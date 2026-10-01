@@ -4,12 +4,11 @@
 
 use super::{Cx, select_handler};
 use crate::display::{
-    Delim, Layout, ProjectionInput, activatable, bracket, descend, dim, id, on_activate, on_hover,
-    pickable_runtime, row, selectable_bracket,
+    Delim, Layout, ProjectionInput, activatable, descend, dim, id, on_activate, on_hover,
+    pickable_runtime, selectable_bracket,
 };
 use crate::frame::Hovered;
 use crate::hover::Hover;
-use crate::libraries::name;
 use gid::{CellId, Resolution, Step, hex_string};
 use std::rc::Rc;
 
@@ -27,17 +26,6 @@ pub fn of(
         grap::Shape::List(positions) => {
             crate::display::structure::list_layout_at(input, positions, None)
         }
-        // A named record reads as its name, then its other fields.
-        grap::Shape::Record(keys) if !cx.raw && name::named(value) => name::with_name(
-            input,
-            crate::display::structure::record_layout_at(
-                input,
-                keys.into_iter()
-                    .filter(|key| *key != name::vocabulary::NAME)
-                    .collect(),
-                |_| None,
-            ),
-        ),
         grap::Shape::Record(keys) => {
             crate::display::structure::record_layout_at(input, keys, |_| None)
         }
@@ -53,66 +41,40 @@ fn blob_text(bytes: &[u8]) -> String {
 }
 
 /// The editor-owned folded form shared by raw and custom projections.
-/// Active structural editors keep their containing value open. A named
-/// value keeps its name in front of what it hides.
+/// Active structural editors keep their containing value open.
 pub(super) fn collapsed_layout(
     cx: &Cx,
     path: &[Step],
     value: &grap::RuntimeValue,
     default: bool,
 ) -> Option<View> {
-    let (delim, label) = match value.as_cell() {
+    let delim = match value.as_cell() {
         Some(cell) => {
-            let source = cx.sources.resolve(cell)?.source;
+            let value = cx.sources.resolve(cell)?;
             let mut followed = path.to_vec();
-            followed.push(Step::Follow(source));
-            (cx.pending_child_of(&followed).is_none()
-                && cx.pending_edge_under(&followed).is_none())
-            .then_some(())?;
-            (
-                Delim::Paren,
-                cx.name(cell)
-                    .is_some()
-                    .then(|| vec![Step::Follow(source), Step::Key(name::vocabulary::NAME)]),
-            )
+            followed.push(Step::Follow(value.source));
+            (cx.pending_child_of(&followed).is_none() && cx.pending_edge_under(&followed).is_none())
+                .then_some(Delim::Paren)?
         }
         None if value.list_len().is_some_and(|len| len != 0)
             && cx.pending_child_of(path).is_none() =>
         {
-            (Delim::Bracket, None)
+            Delim::Bracket
         }
         None if value.record_len().is_some_and(|len| len != 0)
             && cx.pending_child_of(path).is_none()
             && cx.pending_edge_under(path).is_none() =>
         {
-            (
-                Delim::Brace,
-                (!cx.raw && name::named(value)).then(|| vec![Step::Key(name::vocabulary::NAME)]),
-            )
+            Delim::Brace
         }
         _ => return None,
     };
-    let folded = toggle(dim("…"), path, cx, default);
-    Some(match (delim, label) {
-        // The cell stays a cell around the named record it hides.
-        (Delim::Paren, Some(label)) => selectable(
-            cx,
-            selectable_bracket(
-                Delim::Paren,
-                row(6.0, [name::label(label), bracket(Delim::Brace, folded)]),
-            ),
-            path,
-            value,
-        ),
-        (delim, Some(label)) => row(
-            6.0,
-            [
-                name::label(label),
-                selectable(cx, selectable_bracket(delim, folded), path, value),
-            ],
-        ),
-        (delim, None) => selectable(cx, selectable_bracket(delim, folded), path, value),
-    })
+    Some(selectable(
+        cx,
+        selectable_bracket(delim, toggle(dim("…"), path, cx, default)),
+        path,
+        value,
+    ))
 }
 
 fn cell_layout(cx: &Cx, cell: CellId) -> View {

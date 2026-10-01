@@ -86,15 +86,10 @@ impl Annotations {
 }
 
 pub fn collapsed(annotations: &Annotations, path: &[Step], in_cycle: bool) -> bool {
-    chosen_fold(annotations, path).unwrap_or(in_cycle)
-}
-
-/// The fold someone chose at `path`, overriding its default.
-pub fn chosen_fold(annotations: &Annotations, path: &[Step]) -> Option<bool> {
     match annotations.field(path, FOLD).and_then(Value::as_cell) {
-        Some(state) if state == FOLDED => Some(true),
-        Some(state) if state == EXPANDED => Some(false),
-        _ => None,
+        Some(state) if state == FOLDED => true,
+        Some(state) if state == EXPANDED => false,
+        _ => in_cycle,
     }
 }
 

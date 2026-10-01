@@ -130,30 +130,3 @@ fn fold_keys_are_directional_and_stay_sparse() {
     let folds = press(&mut world, &leaf, command(NamedKey::ArrowUp));
     assert!(folds.at(&leaf).is_none());
 }
-
-#[test]
-fn a_folded_named_cell_keeps_its_name_unless_raw() {
-    let node = new_cell_id();
-    let next = crate::test_values::label("next");
-    let mut cells = Cells::new();
-    cells.set_value(node, name::record("node", [(next, Value::from(node))]));
-    let mut world = world_of(&Document {
-        root: Some(Value::from(node)),
-        cells,
-    });
-    let follow = Step::Follow(gid::Resolution::Document);
-    let reentry = vec![follow.clone(), Step::Key(next)];
-    let label = [&reentry[..], &[follow, Step::Key(name::vocabulary::NAME)]].concat();
-    let inside = [&reentry[..], &reentry[..]].concat();
-    let shown = |world: &mut crate::Editor, raw| {
-        editing_frame(world, raw)
-            .descends
-            .iter()
-            .map(|d| d.path.to_vec())
-            .collect::<Vec<_>>()
-    };
-    let named = shown(&mut world, false);
-    assert!(named.contains(&label));
-    assert!(!named.contains(&inside));
-    assert!(!shown(&mut world, true).contains(&label));
-}

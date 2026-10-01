@@ -122,9 +122,9 @@ pub(crate) struct Cx<'a> {
     /// Names and field order derive from this view bit. Value
     /// projections come from the editor's stack; `grap` is one of them.
     pub(crate) raw: bool,
-    /// Which references inside a tutorial slot start folded, so a call
-    /// doesn't inline its callee.
-    pub(crate) fold_references: FoldReferences,
+    /// A tutorial's base view opens only the cell it shows; references
+    /// inside start folded, so a call doesn't inline its callee.
+    pub(crate) fold_references: bool,
     pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
     pub(crate) selection: Option<&'a Selection>,
@@ -134,19 +134,6 @@ pub(crate) struct Cx<'a> {
     /// The selected structural source, normalized across projections
     /// for execution-linked output.
     pub(crate) selected_trace: Option<SourceTrace>,
-}
-
-/// References deeper than a slot's own value, at the given path length.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) enum FoldReferences {
-    #[default]
-    None,
-    /// Named definitions, where no projection draws the reference.
-    #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-    Named(usize),
-    /// Every reference, as the base view shows them.
-    #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
-    All(usize),
 }
 
 #[derive(Clone, Default)]
@@ -357,7 +344,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let cx = Cx {
             raw: true,
-            fold_references: FoldReferences::All(self.path.len() + 1),
+            fold_references: true,
             ..self.cx.clone()
         };
         let nothing = crate::display::partial(|_| None);
@@ -371,32 +358,6 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             std::slice::from_ref(&step),
             Some(nothing.clone()),
             Some(nothing),
-            build,
-        )
-    }
-    #[cfg(any(test, target_arch = "wasm32"))]
-    fn descend_slot(
-        &self,
-        text: &mut TextCtx,
-        build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
-        step: Step,
-        current: Option<crate::display::Partial<crate::Editor, Hovered>>,
-        default: Option<crate::display::Partial<crate::Editor, Hovered>>,
-    ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-        let cx = Cx {
-            fold_references: FoldReferences::Named(self.path.len() + 1),
-            ..self.cx.clone()
-        };
-        prepare_descend_path(
-            &cx,
-            self.projection,
-            text,
-            self.path,
-            self.ancestors,
-            self.value,
-            std::slice::from_ref(&step),
-            current,
-            default,
             build,
         )
     }
@@ -550,24 +511,6 @@ impl Cx<'_> {
     /// convention and therefore falls back to the short id.
     fn name(&self, cell: CellId) -> Option<&str> {
         (!self.raw).then(|| self.sources.name(cell)).flatten()
-    }
-
-    /// Whether a reference at `path` starts folded.
-    fn folds_reference(&self, path: &[Step], cell: CellId) -> bool {
-        match self.fold_references {
-            FoldReferences::None => false,
-            // Folding a cell that holds only its name would hide nothing.
-            FoldReferences::Named(slot) => {
-                path.len() > slot
-                    && self.name(cell).is_some()
-                    && self
-                        .sources
-                        .resolve(cell)
-                        .and_then(|resolved| resolved.value.as_record())
-                        .is_some_and(|fields| fields.len() > 1)
-            }
-            FoldReferences::All(slot) => path.len() > slot,
-        }
     }
 
     /// Whether `path` carries the primary highlight. A label-stage
@@ -727,7 +670,7 @@ fn prepare_project(
         sources,
         edits: Default::default(),
         raw,
-        fold_references: FoldReferences::None,
+        fold_references: false,
         annotations,
         styles,
         selection,
@@ -1017,17 +960,11 @@ fn prepare_value(
     // Ancestry is already available from projection; folds must not re-read an
     // occurrence as a document path (and computed values have no such path).
     let fold_default = value.and_then(|value| {
-        let folded = value
-            .as_cell()
-            .is_some_and(|cell| ancestors.cells.contains(&cell) || cx.folds_reference(path, cell));
+        let folded = value.as_cell().is_some_and(|cell| {
+            ancestors.cells.contains(&cell) || cx.fold_references && !ancestors.cells.is_empty()
+        });
         crate::selection::collapse_default_for_value(&cx.sources, value, folded)
     });
-    // A slot's named fold gives way to any projection that draws the
-    // reference, such as a call naming its function.
-    let yielding = matches!(cx.fold_references, FoldReferences::Named(_))
-        && value
-            .and_then(grap::RuntimeValue::as_cell)
-            .is_some_and(|cell| !ancestors.cells.contains(&cell));
     let layout = value_layout(
         cx,
         projection,
@@ -1037,7 +974,6 @@ fn prepare_value(
         source.as_deref(),
         value,
         fold_default,
-        yielding,
     );
     let prepared = match layout {
         None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), None)),
@@ -1133,18 +1069,12 @@ fn value_layout(
     source: Option<&[Step]>,
     value: Option<&grap::RuntimeValue>,
     fold_default: Option<bool>,
-    yielding: bool,
 ) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
-    let folded = value
-        .zip(fold_default)
-        .filter(|(_, default)| crate::annotations::collapsed(cx.annotations, path, *default));
-    // A fold someone chose always applies; a yielding default waits until
-    // no projection draws the value.
-    let deferred = yielding && crate::annotations::chosen_fold(cx.annotations, path).is_none();
-    if !deferred
-        && let Some((value, default)) = folded
+    if let Some(value) = value
+        && let Some(default) = fold_default
+        && crate::annotations::collapsed(cx.annotations, path, default)
         && let Some(collapsed) = structure::collapsed_layout(cx, path, value, default)
     {
         return Some(collapsed);
@@ -1176,11 +1106,6 @@ fn value_layout(
         Some(current) => current(&input),
         None => projection.apply(&input),
     }
-    .or_else(|| {
-        folded
-            .filter(|_| deferred)
-            .and_then(|(value, default)| structure::collapsed_layout(cx, path, value, default))
-    })
     .or_else(|| value.map(|value| structure::of(cx, path, value, &input)))
 }
 

@@ -99,6 +99,18 @@ pub(crate) fn tutorial_slots(
                     })
                 })
                 .transpose()?;
+            let plain_inside = plain.clone().map(|plain| {
+                crate::display::compose_partials([
+                    crate::display::runtime_partial(named_reference),
+                    plain,
+                ])
+            });
+            // Whatever the libraries leave undrawn, a named cell still reads as
+            // its name rather than inlining its definition.
+            let full_inside = crate::display::compose_partials([
+                projection.partial().clone(),
+                crate::display::runtime_partial(named_reference),
+            ]);
             let captioned = slots.iter().any(|(_, level)| *level != Level::Full);
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
@@ -107,13 +119,15 @@ pub(crate) fn tutorial_slots(
                         16.0,
                         slots.iter().map(|(key, level)| {
                             let view = match level {
-                                Level::Full => {
-                                    crate::display::descend_slot(Step::Key(*key), None, None)
-                                }
-                                Level::Plain => crate::display::descend_slot(
+                                Level::Full => crate::display::descend(
+                                    Step::Key(*key),
+                                    None,
+                                    Some(full_inside.clone()),
+                                ),
+                                Level::Plain => crate::display::descend(
                                     Step::Key(*key),
                                     plain.clone(),
-                                    plain.clone(),
+                                    plain_inside.clone(),
                                 ),
                                 Level::Raw => crate::display::descend_raw(Step::Key(*key)),
                             };
@@ -141,6 +155,21 @@ pub(crate) fn tutorial_slots(
             })))
         }
     }
+}
+
+/// Inside a slot, a named cell no library draws reads as its name, so a
+/// call shows which function it calls instead of inlining the definition.
+fn named_reference(
+    input: &crate::display::ProjectionInput<
+        '_,
+        Editor,
+        crate::frame::Hovered,
+        ::grap::RuntimeValue,
+    >,
+) -> Option<crate::display::Layout<Editor, crate::frame::Hovered>> {
+    crate::libraries::grap::shallow_cell_with(input, |name| {
+        crate::display::selectable_bracket(crate::display::Delim::Paren, name)
+    })
 }
 
 #[derive(PartialEq, Eq)]

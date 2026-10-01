@@ -2205,7 +2205,7 @@ fn drawn_shape_coordinates_show_parameters_by_name() {
 }
 
 #[test]
-fn tutorial_plain_and_base_slots_start_a_callee_folded() {
+fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
     use crate::libraries::{absent, blob, grap as grap_library, number};
     use grap::vocabulary::FUNCTION;
     let (mut world, names) = lesson_world(
@@ -2259,83 +2259,30 @@ fn tutorial_plain_and_base_slots_start_a_callee_folded() {
         .projection,
     )
     .unwrap();
-    let annotations = |world: &crate::Editor| {
-        world
-            .model
-            .workspace
-            .view(world.model.workspace.document_root())
-            .unwrap()
-            .annotations
-            .clone()
-    };
-    let shown = |world: &mut crate::Editor| {
-        let annotations = annotations(world);
-        editing_frame_with_annotations(world, false, None, None, &annotations)
+    let frame = editing_frame(&mut world, false);
+    let placed = |path: &[Step]| frame.descends.iter().any(|d| d.path.as_ref() == path);
+    let opened = |path: &[Step]| {
+        frame
             .descends
             .iter()
-            .map(|d| d.path.to_vec())
-            .collect::<Vec<_>>()
+            .any(|d| d.path.len() > path.len() && d.path.starts_with(path))
     };
-    let callee = |slot: &str| {
-        vec![
+    for slot in ["first", "second"] {
+        let callee = [
             Step::Key(names[slot]),
             Step::Follow(gid::Resolution::Document),
             Step::Key(FUNCTION),
-        ]
-    };
-    let inside = |path: &[Step], steps: &[Step]| [path, steps].concat();
-    let follow = Step::Follow(gid::Resolution::Document);
-    let name = inside(
-        &callee("first"),
-        &[follow.clone(), Step::Key(name::vocabulary::NAME)],
-    );
-    let body = inside(
-        &callee("first"),
-        &[follow.clone(), Step::Key(grap::vocabulary::BODY)],
-    );
-    let paths = shown(&mut world);
-    for slot in ["first", "second"] {
-        assert!(
-            paths.contains(&callee(slot)),
-            "{slot} shows its call's function"
-        );
-        assert!(paths.contains(&inside(&callee(slot)[..2], &[Step::Key(names["x"])])));
+        ];
+        assert!(placed(&callee), "{slot} shows its call's function");
+        assert!(!opened(&callee), "{slot} doesn't inline the definition");
+        assert!(placed(&[
+            Step::Key(names[slot]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(names["x"]),
+        ]));
     }
-    // The plain view folds the callee behind its name; the base view has no names.
-    assert!(paths.contains(&name));
-    assert!(
-        !paths.contains(&body),
-        "the plain view doesn't inline the definition"
-    );
-    let base = callee("second");
-    assert!(
-        !paths
-            .iter()
-            .any(|path| path.len() > base.len() && path.starts_with(&base)),
-        "the base view doesn't inline the definition"
-    );
     // A slot showing the definition itself still opens it.
-    assert!(paths.contains(&vec![
-        Step::Key(names["third"]),
-        follow,
-        Step::Key(grap::vocabulary::BODY)
-    ]));
-    // Opening the fold shows the definition in place.
-    select_occurrence(&mut world, &callee("first"));
-    let annotations_now = annotations(&world);
-    assert!(
-        editing_frame_with_annotations(&mut world, false, None, None, &annotations_now)
-            .resolve_for_dispatch()
-            .dispatch_key(
-                &mut world,
-                &KeyboardEvent {
-                    key: Key::Character(" ".into()),
-                    state: KeyState::Down,
-                    ..Default::default()
-                },
-            )
-    );
-    assert!(shown(&mut world).contains(&body));
+    assert!(opened(&[Step::Key(names["third"])]));
 }
 
 #[test]
@@ -2386,7 +2333,7 @@ fn swapping_libraries_keeps_the_document_and_selection() {
 }
 
 #[test]
-fn a_tutorial_slot_without_grap_folds_a_callee_behind_its_name() {
+fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
     use crate::libraries::{blob, number};
     use grap::vocabulary::FUNCTION;
     let (doc, names) = crate::gid_text::parse(include_str!(
@@ -2405,23 +2352,12 @@ fn a_tutorial_slot_without_grap_folds_a_callee_behind_its_name() {
         Step::Key(grap::vocabulary::EVALUATE),
         Step::Key(FUNCTION),
     ];
-    let name = [
-        &callee[..],
-        &[
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(name::vocabulary::NAME),
-        ],
-    ]
-    .concat();
-    let inside = frame
-        .descends
-        .iter()
-        .filter(|d| d.path.len() > callee.len() && d.path.starts_with(&callee))
-        .map(|d| d.path.to_vec())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        inside,
-        [name],
-        "the call shows (scale {{…}}), not scale's whole definition"
+    assert!(frame.descends.iter().any(|d| d.path.as_ref() == callee));
+    assert!(
+        !frame
+            .descends
+            .iter()
+            .any(|d| d.path.len() > callee.len() && d.path.starts_with(&callee)),
+        "the call shows (scale), not scale's whole definition"
     );
 }

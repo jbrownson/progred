@@ -785,24 +785,6 @@ pub fn descend_raw<World: 'static, Hover: 'static>(step: Step) -> Layout<World, 
     }))
 }
 
-/// Descend into a tutorial slot's value.
-#[cfg(any(test, target_arch = "wasm32"))]
-pub fn descend_slot<World: 'static, Hover: 'static>(
-    step: Step,
-    projection: Option<Partial<World, Hover>>,
-    default_projection: Option<Partial<World, Hover>>,
-) -> Layout<World, Hover> {
-    Layout::program(Rc::new(move |context, build| {
-        context.project.descend_slot(
-            context.text,
-            build,
-            step.clone(),
-            projection.clone(),
-            default_projection.clone(),
-        )
-    }))
-}
-
 /// Descend through stored structure without projecting intermediate containers.
 pub fn descend_path<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
