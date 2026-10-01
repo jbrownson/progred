@@ -10,6 +10,7 @@ fn configure(world: &mut crate::Editor, slots: &[CellId]) {
                 .join(","),
         ),
         world.stack.projection.clone(),
+        &world.stack.libraries,
     )
     .unwrap();
 }

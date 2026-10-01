@@ -37,11 +37,23 @@ enum Level {
 impl Level {
     /// Shown above each slot when slots differ in level, so the views
     /// explain themselves without the surrounding page.
-    fn caption(self) -> &'static str {
+    fn caption(self, libraries: &crate::libraries::Libraries) -> String {
         match self {
-            Level::Full => "Drawn by every library",
-            Level::Plain => "Drawn by names, text, and numbers only",
-            Level::Raw => "The base projection: no libraries",
+            Level::Full => {
+                let names = libraries.names().collect::<Vec<_>>();
+                match names.as_slice() {
+                    [] => "Drawn with no libraries".into(),
+                    [name] => format!("Drawn with the {name} library"),
+                    [first, second] => format!("Drawn with the {first} and {second} libraries"),
+                    [rest @ .., last] => {
+                        format!("Drawn with the {}, and {last} libraries", rest.join(", "))
+                    }
+                }
+            }
+            Level::Plain => {
+                "Drawn with the name, text, and blob libraries, plus f64’s numbers but not its arithmetic".into()
+            }
+            Level::Raw => "The base projection: no libraries".into(),
         }
     }
 }
@@ -49,6 +61,7 @@ impl Level {
 pub(crate) fn tutorial_slots(
     ids: Option<&str>,
     projection: crate::projection::Projection<Editor>,
+    libraries: &crate::libraries::Libraries,
 ) -> Result<crate::projection::Projection<Editor>, String> {
     match ids {
         None => Ok(projection),
@@ -112,6 +125,8 @@ pub(crate) fn tutorial_slots(
                 crate::display::runtime_partial(named_reference),
             ]);
             let captioned = slots.iter().any(|(_, level)| *level != Level::Full);
+            let captions =
+                [Level::Full, Level::Plain, Level::Raw].map(|level| level.caption(libraries));
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
                     crate::display::projection::group(crate::display::col(
@@ -137,7 +152,7 @@ pub(crate) fn tutorial_slots(
                                     4.0,
                                     [
                                         crate::display::leaf(puri::Leaf::Text {
-                                            text: level.caption().into(),
+                                            text: captions[*level as usize].clone(),
                                             paint: crate::display::Paint::Face(
                                                 crate::display::Face::Dim,
                                             ),
@@ -265,14 +280,14 @@ mod tests {
             "9940ece27410c72a5308a544890ccc71:fancy",
             "9940ece27410c72a5308a544890ccc71:",
         ] {
-            assert!(tutorial_slots(Some(ids), Default::default()).is_err());
+            assert!(tutorial_slots(Some(ids), Default::default(), &Default::default()).is_err());
         }
-        assert!(tutorial_slots(None, Default::default()).is_ok());
+        assert!(tutorial_slots(None, Default::default(), &Default::default()).is_ok());
         for ids in [
             "9940ece27410c72a5308a544890ccc71",
             "9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:plain,5e716c07490849f072b4e9017dd6230d:raw",
         ] {
-            assert!(tutorial_slots(Some(ids), Default::default()).is_ok());
+            assert!(tutorial_slots(Some(ids), Default::default(), &Default::default()).is_ok());
         }
     }
 

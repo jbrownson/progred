@@ -291,6 +291,14 @@ impl Libraries {
             .map(|(id, definitions)| (*id, definitions))
     }
 
+    /// The names libraries give themselves, in load order.
+    #[cfg(any(test, target_arch = "wasm32"))]
+    pub fn names(&self) -> impl Iterator<Item = &str> + '_ {
+        self.entries
+            .iter()
+            .filter_map(|(id, definitions)| definitions.value(*id).and_then(name::read))
+    }
+
     /// Each loaded library's definition of `cell`, in load order.
     pub fn definitions(
         &self,

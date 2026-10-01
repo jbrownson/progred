@@ -51,8 +51,13 @@ thread_local! {
 
 pub(crate) fn stack(libraries: &str) -> Result<crate::stack::Stack<crate::Editor>, String> {
     let mut stack = web_embed::libraries(Some(libraries))?;
-    stack.projection = TUTORIAL_SLOTS
-        .with(|slots| web_embed::tutorial_slots(slots.borrow().as_deref(), stack.projection))?;
+    stack.projection = TUTORIAL_SLOTS.with(|slots| {
+        web_embed::tutorial_slots(
+            slots.borrow().as_deref(),
+            stack.projection,
+            &stack.libraries,
+        )
+    })?;
     Ok(stack)
 }
 
@@ -107,8 +112,12 @@ pub fn start_editor(
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
     let mut stack = web_embed::libraries(libraries.as_deref())
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
-    stack.projection = web_embed::tutorial_slots(tutorial_slots.as_deref(), stack.projection)
-        .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
+    stack.projection = web_embed::tutorial_slots(
+        tutorial_slots.as_deref(),
+        stack.projection,
+        &stack.libraries,
+    )
+    .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
     TUTORIAL_SLOTS.with(|slots| *slots.borrow_mut() = tutorial_slots);
     run_document(
         doc,

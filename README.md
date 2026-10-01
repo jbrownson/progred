@@ -28,7 +28,7 @@ renderer has finished its final refinement.*
 
 ![The IoP tree drawing beside its editable program in Progred.](docs/images/iop-tree.png)
 
-*Our recreation of the tree demo from Bret Victor's
+*A recreation of the tree demo from Bret Victor's
 [Inventing on Principle](https://worrydream.com/InventingOnPrinciple/).
 The original demo and the inspiration for this live-editing loop are his.
 Both screenshots are headless editor captures, without operating-system window

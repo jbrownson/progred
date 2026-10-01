@@ -189,6 +189,7 @@ fn empty_slots_make_values_through_the_picker() {
                 .join(","),
         ),
         world.stack.projection,
+        &world.stack.libraries,
     )
     .unwrap();
     let key = |world: &mut crate::Editor, key, modifiers| {
@@ -290,6 +291,7 @@ fn website_forest_edits_change_one_height_and_all_leaf_colors() {
                 .join(","),
         ),
         world.stack.projection,
+        &world.stack.libraries,
     )
     .unwrap();
     let painted = |world: &mut crate::Editor| leaves(&settle(editing_frame(world, false)).list.0);
@@ -764,6 +766,7 @@ fn website_grap_edits_distinguish_literal_arguments_and_shared_cells() {
                 .join(","),
         ),
         world.stack.projection.clone(),
+        &world.stack.libraries,
     )
     .unwrap();
     assert_eq!(results(&world, &slots), [5.0, 6.0]);
@@ -889,6 +892,7 @@ fn website_functions_edit_arguments_body_and_parameter_name() {
                 .join(","),
         ),
         world.stack.projection.clone(),
+        &world.stack.libraries,
     )
     .unwrap();
     assert_eq!(results(&world, &slots), [6.0, 10.0]);
@@ -1048,6 +1052,7 @@ fn website_drawing_edits_change_painted_circles_and_picking_follows_the_fill_cal
                 .join(","),
         ),
         world.stack.projection.clone(),
+        &world.stack.libraries,
     )
     .unwrap();
     assert_circles(&mut world, [(60.0, 24.0), (160.0, 24.0)]);
@@ -1756,6 +1761,7 @@ fn lesson_world(
     world.stack.projection = crate::web_embed::tutorial_slots(
         Some(&slots.map(|slot| names[slot].to_string()).join(",")),
         world.stack.projection.clone(),
+        &world.stack.libraries,
     )
     .unwrap();
     (world, names)
@@ -2041,6 +2047,7 @@ fn website_projections_edit_one_calculation_through_any_view() {
             names["first"], names["second"], names["third"]
         )),
         world.stack.projection.clone(),
+        &world.stack.libraries,
     )
     .unwrap();
     let right = |slot: &str| {
@@ -2097,6 +2104,7 @@ fn website_model_edits_show_through_the_base_projection() {
     world.stack.projection = crate::web_embed::tutorial_slots(
         Some(&format!("{},{}:raw", names["first"], names["second"])),
         world.stack.projection.clone(),
+        &world.stack.libraries,
     )
     .unwrap();
     let at = |slot: &str, key: &str| {
@@ -2257,6 +2265,7 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
         ])
         .unwrap()
         .projection,
+        &world.stack.libraries,
     )
     .unwrap();
     let frame = editing_frame(&mut world, false);
@@ -2296,7 +2305,8 @@ fn swapping_libraries_keeps_the_document_and_selection() {
     let stack_of = |libraries: &[CellId]| {
         let mut stack = crate::stack::load_selected(libraries).unwrap();
         stack.projection =
-            crate::web_embed::tutorial_slots(Some(&slots), stack.projection).unwrap();
+            crate::web_embed::tutorial_slots(Some(&slots), stack.projection, &stack.libraries)
+                .unwrap();
         stack
     };
     let mut world = crate::test_editor_with_stack(
@@ -2342,9 +2352,12 @@ fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
     .unwrap();
     let mut stack =
         crate::stack::load_selected(&[name::ID, text::ID, blob::ID, number::ID, f64::ID]).unwrap();
-    stack.projection =
-        crate::web_embed::tutorial_slots(Some(&names["second"].to_string()), stack.projection)
-            .unwrap();
+    stack.projection = crate::web_embed::tutorial_slots(
+        Some(&names["second"].to_string()),
+        stack.projection,
+        &stack.libraries,
+    )
+    .unwrap();
     let mut world = crate::test_editor_with_stack(doc, stack);
     let frame = editing_frame(&mut world, false);
     let callee = [

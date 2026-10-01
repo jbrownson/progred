@@ -95,14 +95,14 @@
         </script>
         <div class="still" role="group" aria-label="The forest and its stored structure">
           <figure>
-            <img class="light-only" src="images/forest-light.png" alt="The forest drawn by every library, with its slider and the start of its program." width="704" height="600" />
-            <img class="dark-only" src="images/forest-dark.png" alt="The forest drawn by every library, with its slider and the start of its program." width="704" height="600" />
-            <figcaption>Drawn by every library.</figcaption>
+            <img class="light-only" src="images/forest-light.png" alt="The forest and its slider, drawn with fifteen libraries, above the start of its program." width="704" height="600" />
+            <img class="dark-only" src="images/forest-dark.png" alt="The forest and its slider, drawn with fifteen libraries, above the start of its program." width="704" height="600" />
+            <figcaption>Drawn with the name, text, blob, absent, color, control, number, f64, grap, layout, presentation, list, logic, sequence, and controls libraries.</figcaption>
           </figure>
           <figure>
             <img class="light-only" src="images/structure-light.png" alt="The same document with the libraries off: records, lists, bytes, and cells, with names only where the document defines them." width="704" height="600" />
             <img class="dark-only" src="images/structure-dark.png" alt="The same document with the libraries off: records, lists, bytes, and cells, with names only where the document defines them." width="704" height="600" />
-            <figcaption>The same document with the libraries off. On a laptop, this is a live editor you can take apart yourself.</figcaption>
+            <figcaption>The same document with only the name, text, and blob libraries. On a laptop, this is a live editor you can take apart yourself.</figcaption>
           </figure>
         </div>
       </section>
@@ -134,7 +134,7 @@
         </article>
         <article class="idea" id="grap">
           <h4>Grap, a language made of the same data</h4>
-          <p>Functions and calls are ordinary records. Functions that libraries implement receive their arguments unevaluated, so <code>do</code>, <code>all</code>, <code>for each</code>, and <code>match</code> are library functions rather than syntax. Unfinished programs still run: a missing argument or a mismatched value becomes an <strong>absent</strong>, a value that says what’s wrong, which the rest of the program can pass along or recover from. Fuel bounds every evaluation.</p>
+          <p>Functions and calls are ordinary records. Functions that libraries implement receive their arguments unevaluated, so <code>do</code>, <code>all</code>, <code>for each</code>, and <code>match</code> are library functions, not built-in keywords. Unfinished programs still run: a missing argument or a mismatched value becomes an <strong>absent</strong>, a value that says what’s wrong, which the rest of the program can pass along or recover from. Fuel bounds every evaluation.</p>
           <p class="idea-links"><a href="lab/peel.html#unfinished">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#evaluation">Evaluation</a></p>
         </article>
         <article class="idea" id="linked">
@@ -197,14 +197,14 @@
 
       <section class="ways-in" id="ways-in" aria-labelledby="ways-in-title">
         <h2 id="ways-in-title">Four ways in. Which one works?</h2>
-        <p>We haven’t settled how to introduce Progred, so here are four tutorials on the same editor, each taking a different route. Try one or two, then tell us on Zulip which made it click and where you got lost. They’re best on a laptop.</p>
+        <p>There’s no settled way to introduce Progred yet, so here are four tutorials on the same editor, each taking a different route. Try one or two, then share on Zulip which made it click and where you got lost. They’re best on a laptop.</p>
         <ol class="tutorials">
           <li><a href="tutorial.html"><strong>Change a program, see what happens</strong><span>A guided tour in short exercises: values, views, cells, calculations, functions, and drawings, with tasks that check themselves.</span></a></li>
           <li><a href="story.html"><strong>How the forest was made</strong><span>One program grows from a single dot into a forest, and each step adds one idea.</span></a></li>
           <li><a href="lab/peel.html"><strong>Peel the forest</strong><span>Start from the finished forest and switch its libraries off until only structure is left, then open six doors into what you saw.</span></a></li>
           <li><a href="lab/see.html"><strong>Teach the editor to see</strong><span>Start from bare structure and load one library at a time, until the editor can draw the forest.</span></a></li>
         </ol>
-        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Tell us which worked</a></p>
+        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Share which worked</a></p>
       </section>
 
       <section class="about" id="about" aria-labelledby="about-title">

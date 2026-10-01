@@ -456,6 +456,7 @@ fn website_lesson_svg_captures() {
                                 .join(","),
                         ),
                         editor.stack.projection,
+                        &editor.stack.libraries,
                     )
                     .unwrap();
                 }
@@ -514,6 +515,7 @@ pub(super) fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text
     editor.stack.projection = crate::web_embed::tutorial_slots(
         Some(&format!("{},{}", fields["second"], fields["first"])),
         editor.stack.projection,
+        &editor.stack.libraries,
     )
     .unwrap();
     editor.font_cx = crate::fonts::bundled_font_context();
@@ -925,6 +927,7 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
     editor.stack.projection = crate::web_embed::tutorial_slots(
         Some(&format!("{},{}", fields["second"], fields["first"])),
         editor.stack.projection,
+        &editor.stack.libraries,
     )
     .unwrap();
     editor.font_cx = crate::fonts::bundled_font_context();
@@ -1729,6 +1732,7 @@ fn website_home_stills() {
         editor.stack.projection = crate::web_embed::tutorial_slots(
             Some(&format!("{},{}", fields["second"], fields["first"])),
             editor.stack.projection,
+            &editor.stack.libraries,
         )
         .unwrap();
         editor.palette = theme.palette();

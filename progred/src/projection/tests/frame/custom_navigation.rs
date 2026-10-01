@@ -477,6 +477,7 @@ fn tutorial_slots_use_vertical_flow_including_missing_slots() {
     let projection = crate::web_embed::tutorial_slots(
         Some(&format!("{first},{missing},{last}")),
         world.stack.projection.clone(),
+        &world.stack.libraries,
     )
     .unwrap();
     for (from, direction, to) in [
