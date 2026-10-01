@@ -1,3 +1,6 @@
+// Transcribed by watching Bret Victor's Inventing on Principle (2012), capturing as much of the
+// demo's code as appears on screen. Kept for reference; not covered by the repository's license.
+
 // scene
 var ctx, canvasWidth, canvasHeight;
 
