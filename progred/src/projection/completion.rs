@@ -86,6 +86,8 @@ fn pending_target(
         path.clone(),
         crate::display::widget::navigation::arrival(path.clone(), cx),
         cx.edits.clone(),
+        None,
+        selected,
     );
     before(child, move |p, placement| {
         let outline = text_frame::outline(scale, placement.rect);

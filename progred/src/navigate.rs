@@ -325,6 +325,8 @@ mod tests {
                 path: Rc::from([]),
                 rect: Rect::new(0.0, 0.0, 20.0, 20.0),
                 select: Rc::new(|_, _| false),
+                secondary: None,
+                selected: false,
             },
             Descend {
                 scope: Default::default(),
@@ -332,6 +334,8 @@ mod tests {
                 path: Rc::from([]),
                 rect: Rect::new(0.0, 1_000.0, 20.0, 1_060.0),
                 select: Rc::new(|_, _| false),
+                secondary: None,
+                selected: false,
             },
         ];
         let regions = [ViewRegion {

@@ -399,6 +399,8 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
                             true
                         }),
                         scope: Default::default(),
+                        secondary: None,
+                        selected: false,
                     });
                 });
             }

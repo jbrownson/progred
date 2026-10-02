@@ -143,6 +143,7 @@ fn attribute_hover(
     placed::ResolvedHover {
         hovered,
         hovered_secondary,
+        selected_secondary: crate::display::widget::navigation::selected_secondary(descends),
         hovered_trace,
     }
 }
@@ -979,6 +980,8 @@ mod frame_tests {
             rect: Rect::new(0.0, 0.0, 10.0, 10.0),
             select: Rc::new(|_, _| true),
             scope,
+            secondary: None,
+            selected: false,
         }];
         let hover = Some(Hovered::Tree(hover::Hover::Value(occurrence.clone())));
         let resolved = attribute_hover(
@@ -1013,6 +1016,8 @@ mod frame_tests {
             occurrence.clone(),
             Rc::new(|_, _| true),
             landmarks[0].scope.clone(),
+            None,
+            false,
         );
         let frame = hover_frame(
             &editor,
@@ -1878,6 +1883,8 @@ mod frame_tests {
                     *selected = Some(source);
                     true
                 }),
+                secondary: None,
+                selected: false,
             },
         );
         for (source, rect) in targets {

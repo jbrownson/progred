@@ -128,9 +128,6 @@ pub(crate) struct Cx<'a> {
     pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
     pub(crate) selection: Option<&'a Selection>,
-    /// The selected cell-relative location whose other projections
-    /// carry the secondary mark.
-    pub(crate) secondary: Option<Secondary>,
     /// The selected structural source, normalized across projections
     /// for execution-linked output.
     pub(crate) selected_trace: Option<SourceTrace>,
@@ -597,19 +594,6 @@ fn primary_highlight_stroke(scale: f64) -> Stroke {
     Stroke::new(2.5 * scale)
 }
 
-/// The selected location shared by repeated projections of a cell.
-fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Secondary> {
-    match selection? {
-        current if current.stage(sources) == Stage::Edge => {
-            let path: SharedPath = Rc::from(current.source_path()?.as_ref());
-            sources
-                .resolve_path(&path)
-                .map(|value| Secondary::from_path(sources, path.clone(), value.as_cell()))
-        }
-        _ => None,
-    }
-}
-
 /// The explicit-state boundary: everything a projection pass reads.
 /// `width` is the space the projection may fill. `root` and
 /// `root_path` let an editor pane begin at a value occurrence
@@ -682,9 +666,6 @@ fn prepare_project(
         annotations,
         styles,
         selection,
-        // Other projections of the selected cell are secondary. The
-        // HOVERED value's faint marks come from the render pass's ResolvedHover.
-        secondary: secondary_of(&sources, selection),
         selected_trace: source_selection.and_then(|selection| {
             Some(SourceTrace::from_path(
                 &sources,
@@ -730,34 +711,33 @@ fn descend_landmark_with(
     selected: bool,
     scale: f64,
     path: SharedPath,
-    secondary: Option<(Secondary, bool)>,
+    secondary: Option<Secondary>,
     select: crate::navigate::Select<crate::Editor>,
     scope: crate::editing::Scope,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
     let highlight_path = path.clone();
+    let mark = secondary.clone();
     let marked = decorate(child, move |p, rect| {
         let highlight_path = highlight_path.clone();
         let outline = highlight_outline(scale, rect);
         p.render(move |cv, hover| {
+            let shares = |other: &Option<Secondary>| mark.is_some() && *other == mark;
             if selected {
                 primary_highlight(palette, scale, cv, outline);
-            } else if matches!(&secondary, Some((_, true))) {
+            } else if shares(&hover.selected_secondary) {
                 secondary_highlight(palette, scale, cv, outline, true);
             } else if matches!(
                 tree_hovered(hover),
                 Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
             ) {
                 hover_highlight(palette, scale, cv, outline);
-            } else if secondary
-                .as_ref()
-                .is_some_and(|(secondary, _)| hover.hovered_secondary.as_ref() == Some(secondary))
-            {
+            } else if shares(&hover.hovered_secondary) {
                 secondary_highlight(palette, scale, cv, outline, false);
             }
         });
     });
-    crate::display::widget::navigation::landmark(marked, path, select, scope)
+    crate::display::widget::navigation::landmark(marked, path, select, scope, secondary, selected)
 }
 
 /// Standard commands for this displayed value, below its own widget handlers.
@@ -998,10 +978,10 @@ fn prepare_value(
                 build,
             );
             let landmark_path: SharedPath = Rc::from(path);
-            // Other projections of the selected location carry the secondary
-            // mark; the selected one has the primary highlight.
-            let secondary = value.filter(|_| !cx.selected(path)).and_then(|value| {
-                let secondary = if cx.edits.is_identity() {
+            // What this projection shares with others of the same location;
+            // the frame marks those sharing the selected or hovered one's.
+            let secondary = value.and_then(|value| {
+                Some(if cx.edits.is_identity() {
                     Secondary::from_context(
                         landmark_path.clone(),
                         value.as_cell(),
@@ -1013,9 +993,7 @@ fn prepare_value(
                 } else {
                     let source = source.as_deref()?;
                     Secondary::from_path(&cx.sources, Rc::from(source), None)
-                };
-                let strong = cx.secondary.as_ref() == Some(&secondary);
-                Some((secondary, strong))
+                })
             });
             // A landmark, not a target: highlight and keyboard reach span
             // the full bounds, while clicks belong to the content each arm

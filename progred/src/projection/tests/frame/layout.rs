@@ -1526,8 +1526,19 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
 }
 
 #[test]
-fn a_selected_reference_marks_its_cell_in_computed_results() {
+fn a_selected_reference_marks_its_cell_in_every_view() {
     use crate::libraries::{absent, grap::vocabulary::GRAP, presentation, workspace};
+    fn fills(commands: &[DrawCmd], brush: &Brush, outline: RoundedRect) -> bool {
+        commands.iter().any(|command| match command {
+            DrawCmd::Fill {
+                shape: Shape::RoundedRect(rect),
+                brush: fill,
+                ..
+            } => fill == brush && *rect == outline,
+            DrawCmd::Clip { children, .. } => fills(children, brush, outline),
+            _ => false,
+        })
+    }
     let program = new_cell_id();
     let doc = Document {
         root: Some(Value::record([
@@ -1545,26 +1556,41 @@ fn a_selected_reference_marks_its_cell_in_computed_results() {
         ])),
         cells: Cells::new(),
     };
-    let mut world = crate::test_editor(doc);
-    world.model.selection = Some(Selection::edge(&crate::test_root(), vec![Step::Key(GRAP)]));
-    let bench = settle(editing_frame(&mut world, false));
-    let missing = bench
-        .descends
-        .iter()
-        .find(|descend| descend.path.last() == Some(&Step::Key(absent::vocabulary::CELL)))
-        .expect("the pane shows the missing program cell");
+    let size = kurbo::Size::new(900.0, 600.0);
+    let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
+    runner.refresh_frame(1.0, size);
+    let drawn = |key| {
+        runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .find(|descend| descend.path.last() == Some(&Step::Key(key)))
+            .cloned()
+            .expect("drawn")
+    };
+    // The document's program field, and the pane's result naming it missing.
+    let (field, missing) = (drawn(GRAP), drawn(absent::vocabulary::CELL));
+    assert_ne!(field.root, missing.root);
     let mark = Brush::from(
         crate::styles::Theme::Light
             .palette()
             .accent
             .with_alpha(0.10),
     );
-    assert!(
-        bench.list.0.iter().any(|command| matches!(
-            command,
-            DrawCmd::Fill { shape: Shape::RoundedRect(rect), brush, .. }
-                if *brush == mark && *rect == highlight_outline(1.0, missing.rect)
-        )),
-        "the missing cell in the result is the selected program cell"
-    );
+    for (selected, other) in [(&field, &missing), (&missing, &field)] {
+        runner.editor.model.selection = Some(Selection::edge(
+            selected.root.as_ref().unwrap(),
+            selected.path.to_vec(),
+        ));
+        runner.refresh_frame(1.0, size);
+        let mut list = DrawList::default();
+        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
+        assert!(
+            fills(&list.0, &mark, highlight_outline(1.0, other.rect)),
+            "selecting {:?} marks {:?}",
+            selected.path,
+            other.path,
+        );
+    }
 }

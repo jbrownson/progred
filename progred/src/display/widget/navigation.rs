@@ -1,5 +1,5 @@
 //! Layout collects selectable stops; only the current selection's destinations survive.
-use super::{HoverPass, frame::DispatchContext};
+use super::{HoverPass, frame::DispatchContext, source::Secondary};
 use gid::Step;
 use measured::Measured;
 use puri::Rect;
@@ -65,6 +65,10 @@ pub struct Landmark<World> {
     pub rect: Rect,
     pub select: Select<World>,
     pub(crate) scope: crate::editing::Scope,
+    /// What it shares with other projections of the same thing.
+    pub secondary: Option<Secondary>,
+    /// Whether it carries the primary highlight.
+    pub selected: bool,
 }
 
 impl<World> Clone for Landmark<World> {
@@ -75,8 +79,19 @@ impl<World> Clone for Landmark<World> {
             rect: self.rect,
             select: self.select.clone(),
             scope: self.scope.clone(),
+            secondary: self.secondary.clone(),
+            selected: self.selected,
         }
     }
+}
+
+/// What the selected occurrence shares with the projections that carry the
+/// secondary mark, in whichever view they are drawn.
+pub fn selected_secondary<World>(landmarks: &[Landmark<World>]) -> Option<Secondary> {
+    landmarks
+        .iter()
+        .filter(|landmark| landmark.selected)
+        .find_map(|landmark| landmark.secondary.clone())
 }
 
 pub(crate) fn landmark<World: 'static, H: 'static>(
@@ -84,6 +99,8 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
     path: Rc<[Step]>,
     select: Select<World>,
     scope: crate::editing::Scope,
+    secondary: Option<Secondary>,
+    selected: bool,
 ) -> Measured<HoverPass<World, H>> {
     measured::around_into(child, move |placement, inner, pass| {
         pass.scope(
@@ -102,6 +119,8 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     rect: placement.rect,
                     select,
                     scope,
+                    secondary,
+                    selected,
                 });
                 output
             },

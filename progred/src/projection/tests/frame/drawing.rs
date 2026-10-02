@@ -340,7 +340,6 @@ fn drawing_frame(
         annotations: &annotations,
         styles: &styles,
         selection: None,
-        secondary: None,
         selected_trace: None,
     };
     crate::projection::drawing::program_leaf(
@@ -430,6 +429,8 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
                 picked.borrow_mut().push(source.clone());
                 true
             }),
+            secondary: None,
+            selected: false,
         }]);
         let mut state = ui_events::pointer::PointerState::default();
         state.position.x = 5.0;
@@ -579,6 +580,8 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
                 true
             }
         }),
+        secondary: None,
+        selected: false,
     }]);
     input.view_regions = Rc::from([placed::ViewRegion {
         root: source_view.clone(),

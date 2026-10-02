@@ -104,9 +104,12 @@ fn settle_with_sources(
         Some(Hovered::Tree(hover)) => hover_secondary(sources, placed.completion.as_ref(), hover),
         _ => None,
     });
+    let selected_secondary =
+        crate::display::widget::navigation::selected_secondary(&placed.descends);
     let frame = placed.bind(crate::placed::ResolvedHover {
         hovered,
         hovered_secondary,
+        selected_secondary,
         hovered_trace: None,
     });
     let hover = binding.elapsed();

@@ -361,6 +361,7 @@ mod tests {
         ResolvedHover {
             hovered: None,
             hovered_secondary: None,
+            selected_secondary: None,
             hovered_trace: None,
         }
     }
@@ -1062,6 +1063,8 @@ mod tests {
                 true
             }),
             Default::default(),
+            None,
+            false,
         );
         let widget = container::floating(
             widget::leaf(Extent::default(), |_, _| {}),
@@ -1205,6 +1208,8 @@ mod tests {
                         true
                     }
                 }),
+                secondary: None,
+                selected: false,
             }]);
             let mut event = down_at(5.0, 5.0);
             event.state.modifiers =

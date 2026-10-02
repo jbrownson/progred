@@ -419,6 +419,9 @@ pub struct ResolvedHover<Hover> {
     /// The cell-relative location the hover refers to; its other
     /// projections carry the faint secondary mark.
     pub hovered_secondary: Option<Secondary>,
+    /// The same for the selected occurrence, whose other projections carry
+    /// the strong mark in every view.
+    pub selected_secondary: Option<Secondary>,
     /// The actual structural source under the pointer, independent of
     /// value-equivalence highlighting.
     pub hovered_trace: Option<SourceTrace>,
@@ -597,6 +600,7 @@ impl<H> Default for ResolvedHover<H> {
         Self {
             hovered: None,
             hovered_secondary: None,
+            selected_secondary: None,
             hovered_trace: None,
         }
     }
