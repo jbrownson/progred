@@ -745,6 +745,7 @@ mod tests {
             ("2", Example::Fidget),
             ("3", Example::Toolpaths),
             ("4", Example::Grap),
+            ("5", Example::Libraries),
         ] {
             assert_eq!(
                 shortcut(

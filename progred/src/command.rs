@@ -77,10 +77,17 @@ pub enum Example {
     Fidget,
     Toolpaths,
     Grap,
+    Libraries,
 }
 
 impl Example {
-    pub const ALL: [Self; 4] = [Self::IopTree, Self::Fidget, Self::Toolpaths, Self::Grap];
+    pub const ALL: [Self; 5] = [
+        Self::IopTree,
+        Self::Fidget,
+        Self::Toolpaths,
+        Self::Grap,
+        Self::Libraries,
+    ];
 
     /// The bundled document's file name, which also names it in a web address.
     #[cfg(any(test, target_arch = "wasm32"))]
@@ -90,6 +97,7 @@ impl Example {
             Self::IopTree => "iop-tree",
             Self::Fidget => "fidget-shapes",
             Self::Toolpaths => "toolpaths",
+            Self::Libraries => "libraries",
         }
     }
 
@@ -99,6 +107,7 @@ impl Example {
             Self::IopTree => include_str!("../../examples/iop-tree.gid"),
             Self::Fidget => include_str!("../../examples/fidget-shapes.gid"),
             Self::Toolpaths => include_str!("../../examples/toolpaths.gid"),
+            Self::Libraries => include_str!("../../examples/libraries.gid"),
         }
     }
 }
@@ -153,6 +162,7 @@ pub enum ShortcutKey {
     Digit2,
     Digit3,
     Digit4,
+    Digit5,
     D,
     N,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -175,6 +185,7 @@ impl ShortcutKey {
             Self::Digit2 => "2",
             Self::Digit3 => "3",
             Self::Digit4 => "4",
+            Self::Digit5 => "5",
             Self::D => "D",
             Self::N => "N",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -250,6 +261,10 @@ pub fn spec(command: Command) -> Spec {
         Command::App(AppCommand::Example(Example::Grap)) => {
             item("Grap Language", Some(Shortcut::plain(ShortcutKey::Digit4)))
         }
+        Command::App(AppCommand::Example(Example::Libraries)) => item(
+            "Document Libraries",
+            Some(Shortcut::plain(ShortcutKey::Digit5)),
+        ),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::Save) => item("Save", Some(Shortcut::plain(ShortcutKey::S))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]

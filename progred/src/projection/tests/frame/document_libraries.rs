@@ -143,7 +143,7 @@ fn only_the_root_declares_libraries() {
 #[test]
 fn the_lab_libraries_draw_fractions_angles_and_tints() {
     let (doc, names) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lab/library.gid"
+        "../../../../../examples/libraries.gid"
     ))
     .unwrap();
     let mut world = crate::test_editor(doc);

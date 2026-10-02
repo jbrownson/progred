@@ -10,6 +10,7 @@ platforms. Examples are numbered consecutively in menu order.
 | 2 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube; inline source and previews |
 | 3 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
 | 4 | `grap-demo.gid` | Grap evaluation |
+| 5 | `libraries.gid` | Libraries the document defines: fractions, angles, and tints, each a key it owns and a view that draws it |
 | | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
 
 The menu lists the examples meant for visitors. The navigation fixture isn't on
