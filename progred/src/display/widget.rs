@@ -4,9 +4,9 @@
 use crate::display::Layout;
 #[cfg(test)]
 pub use frame::place;
-pub use frame::{HoverContext, HoverInput, HoverPass, Probe};
 #[cfg(test)]
-pub use frame::{HoverOutput, Attribution};
+pub use frame::{Attribution, HoverOutput};
+pub use frame::{HoverContext, HoverInput, HoverPass, Probe};
 use gid::Value;
 pub use measured::Extent;
 use measured::Measured;

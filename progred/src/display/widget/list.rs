@@ -51,7 +51,7 @@ pub fn insertion_gap<W: 'static, H: Clone + PartialEq + 'static>(
 mod tests {
     use super::*;
     use crate::display::recording::{Recorded, record};
-    use crate::display::widget::{HoverInput, HoverOutput, Attribution};
+    use crate::display::widget::{Attribution, HoverInput, HoverOutput};
     use puri::{DrawCmd, DrawList, Placement, Point, Rect, Shape};
 
     fn gap(active: bool) -> HoverOutput<(), u32> {
