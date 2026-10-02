@@ -5,23 +5,17 @@ use crate::display::{
     row, selectable_bracket, shared,
 };
 use crate::libraries::name;
+use crate::libraries::representation::Precedence;
 use gid::{CellId, Step, Value};
 
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Precedence {
-    Sum,
-    Product,
-}
-
 fn precedence(marker: CellId) -> Option<Precedence> {
-    match marker {
-        SUM | SUBTRACT => Some(Precedence::Sum),
-        MULTIPLY | DIVIDE => Some(Precedence::Product),
-        _ => None,
-    }
+    let (_, symbol) = super::ARITHMETIC
+        .into_iter()
+        .find(|(cell, _)| *cell == marker)?;
+    Precedence::of_symbol(symbol)
 }
 
 fn form(value: &Value) -> Option<(CellId, &Value)> {
@@ -55,7 +49,7 @@ fn operand(
             precedence(marker),
             form(value).and_then(|(marker, _)| precedence(marker)),
         ) {
-            (Some(parent), Some(nested)) => nested < parent || (nested == parent && key == RIGHT),
+            (Some(parent), Some(nested)) => parent.groups(nested, key == RIGHT),
             _ => false,
         };
     if needs_group {

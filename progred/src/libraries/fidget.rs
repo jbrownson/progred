@@ -2,7 +2,7 @@
 //! one lowering and preview backend. Neither Grap nor GID knows about
 //! the host representation.
 
-use crate::libraries::{Library, absent, color, control, f32, name, presentation};
+use crate::libraries::{Library, absent, color, control, f32, name, presentation, representation};
 #[cfg(test)]
 use fidget_engine::shape::EzShape;
 #[cfg(not(target_arch = "wasm32"))]
@@ -103,6 +103,14 @@ pub mod vocabulary {
     pub const INVALID_BOUNDS: CellId = CellId::from_u128(0x64f01f9b22d96b4adfaadf21c2d6a74e);
     pub const INVALID_SIZE: CellId = CellId::from_u128(0x220fe6002d6a973da9c2ea1ff7fec98e);
 }
+
+/// Arithmetic on fields, which reads infix as a number's does.
+const ARITHMETIC: [(CellId, &str); 4] = [
+    (vocabulary::SUM, "+"),
+    (vocabulary::SUBTRACT, "-"),
+    (vocabulary::MULTIPLY, "*"),
+    (vocabulary::DIVIDE, "/"),
+];
 
 fn node(marker: CellId, content: Value) -> Value {
     Value::record([(marker, content)])
@@ -1148,10 +1156,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     for (cell, spelling) in [
         (vocabulary::FIDGET, "fidget"),
         (vocabulary::AXIS, "axis"),
-        (vocabulary::SUM, "+"),
-        (vocabulary::SUBTRACT, "-"),
-        (vocabulary::MULTIPLY, "*"),
-        (vocabulary::DIVIDE, "/"),
         (vocabulary::MIN, "min"),
         (vocabulary::MAX, "max"),
         (vocabulary::NEGATE, "negate"),
@@ -1186,7 +1190,10 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::YAW, "yaw"),
         (vocabulary::PITCH, "pitch"),
         (vocabulary::ZOOM, "zoom"),
-    ] {
+    ]
+    .into_iter()
+    .chain(ARITHMETIC)
+    {
         cells.set_value(cell, name::record(spelling, []));
     }
     for (cell, spelling) in [
@@ -1235,11 +1242,18 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ),
     );
     let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
+    let infix: Rc<[_]> = ARITHMETIC
+        .into_iter()
+        .filter_map(|(cell, symbol)| Some((cell, representation::Precedence::of_symbol(symbol)?)))
+        .collect();
     Library::named(
         ID,
         "fidget",
         crate::libraries::Definitions::from_parts(cells, functions()),
         crate::display::compose_partials([
+            crate::display::runtime_partial(move |input| {
+                representation::infix_display(vocabulary::FIDGET, &infix, input)
+            }),
             crate::display::runtime_partial(projection::field),
             crate::display::runtime_partial(move |input| display(input, &renderer)),
             crate::display::runtime_partial(mesh::display),
