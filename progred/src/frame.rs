@@ -114,23 +114,22 @@ fn attribute_hover(
         other => other,
     };
     let visible = source_hover_visible(hovered.as_ref(), link);
-    let source_path = match &hovered {
+    let landmark = match &hovered {
         Some(Hovered::Tree(hover::Hover::Value(path))) => descends
             .iter()
-            .find(|d| d.root.as_ref() == root && d.path == *path)
-            .and_then(|d| d.scope.source(path))
-            .map(|path| std::rc::Rc::<[gid::Step]>::from(path.as_ref())),
+            .find(|d| d.root.as_ref() == root && d.path == *path),
         _ => None,
     };
+    let source_path = landmark
+        .and_then(|d| d.scope.source(&d.path))
+        .map(|path| std::rc::Rc::<[gid::Step]>::from(path.as_ref()));
     let hovered_secondary = match &hovered {
+        // What the occurrence was drawn sharing, which a computed one has
+        // without a stored source.
         Some(Hovered::Tree(hover::Hover::Value(_))) if visible => {
-            source_path.as_ref().and_then(|path| {
-                sources.resolve_path(path).map(|value| {
-                    hover::Secondary::from_path(sources, path.clone(), value.as_cell())
-                })
-            })
+            landmark.and_then(|d| d.secondary.clone())
         }
-        Some(Hovered::Tree(hover)) if visible => hover::hover_secondary(sources, completion, hover),
+        Some(Hovered::Tree(hover)) if visible => hover::hover_secondary(completion, hover),
         _ => None,
     };
     let hovered_trace = match &hovered {
@@ -974,13 +973,15 @@ mod frame_tests {
             source.clone(),
             crate::display::Conject::descend(),
         );
+        // What the projection draws a conjected occurrence sharing.
+        let secondary = hover::Secondary::Stored(Rc::from(source.as_slice()));
         let mut landmarks = [navigate::Descend::<Editor> {
             path: occurrence.clone(),
             root: Some(root.clone()),
             rect: Rect::new(0.0, 0.0, 10.0, 10.0),
             select: Rc::new(|_, _| true),
             scope,
-            secondary: None,
+            secondary: Some(secondary.clone()),
             selected: false,
         }];
         let hover = Some(Hovered::Tree(hover::Hover::Value(occurrence.clone())));
@@ -994,10 +995,7 @@ mod frame_tests {
         );
         let expected = hover::SourceTrace::Stored(Rc::from(source));
         assert_eq!(resolved.hovered_trace, Some(expected.clone()));
-        assert_eq!(
-            resolved.hovered_secondary,
-            Some(hover::Secondary::from_trace(&expected))
-        );
+        assert_eq!(resolved.hovered_secondary, Some(secondary.clone()));
         // A held press must carry the owning view into successor attribution,
         // not just preserve the displayed hover path.
         let observed = Rc::new(std::cell::RefCell::new(None));
@@ -1016,7 +1014,7 @@ mod frame_tests {
             occurrence.clone(),
             Rc::new(|_, _| true),
             landmarks[0].scope.clone(),
-            None,
+            Some(secondary.clone()),
             false,
         );
         let frame = hover_frame(
@@ -1029,10 +1027,7 @@ mod frame_tests {
         assert_eq!(frame.dispatch.pointer_root, Some(root.clone()));
         assert_eq!(
             *observed.borrow(),
-            Some((
-                Some(expected.clone()),
-                Some(hover::Secondary::from_trace(&expected))
-            ))
+            Some((Some(expected.clone()), Some(secondary)))
         );
         // A detached occurrence must not acquire provenance even when its
         // spelling also names real document data.
@@ -1056,7 +1051,6 @@ mod frame_tests {
             false,
         );
         assert!(resolved.hovered_trace.is_none());
-        assert!(resolved.hovered_secondary.is_none());
     }
 
     fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {

@@ -131,14 +131,11 @@ pub(crate) fn from_grap(
 /// The secondary target a hover refers to. An `Entry` hover reads the
 /// exact completion offers emitted by the current frame.
 pub(crate) fn hover_secondary<C>(
-    sources: &Sources,
     completion: Option<&Offers<C>>,
     hover: &Hover,
 ) -> Option<Secondary> {
     match hover {
-        Hover::Value(path) => sources
-            .resolve_path(path)
-            .map(|value| Secondary::from_path(sources, path.clone(), value.as_cell())),
+        Hover::Value(_) => None, // Drawn with the occurrence; read from its landmark.
         Hover::Source(source) => Some(Secondary::from_trace(source)),
         Hover::Calls(_) => None, // Needs the available projection; resolved by frame attribution.
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),

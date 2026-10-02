@@ -83,14 +83,7 @@ struct Bench {
 }
 
 /// Paint and unpack the output of the completed hover pass.
-fn settle(placed: crate::placed::HoverOutput<World>) -> Bench {
-    settle_with_sources(placed, None)
-}
-
-fn settle_with_sources(
-    mut placed: crate::placed::HoverOutput<World>,
-    sources: Option<&Sources>,
-) -> Bench {
+fn settle(mut placed: crate::placed::HoverOutput<World>) -> Bench {
     let binding = std::time::Instant::now();
     #[cfg(feature = "layout-profile")]
     let profile = crate::display::profile::enter(crate::display::profile::Kind::Hover);
@@ -100,10 +93,15 @@ fn settle_with_sources(
         Some(Claim::Direct(hover)) => Some(hover.clone()),
         _ => None,
     };
-    let hovered_secondary = sources.and_then(|sources| match &hovered {
-        Some(Hovered::Tree(hover)) => hover_secondary(sources, placed.completion.as_ref(), hover),
+    let hovered_secondary = match &hovered {
+        Some(Hovered::Tree(Hover::Value(path))) => placed
+            .descends
+            .iter()
+            .find(|descend| descend.path == *path)
+            .and_then(|descend| descend.secondary.clone()),
+        Some(Hovered::Tree(hover)) => hover_secondary(placed.completion.as_ref(), hover),
         _ => None,
-    });
+    };
     let selected_secondary =
         crate::display::widget::navigation::selected_secondary(&placed.descends);
     let frame = placed.bind(crate::placed::ResolvedHover {
@@ -351,7 +349,7 @@ impl BenchContext {
         let phase = std::time::Instant::now();
         #[cfg(feature = "layout-profile")]
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Paint);
-        let mut settled = settle_with_sources(placed, Some(&sources));
+        let mut settled = settle(placed);
         #[cfg(feature = "layout-profile")]
         drop(profile);
         settled.times = FrameTimes {

@@ -1526,7 +1526,7 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
 }
 
 #[test]
-fn a_selected_reference_marks_its_cell_in_every_view() {
+fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
     use crate::libraries::{absent, grap::vocabulary::GRAP, presentation, workspace};
     fn fills(commands: &[DrawCmd], brush: &Brush, outline: RoundedRect) -> bool {
         commands.iter().any(|command| match command {
@@ -1572,24 +1572,40 @@ fn a_selected_reference_marks_its_cell_in_every_view() {
     // The document's program field, and the pane's result naming it missing.
     let (field, missing) = (drawn(GRAP), drawn(absent::vocabulary::CELL));
     assert_ne!(field.root, missing.root);
-    let mark = Brush::from(
-        crate::styles::Theme::Light
-            .palette()
-            .accent
-            .with_alpha(0.10),
-    );
+    let mark = |alpha| {
+        Brush::from(
+            crate::styles::Theme::Light
+                .palette()
+                .accent
+                .with_alpha(alpha),
+        )
+    };
+    let marked = |runner: &mut crate::EditorRunner, alpha, other: &crate::navigate::Descend<_>| {
+        runner.refresh_frame(1.0, size);
+        let mut list = DrawList::default();
+        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
+        fills(&list.0, &mark(alpha), highlight_outline(1.0, other.rect))
+    };
     for (selected, other) in [(&field, &missing), (&missing, &field)] {
         runner.editor.model.selection = Some(Selection::edge(
             selected.root.as_ref().unwrap(),
             selected.path.to_vec(),
         ));
-        runner.refresh_frame(1.0, size);
-        let mut list = DrawList::default();
-        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
         assert!(
-            fills(&list.0, &mark, highlight_outline(1.0, other.rect)),
+            marked(&mut runner, 0.10, other),
             "selecting {:?} marks {:?}",
             selected.path,
+            other.path,
+        );
+    }
+    runner.editor.model.selection = None;
+    for (hovered, other) in [(&field, &missing), (&missing, &field)] {
+        // On the reference's opening parenthesis, not the missing value inside.
+        runner.editor.pointer = Some(Point::new(hovered.rect.x0 + 2.0, hovered.rect.center().y));
+        assert!(
+            marked(&mut runner, 0.05, other),
+            "hovering {:?} marks {:?}",
+            hovered.path,
             other.path,
         );
     }

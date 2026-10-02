@@ -2306,9 +2306,6 @@ fn completion_constructor_aliases_rank_ahead_of_literal_text() {
 
 #[test]
 fn entry_hover_marks_follow_the_visible_offers() {
-    let doc = sample_document();
-    let lib = crate::stack::load().libraries;
-    let sources = src(&doc, &lib);
     let cell = new_cell_id();
     let offers = |value: Value| Offers {
         entries: vec![Entry {
@@ -2322,19 +2319,15 @@ fn entry_hover_marks_follow_the_visible_offers() {
     };
 
     assert_eq!(
-        hover_secondary(&sources, Some(&offers(Value::from(cell))), &Hover::Entry(0)),
+        hover_secondary(Some(&offers(Value::from(cell))), &Hover::Entry(0)),
         Some(Secondary::Cell(cell))
     );
     assert_eq!(
         hover_secondary(
-            &sources,
             Some(&offers(crate::test_values::text("offer"))),
             &Hover::Entry(0)
         ),
         None
     );
-    assert_eq!(
-        hover_secondary::<()>(&sources, None, &Hover::Entry(0)),
-        None
-    );
+    assert_eq!(hover_secondary::<()>(None, &Hover::Entry(0)), None);
 }
