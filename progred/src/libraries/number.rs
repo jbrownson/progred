@@ -542,12 +542,14 @@ fn partial_min<N: Copy + PartialOrd>(left: N, right: N) -> N {
     if right < left { right } else { left }
 }
 
+/// The step a scrub starts with: the value's second significant digit, at
+/// most one, so a two-digit number moves by ones.
 fn initial_precision(magnitude: f64, minimum: f64) -> f64 {
     (if magnitude == 0.0 {
-        0.01
+        0.1
     } else {
         10.0_f64
-            .powf(magnitude.abs().log10().floor() - 2.0)
+            .powf(magnitude.abs().log10().floor() - 1.0)
             .min(1.0)
     })
     .max(minimum)
@@ -679,7 +681,7 @@ mod tests {
                     distance_y: 0.0,
                 })
                 .value,
-            0.501,
+            0.51,
         );
 
         let one_decimal_place = PIXELS_PER_DECADE;
@@ -741,7 +743,8 @@ mod tests {
 
     #[test]
     fn a_gesture_fixes_its_scale_from_the_starting_value() {
-        assert_eq!(NumberScrub::new(0.1234838495).base, 0.001);
+        assert_eq!(NumberScrub::new(0.1234838495).base, 0.01);
+        assert_eq!(NumberScrub::new(60.0).base, 1.0);
         assert_eq!(NumberScrub::new(123.0).base, 1.0);
         assert_eq!(NumberScrub::new(1234.0).base, 1.0);
         assert_eq!(NumberScrub::new(0_u64).base, 1.0);

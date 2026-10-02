@@ -171,10 +171,6 @@ fn heights() {
     heights.hold(ModifiersState::CONTROL);
     let start = heights.text_at(&leaves);
     heights.press_at(start);
-    // Straight across, 60 moves a fortieth per pixel: reaching 90 would take
-    // wider than the frame. Dragging up first makes each pixel count for more.
-    let up = start - kurbo::Vec2::new(0.0, 48.0);
-    heights.move_to(up);
     let mut moved = 0.0;
     while (heights.number(&leaves).unwrap() - 90.0).abs() > 3.0 {
         moved += 2.0;
@@ -183,7 +179,7 @@ fn heights() {
             "never reached 90: {:?}",
             heights.number(&leaves)
         );
-        heights.move_to(up + kurbo::Vec2::new(moved, 0.0));
+        heights.move_to(start + kurbo::Vec2::new(moved, 0.0));
     }
     heights.release();
     heights.hold(ModifiersState::empty());
