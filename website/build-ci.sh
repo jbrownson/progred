@@ -36,6 +36,10 @@ if [ ! -x "$bindgen_root/wasm-bindgen" ]; then
     )
 fi
 
+# The editor shows which commit it was built from.
+PROGRED_COMMIT=$(git rev-parse --short=8 HEAD 2>/dev/null || printf '%.8s' "${WORKERS_CI_COMMIT_SHA-}")
+export PROGRED_COMMIT
+
 # This is the deliberate CI exception to the local Cargo tripwire.
 export RUSTC_WRAPPER=
 export CARGO_NET_OFFLINE=false

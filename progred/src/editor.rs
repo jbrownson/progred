@@ -70,6 +70,16 @@ pub(crate) enum AfterDiscard {
     Quit,
 }
 
+/// How finished Progred is, and the commit this build came from when it was
+/// told: in the web editor's menu bar and window titles, so a screenshot
+/// says which version it shows.
+pub(crate) fn stage() -> String {
+    match option_env!("PROGRED_COMMIT").filter(|commit| !commit.is_empty()) {
+        Some(commit) => format!("pre-alpha {commit}"),
+        None => "pre-alpha".to_owned(),
+    }
+}
+
 /// One window editing one document: its own CellId universe, model,
 /// history, interaction state, and measurement caches (the font
 /// context is a cheap clone over shared font data). The dispatch
@@ -328,23 +338,27 @@ impl Editor {
     }
 
     pub(crate) fn title(&self) -> String {
-        // The macOS convention: the display name alone — the dirty
-        // state is the close button's dot, the location the proxy
-        // icon.
+        // The macOS convention: the display name — the dirty state is
+        // the close button's dot, the location the proxy icon — then
+        // the app's stage, as a beta's title says it is one.
         #[cfg(target_os = "macos")]
-        return match &self.doc_path {
-            Some(path) => path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.display().to_string()),
-            None => "Untitled".to_string(),
-        };
+        return format!(
+            "{} — Progred {}",
+            match &self.doc_path {
+                Some(path) => path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.display().to_string()),
+                None => "Untitled".to_string(),
+            },
+            stage()
+        );
         #[cfg(not(target_os = "macos"))]
         {
             let dirty = if self.model.dirty() { " •" } else { "" };
             match &self.doc_path {
-                Some(path) => format!("Progred — {}{dirty}", path.display()),
-                None => format!("Progred — untitled{dirty}"),
+                Some(path) => format!("Progred {} — {}{dirty}", stage(), path.display()),
+                None => format!("Progred {} — untitled{dirty}", stage()),
             }
         }
     }

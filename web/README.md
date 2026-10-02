@@ -112,6 +112,12 @@ enabled item, and Enter/Space activates it. Escape, Tab, an outside click, or
 losing focus dismisses the menu. The displayed Cmd/Ctrl shortcuts work with menus
 open or closed. The native macOS menu remains separate.
 
+The menu bar's far end shows Progred's stage and the commit the build came
+from, as native window titles do, so a screenshot says which version it shows.
+`tools/sandbox-cargo` and `website/build-ci.sh` pass the commit in as
+`PROGRED_COMMIT`, since build code can't read Git; a local build with
+uncommitted changes is marked dirty.
+
 The browser build uses a shared-memory coordinator for the existing CAM background
 jobs. It requires a secure context (localhost or HTTPS) and cross-origin
 isolation, and WebAssembly SIMD support. The local server supplies

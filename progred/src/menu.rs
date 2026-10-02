@@ -617,13 +617,34 @@ mod view {
             })
             .collect::<Vec<_>>();
         let heading_width = x;
+        // How finished Progred is, at the bar's far end: a note, not a menu.
+        let stage = {
+            let text = crate::render::text(tcx, &crate::editor::stage(), &styles.dim);
+            let vertical = ((bar_height(description.scale) - text.extent.height()) / 2.0).max(0.0);
+            let horizontal = 10.0 * description.scale;
+            measured::pad(
+                Insets::new(horizontal, vertical, horizontal, vertical),
+                text,
+            )
+        };
+        let spacer = placed::leaf(
+            Extent {
+                width: (description.width - heading_width - stage.extent.width).max(0.0),
+                ascent: 0.0,
+                descent: 0.0,
+            },
+            |_, _| {},
+        );
         let popup = description.state.open().and_then(|index| {
             definition
                 .get(index)
                 .map(|menu| popup(tcx, &styles, &description, &menu.entries))
         });
         let bar = placed::decorate(
-            measured::min_width(description.width, measured::centered_row(0.0, headings)),
+            measured::min_width(
+                description.width,
+                measured::centered_row(0.0, headings.into_iter().chain([spacer, stage]).collect()),
+            ),
             move |p, rect| {
                 p.fill(rect, palette.chrome, Affine::IDENTITY);
                 p.fill(
