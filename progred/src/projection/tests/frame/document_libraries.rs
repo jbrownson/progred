@@ -217,11 +217,15 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
         2,
         "the heading's dial and its dot"
     );
-    let swatches = fills(|shape| matches!(shape, Shape::Rect(_)));
+    let rects = fills(|shape| matches!(shape, Shape::Rect(_)));
+    assert!(
+        rects.contains(&Brush::from(puri::Color::from_rgb8(0x99, 0x99, 0x99))),
+        "the dial marks zero"
+    );
     for color in [0x3b82a0u32, 0xc1440e, 0x548b64] {
         let [r, g, b] = [16, 8, 0].map(|shift| (color >> shift) as u8);
         assert!(
-            swatches.contains(&Brush::from(puri::Color::from_rgb8(r, g, b))),
+            rects.contains(&Brush::from(puri::Color::from_rgb8(r, g, b))),
             "a swatch of {color:06x}"
         );
     }

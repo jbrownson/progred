@@ -76,8 +76,8 @@
     angles: {name: "angles", keys: [degrees], projection: angle_view},
     angle_view: {name: "angle view", params: [value], body: {
       function: row, gap: {f64: 0x0000000000001040}, children: {function: do, expressions: [
-        {function: canvas, width: {f64: 0x0000000000003440}, ascent: {f64: 0x0000000000002c40},
-          descent: {f64: 0x0000000000001840},
+        {function: canvas, width: {f64: 0x0000000000003c40}, ascent: {f64: 0x0000000000003440},
+          descent: {f64: 0x0000000000002040},
           program: {function: quote, expression: {function: dial, value: {unquote: value}}}},
         {function: descend, step: {key: degrees}},
         {function: text, content: "degrees"},
@@ -87,16 +87,19 @@
       function: where,
       bindings: [{pattern: {degrees: {bind: deg}}, subject: value}],
       expression: {function: all, expressions: [
-        {function: fill, paint: {rgb: 0xdddddd}, shape: {circle: {x: {f64: 0x0000000000002440},
-          y: {f64: 0x0000000000002440}, radius: {f64: 0x0000000000002240}}}},
+        {function: fill, paint: {rgb: 0xdddddd}, shape: {circle: {x: {f64: 0x0000000000002c40},
+          y: {f64: 0x0000000000002c40}, radius: {f64: 0x0000000000002a40}}}},
+        {function: fill, paint: {rgb: 0x999999}, shape: {rect: {x: {f64: 0x0000000000002c40},
+          y: {f64: 0x0000000000002a40}, width: {f64: 0x0000000000002a40},
+          height: {f64: 0x0000000000000040}}}},
         {function: fill, paint: {rgb: 0x444444}, shape: {function: quote, expression: {circle: {
-          x: {unquote: {function: sum, left: {f64: 0x0000000000002440}, right: {function: multiply,
-            left: {f64: 0x0000000000001c40},
+          x: {unquote: {function: sum, left: {f64: 0x0000000000002c40}, right: {function: multiply,
+            left: {f64: 0x0000000000002440},
             right: {function: cos, operand: {function: multiply, left: deg, right: {f64: 0x399d52a246df913f}}}}}},
-          y: {unquote: {function: subtract, left: {f64: 0x0000000000002440}, right: {function: multiply,
-            left: {f64: 0x0000000000001c40},
+          y: {unquote: {function: subtract, left: {f64: 0x0000000000002c40}, right: {function: multiply,
+            left: {f64: 0x0000000000002440},
             right: {function: sin, operand: {function: multiply, left: deg, right: {f64: 0x399d52a246df913f}}}}}},
-          radius: {f64: 0x0000000000000440}}}}},
+          radius: {f64: 0x0000000000000840}}}}},
       ]},
     }},
 
