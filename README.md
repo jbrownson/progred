@@ -79,8 +79,9 @@ browser currently runs expensive jobs synchronously.
 - **Fluent input.** Code is mostly entered a piece at a time through pickers
   rather than typed left to right; typing an operator after a number is the
   first exception.
-- **Libraries defined in documents.** Libraries are built into the editor. A
-  document can define its own functions and views, but not yet a library.
+- **Complete libraries in documents.** A document can declare a library that
+  draws its own records, but the library can't offer completions yet, and other
+  documents can't load it.
 - **A full browser version.** The web editor can't open or save documents, so
   edits are lost on reload. Its copy and paste stay inside the page, and IME and
   dictation don't work in it.
