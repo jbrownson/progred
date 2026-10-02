@@ -92,6 +92,16 @@ fn fidget_figures_preserve_the_standalone_previews_beside_their_code() {
         })
         .count();
     assert_eq!(pictured, figures.len());
+    // Between a picture and its code, a click selects the figure.
+    let (first, _) = &figures[0];
+    let first = vec![key("figures"), Step::Element(first.clone())];
+    let picture = landmark(&[
+        first[0].clone(),
+        first[1].clone(),
+        Step::Key(presentation::vocabulary::RESULT),
+    ])
+    .unwrap();
+    let gap = Point::new(picture.x1 + 8.0, picture.y0 + 8.0);
     let previews = frame
         .list
         .0
@@ -108,6 +118,8 @@ fn fidget_figures_preserve_the_standalone_previews_beside_their_code() {
         previews.iter().all(|at| (at.x - previews[0].x).abs() < 0.5),
         "{previews:?}"
     );
+    assert!(click_at(&mut world, gap).is_some());
+    assert_eq!(world.model.selection.as_ref().unwrap().path(), first);
 }
 
 /// A standalone shape's name rides along in its field tree; it isn't

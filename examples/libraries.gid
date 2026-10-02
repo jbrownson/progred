@@ -27,6 +27,7 @@
     "key": f12dea12c741fe36312750a264f3a235, "col": 9d04b6e1783f2ca5f17d09c4e6a2358b,
     "baseline": 6cd28a4f91e057b3c2941e6a07f5d3b8, "center": 6837fa29d597fede353287ffd98394f5,
     "rule": f8a0697c10a7a18e750e3fb32a57bcf2, "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
+    "selectable": 40b93f6e17d5a28c6a2df1905e83b7c4,
     "libraries": bc197ad66fea59a9bd97c4191c7845b2, "keys": bb30d215605f5599e31f6274641ca89f,
     "projection": 873503e2e37a1722a0dd21399be9ee7f, "functions": e180cc460ec3879c7b331c8e734be0af,
     "over": 5217a5a2b20b9aa61ae7cc5f02d83822, "under": d5f908921d5ad4d2aec6856d1cf34eb6,
@@ -48,13 +49,13 @@
     p: {name: "p"}, q: {name: "q"}, a: {name: "a"}, b: {name: "b"}, c: {name: "c"}, d: {name: "d"},
     deg: {name: "deg"}, ray: {name: "ray"},
 
-    fraction_view: {name: "fraction view", params: [value], body: {
+    fraction_view: {name: "fraction view", params: [value], body: {function: selectable, child: {
       function: col, baseline: {f64: 0x000000000000f03f}, children: {function: do, expressions: [
         {function: center, child: {function: descend, step: {key: over}}},
         {function: rule},
         {function: center, child: {function: descend, step: {key: under}}},
       ]},
-    }},
+    }}},
     add_fractions: {name: "add fractions", params: [p, q], body: {
       function: where,
       bindings: [
@@ -71,7 +72,7 @@
     half: {over: {f64: 0x000000000000f03f}, under: {f64: 0x0000000000000040}},
     quarter: {over: {f64: 0x000000000000f03f}, under: {f64: 0x0000000000001040}},
 
-    angle_view: {name: "angle view", params: [value], body: {
+    angle_view: {name: "angle view", params: [value], body: {function: selectable, child: {
       function: row, gap: {f64: 0x0000000000001040}, children: {function: do, expressions: [
         {function: canvas, width: {f64: 0x0000000000003c40}, ascent: {f64: 0x0000000000003440},
           descent: {f64: 0x0000000000002040},
@@ -79,7 +80,7 @@
         {function: descend, step: {key: degrees}},
         {function: text, content: "degrees"},
       ]},
-    }},
+    }}},
     dial: {name: "dial", params: [value], body: {
       function: where,
       bindings: [

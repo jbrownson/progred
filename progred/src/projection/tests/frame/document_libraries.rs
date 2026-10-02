@@ -317,3 +317,53 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
         }
     }
 }
+
+#[test]
+fn the_example_views_select_what_they_draw() {
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../../../../examples/libraries.gid")).unwrap();
+    let mut world = crate::test_editor(doc);
+    let key = |name: &str| Step::Key(names[name]);
+    let first = |world: &crate::Editor, list: &str| {
+        world
+            .sources()
+            .resolve_path(&[key(list)])
+            .and_then(Value::as_list)
+            .unwrap()
+            .keys()
+            .next()
+            .cloned()
+            .unwrap()
+    };
+    let fraction = vec![
+        key("fractions"),
+        Step::Element(first(&world, "fractions")),
+        Step::Follow(gid::Resolution::Document),
+    ];
+    let over = [fraction.clone(), vec![key("over")]].concat();
+    let under = [fraction.clone(), vec![key("under")]].concat();
+    let angle = vec![key("angles"), Step::Element(first(&world, "angles"))];
+    let frame = settle(editing_frame(&mut world, false));
+    let rect = |path: &[Step]| {
+        frame
+            .descends
+            .iter()
+            .find(|landmark| landmark.path.as_ref() == path)
+            .unwrap()
+            .rect
+    };
+    let (over_rect, under_rect, angle_rect) = (rect(&over), rect(&under), rect(&angle));
+    let selected = |world: &crate::Editor| world.model.selection.as_ref().unwrap().path().to_vec();
+
+    // The rule lies between the parts.
+    let rule = Point::new(over_rect.center().x, (over_rect.y1 + under_rect.y0) / 2.0);
+    assert!(click_at(&mut world, rule).is_some());
+    assert_eq!(selected(&world), fraction, "the rule selects its fraction");
+    assert!(click_at(&mut world, over_rect.center()).is_some());
+    assert_eq!(selected(&world), over, "a part still selects itself");
+    // The word after the number. (The dial's ink names the code that drew
+    // it, so only its blank corners select the angle.)
+    let label = Point::new(angle_rect.x1 - 4.0, angle_rect.center().y);
+    assert!(click_at(&mut world, label).is_some());
+    assert_eq!(selected(&world), angle, "the label selects its angle");
+}

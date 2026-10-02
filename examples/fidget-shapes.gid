@@ -11,6 +11,7 @@
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
     "chamfer": c8d941b591fe167eddf75746f1715e3b,
     "chamfer_pair": cdc74e6807e9a98e7f520e1b138f96cd,
+    "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
     "children": e10b73d5482f96ca7d3852c0f16b49ea,
     "color": d6b4c91765541de967c02878c42d15ea,
     "control_depth": 65ad865257a071f944d92b08fec98ebf,
@@ -77,6 +78,7 @@
     "ring": ec804b721f63fb7b8fea58b401ae4eed,
     "row": 1af52c96e380b7d40c9e1f6a2d5b83e7,
     "scene": d6757ca4cb992116fe31ede39530709d,
+    "selectable": 40b93f6e17d5a28c6a2df1905e83b7c4,
     "shape": ebeb131d69636b697e95536fd45fc70e,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
     "sin": d9f6470a88f105fc9a54f65226afd55d,
@@ -423,31 +425,34 @@
         expressions: [
           picture,
           {
-            baseline: {
-              f64: 0x000000000000f03f,
+            child: {
+              baseline: {
+                f64: 0x000000000000f03f,
+              },
+              function: row,
+              gap: {
+                f64: 0x0000000000003040,
+              },
+              children: {
+                expressions: [
+                  {
+                    steps: [
+                      {
+                        key: result,
+                      },
+                    ],
+                    function: at,
+                    at_value: picture,
+                  },
+                  {
+                    step: part,
+                    function: descend,
+                  },
+                ],
+                function: do,
+              },
             },
-            function: row,
-            gap: {
-              f64: 0x0000000000003040,
-            },
-            children: {
-              expressions: [
-                {
-                  steps: [
-                    {
-                      key: result,
-                    },
-                  ],
-                  function: at,
-                  at_value: picture,
-                },
-                {
-                  step: part,
-                  function: descend,
-                },
-              ],
-              function: do,
-            },
+            function: selectable,
           },
         ],
         function: do,
