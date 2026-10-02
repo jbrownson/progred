@@ -559,7 +559,9 @@ can produce that sequence; a list of expressions remains inert unless a control
 function evaluates it. A row aligns its children's baselines; given a
 `baseline`, it aligns their tops instead and keeps that child's baseline, as a
 column does. `pad`, `center`, `bracket`, and interaction wrappers take
-a raw `child` expression that must emit exactly one child. No buffer borrow is held
+a raw `child` expression that must emit exactly one child. `selectable` makes its
+child select the value being drawn: it claims the hover there, and a click selects
+that value; whatever the child descends into keeps its own target. No buffer borrow is held
 while evaluating a body. Successful operations return the ordinary empty record;
 their useful output remains in Rust.
 

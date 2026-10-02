@@ -2169,7 +2169,7 @@ mod frame_tests {
                             let height =
                                 f64::read(&context.eval_to_value(height, environment)?).unwrap();
                             calls.borrow_mut().push(Size::new(width, height));
-                            Ok(layout::hoverable(layout::drawing(width, 0.0, height, [])))
+                            Ok(layout::selectable(layout::drawing(width, 0.0, height, [])))
                         }
                     }),
                 ),

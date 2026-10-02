@@ -82,6 +82,35 @@ struct Bench {
     frame_elapsed: std::time::Duration,
 }
 
+/// A primary click at `point`, acting on whatever the settled hover there
+/// names, as the window does. `None` when nothing claims the point.
+fn click_at(world: &mut crate::Editor, point: Point) -> Option<Hovered> {
+    let frame = editing_frame(world, false);
+    let Some((_, Claim::Direct(target))) = frame.hover_geometry.probe(Some(point), None, 0.0)
+    else {
+        return None;
+    };
+    let mut input =
+        crate::placed::DispatchContext::new(Some(crate::test_root()), Some(target.clone()));
+    frame.resolve_for_dispatch().dispatch_pointer_down_with(
+        world,
+        &PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: PointerState {
+                position: (point.x, point.y).into(),
+                ..Default::default()
+            },
+        },
+        &mut input,
+    );
+    Some(target)
+}
+
 /// Paint and unpack the output of the completed hover pass.
 fn settle(mut placed: crate::placed::HoverOutput<World>) -> Bench {
     let binding = std::time::Instant::now();

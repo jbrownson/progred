@@ -1404,3 +1404,32 @@ fn a_numbers_other_fields_follow_it_including_one_being_added() {
     assert!(drawn(&mut runner, note));
     assert!(!drawn(&mut runner, f64::vocabulary::F64));
 }
+
+#[test]
+fn a_read_only_swatch_selects_its_color() {
+    use crate::libraries::presentation::vocabulary::RESULT;
+    let color = crate::libraries::color::value(puri::Color::from_rgb8(0x50, 0x96, 0xdc));
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([(grap::vocabulary::EVALUATE, color)])),
+        cells: Cells::new(),
+    });
+    // The evaluated result is computed, so it's read-only.
+    let result = vec![Step::Key(RESULT)];
+    let frame = settle(editing_frame(&mut world, false));
+    let rect = frame
+        .descends
+        .iter()
+        .find(|landmark| landmark.path.as_ref() == result)
+        .unwrap()
+        .rect;
+    assert!(click_at(&mut world, Point::new(rect.x0 + 7.0, rect.center().y)).is_some());
+    let selection = world.model.selection.as_ref().unwrap();
+    assert_eq!(selection.path(), result);
+    assert!(
+        selection
+            .payload()
+            .as_record()
+            .is_none_or(|fields| !fields.contains_key(&crate::libraries::color::vocabulary::PICKER)),
+        "no picker opens on a read-only color"
+    );
+}

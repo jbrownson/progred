@@ -16,8 +16,8 @@ use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
-    Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment, alternatives,
-    block_hover, border, bracket, descend, leaf, on_activate, on_hover, overlay as layout_overlay,
+    Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment, activatable,
+    alternatives, block_hover, border, bracket, descend, leaf, overlay as layout_overlay,
     pickable_runtime, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -70,7 +70,6 @@ pub mod vocabulary {
     // Interaction attach-points.
     pub const SELECTABLE: CellId = CellId::from_u128(0x40b93f6e17d5a28c6a2df1905e83b7c4);
     pub const PICKABLE: CellId = CellId::from_u128(0xf8261c05d94eb7a3072c48e6b3f19d58);
-    pub const HOVERABLE: CellId = CellId::from_u128(0x1d7c40a396f58e2b95e1a2c7048d63bf);
     pub const HOVER_BLOCK: CellId = CellId::from_u128(0x83f0d5b7264a19ce4c07f3921ea6b85d);
     pub const HANDLER: CellId = CellId::from_u128(0x3e5d38e4658b1895e38307ad12862061);
 
@@ -498,11 +497,6 @@ pub fn pick_target(child: Value, value: Value) -> Value {
 }
 
 #[cfg(test)]
-pub fn hoverable(child: Value) -> Value {
-    node(vocabulary::HOVERABLE, child)
-}
-
-#[cfg(test)]
 pub fn hover_block(child: Value) -> Value {
     node(vocabulary::HOVER_BLOCK, child)
 }
@@ -685,7 +679,7 @@ fn decode_with(
     if let Some(content) = value.field(vocabulary::SELECTABLE) {
         let child = decode_with(&content, target)?;
         let interaction = target();
-        return Some(on_activate(child, interaction.hover, interaction.select));
+        return Some(activatable(child, interaction.hover, interaction.select));
     }
     if let Some(content) = value.field(vocabulary::PICKABLE) {
         content.record_len()?;
@@ -696,9 +690,6 @@ fn decode_with(
             interaction.hover,
             content.field(vocabulary::VALUE)?,
         ));
-    }
-    if let Some(content) = value.field(vocabulary::HOVERABLE) {
-        return Some(on_hover(decode_with(&content, target)?, target().hover));
     }
     if let Some(content) = value.field(vocabulary::HOVER_BLOCK) {
         return Some(block_hover(decode_with(&content, target)?));
@@ -974,7 +965,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::INVALID_DRAWING, "invalid drawing arguments"),
         (vocabulary::SELECTABLE, "selectable"),
         (vocabulary::PICKABLE, "pickable"),
-        (vocabulary::HOVERABLE, "hoverable"),
         (vocabulary::HOVER_BLOCK, "hover block"),
         (vocabulary::ON_EVENT, "on event"),
         (vocabulary::HANDLER, "handler"),
@@ -1562,6 +1552,9 @@ mod tests {
         };
         assert_eq!(forms.len(), 2);
         let Recorded::Before { child, .. } = &forms[0] else {
+            panic!("selectable claims the hover");
+        };
+        let Recorded::Before { child, .. } = child.as_ref() else {
             panic!("selectable attaches the provided select");
         };
         let Recorded::Row { gap, children, .. } = child.as_ref() else {
@@ -1616,7 +1609,7 @@ mod tests {
         );
         assert_eq!(
             crate::libraries::test_widgets::claim(
-                &decoded(&hoverable(text_leaf("h", vocabulary::LABEL_FACE))).unwrap()
+                &decoded(&selectable(text_leaf("h", vocabulary::LABEL_FACE))).unwrap()
             ),
             Some(puri::hover::Claim::Direct(
                 crate::libraries::test_widgets::hover(vec![])

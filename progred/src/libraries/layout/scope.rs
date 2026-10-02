@@ -23,7 +23,6 @@ const FUNCTIONS: &[CellId] = &[
     AT,
     CANVAS,
     SELECTABLE,
-    HOVERABLE,
     HOVER_BLOCK,
     PICKABLE,
     ON_EVENT,
@@ -350,7 +349,7 @@ fn operation(
                 program,
             )
         }
-        SELECTABLE | HOVERABLE | HOVER_BLOCK | PICKABLE | ON_EVENT => {
+        SELECTABLE | HOVER_BLOCK | PICKABLE | ON_EVENT => {
             let value = if function == PICKABLE {
                 Some(context.eval(need!(context.field(call, VALUE)), environment)?)
             } else {
@@ -367,9 +366,8 @@ fn operation(
             match function {
                 SELECTABLE => {
                     let target = target();
-                    on_activate(child, target.hover, target.select)
+                    activatable(child, target.hover, target.select)
                 }
-                HOVERABLE => on_hover(child, target().hover),
                 HOVER_BLOCK => block_hover(child),
                 PICKABLE => pickable_runtime(child, target().hover, need!(value)),
                 ON_EVENT => on_event(child, need!(handler)),

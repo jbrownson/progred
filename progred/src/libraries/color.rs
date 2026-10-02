@@ -5,8 +5,8 @@ use gid::{Cells, Step, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
 use crate::display::{
-    Layout, PointEvent, PointUpdate, ProjectionInput, TextFamily, centered_row, col, descend,
-    on_activate, on_hover, on_point, popover, widget,
+    Layout, PointEvent, PointUpdate, ProjectionInput, TextFamily, activatable, centered_row, col,
+    descend, on_point, popover, widget,
 };
 use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
 use puri::draw::CanvasSink;
@@ -394,17 +394,14 @@ pub fn display(
         picker_selection(initial_hue)
     };
     let target = input.targets.current();
-    let swatch = if input.writable {
+    // Read-only colors still select; only a writable one opens the picker.
+    let activate: crate::display::ActionHandler<crate::Editor> = if input.writable {
         let select_picker = target.select_with;
-        on_activate(
-            swatch(color),
-            target.hover.clone(),
-            Rc::new(move |world| select_picker(world, next_selection.clone())),
-        )
+        Rc::new(move |world| select_picker(world, next_selection.clone()))
     } else {
-        swatch(color)
+        target.select
     };
-    let swatch = on_hover(swatch, target.hover);
+    let swatch = activatable(swatch(color), target.hover, activate);
     let swatch = if input.writable
         && let Some(hue) = selected_hue
     {
@@ -661,7 +658,7 @@ mod tests {
     }
 
     #[test]
-    fn a_read_only_color_has_no_picker_activation_or_popup() {
+    fn a_read_only_color_selects_without_a_picker_or_popup() {
         let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
         let selection = picker_selection(0.1);
         let target = |_| crate::display::ProjectionTarget {
@@ -685,10 +682,15 @@ mod tests {
             panic!("color projection is one row")
         };
 
+        // The hover claim around a plain selecting activation around the
+        // swatch; no popup wraps it.
         assert!(matches!(
             children[0],
             Recorded::Before { ref child, .. }
-                if matches!(child.as_ref(), Recorded::Widget(_))
+                if matches!(
+                    child.as_ref(),
+                    Recorded::Before { child, .. } if matches!(child.as_ref(), Recorded::Widget(_))
+                )
         ));
     }
 
