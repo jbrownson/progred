@@ -33,6 +33,12 @@ impl TextClipboard for SystemTextClipboard {
             cb.set_text(text.to_string()).ok();
         }
     }
+
+    fn holds_structure(&mut self) -> bool {
+        use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
+        ClipboardContext::new()
+            .is_ok_and(|cb| cb.has(ContentFormat::Other(CLIPBOARD_FORMAT.to_string())))
+    }
 }
 
 #[cfg(any(test, target_arch = "wasm32"))]
@@ -44,5 +50,9 @@ impl TextClipboard for SystemTextClipboard {
     fn set_text(&mut self, text: &str) {
         self.text = Some(text.to_string());
         self.structure = None;
+    }
+
+    fn holds_structure(&mut self) -> bool {
+        self.structure.is_some()
     }
 }

@@ -395,6 +395,46 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
 }
 
 #[test]
+fn pasting_a_copied_value_over_a_number_or_text_replaces_it() {
+    let root = Value::list([f64::value(1.0), f64::value(2.0), text::value("hello")]);
+    let positions: Vec<_> = root.as_list().unwrap().keys().cloned().collect();
+    let size = kurbo::Size::new(900.0, 600.0);
+    let mut runner = crate::EditorRunner::new(crate::test_editor(Document {
+        root: Some(root),
+        cells: Cells::new(),
+    }));
+    let chord = |key: &str| KeyboardEvent {
+        key: Key::Character(key.into()),
+        modifiers: if cfg!(target_os = "macos") {
+            Modifiers::META
+        } else {
+            Modifiers::CONTROL
+        },
+        ..arrow(NamedKey::End)
+    };
+    let select = |runner: &mut crate::EditorRunner, index: usize| {
+        runner.editor.model.selection = Some(Selection::edge(
+            &crate::test_root(),
+            vec![Step::Element(positions[index].clone())],
+        ));
+        runner.refresh_frame(1.0, size);
+    };
+    select(&mut runner, 0);
+    assert!(runner.keyboard_event(&chord("c"), 1.0, size));
+    // The copy's text is its JSON, not something to type into the
+    // selected value's editor.
+    for index in [1, 2] {
+        select(&mut runner, index);
+        assert!(runner.keyboard_event(&chord("v"), 1.0, size));
+        let root = runner.editor.model.doc.root.as_ref().unwrap();
+        assert_eq!(
+            root.as_list().unwrap().get(&positions[index]),
+            Some(&f64::value(1.0))
+        );
+    }
+}
+
+#[test]
 fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
     let libraries = core_libraries();
     let doc = Document {

@@ -151,6 +151,11 @@ pub struct LineEditPointerDown {
 pub trait TextClipboard {
     fn get_text(&mut self) -> Option<String>;
     fn set_text(&mut self, text: &str);
+    /// Whether the text stands in for a richer structure, which the
+    /// caller pastes whole rather than as typed text.
+    fn holds_structure(&mut self) -> bool {
+        false
+    }
 }
 
 /// What an editing dispatch needs from the caller's context: the state
@@ -370,7 +375,8 @@ impl LineEditState {
                 // Copy and cut handle only when text is actually
                 // selected: with nothing to copy they decline, so the
                 // caller can interpret the chord (structural copy of
-                // the edited value). Paste always lands in the text.
+                // the edited value). Paste lands in the text unless the
+                // clipboard holds a structure, which the caller places.
                 Key::Character(c)
                     if action_mod && matches!(c.to_lowercase().as_str(), "c" | "x" | "v") =>
                 {
@@ -385,6 +391,7 @@ impl LineEditState {
                             drv.delete_selection();
                             true
                         }
+                        ("v", _) if clipboard.holds_structure() => false,
                         ("v", _) => {
                             if let Some(text) = clipboard.get_text() {
                                 drv.insert_or_replace_selection(&text);
@@ -1453,6 +1460,38 @@ mod tests {
             action,
         ));
         assert_eq!(target.text(), "hello");
+    }
+
+    #[test]
+    fn paste_leaves_a_structure_to_the_caller() {
+        struct Structured;
+        impl TextClipboard for Structured {
+            fn get_text(&mut self) -> Option<String> {
+                Some(r#"{"record":[]}"#.into())
+            }
+
+            fn set_text(&mut self, _: &str) {}
+
+            fn holds_structure(&mut self) -> bool {
+                true
+            }
+        }
+        let (mut fonts, mut layouts) = contexts();
+        let mut target = state("12");
+        assert!(!press_with_clipboard(
+            &presentation(),
+            &mut target,
+            &mut fonts,
+            &mut layouts,
+            &mut Structured,
+            Key::Character("v".into()),
+            if cfg!(target_os = "macos") {
+                Modifiers::META
+            } else {
+                Modifiers::CONTROL
+            },
+        ));
+        assert_eq!(target.text(), "12");
     }
 
     #[test]
