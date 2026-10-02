@@ -228,6 +228,32 @@ fn a_plain_missing_name_selection_offers_and_commits_text() {
 }
 
 #[test]
+fn a_grap_program_offers_grap_suggestions() {
+    use crate::libraries::grap::vocabulary::GRAP;
+    let doc = Document {
+        root: Some(Value::record([(GRAP, new_cell_id().into())])),
+        cells: Cells::new(),
+    };
+    let program = vec![Step::Key(GRAP), Step::Follow(Resolution::Document)];
+    let offered = |query| {
+        projected_completion_entries(
+            &doc,
+            &crate::selection::pending_with_query(&crate::test_root(), program.clone(), query),
+        )
+        .into_iter()
+        .map(|entry| entry.display)
+        .collect::<Vec<_>>()
+    };
+    assert_eq!(offered("\"")[0], "quote");
+    let lambda = offered("lam");
+    assert!(lambda.contains(&"new lambda".to_owned()));
+    assert!(
+        !lambda.contains(&"malformed lambda".to_owned()),
+        "error messages stay behind the expansion"
+    );
+}
+
+#[test]
 fn quote_and_unquote_are_offered_under_their_marks() {
     use crate::libraries::{control::vocabulary as control, grap::vocabulary::GRAP};
     use grap::vocabulary::{BODY, EXPRESSION};

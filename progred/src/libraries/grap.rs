@@ -127,6 +127,33 @@ pub(crate) fn expression_path(
     descend_path_local(steps, crate::display::runtime_partial(expression), default)
 }
 
+/// A record naming a Grap program: the program its `grap` field names is
+/// code, so an empty one offers Grap's suggestions. Its other fields, and
+/// code further in, keep their ordinary projections.
+pub fn program_display(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input.value?.field(vocabulary::GRAP)?;
+    crate::display::structure::record_layout(input, |key| {
+        (key == vocabulary::GRAP).then(|| crate::display::runtime_partial(program))
+    })
+}
+
+/// The program's cell keeps its parentheses; what fills it is an expression.
+fn program(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let cell = input.value?.as_cell()?;
+    let source = input
+        .env
+        .resolve(cell)
+        .map_or(gid::Resolution::Document, |definition| definition.source);
+    Some(group(selectable_bracket(
+        Delim::Paren,
+        expression_path([Step::Follow(source)], &input.default_projection),
+    )))
+}
+
 /// Declaration cells keep their parentheses, with a named definition
 /// shown as an unquoted editor at the real name field.
 pub(crate) fn declaration_path(
@@ -506,6 +533,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
             crate::display::runtime_partial(lambda_display),
             crate::display::runtime_partial(value_display),
             crate::display::runtime_partial(ffi_display),
+            crate::display::runtime_partial(program_display),
         ]),
     )
     .with_completions(completions)

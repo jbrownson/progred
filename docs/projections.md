@@ -290,8 +290,10 @@ evaluation allowance. Ordinary call-shaped values elsewhere, including returned
 ones, remain editable data until explicitly evaluated.
 
 The separate `grap` field is ordinary library vocabulary saying its contents
-belong to the Grap domain. It requests no evaluation and has no projection; the
-Grap library only offers it as a suggested root field and a root template.
+belong to the Grap domain. It requests no evaluation. The Grap library offers it
+as a suggested root field and a root template, and draws the program it names as
+an expression slot: the cell keeps its parentheses, and an empty program offers
+Grap's suggestions rather than the whole vocabulary.
 
 The presentation library offers an opt-in interpreter for
 `{value: source, projection: function}`. Pane views try it only at entry,
