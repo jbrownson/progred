@@ -2333,3 +2333,53 @@ fn entry_hover_marks_follow_the_visible_offers() {
     );
     assert_eq!(hover_secondary::<()>(None, None, &Hover::Entry(0)), None);
 }
+
+#[test]
+fn an_operations_own_type_leads_in_its_operands_and_operator() {
+    use crate::libraries::grap::vocabulary::GRAP;
+    use crate::libraries::{f32, number::vocabulary as number, u64};
+    use grap::vocabulary::FUNCTION;
+    let first = |program: Value, field: CellId, query: &str| {
+        let cell = new_cell_id();
+        let mut cells = Cells::new();
+        cells.set_value(cell, program);
+        let document = Document {
+            root: Some(Value::record([(GRAP, cell.into())])),
+            cells,
+        };
+        let path = vec![
+            Step::Key(GRAP),
+            Step::Follow(Resolution::Document),
+            Step::Key(field),
+        ];
+        let selection = crate::selection::pending_with_query(&crate::test_root(), path, query);
+        let entry = projected_completion_entries(&document, &selection)
+            .into_iter()
+            .next()
+            .unwrap();
+        (entry.detail, entry.source)
+    };
+    for (sum, multiply, tag) in [
+        (f64::vocabulary::SUM, f64::vocabulary::MULTIPLY, "f64"),
+        (f32::vocabulary::SUM, f32::vocabulary::MULTIPLY, "f32"),
+        (u64::vocabulary::SUM, u64::vocabulary::MULTIPLY, "u64"),
+    ] {
+        let call = grap::call(sum.into(), []);
+        assert_eq!(
+            first(call.clone(), number::LEFT, "1").0.as_deref(),
+            Some(tag)
+        );
+        assert_eq!(
+            first(call, number::RIGHT, "*").0,
+            Some(format!("call · {tag}"))
+        );
+        let whole = grap::call(
+            sum.into(),
+            [
+                (number::LEFT, Value::record([])),
+                (number::RIGHT, Value::record([])),
+            ],
+        );
+        assert_eq!(first(whole, FUNCTION, "*").1, Some(multiply));
+    }
+}

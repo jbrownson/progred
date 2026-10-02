@@ -36,33 +36,42 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                 scope: CompletionScope::Everything,
                 ..*request
             };
-            offers.extend(
-                libraries
-                    .as_ref()
-                    .and_then(|provider| provider(&library_request))
-                    .unwrap_or_default()
-                    .into_iter()
-                    .chain(
-                        request
-                            .query
-                            .trim()
-                            .is_empty()
-                            .then(|| super::call_completions(request))
-                            .into_iter()
-                            .flatten(),
-                    )
-                    .filter(|offer| {
-                        !offer
-                            .preview
-                            .as_ref()
-                            .and_then(Value::as_record)
-                            .and_then(|fields| fields.get(&FUNCTION))
-                            .and_then(Value::as_cell)
-                            .is_some_and(|cell| {
-                                cell == control::QUOTE || bindings.contains_key(&cell)
-                            })
-                    }),
-            );
+            let mut library_offers: Vec<_> = libraries
+                .as_ref()
+                .and_then(|provider| provider(&library_request))
+                .unwrap_or_default()
+                .into_iter()
+                .chain(
+                    request
+                        .query
+                        .trim()
+                        .is_empty()
+                        .then(|| super::call_completions(request))
+                        .into_iter()
+                        .flatten(),
+                )
+                .filter(|offer| {
+                    !offer
+                        .preview
+                        .as_ref()
+                        .and_then(Value::as_record)
+                        .and_then(|fields| fields.get(&FUNCTION))
+                        .and_then(Value::as_cell)
+                        .is_some_and(|cell| cell == control::QUOTE || bindings.contains_key(&cell))
+                })
+                .collect();
+            // An operation's own library leads in its operands: its literals
+            // and its other operations.
+            if let Some(context) = crate::completion::operation_library(request) {
+                library_offers.sort_by_key(|offer| {
+                    offer
+                        .preview
+                        .as_ref()
+                        .and_then(|preview| crate::completion::offer_library(request, preview))
+                        != Some(context)
+                });
+            }
+            offers.extend(library_offers);
             offers.extend([
                 select("new list", Value::list([])).with_aliases(["["]),
                 select("new record", Value::record([])).with_aliases(["{"]),

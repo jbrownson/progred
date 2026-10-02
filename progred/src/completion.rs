@@ -14,6 +14,48 @@ use std::rc::Rc;
 
 pub use crate::display::widget::offers::{Entry, Offers};
 
+/// The library whose operation a slot belongs to, as an operand or as the
+/// operator itself. Its offers lead there: a local stand-in for knowing types.
+pub(crate) fn operation_library(request: &CompletionRequest<'_>) -> Option<Resolution> {
+    use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
+    use ::grap::vocabulary::FUNCTION;
+    let (gid::Step::Key(field), parent) = request.path.split_last()? else {
+        return None;
+    };
+    [FUNCTION, LEFT, RIGHT, OPERAND]
+        .contains(field)
+        .then_some(())?;
+    let function = (request.value_at)(parent)?
+        .as_record()?
+        .get(&FUNCTION)?
+        .as_cell()?;
+    library_of(request, function)
+}
+
+/// The library an offer comes from: the function it calls, the cell it
+/// refers to, or the first of its fields a library defines, such as a
+/// number's tag.
+pub(crate) fn offer_library(
+    request: &CompletionRequest<'_>,
+    preview: &Value,
+) -> Option<Resolution> {
+    if let Some(cell) = preview.as_cell() {
+        return library_of(request, cell);
+    }
+    let fields = preview.as_record()?;
+    match fields
+        .get(&::grap::vocabulary::FUNCTION)
+        .and_then(Value::as_cell)
+    {
+        Some(function) => library_of(request, function),
+        None => fields.keys().find_map(|key| library_of(request, *key)),
+    }
+}
+
+fn library_of(request: &CompletionRequest<'_>, cell: CellId) -> Option<Resolution> {
+    Some((request.resolve)(cell)?.source).filter(|source| matches!(source, Resolution::Library(_)))
+}
+
 /// Labels can only be cells; any value completes a value.
 fn activation(
     kind: CompletionKind,
@@ -352,7 +394,16 @@ pub(crate) fn completion_entries_with(
         })
         .partition(|(_, _, external)| !*external);
     local.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-    external.sort_by(|a, b| a.0.display.cmp(&b.0.display));
+    let context = operation_library(request);
+    let elsewhere = |entry: &Entry<crate::Editor>| {
+        context.is_some()
+            && entry
+                .source
+                .and_then(|cell| sources.resolve(cell))
+                .map(|definition| definition.source)
+                != context
+    };
+    external.sort_by(|a, b| (elsewhere(&a.0), &a.0.display).cmp(&(elsewhere(&b.0), &b.0.display)));
     let mut references_pool: Vec<_> = local
         .into_iter()
         .map(|(entry, named, _)| (entry, named, None))

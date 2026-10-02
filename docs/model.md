@@ -344,7 +344,10 @@ are tried first. Binding suggestions put the nearest enclosing lexical scope
 first, then outer scopes, sorting names alphabetically within each scope.
 Rebinding a cell gives it the nearer scope's rank; scrolling and layout have no
 effect on this order. Typed-query match quality still ranks ahead of proximity.
-The projection environment exposes
+In an operation's operand (`left`, `right`, or `operand`) and in its operator,
+offers from the library defining that operation come before other libraries':
+a number type's literals and operations lead in its own arithmetic, standing in
+for types until there are some. The projection environment exposes
 the loaded library provider for composition; Grap reuses those offers rather than
 duplicating numeric conventions. Scope discovery reads source structure only;
 quoted template declarations do not introduce bindings into unquotes. Computed
@@ -378,8 +381,9 @@ representation; it remains a suggestion until committed. Other invalid numeric
 queries offer no number. Universal offers use a general ordering: exact nonempty
 display-name matches from library interpretations, strong named cell and constructor
 matches, remaining library-provided interpretations in library order,
-plain text (or a new label), then weak fuzzy and unnamed references. The editor
-does not distinguish particular numeric representations for ranking. With an
+plain text (or a new label), then weak fuzzy and unnamed references. Outside an
+operation's slots, the editor does not distinguish particular numeric
+representations for ranking. With an
 empty query, the zero interpretations therefore follow named cells and
 constructors, just before the empty string. Explicit quoted text and blob syntax
 lead instead. Numeric providers decline label requests. A projection's narrow
