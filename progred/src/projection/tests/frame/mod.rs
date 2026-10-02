@@ -93,18 +93,19 @@ fn settle(mut placed: crate::placed::HoverOutput<World>) -> Bench {
         Some(Claim::Direct(hover)) => Some(hover.clone()),
         _ => None,
     };
+    let landmark = match &hovered {
+        Some(Hovered::Tree(Hover::Value(path))) => {
+            placed.descends.iter().find(|descend| descend.path == *path)
+        }
+        _ => None,
+    };
     let hovered_secondary = match &hovered {
-        Some(Hovered::Tree(Hover::Value(path))) => placed
-            .descends
-            .iter()
-            .find(|descend| descend.path == *path)
-            .and_then(|descend| descend.secondary.clone()),
-        Some(Hovered::Tree(hover)) => hover_secondary(placed.completion.as_ref(), hover),
+        Some(Hovered::Tree(hover)) => hover_secondary(landmark, placed.completion.as_ref(), hover),
         _ => None,
     };
     let selected_secondary =
         crate::display::widget::navigation::selected_secondary(&placed.descends);
-    let frame = placed.bind(crate::placed::ResolvedHover {
+    let frame = placed.bind(crate::placed::Attribution {
         hovered,
         hovered_secondary,
         selected_secondary,

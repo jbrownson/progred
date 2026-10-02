@@ -811,7 +811,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         let hovered = Hovered::Tree(hovered);
         puri::frame::render(
             placed
-                .bind(crate::placed::ResolvedHover {
+                .bind(crate::placed::Attribution {
                     hovered: Some(hovered),
                     ..Default::default()
                 })

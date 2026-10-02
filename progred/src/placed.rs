@@ -23,7 +23,7 @@ pub type HoverPass<C> = crate::display::widget::HoverPass<C, Hovered>;
 pub type HoverOutput<C> = crate::display::widget::HoverOutput<C, Hovered>;
 pub use crate::display::widget::{HoverContext, HoverInput};
 pub type DispatchContext<C> = crate::display::widget::frame::DispatchContext<C, Hovered>;
-pub type ResolvedHover = crate::display::widget::frame::ResolvedHover<Hovered>;
+pub type Attribution = crate::display::widget::frame::Attribution<Hovered>;
 pub use puri::frame::Render;
 pub type Probe = crate::display::widget::frame::Probe<Hovered>;
 pub use crate::display::widget::frame::ViewRegion;
@@ -134,7 +134,7 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
     /// Defer painting until this frame's hover has settled.
     pub fn render(
         &mut self,
-        render: impl FnOnce(&mut dyn puri::draw::CanvasSink, &ResolvedHover) + 'static,
+        render: impl FnOnce(&mut dyn puri::draw::CanvasSink, &Attribution) + 'static,
     ) {
         if self.visible {
             self.placed.render(render);
@@ -357,8 +357,8 @@ mod tests {
         }
     }
 
-    fn no_ink() -> ResolvedHover {
-        ResolvedHover {
+    fn no_ink() -> Attribution {
+        Attribution {
             hovered: None,
             hovered_secondary: None,
             selected_secondary: None,

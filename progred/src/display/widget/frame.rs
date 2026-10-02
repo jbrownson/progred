@@ -69,15 +69,12 @@ impl<'a, C, H> HoverContext<'a, C, H> {
 impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
     pub fn after_hover(
         &mut self,
-        next: impl FnOnce(Rc<ResolvedHover<H>>, &mut Effects<C, H>) + 'static,
+        next: impl FnOnce(Rc<Attribution<H>>, &mut Effects<C, H>) + 'static,
     ) {
         self.output.after_hover.push(next);
     }
 
-    pub fn render(
-        &mut self,
-        render: impl FnOnce(&mut dyn CanvasSink, &ResolvedHover<H>) + 'static,
-    ) {
+    pub fn render(&mut self, render: impl FnOnce(&mut dyn CanvasSink, &Attribution<H>) + 'static) {
         self.after_hover(move |hover, output| {
             output
                 .renders
@@ -413,8 +410,9 @@ pub struct ViewRegion {
     pub content: Option<Vec2>,
 }
 
-/// The winner and its source attribution, freshly derived for this frame.
-pub struct ResolvedHover<Hover> {
+/// What this frame's hover and selection refer to, derived once after
+/// placement and shared by its continuations.
+pub struct Attribution<Hover> {
     pub hovered: Option<Hover>,
     /// The cell-relative location the hover refers to; its other
     /// projections carry the faint secondary mark.
@@ -476,7 +474,7 @@ pub struct HoverOutput<C, Hover> {
     pub completion: Option<Offers<C>>,
     /// The focused text editor's caret, for platform text composition.
     pub input_area: Option<Rect>,
-    pub after_hover: AfterHover<ResolvedHover<Hover>, Effects<C, Hover>>,
+    pub after_hover: AfterHover<Attribution<Hover>, Effects<C, Hover>>,
 }
 
 /// Preserve the destination's ordering while avoiding an allocation
@@ -564,12 +562,12 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         self.handler.get_or_insert_with(Handler::new)
     }
 
-    pub fn bind(self, hover: ResolvedHover<Hover>) -> FrameOutput<C, Hover> {
+    pub fn bind(self, attribution: Attribution<Hover>) -> FrameOutput<C, Hover> {
         let mut effects = Effects {
             renders: Vec::new(),
             handler: self.handler,
         };
-        self.after_hover.bind(Rc::new(hover), &mut effects);
+        self.after_hover.bind(Rc::new(attribution), &mut effects);
         FrameOutput {
             scroll_probes: self.scroll_probes,
             renders: effects.renders,
@@ -595,7 +593,7 @@ fn view_handler<C: 'static, H: 'static>(
     })
 }
 
-impl<H> Default for ResolvedHover<H> {
+impl<H> Default for Attribution<H> {
     fn default() -> Self {
         Self {
             hovered: None,
@@ -740,7 +738,7 @@ mod tests {
         );
         assert_eq!(&*calls.borrow(), &[1, 11, 2, 12]);
         assert_eq!(output.claim, Some((None, Claim::Direct(2))));
-        let output = output.bind(ResolvedHover {
+        let output = output.bind(Attribution {
             hovered: Some(2),
             ..Default::default()
         });
@@ -805,7 +803,7 @@ mod tests {
         mark(&mut pass, 0);
         let output = pass.finish();
         assert_eq!(output.claim, Some((None, Claim::Direct(3))));
-        let output = output.bind(ResolvedHover {
+        let output = output.bind(Attribution {
             hovered: Some(3),
             ..Default::default()
         });

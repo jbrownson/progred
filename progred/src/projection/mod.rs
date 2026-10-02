@@ -460,7 +460,7 @@ fn prepare_at(
 
 /// The resolved hover's tree identity, for ink that lights its own
 /// claim.
-fn tree_hovered(hover: &placed::ResolvedHover) -> Option<&Hover> {
+fn tree_hovered(hover: &placed::Attribution) -> Option<&Hover> {
     match hover.hovered.as_ref() {
         Some(Hovered::Tree(hover)) => Some(hover),
         _ => None,

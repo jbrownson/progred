@@ -184,7 +184,7 @@ mod tests {
             let mut canvas = DrawList::new();
             puri::frame::render(
                 highlighted
-                    .bind(crate::display::widget::ResolvedHover {
+                    .bind(crate::display::widget::Attribution {
                         hovered,
                         ..Default::default()
                     })

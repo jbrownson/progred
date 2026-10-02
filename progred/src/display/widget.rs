@@ -6,7 +6,7 @@ use crate::display::Layout;
 pub use frame::place;
 pub use frame::{HoverContext, HoverInput, HoverPass, Probe};
 #[cfg(test)]
-pub use frame::{HoverOutput, ResolvedHover};
+pub use frame::{HoverOutput, Attribution};
 use gid::Value;
 pub use measured::Extent;
 use measured::Measured;
@@ -436,7 +436,7 @@ mod tests {
         );
         let mut canvas = DrawList::new();
         let (_, select) = output.landmark_select.take().unwrap();
-        let output = output.bind(ResolvedHover {
+        let output = output.bind(Attribution {
             hovered: Some(7),
             ..Default::default()
         });

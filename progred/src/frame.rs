@@ -94,16 +94,16 @@ pub(crate) enum Hovered {
     Blocked,
 }
 
-/// A fresh description of this frame's winner, shared by its continuations.
-/// Resolve source paths here once, not in each painted occurrence.
-fn attribute_hover(
+/// What this frame's hover winner and selection refer to, shared by its
+/// continuations. Resolve each once here, not in each painted occurrence.
+fn attribute(
     sources: &sources::Sources<'_>,
     descends: &[navigate::Descend<Editor>],
     root: Option<&workspace::Root>,
     completion: Option<&crate::completion::Offers<Editor>>,
     hovered: Option<Hovered>,
     link: bool,
-) -> placed::ResolvedHover {
+) -> placed::Attribution {
     // Keep the probe's call chain for subsequent input, but use the selected
     // source for this frame's ordinary source/secondary decoration.
     let hovered = match hovered {
@@ -124,12 +124,9 @@ fn attribute_hover(
         .and_then(|d| d.scope.source(&d.path))
         .map(|path| std::rc::Rc::<[gid::Step]>::from(path.as_ref()));
     let hovered_secondary = match &hovered {
-        // What the occurrence was drawn sharing, which a computed one has
-        // without a stored source.
-        Some(Hovered::Tree(hover::Hover::Value(_))) if visible => {
-            landmark.and_then(|d| d.secondary.clone())
+        Some(Hovered::Tree(hover)) if visible => {
+            hover::hover_secondary(landmark, completion, hover)
         }
-        Some(Hovered::Tree(hover)) if visible => hover::hover_secondary(completion, hover),
         _ => None,
     };
     let hovered_trace = match &hovered {
@@ -139,7 +136,7 @@ fn attribute_hover(
         Some(Hovered::Tree(hover::Hover::Source(source))) if visible => Some(source.clone()),
         _ => None,
     };
-    placed::ResolvedHover {
+    placed::Attribution {
         hovered,
         hovered_secondary,
         selected_secondary: crate::display::widget::navigation::selected_secondary(descends),
@@ -265,7 +262,7 @@ fn compute_hover(
     } else {
         hover_target(output.claim.take())
     };
-    let resolved = attribute_hover(
+    let resolved = attribute(
         &sources::Sources {
             doc: &description.model.doc,
             libraries: &description.stack.libraries,
@@ -985,7 +982,7 @@ mod frame_tests {
             selected: false,
         }];
         let hover = Some(Hovered::Tree(hover::Hover::Value(occurrence.clone())));
-        let resolved = attribute_hover(
+        let resolved = attribute(
             &editor.sources(),
             &landmarks,
             Some(&root),
@@ -1042,7 +1039,7 @@ mod frame_tests {
             ),
         ]));
         landmarks[0].scope = crate::editing::Scope::default().detached(occurrence.to_vec());
-        let resolved = attribute_hover(
+        let resolved = attribute(
             &editor.sources(),
             &landmarks,
             Some(&root),

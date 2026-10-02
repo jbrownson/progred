@@ -133,7 +133,7 @@ fn source_highlight_clips_its_rectangle_without_a_pane_sized_layer() {
                 ),
                 Placement::new(rect, clip),
             );
-            let frame = output.bind(widget::ResolvedHover {
+            let frame = output.bind(widget::Attribution {
                 hovered_trace: Some(source.clone()),
                 ..Default::default()
             });
@@ -1215,7 +1215,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
                 sources[0].clone()
             ))))
         );
-        placed.bind(widget::ResolvedHover {
+        placed.bind(widget::Attribution {
             hovered_trace: hovered,
             ..Default::default()
         })

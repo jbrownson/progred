@@ -33,7 +33,7 @@ impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::HoverO
             }
             puri::hover::Claim::Occludes => None,
         });
-        let frame = self.bind(widget::frame::ResolvedHover {
+        let frame = self.bind(widget::frame::Attribution {
             hovered,
             ..Default::default()
         });

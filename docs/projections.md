@@ -425,7 +425,7 @@ state; the reusable card owns row ink, navigation, and scrolling. Drawing-progra
 widgets directly use the app's evaluation/source attribution helpers. Both
 return the same measured widgets as other projections, not control opcodes.
 Their settled placements run against `HoverPass`; its `HoverOutput` holds the
-winner and after-hover continuations. Binding those with `ResolvedHover` produces
+winner and after-hover continuations. Binding those with `Attribution` produces
 paint and handlers independently, using Puri's generic phase composition.
 Reusable widgets remain consumers of Puri. See [the editor model](model.md).
 

@@ -2319,15 +2319,16 @@ fn entry_hover_marks_follow_the_visible_offers() {
     };
 
     assert_eq!(
-        hover_secondary(Some(&offers(Value::from(cell))), &Hover::Entry(0)),
+        hover_secondary(None, Some(&offers(Value::from(cell))), &Hover::Entry(0)),
         Some(Secondary::Cell(cell))
     );
     assert_eq!(
         hover_secondary(
+            None,
             Some(&offers(crate::test_values::text("offer"))),
             &Hover::Entry(0)
         ),
         None
     );
-    assert_eq!(hover_secondary::<()>(None, &Hover::Entry(0)), None);
+    assert_eq!(hover_secondary::<()>(None, None, &Hover::Entry(0)), None);
 }

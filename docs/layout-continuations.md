@@ -74,7 +74,7 @@ The successor is built by `refresh_frame` in
    winning claim, the probes that produced it, navigation declarations, and
    `AfterHover` continuations. Widget placement callbacks are still one-shot;
    only their settled hit tests are retained.
-5. The app constructs `ResolvedHover` and binds the continuations. This produces
+5. The app constructs `Attribution` and binds the continuations. This produces
    rendering and handlers independently. Each render is now a canvas-only
    callback capturing the resolved input from this frame. Presenting it cannot
    read a newer hover or debug setting. Painting remains optional.
@@ -211,7 +211,7 @@ answer probes, declare navigation, and supply `after_hover` continuations.
 the winner are lifted into it at the end of the widget's contribution. Handlers
 that need the winner can instead be constructed inside `after_hover`.
 `finish` runs floating placements and returns `HoverOutput`. Its consuming
-`bind` operation uses `ResolvedHover` to assemble `Effects`, then returns a
+`bind` operation uses `Attribution` to assemble `Effects`, then returns a
 distinct `FrameOutput`: canvas-only renders, one function-over-`Event` handler
 chain, and settled navigation/view/hover geometry. A hover output cannot be bound
 twice or masquerade as a completed frame.
@@ -228,9 +228,10 @@ paint/navigation segments. Scoped wrappers map a child's output, consuming
 navigation overrides without affecting siblings or ancestors. Floating placements
 escape enclosing clip/navigation scopes but retain their owning view.
 
-Progred's `attribute_hover` function derives secondary identity and source trace
-once for the winner. `ResolvedHover` explicitly shares those results within this
-frame, avoiding repeated source-path walks by each painted occurrence. It is
+Progred's `attribute` function reads the hovered and selected occurrences'
+secondary identities off their landmarks, which recorded them during layout,
+and derives the hovered source trace once. `Attribution` explicitly shares those
+results within this frame, so each painted occurrence only compares. It is
 freshly constructed, not retained as a cross-frame memo. Debug geometry is
 editor configuration captured while constructing the frame, not hover data.
 
