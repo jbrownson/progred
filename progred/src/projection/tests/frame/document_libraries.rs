@@ -141,46 +141,88 @@ fn only_the_root_declares_libraries() {
 }
 
 #[test]
-fn the_lab_planets_draw_through_their_library() {
+fn the_lab_libraries_draw_fractions_angles_and_tints() {
     let (doc, names) = crate::gid_text::parse(include_str!(
         "../../../../../website/public/lab/library.gid"
     ))
     .unwrap();
     let mut world = crate::test_editor(doc);
-    let system = [Step::Key(names["system"])];
-    let planets = world
-        .sources()
-        .resolve_path(&system)
-        .and_then(Value::as_list)
-        .unwrap()
-        .keys()
-        .cloned()
-        .collect::<Vec<_>>();
-    for position in &planets {
-        for field in ["planet", "moons"] {
-            assert!(drawn(
-                &mut world,
-                &[
-                    system.as_slice(),
-                    &[Step::Element(position.clone()), Step::Key(names[field])]
-                ]
-                .concat()
-            ));
+    let key = |name: &str| Step::Key(names[name]);
+    let elements = |world: &crate::Editor, list: &str| {
+        world
+            .sources()
+            .resolve_path(&[key(list)])
+            .and_then(Value::as_list)
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    for position in elements(&world, "numbers") {
+        for part in ["over", "under"] {
+            let at = [
+                key("numbers"),
+                Step::Element(position.clone()),
+                Step::Follow(gid::Resolution::Document),
+                key(part),
+            ];
+            assert!(drawn(&mut world, &at), "{part} of a fraction");
         }
     }
-    let circles = settle(editing_frame(&mut world, false))
-        .list
-        .0
-        .iter()
-        .filter(|command| {
-            matches!(
-                command,
-                DrawCmd::Fill {
-                    shape: Shape::Circle(_),
-                    ..
-                }
-            )
-        })
-        .count();
-    assert!(circles >= 2 + 3, "each planet and its moons: {circles}");
+    let total = world
+        .sources()
+        .resolve_path(&[key("total")])
+        .cloned()
+        .unwrap();
+    let sum = ::grap::evaluate_value(
+        total
+            .as_record()
+            .unwrap()
+            .get(&::grap::vocabulary::EVALUATE)
+            .unwrap(),
+        &world.sources(),
+        ::grap::DEFAULT_FUEL,
+    )
+    .result;
+    assert_eq!(
+        [key("over"), key("under")].map(|part| {
+            let Step::Key(part) = part else {
+                unreachable!()
+            };
+            sum.as_record()
+                .and_then(|fields| fields.get(&part))
+                .and_then(crate::libraries::f64::read)
+        }),
+        [Some(6.0), Some(8.0)]
+    );
+    assert!(drawn(&mut world, &[key("heading"), key("degrees")]));
+    for position in elements(&world, "colors") {
+        assert!(drawn(
+            &mut world,
+            &[key("colors"), Step::Element(position), key("tint")]
+        ));
+    }
+    let painted = settle(editing_frame(&mut world, false)).list.0;
+    let fills = |wanted: fn(&Shape) -> bool| {
+        painted
+            .iter()
+            .filter_map(|command| match command {
+                DrawCmd::Fill { shape, brush, .. } if wanted(shape) => Some(brush.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        fills(|shape| matches!(shape, Shape::Circle(_))).len(),
+        2,
+        "the heading's dial and its dot"
+    );
+    let swatches = fills(|shape| matches!(shape, Shape::Rect(_)));
+    for color in [0x3b82a0u32, 0xc1440e, 0x548b64] {
+        let [r, g, b] = [16, 8, 0].map(|shift| (color >> shift) as u8);
+        assert!(
+            swatches.contains(&Brush::from(puri::Color::from_rgb8(r, g, b))),
+            "a swatch of {color:06x}"
+        );
+    }
 }
