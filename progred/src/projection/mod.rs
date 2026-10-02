@@ -268,6 +268,14 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
     fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
         self.cx.sources.definition(cell)
     }
+
+    fn libraries(&self) -> Vec<crate::display::DocumentLibrary> {
+        crate::workspace::libraries(&self.cx.sources)
+    }
+
+    fn occurrence(&self) -> &[Step] {
+        self.path
+    }
 }
 
 /// Prepare a projection with its explicit source and current widget inputs.

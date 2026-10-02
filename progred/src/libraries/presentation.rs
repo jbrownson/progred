@@ -130,6 +130,88 @@ pub fn display(
     Some(at([Step::Key(vocabulary::RESULT)], &result))
 }
 
+thread_local! {
+    /// Where document libraries are drawing right now. One steps aside where
+    /// it's already drawing, so its view can show the value's ordinary
+    /// projection inside itself.
+    static DRAWING: std::cell::RefCell<Vec<std::rc::Rc<[Step]>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// How deeply document libraries' drawings may nest before the loaded
+/// libraries take over, so a view that keeps drawing itself still ends.
+const NESTING: usize = 64;
+
+struct Drawing;
+
+impl Drawing {
+    fn at(occurrence: std::rc::Rc<[Step]>) -> Self {
+        DRAWING.with(|drawing| drawing.borrow_mut().push(occurrence));
+        Self
+    }
+}
+
+impl Drop for Drawing {
+    fn drop(&mut self) {
+        DRAWING.with(|drawing| drawing.borrow_mut().pop());
+    }
+}
+
+/// The libraries a document declares at its root, tried in order on a record
+/// carrying a key one owns, once every loaded library declines it. A
+/// projection that emits a layout draws the record in place, so whatever it
+/// descends into stays editable; one that returns a value draws that value
+/// with the loaded libraries; an absent passes the record on.
+pub(crate) fn document_libraries(
+    loaded: crate::display::Partial<crate::Editor, crate::frame::Hovered>,
+) -> crate::display::Partial<crate::Editor, crate::frame::Hovered> {
+    crate::display::runtime_partial(move |input| {
+        let value = input.value?;
+        let occurrence: std::rc::Rc<[Step]> = input.env.occurrence().into();
+        if DRAWING.with(|drawing| {
+            let drawing = drawing.borrow();
+            drawing.len() >= NESTING || drawing.contains(&occurrence)
+        }) {
+            return None;
+        }
+        input.env.libraries().into_iter().find_map(|library| {
+            if !library.keys.iter().any(|key| value.field(*key).is_some()) {
+                return None;
+            }
+            let projection = library.projection;
+            let (evaluation, layout) = layout::scope::run(
+                || input.targets.current(),
+                |scope| {
+                    input.env.apply_runtime_scoped(
+                        &projection,
+                        &[(vocabulary::VALUE, value.clone())],
+                        Some(scope),
+                    )
+                },
+            );
+            let layout = match layout {
+                // The view chose what to show; only a field being added
+                // follows it.
+                Some(layout) => crate::display::structure::with_extra_fields(input, |_| true, layout),
+                None if evaluation.completed && !evaluation.result.is_absent() => {
+                    crate::display::at_with_projection(
+                        [Step::Key(vocabulary::RESULT)],
+                        evaluation.result,
+                        Some(loaded.clone()),
+                        Some(loaded.clone()),
+                    )
+                }
+                None => return None,
+            };
+            let occurrence = occurrence.clone();
+            Some(Layout::new(move |builder| {
+                let _drawing = Drawing::at(occurrence.clone());
+                layout.run(builder)
+            }))
+        })
+    })
+}
+
 /// Opt-in presentation of a declaration; not part of the library's
 /// ordinary authoring projection.
 pub fn projected_display(

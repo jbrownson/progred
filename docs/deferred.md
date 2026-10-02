@@ -52,16 +52,16 @@ remain available internally.
 
 ## Editor-authored libraries
 
-Libraries now have ordinary description cells and unified definition tables.
-Their native projection and completion contributions still use Rust callbacks;
-there is not yet a GID convention and decoder for a complete editor-authored
-library. Loading such a library should be an explicit editor operation, not
-an evaluator FFI or implicit discovery of reserved cells. Keep configuration
-and definitions reachable from root. The proposed descriptor lists cell references,
-not a second record duplicating their definitions. Loading needs that descriptor
-and a source that can resolve the listed cells; a document can provide that source
-without becoming part of the library's semantic type. Authoring/loading UI remains
-deferred until there is a compelling use case.
+A document can declare libraries that draw its own records (the root's
+`libraries` field; see projections.md). What remains for a complete
+editor-authored library: completion offers, so a library can construct its
+values; library-scoped definitions and names, beyond ordinary document cells;
+and loading a library defined in one document into another, as an explicit
+editor operation with its configuration and definitions reachable from root.
+The proposed descriptor lists cell references, not a second record duplicating
+their definitions; loading needs that descriptor and a source that can resolve
+the listed cells, which a document can provide without becoming part of the
+library's semantic type.
 
 ## Quotes that fill bound variables
 

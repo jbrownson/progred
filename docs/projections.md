@@ -50,12 +50,27 @@ path, Raw mode, read-only path and cell lookups, and lazy enumeration of defined
 Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
 There are no root-specific host hooks: root templates and root fields are ordinary
-provider decisions about that request. Documents
-currently contribute no library cells, foreign functions, or projections. A Grap
-function stored in a document is ordinary reachable data; configuration is never
-discovered through a reserved cell address or other data outside ordinary root
-reachability. A future document-local library mechanism needs an explicit design
-whose configuration and definitions are reachable from root.
+provider decisions about that request. A Grap function stored in a document is
+ordinary reachable data; configuration is never discovered through a reserved
+cell address or other data outside ordinary root reachability.
+
+A document declares its own libraries under the root's `libraries` field, which
+the workspace library names beside `panes`, and the editor reads it only at the
+root. Each entry, or the cell it names, is a record of the `keys` the library
+owns and the `projection` that draws a record carrying any of them: a function
+of `value`, the same convention a pane's projection uses. After every loaded
+library declines a value, the editor tries the declared libraries in order on
+records carrying their keys, so a document library can't take over another
+library's values, the root, or its own definition. The projection runs with the
+layout functions available: a layout it emits draws the record in place, so
+whatever it descends into stays editable; a value it returns is drawn with the
+loaded libraries; an absent passes the record on. Only a field being added follows
+an emitted layout, as a trailing record. A library steps aside where it is already
+drawing, so a view can show its record's ordinary projection inside itself, and
+nested document-library drawings stop at a fixed depth. Declarations are read
+while projecting, so editing a library's view redraws its records at once. Document
+libraries contribute no completions or foreign functions, and other documents
+can't load them.
 
 Library labels are once-minted random `CellId`s. Their readable names are
 ordinary GID facts, not identifiers derived from names. Text is an open

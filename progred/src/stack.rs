@@ -49,7 +49,12 @@ fn compose(
 ) -> Stack<crate::Editor> {
     let (libraries, projections, providers) = Libraries::from_contributions(contributions);
     let completions = crate::libraries::completion::combine(providers);
-    let projection = Projection::new(projections);
+    let loaded = crate::display::compose_partials(projections.clone());
+    let projection = Projection::new(
+        projections
+            .into_iter()
+            .chain([presentation::document_libraries(loaded)]),
+    );
     Stack {
         libraries,
         pane_projection: projection

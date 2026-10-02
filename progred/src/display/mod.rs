@@ -255,6 +255,13 @@ impl<World: 'static, Hover: 'static> Layout<World, Hover> {
     }
 }
 
+/// A library the document defines: the keys it owns, and the projection of a
+/// record carrying any of them.
+pub struct DocumentLibrary {
+    pub keys: Vec<CellId>,
+    pub projection: grap::RuntimeValue,
+}
+
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
     /// Expression-facing application without materializing the callable or its
@@ -371,6 +378,16 @@ pub trait Env {
     /// The selected definition and its source, without evaluation.
     fn resolve(&self, _cell: CellId) -> Option<ResolvedCell<'_>> {
         None
+    }
+
+    /// The libraries the document declares at its root.
+    fn libraries(&self) -> Vec<DocumentLibrary> {
+        Vec::new()
+    }
+
+    /// Where the value being projected occurs.
+    fn occurrence(&self) -> &[Step] {
+        &[]
     }
 }
 

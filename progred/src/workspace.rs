@@ -137,6 +137,44 @@ pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
     .collect()
 }
 
+/// The libraries the document declares at its root, in order. Each entry, or
+/// the cell it names, is a record of the `keys` the library owns and the
+/// `projection` that draws a record carrying them, a function of `value`.
+pub(crate) fn libraries(
+    sources: &crate::sources::Sources<'_>,
+) -> Vec<crate::display::DocumentLibrary> {
+    let Some(declared) = sources
+        .root()
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&vocabulary::LIBRARIES))
+        .and_then(Value::as_list)
+    else {
+        return Vec::new();
+    };
+    declared
+        .values()
+        .filter_map(|entry| {
+            let entry = match entry.as_cell() {
+                Some(cell) => sources.resolve(cell)?.value,
+                None => entry,
+            };
+            let fields = entry.as_record()?;
+            Some(crate::display::DocumentLibrary {
+                keys: fields
+                    .get(&vocabulary::KEYS)?
+                    .as_list()?
+                    .values()
+                    .filter_map(Value::as_cell)
+                    .collect(),
+                projection: fields
+                    .get(&crate::libraries::presentation::vocabulary::PROJECTION)?
+                    .clone()
+                    .into(),
+            })
+        })
+        .collect()
+}
+
 fn column_key(side: Side) -> CellId {
     match side {
         Side::Left => vocabulary::LEFT,

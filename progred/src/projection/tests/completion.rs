@@ -1681,6 +1681,7 @@ fn root_field_completion_offers_only_root_vocabulary_until_widened() {
             fidget::vocabulary::FIDGET,
             crate::libraries::grap::vocabulary::GRAP,
             crate::workspace::vocabulary::PANES,
+            crate::workspace::vocabulary::LIBRARIES,
         ]
     );
     for entry in &entries {
@@ -1856,6 +1857,7 @@ fn existing_root_fields_are_not_offered_again() {
         [
             crate::libraries::grap::vocabulary::GRAP,
             crate::workspace::vocabulary::PANES,
+            crate::workspace::vocabulary::LIBRARIES,
         ]
     );
 }
