@@ -14,17 +14,16 @@ use std::rc::Rc;
 
 pub use crate::display::widget::offers::{Entry, Offers};
 
-/// The library whose operation a slot belongs to, as an operand or as the
-/// operator itself. Its offers lead there: a local stand-in for knowing types.
+/// The library whose operation a slot belongs to, as a binary operand or as the
+/// operator itself; a lone operand may be a conversion's, of another type.
+/// There its offers stand in for a type: see [`within_operation`].
 pub(crate) fn operation_library(request: &CompletionRequest<'_>) -> Option<Resolution> {
-    use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
+    use crate::libraries::number::vocabulary::{LEFT, RIGHT};
     use ::grap::vocabulary::FUNCTION;
     let (gid::Step::Key(field), parent) = request.path.split_last()? else {
         return None;
     };
-    [FUNCTION, LEFT, RIGHT, OPERAND]
-        .contains(field)
-        .then_some(())?;
+    [FUNCTION, LEFT, RIGHT].contains(field).then_some(())?;
     let function = (request.value_at)(parent)?
         .as_record()?
         .get(&FUNCTION)?
@@ -54,6 +53,39 @@ pub(crate) fn offer_library(
 
 fn library_of(request: &CompletionRequest<'_>, cell: CellId) -> Option<Resolution> {
     Some((request.resolve)(cell)?.source).filter(|source| matches!(source, Resolution::Library(_)))
+}
+
+/// The operation's library's offers first, and hiding other libraries'
+/// offers of the same spelling: a number type's literals and operations
+/// replace other types' in its arithmetic.
+pub(crate) fn within_operation<T>(
+    items: Vec<T>,
+    context: Resolution,
+    library: impl Fn(&T) -> Option<Resolution>,
+    spelling: impl Fn(&T) -> String,
+) -> Vec<T> {
+    let (own, others): (Vec<_>, Vec<_>) = items
+        .into_iter()
+        .partition(|item| library(item) == Some(context));
+    let shadowed: std::collections::HashSet<_> = own.iter().map(&spelling).collect();
+    own.into_iter()
+        .chain(
+            others
+                .into_iter()
+                .filter(|item| library(item).is_none() || !shadowed.contains(&spelling(item))),
+        )
+        .collect()
+}
+
+/// An offer's display as the picker spells it.
+pub(crate) fn spelling(request: &CompletionRequest<'_>, text: &CompletionText) -> String {
+    match text {
+        CompletionText::Literal(text) => text.clone(),
+        CompletionText::Name(cell) => (request.resolve)(*cell)
+            .and_then(|definition| name::read(definition.value))
+            .map(str::to_owned)
+            .unwrap_or_else(|| short_id(*cell)),
+    }
 }
 
 /// Labels can only be cells; any value completes a value.
@@ -394,16 +426,21 @@ pub(crate) fn completion_entries_with(
         })
         .partition(|(_, _, external)| !*external);
     local.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-    let context = operation_library(request);
-    let elsewhere = |entry: &Entry<crate::Editor>| {
-        context.is_some()
-            && entry
-                .source
-                .and_then(|cell| sources.resolve(cell))
-                .map(|definition| definition.source)
-                != context
-    };
-    external.sort_by(|a, b| (elsewhere(&a.0), &a.0.display).cmp(&(elsewhere(&b.0), &b.0.display)));
+    external.sort_by(|a, b| a.0.display.cmp(&b.0.display));
+    if let Some(context) = operation_library(request) {
+        external = within_operation(
+            external,
+            context,
+            |(entry, _, _)| {
+                entry
+                    .source
+                    .and_then(|cell| sources.resolve(cell))
+                    .map(|definition| definition.source)
+                    .filter(|source| matches!(source, Resolution::Library(_)))
+            },
+            |(entry, _, _)| entry.display.clone(),
+        );
+    }
     let mut references_pool: Vec<_> = local
         .into_iter()
         .map(|(entry, named, _)| (entry, named, None))

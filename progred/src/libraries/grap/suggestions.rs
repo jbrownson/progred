@@ -60,16 +60,18 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                         .is_some_and(|cell| cell == control::QUOTE || bindings.contains_key(&cell))
                 })
                 .collect();
-            // An operation's own library leads in its operands: its literals
-            // and its other operations.
             if let Some(context) = crate::completion::operation_library(request) {
-                library_offers.sort_by_key(|offer| {
-                    offer
-                        .preview
-                        .as_ref()
-                        .and_then(|preview| crate::completion::offer_library(request, preview))
-                        != Some(context)
-                });
+                library_offers = crate::completion::within_operation(
+                    library_offers,
+                    context,
+                    |offer| {
+                        offer
+                            .preview
+                            .as_ref()
+                            .and_then(|preview| crate::completion::offer_library(request, preview))
+                    },
+                    |offer| crate::completion::spelling(request, &offer.display),
+                );
             }
             offers.extend(library_offers);
             offers.extend([

@@ -2335,11 +2335,11 @@ fn entry_hover_marks_follow_the_visible_offers() {
 }
 
 #[test]
-fn an_operations_own_type_leads_in_its_operands_and_operator() {
+fn an_operations_own_type_replaces_others_in_its_operands_and_operator() {
     use crate::libraries::grap::vocabulary::GRAP;
-    use crate::libraries::{f32, number::vocabulary as number, u64};
+    use crate::libraries::{f32, fidget, number::vocabulary as number, u64};
     use grap::vocabulary::FUNCTION;
-    let first = |program: Value, field: CellId, query: &str| {
+    let offered = |program: Value, field: CellId, query: &str| {
         let cell = new_cell_id();
         let mut cells = Cells::new();
         cells.set_value(cell, program);
@@ -2353,26 +2353,33 @@ fn an_operations_own_type_leads_in_its_operands_and_operator() {
             Step::Key(field),
         ];
         let selection = crate::selection::pending_with_query(&crate::test_root(), path, query);
-        let entry = projected_completion_entries(&document, &selection)
-            .into_iter()
-            .next()
-            .unwrap();
-        (entry.detail, entry.source)
+        projected_completion_entries(&document, &selection)
     };
-    for (sum, multiply, tag) in [
+    let types = [
         (f64::vocabulary::SUM, f64::vocabulary::MULTIPLY, "f64"),
         (f32::vocabulary::SUM, f32::vocabulary::MULTIPLY, "f32"),
         (u64::vocabulary::SUM, u64::vocabulary::MULTIPLY, "u64"),
-    ] {
+    ];
+    let multiplies = [
+        f64::vocabulary::MULTIPLY,
+        f32::vocabulary::MULTIPLY,
+        u64::vocabulary::MULTIPLY,
+        fidget::vocabulary::MULTIPLY,
+    ];
+    for (sum, multiply, tag) in types {
         let call = grap::call(sum.into(), []);
-        assert_eq!(
-            first(call.clone(), number::LEFT, "1").0.as_deref(),
-            Some(tag)
-        );
-        assert_eq!(
-            first(call, number::RIGHT, "*").0,
-            Some(format!("call · {tag}"))
-        );
+        let numbers: Vec<_> = offered(call.clone(), number::LEFT, "1")
+            .into_iter()
+            .filter_map(|entry| entry.detail)
+            .filter(|detail| ["f64", "f32", "u64"].contains(&detail.as_str()))
+            .collect();
+        assert_eq!(numbers, [tag]);
+        let calls: Vec<_> = offered(call, number::RIGHT, "*")
+            .into_iter()
+            .filter(|entry| entry.display == "*")
+            .filter_map(|entry| entry.detail)
+            .collect();
+        assert_eq!(calls, [format!("call · {tag}")]);
         let whole = grap::call(
             sum.into(),
             [
@@ -2380,6 +2387,11 @@ fn an_operations_own_type_leads_in_its_operands_and_operator() {
                 (number::RIGHT, Value::record([])),
             ],
         );
-        assert_eq!(first(whole, FUNCTION, "*").1, Some(multiply));
+        let operators: Vec<_> = offered(whole, FUNCTION, "*")
+            .into_iter()
+            .filter_map(|entry| entry.source)
+            .filter(|source| multiplies.contains(source))
+            .collect();
+        assert_eq!(operators, [multiply]);
     }
 }
