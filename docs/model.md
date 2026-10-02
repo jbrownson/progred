@@ -124,6 +124,17 @@ state are optional. This applies to empty roots, bare-cell definitions, missing
 record fields, and inserted list positions, without a special selection callback
 for each. Read-only locations do not enter a picker.
 
+Deleting a selected value keeps its place selected as a hole, so the next
+keystrokes write its replacement; Backspace or Delete on the hole's empty query
+removes it, landing on the stop before it (after it, for Delete). Typing over a
+selected value opens a picker in its place seeded with what was typed: an
+explicit pending payload over the existing value, which projection draws as
+missing until a choice commits, so the document is untouched until then. A
+picker opened from a key remembers where it was opened, and Escape, or an empty
+query's Backspace or Delete, steps back there. Views that draw a record as one
+value (numbers, text, colors) step aside while a field is added, so the record
+view shows the new field's picker.
+
 The live `LineEditState` owns text, caret, IME, and text-drag state. A projection
 at the selected location receives a GID description derived from that state.
 A capability replacement decodes it once into the live editor; there is no

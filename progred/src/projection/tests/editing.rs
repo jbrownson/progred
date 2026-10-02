@@ -482,7 +482,7 @@ fn deletion_and_history_landings_need_no_line_initialization() {
     let mut world = editing_world(&doc, &libraries);
     let frame = editing_frame(&mut world, false);
     assert!(delete_edge(&mut model.doc, &libraries, &first));
-    let next = crate::navigate::selection_after_delete(&frame.descends, None, &first);
+    let next = crate::navigate::selection_after_removing(&frame.descends, None, &first, true);
     assert_eq!(next, second);
     model.selection = Some(Selection::edge(&root, next));
     for (undo, expected) in [(false, "survivor!"), (true, "first!")] {

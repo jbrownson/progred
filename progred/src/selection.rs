@@ -36,6 +36,8 @@ pub struct Selection {
     scope: crate::editing::Scope,
     payload: Value,
     editor: Option<Editor>,
+    /// Where a picker opened from a key was opened, for stepping back to.
+    origin: Option<Path>,
 }
 
 /// The selection's role. Without an explicit query mode, its location
@@ -105,6 +107,7 @@ impl Selection {
                         payload
                     },
                     editor,
+                    origin: None,
                 }
             }
         };
@@ -143,6 +146,15 @@ impl Selection {
         self.scope = scope;
     }
 
+    pub(crate) fn origin(&self) -> Option<&[Step]> {
+        self.origin.as_deref()
+    }
+
+    pub(crate) fn with_origin(mut self, origin: Option<Path>) -> Self {
+        self.origin = origin;
+        self
+    }
+
     pub(crate) fn source_path(&self) -> Option<std::borrow::Cow<'_, [Step]>> {
         self.scope.source(&self.path)
     }
@@ -173,7 +185,7 @@ impl Selection {
         }
     }
 
-    fn explicit_stage(&self) -> Stage {
+    pub(crate) fn explicit_stage(&self) -> Stage {
         match payload::stage(&self.payload) {
             Some(stage) if stage == payload::vocabulary::PENDING => Stage::Pending,
             Some(stage) if stage == payload::vocabulary::LABEL => Stage::Label,
@@ -335,6 +347,7 @@ fn edge_selection(root: &workspace::Root, path: Path, editor: Option<Editor>) ->
         scope: Default::default(),
         payload: payload::edge(),
         editor,
+        origin: None,
     }
 }
 
@@ -454,10 +467,12 @@ pub(crate) fn bare_edge(root: &workspace::Root, path: Path) -> Selection {
         scope: Default::default(),
         payload: payload::edge(),
         editor: None,
+        origin: None,
     }
 }
 
-/// A value pending with a seeded query — the clipboard and test paths.
+/// A value pending with a seeded query — the clipboard, replacement, and
+/// test paths.
 pub(crate) fn pending_with_query(root: &workspace::Root, path: Path, seed: &str) -> Selection {
     query_selection(root, path, payload::pending(seed, 0))
 }
@@ -476,6 +491,7 @@ fn query_selection(root: &workspace::Root, path: Path, payload: Value) -> Select
             query: true,
             recorded: false,
         }),
+        origin: None,
     }
 }
 

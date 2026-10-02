@@ -2406,3 +2406,183 @@ fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
         "the call shows (scale), not scale's whole definition"
     );
 }
+
+/// A document of three empty lists, the middle one selected, driven through
+/// the shell's own key handling.
+fn three_lists() -> (crate::EditorRunner, [Path; 3]) {
+    let doc = Document {
+        root: Some(Value::list([
+            Value::list([]),
+            Value::list([]),
+            Value::list([]),
+        ])),
+        cells: Cells::new(),
+    };
+    let paths = positions(doc.root.as_ref().unwrap())
+        .into_iter()
+        .map(|position| vec![Step::Element(position)])
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
+    let [_, middle, _]: &[Path; 3] = &paths;
+    runner.editor.model.selection = Some(make_selection(middle.clone()));
+    runner.refresh_frame(1.0, kurbo::Size::new(600.0, 400.0));
+    (runner, paths)
+}
+
+fn press_key(runner: &mut crate::EditorRunner, key: Key) {
+    assert!(runner.keyboard_event(
+        &KeyboardEvent {
+            key,
+            state: KeyState::Down,
+            ..Default::default()
+        },
+        1.0,
+        kurbo::Size::new(600.0, 400.0),
+    ));
+}
+
+#[test]
+fn deleting_empties_a_place_then_removing_it_moves_toward_the_key() {
+    for (key, lands) in [(NamedKey::Backspace, 0), (NamedKey::Delete, 2)] {
+        let (mut runner, paths) = three_lists();
+        press_key(&mut runner, Key::Named(key.clone()));
+        let hole = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(hole.path(), paths[1], "{key:?} keeps the place selected");
+        assert_eq!(hole.stage(&runner.editor.sources()), Stage::Pending);
+        assert_eq!(
+            runner
+                .editor
+                .model
+                .doc
+                .root
+                .as_ref()
+                .and_then(Value::as_list)
+                .map(|list| list.len()),
+            Some(2)
+        );
+        press_key(&mut runner, Key::Named(key.clone()));
+        let landed = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(landed.path(), paths[lands], "{key:?} removes the hole");
+        assert_eq!(landed.stage(&runner.editor.sources()), Stage::Edge);
+    }
+}
+
+#[test]
+fn escape_returns_a_picker_to_where_it_was_opened() {
+    let (mut runner, paths) = three_lists();
+    let document = runner.editor.model.doc.clone();
+    press_key(&mut runner, Key::Named(NamedKey::Enter));
+    assert_eq!(
+        runner
+            .editor
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .stage(&runner.editor.sources()),
+        Stage::Pending
+    );
+    press_key(&mut runner, Key::Named(NamedKey::Escape));
+    let back = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(back.path(), paths[1]);
+    assert_eq!(back.stage(&runner.editor.sources()), Stage::Edge);
+    assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+    press_key(&mut runner, Key::Named(NamedKey::Escape));
+    assert!(runner.editor.model.selection.is_none());
+}
+
+#[test]
+fn typing_over_a_value_replaces_it_and_escape_brings_it_back() {
+    let (mut runner, paths) = three_lists();
+    let document = runner.editor.model.doc.clone();
+    press_key(&mut runner, Key::Character("x".into()));
+    let replacing = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(replacing.path(), paths[1]);
+    assert_eq!(replacing.stage(&runner.editor.sources()), Stage::Pending);
+    assert!(
+        Rc::ptr_eq(&runner.editor.model.doc, &document),
+        "nothing changes until a commit"
+    );
+    let frame = editing_frame(&mut runner.editor, false);
+    assert!(frame.completion.is_some(), "the hole shows its picker");
+    assert!(
+        !frame
+            .descends
+            .iter()
+            .any(|target| target.path.as_ref() == paths[1].as_slice()
+                && target.path.len() > paths[1].len()),
+        "the old value is not drawn"
+    );
+    press_key(&mut runner, Key::Named(NamedKey::Escape));
+    let back = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(back.path(), paths[1]);
+    assert_eq!(back.stage(&runner.editor.sources()), Stage::Edge);
+    assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+
+    press_key(&mut runner, Key::Character("{".into()));
+    if runner
+        .editor
+        .model
+        .selection
+        .as_ref()
+        .unwrap()
+        .stage(&runner.editor.sources())
+        == Stage::Pending
+    {
+        press_key(&mut runner, Key::Named(NamedKey::Enter));
+    }
+    assert_eq!(
+        runner.editor.sources().resolve_path(&paths[1]),
+        Some(&Value::record([]))
+    );
+    assert!(runner.editor.model.step_history(true));
+    assert_eq!(
+        runner.editor.sources().resolve_path(&paths[1]),
+        Some(&Value::list([])),
+        "one undo step restores the replaced value"
+    );
+}
+
+#[test]
+fn adding_a_field_to_a_number_shows_its_picker() {
+    let x = new_cell_id();
+    let doc = Document {
+        root: Some(Value::record([(x, f64::value(1.0))])),
+        cells: Cells::new(),
+    };
+    let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
+    runner.editor.model.selection = Some(make_selection(vec![Step::Key(x)]));
+    runner.refresh_frame(1.0, kurbo::Size::new(600.0, 400.0));
+    let command = match runner.editor.command_modifier {
+        puri::keyboard::CommandModifier::Meta => Modifiers::META,
+        puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
+    };
+    assert!(runner.keyboard_event(
+        &KeyboardEvent {
+            key: Key::Named(NamedKey::Enter),
+            modifiers: command,
+            state: KeyState::Down,
+            ..Default::default()
+        },
+        1.0,
+        kurbo::Size::new(600.0, 400.0),
+    ));
+    assert_eq!(
+        runner
+            .editor
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .stage(&runner.editor.sources()),
+        Stage::Label
+    );
+    assert!(
+        editing_frame(&mut runner.editor, false)
+            .completion
+            .is_some(),
+        "the new field's picker is drawn"
+    );
+}

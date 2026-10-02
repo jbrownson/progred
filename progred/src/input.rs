@@ -120,6 +120,7 @@ fn keyboard(
         || editor.paste_key(event)
         || editor.delete_key(geometry, event)
         || editor.insert_key(geometry, event)
+        || editor.replace_key(geometry, event)
         || navigate::keyboard(editor, geometry, event)
         || navigate::direction(event).is_some_and(|direction| {
             let handled = dispatch

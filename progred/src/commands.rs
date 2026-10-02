@@ -96,11 +96,10 @@ impl Editor {
         true
     }
 
-    /// Backspace or Delete removes the selected edge — a focused atom
-    /// editor claims the keys while it has text and declines on an
-    /// empty buffer, so emptying a string then backspacing again
-    /// deletes the element. Selection lands on the next sibling, else
-    /// the previous, else the parent.
+    /// Backspace or Delete empties the selected edge in place — a focused
+    /// atom editor claims the keys while it has text and declines on an
+    /// empty buffer, so emptying a string then backspacing again empties
+    /// its place. Pressing again on the hole removes it (see insert_key).
     pub(crate) fn delete_key(
         &mut self,
         geometry: navigate::Geometry<'_>,
@@ -115,8 +114,9 @@ impl Editor {
             && self.delete_selected_edge(geometry)
     }
 
-    /// Deletes the selected edge and lands the selection on a
-    /// survivor — Backspace/Delete's action, and cut's second half.
+    /// Deletes the selected edge and keeps its place selected as a hole,
+    /// ready for a replacement — Backspace/Delete's action, and cut's
+    /// second half.
     pub(crate) fn delete_selected_edge(&mut self, geometry: navigate::Geometry<'_>) -> bool {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
@@ -124,6 +124,7 @@ impl Editor {
             Some(current) if current.stage(&self.sources()) == selection::Stage::Edge => {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
+                let scope = current.scope().clone();
                 let Some(source_path) = current.source_path().map(|path| path.into_owned()) else {
                     return false;
                 };
@@ -139,9 +140,9 @@ impl Editor {
                             self.model.history.record(before);
                             self.refresh_title();
                         }
-                        let next =
-                            navigate::selection_after_delete(geometry.descends, Some(&root), &path);
-                        self.select_landmark_or_edge(geometry, &root, next);
+                        let mut hole = selection::pending_value(&root, path);
+                        hole.set_scope(scope);
+                        self.model.selection = Some(hole);
                         geometry.reveal_selection(self);
                         true
                     }
@@ -326,10 +327,8 @@ impl Editor {
     /// appended element on a list (with Shift, at the front). Labels
     /// author first, then values; list elements are one-stage value
     /// pendings, the projection minting the position.
-    /// On an empty document Enter begins the root value. Escape
-    /// clears the selection from anywhere, discarding any pending;
-    /// Backspace on an empty query cancels a pending back to its
-    /// anchor instead, keeping the keyboard flow.
+    /// On an empty document Enter begins the root value. Escape and an
+    /// empty query's Backspace or Delete step back out of a picker.
     pub(crate) fn insert_key(
         &mut self,
         geometry: navigate::Geometry<'_>,
@@ -372,7 +371,9 @@ impl Editor {
                         }
                         .map(|mut pending| {
                             pending.set_scope(scope);
-                            pending
+                            pending.with_origin(
+                                selection.as_ref().map(|current| current.path().to_vec()),
+                            )
                         });
                         let began = started.is_some();
                         self.model.selection = started.or(selection);
@@ -382,47 +383,125 @@ impl Editor {
                         began
                     }
                 },
-                Key::Named(NamedKey::Escape) => self.model.selection.take().is_some(),
-                Key::Named(NamedKey::Backspace) => {
-                    match &self.model.selection {
-                        Some(current)
-                            if current.stage(&self.sources()) == selection::Stage::Pending =>
-                        {
-                            let root = current.root().clone();
-                            let back = navigate::selection_after_delete(
-                                geometry.descends,
-                                Some(&root),
-                                current.path(),
-                            );
-                            // Cancelling the empty document's root
-                            // pending deselects — reselecting it
-                            // would pend again.
-                            if back.is_empty() && self.model.doc.root.is_none() {
-                                self.model.selection = None;
-                            } else {
-                                self.select_landmark_or_edge(geometry, &root, back);
-                            }
-                            geometry.reveal_selection(self);
-                            true
-                        }
-                        Some(current)
-                            if current.stage(&self.sources()) == selection::Stage::Label =>
-                        {
-                            let root = current.root().clone();
-                            let path = current.path().to_vec();
-                            let scope = current.scope().clone();
-                            self.model.selection = None;
-                            scope
-                                .open(crate::editing::Access::new(self))
-                                .select(&root, &path);
-                            geometry.reveal_selection(self);
-                            true
-                        }
-                        _ => false,
-                    }
+                Key::Named(NamedKey::Escape) => self.escape(geometry),
+                Key::Named(key @ (NamedKey::Backspace | NamedKey::Delete)) => {
+                    self.cancel_pending(geometry, *key == NamedKey::Delete)
                 }
                 _ => false,
             }
+    }
+
+    /// Escape steps back one level: a picker opened from a key returns to
+    /// where it was opened, so a replacement gets its value back; anything
+    /// else clears the selection.
+    fn escape(&mut self, geometry: navigate::Geometry<'_>) -> bool {
+        let Some(current) = &self.model.selection else {
+            return false;
+        };
+        if current.stage(&self.sources()) != selection::Stage::Edge && current.origin().is_some() {
+            self.return_to_origin(geometry);
+        } else {
+            self.model.selection = None;
+        }
+        true
+    }
+
+    /// Leaves a picker for the selection it was opened from. A replacement's
+    /// origin is its own place, where this frame draws the hole, so that
+    /// value is selected afresh rather than through the frame.
+    fn return_to_origin(&mut self, geometry: navigate::Geometry<'_>) {
+        let Some(current) = self.model.selection.take() else {
+            return;
+        };
+        let Some(origin) = current.origin().map(<[gid::Step]>::to_vec) else {
+            return;
+        };
+        let root = current.root().clone();
+        if origin == current.path() {
+            current
+                .scope()
+                .clone()
+                .open(crate::editing::Access::new(self))
+                .select(&root, &origin);
+        } else {
+            self.model.selection = Some(current);
+            self.select_landmark_or_edge(geometry, &root, origin);
+        }
+        geometry.reveal_selection(self);
+    }
+
+    /// An empty query's Backspace or Delete cancels its picker: back to
+    /// where it was opened, else to the stop before the hole it leaves
+    /// (after it, for Delete). A label goes back to its record.
+    fn cancel_pending(&mut self, geometry: navigate::Geometry<'_>, forward: bool) -> bool {
+        let Some(current) = &self.model.selection else {
+            return false;
+        };
+        let stage = current.stage(&self.sources());
+        if stage == selection::Stage::Edge {
+            return false;
+        }
+        if current.origin().is_some() {
+            self.return_to_origin(geometry);
+            return true;
+        }
+        let root = current.root().clone();
+        let back = match stage {
+            selection::Stage::Label => current.path().to_vec(),
+            _ => navigate::selection_after_removing(
+                geometry.descends,
+                Some(&root),
+                current.path(),
+                forward,
+            ),
+        };
+        // Cancelling the empty document's root pending deselects —
+        // reselecting it would pend again.
+        if back.is_empty() && self.model.doc.root.is_none() {
+            self.model.selection = None;
+        } else {
+            self.select_landmark_or_edge(geometry, &root, back);
+        }
+        geometry.reveal_selection(self);
+        true
+    }
+
+    /// Typing over a selected value starts replacing it: a picker in its
+    /// place, seeded with what was typed. The document keeps the value
+    /// until a choice commits, so Escape brings it back.
+    pub(crate) fn replace_key(
+        &mut self,
+        geometry: navigate::Geometry<'_>,
+        event: &KeyboardEvent,
+    ) -> bool {
+        if !event.state.is_down()
+            || event.modifiers.ctrl()
+            || event.modifiers.meta()
+            || event.modifiers.alt()
+        {
+            return false;
+        }
+        let Key::Character(typed) = &event.key else {
+            return false;
+        };
+        let Some(current) = &self.model.selection else {
+            return false;
+        };
+        let sources = self.sources();
+        if typed.trim().is_empty()
+            || current.stage(&sources) != selection::Stage::Edge
+            || current.value(&sources).is_none()
+            || !current.writable(&sources)
+        {
+            return false;
+        }
+        let path = current.path().to_vec();
+        let mut replacing = selection::pending_with_query(current.root(), path.clone(), typed)
+            .with_origin(Some(path));
+        replacing.set_scope(current.scope().clone());
+        self.model.selection = Some(replacing);
+        geometry.reveal_selection(self);
+        true
     }
 
     /// Fold state belongs to an occurrence. Projection supplies its default;

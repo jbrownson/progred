@@ -208,10 +208,13 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         })
     }
 
+    /// A number reads as its spelling; adding a field to it shows the
+    /// record, so the new field's picker has a place.
     pub fn display(
         self,
         input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
     ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+        (input.pending != Some(crate::display::Pending::Field)).then_some(())?;
         layout(input, (self.read)(input.value?)?, self.tag, self.encode)
     }
 

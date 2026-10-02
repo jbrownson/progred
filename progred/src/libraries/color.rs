@@ -384,6 +384,7 @@ pub fn display(
     if input.value.is_none() {
         return missing_picker(input);
     }
+    (input.pending != Some(crate::display::Pending::Field)).then_some(())?;
     let encoded = encoded_runtime(input.value?)?;
     let color = decoded_color(encoded);
     let initial_hue = hsva(encoded).hue;

@@ -523,6 +523,14 @@ impl Cx<'_> {
         })
     }
 
+    /// Whether the selection is a picker at `path` itself. Over an existing
+    /// value it is replacing that value, so views draw the hole instead.
+    fn pending_at(&self, path: &[Step]) -> bool {
+        self.selection.is_some_and(|current| {
+            current.path() == path && current.explicit_stage() == Stage::Pending
+        })
+    }
+
     /// The pending child step under `path`, when the selection is
     /// authoring one there.
     fn pending_child_of(&self, path: &[Step]) -> Option<Step> {
@@ -939,6 +947,7 @@ fn prepare_value(
     value: Option<&grap::RuntimeValue>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
+    let value = value.filter(|_| !cx.pending_at(path));
     let source = cx.edits.source(path);
     let ground = ground(cx, source.as_deref(), value);
     let changed_ground = (ground != ancestors.ground).then_some(ground);

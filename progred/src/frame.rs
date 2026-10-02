@@ -1612,7 +1612,17 @@ mod frame_tests {
                 1.0,
                 viewport
             ));
-            assert_ne!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+            let selection = runner.editor.model.selection.as_ref().unwrap();
+            if key == NamedKey::Delete {
+                // Deleting keeps the place selected, as a hole.
+                assert_eq!(selection.path(), path);
+                assert_eq!(
+                    selection.stage(&runner.editor.sources()),
+                    crate::selection::Stage::Pending
+                );
+            } else {
+                assert_ne!(selection.path(), path);
+            }
             assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
             assert_eq!(
                 projected.get(),

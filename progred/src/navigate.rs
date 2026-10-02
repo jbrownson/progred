@@ -131,16 +131,16 @@ fn reveal_axis(
     scroll.clamp(0.0, maximum)
 }
 
-/// Where the selection lands after deleting `path`: the next sibling,
-/// else the previous, else the parent. Also where a discarded pending
-/// edge returns to.
-pub fn selection_after_delete<World>(
+/// Where the selection lands after removing `path`: the sibling after it
+/// (before it, moving backward), else the other one, else the parent.
+pub fn selection_after_removing<World>(
     descends: &[Descend<World>],
     root: Option<&Root>,
     path: &[Step],
+    forward: bool,
 ) -> Path {
-    sibling(descends, root, path, true)
-        .or_else(|| sibling(descends, root, path, false))
+    sibling(descends, root, path, forward)
+        .or_else(|| sibling(descends, root, path, !forward))
         .unwrap_or_else(|| {
             path.split_last()
                 .map(|(_, parent)| parent.to_vec())
@@ -224,8 +224,8 @@ fn root_target<'a, World>(
 }
 
 /// The neighboring sibling in placement order, continuing through
-/// ancestors at the ends — where the selection lands after a delete,
-/// via [`selection_after_delete`].
+/// ancestors at the ends — where the selection lands after a removal,
+/// via [`selection_after_removing`].
 fn sibling<World>(
     descends: &[Descend<World>],
     root: Option<&Root>,
