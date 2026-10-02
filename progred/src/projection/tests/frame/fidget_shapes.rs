@@ -57,16 +57,29 @@ fn fidget_figures_preserve_the_standalone_previews_beside_their_code() {
         ));
     }
 
-    // A gallery: each figure's code beside one preview, every preview at
-    // the start of its row.
+    // A gallery: each figure's code beside its preview, tops aligned, and
+    // every preview at the start of its row.
     let frame = settle(editing_frame(&mut world, false));
-    for (path, name) in codes {
+    let landmark = |path: &[Step]| {
+        frame
+            .descends
+            .iter()
+            .find(|landmark| landmark.path.as_ref() == path)
+            .map(|landmark| landmark.rect)
+    };
+    for (code, name) in codes {
+        let picture = [
+            code[0].clone(),
+            code[1].clone(),
+            Step::Key(presentation::vocabulary::RESULT),
+        ];
+        let (code, picture) = (
+            landmark(&code).expect(name),
+            landmark(&picture).expect(name),
+        );
         assert!(
-            frame
-                .descends
-                .iter()
-                .any(|landmark| landmark.path.as_ref() == path),
-            "{name}: its code"
+            (code.y0 - picture.y0).abs() < 0.5,
+            "{name}: {code:?} beside {picture:?}"
         );
     }
     // Only the figures are pictured: the views' own patterns carry the keys
@@ -77,20 +90,8 @@ fn fidget_figures_preserve_the_standalone_previews_beside_their_code() {
         .filter(|landmark| {
             landmark.path.last() == Some(&Step::Key(presentation::vocabulary::RESULT))
         })
-        .collect::<Vec<_>>();
-    assert_eq!(pictured.len(), figures.len());
-    for (position, _) in &figures {
-        let path = [
-            key("figures"),
-            Step::Element(position.clone()),
-            Step::Key(presentation::vocabulary::RESULT),
-        ];
-        assert!(
-            pictured
-                .iter()
-                .any(|landmark| landmark.path.as_ref() == path)
-        );
-    }
+        .count();
+    assert_eq!(pictured, figures.len());
     let previews = frame
         .list
         .0

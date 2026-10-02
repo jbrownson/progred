@@ -141,7 +141,7 @@ fn only_the_root_declares_libraries() {
 }
 
 #[test]
-fn the_lab_libraries_draw_fractions_angles_and_tints() {
+fn the_example_libraries_draw_fractions_angles_and_their_functions() {
     let (doc, names) =
         crate::gid_text::parse(include_str!("../../../../../examples/libraries.gid")).unwrap();
     let mut world = crate::test_editor(doc);
@@ -248,37 +248,72 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
             &[key("angles"), Step::Element(position), key("degrees")]
         ));
     }
-    for position in elements(&world, "tints") {
-        assert!(drawn(
-            &mut world,
-            &[key("tints"), Step::Element(position), key("tint")]
-        ));
-    }
-    let painted = settle(editing_frame(&mut world, false)).list.0;
-    let fills = |wanted: fn(&Shape) -> bool| {
-        painted
+    // Each dial: a gray zero line, and a dark line turned by its angle.
+    let frame = settle(editing_frame(&mut world, false));
+    let lines = |within: Rect, [r, g, b]: [u8; 3]| {
+        let brush = Brush::from(puri::Color::from_rgb8(r, g, b));
+        frame
+            .list
+            .0
             .iter()
             .filter_map(|command| match command {
-                DrawCmd::Fill { shape, brush, .. } if wanted(shape) => Some(brush.clone()),
+                DrawCmd::Fill {
+                    shape: Shape::Rect(_),
+                    brush: paint,
+                    transform,
+                } if *paint == brush && within.contains(transform.translation().to_point()) => {
+                    let [a, b, ..] = transform.as_coeffs();
+                    // Screen y points down, so a counterclockwise turn is negative.
+                    Some((-b.atan2(a)).to_degrees().round())
+                }
                 _ => None,
             })
             .collect::<Vec<_>>()
     };
-    assert_eq!(
-        fills(|shape| matches!(shape, Shape::Circle(_))).len(),
-        4,
-        "each angle's dial and its dot"
-    );
-    let rects = fills(|shape| matches!(shape, Shape::Rect(_)));
-    assert!(
-        rects.contains(&Brush::from(puri::Color::from_rgb8(0x99, 0x99, 0x99))),
-        "the dial marks zero"
-    );
-    for color in [0x3b82a0u32, 0xc1440e, 0x548b64] {
-        let [r, g, b] = [16, 8, 0].map(|shift| (color >> shift) as u8);
-        assert!(
-            rects.contains(&Brush::from(puri::Color::from_rgb8(r, g, b))),
-            "a swatch of {color:06x}"
-        );
+    for (position, degrees) in elements(&world, "angles").into_iter().zip([45.0, 120.0]) {
+        let angle = frame
+            .descends
+            .iter()
+            .find(|landmark| {
+                landmark.path.as_ref() == [key("angles"), Step::Element(position.clone())]
+            })
+            .unwrap()
+            .rect;
+        assert_eq!(lines(angle, [0x99; 3]), [0.0], "{degrees}: the zero line");
+        assert_eq!(lines(angle, [0x44; 3]), [degrees], "{degrees}: its line");
+    }
+    // Functions only code calls are listed in their library, so they're drawn.
+    let libraries = world
+        .sources()
+        .resolve_path(&[key("libraries")])
+        .and_then(Value::as_list)
+        .unwrap()
+        .iter()
+        .map(|(position, library)| (position.clone(), library.clone()))
+        .collect::<Vec<_>>();
+    for (library, record) in libraries {
+        let functions = record
+            .as_record()
+            .and_then(|fields| fields.get(&names["functions"]))
+            .and_then(Value::as_list)
+            .unwrap();
+        assert!(!functions.is_empty());
+        for (function, _) in functions.iter() {
+            let body = [
+                key("libraries"),
+                Step::Element(library.clone()),
+                key("functions"),
+                Step::Element(function.clone()),
+                Step::Follow(gid::Resolution::Document),
+                Step::Key(::grap::vocabulary::BODY),
+            ];
+            assert!(
+                frame
+                    .descends
+                    .iter()
+                    .any(|landmark| landmark.path.as_ref() == body),
+                "{body:?}"
+            );
+        }
     }
 }

@@ -4,6 +4,7 @@
     "at": e90d25c8b64a37f1084b92d7f3a65c1e,
     "at_value": 85e3b0d729c4165ffa1e0c5d49b3872e,
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
+    "baseline": 6cd28a4f91e057b3c2941e6a07f5d3b8,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
@@ -35,6 +36,7 @@
     "figure_view": b99645084a80c86dbc18fbc2eadc8d1a,
     "figures": 20d01ef06b50dc37b0660d7237a6eb97,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "functions": e180cc460ec3879c7b331c8e734be0af,
     "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
     "gyroid": 6824d83b85a76ffceb8f676e18f922c2,
     "half_face": 7d2e1d8a6a5d9e563d38ad85e56cf648,
@@ -421,6 +423,9 @@
         expressions: [
           picture,
           {
+            baseline: {
+              f64: 0x000000000000f03f,
+            },
             function: row,
             gap: {
               f64: 0x0000000000003040,
@@ -481,6 +486,9 @@
     },
     figures: {
       name: "figures",
+    },
+    functions: {
+      name: "functions",
     },
     gyroid: {
       name: "gyroid sphere",
@@ -1018,12 +1026,19 @@
         keys: [
           figure,
         ],
+        functions: [
+          figure_layout,
+          rendered,
+        ],
       },
       {
         name: "mesh figure",
         projection: mesh_view,
         keys: [
           mesh,
+        ],
+        functions: [
+          meshed,
         ],
       },
     ],

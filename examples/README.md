@@ -10,7 +10,7 @@ platforms. Examples are numbered consecutively in menu order.
 | 2 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube, drawn by figure libraries the document declares |
 | 3 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
 | 4 | `grap-demo.gid` | Grap evaluation |
-| 5 | `libraries.gid` | Libraries the document defines: fractions, angles, and tints, each a key it owns and a view that draws it |
+| 5 | `libraries.gid` | Libraries the document defines: fractions and angles, each a key it owns, a view that draws it, and the functions that go with it |
 | | `navigation.gid` | Keyboard navigation: nested outlines, custom code forms, lists/cells, missing values, shared occurrences, and computed results |
 
 The menu lists the examples meant for visitors. The navigation fixture isn't on
@@ -54,7 +54,8 @@ See [layout navigation](../docs/navigation.md) for the current contract.
 **Examples → Implicit CAD Shapes** (Command+2 / Ctrl+2) lists five figures, records
 like `{figure: torus}`, and declares the two libraries that draw them: `figure`
 previews with `preview 3d`, `mesh figure` with `preview mesh`. Each draws its
-figure's picture beside the shape's editable source. Every shape is a no-argument
+figure's picture beside the shape's editable source, tops aligned, and lists the
+functions its view calls, so their definitions are drawn with it. Every shape is a no-argument
 Grap function, since a library's view receives the record as data and calls the
 function to get the shape. There is no separate pane or chooser; scroll to another
 shape, or fold its source using the ordinary editor controls. The full machining
