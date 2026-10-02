@@ -32,10 +32,10 @@
     "projection": 873503e2e37a1722a0dd21399be9ee7f,
     "over": 5217a5a2b20b9aa61ae7cc5f02d83822, "under": d5f908921d5ad4d2aec6856d1cf34eb6,
     "degrees": ca9a2253bfe9bb037b1daf8416c70a8c, "tint": a3819c2b8547b98c7c6272bcda2f70e7,
-    "numbers": a001809ea5ff5401974403cfde470183, "total": ecc1082422297b4058d2e78004f46401,
-    "heading": 1658642f21a8218fbfec1e4825521991, "colors": c55af3f12679b25da50259912ace2a8c,
-    "fractions": f587791a1d1ac3e3a8bda9c4247d45c5, "angles": 4c83f1efd81dcbb1a19cf9bdf0508f5c,
-    "tints": 1f6c8bc0d6b100a3f43465465efde029,
+    "fractions": a001809ea5ff5401974403cfde470183, "fraction_sum": ecc1082422297b4058d2e78004f46401,
+    "angles": 1658642f21a8218fbfec1e4825521991, "tints": c55af3f12679b25da50259912ace2a8c,
+    "fraction": f587791a1d1ac3e3a8bda9c4247d45c5, "angle": 4c83f1efd81dcbb1a19cf9bdf0508f5c,
+    "tint_library": 1f6c8bc0d6b100a3f43465465efde029,
     "fraction_view": 36c14e402793fba7185c25c82c5a3a92, "angle_view": d25f2e0775f96fff6d8aaa1f5f29ad54,
     "tint_view": ecb0839c9226c3b004855e3badcab2a3, "dial": 373b19479c838e954b5d9b15730b2f6e,
     "swatch": 913a2b1e67169b041594eb3be5f68f5b, "add_fractions": 322da916b6c050dd516dbde5e1ab2598,
@@ -47,11 +47,11 @@
   },
   "cells": {
     over: {name: "over"}, under: {name: "under"}, degrees: {name: "degrees"}, tint: {name: "tint"},
-    numbers: {name: "numbers"}, total: {name: "total"}, heading: {name: "heading"}, colors: {name: "colors"},
+    fractions: {name: "fractions"}, fraction_sum: {name: "sum"}, angles: {name: "angles"}, tints: {name: "tints"},
     p: {name: "p"}, q: {name: "q"}, a: {name: "a"}, b: {name: "b"}, c: {name: "c"}, d: {name: "d"},
     t: {name: "t"}, deg: {name: "deg"},
 
-    fractions: {name: "fractions", keys: [over], projection: fraction_view},
+    fraction: {name: "fraction", keys: [over], projection: fraction_view},
     fraction_view: {name: "fraction view", params: [value], body: {
       function: col, baseline: {f64: 0x000000000000f03f}, children: {function: do, expressions: [
         {function: center, child: {function: descend, step: {key: over}}},
@@ -75,7 +75,7 @@
     half: {over: {f64: 0x000000000000f03f}, under: {f64: 0x0000000000000040}},
     quarter: {over: {f64: 0x000000000000f03f}, under: {f64: 0x0000000000001040}},
 
-    angles: {name: "angles", keys: [degrees], projection: angle_view},
+    angle: {name: "angle", keys: [degrees], projection: angle_view},
     angle_view: {name: "angle view", params: [value], body: {
       function: row, gap: {f64: 0x0000000000001040}, children: {function: do, expressions: [
         {function: canvas, width: {f64: 0x0000000000003c40}, ascent: {f64: 0x0000000000003440},
@@ -105,7 +105,7 @@
       ]},
     }},
 
-    tints: {name: "tints", keys: [tint], projection: tint_view},
+    tint_library: {name: "tint", keys: [tint], projection: tint_view},
     tint_view: {name: "tint view", params: [value], body: {
       function: row, gap: {f64: 0x0000000000001040}, children: {function: do, expressions: [
         {function: canvas, width: {f64: 0x0000000000002e40}, ascent: {f64: 0x0000000000002640},
@@ -124,10 +124,10 @@
     }},
   },
   "root": {
-    libraries: [fractions, angles, tints],
-    numbers: [half, quarter],
-    total: {evaluate: {function: add_fractions, p: half, q: quarter}},
-    heading: {degrees: {f64: 0x0000000000804640}},
-    colors: [{tint: 0x3b82a0}, {tint: 0xc1440e}, {tint: 0x548b64}],
+    libraries: [fraction, angle, tint_library],
+    fractions: [half, quarter],
+    fraction_sum: {evaluate: {function: add_fractions, p: half, q: quarter}},
+    angles: [{degrees: {f64: 0x0000000000804640}}, {degrees: {f64: 0x0000000000005e40}}],
+    tints: [{tint: 0x3b82a0}, {tint: 0xc1440e}, {tint: 0x548b64}],
   },
 }

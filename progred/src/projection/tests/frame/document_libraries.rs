@@ -142,10 +142,8 @@ fn only_the_root_declares_libraries() {
 
 #[test]
 fn the_lab_libraries_draw_fractions_angles_and_tints() {
-    let (doc, names) = crate::gid_text::parse(include_str!(
-        "../../../../../examples/libraries.gid"
-    ))
-    .unwrap();
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../../../../examples/libraries.gid")).unwrap();
     let mut world = crate::test_editor(doc);
     let key = |name: &str| Step::Key(names[name]);
     let elements = |world: &crate::Editor, list: &str| {
@@ -158,10 +156,10 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
             .cloned()
             .collect::<Vec<_>>()
     };
-    for position in elements(&world, "numbers") {
+    for position in elements(&world, "fractions") {
         for part in ["over", "under"] {
             let at = [
-                key("numbers"),
+                key("fractions"),
                 Step::Element(position.clone()),
                 Step::Follow(gid::Resolution::Document),
                 key(part),
@@ -188,10 +186,10 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
             _ => None,
         })
         .collect::<Vec<_>>();
-    for position in elements(&world, "numbers") {
+    for position in elements(&world, "fractions") {
         let part = |name: &str| {
             let path = [
-                key("numbers"),
+                key("fractions"),
                 Step::Element(position.clone()),
                 Step::Follow(gid::Resolution::Document),
                 key(name),
@@ -220,7 +218,7 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
     }
     let total = world
         .sources()
-        .resolve_path(&[key("total")])
+        .resolve_path(&[key("fraction_sum")])
         .cloned()
         .unwrap();
     let sum = ::grap::evaluate_value(
@@ -244,11 +242,16 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
         }),
         [Some(6.0), Some(8.0)]
     );
-    assert!(drawn(&mut world, &[key("heading"), key("degrees")]));
-    for position in elements(&world, "colors") {
+    for position in elements(&world, "angles") {
         assert!(drawn(
             &mut world,
-            &[key("colors"), Step::Element(position), key("tint")]
+            &[key("angles"), Step::Element(position), key("degrees")]
+        ));
+    }
+    for position in elements(&world, "tints") {
+        assert!(drawn(
+            &mut world,
+            &[key("tints"), Step::Element(position), key("tint")]
         ));
     }
     let painted = settle(editing_frame(&mut world, false)).list.0;
@@ -263,8 +266,8 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
     };
     assert_eq!(
         fills(|shape| matches!(shape, Shape::Circle(_))).len(),
-        2,
-        "the heading's dial and its dot"
+        4,
+        "each angle's dial and its dot"
     );
     let rects = fills(|shape| matches!(shape, Shape::Rect(_)));
     assert!(
@@ -279,4 +282,3 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
         );
     }
 }
-
