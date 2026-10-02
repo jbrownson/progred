@@ -2,7 +2,7 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
-use crate::libraries::{Library, absent, logic, name, number};
+use crate::libraries::{Library, absent, name, number};
 use gid::CellId;
 #[cfg(test)]
 use gid::{Step, Value};
@@ -20,9 +20,8 @@ use ::grap::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeVal
 pub mod vocabulary {
     use gid::CellId;
 
-    pub use crate::libraries::number::vocabulary::OPERAND;
     #[cfg(test)]
-    pub use crate::libraries::number::vocabulary::{LEFT, RIGHT};
+    pub use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
     pub use ::grap::f64::F64;
     pub const SUM: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
     pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
@@ -94,6 +93,7 @@ pub(crate) fn convention() -> number::Convention<f64> {
         update: vocabulary::UPDATE,
         left_not: vocabulary::LEFT_NOT_F64,
         right_not: vocabulary::RIGHT_NOT_F64,
+        operand_not: vocabulary::OPERAND_NOT_F64,
         invalid_input: vocabulary::INVALID_INPUT,
         encode: value,
         runtime: RuntimeValue::f64,
@@ -103,7 +103,7 @@ pub(crate) fn convention() -> number::Convention<f64> {
 }
 
 fn parts() -> number::Parts {
-    use number::Operation::{Arithmetic, Comparison};
+    use number::Operation::{Arithmetic, Comparison, Predicate, Unary};
     let mut parts = convention().parts([
         (vocabulary::SUM, "+", Arithmetic(|left, right| left + right)),
         (
@@ -134,46 +134,23 @@ fn parts() -> number::Parts {
             "==",
             Comparison(|left, right| left == right),
         ),
-    ]);
-    for (cell, operation) in [
-        (vocabulary::SIN, f64::sin as fn(f64) -> f64),
-        (vocabulary::COS, f64::cos),
-        (vocabulary::FLOOR, f64::floor),
-        (vocabulary::CEIL, f64::ceil),
-    ] {
-        parts.functions = parts.functions.register(
-            cell,
-            ForeignFunction::new(move |context, call, environment| {
-                unary(context, call, environment, operation)
-            })
-            .parameters([vocabulary::OPERAND])
-            .tracked(),
-        );
-    }
-    parts.functions = parts
-        .functions
-        .register(
-            vocabulary::LERP,
-            ForeignFunction::new(lerp)
-                .parameters([vocabulary::START, vocabulary::END, vocabulary::AMOUNT])
-                .tracked(),
-        )
-        .register(
+        (vocabulary::SIN, "sin", Unary(f64::sin)),
+        (vocabulary::COS, "cos", Unary(f64::cos)),
+        (vocabulary::FLOOR, "floor", Unary(f64::floor)),
+        (vocabulary::CEIL, "ceil", Unary(f64::ceil)),
+        (
             vocabulary::IS_FINITE,
-            ForeignFunction::new(|context, call, environment| {
-                unary_value(context, call, environment, |value| {
-                    logic::value(value.is_finite()).into()
-                })
-            })
-            .parameters([vocabulary::OPERAND])
+            "is finite",
+            Predicate(f64::is_finite),
+        ),
+    ]);
+    parts.functions = parts.functions.register(
+        vocabulary::LERP,
+        ForeignFunction::new(lerp)
+            .parameters([vocabulary::START, vocabulary::END, vocabulary::AMOUNT])
             .tracked(),
-        );
+    );
     for (cell, name) in [
-        (vocabulary::SIN, "sin"),
-        (vocabulary::COS, "cos"),
-        (vocabulary::FLOOR, "floor"),
-        (vocabulary::CEIL, "ceil"),
-        (vocabulary::IS_FINITE, "is finite"),
         (vocabulary::LERP, "lerp"),
         (vocabulary::START, "start"),
         (vocabulary::END, "end"),
@@ -182,7 +159,6 @@ fn parts() -> number::Parts {
         parts.cells.set_value(cell, name::record(name, []));
     }
     for (cell, name) in [
-        (vocabulary::OPERAND_NOT_F64, "operand is not f64"),
         (vocabulary::START_NOT_F64, "start is not f64"),
         (vocabulary::END_NOT_F64, "end is not f64"),
         (vocabulary::AMOUNT_NOT_F64, "amount is not f64"),
@@ -193,14 +169,7 @@ fn parts() -> number::Parts {
         vocabulary::PI,
         overlay_value(&value(std::f64::consts::PI), name::record("π", [])),
     );
-    parts.calls.extend([
-        vocabulary::SIN,
-        vocabulary::COS,
-        vocabulary::FLOOR,
-        vocabulary::CEIL,
-        vocabulary::IS_FINITE,
-        vocabulary::LERP,
-    ]);
+    parts.calls.push(vocabulary::LERP);
     parts
 }
 
@@ -234,32 +203,6 @@ fn lerp(
     })
 }
 
-fn unary(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    operation: impl FnOnce(f64) -> f64,
-) -> Result<RuntimeValue, Halt> {
-    unary_value(context, call, environment, |operand| {
-        RuntimeValue::f64(operation(operand))
-    })
-}
-
-fn unary_value(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-    operation: impl FnOnce(f64) -> RuntimeValue,
-) -> Result<RuntimeValue, Halt> {
-    let Some(operand) = context.field(call, vocabulary::OPERAND) else {
-        return Ok(context.missing_runtime_argument(vocabulary::OPERAND));
-    };
-    Ok(context
-        .eval_f64(operand, environment)?
-        .map(operation)
-        .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64).into()))
-}
-
 pub fn completions(query: &str) -> Vec<crate::display::Completion> {
     convention().completions(query)
 }
@@ -278,7 +221,7 @@ mod tests {
         number::infix_display(vocabulary::F64, &parts().infix, input)
     }
     use crate::display::recording::{Recordable, Recorded};
-    use crate::libraries::line_edit;
+    use crate::libraries::{line_edit, logic};
 
     use crate::display::test_support::{ProjectionCall, inspect};
     use gid::new_cell_id;

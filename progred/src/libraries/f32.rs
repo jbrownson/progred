@@ -2,11 +2,10 @@
 //! single precision. It remains ordinary GID data and ordinary Grap
 //! library behavior.
 
-use crate::libraries::{Library, name, number};
+use crate::libraries::{Library, number};
 use gid::{CellId, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf8daecede6e48de724408cfb0e3090f8);
-use ::grap::{Context, Environment, Expression, ForeignFunction, Halt};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -22,6 +21,7 @@ pub mod vocabulary {
     pub const EQUAL: CellId = CellId::from_u128(0xe0637a60944f8dd9afd2fb4c28214dc3);
     pub const LEFT_NOT_F32: CellId = CellId::from_u128(0x2f7a7dfd96df51008a563a36e075e50b);
     pub const RIGHT_NOT_F32: CellId = CellId::from_u128(0xd4a7b035dc57953dca5c1d20cb591d0d);
+    pub const OPERAND_NOT_F32: CellId = CellId::from_u128(0xcc210598ba95d6d2a4fb8baa13e92864);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0x722482f3e369634464ae68add98480e6);
 }
 
@@ -77,6 +77,7 @@ pub(crate) fn convention() -> number::Convention<f32> {
         update: vocabulary::UPDATE,
         left_not: vocabulary::LEFT_NOT_F32,
         right_not: vocabulary::RIGHT_NOT_F32,
+        operand_not: vocabulary::OPERAND_NOT_F32,
         invalid_input: vocabulary::INVALID_INPUT,
         encode: value,
         runtime: |number| value(number).into(),
@@ -91,29 +92,9 @@ pub(crate) fn convention() -> number::Convention<f32> {
     }
 }
 
-fn from_f64(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<Value, Halt> {
-    let Some(operand) = context.field(call, number::vocabulary::OPERAND) else {
-        return Ok(context.missing_argument(number::vocabulary::OPERAND));
-    };
-    let operand = context.eval_to_value(operand, environment)?;
-    Ok(crate::libraries::f64::read(&operand)
-        .map(|number| value(number as f32))
-        .unwrap_or_else(|| {
-            ::grap::absent::with_detail(
-                vocabulary::INVALID_INPUT,
-                number::vocabulary::OPERAND,
-                operand,
-            )
-        }))
-}
-
 fn parts() -> number::Parts {
-    use number::Operation::{Arithmetic, Comparison};
-    let mut parts = convention().parts([
+    use number::Operation::{Arithmetic, Comparison, Conversion};
+    convention().parts([
         (vocabulary::SUM, "+", Arithmetic(|left, right| left + right)),
         (
             vocabulary::SUBTRACT,
@@ -140,17 +121,12 @@ fn parts() -> number::Parts {
             "==",
             Comparison(|left, right| left == right),
         ),
-    ]);
-    parts
-        .cells
-        .set_value(vocabulary::FROM_F64, name::record("f32 from f64", []));
-    parts.functions = parts.functions.register(
-        vocabulary::FROM_F64,
-        ForeignFunction::from_value(from_f64)
-            .parameters([number::vocabulary::OPERAND])
-            .tracked(),
-    );
-    parts
+        (
+            vocabulary::FROM_F64,
+            "f32 from f64",
+            Conversion(|operand| operand.as_f64().map(|number| number as f32)),
+        ),
+    ])
 }
 
 #[cfg(test)]
@@ -165,7 +141,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::libraries::{absent, line_edit, logic};
+    use crate::libraries::{absent, line_edit, logic, name};
     use gid::new_cell_id;
 
     fn call(function: CellId, left: Value, right: Value) -> Value {

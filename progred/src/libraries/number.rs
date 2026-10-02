@@ -108,13 +108,13 @@ pub(crate) enum Precedence {
 }
 
 impl Precedence {
-    /// Comparisons and the arithmetic symbols read infix; named operations
-    /// stay calls.
+    /// Comparisons and the arithmetic symbols read infix; named and
+    /// one-operand operations stay calls.
     fn of<N>(spelling: &str, operation: &Operation<N>) -> Option<Self> {
         match (operation, spelling) {
             (Operation::Comparison(_), _) => Some(Self::Comparison),
-            (_, "+" | "-") => Some(Self::Sum),
-            (_, "*" | "/") => Some(Self::Product),
+            (Operation::Arithmetic(_) | Operation::Checked(..), "+" | "-") => Some(Self::Sum),
+            (Operation::Arithmetic(_) | Operation::Checked(..), "*" | "/") => Some(Self::Product),
             _ => None,
         }
     }
@@ -196,6 +196,7 @@ pub(crate) struct Convention<N> {
     pub update: CellId,
     pub left_not: CellId,
     pub right_not: CellId,
+    pub operand_not: CellId,
     pub invalid_input: CellId,
     pub encode: fn(N) -> Value,
     pub runtime: fn(N) -> RuntimeValue,
@@ -210,6 +211,10 @@ pub(crate) enum Operation<N> {
     /// Fails with the given reason instead of producing a result.
     Checked(fn(N, N) -> Option<N>, CellId),
     Comparison(fn(N, N) -> bool),
+    Unary(fn(N) -> N),
+    Predicate(fn(N) -> bool),
+    /// From another representation's operand, which it reads itself.
+    Conversion(fn(&RuntimeValue) -> Option<N>),
 }
 
 /// A convention's generated cells, functions, and projected call forms,
@@ -236,6 +241,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         for (cell, reason) in [
             (self.left_not, format!("left is not {}", self.name)),
             (self.right_not, format!("right is not {}", self.name)),
+            (self.operand_not, format!("operand is not {}", self.name)),
             (self.invalid_input, format!("invalid {} input", self.name)),
         ] {
             cells.set_value(cell, absent::named_reason(reason));
@@ -318,7 +324,58 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             Operation::Comparison(apply) => {
                 self.binary(move |left, right| logic::value(apply(left, right)).into())
             }
+            Operation::Unary(apply) => self.unary(move |operand| (self.runtime)(apply(operand))),
+            Operation::Predicate(apply) => {
+                self.unary(move |operand| logic::value(apply(operand)).into())
+            }
+            Operation::Conversion(convert) => self.conversion(convert),
         }
+    }
+
+    fn unary(self, operation: impl Fn(N) -> RuntimeValue + 'static) -> ForeignFunction {
+        let operation = Rc::new(operation);
+        ForeignFunction::staged(move |context, call| {
+            match context.field(call, vocabulary::OPERAND) {
+                Some(operand) => {
+                    let operation = operation.clone();
+                    Rc::new(move |context, environment| {
+                        Ok(match (self.eval)(context, operand.clone(), environment)? {
+                            Some(operand) => operation(operand),
+                            None => absent::with_reason(self.operand_not).into(),
+                        })
+                    })
+                }
+                None => {
+                    Rc::new(|context, _| Ok(context.missing_runtime_argument(vocabulary::OPERAND)))
+                }
+            }
+        })
+        .parameters([vocabulary::OPERAND])
+        .tracked()
+    }
+
+    fn conversion(self, convert: fn(&RuntimeValue) -> Option<N>) -> ForeignFunction {
+        ForeignFunction::staged(move |context, call| {
+            match context.field(call, vocabulary::OPERAND) {
+                Some(operand) => Rc::new(move |context, environment| {
+                    let operand = context.eval(operand.clone(), environment)?;
+                    Ok(match convert(&operand) {
+                        Some(number) => (self.runtime)(number),
+                        None => ::grap::absent::with_detail(
+                            self.invalid_input,
+                            vocabulary::OPERAND,
+                            operand.to_value(),
+                        )
+                        .into(),
+                    })
+                }),
+                None => {
+                    Rc::new(|context, _| Ok(context.missing_runtime_argument(vocabulary::OPERAND)))
+                }
+            }
+        })
+        .parameters([vocabulary::OPERAND])
+        .tracked()
     }
 
     /// Each call site finds its operand expressions once; its stage only

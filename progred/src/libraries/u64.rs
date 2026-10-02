@@ -18,6 +18,7 @@ pub mod vocabulary {
     pub const EQUAL: CellId = CellId::from_u128(0xc3931b2321d6c783fee133acaa929738);
     pub const LEFT_NOT_U64: CellId = CellId::from_u128(0x64dd17fd81404f413122ffc00b452e2e);
     pub const RIGHT_NOT_U64: CellId = CellId::from_u128(0x1a13161cd3a0e5fa71455a277839bd32);
+    pub const OPERAND_NOT_U64: CellId = CellId::from_u128(0xe516273ed0eb1e3a6acd87dabb878383);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0x64082046ad013b14b42773624d8453f1);
     pub const OVERFLOW: CellId = CellId::from_u128(0x184f82a04d9cb7609238b2dd05ad5cd0);
     pub const DIVISION_BY_ZERO: CellId = CellId::from_u128(0x7eef118f55e12f09c8f7324c0fdd765d);
@@ -74,6 +75,7 @@ pub(crate) fn convention() -> number::Convention<u64> {
         update: vocabulary::UPDATE,
         left_not: vocabulary::LEFT_NOT_U64,
         right_not: vocabulary::RIGHT_NOT_U64,
+        operand_not: vocabulary::OPERAND_NOT_U64,
         invalid_input: vocabulary::INVALID_INPUT,
         encode: value,
         runtime: |number| value(number).into(),
