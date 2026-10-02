@@ -3,14 +3,16 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
+use crate::display::projection::group;
 use crate::display::{
-    Face, Layout, Partial, ProjectionInput, activatable, overlay_value, row, subscript,
+    Delim, Face, Layout, Partial, ProjectionInput, activatable, overlay_value, row,
+    selectable_bracket, subscript,
 };
 use crate::libraries::{Library, absent, line_edit, logic, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Cells, Step, Value};
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -97,6 +99,77 @@ pub(crate) fn operation(representation: CellId) -> Partial<crate::Editor, crate:
     })
 }
 
+/// How tightly an infix operator binds; a looser operand gets parentheses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Precedence {
+    Comparison,
+    Sum,
+    Product,
+}
+
+impl Precedence {
+    /// Comparisons and the arithmetic symbols read infix; named operations
+    /// stay calls.
+    fn of<N>(spelling: &str, operation: &Operation<N>) -> Option<Self> {
+        match (operation, spelling) {
+            (Operation::Comparison(_), _) => Some(Self::Comparison),
+            (_, "+" | "-") => Some(Self::Sum),
+            (_, "*" | "/") => Some(Self::Product),
+            _ => None,
+        }
+    }
+}
+
+/// `left op right` for one representation's operators.
+pub(crate) fn infix_display(
+    representation: CellId,
+    operators: &[(CellId, Precedence)],
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input.pending.is_none().then_some(())?;
+    let binds = |call: &RuntimeValue| {
+        call.field(vocabulary::LEFT)?;
+        call.field(vocabulary::RIGHT)?;
+        let function = call.field(::grap::vocabulary::FUNCTION)?.as_cell()?;
+        operators
+            .iter()
+            .find(|(operator, _)| *operator == function)
+            .map(|(_, precedence)| *precedence)
+    };
+    let fields = input.value?;
+    let precedence = binds(fields)?;
+    let operand = |field| {
+        let child =
+            crate::libraries::grap::expression_descend(Step::Key(field), &input.default_projection);
+        let looser = fields
+            .field(field)
+            .as_ref()
+            .and_then(binds)
+            .is_some_and(|operand| {
+                operand < precedence
+                    || (operand == precedence
+                        && (field == vocabulary::RIGHT || precedence == Precedence::Comparison))
+            });
+        if looser {
+            selectable_bracket(Delim::Paren, child)
+        } else {
+            child
+        }
+    };
+    Some(group(row(
+        6.0,
+        [
+            operand(vocabulary::LEFT),
+            crate::display::descend_local(
+                Step::Key(::grap::vocabulary::FUNCTION),
+                operation(representation),
+                &input.default_projection,
+            ),
+            operand(vocabulary::RIGHT),
+        ],
+    )))
+}
+
 pub(crate) fn calls(
     representation: CellId,
     operations: impl Into<Rc<[CellId]>>,
@@ -145,6 +218,8 @@ pub(crate) struct Parts {
     pub cells: Cells,
     pub functions: ForeignFunctions,
     pub calls: Vec<CellId>,
+    /// The calls that read infix, and how tightly each binds.
+    pub infix: Vec<(CellId, Precedence)>,
 }
 
 impl<N: Scrubbable + std::str::FromStr> Convention<N> {
@@ -171,8 +246,12 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                 functions: ForeignFunctions::default()
                     .register(self.update, self.update_function()),
                 calls: Vec::new(),
+                infix: Vec::new(),
             },
             |mut parts, (cell, spelling, operation)| {
+                parts.infix.extend(
+                    Precedence::of(spelling, &operation).map(|precedence| (cell, precedence)),
+                );
                 parts.cells.set_value(cell, name::record(spelling, []));
                 parts.functions = parts.functions.register(cell, self.operation(operation));
                 parts.calls.push(cell);
@@ -191,12 +270,17 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             cells,
             functions,
             calls: operations,
+            infix,
         } = parts;
+        let infix: Rc<[(CellId, Precedence)]> = infix.into();
         Library::named(
             id,
             self.name,
             crate::libraries::Definitions::from_parts(cells, functions),
             crate::display::compose_partials(before.into_iter().chain([
+                crate::display::runtime_partial(move |input| {
+                    infix_display(self.tag, &infix, input)
+                }),
                 calls(self.tag, operations),
                 crate::display::runtime_partial(move |input| self.display(input)),
             ])),

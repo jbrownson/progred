@@ -3,22 +3,26 @@
 //! functions.
 
 use crate::libraries::{Library, absent, logic, name, number};
+use gid::CellId;
 #[cfg(test)]
-use gid::Value;
-use gid::{CellId, Step};
+use gid::{Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0x1fdb573a2c56a7063546c195318214bc);
-use crate::display::projection::group;
-use crate::display::{Delim, Layout, ProjectionInput, overlay_value, row, selectable_bracket};
+use crate::display::overlay_value;
+#[cfg(test)]
+use crate::display::{Layout, ProjectionInput};
 #[cfg(test)]
 use ::grap;
+#[cfg(test)]
 use ::grap::vocabulary::FUNCTION;
 use ::grap::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue};
 
 pub mod vocabulary {
     use gid::CellId;
 
-    pub use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
+    pub use crate::libraries::number::vocabulary::OPERAND;
+    #[cfg(test)]
+    pub use crate::libraries::number::vocabulary::{LEFT, RIGHT};
     pub use ::grap::f64::F64;
     pub const SUM: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
     pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
@@ -81,81 +85,6 @@ impl number::Scrubbable for f64 {
             format!("{self:.decimal_places$}")
         }
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Precedence {
-    Comparison,
-    Sum,
-    Product,
-}
-
-fn precedence(function: CellId) -> Option<Precedence> {
-    match function {
-        vocabulary::SUM | vocabulary::SUBTRACT => Some(Precedence::Sum),
-        vocabulary::MULTIPLY | vocabulary::DIVIDE => Some(Precedence::Product),
-        vocabulary::LESS | vocabulary::EQUAL => Some(Precedence::Comparison),
-        _ => None,
-    }
-}
-
-fn expression_precedence(value: &RuntimeValue) -> Option<Precedence> {
-    let fields = value;
-    fields.field(vocabulary::LEFT)?;
-    fields.field(vocabulary::RIGHT)?;
-    fields.field(FUNCTION)?.as_cell().and_then(precedence)
-}
-
-fn operand(
-    field: CellId,
-    value: &RuntimeValue,
-    parent: Precedence,
-    default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
-    let child = crate::libraries::grap::expression_descend(Step::Key(field), default);
-    match expression_precedence(value) {
-        Some(child_precedence)
-            if child_precedence < parent
-                || (child_precedence == parent
-                    && (field == vocabulary::RIGHT || parent == Precedence::Comparison)) =>
-        {
-            selectable_bracket(Delim::Paren, child)
-        }
-        _ => child,
-    }
-}
-
-pub fn binary_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    input.pending.is_none().then_some(())?;
-    let fields = input.value?;
-    let function = fields.field(FUNCTION)?;
-    let precedence = precedence(function.as_cell()?)?;
-    let left = fields.field(vocabulary::LEFT)?;
-    let right = fields.field(vocabulary::RIGHT)?;
-    Some(group(row(
-        6.0,
-        [
-            operand(
-                vocabulary::LEFT,
-                &left,
-                precedence,
-                &input.default_projection,
-            ),
-            crate::display::descend_local(
-                Step::Key(FUNCTION),
-                number::operation(vocabulary::F64),
-                &input.default_projection,
-            ),
-            operand(
-                vocabulary::RIGHT,
-                &right,
-                precedence,
-                &input.default_projection,
-            ),
-        ],
-    )))
 }
 
 pub(crate) fn convention() -> number::Convention<f64> {
@@ -336,16 +265,18 @@ pub fn completions(query: &str) -> Vec<crate::display::Completion> {
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
-    convention().library(
-        ID,
-        parts(),
-        [crate::display::runtime_partial(binary_display)],
-    )
+    convention().library(ID, parts(), std::iter::empty())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn binary_display(
+        input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
+    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+        number::infix_display(vocabulary::F64, &parts().infix, input)
+    }
     use crate::display::recording::{Recordable, Recorded};
     use crate::libraries::line_edit;
 
@@ -649,9 +580,41 @@ mod tests {
     }
 
     #[test]
+    fn every_numeric_library_reads_its_operators_infix() {
+        use crate::libraries::{f32, u64};
+        for (library, sum, left, right) in [
+            (library(), vocabulary::SUM, value(1.0), value(2.0)),
+            (
+                f32::library(),
+                f32::vocabulary::SUM,
+                f32::value(1.0),
+                f32::value(2.0),
+            ),
+            (
+                u64::library(),
+                u64::vocabulary::SUM,
+                u64::value(1),
+                u64::value(2),
+            ),
+        ] {
+            let sum = RuntimeValue::from(&call(sum, left, right));
+            let layout = (library.projection)(&projection_input(&sum)).expect("a sum projects");
+            let Recorded::Row { children, .. } = layout.record().content().clone() else {
+                panic!("binary notation is a row");
+            };
+            assert!(matches!(&inspect(&(&children[0])),
+                ProjectionCall::Descend { step: Step::Key(field), .. } if *field == vocabulary::LEFT
+            ));
+            assert!(matches!(&inspect(&(&children[1])),
+                ProjectionCall::Descend { step: Step::Key(field), .. } if *field == FUNCTION
+            ));
+        }
+    }
+
+    #[test]
     fn binary_notation_ignores_unrelated_fields_without_changing_grouping() {
         let extra = new_cell_id();
-        let call = grap::call(
+        let sum = grap::call(
             Value::from(vocabulary::SUM),
             [
                 (vocabulary::LEFT, value(1.0)),
@@ -659,29 +622,30 @@ mod tests {
                 (extra, value(3.0)),
             ],
         );
-        assert!(binary_display(&projection_input(&(&call).into())).is_some());
-        assert!(matches!(
-            expression_precedence(&(&call).into()),
-            Some(Precedence::Sum)
-        ));
-        let default = crate::display::runtime_partial(|_| None);
+        assert!(binary_display(&projection_input(&(&sum).into())).is_some());
         for (parent, field, grouped) in [
-            (Precedence::Product, vocabulary::LEFT, true),
-            (Precedence::Sum, vocabulary::LEFT, false),
-            (Precedence::Sum, vocabulary::RIGHT, true),
+            (vocabulary::MULTIPLY, vocabulary::LEFT, true),
+            (vocabulary::SUM, vocabulary::LEFT, false),
+            (vocabulary::SUM, vocabulary::RIGHT, true),
         ] {
+            let (left, right, index) = if field == vocabulary::LEFT {
+                (sum.clone(), value(4.0), 0)
+            } else {
+                (value(4.0), sum.clone(), 2)
+            };
+            let layout =
+                binary_display(&projection_input(&(&call(parent, left, right)).into())).unwrap();
+            let Recorded::Row { children, .. } = layout.record().content().clone() else {
+                panic!("binary notation is a row");
+            };
             assert_eq!(
-                matches!(
-                    operand(field, &(&call).into(), parent, &default).record(),
-                    Recorded::Row { .. }
-                ),
-                grouped,
+                matches!(children[index].content(), Recorded::Row { .. }),
+                grouped
             );
         }
         for key in [FUNCTION, vocabulary::LEFT, vocabulary::RIGHT] {
-            let incomplete = Value::record(call.as_record().unwrap().without(&key));
+            let incomplete = Value::record(sum.as_record().unwrap().without(&key));
             assert!(binary_display(&projection_input(&(&incomplete).into())).is_none());
-            assert!(expression_precedence(&(&incomplete).into()).is_none());
         }
     }
 
