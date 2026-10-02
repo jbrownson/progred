@@ -24,7 +24,8 @@ pub(super) fn display(
     let fields = input.value?.as_record()?.clone();
     let value = ::grap::RuntimeValue::from(input.value?.clone());
     let runtime_input = input.with_value(Some(&value));
-    let footer = extras(&runtime_input, &keys);
+    let footer =
+        d::structure::extra_fields(&runtime_input, |key| key == OUTLINE || keys.contains(&key));
     let label = d::structure::record_label(&runtime_input, OUTLINE);
     Some(Layout::program(Rc::new(move |context, build| {
         let source = context
@@ -168,23 +169,6 @@ fn heading(
             .measure(context, build)
         }))
     })
-}
-
-fn extras(
-    input: &ProjectionInput<'_, crate::Editor, Hovered, ::grap::RuntimeValue>,
-    sections: &[CellId],
-) -> Option<Layout<crate::Editor, Hovered>> {
-    let fields = d::structure::record_keys(input)?
-        .into_iter()
-        .filter(|key| *key != OUTLINE && !sections.contains(key))
-        .map(|key| d::structure::record_field(input, key, None))
-        .collect::<Vec<_>>();
-    let pending = d::structure::pending_field(input);
-    if fields.is_empty() && pending.is_none() {
-        None
-    } else {
-        Some(d::record_fragment(fields, pending))
-    }
 }
 
 #[cfg(test)]

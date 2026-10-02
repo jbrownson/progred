@@ -267,6 +267,34 @@ pub(crate) fn record_label(
     }
 }
 
+/// The fields a projection leaves undrawn, and one being added, as a
+/// record fragment to follow what it does draw.
+pub(crate) fn extra_fields(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    drawn: impl Fn(CellId) -> bool,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    let fields = record_keys(input)?
+        .into_iter()
+        .filter(|key| !drawn(*key))
+        .map(|key| record_field(input, key, None))
+        .collect::<Vec<_>>();
+    let pending = pending_field(input);
+    (!fields.is_empty() || pending.is_some()).then(|| record_fragment(fields, pending))
+}
+
+/// `content` followed by its [`extra_fields`], as a call's head is by its
+/// arguments.
+pub(crate) fn with_extra_fields(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    drawn: impl Fn(CellId) -> bool,
+    content: Layout<crate::Editor, crate::frame::Hovered>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    match extra_fields(input, drawn) {
+        Some(extras) => super::projection::group_hug(content, extras, 0.0, 20.0),
+        None => content,
+    }
+}
+
 pub(crate) fn pending_field(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {

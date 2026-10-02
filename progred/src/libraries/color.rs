@@ -384,7 +384,6 @@ pub fn display(
     if input.value.is_none() {
         return missing_picker(input);
     }
-    (input.pending != Some(crate::display::Pending::Field)).then_some(())?;
     let encoded = encoded_runtime(input.value?)?;
     let color = decoded_color(encoded);
     let initial_hue = hsva(encoded).hue;
@@ -418,12 +417,21 @@ pub fn display(
         .field(name::vocabulary::NAME)
         .and_then(|value| text::read(value.as_value()).map(|_| ()))
         .map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
+    let named = name.is_some();
     let spelling = crate::display::line_edit(hex_editor(encoded));
-    Some(centered_row(
-        4.0,
-        std::iter::once(swatch)
-            .chain(name)
-            .chain(std::iter::once(spelling)),
+    Some(crate::display::structure::with_extra_fields(
+        input,
+        |key| {
+            key == vocabulary::RGB
+                || key == vocabulary::RGBA
+                || (named && key == name::vocabulary::NAME)
+        },
+        centered_row(
+            4.0,
+            std::iter::once(swatch)
+                .chain(name)
+                .chain(std::iter::once(spelling)),
+        ),
     ))
 }
 
@@ -739,10 +747,12 @@ mod tests {
             select_with: std::rc::Rc::new(|_: &mut crate::Editor, _| false),
             hover: crate::libraries::test_widgets::hover(vec![]),
         };
+        // Its extra field would follow the color in a record of its own.
+        let plain = value(Color::from_rgba8(0x66, 0x33, 0x99, 0xff));
         let layout = display(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
-            value: Some(&(&color).into()),
+            value: Some(&(&plain).into()),
             scale_factor: 1.0,
             writable: true,
             selection: Some(&selection),

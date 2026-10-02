@@ -2546,13 +2546,27 @@ fn typing_over_a_value_replaces_it_and_escape_brings_it_back() {
 }
 
 #[test]
-fn adding_a_field_to_a_number_shows_its_picker() {
-    let x = new_cell_id();
+fn a_numbers_other_fields_follow_it_including_one_being_added() {
+    let (x, note) = (new_cell_id(), new_cell_id());
+    let number = f64::value(1.0)
+        .as_record()
+        .unwrap()
+        .clone()
+        .update(note, text::value("hi"));
     let doc = Document {
-        root: Some(Value::record([(x, f64::value(1.0))])),
+        root: Some(Value::record([(x, Value::record(number))])),
         cells: Cells::new(),
     };
     let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
+    // The number view leaves its own field undrawn, unlike the record view.
+    let drawn = |runner: &mut crate::EditorRunner, field| {
+        editing_frame(&mut runner.editor, false)
+            .descends
+            .iter()
+            .any(|descend| *descend.path == [Step::Key(x), Step::Key(field)])
+    };
+    assert!(drawn(&mut runner, note));
+    assert!(!drawn(&mut runner, f64::vocabulary::F64));
     runner.editor.model.selection = Some(make_selection(vec![Step::Key(x)]));
     runner.refresh_frame(1.0, kurbo::Size::new(600.0, 400.0));
     let command = match runner.editor.command_modifier {
@@ -2585,4 +2599,6 @@ fn adding_a_field_to_a_number_shows_its_picker() {
             .is_some(),
         "the new field's picker is drawn"
     );
+    assert!(drawn(&mut runner, note));
+    assert!(!drawn(&mut runner, f64::vocabulary::F64));
 }

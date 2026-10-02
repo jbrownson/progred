@@ -84,14 +84,18 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-/// Text reads as its characters; adding a field to it shows the record.
+/// Text reads as its characters, then any other fields, including one
+/// being added.
 pub fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    (input.pending != Some(crate::display::Pending::Field)).then_some(())?;
     let bytes = input.value?.field(vocabulary::UTF8)?;
     let text = std::str::from_utf8(bytes.as_blob()?).ok()?;
-    Some(crate::display::line_edit(editor_for_text(text)))
+    Some(crate::display::structure::with_extra_fields(
+        input,
+        |key| key == vocabulary::UTF8,
+        crate::display::line_edit(editor_for_text(text)),
+    ))
 }
 
 pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
