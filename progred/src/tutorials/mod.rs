@@ -11,6 +11,7 @@ use puri::draw::{DrawCmd, DrawList, Shape};
 use puri::hover::Claim;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
+use ui_events::pointer::PointerEvent;
 use ui_events_winit::WindowEventTranslation;
 use winit::dpi::PhysicalPosition;
 use winit::event::{DeviceId, ElementState, MouseButton, WindowEvent};
@@ -510,18 +511,30 @@ impl Embed {
     }
 
     fn window_event(&mut self, event: WindowEvent) {
-        self.runner.flush_before_window_event(&event);
-        if let WindowEvent::ModifiersChanged(modifiers) = &event {
+        let pointer = self.translate(&event);
+        self.dispatch(&event, pointer);
+    }
+
+    /// What the window's reducer makes of `event`, stamped with the moment it
+    /// arrives.
+    fn translate(&mut self, event: &WindowEvent) -> Option<PointerEvent> {
+        match crate::translate_window_event(&mut self.runner.editor.reducer, SCALE, event) {
+            Some(WindowEventTranslation::Pointer(pointer)) => Some(pointer),
+            _ => None,
+        }
+    }
+
+    fn dispatch(&mut self, event: &WindowEvent, pointer: Option<PointerEvent>) {
+        self.runner.flush_before_window_event(event);
+        if let WindowEvent::ModifiersChanged(modifiers) = event {
             self.runner.modifiers_changed(
                 ui_events_winit::keyboard::from_winit_modifier_state(modifiers.state()),
                 SCALE,
                 VIEWPORT,
             );
         }
-        if let Some(WindowEventTranslation::Pointer(event)) =
-            crate::translate_window_event(&mut self.runner.editor.reducer, SCALE, &event)
-        {
-            self.runner.pointer_event(&event, SCALE, VIEWPORT);
+        if let Some(pointer) = pointer {
+            self.runner.pointer_event(&pointer, SCALE, VIEWPORT);
         }
         self.present();
     }
@@ -568,9 +581,22 @@ impl Embed {
     fn clicks_at(&mut self, point: Point, count: usize) {
         self.pause();
         self.move_to(point);
-        for _ in 0..count {
-            self.button(ElementState::Pressed);
-            self.button(ElementState::Released);
+        // A double click's presses arrive together: however long the editor
+        // takes with the first, the second still lands within the interval.
+        let presses = (0..count)
+            .flat_map(|_| [ElementState::Pressed, ElementState::Released])
+            .map(|state| {
+                let event = WindowEvent::MouseInput {
+                    device_id: DeviceId::dummy(),
+                    state,
+                    button: MouseButton::Left,
+                };
+                let pointer = self.translate(&event);
+                (event, pointer)
+            })
+            .collect::<Vec<_>>();
+        for (event, pointer) in presses {
+            self.dispatch(&event, pointer);
         }
     }
 
