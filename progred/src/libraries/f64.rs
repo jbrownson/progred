@@ -218,7 +218,28 @@ mod tests {
     fn binary_display(
         input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
     ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-        number::infix_display(vocabulary::F64, &parts().infix, input)
+        crate::libraries::representation::infix_display(vocabulary::F64, &parts().infix, input)
+    }
+
+    /// Binary notation's one-line form; the other wraps after the left operand.
+    fn infix_children(
+        layout: &Layout<crate::Editor, crate::frame::Hovered>,
+    ) -> Option<Vec<Recorded<crate::Editor, crate::frame::Hovered>>> {
+        fn unshared(
+            layout: &Recorded<crate::Editor, crate::frame::Hovered>,
+        ) -> Recorded<crate::Editor, crate::frame::Hovered> {
+            match layout.content() {
+                Recorded::Shared { child, .. } => unshared(child),
+                content => content.clone(),
+            }
+        }
+        let Recorded::Alternatives(options) = layout.record().content().clone() else {
+            return None;
+        };
+        let Recorded::Row { children, .. } = options.first()?.content() else {
+            return None;
+        };
+        Some(children.iter().map(unshared).collect())
     }
     use crate::display::recording::{Recordable, Recorded};
     use crate::libraries::{line_edit, logic};
@@ -324,14 +345,8 @@ mod tests {
             (vocabulary::LEFT, sum),
             (vocabulary::RIGHT, RuntimeValue::f64(3.0)),
         ]);
-        let Recorded::Row { children, .. } = binary_display(&projection_input(&product))
-            .unwrap()
-            .record()
-            .content()
-            .clone()
-        else {
-            panic!("binary notation is a row")
-        };
+        let children =
+            infix_children(&binary_display(&projection_input(&product)).unwrap()).unwrap();
         crate::display::test_support::delimited(&children[0]);
     }
 
@@ -487,9 +502,7 @@ mod tests {
         let product = call(vocabulary::MULTIPLY, value(2.0), value(3.0));
         let sum = call(vocabulary::SUM, value(1.0), product);
         let layout = binary_display(&projection_input(&(&sum).into())).unwrap();
-        let Recorded::Row { children, .. } = layout.record().content().clone() else {
-            panic!("binary notation is a row");
-        };
+        let children = infix_children(&layout).unwrap();
         assert!(matches!(&inspect(&(&children[0])),
             ProjectionCall::Descend {
                 step: Step::Key(field),
@@ -516,10 +529,22 @@ mod tests {
             value(3.0),
         );
         let layout = binary_display(&projection_input(&(&product).into())).unwrap();
-        let Recorded::Row { children, .. } = layout.record().content().clone() else {
-            panic!("binary notation is a row");
-        };
+        let children = infix_children(&layout).unwrap();
         crate::display::test_support::delimited(&children[0]);
+    }
+
+    #[test]
+    fn binary_notation_wraps_before_its_operator() {
+        let sum = call(vocabulary::SUM, value(1.0), value(2.0));
+        let layout = binary_display(&projection_input(&(&sum).into())).unwrap();
+        let Recorded::Alternatives(options) = layout.record().content().clone() else {
+            panic!("binary notation has a one-line form and a wrapped one");
+        };
+        let Recorded::Col { children, .. } = options[1].content() else {
+            panic!("the wrapped form stacks");
+        };
+        // The left operand, then the operator with the right one.
+        assert_eq!(children.len(), 2);
     }
 
     #[test]
@@ -528,7 +553,7 @@ mod tests {
         let infix = |library: &Library<crate::Editor, crate::frame::Hovered>, call: Value| {
             let layout = (library.projection)(&projection_input(&RuntimeValue::from(&call)))
                 .expect("a call projects");
-            let Recorded::Row { children, .. } = layout.record().content().clone() else {
+            let Some(children) = infix_children(&layout) else {
                 return false;
             };
             let descends = |index: usize, key: CellId| {
@@ -616,9 +641,7 @@ mod tests {
             };
             let layout =
                 binary_display(&projection_input(&(&call(parent, left, right)).into())).unwrap();
-            let Recorded::Row { children, .. } = layout.record().content().clone() else {
-                panic!("binary notation is a row");
-            };
+            let children = infix_children(&layout).unwrap();
             assert_eq!(
                 matches!(children[index].content(), Recorded::Row { .. }),
                 grouped

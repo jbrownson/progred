@@ -3,16 +3,13 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
-use crate::display::projection::group;
-use crate::display::{
-    Delim, Face, Layout, Partial, ProjectionInput, activatable, overlay_value, row,
-    selectable_bracket, subscript,
-};
+use crate::display::{Layout, Partial, ProjectionInput, activatable, overlay_value};
+use crate::libraries::representation::{Precedence, calls, infix_display, tagged};
 use crate::libraries::{Library, absent, line_edit, logic, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
-use gid::{CellId, Cells, Step, Value};
+use gid::{CellId, Cells, Value};
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -70,120 +67,14 @@ const PIXELS_PER_STEP: f64 = 4.0;
 const PIXELS_PER_DECADE: f64 = 24.0;
 const DECADE_STRETCH: f64 = 1.5;
 
-fn with_representation<V>(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, V>,
-    content: Layout<crate::Editor, crate::frame::Hovered>,
-    representation: CellId,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
-    row(
-        2.0,
-        [
-            content,
-            subscript(
-                input
-                    .env
-                    .name(representation)
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| crate::identity::short_id(representation)),
-                Face::Dim,
-            ),
-        ],
-    )
-}
-
-pub(crate) fn operation(representation: CellId) -> Partial<crate::Editor, crate::frame::Hovered> {
-    crate::display::runtime_partial(move |input| {
-        crate::libraries::grap::shallow_cell_with(input, |label| {
-            with_representation(input, label, representation)
-        })
-    })
-}
-
-/// How tightly an infix operator binds; a looser operand gets parentheses.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Precedence {
-    Comparison,
-    Sum,
-    Product,
-}
-
-impl Precedence {
-    /// Comparisons and the arithmetic symbols read infix; named and
-    /// one-operand operations stay calls.
-    fn of<N>(spelling: &str, operation: &Operation<N>) -> Option<Self> {
-        match (operation, spelling) {
-            (Operation::Comparison(_), _) => Some(Self::Comparison),
-            (Operation::Arithmetic(_) | Operation::Checked(..), "+" | "-") => Some(Self::Sum),
-            (Operation::Arithmetic(_) | Operation::Checked(..), "*" | "/") => Some(Self::Product),
-            _ => None,
-        }
+/// Comparisons and the arithmetic symbols read infix; named and one-operand
+/// operations stay calls.
+fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence> {
+    match operation {
+        Operation::Comparison(_) => Some(Precedence::Comparison),
+        Operation::Arithmetic(_) | Operation::Checked(..) => Precedence::of_symbol(spelling),
+        Operation::Unary(_) | Operation::Predicate(_) | Operation::Conversion(_) => None,
     }
-}
-
-/// `left op right` for one representation's operators.
-pub(crate) fn infix_display(
-    representation: CellId,
-    operators: &[(CellId, Precedence)],
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    input.pending.is_none().then_some(())?;
-    let binds = |call: &RuntimeValue| {
-        call.field(vocabulary::LEFT)?;
-        call.field(vocabulary::RIGHT)?;
-        let function = call.field(::grap::vocabulary::FUNCTION)?.as_cell()?;
-        operators
-            .iter()
-            .find(|(operator, _)| *operator == function)
-            .map(|(_, precedence)| *precedence)
-    };
-    let fields = input.value?;
-    let precedence = binds(fields)?;
-    let operand = |field| {
-        let child =
-            crate::libraries::grap::expression_descend(Step::Key(field), &input.default_projection);
-        let looser = fields
-            .field(field)
-            .as_ref()
-            .and_then(binds)
-            .is_some_and(|operand| {
-                operand < precedence
-                    || (operand == precedence
-                        && (field == vocabulary::RIGHT || precedence == Precedence::Comparison))
-            });
-        if looser {
-            selectable_bracket(Delim::Paren, child)
-        } else {
-            child
-        }
-    };
-    Some(group(row(
-        6.0,
-        [
-            operand(vocabulary::LEFT),
-            crate::display::descend_local(
-                Step::Key(::grap::vocabulary::FUNCTION),
-                operation(representation),
-                &input.default_projection,
-            ),
-            operand(vocabulary::RIGHT),
-        ],
-    )))
-}
-
-pub(crate) fn calls(
-    representation: CellId,
-    operations: impl Into<Rc<[CellId]>>,
-) -> Partial<crate::Editor, crate::frame::Hovered> {
-    let operations = operations.into();
-    let function_projection = operation(representation);
-    crate::display::runtime_partial(move |input| {
-        let function = input
-            .value?
-            .field(::grap::vocabulary::FUNCTION)?
-            .as_cell()?;
-        operations.contains(&function).then_some(())?;
-        crate::libraries::grap::call_with_function(input, Some(function_projection.clone()))
-    })
 }
 
 /// One numeric convention's identity and encodings. Each representation
@@ -255,9 +146,9 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                 infix: Vec::new(),
             },
             |mut parts, (cell, spelling, operation)| {
-                parts.infix.extend(
-                    Precedence::of(spelling, &operation).map(|precedence| (cell, precedence)),
-                );
+                parts
+                    .infix
+                    .extend(precedence(spelling, &operation).map(|precedence| (cell, precedence)));
                 parts.cells.set_value(cell, name::record(spelling, []));
                 parts.functions = parts.functions.register(cell, self.operation(operation));
                 parts.calls.push(cell);
@@ -451,7 +342,7 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
     encode: fn(N) -> Value,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let original = input.value?;
-    let line = with_representation(
+    let line = tagged(
         input,
         line_edit::layout(
             number.to_string(),

@@ -28,6 +28,7 @@ pub mod number;
 pub mod path;
 pub mod presentation;
 pub mod random;
+pub mod representation;
 pub mod selection;
 pub mod sequence;
 pub mod site;
