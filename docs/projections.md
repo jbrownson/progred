@@ -61,10 +61,13 @@ owns and the `projection` that draws a record carrying any of them: a function
 of `value`, the same convention a pane's projection uses. After every loaded
 library declines a value, the editor tries the declared libraries in order on
 records carrying their keys, so a document library can't take over another
-library's values, the root, or its own definition. The projection runs with the
-layout functions available: a layout it emits draws the record in place, so
-whatever it descends into stays editable; a value it returns is drawn with the
-loaded libraries; an absent passes the record on. Only a field being added follows
+library's values, the root, or its own definition. Records in its own code that
+carry its keys, like the patterns its view destructures, are still offered to it.
+The projection runs with the layout functions available: a layout it emits draws
+the record in place, so whatever it descends into stays editable; a value it
+returns is drawn with the loaded libraries; an absent passes the record on, so a
+view that can't draw a value returns an absent before emitting anything (`do`
+stops at its first absent). Only a field being added follows
 an emitted layout, as a trailing record. A library steps aside where it is already
 drawing, so a view can show its record's ordinary projection inside itself, and
 nested document-library drawings stop at a fixed depth. Declarations are read

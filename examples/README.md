@@ -7,7 +7,7 @@ platforms. Examples are numbered consecutively in menu order.
 | Shortcut | Document | Purpose |
 | --- | --- | --- |
 | 1 | `iop-tree.gid` | Editable tree drawing, inspired by Inventing on Principle |
-| 2 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube; inline source and previews |
+| 2 | `fidget-shapes.gid` | Cutaway spheres, torus, tanglecube, gyroid, and the plain fidget cube, drawn by figure libraries the document declares |
 | 3 | `toolpaths.gid` | Two-operation CAM playback, progressive stock rendering, and tool profiles |
 | 4 | `grap-demo.gid` | Grap evaluation |
 | 5 | `libraries.gid` | Libraries the document defines: fractions, angles, and tints, each a key it owns and a view that draws it |
@@ -51,11 +51,14 @@ See [layout navigation](../docs/navigation.md) for the current contract.
 
 ## Fidget shapes
 
-**Examples → Implicit CAD Shapes** (Command+2 / Ctrl+2) is an ordinary list of five
-examples. Each item contains the editable shape definition and an `evaluate`
-call displaying its preview. There is no separate pane or chooser; scroll to
-another shape, or fold its source using the ordinary editor controls. The full
-machining example remains separate at Command+3 / Ctrl+3.
+**Examples → Implicit CAD Shapes** (Command+2 / Ctrl+2) lists five figures, records
+like `{figure: torus}`, and declares the two libraries that draw them: `figure`
+previews with `preview 3d`, `mesh figure` with `preview mesh`. Each draws its
+figure's picture beside the shape's editable source. Every shape is a no-argument
+Grap function, since a library's view receives the record as data and calls the
+function to get the shape. There is no separate pane or chooser; scroll to another
+shape, or fold its source using the ordinary editor controls. The full machining
+example remains separate at Command+3 / Ctrl+3.
 
 The original `fidget.gid`, `fidget-torus.gid`, `fidget-tanglecube.gid`,
 `fidget-gyroid.gid`, and `fidget-cube.gid` files remain as stable fixtures for
@@ -89,12 +92,12 @@ constructs ordinary Fidget arithmetic. Its `where` bindings expose the Rhino def
 chamfer `0.1`, and control-point depth `0.5`. The resulting face-center depression
 is `0.125`, not `0.5`. Edit or scrub those constants in the source.
 
-The inline preview calls the function and wraps its result in a cyan scene object
-for `preview mesh` at mesh depth 5. The cube function itself still returns an ordinary field.
+Its `mesh figure` view calls the function, and `meshed` wraps the result in a cyan
+scene object for `preview mesh` at mesh depth 5. The cube function itself still returns an ordinary field.
 Its explicit bounds are −0.6…0.6, in the same model units; no geometry scaling
 or cube-specific Rust primitive is involved. Orbit and zoom work normally, with
 fresh CPU meshing on every frame and GPU triangle drawing on native platforms.
-Edit the inline call to change `mesh depth` or use `preview 3d` for comparison.
+Edit `meshed` to change `mesh depth`, or to call `preview 3d` for comparison.
 See [the mesh viewport](../docs/fidget-mesh.md) for parameters and limitations.
 See [the geometry derivation](../docs/fidget-cube.md) for correspondence to the
 Rhino surfaces, parameter limitations, and what is not yet a CAM model.

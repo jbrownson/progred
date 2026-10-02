@@ -15,8 +15,8 @@ by a partial in the Fidget library. Invalid arguments return absents or decline
 to the structural fallback, as with the existing preview.
 
 The cube in Examples → Implicit CAD Shapes (Command+2 / Ctrl+2) explicitly uses this
-function at depth 5. Edit its inline call to change the depth or replace its
-function with `preview 3d` for comparison. The toolpath example
+function at depth 5, through the document's `meshed` function. Edit that call to
+change the depth or replace its function with `preview 3d` for comparison. The toolpath example
 (Command+4 / Ctrl+4) uses `preview paths refined`: a mesh draft followed by
 final-quality implicit stock/model tiles. Paths and the displayed tool remain
 directly generated triangle meshes, depth-tested against the implicit surface.
