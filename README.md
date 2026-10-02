@@ -3,7 +3,7 @@
 # Progred
 
 **Like JSON, but a graph, and projected.** Progred is a pre-alpha programming
-environment. Your program is a document like that, and everything
+environment. Your program is a document, and everything
 you see, including the code, is a projection of it drawn by some library.
 Working in it feels more like a spreadsheet than a text file: change a value,
 and whatever depends on it updates. It's a minimal prototype that demonstrates
