@@ -580,34 +580,72 @@ mod tests {
     }
 
     #[test]
-    fn every_numeric_library_reads_its_operators_infix() {
+    fn every_numeric_operator_reads_infix() {
         use crate::libraries::{f32, u64};
-        for (library, sum, left, right) in [
-            (library(), vocabulary::SUM, value(1.0), value(2.0)),
+        let infix = |library: &Library<crate::Editor, crate::frame::Hovered>, call: Value| {
+            let layout = (library.projection)(&projection_input(&RuntimeValue::from(&call)))
+                .expect("a call projects");
+            let Recorded::Row { children, .. } = layout.record().content().clone() else {
+                return false;
+            };
+            let descends = |index: usize, key: CellId| {
+                matches!(&inspect(&(&children[index])),
+                    ProjectionCall::Descend { step: Step::Key(field), .. } if *field == key
+                )
+            };
+            children.len() == 3
+                && descends(0, vocabulary::LEFT)
+                && descends(1, FUNCTION)
+                && descends(2, vocabulary::RIGHT)
+        };
+        for (library, operators, one) in [
+            (
+                library(),
+                [
+                    vocabulary::SUM,
+                    vocabulary::SUBTRACT,
+                    vocabulary::MULTIPLY,
+                    vocabulary::DIVIDE,
+                    vocabulary::LESS,
+                    vocabulary::EQUAL,
+                ],
+                value(1.0),
+            ),
             (
                 f32::library(),
-                f32::vocabulary::SUM,
+                [
+                    f32::vocabulary::SUM,
+                    f32::vocabulary::SUBTRACT,
+                    f32::vocabulary::MULTIPLY,
+                    f32::vocabulary::DIVIDE,
+                    f32::vocabulary::LESS,
+                    f32::vocabulary::EQUAL,
+                ],
                 f32::value(1.0),
-                f32::value(2.0),
             ),
             (
                 u64::library(),
-                u64::vocabulary::SUM,
+                [
+                    u64::vocabulary::SUM,
+                    u64::vocabulary::SUBTRACT,
+                    u64::vocabulary::MULTIPLY,
+                    u64::vocabulary::DIVIDE,
+                    u64::vocabulary::LESS,
+                    u64::vocabulary::EQUAL,
+                ],
                 u64::value(1),
-                u64::value(2),
             ),
         ] {
-            let sum = RuntimeValue::from(&call(sum, left, right));
-            let layout = (library.projection)(&projection_input(&sum)).expect("a sum projects");
-            let Recorded::Row { children, .. } = layout.record().content().clone() else {
-                panic!("binary notation is a row");
-            };
-            assert!(matches!(&inspect(&(&children[0])),
-                ProjectionCall::Descend { step: Step::Key(field), .. } if *field == vocabulary::LEFT
-            ));
-            assert!(matches!(&inspect(&(&children[1])),
-                ProjectionCall::Descend { step: Step::Key(field), .. } if *field == FUNCTION
-            ));
+            for operator in operators {
+                assert!(
+                    infix(&library, call(operator, one.clone(), one.clone())),
+                    "{operator:?} reads infix"
+                );
+            }
+        }
+        // Named operations stay calls.
+        for operation in [vocabulary::MIN, vocabulary::MAX, vocabulary::HYPOT] {
+            assert!(!infix(&library(), call(operation, value(1.0), value(2.0))));
         }
     }
 
