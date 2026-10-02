@@ -14,16 +14,18 @@ use std::rc::Rc;
 
 pub use crate::display::widget::offers::{Entry, Offers};
 
-/// The library whose operation a slot belongs to, as a binary operand or as the
-/// operator itself; a lone operand may be a conversion's, of another type.
-/// There its offers stand in for a type: see [`within_operation`].
+/// The library whose operation a slot belongs to, as an operand or as the
+/// operator itself. There its offers stand in for a type: see
+/// [`within_operation`]. Conversions belong to neither type's library.
 pub(crate) fn operation_library(request: &CompletionRequest<'_>) -> Option<Resolution> {
-    use crate::libraries::number::vocabulary::{LEFT, RIGHT};
+    use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
     use ::grap::vocabulary::FUNCTION;
     let (gid::Step::Key(field), parent) = request.path.split_last()? else {
         return None;
     };
-    [FUNCTION, LEFT, RIGHT].contains(field).then_some(())?;
+    [FUNCTION, LEFT, RIGHT, OPERAND]
+        .contains(field)
+        .then_some(())?;
     let function = (request.value_at)(parent)?
         .as_record()?
         .get(&FUNCTION)?

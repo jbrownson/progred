@@ -2394,4 +2394,18 @@ fn an_operations_own_type_replaces_others_in_its_operands_and_operator() {
             .collect();
         assert_eq!(operators, [multiply]);
     }
+    // A unary operation's operand takes its type; a conversion's, from a
+    // library of neither type, keeps every one.
+    let numbers = |function: CellId| -> Vec<String> {
+        offered(grap::call(function.into(), []), number::OPERAND, "1")
+            .into_iter()
+            .filter_map(|entry| entry.detail)
+            .filter(|detail| ["f64", "f32", "u64"].contains(&detail.as_str()))
+            .collect()
+    };
+    assert_eq!(numbers(f64::vocabulary::SIN), ["f64"]);
+    assert_eq!(
+        numbers(crate::libraries::conversion::vocabulary::F32_FROM_F64),
+        ["f32", "f64", "u64"]
+    );
 }

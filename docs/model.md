@@ -344,12 +344,12 @@ are tried first. Binding suggestions put the nearest enclosing lexical scope
 first, then outer scopes, sorting names alphabetically within each scope.
 Rebinding a cell gives it the nearer scope's rank; scrolling and layout have no
 effect on this order. Typed-query match quality still ranks ahead of proximity.
-In a binary operation's `left` and `right`, and in any operation's operator, the
-library defining the operation stands in for a type until there are some: its
-offers come first and hide other libraries' offers of the same spelling, so a
-number type's literals and operations replace other types' in its arithmetic. A
-lone `operand` may be a conversion's, of another type, so it keeps every offer.
-The projection environment exposes
+In an operation's `left`, `right`, or `operand`, and in its operator, the library
+defining the operation stands in for a type until there are some: its offers
+come first and hide other libraries' offers of the same spelling, so a number
+type's literals and operations replace other types' in its arithmetic.
+Conversions between number types live in a conversion library of their own, so
+their operands keep every type's offers. The projection environment exposes
 the loaded library provider for composition; Grap reuses those offers rather than
 duplicating numeric conventions. Scope discovery reads source structure only;
 quoted template declarations do not introduce bindings into unquotes. Computed

@@ -11,7 +11,6 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const F32: CellId = CellId::from_u128(0x64810cfeb0631ca8875e282d1ad4af79);
-    pub const FROM_F64: CellId = CellId::from_u128(0x73bd2225d2091ba893a5570e8e9bacff);
     pub const UPDATE: CellId = CellId::from_u128(0x9c34c242d73e090cbd62de1242ad74ae);
     pub const SUM: CellId = CellId::from_u128(0x257e5967d826e69d28929cf365667ae1);
     pub const SUBTRACT: CellId = CellId::from_u128(0x5cd7408dab067d8b92c7a1bd9cda7b05);
@@ -93,7 +92,7 @@ pub(crate) fn convention() -> number::Convention<f32> {
 }
 
 fn parts() -> number::Parts {
-    use number::Operation::{Arithmetic, Comparison, Conversion};
+    use number::Operation::{Arithmetic, Comparison};
     convention().parts([
         (vocabulary::SUM, "+", Arithmetic(|left, right| left + right)),
         (
@@ -120,11 +119,6 @@ fn parts() -> number::Parts {
             vocabulary::EQUAL,
             "==",
             Comparison(|left, right| left == right),
-        ),
-        (
-            vocabulary::FROM_F64,
-            "f32 from f64",
-            Conversion(|operand| operand.as_f64().map(|number| number as f32)),
         ),
     ])
 }
@@ -156,46 +150,6 @@ mod tests {
 
     fn evaluate(expression: &Value) -> Value {
         crate::libraries::test_evaluate(expression, |_| None, &functions(), 20).result
-    }
-
-    #[test]
-    fn conversion_from_f64_rounds_at_the_explicit_numeric_boundary() {
-        let convert = |operand| {
-            evaluate(&::grap::call(
-                vocabulary::FROM_F64.into(),
-                [(number::vocabulary::OPERAND, operand)],
-            ))
-        };
-        for number in [
-            0.0,
-            -0.0,
-            0.1,
-            -3.25,
-            f64::MAX,
-            f64::MIN_POSITIVE,
-            f64::INFINITY,
-        ] {
-            let result = convert(crate::libraries::f64::value(number));
-            assert_eq!(read(&result).unwrap().to_bits(), (number as f32).to_bits());
-        }
-        assert!(
-            read(&convert(crate::libraries::f64::value(f64::NAN)))
-                .unwrap()
-                .is_nan()
-        );
-        let invalid = value(1.0);
-        assert_eq!(
-            convert(invalid.clone()),
-            ::grap::absent::with_detail(
-                vocabulary::INVALID_INPUT,
-                number::vocabulary::OPERAND,
-                invalid,
-            )
-        );
-        assert!(::grap::absent::is_absent(&evaluate(&::grap::call(
-            vocabulary::FROM_F64.into(),
-            [],
-        ))));
     }
 
     #[test]

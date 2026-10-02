@@ -2,9 +2,9 @@
 
 use crate::frame::Hovered;
 use crate::libraries::{
-    Libraries, Library, absent, blob, color, control, controls, f32, f64, fidget, geometry,
-    grap as grap_library, layout, line_edit, list, logic, name, number, presentation, random,
-    selection, sequence, site, text, toolpath, tree, u64, workspace,
+    Libraries, Library, absent, blob, color, control, controls, conversion, f32, f64, fidget,
+    geometry, grap as grap_library, layout, line_edit, list, logic, name, number, presentation,
+    random, selection, sequence, site, text, toolpath, tree, u64, workspace,
 };
 use crate::projection::Projection;
 
@@ -77,6 +77,7 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (f32::ID, f32::library),
     (f64::ID, f64::library),
     (u64::ID, u64::library),
+    (conversion::ID, conversion::library),
     (fidget::ID, fidget::library),
     (toolpath::ID, toolpath::library),
     (grap_library::ID, grap_library::library),

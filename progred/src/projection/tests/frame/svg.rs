@@ -891,8 +891,8 @@ fn website_growing_forest_clouds_svg_capture() {
 
 fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
-        absent, blob, color, control, controls, f32, f64, fidget, geometry, grap, layout, list,
-        logic, name, number, presentation, text, toolpath, tree, u64,
+        absent, blob, color, control, controls, conversion, f32, f64, fidget, geometry, grap,
+        layout, list, logic, name, number, presentation, text, toolpath, tree, u64,
     };
     let (doc, fields) = crate::gid_text::parse(include_str!(
         "../../../../../website/public/lessons/shape.gid"
@@ -913,6 +913,7 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
             layout::ID,
             f32::ID,
             u64::ID,
+            conversion::ID,
             fidget::ID,
             controls::ID,
             presentation::ID,

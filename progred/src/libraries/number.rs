@@ -74,7 +74,7 @@ fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence>
     match operation {
         Operation::Comparison(_) => Some(Precedence::Comparison),
         Operation::Arithmetic(_) | Operation::Checked(..) => Precedence::of_symbol(spelling),
-        Operation::Unary(_) | Operation::Predicate(_) | Operation::Conversion(_) => None,
+        Operation::Unary(_) | Operation::Predicate(_) => None,
     }
 }
 
@@ -105,8 +105,6 @@ pub(crate) enum Operation<N> {
     Comparison(fn(N, N) -> bool),
     Unary(fn(N) -> N),
     Predicate(fn(N) -> bool),
-    /// From another representation's operand, which it reads itself.
-    Conversion(fn(&RuntimeValue) -> Option<N>),
 }
 
 /// A convention's generated cells, functions, and projected call forms,
@@ -233,7 +231,6 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             Operation::Predicate(apply) => {
                 self.unary(move |operand| logic::value(apply(operand)).into())
             }
-            Operation::Conversion(convert) => self.conversion(convert),
         }
     }
 
@@ -259,7 +256,8 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         .tracked()
     }
 
-    fn conversion(self, convert: fn(&RuntimeValue) -> Option<N>) -> ForeignFunction {
+    /// To this type from another, whose operand it reads itself.
+    pub(crate) fn conversion(self, convert: fn(&RuntimeValue) -> Option<N>) -> ForeignFunction {
         ForeignFunction::staged(move |context, call| {
             match context.field(call, vocabulary::OPERAND) {
                 Some(operand) => Rc::new(move |context, environment| {
