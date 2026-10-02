@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Progred is an experimental programming environment. Your program is a graph of records, lists, blobs, and cells, and everything you see, including the code, is a projection of it." />
+    <meta name="description" content="Progred is a pre-alpha programming environment, public early for feedback. Your program is a graph of records, lists, blobs, and cells, and everything you see, including the code, is a projection of it." />
     <title>Progred — like JSON, but a graph, and projected</title>
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://prog.red/" />
     <meta property="og:title" content="Progred — like JSON, but a graph, and projected" />
-    <meta property="og:description" content="An experimental programming environment where everything you see, including the code, is a projection of one graph. Take a live program apart in your browser." />
+    <meta property="og:description" content="A pre-alpha programming environment where everything you see, including the code, is a projection of one graph. Take a live program apart in your browser." />
     <meta property="og:image" content="https://prog.red/images/forest-light.png" />
     <meta property="og:image:alt" content="A drawing of a forest above the Progred program that draws it." />
     <meta name="twitter:card" content="summary_large_image" />
@@ -67,8 +67,9 @@
     <main class="home">
       <section class="hero" aria-labelledby="pitch">
         <h1 id="pitch">Like JSON, but a graph, and projected.</h1>
-        <p class="lede">Progred is an experimental programming environment. Your program is a document like that, and everything you see, including the code, is a projection of it drawn by some library. Working in it feels more like a spreadsheet than a text file: change a value, and whatever depends on it updates.</p>
+        <p class="lede">Progred is a pre-alpha programming environment. Your program is a document like that, and everything you see, including the code, is a projection of it drawn by some library. Working in it feels more like a spreadsheet than a text file: change a value, and whatever depends on it updates. It’s a minimal prototype that demonstrates these ideas, not a finished product.</p>
         <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also live in a cell, which has its own identity, so any number of places can point to it; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
+        <p><strong>It’s public early to get feedback.</strong> Share on Zulip what clicks, what doesn’t, and where you get lost.</p>
         <p class="actions">
           <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Chat about it on Zulip</a>
           <a class="button" href="try">Try the editor</a>
@@ -179,7 +180,7 @@
 
       <section class="today" id="today" aria-labelledby="today-title">
         <h2 id="today-title">What it does today</h2>
-        <p>Progred is a working prototype. CAD/CAM is the demanding example it’s being pushed on right now, because it needs expensive live views, parameters you can scrub, and output you can trace back to code. It’s an example, not the point.</p>
+        <p>Progred is pre-alpha: enough to show these ideas working together, with rough edges and missing pieces a finished environment wouldn’t have. CAD/CAM is the demanding example it’s being pushed on right now, because it needs expensive live views, parameters you can scrub, and output you can trace back to code. It’s an example, not the point.</p>
         <figure>
           <img src="images/iop-tree.png" alt="A tree drawing beside the editable program that draws it." width="1200" height="900" loading="lazy" />
           <figcaption>A recreation of the tree from Bret Victor’s <a href="https://worrydream.com/InventingOnPrinciple/">Inventing on Principle</a>, beside its editable program. The original demo and the inspiration for this loop are his.</figcaption>
@@ -195,6 +196,19 @@
           <li><strong>Early CAM:</strong> toolpaths, playback, and stock removal. <a href="cam" target="_blank" rel="noopener">Open the toolpaths in the full editor</a>.</li>
         </ul>
         <p>macOS is the main platform. This site runs the same editor compiled to WebAssembly, and there’s a Linux build too. <a href="https://github.com/jbrownson/progred#try-it">Build it from source</a>.</p>
+      </section>
+
+      <section class="missing" id="missing" aria-labelledby="missing-title">
+        <h2 id="missing-title">What isn’t there yet</h2>
+        <ul>
+          <li><strong>A type system.</strong> Nothing checks that a value fits where it goes before the program runs; a mismatch becomes an absent when it does. Completions can’t tell what a slot expects either, beyond an operation’s own number type.</li>
+          <li><strong>A robust set of libraries.</strong> The built-in libraries cover the examples and little else: there’s no <code>and</code>, <code>or</code>, <code>not</code>, or <code>if</code>, comparisons stop at <code>&lt;</code> and <code>==</code>, and text has no operations.</li>
+          <li><strong>Fluent input.</strong> Code is mostly entered a piece at a time through pickers rather than typed left to right; typing an operator after a number is the first exception.</li>
+          <li><strong>Libraries defined in documents.</strong> Libraries are built into the editor. A document can define its own functions and views, but not yet a library.</li>
+          <li><strong>A full browser version.</strong> The web editor can’t open or save documents, so edits are lost on reload. Its copy and paste stay inside the page, and IME and dictation don’t work in it.</li>
+          <li><strong>Accessibility.</strong> The editor draws to a canvas without an accessibility tree, so screen readers can’t read it.</li>
+          <li><strong>A stable format.</strong> The document format, Grap, and the libraries are all still changing.</li>
+        </ul>
       </section>
 
       <section class="ways-in" id="ways-in" aria-labelledby="ways-in-title">
@@ -216,7 +230,7 @@
 
       <section class="closing" aria-labelledby="closing-title">
         <h2 id="closing-title">Come talk about it</h2>
-        <p>The conversation happens on Zulip. Questions, ideas, criticism, and which tutorial worked for you are all welcome.</p>
+        <p>Early feedback matters most at this stage, and the conversation happens on Zulip. Questions, ideas, criticism, where you got stuck, and which tutorial worked for you are all welcome.</p>
         <p class="actions">
           <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Join the Progred Zulip</a>
           <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">GitHub</a>

@@ -2,11 +2,15 @@
 
 # Progred
 
-**Like JSON, but a graph, and projected.** Progred is an experimental
-programming environment. Your program is a document like that, and everything
+**Like JSON, but a graph, and projected.** Progred is a pre-alpha programming
+environment. Your program is a document like that, and everything
 you see, including the code, is a projection of it drawn by some library.
 Working in it feels more like a spreadsheet than a text file: change a value,
-and whatever depends on it updates.
+and whatever depends on it updates. It's a minimal prototype that demonstrates
+these ideas, not a finished product.
+
+It's public early to get feedback: share on Zulip what clicks, what
+doesn't, and where you get lost.
 
 **[Try it in your browser at prog.red](https://prog.red) · [Chat about it on Zulip](https://progred.zulipchat.com)**
 
@@ -37,7 +41,7 @@ The original demo and the inspiration for this live-editing loop are his.
 Both screenshots are headless editor captures, without operating-system window
 chrome.*
 
-This is a working prototype, not a finished CAD package. The editor, language,
+This is a pre-alpha prototype, not a finished CAD package. The editor, language,
 and document conventions are evolving together. **CAM currently means toolpath
 generation and stock-removal visualization—not machine-ready G-code, verified
 clearance, or a safe machining plan.**
@@ -63,6 +67,27 @@ clearance, or a safe machining plan.**
 macOS is the primary development platform. There are also Linux and browser
 hosts. They do not yet have feature or performance parity: in particular, the
 browser currently runs expensive jobs synchronously.
+
+## What isn't there yet
+
+- **A type system.** Nothing checks that a value fits where it goes before the
+  program runs; a mismatch becomes an absent when it does. Completions can't
+  tell what a slot expects either, beyond an operation's own number type.
+- **A robust set of libraries.** The built-in libraries cover the examples and
+  little else: there's no `and`, `or`, `not`, or `if`, comparisons stop at `<`
+  and `==`, and text has no operations.
+- **Fluent input.** Code is mostly entered a piece at a time through pickers
+  rather than typed left to right; typing an operator after a number is the
+  first exception.
+- **Libraries defined in documents.** Libraries are built into the editor. A
+  document can define its own functions and views, but not yet a library.
+- **A full browser version.** The web editor can't open or save documents, so
+  edits are lost on reload. Its copy and paste stay inside the page, and IME and
+  dictation don't work in it.
+- **Accessibility.** The editor draws to a canvas without an accessibility
+  tree, so screen readers can't read it.
+- **A stable format.** The document format, Grap, and the libraries are all
+  still changing.
 
 ## Try it
 
