@@ -1524,3 +1524,47 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.is_empty()
     ));
 }
+
+#[test]
+fn a_selected_reference_marks_its_cell_in_computed_results() {
+    use crate::libraries::{absent, grap::vocabulary::GRAP, presentation, workspace};
+    let program = new_cell_id();
+    let doc = Document {
+        root: Some(Value::record([
+            (GRAP, program.into()),
+            (
+                workspace::vocabulary::PANES,
+                Value::record([(
+                    workspace::vocabulary::LEFT,
+                    Value::list([Value::record([(
+                        presentation::vocabulary::RENDER,
+                        program.into(),
+                    )])]),
+                )]),
+            ),
+        ])),
+        cells: Cells::new(),
+    };
+    let mut world = crate::test_editor(doc);
+    world.model.selection = Some(Selection::edge(&crate::test_root(), vec![Step::Key(GRAP)]));
+    let bench = settle(editing_frame(&mut world, false));
+    let missing = bench
+        .descends
+        .iter()
+        .find(|descend| descend.path.last() == Some(&Step::Key(absent::vocabulary::CELL)))
+        .expect("the pane shows the missing program cell");
+    let mark = Brush::from(
+        crate::styles::Theme::Light
+            .palette()
+            .accent
+            .with_alpha(0.10),
+    );
+    assert!(
+        bench.list.0.iter().any(|command| matches!(
+            command,
+            DrawCmd::Fill { shape: Shape::RoundedRect(rect), brush, .. }
+                if *brush == mark && *rect == highlight_outline(1.0, missing.rect)
+        )),
+        "the missing cell in the result is the selected program cell"
+    );
+}

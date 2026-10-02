@@ -1007,9 +1007,12 @@ fn prepare_value(
                         value.as_cell(),
                         ancestors.enclosing,
                     )
+                } else if let Some(cell) = value.as_cell() {
+                    // A reference names its cell even in a computed result.
+                    Secondary::Cell(cell)
                 } else {
                     let source = source.as_deref()?;
-                    Secondary::from_path(&cx.sources, Rc::from(source), value.as_cell())
+                    Secondary::from_path(&cx.sources, Rc::from(source), None)
                 };
                 let strong = cx.secondary.as_ref() == Some(&secondary);
                 Some((secondary, strong))
