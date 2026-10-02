@@ -289,7 +289,10 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
     assert!(
         editing_frame(&mut world, false)
             .resolve_for_dispatch()
-            .dispatch_key(&mut world, &event(Key::Character("x".into()), Modifiers::empty()))
+            .dispatch_key(
+                &mut world,
+                &event(Key::Character("x".into()), Modifiers::empty())
+            )
     );
     let entries = editing_frame(&mut world, false)
         .completion
@@ -300,7 +303,10 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
     assert!(
         editing_frame(&mut world, false)
             .resolve_for_dispatch()
-            .dispatch_key(&mut world, &event(Key::Named(NamedKey::Enter), Modifiers::empty()))
+            .dispatch_key(
+                &mut world,
+                &event(Key::Named(NamedKey::Enter), Modifiers::empty())
+            )
     );
     let added = world
         .sources()
@@ -310,7 +316,10 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
         .and_then(|value| value.as_cell())
         .expect("the list holds the new parameter");
     assert_eq!(
-        world.sources().resolve(added).map(|definition| definition.value.clone()),
+        world
+            .sources()
+            .resolve(added)
+            .map(|definition| definition.value.clone()),
         Some(name::record("x", []))
     );
 }
