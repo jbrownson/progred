@@ -196,18 +196,16 @@ fn unfinished() {
         Some(8.0)
     );
 
-    // Change 3 to a piece of text and read the reason. Typing over the 3
-    // only edits its spelling, so empty it to a box first.
-    unfinished.double_click(&argument(&unfinished, "second"));
-    unfinished.press(NamedKey::Backspace);
-    unfinished.press(NamedKey::Backspace);
-    unfinished.type_text("\"three\"");
-    unfinished.press(NamedKey::Enter);
+    // The call given "three" returns an absent too, its reason from the
+    // x * 2 inside scale.
     assert_eq!(
-        unfinished.text(&argument(&unfinished, "second")).as_deref(),
-        Some("three")
+        ::grap::absent::reason(&result(&unfinished, "fourth")),
+        Some(crate::libraries::f64::vocabulary::LEFT_NOT_F64)
     );
-    assert!(::grap::absent::is_absent(&result(&unfinished, "second")));
+    assert!(unfinished.drawn(&[
+        unfinished.key("fourth"),
+        Step::Key(crate::libraries::presentation::vocabulary::RESULT),
+    ]));
 }
 
 /// Change the planet's moons and the color its view paints it.
