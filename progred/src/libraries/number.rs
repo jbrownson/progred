@@ -10,6 +10,7 @@ use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
 use gid::{CellId, Cells, Value};
+use puri::handler::HasHandler;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -116,6 +117,8 @@ pub(crate) struct Parts {
     pub calls: Vec<CellId>,
     /// The calls that read infix, and how tightly each binds.
     pub infix: Vec<(CellId, Precedence)>,
+    /// The infix operators by spelling, for typing after a number.
+    pub symbols: Vec<(&'static str, CellId)>,
 }
 
 impl<N: Scrubbable + std::str::FromStr> Convention<N> {
@@ -144,11 +147,13 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                     .register(self.update, self.update_function()),
                 calls: Vec::new(),
                 infix: Vec::new(),
+                symbols: Vec::new(),
             },
             |mut parts, (cell, spelling, operation)| {
-                parts
-                    .infix
-                    .extend(precedence(spelling, &operation).map(|precedence| (cell, precedence)));
+                if let Some(precedence) = precedence(spelling, &operation) {
+                    parts.infix.push((cell, precedence));
+                    parts.symbols.push((spelling, cell));
+                }
                 parts.cells.set_value(cell, name::record(spelling, []));
                 parts.functions = parts.functions.register(cell, self.operation(operation));
                 parts.calls.push(cell);
@@ -168,8 +173,10 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             functions,
             calls: operations,
             infix,
+            symbols,
         } = parts;
         let infix: Rc<[(CellId, Precedence)]> = infix.into();
+        let symbols: Rc<[(&'static str, CellId)]> = symbols.into();
         Library::named(
             id,
             self.name,
@@ -179,7 +186,14 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                     infix_display(self.tag, &infix, input)
                 }),
                 calls(self.tag, operations),
-                crate::display::runtime_partial(move |input| self.display(input)),
+                crate::display::runtime_partial(move |input| {
+                    let layout = self.display(input)?;
+                    Some(if input.writable && input.selection.is_some() {
+                        typed_operators::<N>(layout, symbols.clone())
+                    } else {
+                        layout
+                    })
+                }),
             ])),
         )
         .with_completions(move |request| {
@@ -325,6 +339,91 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         .parameters([line_edit::vocabulary::INPUT])
         .tracked()
     }
+}
+
+/// A selected number takes its type's single-character operators as typing:
+/// one typed at the end of a whole number makes the number its left operand,
+/// with the right operand's picker open. A sign or exponent that doesn't yet
+/// make a number still goes into its text.
+fn typed_operators<N: std::str::FromStr + 'static>(
+    child: Layout<crate::Editor, crate::frame::Hovered>,
+    symbols: Rc<[(&'static str, CellId)]>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    crate::display::widget::after(
+        child,
+        Rc::new(move |context| {
+            let root = context.inputs.view.clone();
+            let path = context.path.to_vec();
+            let edits = context.inputs.edits.clone();
+            let symbols = symbols.clone();
+            Box::new(move |output, _| {
+                output.handler().on_key(move |editor, event| {
+                    wrap_typed::<N>(editor, event, &root, &path, &edits, &symbols)
+                });
+            })
+        }),
+    )
+}
+
+fn wrap_typed<N: std::str::FromStr>(
+    editor: &mut crate::Editor,
+    event: &ui_events::keyboard::KeyboardEvent,
+    root: &crate::workspace::Root,
+    path: &[gid::Step],
+    edits: &crate::editing::Scope,
+    symbols: &[(&'static str, CellId)],
+) -> bool {
+    if !event.state.is_down()
+        || event.modifiers.ctrl()
+        || event.modifiers.meta()
+        || event.modifiers.alt()
+    {
+        return false;
+    }
+    let ui_events::keyboard::Key::Character(typed) = &event.key else {
+        return false;
+    };
+    let Some(&(_, operator)) = symbols
+        .iter()
+        .find(|(spelling, _)| *spelling == typed.as_str())
+    else {
+        return false;
+    };
+    let Some(current) = editor
+        .model
+        .selection
+        .as_ref()
+        .filter(|current| current.root() == root && current.path() == path)
+    else {
+        return false;
+    };
+    if let Some(line) = current.value_edit() {
+        let (anchor, focus) = line.selection_offsets();
+        if anchor != focus || focus != line.text().len() || line.text().trim().parse::<N>().is_err()
+        {
+            return false;
+        }
+    }
+    let Some(left) = current.value(&editor.sources()).cloned() else {
+        return false;
+    };
+    let wrapped = ::grap::call(Value::from(operator), [(vocabulary::LEFT, left)]);
+    if !edits
+        .open(crate::editing::Access::new(editor))
+        .replace(path, wrapped)
+    {
+        return false;
+    }
+    let mut right = crate::selection::pending_value(
+        root,
+        path.iter()
+            .cloned()
+            .chain([gid::Step::Key(vocabulary::RIGHT)])
+            .collect(),
+    );
+    right.set_scope(edits.clone());
+    editor.model.selection = Some(right);
+    true
 }
 
 pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {

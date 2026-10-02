@@ -2546,6 +2546,61 @@ fn typing_over_a_value_replaces_it_and_escape_brings_it_back() {
 }
 
 #[test]
+fn typing_an_operator_after_a_number_makes_it_the_left_operand() {
+    use crate::libraries::{number::vocabulary as number, u64};
+    let size = kurbo::Size::new(600.0, 400.0);
+    let typed = |root: Value, keys: &[&str]| {
+        let mut runner = crate::EditorRunner::new(crate::test_editor(Document {
+            root: Some(root),
+            cells: Cells::new(),
+        }));
+        runner.editor.model.selection = Some(make_selection(vec![]));
+        runner.refresh_frame(1.0, size);
+        for key in keys {
+            runner.keyboard_event(
+                &KeyboardEvent {
+                    key: Key::Character((*key).into()),
+                    state: KeyState::Down,
+                    ..Default::default()
+                },
+                1.0,
+                size,
+            );
+        }
+        runner
+    };
+    for (number, operator, symbol) in [
+        (f64::value(2.0), f64::vocabulary::MULTIPLY, "*"),
+        (f64::value(2.0), f64::vocabulary::SUBTRACT, "-"),
+        (u64::value(6), u64::vocabulary::DIVIDE, "/"),
+    ] {
+        let runner = typed(number.clone(), &[symbol]);
+        assert_eq!(
+            runner.editor.model.doc.root,
+            Some(grap::call(operator.into(), [(number::LEFT, number)]))
+        );
+        let selection = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(selection.path(), [Step::Key(number::RIGHT)]);
+        assert_eq!(selection.stage(&runner.editor.sources()), Stage::Pending);
+    }
+    // An exponent's sign belongs to the number it is still becoming.
+    let runner = typed(f64::value(2.0), &["e", "-"]);
+    assert_eq!(runner.editor.model.doc.root, Some(f64::value(2.0)));
+    assert_eq!(
+        runner
+            .editor
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .edit()
+            .unwrap()
+            .text(),
+        "2e-"
+    );
+}
+
+#[test]
 fn a_numbers_other_fields_follow_it_including_one_being_added() {
     let (x, note) = (new_cell_id(), new_cell_id());
     let number = f64::value(1.0)

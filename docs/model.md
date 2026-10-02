@@ -129,8 +129,11 @@ keystrokes write its replacement; Backspace or Delete on the hole's empty query
 removes it, landing on the stop before it (after it, for Delete). Typing over a
 selected value opens a picker in its place seeded with what was typed: an
 explicit pending payload over the existing value, which projection draws as
-missing until a choice commits, so the document is untouched until then. A
-picker opened from a key remembers where it was opened, and Escape, or an empty
+missing until a choice commits, so the document is untouched until then. One of
+a number type's single-character operators typed at the end of a selected
+number instead makes the number that operator's left operand and opens the
+right operand's picker; a sign or exponent the number is still becoming stays
+in its text. A picker opened from a key remembers where it was opened, and Escape, or an empty
 query's Backspace or Delete, steps back there. Views that draw a record as one
 value (numbers, text, colors) follow it with a record of its other fields, as a
 call follows its head with its arguments; a field being added appears there.
