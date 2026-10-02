@@ -1771,12 +1771,13 @@ fn built_in_call_completion_opens_its_first_argument() {
 
 #[test]
 fn built_in_call_field_completion_offers_its_missing_parameters() {
+    // A named operation, since arithmetic reads infix with its operands as slots.
     use crate::libraries::{
-        f64::vocabulary::SUM,
+        f64::vocabulary::MIN,
         number::vocabulary::{LEFT, RIGHT},
     };
     let document = Document {
-        root: Some(grap::call(SUM.into(), [])),
+        root: Some(grap::call(MIN.into(), [])),
         cells: Cells::new(),
     };
     let stack = crate::stack::load();
@@ -1795,7 +1796,7 @@ fn built_in_call_field_completion_offers_its_missing_parameters() {
     assert_eq!(offered(&document), [LEFT, RIGHT]);
 
     let document = Document {
-        root: Some(grap::call(SUM.into(), [(LEFT, Value::record([]))])),
+        root: Some(grap::call(MIN.into(), [(LEFT, Value::record([]))])),
         ..document
     };
     assert_eq!(offered(&document), [RIGHT]);

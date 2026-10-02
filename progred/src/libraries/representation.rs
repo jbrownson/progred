@@ -2,6 +2,7 @@
 //! fidget's fields: its tag after a value or operator, operators drawn infix
 //! or as calls headed by the tagged operator, and how tightly infix binds.
 
+use crate::display::Pending;
 use crate::display::projection::group;
 use crate::display::{
     Delim, Face, Layout, Partial, ProjectionInput, alternatives, col, row, selectable_bracket,
@@ -9,6 +10,7 @@ use crate::display::{
 };
 use crate::libraries::number::vocabulary::{LEFT, RIGHT};
 use ::grap::RuntimeValue;
+use ::grap::vocabulary::FUNCTION;
 use gid::{CellId, Step};
 use std::rc::Rc;
 
@@ -67,17 +69,20 @@ impl Precedence {
     }
 }
 
-/// `left op right` for one representation's operators.
+/// `left op right` for one representation's operators, from the moment the
+/// operator is chosen: a missing operand is an empty slot, and other fields,
+/// including one being added, follow in a record.
 pub(crate) fn infix_display(
     representation: CellId,
     operators: &[(CellId, Precedence)],
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    input.pending.is_none().then_some(())?;
+    match &input.pending {
+        None | Some(Pending::Field | Pending::Child(Step::Key(_))) => {}
+        Some(Pending::Child(_)) => return None,
+    }
     let binds = |call: &RuntimeValue| {
-        call.field(LEFT)?;
-        call.field(RIGHT)?;
-        let function = call.field(::grap::vocabulary::FUNCTION)?.as_cell()?;
+        let function = call.field(FUNCTION)?.as_cell()?;
         operators
             .iter()
             .find(|(operator, _)| *operator == function)
@@ -101,16 +106,21 @@ pub(crate) fn infix_display(
     };
     let left = shared(operand(LEFT));
     let operator = shared(crate::display::descend_local(
-        Step::Key(::grap::vocabulary::FUNCTION),
+        Step::Key(FUNCTION),
         operation(representation),
         &input.default_projection,
     ));
     let right = shared(operand(RIGHT));
     // Too narrow for one line, the operator starts the second.
-    Some(group(alternatives([
+    let infix = group(alternatives([
         row(6.0, [left.clone(), operator.clone(), right.clone()]),
         col(0, 2.0, [left, row(6.0, [operator, right])]),
-    ])))
+    ]));
+    Some(crate::display::structure::with_extra_fields(
+        input,
+        |key| key == FUNCTION || key == LEFT || key == RIGHT,
+        infix,
+    ))
 }
 
 /// Calls of `operations`, headed by the operator with its tag.
@@ -121,10 +131,7 @@ pub(crate) fn calls(
     let operations = operations.into();
     let function_projection = operation(representation);
     crate::display::runtime_partial(move |input| {
-        let function = input
-            .value?
-            .field(::grap::vocabulary::FUNCTION)?
-            .as_cell()?;
+        let function = input.value?.field(FUNCTION)?.as_cell()?;
         operations.contains(&function).then_some(())?;
         crate::libraries::grap::call_with_function(input, Some(function_projection.clone()))
     })

@@ -720,6 +720,60 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
 }
 
 #[test]
+fn infix_draws_other_fields_after_it_and_adds_fields_there() {
+    let extra = new_cell_id();
+    let sum = grap::call(
+        f64::vocabulary::SUM.into(),
+        [
+            (f64::vocabulary::LEFT, f64::value(1.0)),
+            (f64::vocabulary::RIGHT, f64::value(2.0)),
+        ],
+    );
+    let libraries = core_libraries();
+    let doc = Document {
+        cells: Cells::new(),
+        root: Some(sum.clone()),
+    };
+    let mut world = editing_world(&doc, &libraries);
+    world.model.selection = pending_edge(&crate::test_root(), &src(&doc, &libraries), Vec::new());
+    assert!(editing_frame(&mut world, false).completion.is_some());
+    let doc = Document {
+        cells: Cells::new(),
+        root: Some(Value::record(
+            sum.as_record()
+                .unwrap()
+                .update(extra, text::value("metadata")),
+        )),
+    };
+    let mut world = editing_world(&doc, &libraries);
+    assert!(
+        editing_frame(&mut world, false)
+            .descends
+            .iter()
+            .any(|d| d.path.as_ref() == [Step::Key(extra)])
+    );
+    // Chosen alone, the operator reads infix with its operands as slots and
+    // the first one's picker open.
+    let doc = Document {
+        cells: Cells::new(),
+        root: Some(grap::call(f64::vocabulary::SUM.into(), [])),
+    };
+    let mut world = editing_world(&doc, &libraries);
+    world.model.selection = Some(crate::selection::pending_value(
+        &crate::test_root(),
+        vec![Step::Key(f64::vocabulary::LEFT)],
+    ));
+    let frame = editing_frame(&mut world, false);
+    assert!(frame.completion.is_some());
+    assert!(
+        frame
+            .descends
+            .iter()
+            .any(|d| d.path.as_ref() == [Step::Key(f64::vocabulary::RIGHT)])
+    );
+}
+
+#[test]
 fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available() {
     let extra = new_cell_id();
     let binder = new_cell_id();
@@ -727,19 +781,10 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
         .into_iter()
         .map(|(root, _)| root)
         .collect::<Vec<_>>();
-    forms.extend([
-        grap::call(
-            control::DO.into(),
-            [(control::EXPRESSIONS, Value::list([]))],
-        ),
-        grap::call(
-            f64::vocabulary::SUM.into(),
-            [
-                (f64::vocabulary::LEFT, f64::value(1.0)),
-                (f64::vocabulary::RIGHT, f64::value(2.0)),
-            ],
-        ),
-    ]);
+    forms.push(grap::call(
+        control::DO.into(),
+        [(control::EXPRESSIONS, Value::list([]))],
+    ));
     let libraries = core_libraries();
     for root in forms {
         let doc = Document {

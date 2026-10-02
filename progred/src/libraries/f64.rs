@@ -618,7 +618,7 @@ mod tests {
     }
 
     #[test]
-    fn binary_notation_ignores_unrelated_fields_without_changing_grouping() {
+    fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
         let extra = new_cell_id();
         let sum = grap::call(
             Value::from(vocabulary::SUM),
@@ -647,9 +647,17 @@ mod tests {
                 grouped
             );
         }
-        for key in [FUNCTION, vocabulary::LEFT, vocabulary::RIGHT] {
-            let incomplete = Value::record(sum.as_record().unwrap().without(&key));
-            assert!(binary_display(&projection_input(&(&incomplete).into())).is_none());
+        let without = |value: &Value, key| Value::record(value.as_record().unwrap().without(&key));
+        assert!(binary_display(&projection_input(&(&without(&sum, FUNCTION)).into())).is_none());
+        // From the moment the operator is chosen, a missing operand is a slot.
+        let plain = without(&sum, extra);
+        for (key, index) in [(vocabulary::LEFT, 0), (vocabulary::RIGHT, 2)] {
+            let layout =
+                binary_display(&projection_input(&(&without(&plain, key)).into())).unwrap();
+            let children = infix_children(&layout).unwrap();
+            assert!(matches!(&inspect(&(&children[index])),
+                ProjectionCall::Descend { step: Step::Key(field), .. } if *field == key
+            ));
         }
     }
 

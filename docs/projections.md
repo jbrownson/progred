@@ -277,6 +277,12 @@ conflicting operation tags decline; translation keeps its explicit named
 parameters. These are source projections only, independent of the opt-in
 rendered viewport.
 
+Grap calls of arithmetic and comparison, a number type's or Fidget's, read
+infix as well, the operator tagged with its representation. They do from the
+moment the operator is chosen: a missing operand is an empty slot whose picker
+opens in place, and other fields, including one being added, follow in a
+record. A line too narrow for the expression wraps before its operator.
+
 `{evaluate: expression}` is a Grap-library value partial, not evaluator syntax
 or a field hook in the structural walk. The evaluator never observes the field;
 a host that never loads the projection never sees it. It shows the stored
