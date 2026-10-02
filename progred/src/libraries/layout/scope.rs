@@ -231,23 +231,28 @@ fn operation(
             } else {
                 0.0
             };
-            let baseline = if function == COL {
-                number!(BASELINE, Some(0.0))
-            } else {
-                0.0
+            // A row given a baseline aligns tops, as a column does.
+            let baseline = match function {
+                COL => Some(number!(BASELINE, Some(0.0))),
+                ROW if context.field(call, BASELINE).is_some() => Some(number!(BASELINE, None)),
+                _ => None,
             };
             let body = need!(context.field(call, CHILDREN));
             let children = children!(body);
-            match function {
-                ROW => crate::display::row(gap, children),
-                COL if baseline >= 0.0
-                    && baseline.fract() == 0.0
-                    && (children.is_empty() || baseline < children.len() as f64) =>
-                {
-                    crate::display::col(baseline as usize, gap, children)
-                }
-                OVERLAY => layout_overlay(children),
-                ALTERNATIVES if !children.is_empty() => alternatives(children),
+            let baseline = match baseline {
+                Some(baseline) => Some(need!(baseline_index(baseline, children.len()))),
+                None => None,
+            };
+            match (function, baseline) {
+                (ROW, None) => crate::display::row(gap, children),
+                (ROW, Some(baseline)) => crate::display::aligned_row(
+                    crate::display::RowAlignment::Top { baseline },
+                    gap,
+                    children,
+                ),
+                (COL, Some(baseline)) => crate::display::col(baseline, gap, children),
+                (OVERLAY, _) => layout_overlay(children),
+                (ALTERNATIVES, _) if !children.is_empty() => alternatives(children),
                 _ => return Err(invalid(function)),
             }
         }

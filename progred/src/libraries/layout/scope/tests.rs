@@ -213,6 +213,29 @@ fn grap_recursion_calls_emit_the_same_native_location_operations() {
 }
 
 #[test]
+fn a_row_given_a_baseline_aligns_tops_as_a_column_does() {
+    use crate::display::RowAlignment;
+    for (baseline, expected) in [
+        (None, RowAlignment::Baseline),
+        (Some(1.0), RowAlignment::Top { baseline: 1 }),
+    ] {
+        let program = call(
+            ROW,
+            baseline
+                .map(|baseline| (BASELINE, f64_convention::value(baseline)))
+                .into_iter()
+                .chain([(CHILDREN, sequence([text("left"), text("right")]))]),
+        );
+        let (result, layout) = evaluate(&program, 10000);
+        assert!(result.completed);
+        let Recorded::Row { alignment, .. } = layout.unwrap().record() else {
+            panic!("row")
+        };
+        assert!(alignment == expected);
+    }
+}
+
+#[test]
 fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
     let programs = [
         sequence([text("valid"), call(TEXT, [])]),
@@ -223,6 +246,13 @@ fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
             [
                 (BASELINE, f64_convention::value(10.0)),
                 (CHILDREN, text("one")),
+            ],
+        ),
+        call(
+            ROW,
+            [
+                (BASELINE, f64_convention::value(2.0)),
+                (CHILDREN, sequence([text("two"), text("children")])),
             ],
         ),
         call(PAD, [(CHILD, sequence([text("two"), text("children")]))]),

@@ -16,8 +16,8 @@ use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
-    Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, alternatives, block_hover,
-    border, bracket, descend, leaf, on_activate, on_hover, overlay as layout_overlay,
+    Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment, alternatives,
+    block_hover, border, bracket, descend, leaf, on_activate, on_hover, overlay as layout_overlay,
     pickable_runtime, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -539,6 +539,13 @@ pub fn decode(
     })
 }
 
+/// Which child's baseline a column, or a row aligning tops, keeps. A
+/// container with no children has nothing to choose, so any index passes.
+fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
+    (baseline >= 0.0 && baseline.fract() == 0.0 && (children == 0 || baseline < children as f64))
+        .then_some(baseline as usize)
+}
+
 fn decode_with(
     value: &::grap::RuntimeValue,
     target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
@@ -546,19 +553,25 @@ fn decode_with(
     value.record_len()?;
     if let Some(content) = value.field(vocabulary::ROW) {
         content.record_len()?;
-        return Some(crate::display::row(
-            read_number(content.field(vocabulary::GAP)?.as_value())?,
-            children(&content.field(vocabulary::CHILDREN)?, target)?,
-        ));
+        let gap = read_number(content.field(vocabulary::GAP)?.as_value())?;
+        let children = children(&content.field(vocabulary::CHILDREN)?, target)?;
+        return Some(match content.field(vocabulary::BASELINE) {
+            None => crate::display::row(gap, children),
+            Some(baseline) => crate::display::aligned_row(
+                RowAlignment::Top {
+                    baseline: baseline_index(read_number(baseline.as_value())?, children.len())?,
+                },
+                gap,
+                children,
+            ),
+        });
     }
     if let Some(content) = value.field(vocabulary::COL) {
         content.record_len()?;
         let baseline = read_number(content.field(vocabulary::BASELINE)?.as_value())?;
-        (baseline >= 0.0 && baseline.fract() == 0.0).then_some(())?;
         let children = children(&content.field(vocabulary::CHILDREN)?, target)?;
-        (children.is_empty() || baseline < children.len() as f64).then_some(())?;
         return Some(crate::display::col(
-            baseline as usize,
+            baseline_index(baseline, children.len())?,
             read_number(content.field(vocabulary::GAP)?.as_value())?,
             children,
         ));

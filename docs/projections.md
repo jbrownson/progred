@@ -556,7 +556,9 @@ Within that scope, `row`, `col`, `overlay`, and `alternatives` take a raw
 `children` expression. They evaluate it once into a fresh child buffer, then
 emit the corresponding native layout. `do`, ordinary function calls, and loops
 can produce that sequence; a list of expressions remains inert unless a control
-function evaluates it. `pad`, `center`, `bracket`, and interaction wrappers take
+function evaluates it. A row aligns its children's baselines; given a
+`baseline`, it aligns their tops instead and keeps that child's baseline, as a
+column does. `pad`, `center`, `bracket`, and interaction wrappers take
 a raw `child` expression that must emit exactly one child. No buffer borrow is held
 while evaluating a body. Successful operations return the ordinary empty record;
 their useful output remains in Rust.
