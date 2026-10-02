@@ -336,3 +336,13 @@ Run the preview server and browser script checks without opening an editor
 python3 -B -m unittest discover -s website -p 'test_*.py'
 node --test website/test_*.cjs
 ```
+
+The editor's tests follow every tutorial page's steps (`progred/src/tutorials`).
+Each opens an embed with the document, libraries, and slots its page's iframe
+names, does what the page says with pointer and key events, and must try each of
+the page's numbered tasks in order, so changing a page's embed or tasks means
+changing its test:
+
+```sh
+./tools/sandbox-cargo test -p progred --lib tutorials
+```
