@@ -169,6 +169,55 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
             assert!(drawn(&mut world, &at), "{part} of a fraction");
         }
     }
+    // Stacked: each part centered over the other, with a rule as wide as
+    // the wider part between them.
+    let frame = settle(editing_frame(&mut world, false));
+    let ink = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0)
+        .ink
+        .brush;
+    let rules = frame
+        .list
+        .0
+        .iter()
+        .filter_map(|command| match command {
+            DrawCmd::Fill {
+                shape: Shape::Rect(rect),
+                brush,
+                transform,
+            } if *brush == ink => Some(transform.transform_rect_bbox(*rect)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    for position in elements(&world, "numbers") {
+        let part = |name: &str| {
+            let path = [
+                key("numbers"),
+                Step::Element(position.clone()),
+                Step::Follow(gid::Resolution::Document),
+                key(name),
+            ];
+            frame
+                .descends
+                .iter()
+                .find(|landmark| landmark.path.as_ref() == path)
+                .unwrap()
+                .rect
+        };
+        let (over, under) = (part("over"), part("under"));
+        assert!(
+            (over.center().x - under.center().x).abs() < 0.5,
+            "{over:?} {under:?}"
+        );
+        assert!(
+            rules
+                .iter()
+                .any(|rule| (rule.x0 - over.x0.min(under.x0)).abs() < 0.5
+                    && (rule.x1 - over.x1.max(under.x1)).abs() < 0.5
+                    && rule.y0 >= over.y1
+                    && rule.y1 <= under.y0),
+            "a rule between {over:?} and {under:?}: {rules:?}"
+        );
+    }
     let total = world
         .sources()
         .resolve_path(&[key("total")])
@@ -230,3 +279,4 @@ fn the_lab_libraries_draw_fractions_angles_and_tints() {
         );
     }
 }
+

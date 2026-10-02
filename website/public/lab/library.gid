@@ -25,7 +25,9 @@
     "children": e10b73d5482f96ca7d3852c0f16b49ea, "canvas": b33eff2d53a88f77c431b7c728a49f0f,
     "text": 08e64d1f3a92c5b7b7f0d38a165e29c4, "content": 3e6b91d4a25f70c8815d29f6c4a30e7b,
     "descend": 35c7a8e2f10d49b6d2f8016c4b9ea375, "step": 67a2d5e0b93c48f14e28b671d0a5c39f,
-    "key": f12dea12c741fe36312750a264f3a235,
+    "key": f12dea12c741fe36312750a264f3a235, "col": 9d04b6e1783f2ca5f17d09c4e6a2358b,
+    "baseline": 6cd28a4f91e057b3c2941e6a07f5d3b8, "center": 6837fa29d597fede353287ffd98394f5,
+    "rule": f8a0697c10a7a18e750e3fb32a57bcf2, "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
     "libraries": bc197ad66fea59a9bd97c4191c7845b2, "keys": bb30d215605f5599e31f6274641ca89f,
     "projection": 873503e2e37a1722a0dd21399be9ee7f,
     "over": 5217a5a2b20b9aa61ae7cc5f02d83822, "under": d5f908921d5ad4d2aec6856d1cf34eb6,
@@ -51,10 +53,10 @@
 
     fractions: {name: "fractions", keys: [over], projection: fraction_view},
     fraction_view: {name: "fraction view", params: [value], body: {
-      function: row, gap: {f64: 0x0000000000000040}, children: {function: do, expressions: [
-        {function: descend, step: {key: over}},
-        {function: text, content: "⁄"},
-        {function: descend, step: {key: under}},
+      function: col, baseline: {f64: 0x000000000000f03f}, children: {function: do, expressions: [
+        {function: center, child: {function: descend, step: {key: over}}},
+        {function: rule},
+        {function: center, child: {function: descend, step: {key: under}}},
       ]},
     }},
     add_fractions: {name: "add fractions", params: [p, q], body: {
