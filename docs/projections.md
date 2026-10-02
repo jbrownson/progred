@@ -170,6 +170,9 @@ Grap contributes a `new lambda` value completion (aliases `lambda` and `λ`) to
 the universal picker. It inserts `{params: []}` and selects the missing body.
 The lambda projection accepts that unfinished shape and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
+An empty parameter slot offers `x — new parameter` for whatever is typed: a
+new document cell named `x`, ahead of existing cells of that name, which stay
+behind `…`.
 
 The expression-use partial also handles missing values with a focused completion
 provider. It combines statically visible bindings and function calls with the

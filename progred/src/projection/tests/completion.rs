@@ -254,6 +254,68 @@ fn a_grap_program_offers_grap_suggestions() {
 }
 
 #[test]
+fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
+    use crate::libraries::grap::vocabulary::GRAP;
+    use grap::vocabulary::PARAMS;
+    use ui_events::keyboard::{Key, NamedKey};
+
+    let function = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(function, Value::record([(PARAMS, Value::list([]))]));
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([(GRAP, function.into())])),
+        cells,
+    });
+    let params: Path = vec![
+        Step::Key(GRAP),
+        Step::Follow(Resolution::Document),
+        Step::Key(PARAMS),
+    ];
+    world.model.selection = Some(make_selection(params.clone()));
+    let command = match world.command_modifier {
+        puri::keyboard::CommandModifier::Meta => Modifiers::META,
+        puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
+    };
+    let event = |key, modifiers| KeyboardEvent {
+        key,
+        modifiers,
+        state: KeyState::Down,
+        ..Default::default()
+    };
+    assert!(world.insert_key(
+        Default::default(),
+        &event(Key::Named(NamedKey::Enter), command)
+    ));
+    assert!(
+        editing_frame(&mut world, false)
+            .resolve_for_dispatch()
+            .dispatch_key(&mut world, &event(Key::Character("x".into()), Modifiers::empty()))
+    );
+    let entries = editing_frame(&mut world, false)
+        .completion
+        .expect("the empty parameter shows its picker")
+        .entries;
+    assert_eq!(entries[0].display, "x");
+    assert_eq!(entries[0].detail.as_deref(), Some("new parameter"));
+    assert!(
+        editing_frame(&mut world, false)
+            .resolve_for_dispatch()
+            .dispatch_key(&mut world, &event(Key::Named(NamedKey::Enter), Modifiers::empty()))
+    );
+    let added = world
+        .sources()
+        .resolve_path(&params)
+        .and_then(Value::as_list)
+        .and_then(|list| list.values().next().cloned())
+        .and_then(|value| value.as_cell())
+        .expect("the list holds the new parameter");
+    assert_eq!(
+        world.sources().resolve(added).map(|definition| definition.value.clone()),
+        Some(name::record("x", []))
+    );
+}
+
+#[test]
 fn quote_and_unquote_are_offered_under_their_marks() {
     use crate::libraries::{control::vocabulary as control, grap::vocabulary::GRAP};
     use grap::vocabulary::{BODY, EXPRESSION};

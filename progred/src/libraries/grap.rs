@@ -66,6 +66,43 @@ pub(crate) fn shallow_cell_with(
     )))
 }
 
+/// A parameter is a cell. An empty slot offers a new one named as typed,
+/// ahead of existing cells that happen to share the name.
+fn parameter(
+    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    match input.value {
+        Some(_) => declaration_cell(input),
+        None => Some(completion(
+            CompletionKind::Value,
+            Some(std::rc::Rc::new(|request| {
+                let spelling = request.query.trim().to_owned();
+                Some(
+                    (!spelling.is_empty())
+                        .then(|| {
+                            Completion::new(
+                                crate::display::CompletionText::Literal(spelling.clone()),
+                                move |world| {
+                                    crate::editing::commit_new_cell(
+                                        world,
+                                        name::record(&spelling, []),
+                                        Some(crate::libraries::selection::at(
+                                            &[],
+                                            crate::libraries::selection::edge(),
+                                        )),
+                                    )
+                                },
+                            )
+                            .with_detail("new parameter")
+                        })
+                        .into_iter()
+                        .collect(),
+                )
+            })),
+        )),
+    }
+}
+
 fn declaration_cell(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
@@ -348,7 +385,7 @@ pub fn lambda_display(
         .then_some(())?;
     let params = descend_path_local(
         [Step::Key(PARAMS)],
-        crate::display::structure::list(Some(crate::display::runtime_partial(declaration_cell))),
+        crate::display::structure::list(Some(crate::display::runtime_partial(parameter))),
         &input.default_projection,
     );
     let body_target = input.targets.at([Step::Key(BODY)]);

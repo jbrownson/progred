@@ -61,6 +61,22 @@ pub(crate) fn commit_value(
     }
 }
 
+/// Commits a reference to a new cell, defined as given, into the pending.
+pub(crate) fn commit_new_cell(
+    app: &mut Editor,
+    definition: Value,
+    on_commit: Option<crate::site::Continuation>,
+) {
+    if app
+        .model
+        .selection
+        .as_ref()
+        .is_some_and(|s| s.stage(&app.sources()) == selection::Stage::Pending)
+    {
+        app.commit_completion(gid::new_cell_id().into(), Some(definition), on_commit);
+    }
+}
+
 pub(crate) fn commit_label(
     app: &mut Editor,
     label: gid::CellId,

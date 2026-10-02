@@ -184,13 +184,22 @@ pub(crate) fn prepare(
     let mut document = std::rc::Rc::new(sources.doc.clone());
     let mut path = selection.path().to_vec();
     let document_changed = match selection.stage(sources) {
-        Stage::Pending => selection::set_value(
-            &mut document,
-            sources.libraries,
-            &selection.source_path()?,
-            value,
-        )
-        .then_some(true)?,
+        Stage::Pending => {
+            let defined = definition.zip(value.as_cell());
+            selection::set_value(
+                &mut document,
+                sources.libraries,
+                &selection.source_path()?,
+                value,
+            )
+            .then_some(())?;
+            if let Some((definition, cell)) = defined {
+                std::rc::Rc::make_mut(&mut document)
+                    .cells
+                    .set_value(cell, definition);
+            }
+            true
+        }
         Stage::Label => {
             let label = value.as_cell()?;
             path.push(gid::Step::Key(label));
