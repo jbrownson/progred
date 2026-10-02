@@ -553,13 +553,16 @@ Within that scope, `row`, `col`, `overlay`, and `alternatives` take a raw
 `children` expression. They evaluate it once into a fresh child buffer, then
 emit the corresponding native layout. `do`, ordinary function calls, and loops
 can produce that sequence; a list of expressions remains inert unless a control
-function evaluates it. `pad`, `bracket`, and interaction wrappers take a raw
-`child` expression that must emit exactly one child. No buffer borrow is held
+function evaluates it. `pad`, `center`, `bracket`, and interaction wrappers take
+a raw `child` expression that must emit exactly one child. No buffer borrow is held
 while evaluating a body. Successful operations return the ordinary empty record;
 their useful output remains in Rust.
 
-Leaf/recursion capabilities include `text`, `slot`, `descend`, `descend path`,
-`jump`, and `at`. `descend` takes `step`; `descend path` takes
+Leaf/recursion capabilities include `text`, `slot`, `rule`, `descend`, `descend path`,
+`jump`, and `at`. `center` and `rule` act at placement, using the width a
+container offers its child, which a column sets to its widest: a fraction is a
+column of a centered numerator, a rule, and a centered denominator, with no
+measurement in Grap. `descend` takes `step`; `descend path` takes
 `steps`; `jump` takes `steps` and `document path`; `at` takes `steps` and `value`.
 All paths use the path library, with no opaque editor or scope value in Grap.
 Custom native conject functions are currently Rust-side; the Grap-facing jump

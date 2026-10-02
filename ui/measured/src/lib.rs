@@ -238,6 +238,12 @@ pub fn fill_height<Out: 'static>(child: Measured<Out>) -> Measured<Out> {
     })
 }
 
+pub fn fill_width<Out: 'static>(child: Measured<Out>) -> Measured<Out> {
+    around_into(child, |placement, inner, out| {
+        inner.place_at_into(placement.fill_width(), out)
+    })
+}
+
 /// A wrapper controls when and where its child continuation runs.
 pub fn around<Out: Output + 'static>(
     child: Measured<Out>,
@@ -595,6 +601,23 @@ mod tests {
         assert_eq!(output[0].available_rect, Rect::new(10.0, 20.0, 15.0, 60.0));
         assert_eq!(output[1].rect, Rect::new(17.0, 20.0, 22.0, 60.0));
         assert_eq!(output[1].clip_rect, placement.clip_rect);
+    }
+
+    #[test]
+    fn a_column_offers_its_width_and_fill_width_takes_it() {
+        let layout = col(
+            0,
+            0.0,
+            vec![
+                probe(ext(5.0, 3.0, 2.0)),
+                fill_width(probe(ext(0.0, 1.0, 0.0))),
+                probe(ext(20.0, 3.0, 2.0)),
+            ],
+        );
+        assert_eq!(layout.extent.width, 20.0);
+        let output = place(layout, Placement::root(Rect::new(10.0, 0.0, 30.0, 11.0)));
+        assert_eq!(output[0].rect.width(), 5.0);
+        assert_eq!(output[1].rect, Rect::new(10.0, 5.0, 30.0, 6.0));
     }
 
     #[test]

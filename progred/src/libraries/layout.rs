@@ -40,6 +40,8 @@ pub mod vocabulary {
     pub const ROW: CellId = CellId::from_u128(0x1af52c96e380b7d40c9e1f6a2d5b83e7);
     pub const COL: CellId = CellId::from_u128(0x9d04b6e1783f2ca5f17d09c4e6a2358b);
     pub const PAD: CellId = CellId::from_u128(0x4e8a17d0952cb6f3a30c5e92b7d1f648);
+    /// A child in the middle of the width its container offers.
+    pub const CENTER: CellId = CellId::from_u128(0x6837fa29d597fede353287ffd98394f5);
     pub const BORDER: CellId = CellId::from_u128(0xa4edf70410d16734683d9f2de0bb0080);
     pub const OVERLAY: CellId = CellId::from_u128(0x95de46726d377f70f4f8b6f88893aa52);
     pub const BRACKET: CellId = CellId::from_u128(0xc71e0f4b2d8a6395e6b34a08d15c97f2);
@@ -53,6 +55,8 @@ pub mod vocabulary {
     // Leaves.
     pub const TEXT: CellId = CellId::from_u128(0x08e64d1f3a92c5b7b7f0d38a165e29c4);
     pub const SLOT: CellId = CellId::from_u128(0x96e07d2a58c4b1f3f3b18e57d0c2946a);
+    /// A line across the width its container offers.
+    pub const RULE: CellId = CellId::from_u128(0xf8a0697c10a7a18e750e3fb32a57bcf2);
     pub const CANVAS: CellId = CellId::from_u128(0xb33eff2d53a88f77c431b7c728a49f0f);
     pub const LAYOUT_PROGRAM: CellId = CellId::from_u128(0x120660d976130c8ba722d26b1a28c975);
     pub const INVALID_PROGRAM: CellId = CellId::from_u128(0xd0f97606bf2fe368cb9645e4bad8b977);
@@ -936,6 +940,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         (vocabulary::ROW, "row"),
         (vocabulary::COL, "col"),
         (vocabulary::PAD, "pad"),
+        (vocabulary::CENTER, "center"),
+        (vocabulary::RULE, "rule"),
         (vocabulary::BORDER, "border"),
         (vocabulary::OVERLAY, "overlay"),
         (vocabulary::BRACKET, "bracket"),

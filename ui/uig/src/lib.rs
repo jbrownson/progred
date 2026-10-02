@@ -43,6 +43,18 @@ impl Placement {
         }
     }
 
+    pub fn fill_width(self) -> Self {
+        Self {
+            rect: Rect::new(
+                self.available_rect.x0,
+                self.rect.y0,
+                self.available_rect.x1,
+                self.rect.y1,
+            ),
+            ..self
+        }
+    }
+
     pub fn visible_rect(self) -> Rect {
         self.rect.intersect(self.clip_rect)
     }

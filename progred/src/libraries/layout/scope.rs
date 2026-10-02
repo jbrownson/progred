@@ -10,11 +10,13 @@ const FUNCTIONS: &[CellId] = &[
     ROW,
     COL,
     PAD,
+    CENTER,
     OVERLAY,
     ALTERNATIVES,
     BRACKET,
     TEXT,
     SLOT,
+    RULE,
     DESCEND,
     DESCEND_PATH,
     JUMP,
@@ -260,6 +262,11 @@ fn operation(
             let children = children!(body);
             crate::display::padding(insets.into(), need!(single(children)))
         }
+        CENTER => {
+            let body = need!(context.field(call, CHILD));
+            let children = children!(body);
+            crate::display::center(need!(single(children)))
+        }
         BRACKET => {
             let delim = arg!(DELIM, |value| match value.as_cell()? {
                 PAREN => Some(Delim::Paren),
@@ -287,6 +294,7 @@ fn operation(
             })
         }
         SLOT => slot(),
+        RULE => crate::display::rule(),
         DESCEND => descend(
             arg!(STEP, |value| crate::libraries::path::read_step(
                 value.as_value()

@@ -629,6 +629,62 @@ pub fn padding<World: 'static, Hover: 'static>(
     })
 }
 
+/// Place a child in the middle of the width its container offers it.
+pub fn center<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> Layout<World, Hover> {
+    widget::around(
+        child,
+        Rc::new(|_| {
+            Box::new(
+                |child: measured::Measured<widget::HoverPass<World, Hover>>| {
+                    let extent = child.extent;
+                    measured::around_into(child, move |placement, inner, out| {
+                        let offered = placement.available_rect;
+                        let x = offered.x0 + ((offered.width() - extent.width) / 2.0).max(0.0);
+                        let rect = extent.rect_at(puri::Point::new(x, placement.rect.y0));
+                        inner.place_at_into(
+                            measured::child_placement(placement, rect).with_available_rect(offered),
+                            out,
+                        )
+                    })
+                },
+            )
+        }),
+    )
+}
+
+const RULE_SPACE: f64 = 3.0;
+const RULE_THICKNESS: f64 = 1.0;
+
+/// A line across the width its container offers it, with space above and
+/// below. Its baseline is its bottom, so a column aligned on it holds the
+/// line just above the surrounding text's baseline.
+pub fn rule<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
+    Layout::widget(Rc::new(|context| {
+        let scale = context.inputs.styles.scale;
+        let ink = context.inputs.styles.ink.brush.clone();
+        measured::fill_width(widget::paint(
+            widget::Extent {
+                width: 0.0,
+                ascent: (2.0 * RULE_SPACE + RULE_THICKNESS) * scale,
+                descent: 0.0,
+            },
+            move |canvas, placement| {
+                let top = placement.rect.y0 + RULE_SPACE * scale;
+                canvas.fill_shape(
+                    puri::draw::Shape::Rect(puri::Rect::new(
+                        placement.rect.x0,
+                        top,
+                        placement.rect.x1,
+                        top + RULE_THICKNESS * scale,
+                    )),
+                    ink,
+                    puri::Affine::IDENTITY,
+                );
+            },
+        ))
+    }))
+}
+
 pub fn pad<World: 'static, Hover: 'static>(
     left: f64,
     child: Layout<World, Hover>,
