@@ -184,8 +184,6 @@ figcaption { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted); }
 .tutorials strong { display: block; color: var(--accent); }
 .tutorials span { display: block; margin-top: 0.2rem; font-size: 0.925rem; color: var(--muted); }
 .closing { padding-bottom: 4rem; }
-.still { display: none; }
-:root:not([data-theme="dark"]) .dark-only, :root[data-theme="dark"] .light-only { display: none; }
 
 @media (max-width: 800px) {
   .site-header, main { width: calc(100% - 2.5rem); }
@@ -201,7 +199,3 @@ figcaption { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted); }
   .social-label { display: none; }
 }
 
-@media (max-width: 640px) {
-  .home .live { display: none; }
-  .home .still { display: block; }
-}

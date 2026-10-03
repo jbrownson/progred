@@ -51,13 +51,11 @@ run-website:
 # The CAM capture waits for its progressive render, so it needs --release.
 images:
 	@command -v rsvg-convert >/dev/null || { echo "make images needs rsvg-convert (brew install librsvg)" >&2; exit 1; }
-	./tools/sandbox-cargo test --release -p progred --lib -- --ignored readme_svg_captures website_home_stills
+	./tools/sandbox-cargo test --release -p progred --lib -- --ignored readme_svg_captures website_preview_image
 	rsvg-convert target/sandbox/build/readme_cam.svg -o docs/images/cam-preview.png
 	rsvg-convert target/sandbox/build/readme_iop.svg -o docs/images/iop-tree.png
 	cp docs/images/cam-preview.png docs/images/iop-tree.png website/public/images/
-	for name in forest structure; do for theme in light dark; do \
-		rsvg-convert -z 2 target/sandbox/build/home_$${name}_$$theme.svg -o website/public/images/$$name-$$theme.png; \
-	done; done
+	rsvg-convert -z 2 target/sandbox/build/website_preview.svg -o website/public/images/forest-light.png
 
 # The launcher builds editor changes before serving.
 run-web:

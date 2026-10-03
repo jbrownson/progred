@@ -366,10 +366,9 @@ class AssetTests(unittest.TestCase):
                 self.assertTrue(target.is_file(), str(target))
                 if url.fragment:
                     self.assertIn(f'id="{url.fragment}"', target.read_text())
-        # Phones read stills; only a wide window loads the editor.
+        # Every width loads the live editor, phones included.
         [frame] = page.frames
-        self.assertNotIn("src", frame)
-        self.assertEqual(urlsplit(urljoin("http://localhost/", frame["data-src"])).path, "/editor/")
+        self.assertEqual(urlsplit(urljoin("http://localhost/", frame["src"])).path, "/editor/")
         for path in page.paths:
             with self.subTest(path=path):
                 relative = urlsplit(path).path.removeprefix("./")

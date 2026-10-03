@@ -82,31 +82,9 @@
         <h2 id="peel-title">Take a program apart</h2>
         <p>This forest is a program. Drag its slider to grow it, or hold <kbd data-command-key>Ctrl</kbd> and click a tree to find the code that drew it. Then switch off what the libraries draw, one layer at a time, and then the names, until you’re looking at what’s stored.</p>
         <div class="live">
-          <div class="editor-example" id="peel-editor"><iframe data-src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,0ad8124ba821acd5fbf2c868371e1492,666ba40b81028e32c78bdc1665d6c3a9" title="The growing forest, drawn by libraries you can switch off" loading="lazy"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset the forest">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+          <div class="editor-example" id="peel-editor"><iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,0ad8124ba821acd5fbf2c868371e1492,666ba40b81028e32c78bdc1665d6c3a9" title="The growing forest, drawn by libraries you can switch off" loading="lazy"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset the forest">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
           <div class="peel-controls"><label class="peel-slider">Peel <input type="range" id="peel-depth" min="0" value="0" step="1"></label><div id="peel-layers" class="peel-layers"></div></div>
           <p id="peel-caption" class="peel-caption" aria-live="polite"></p>
-        </div>
-        <script>
-          // Phones read the stills below; only a wide window loads the live editor.
-          {
-            const wide = matchMedia("(min-width: 641px)");
-            const frame = document.querySelector("#peel-editor iframe");
-            const load = () => { if (wide.matches && !frame.hasAttribute("src")) frame.src = frame.dataset.src; };
-            load();
-            wide.addEventListener("change", load);
-          }
-        </script>
-        <div class="still" role="group" aria-label="The forest and its stored structure">
-          <figure>
-            <img class="light-only" src="images/forest-light.png" alt="The forest and its slider, drawn with nine libraries, above the start of its program." width="704" height="600" />
-            <img class="dark-only" src="images/forest-dark.png" alt="The forest and its slider, drawn with nine libraries, above the start of its program." width="704" height="600" />
-            <figcaption>Drawn with the absent, color, control, f64, grap, layout, presentation, sequence, and controls libraries.</figcaption>
-          </figure>
-          <figure>
-            <img class="light-only" src="images/structure-light.png" alt="The same document with the nine libraries’ drawing switched off: calls, colors, and numbers as the records and blobs they’re stored as, labeled with their names." width="704" height="600" />
-            <img class="dark-only" src="images/structure-dark.png" alt="The same document with the nine libraries’ drawing switched off: calls, colors, and numbers as the records and blobs they’re stored as, labeled with their names." width="704" height="600" />
-            <figcaption>The same document with those libraries’ drawing switched off: calls, colors, and numbers as the records and blobs they’re stored as. On a laptop, this is a live editor you can take apart yourself.</figcaption>
-          </figure>
         </div>
       </section>
 

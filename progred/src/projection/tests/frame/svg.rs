@@ -1710,12 +1710,11 @@ fn svg_bench_renders_a_pending_edge() {
     render(&doc, Some(&typing), 320.0, "pending_field_slot.svg");
 }
 
-/// The home page shows these on narrow screens instead of loading the editor:
-/// the forest drawn with the nine libraries it uses, and the same document
-/// with none.
+/// The home page's link preview: the forest drawn with the nine libraries it
+/// uses.
 #[test]
-#[ignore = "regenerates the website home page's forest stills"]
-fn website_home_stills() {
+#[ignore = "regenerates the website's link preview image"]
+fn website_preview_image() {
     use crate::libraries::{
         absent, color, control, controls, f64, grap, layout, presentation, sequence,
     };
@@ -1733,38 +1732,25 @@ fn website_home_stills() {
         presentation::ID,
         sequence::ID,
         controls::ID,
-    ];
-    for (theme_name, theme) in [
-        ("light", crate::styles::Theme::Light),
-        ("dark", crate::styles::Theme::Dark),
-    ] {
-        // The structure still is the peel with every projection off but names on.
-        for (still, projections) in [("forest", &forest[..]), ("structure", &[][..])] {
-            let ids = |libraries: &[CellId]| {
-                libraries
-                    .iter()
-                    .map(|id| id.to_string())
-                    .collect::<Vec<_>>()
-                    .join(",")
-            };
-            let mut editor = crate::test_editor_with_stack(
-                doc.clone(),
-                crate::web_embed::peeled(
-                    Some(&ids(&forest)),
-                    &ids(projections),
-                    Some(&format!("{},{}", fields["second"], fields["first"])),
-                    true,
-                )
-                .unwrap(),
-            );
-            editor.font_cx = crate::fonts::bundled_font_context();
-            editor.palette = theme.palette();
-            editor.drawn_menu = false;
-            render_editor(
-                editor,
-                kurbo::Size::new(704.0, 600.0),
-                &format!("home_{still}_{theme_name}.svg"),
-            );
-        }
-    }
+    ]
+    .map(|id| id.to_string())
+    .join(",");
+    let mut editor = crate::test_editor_with_stack(
+        doc,
+        crate::web_embed::peeled(
+            Some(&forest),
+            &forest,
+            Some(&format!("{},{}", fields["second"], fields["first"])),
+            true,
+        )
+        .unwrap(),
+    );
+    editor.font_cx = crate::fonts::bundled_font_context();
+    editor.palette = crate::styles::Theme::Light.palette();
+    editor.drawn_menu = false;
+    render_editor(
+        editor,
+        kurbo::Size::new(704.0, 600.0),
+        "website_preview.svg",
+    );
 }
