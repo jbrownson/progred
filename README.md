@@ -64,8 +64,8 @@ clearance, or a safe machining plan.**
   cancellable background work, and progressive rendering. The combined CAM
   viewport uses a mesh while implicit images refine in the background.
 
-macOS is the primary development platform. There are also Linux and browser
-hosts. They do not yet have feature or performance parity: in particular, the
+macOS is the primary development platform, and the only one tested recently.
+There are also Linux and browser hosts. They do not yet have feature or performance parity: in particular, the
 browser currently runs expensive jobs synchronously.
 
 ## What isn't there yet
