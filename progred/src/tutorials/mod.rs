@@ -18,7 +18,6 @@ use winit::event::{DeviceId, ElementState, MouseButton, WindowEvent};
 use winit::keyboard::ModifiersState;
 
 mod peel;
-mod see;
 mod story;
 mod tutorial;
 

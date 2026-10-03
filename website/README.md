@@ -61,14 +61,14 @@ for a free port when running an additional preview alongside this one.
 ## Work on it
 
 - `public/index.html` is the home page: the pitch, a live forest whose projections
-  and names you can switch off (`public/peel.js`), the key ideas, what works today, the four
+  and names you can switch off (`public/peel.js`), the key ideas, what works today, the three
   tutorials, and the Zulip links. Narrow screens get stills from `public/images/`
   instead of loading the editor.
   `make images` regenerates those stills, and the copies of the
   [README screenshots](../docs/images/README.md), after editor changes.
-- `public/tutorial.html` is the exercise tutorial described below. `public/story.html`,
-  `public/lab/peel.html`, and `public/lab/see.html` are the alternative tutorials
-  the home page asks visitors to compare.
+- `public/tutorial.html` is the exercise tutorial described below. `public/story.html` and
+  `public/lab/peel.html` are the alternative tutorials the home page asks
+  visitors to compare.
 - `public/style.css`, `public/lessons.js`, and `public/appearance.js` are shared. Edit and refresh.
 - `public/lessons/*.gid` are the small, ordinary documents used by the exercises.
   They are fetched at startup, not compiled into the editor.

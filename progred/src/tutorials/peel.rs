@@ -209,7 +209,7 @@ fn unfinished() {
 }
 
 /// Change the planet's moons and the color its view paints it.
-pub(super) fn draw_planets(page: &str, id: &str) {
+fn draw_planets(page: &str, id: &str) {
     let mut views = Embed::open(page, id);
     let gray = puri::Brush::from(puri::Color::from_rgb8(0x8a, 0x8a, 0x8a));
     let moons = |views: &Embed| {

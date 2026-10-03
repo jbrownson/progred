@@ -344,7 +344,7 @@ class AssetTests(unittest.TestCase):
         # Asks for tutorial feedback go to its channel, not the front page.
         feedback = "https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback"
         self.assertIn(feedback, page.links)
-        for tutorial in ("tutorial.html", "story.html", "lab/peel.html", "lab/see.html"):
+        for tutorial in ("tutorial.html", "story.html", "lab/peel.html"):
             self.assertIn(tutorial, page.links)
             tutorial_page = Page()
             tutorial_page.feed((public / tutorial).read_text())
