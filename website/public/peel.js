@@ -7,14 +7,14 @@ const layers = [
     label: "Pictures and sliders",
     names: "layout, presentation, controls",
     libraries: ["fb2a4dac87512d69448650bc0e29dc80", "d22b834154d60b1df228f9bb4d3c13de", "666ba40b81028e32c78bdc1665d6c3a9"],
-    off: "The picture was a view. With the layout, presentation, and controls libraries no longer drawing, you see what they drew from: a record asking to <code>render</code> the program. Those libraries are still loaded, which is why its keys keep their names. Nothing in the document changed.",
+    off: "The picture was a projection. With the layout, presentation, and controls libraries no longer drawing, you see what they drew from: a record asking to <code>render</code> the program. Those libraries are still loaded, which is why its keys keep their names. Nothing in the document changed.",
   },
   {
     id: "colors",
     label: "Colors",
     names: "color",
     libraries: ["25d0e2034b4bd65bebb4811d65eab89c"],
-    off: "The swatches were a view too. A color is three bytes under the color library's <code>rgb</code> key: <code>#399b75</code> is <code>{rgb: 0x399b75}</code>.",
+    off: "The swatches were a projection too. A color is three bytes under the color library's <code>rgb</code> key: <code>#399b75</code> is <code>{rgb: 0x399b75}</code>.",
   },
   {
     id: "calculations",
