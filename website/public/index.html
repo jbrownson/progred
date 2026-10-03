@@ -120,7 +120,7 @@
         </article>
         <article class="idea" id="identity">
           <h4>Identity, not names</h4>
-          <p>Every key and every reference is a random 128-bit identity. A name is a fact stored about a cell, <code>{name: "x"}</code>, which views draw as a label. So renaming never breaks a reference, two different things can wear the same name, and a call files its arguments under its parameters’ identities.</p>
+          <p>Every key and every reference is a random 128-bit identity. A name is a fact stored about a cell, <code>{name: "x"}</code>, which projections draw as a label. So renaming never breaks a reference, two different things can wear the same name, and a call files its arguments under its parameters’ identities.</p>
           <p class="idea-links"><a href="lab/peel.html#names">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/model.md">Data and editor model</a></p>
         </article>
         <article class="idea" id="meaning">
@@ -128,10 +128,10 @@
           <p>Text is a blob under the text library’s <code>utf8</code> key, and a 64-bit float is an eight-byte blob under the f64 library’s key; the small <sub class="tag">f64</sub> beside a number names that library. Other libraries read numbers their own way (f32, u64, and Fidget, whose arithmetic builds 3D shapes), and each has its own <code>+</code>. The tag on an operator records whose arithmetic you chose.</p>
           <p class="idea-links"><a href="lab/peel.html#bytes">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#packages-and-libraries">Libraries</a></p>
         </article>
-        <h3 class="idea-group">Views and language</h3>
+        <h3 class="idea-group">Projections and language</h3>
         <article class="idea" id="projections">
           <h4>Everything you see is a projection</h4>
-          <p>Libraries contribute partial views, composed in order above one total structural view, and the first that recognizes a value draws it. Data no library understands falls back to structure instead of disappearing. You can edit through any view: code, a number you scrub, a color picker, a slider, or the base projection that shows what’s stored.</p>
+          <p>Libraries contribute projections: functions from a value to a drawing, each free to decline a value it doesn’t recognize. They’re tried in order, and the first that recognizes a value draws it; data no library understands falls back to the base projection, which shows what’s stored, instead of disappearing. You can edit through any projection: code, a number you scrub, a color picker, or a slider.</p>
           <p class="idea-links"><a href="tutorial.html#projections">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#projection-composition">Projection composition</a></p>
         </article>
         <article class="idea" id="grap">
@@ -145,9 +145,9 @@
           <p class="idea-links"><a href="tutorial.html#drawing">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/controls.md">Controls</a></p>
         </article>
         <article class="idea" id="views">
-          <h4>Views are programs</h4>
-          <p>A view can be a Grap function stored in the document beside the data it draws. A pane can show a value through one, and the planet in <em>Peel the forest</em> is drawn by one.</p>
-          <p class="idea-links"><a href="lab/peel.html#views">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/model.md#panes">Panes</a></p>
+          <h4>Projections are programs</h4>
+          <p>A projection is an ordinary function, so a document can declare its own libraries with projections written in Grap. Each library names the keys it owns, and every record carrying one is drawn by its projection, a fraction stacked over a rule or an angle as a dial, while the parts it shows stay editable.</p>
+          <p class="idea-links"><a href="editor/?example=libraries" target="_blank" rel="noopener">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md">Projections</a></p>
         </article>
         <article class="idea" id="panes">
           <h4>The workspace is part of the document</h4>
