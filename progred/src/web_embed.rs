@@ -76,26 +76,50 @@ enum Level {
 
 impl Level {
     /// Shown above each slot when slots differ in level, so the views
-    /// explain themselves without the surrounding page.
-    fn caption(self, libraries: &crate::libraries::Libraries) -> String {
+    /// explain themselves without the surrounding page. A slot showing the
+    /// cell the slot above it shows says so.
+    fn caption(self, libraries: &crate::libraries::Libraries, same: bool) -> String {
+        let drawn = if same {
+            "The same value, drawn"
+        } else {
+            "Drawn"
+        };
         match self {
             Level::Full => {
                 let names = libraries.names().collect::<Vec<_>>();
                 match names.as_slice() {
-                    [] => "Drawn with no libraries".into(),
-                    [name] => format!("Drawn with the {name} library"),
-                    [first, second] => format!("Drawn with the {first} and {second} libraries"),
+                    [] => format!("{drawn} with no libraries"),
+                    [name] => format!("{drawn} with the {name} library"),
+                    [first, second] => format!("{drawn} with the {first} and {second} libraries"),
                     [rest @ .., last] => {
-                        format!("Drawn with the {}, and {last} libraries", rest.join(", "))
+                        format!("{drawn} with the {}, and {last} libraries", rest.join(", "))
                     }
                 }
             }
-            Level::Plain => {
-                "Drawn with the name, text, and blob libraries, plus f64’s numbers but not its arithmetic".into()
-            }
+            Level::Plain => format!(
+                "{drawn} with the name, text, and blob libraries, plus f64’s numbers but not its arithmetic"
+            ),
+            Level::Raw if same => "The same value in the base projection: no libraries".into(),
             Level::Raw => "The base projection: no libraries".into(),
         }
     }
+}
+
+/// Whether each slot shows the cell the slot above it shows. Equal inline
+/// values are copies, not one value, so only shared cells count.
+fn same_as_above(slots: &[(gid::CellId, Level)], root: Option<&Value>) -> Vec<bool> {
+    let cell = |key: &gid::CellId| {
+        root.and_then(Value::as_record)
+            .and_then(|fields| fields.get(key))
+            .and_then(Value::as_cell)
+    };
+    slots
+        .iter()
+        .enumerate()
+        .map(|(index, (key, _))| {
+            index > 0 && cell(key).is_some() && cell(key) == cell(&slots[index - 1].0)
+        })
+        .collect()
 }
 
 pub(crate) fn tutorial_slots(
@@ -165,14 +189,16 @@ pub(crate) fn tutorial_slots(
                 crate::display::runtime_partial(named_reference),
             ]);
             let captioned = slots.windows(2).any(|pair| pair[0].1 != pair[1].1);
-            let captions =
-                [Level::Full, Level::Plain, Level::Raw].map(|level| level.caption(libraries));
+            let captions = [false, true].map(|same| {
+                [Level::Full, Level::Plain, Level::Raw].map(|level| level.caption(libraries, same))
+            });
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
+                    let same = same_as_above(&slots, input.value);
                     crate::display::projection::group(crate::display::col(
                         0,
                         16.0,
-                        slots.iter().map(|(key, level)| {
+                        slots.iter().zip(same).map(|((key, level), same)| {
                             let view = match level {
                                 Level::Full => crate::display::descend(
                                     Step::Key(*key),
@@ -192,7 +218,7 @@ pub(crate) fn tutorial_slots(
                                     4.0,
                                     [
                                         crate::display::leaf(puri::Leaf::Text {
-                                            text: captions[*level as usize].clone(),
+                                            text: captions[same as usize][*level as usize].clone(),
                                             paint: crate::display::Paint::Face(
                                                 crate::display::Face::Dim,
                                             ),
@@ -321,6 +347,33 @@ mod tests {
         assert_eq!(
             content_height(&[region(kurbo::Rect::new(0.0, 40.0, 600.0, 400.0))], 2.0),
             Some(141.0)
+        );
+    }
+
+    #[test]
+    fn a_slot_showing_the_cell_above_says_it_is_the_same_value() {
+        let [a, b, c, shared, other] = [(); 5].map(|_| gid::new_cell_id());
+        let slots = [(a, Level::Full), (b, Level::Raw), (c, Level::Raw)];
+        let root = Value::record([
+            (a, Value::Cell(shared)),
+            (b, Value::Cell(shared)),
+            (c, Value::Cell(other)),
+        ]);
+        assert_eq!(same_as_above(&slots, Some(&root)), [false, true, false]);
+        let copies = Value::record([
+            (a, crate::libraries::f64::value(1.0)),
+            (b, crate::libraries::f64::value(1.0)),
+        ]);
+        assert_eq!(same_as_above(&slots[..2], Some(&copies)), [false, false]);
+        let libraries = crate::libraries::Libraries::default();
+        assert_eq!(
+            Level::Raw.caption(&libraries, true),
+            "The same value in the base projection: no libraries"
+        );
+        assert!(
+            Level::Plain
+                .caption(&libraries, true)
+                .starts_with("The same value, drawn with the name")
         );
     }
 
