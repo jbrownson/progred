@@ -130,3 +130,44 @@ fn fold_keys_are_directional_and_stay_sparse() {
     let folds = press(&mut world, &leaf, command(NamedKey::ArrowUp));
     assert!(folds.at(&leaf).is_none());
 }
+
+#[test]
+fn raw_opens_only_the_cells_it_reaches_directly() {
+    let [shared, user, alias, uses, inner, first, second] = [(); 7].map(|_| new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(shared, Value::record([(inner, f64::value(1.0))]));
+    cells.set_value(user, Value::record([(uses, Value::Cell(shared))]));
+    cells.set_value(alias, Value::Cell(shared));
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([
+            (first, user.into()),
+            (second, alias.into()),
+        ])),
+        cells,
+    });
+    let follow = Step::Follow(gid::Resolution::Document);
+    let frame = editing_frame(&mut world, true);
+    let drawn = |path: &[Step]| {
+        frame
+            .descends
+            .iter()
+            .any(|landmark| landmark.path.as_ref() == path)
+    };
+    // The cell the document reaches opens, and a reference inside it stays
+    // folded, so a shared cell isn't expanded again at every use.
+    assert!(drawn(&[Step::Key(first), follow.clone(), Step::Key(uses)]));
+    assert!(!drawn(&[
+        Step::Key(first),
+        follow.clone(),
+        Step::Key(uses),
+        follow.clone(),
+        Step::Key(inner),
+    ]));
+    // A cell that is only a reference to another opens through to it.
+    assert!(drawn(&[
+        Step::Key(second),
+        follow.clone(),
+        follow,
+        Step::Key(inner),
+    ]));
+}

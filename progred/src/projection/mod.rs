@@ -121,10 +121,11 @@ pub(crate) struct Cx<'a> {
     pub(crate) edits: crate::editing::Scope,
     /// Names and field order derive from this view bit. Value
     /// projections come from the editor's stack; `grap` is one of them.
+    /// Raw opens only the cells it reaches directly: references inside a
+    /// cell's definition start folded, so a call doesn't inline its callee
+    /// and a shared cell isn't expanded again at every use. A cell that is
+    /// only a reference to another opens through to it.
     pub(crate) raw: bool,
-    /// A tutorial's base view opens only the cell it shows; references
-    /// inside start folded, so a call doesn't inline its callee.
-    pub(crate) fold_references: bool,
     pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
     pub(crate) selection: Option<&'a Selection>,
@@ -349,7 +350,6 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let cx = Cx {
             raw: true,
-            fold_references: true,
             ..self.cx.clone()
         };
         let nothing = crate::display::partial(|_| None);
@@ -670,7 +670,6 @@ fn prepare_project(
         sources,
         edits: Default::default(),
         raw,
-        fold_references: false,
         annotations,
         styles,
         selection,
@@ -958,7 +957,11 @@ fn prepare_value(
     // occurrence as a document path (and computed values have no such path).
     let fold_default = value.and_then(|value| {
         let folded = value.as_cell().is_some_and(|cell| {
-            ancestors.cells.contains(&cell) || cx.fold_references && !ancestors.cells.is_empty()
+            ancestors.cells.contains(&cell)
+                || cx.raw
+                    && ancestors
+                        .enclosing
+                        .is_some_and(|(_, _, start)| path.len() > start)
         });
         crate::selection::collapse_default_for_value(&cx.sources, value, folded)
     });
