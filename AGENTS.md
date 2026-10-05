@@ -34,6 +34,13 @@ there is no repository-provided Linux sandbox yet. Agents still must not launch
 the app; the user runs and visually tests it. See `docs/build-security.md` for
 the boundary and the separate fetch/update commands.
 
+Web builds stay on macOS, under Seatbelt; do not add a Linux browser build.
+Once Rust 1.100 is stable (12 November 2026), switch `sandbox-cargo update`
+and `resolve` to stable Cargo: `registry.global-min-publish-age` no longer
+needs `-Z min-publish-age` there. The browser build still needs a nightly for
+`-Z build-std`, which has no scheduled stabilization, so `web-threaded` keeps
+`nightly-2026-08-27`.
+
 ## Workflow
 
 - Don't run the app — the user prefers to run and test it themselves
