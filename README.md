@@ -122,7 +122,7 @@ for another Ctrl+C. Restarting this development loop discards unsaved changes.
 ### A first tour
 
 Use the **Examples** menu to open a fresh example. On native macOS its shortcuts
-are Command+1…4; the drawn menu on other hosts uses Ctrl+1…4.
+are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5.
 
 | Start with | Shortcut | What to try |
 | --- | --- | --- |
@@ -130,6 +130,7 @@ are Command+1…4; the drawn menu on other hosts uses Ctrl+1…4.
 | Implicit CAD Shapes | 2 | Orbit the shapes and edit their parameters, including the cube |
 | CAM Toolpaths | 3 | Move the slider to inspect cuts into the stock |
 | Grap Language | 4 | Explore the data model and language constructs |
+| Document Libraries | 5 | See fractions and angle dials drawn by projections written in the document |
 
 - Click numbers to edit them, or **Command-drag** to scrub: horizontal movement
   changes the value; moving upward makes adjustments coarser, downward finer.
