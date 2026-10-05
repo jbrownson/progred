@@ -10,10 +10,8 @@ if [ "$(uname -s)" != Linux ]; then
     exit 1
 fi
 
-cargo_path=$(rustup which cargo --toolchain stable)
-
 exec env \
     CARGO_NET_OFFLINE=false \
     CARGO_TARGET_DIR="$project_root/target/native" \
     RUSTC_WRAPPER= \
-    "$cargo_path" run --release --locked -p progred -- "$@"
+    cargo run --release --locked -p progred -- "$@"

@@ -13,13 +13,11 @@ if [ "$(uname -s)" != Linux ]; then
     exit 1
 fi
 
-cargo_path=$(rustup which cargo --toolchain stable)
-
 env \
     CARGO_NET_OFFLINE=false \
     CARGO_TARGET_DIR="$project_root/target/native" \
     RUSTC_WRAPPER= \
-    "$cargo_path" build --release --locked -p progred
+    cargo build --release --locked -p progred
 
 data_home=${XDG_DATA_HOME:-$HOME/.local/share}
 bin_home=$HOME/.local/bin
