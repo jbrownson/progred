@@ -144,6 +144,9 @@ are Command+1…4; the drawn menu on other hosts uses Ctrl+1…4.
   in the selected pane or the document, the way the home page peels its
   forest. The library stays loaded, so code still runs and keys keep their
   names.
+- **Zoom In**, **Zoom Out**, and **Actual Size** in the View menu
+  (Command-+, Command-−, Command-0) scale everything in the window, as the
+  browser's zoom does on the web.
 
 Examples replace the current document after the desktop's unsaved-changes
 confirmation. New Document does the same; New Window opens another window.

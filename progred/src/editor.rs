@@ -93,6 +93,8 @@ pub(crate) struct Editor {
     /// This window draws its own menu bar (the drawn menu system).
     pub(crate) drawn_menu: bool,
     pub(crate) state: RenderState,
+    /// Multiplies the display's scale, like a browser's page zoom.
+    pub(crate) zoom: f64,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) paint_resources: Resources,
     pub(crate) font_cx: FontContext,
@@ -226,7 +228,7 @@ impl EditorRunner {
             let window = window.clone();
             let size = window.inner_size();
             self.refresh_frame(
-                window.scale_factor(),
+                self.editor.scale(&window),
                 Size::new(size.width as f64, size.height as f64),
             );
             self.sync_window(&window);
@@ -270,6 +272,7 @@ pub(crate) fn new_editor(
         focused: false,
         drawn_menu,
         state: RenderState::Suspended(None),
+        zoom: 1.0,
         #[cfg(not(target_arch = "wasm32"))]
         paint_resources: Resources::default(),
         font_cx,
@@ -304,6 +307,23 @@ impl Editor {
         match &self.state {
             RenderState::Active { window, .. } => Some(window.clone()),
             RenderState::Suspended(window) => window.clone(),
+        }
+    }
+
+    /// Physical pixels per logical point in `window`, zoom included.
+    pub(crate) fn scale(&self, window: &Window) -> f64 {
+        window.scale_factor() * self.zoom
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn next_zoom(&self, larger: bool) -> Option<f64> {
+        const ZOOMS: [f64; 13] = [
+            0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0,
+        ];
+        if larger {
+            ZOOMS.into_iter().find(|zoom| *zoom > self.zoom)
+        } else {
+            ZOOMS.into_iter().rev().find(|zoom| *zoom < self.zoom)
         }
     }
 
@@ -415,6 +435,12 @@ impl Editor {
                 .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Left)),
             move_right: selected_root
                 .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Right)),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            actual_size: self.zoom != 1.0,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            zoom_in: self.next_zoom(true).is_some(),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            zoom_out: self.next_zoom(false).is_some(),
         }
     }
 
@@ -548,6 +574,14 @@ impl Editor {
             DocCommand::DebugGeometry => {
                 self.model.view.debug_geometry = !self.model.view.debug_geometry
             }
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            DocCommand::ActualSize => self.zoom = 1.0,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            DocCommand::ZoomIn | DocCommand::ZoomOut => {
+                if let Some(zoom) = self.next_zoom(command == DocCommand::ZoomIn) {
+                    self.zoom = zoom;
+                }
+            }
         }
         // Execution only mutates; the caller owns frame scheduling —
         // the drawn dispatch through its disposition, the native path
@@ -652,6 +686,7 @@ impl Editor {
             focused: _,
             drawn_menu: _,
             state: _,
+            zoom: _,
             #[cfg(not(target_arch = "wasm32"))]
             paint_resources,
             font_cx: _,

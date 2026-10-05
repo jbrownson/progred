@@ -22,7 +22,7 @@ use crate::web_render;
 use crate::{UserEvent, translate_window_event};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog};
-use crate::{frame, gid_text, stack};
+use crate::{gid_text, stack};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{modifiers, platform, styles, text_store};
 use kurbo::Size;
@@ -116,7 +116,7 @@ impl ApplicationHandler<UserEvent> for App {
                 if runner.editor.timers.fire_due(now) {
                     if !runner.flush_pending_continuous() {
                         runner.refresh_frame(
-                            window.scale_factor(),
+                            runner.editor.scale(&window),
                             Size::new(size.width as f64, size.height as f64),
                         );
                     }
@@ -167,7 +167,7 @@ impl ApplicationHandler<UserEvent> for App {
                         let size = window.inner_size();
                         if runner.palette_changed(
                             palette,
-                            window.scale_factor(),
+                            runner.editor.scale(&window),
                             Size::new(size.width as f64, size.height as f64),
                         ) {
                             window.request_redraw();
@@ -187,7 +187,7 @@ impl ApplicationHandler<UserEvent> for App {
                                 let size = window.inner_size();
                                 runner.stack_changed(
                                     stack.clone(),
-                                    window.scale_factor(),
+                                    runner.editor.scale(&window),
                                     Size::new(size.width as f64, size.height as f64),
                                 );
                                 window.request_redraw();
@@ -208,7 +208,7 @@ impl ApplicationHandler<UserEvent> for App {
                     let size = window.inner_size();
                     if runner.focus_changed(
                         browser_editor_focused(&window),
-                        window.scale_factor(),
+                        runner.editor.scale(&window),
                         Size::new(size.width as f64, size.height as f64),
                     ) {
                         window.request_redraw();
@@ -223,7 +223,7 @@ impl ApplicationHandler<UserEvent> for App {
                         let window = window.clone();
                         let size = window.inner_size();
                         runner.refresh_frame(
-                            window.scale_factor(),
+                            runner.editor.scale(&window),
                             Size::new(f64::from(size.width), f64::from(size.height)),
                         );
                         runner.sync_window(&window);
@@ -531,7 +531,7 @@ impl App {
             }
             let size = window.inner_size();
             runner.refresh_frame(
-                window.scale_factor(),
+                runner.editor.scale(&window),
                 Size::new(size.width as f64, size.height as f64),
             );
             runner.sync_window(&window);
@@ -551,7 +551,7 @@ impl App {
             RenderState::Active { window, .. } if window.id() == window_id => window.clone(),
             _ => return,
         };
-        let scale = window.scale_factor();
+        let scale = runner.editor.scale(&window);
         // Preserve motion samples without minting intermediate frames.
         // Discrete input (including release/cancel) first settles the batch.
         if runner.flush_before_window_event(&event) {
@@ -711,16 +711,12 @@ impl App {
                     let runner = &mut self.editors[index];
                     if let Some(window) = runner.editor.window() {
                         let size = window.inner_size();
-                        runner.update_frame(
-                            window.scale_factor(),
+                        let geometry = runner.frame.dispatch.geometry(runner.editor.scale(&window));
+                        runner.editor.run_doc_command(command, geometry);
+                        // After the command, which may have zoomed.
+                        runner.refresh_frame(
+                            runner.editor.scale(&window),
                             Size::new(size.width as f64, size.height as f64),
-                            |editor, dispatch, _| {
-                                editor.run_doc_command(
-                                    command,
-                                    dispatch.geometry(window.scale_factor()),
-                                );
-                                frame::FrameDisposition::Remint
-                            },
                         );
                         window.request_redraw();
                     } else {
@@ -791,7 +787,7 @@ impl App {
                             let size = window.inner_size();
                             if runner.palette_changed(
                                 palette,
-                                window.scale_factor(),
+                                runner.editor.scale(&window),
                                 Size::new(size.width as f64, size.height as f64),
                             ) {
                                 window.request_redraw();
@@ -942,7 +938,7 @@ impl App {
             return;
         };
         let window = window.clone();
-        let scale = window.scale_factor();
+        let scale = runner.editor.scale(&window);
         let width = surface.config.width;
         let height = surface.config.height;
 
@@ -1024,7 +1020,7 @@ impl App {
         };
         let canvas = canvas.clone();
         let window = window.clone();
-        let scale = window.scale_factor();
+        let scale = runner.editor.scale(&window);
         let size = window.inner_size();
         let width = size.width;
         let height = size.height;

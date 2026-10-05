@@ -104,7 +104,7 @@ pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
         let Some(window) = runner.editor.window() else {
             return false;
         };
-        let scale = window.scale_factor();
+        let scale = runner.editor.scale(&window);
         let size = window.inner_size();
         let viewport = kurbo::Size::new(size.width as f64, size.height as f64);
         let flushed = runner.flush_pending_continuous();

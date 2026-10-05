@@ -59,6 +59,16 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
         Entry::Separator,
         Entry::Command(C::App(A::Quit)),
     ];
+    // The browser's own page zoom serves the web.
+    #[cfg(target_arch = "wasm32")]
+    let zoom_entries = Vec::new();
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let zoom_entries = vec![
+        Entry::Separator,
+        Entry::Command(C::Doc(D::ActualSize)),
+        Entry::Command(C::Doc(D::ZoomIn)),
+        Entry::Command(C::Doc(D::ZoomOut)),
+    ];
     let mut menus = vec![
         Menu {
             label: "File",
@@ -80,7 +90,7 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
         },
         Menu {
             label: "View",
-            entries: vec![
+            entries: [
                 Entry::Command(C::Doc(D::OpenPaneLeft)),
                 Entry::Command(C::Doc(D::OpenPaneRight)),
                 Entry::Separator,
@@ -91,7 +101,10 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
                 Entry::Separator,
                 Entry::Command(C::Doc(D::Raw)),
                 Entry::Command(C::Doc(D::DebugGeometry)),
-            ],
+            ]
+            .into_iter()
+            .chain(zoom_entries)
+            .collect(),
         },
     ];
     let projections = projections
@@ -783,7 +796,7 @@ mod tests {
 
     #[test]
     fn removed_example_shortcuts_are_unclaimed() {
-        for digit in ["0", "6", "7", "8", "9"] {
+        for digit in ["6", "7", "8", "9"] {
             assert_eq!(
                 shortcut(
                     &key(digit, Modifiers::CONTROL),
@@ -812,6 +825,9 @@ mod tests {
             move_down: true,
             move_left: true,
             move_right: true,
+            actual_size: true,
+            zoom_in: true,
+            zoom_out: true,
         }
     }
 
@@ -939,7 +955,7 @@ mod tests {
     fn the_drawn_tree_lists_every_command_once() {
         let definition = definition([]);
         let commands = commands(&definition).collect::<Vec<_>>();
-        assert_eq!(commands.len(), 17 + Example::ALL.len());
+        assert_eq!(commands.len(), 20 + Example::ALL.len());
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }

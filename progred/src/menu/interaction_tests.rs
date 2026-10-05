@@ -242,6 +242,29 @@ fn a_popup_near_the_right_edge_stays_inside_the_viewport() {
 }
 
 #[test]
+fn zoom_shortcuts_step_the_window_zoom_and_stop_at_its_ends() {
+    let mut runner = runner();
+    let character = |key: &str| Key::Character(key.into());
+    key(&mut runner, character("="), Modifiers::CONTROL);
+    assert_eq!(runner.editor.zoom, 1.1);
+    key(
+        &mut runner,
+        character("+"),
+        Modifiers::CONTROL | Modifiers::SHIFT,
+    );
+    assert_eq!(runner.editor.zoom, 1.25);
+    key(&mut runner, character("-"), Modifiers::CONTROL);
+    assert_eq!(runner.editor.zoom, 1.1);
+    key(&mut runner, character("0"), Modifiers::CONTROL);
+    assert_eq!(runner.editor.zoom, 1.0);
+    let zoom_out = Command::Doc(DocCommand::ZoomOut);
+    while runner.editor.menu_availability().enabled(zoom_out) {
+        key(&mut runner, character("-"), Modifiers::CONTROL);
+    }
+    assert_eq!(runner.editor.zoom, 0.5);
+}
+
+#[test]
 fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
     use crate::libraries::color;
     let mut editor = crate::test_editor(Document {

@@ -16,10 +16,9 @@ pub fn shortcut(
         return None;
     };
     commands.into_iter().find(|command| {
-        spec(*command).shortcut.is_some_and(|shortcut| {
-            shortcut.shift == modifiers.shift()
-                && key.as_str().eq_ignore_ascii_case(shortcut.key.label())
-        })
+        spec(*command)
+            .shortcut
+            .is_some_and(|shortcut| shortcut.matches(key, modifiers.shift()))
     })
 }
 
@@ -133,6 +132,13 @@ pub enum DocCommand {
     /// the library's name.
     Projection(gid::CellId),
     DebugGeometry,
+    // On the web, the browser's page zoom does this.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    ActualSize,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    ZoomIn,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    ZoomOut,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -157,10 +163,21 @@ impl Shortcut {
     const fn shifted(key: ShortcutKey) -> Self {
         Self { key, shift: true }
     }
+
+    fn matches(self, key: &str, shift: bool) -> bool {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        if self.key == ShortcutKey::Plus {
+            // + is Shift-= on most layouts, and browsers take = alone too.
+            return key == "+" || key == "=";
+        }
+        self.shift == shift && key.eq_ignore_ascii_case(self.key.label())
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortcutKey {
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    Digit0,
     Digit1,
     Digit2,
     Digit3,
@@ -179,11 +196,17 @@ pub enum ShortcutKey {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     W,
     Z,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    Plus,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    Minus,
 }
 
 impl ShortcutKey {
     pub const fn label(self) -> &'static str {
         match self {
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Self::Digit0 => "0",
             Self::Digit1 => "1",
             Self::Digit2 => "2",
             Self::Digit3 => "3",
@@ -202,6 +225,10 @@ impl ShortcutKey {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             Self::W => "W",
             Self::Z => "Z",
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Self::Plus => "+",
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            Self::Minus => "-",
         }
     }
 }
@@ -292,6 +319,18 @@ pub fn spec(command: Command) -> Spec {
         Command::Doc(DocCommand::DebugGeometry) => {
             toggle("Debug Geometry", Some(Shortcut::plain(ShortcutKey::D)))
         }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        Command::Doc(DocCommand::ActualSize) => {
+            item("Actual Size", Some(Shortcut::plain(ShortcutKey::Digit0)))
+        }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        Command::Doc(DocCommand::ZoomIn) => {
+            item("Zoom In", Some(Shortcut::plain(ShortcutKey::Plus)))
+        }
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        Command::Doc(DocCommand::ZoomOut) => {
+            item("Zoom Out", Some(Shortcut::plain(ShortcutKey::Minus)))
+        }
     }
 }
 
@@ -308,6 +347,12 @@ pub struct Availability {
     pub move_down: bool,
     pub move_left: bool,
     pub move_right: bool,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub actual_size: bool,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub zoom_in: bool,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub zoom_out: bool,
 }
 
 impl Availability {
@@ -325,6 +370,12 @@ impl Availability {
             DocCommand::MovePaneLeft => self.move_left,
             DocCommand::MovePaneRight => self.move_right,
             DocCommand::Raw | DocCommand::Projection(_) | DocCommand::DebugGeometry => true,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            DocCommand::ActualSize => self.actual_size,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            DocCommand::ZoomIn => self.zoom_in,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            DocCommand::ZoomOut => self.zoom_out,
         }
     }
 

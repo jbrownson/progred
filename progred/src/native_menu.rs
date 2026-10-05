@@ -149,6 +149,10 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
                 Entry::Command(C::Doc(D::Raw)),
                 Entry::Command(C::Doc(D::DebugGeometry)),
                 Entry::Separator,
+                Entry::Command(C::Doc(D::ActualSize)),
+                Entry::Command(C::Doc(D::ZoomIn)),
+                Entry::Command(C::Doc(D::ZoomOut)),
+                Entry::Separator,
                 Entry::Command(C::App(A::Appearance(None))),
                 Entry::Command(C::App(A::Appearance(Some(winit::window::Theme::Light)))),
                 Entry::Command(C::App(A::Appearance(Some(winit::window::Theme::Dark)))),
@@ -221,17 +225,30 @@ fn add_command(
         .shortcut
         .map(shortcut)
         .unwrap_or_else(|| (String::new(), NSEventModifierFlags::empty()));
-    let native = item(
-        mtm,
-        label.unwrap_or(spec.label),
-        Some(sel!(performProgredCommand:)),
-        &key,
-        modifiers,
-    );
-    native.setTag(items.len() as isize);
-    unsafe { native.setTarget(Some(target)) };
-    menu.addItem(&native);
-    items.push((command, native));
+    let mut add = |key: &str, modifiers| {
+        let native = item(
+            mtm,
+            label.unwrap_or(spec.label),
+            Some(sel!(performProgredCommand:)),
+            key,
+            modifiers,
+        );
+        native.setTag(items.len() as isize);
+        unsafe { native.setTarget(Some(target)) };
+        menu.addItem(&native);
+        items.push((command, native.clone()));
+        native
+    };
+    add(&key, modifiers);
+    // ⌘+ is typed with Shift; a hidden twin takes ⌘= as well, as browsers do.
+    if spec
+        .shortcut
+        .is_some_and(|shortcut| shortcut.key == command::ShortcutKey::Plus)
+    {
+        let twin = add("=", NSEventModifierFlags::Command);
+        twin.setHidden(true);
+        twin.setAllowsKeyEquivalentWhenHidden(true);
+    }
 }
 
 fn native_item(
@@ -471,7 +488,7 @@ mod tests {
         let commands = commands(&definition);
         assert_eq!(
             commands.len(),
-            20 + Example::ALL.len() + stack.projections().count()
+            23 + Example::ALL.len() + stack.projections().count()
         );
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));

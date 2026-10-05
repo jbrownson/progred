@@ -32,7 +32,9 @@ impl<World> Clone for Stack<World> {
 }
 
 impl<World> Stack<World> {
-    /// Each library that brings a projection, and its name, in load order.
+    /// What an area can leave off, and its name, in the order projections
+    /// are tried: each library that brings a projection, then the libraries
+    /// the document declares, which stand together under their root key.
     pub fn projections(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
         self.libraries
             .named()
