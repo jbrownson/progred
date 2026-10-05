@@ -281,7 +281,6 @@ mod tests {
                 id,
                 "test",
                 crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
-                crate::display::partial(|_| None),
             ),
         )])
         .0
@@ -297,18 +296,15 @@ mod tests {
         let library = new_cell_id();
         let (libraries, _, _) = Libraries::from_contributions([(
             library,
-            crate::libraries::Library::<(), ()>::new(
-                crate::libraries::Definitions::from_parts(
-                    Cells::new(),
-                    grap::ForeignFunctions::default().register(
-                        function,
-                        grap::ForeignFunction::from_value(|_, _, _| {
-                            panic!("a document definition must shadow the library call")
-                        }),
-                    ),
+            crate::libraries::Library::<(), ()>::new(crate::libraries::Definitions::from_parts(
+                Cells::new(),
+                grap::ForeignFunctions::default().register(
+                    function,
+                    grap::ForeignFunction::from_value(|_, _, _| {
+                        panic!("a document definition must shadow the library call")
+                    }),
                 ),
-                crate::display::partial(|_| None),
-            ),
+            )),
         )]);
         let empty = doc_of(Cells::new());
         let native = Sources {
@@ -377,7 +373,6 @@ mod tests {
                             cells,
                             grap::ForeignFunctions::default(),
                         ),
-                        crate::display::partial(|_| None),
                     ),
                 )
             }))
@@ -516,7 +511,6 @@ mod tests {
                 id,
                 name,
                 crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
-                crate::display::partial(|_| None),
             )
         };
         let doc = Document {

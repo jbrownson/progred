@@ -208,7 +208,6 @@ mod tests {
                             doc.cells.clone(),
                             grap::ForeignFunctions::default(),
                         ),
-                        crate::display::partial(|_| None),
                     ),
                 )
             }))

@@ -65,7 +65,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "geometry",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::runtime_partial(|_| None),
     )
 }
 

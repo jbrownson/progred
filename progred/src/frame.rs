@@ -807,7 +807,10 @@ fn project_frame(
                 state: menu,
                 availability,
                 toggles: toggles.clone(),
-                libraries: stack.libraries.clone(),
+                projections: stack
+                    .projections()
+                    .map(|(library, name)| (library, name.to_owned()))
+                    .collect(),
                 scale,
                 width: viewport_width,
             },
@@ -1854,7 +1857,6 @@ mod frame_tests {
                     doc.cells.clone(),
                     grap::ForeignFunctions::default(),
                 ),
-                crate::display::partial(|_| None),
             ),
         )])
         .0;

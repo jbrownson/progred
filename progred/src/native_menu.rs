@@ -85,8 +85,9 @@ struct Section {
     windows_menu: bool,
 }
 
-/// One `Projections` entry per loaded library, before the Window menu.
-fn definition(libraries: &crate::libraries::Libraries) -> Vec<Section> {
+/// One `Projections` entry per library that brings a projection, before the
+/// Window menu.
+fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>) -> Vec<Section> {
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
     let section = |label, entries| Section {
         label,
@@ -157,8 +158,8 @@ fn definition(libraries: &crate::libraries::Libraries) -> Vec<Section> {
         ),
         section(
             "Projections",
-            libraries
-                .named()
+            projections
+                .into_iter()
                 .map(|(library, name)| Entry::Labeled(C::Doc(D::Projection(library)), name.into()))
                 .collect(),
         ),
@@ -338,7 +339,7 @@ impl Menu {
         let mut windows = None;
         let mut services = None;
 
-        for section in definition(&crate::stack::load().libraries) {
+        for section in definition(crate::stack::load().projections()) {
             let submenu = NSMenu::new(mtm);
             submenu.setTitle(&NSString::from_str(section.label));
             submenu.setAutoenablesItems(false);
@@ -450,8 +451,8 @@ mod tests {
 
     #[test]
     fn the_native_tree_lists_every_command_once() {
-        let libraries = crate::stack::load().libraries;
-        let definition = definition(&libraries);
+        let stack = crate::stack::load();
+        let definition = definition(stack.projections());
         assert_eq!(
             definition
                 .iter()
@@ -470,7 +471,7 @@ mod tests {
         let commands = commands(&definition);
         assert_eq!(
             commands.len(),
-            20 + Example::ALL.len() + libraries.named().count()
+            20 + Example::ALL.len() + stack.projections().count()
         );
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
@@ -479,10 +480,11 @@ mod tests {
 
     #[test]
     fn both_menu_systems_expose_the_same_commands_except_native_appearance() {
-        let libraries = crate::stack::load().libraries;
-        let mut native = commands(&definition(&libraries));
+        let stack = crate::stack::load();
+        let mut native = commands(&definition(stack.projections()));
         native.retain(|command| !matches!(command, Command::App(AppCommand::Appearance(_))));
-        let drawn_definition = crate::menu::definition(&libraries);
+        let drawn_definition =
+            crate::menu::definition(stack.projections().map(|(library, _)| library));
         let mut drawn = crate::menu::commands(&drawn_definition).collect::<Vec<_>>();
         let key = |command: &Command| format!("{command:?}");
         native.sort_by_key(key);

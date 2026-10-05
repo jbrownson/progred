@@ -704,10 +704,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
                 .parameters([KEY, tree::vocabulary::PROGRAM])
                 .tracked(),
         );
-    Library::named(
-        ID,
-        "controls",
-        Definitions::from_parts(cells, functions),
-        display::runtime_partial(display),
-    )
+    Library::named(ID, "controls", Definitions::from_parts(cells, functions))
+        .with_projection(display::runtime_partial(display))
 }

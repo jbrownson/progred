@@ -551,8 +551,10 @@ mod tests {
     fn every_numeric_operator_reads_infix() {
         use crate::libraries::{f32, u64};
         let infix = |library: &Library<crate::Editor, crate::frame::Hovered>, call: Value| {
-            let layout = (library.projection)(&projection_input(&RuntimeValue::from(&call)))
-                .expect("a call projects");
+            let layout = (library.projection.as_ref().unwrap())(&projection_input(
+                &RuntimeValue::from(&call),
+            ))
+            .expect("a call projects");
             let Some(children) = infix_children(&layout) else {
                 return false;
             };

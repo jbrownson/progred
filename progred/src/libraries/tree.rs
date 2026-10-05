@@ -382,8 +382,5 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
             .parameters([PROGRAM])
             .tracked(),
         );
-    Library::new(
-        Definitions::from_parts(cells, functions),
-        crate::display::runtime_partial(|_| None),
-    )
+    Library::new(Definitions::from_parts(cells, functions))
 }

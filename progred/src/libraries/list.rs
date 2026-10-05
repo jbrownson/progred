@@ -300,7 +300,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "list",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::runtime_partial(|_| None),
     )
 }
 

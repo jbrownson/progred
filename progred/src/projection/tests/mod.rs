@@ -35,7 +35,6 @@ fn libraries(cells: Cells) -> Libraries {
             CellId::from_u128(1),
             "test",
             crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
-            crate::display::partial(|_| None),
         ),
     )])
     .0

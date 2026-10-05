@@ -568,7 +568,7 @@ impl Editor {
         }
         match menu::navigate(
             &mut self.menu,
-            &menu::definition(&self.stack.libraries),
+            &menu::definition(self.stack.projections().map(|(library, _)| library)),
             availability,
             event,
         ) {

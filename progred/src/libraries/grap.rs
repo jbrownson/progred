@@ -562,6 +562,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "grap",
         crate::libraries::Definitions::from_parts(cells, functions()),
+    )
+    .with_projection(
         // Calls, lambdas, and value wrappers follow evaluator precedence,
         // but ordinary partial failures still try the next projection.
         crate::display::compose_partials([
@@ -1014,7 +1016,7 @@ mod tests {
         assert!(project_runtime(lambda_display, &input).is_none());
         assert!(project_runtime(value_display, &input).is_some());
         assert!(
-            (library().projection)(
+            (library().projection.unwrap())(
                 &input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref())
             )
             .is_some()

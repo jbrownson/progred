@@ -505,7 +505,6 @@ mod tests {
                             cells,
                             grap::ForeignFunctions::default(),
                         ),
-                        crate::display::partial(|_| None),
                     ),
                 )
             }))

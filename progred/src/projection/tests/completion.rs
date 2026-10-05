@@ -1036,7 +1036,6 @@ fn call_offers_follow_resolved_definitions_without_evaluating_them() {
                 grap::ForeignFunction::from_value(|_, _, _| panic!("completion must not run code")),
             ),
         ),
-        crate::display::partial(|_| None),
     );
     let libraries = Libraries::from_contributions([(new_cell_id(), library)]).0;
     let root = Some(Value::list([]));
@@ -2058,13 +2057,10 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
     definitions.set_value(cell, definition.clone());
     let libraries = Libraries::from_contributions([(
         library_id,
-        crate::libraries::Library::<(), ()>::new(
-            crate::libraries::Definitions::from_parts(
-                definitions,
-                grap::ForeignFunctions::default(),
-            ),
-            crate::display::partial(|_| None),
-        ),
+        crate::libraries::Library::<(), ()>::new(crate::libraries::Definitions::from_parts(
+            definitions,
+            grap::ForeignFunctions::default(),
+        )),
     )])
     .0;
     let mut cells = Cells::new();

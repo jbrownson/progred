@@ -1103,8 +1103,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
                         .tracked(),
                 ),
         ),
-        crate::display::runtime_partial(display),
     )
+    .with_projection(crate::display::runtime_partial(display))
 }
 
 #[cfg(test)]

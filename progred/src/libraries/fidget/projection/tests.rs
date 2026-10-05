@@ -205,17 +205,18 @@ fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
             [(LEFT, number(1.0)), (RIGHT, number(2.0))],
         );
         let runtime = ::grap::RuntimeValue::from(&call);
-        (library.projection)(&input(&call).with_value(Some(&runtime))).is_some_and(|layout| {
-            let Recorded::Alternatives(options) = layout.record().content().clone() else {
-                return false;
-            };
-            let Recorded::Row { children, .. } = options[0].content() else {
-                return false;
-            };
-            matches!(&inspect(&(unshared(&children[0]))),
-                ProjectionCall::Descend { step: Step::Key(field), .. } if *field == LEFT
-            )
-        })
+        (library.projection.as_ref().unwrap())(&input(&call).with_value(Some(&runtime)))
+            .is_some_and(|layout| {
+                let Recorded::Alternatives(options) = layout.record().content().clone() else {
+                    return false;
+                };
+                let Recorded::Row { children, .. } = options[0].content() else {
+                    return false;
+                };
+                matches!(&inspect(&(unshared(&children[0]))),
+                    ProjectionCall::Descend { step: Step::Key(field), .. } if *field == LEFT
+                )
+            })
     };
     for function in [SUM, SUBTRACT, MULTIPLY, DIVIDE] {
         assert!(reads_infix(function), "{function:?} reads infix");

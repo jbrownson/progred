@@ -198,12 +198,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     }
     cells.set_value(INVALID, absent::named_reason("invalid sequence"));
     cells.set_value(FINISHED, absent::named_reason("iteration finished"));
-    Library::named(
-        ID,
-        "sequence",
-        Definitions::from_parts(cells, functions()),
-        crate::display::runtime_partial(|_| None),
-    )
+    Library::named(ID, "sequence", Definitions::from_parts(cells, functions()))
 }
 
 #[cfg(test)]

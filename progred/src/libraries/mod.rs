@@ -166,7 +166,7 @@ impl Definitions {
 
 pub struct Library<World, Hover> {
     pub definitions: Definitions,
-    pub projection: Partial<World, Hover>,
+    pub projection: Option<Partial<World, Hover>>,
     pub completions: Option<CompletionProvider>,
 }
 
@@ -182,34 +182,30 @@ impl<World, Hover> Clone for Library<World, Hover> {
 
 impl<World, Hover> Default for Library<World, Hover> {
     fn default() -> Self {
-        Self {
-            definitions: Definitions::default(),
-            projection: crate::display::runtime_partial(|_| None),
-            completions: None,
-        }
+        Self::new(Definitions::default())
     }
 }
 
 impl<World, Hover> Library<World, Hover> {
-    pub fn new(definitions: Definitions, projection: Partial<World, Hover>) -> Self {
+    pub fn new(definitions: Definitions) -> Self {
         Self {
             definitions,
-            projection,
+            projection: None,
             completions: None,
         }
     }
 
-    pub fn named(
-        id: gid::CellId,
-        name: impl Into<String>,
-        mut definitions: Definitions,
-        projection: Partial<World, Hover>,
-    ) -> Self {
+    pub fn named(id: gid::CellId, name: impl Into<String>, mut definitions: Definitions) -> Self {
         definitions.insert(
             id,
             Definition::Value(crate::libraries::name::record(name, [])),
         );
-        Self::new(definitions, projection)
+        Self::new(definitions)
+    }
+
+    pub fn with_projection(mut self, projection: Partial<World, Hover>) -> Self {
+        self.projection = Some(projection);
+        self
     }
 
     pub fn with_completions(
@@ -244,7 +240,11 @@ impl Libraries {
     }
     pub fn from_contributions<World, Hover>(
         entries: impl IntoIterator<Item = (gid::CellId, Library<World, Hover>)>,
-    ) -> (Self, Vec<Partial<World, Hover>>, Vec<CompletionProvider>) {
+    ) -> (
+        Self,
+        Vec<(gid::CellId, Partial<World, Hover>)>,
+        Vec<CompletionProvider>,
+    ) {
         let mut unique: Vec<(gid::CellId, Library<World, Hover>)> = Vec::new();
         for (id, library) in entries {
             if let Some((_, previous)) = unique.iter_mut().find(|(key, _)| *key == id) {
@@ -257,7 +257,7 @@ impl Libraries {
             (Self::default(), Vec::new(), Vec::new()),
             |(mut libraries, mut projections, mut completions), (id, library)| {
                 libraries.insert(id, library.definitions);
-                projections.push(library.projection);
+                projections.extend(library.projection.map(|projection| (id, projection)));
                 completions.extend(library.completions);
                 (libraries, projections, completions)
             },
@@ -307,10 +307,6 @@ impl Libraries {
                 .and_then(name::read)
                 .map(|name| (*id, name))
         })
-    }
-
-    pub(crate) fn ids(&self) -> impl Iterator<Item = gid::CellId> + '_ {
-        self.entries.iter().map(|(id, _)| *id)
     }
 
     /// Each loaded library's definition of `cell`, in load order.
@@ -440,8 +436,8 @@ mod tests {
                         ForeignFunctions::default()
                             .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
                     ),
-                    crate::display::partial(left_projection),
-                ),
+                )
+                .with_projection(crate::display::partial(left_projection)),
             ),
             (
                 RIGHT_LIBRARY,
@@ -453,8 +449,8 @@ mod tests {
                         ForeignFunctions::default()
                             .register(SHARED_FUNCTION, ForeignFunction::from_value(right_function)),
                     ),
-                    crate::display::partial(right_projection),
-                ),
+                )
+                .with_projection(crate::display::partial(right_projection)),
             ),
         ]);
 
@@ -481,7 +477,7 @@ mod tests {
         assert_eq!(
             projections
                 .iter()
-                .map(|projection| {
+                .map(|(_, projection)| {
                     let target = |_| crate::display::ProjectionTarget {
                         select: Rc::new(|_: &mut crate::Editor| false),
                         select_with: Rc::new(|_: &mut crate::Editor, _| false),
@@ -529,7 +525,6 @@ mod tests {
                 LEFT_LIBRARY,
                 "test",
                 definitions,
-                crate::display::runtime_partial(|_| None),
             ),
         )]);
         assert_eq!(
@@ -611,33 +606,22 @@ mod tests {
 
     #[test]
     fn replacing_a_library_replaces_every_contribution_in_place() {
-        let old: Library<crate::Editor, crate::frame::Hovered> = Library::named(
-            LEFT_LIBRARY,
-            "old",
-            Definitions::default(),
-            crate::display::partial(|_| panic!("replaced projection")),
-        )
-        .with_completions(|_| panic!("replaced completion provider"));
+        let old: Library<crate::Editor, crate::frame::Hovered> =
+            Library::named(LEFT_LIBRARY, "old", Definitions::default())
+                .with_projection(crate::display::partial(|_| panic!("replaced projection")))
+                .with_completions(|_| panic!("replaced completion provider"));
         let replacement_projection = crate::display::partial(left_projection);
         let right_projection = crate::display::partial(right_projection);
-        let replacement = Library::named(
-            LEFT_LIBRARY,
-            "replacement",
-            Definitions::default(),
-            replacement_projection.clone(),
-        )
-        .with_completions(|request| {
-            Some(vec![completion::select(
-                request.query,
-                SHARED_FUNCTION.into(),
-            )])
-        });
-        let right = Library::named(
-            RIGHT_LIBRARY,
-            "right",
-            Definitions::default(),
-            right_projection.clone(),
-        );
+        let replacement = Library::named(LEFT_LIBRARY, "replacement", Definitions::default())
+            .with_projection(replacement_projection.clone())
+            .with_completions(|request| {
+                Some(vec![completion::select(
+                    request.query,
+                    SHARED_FUNCTION.into(),
+                )])
+            });
+        let right = Library::named(RIGHT_LIBRARY, "right", Definitions::default())
+            .with_projection(right_projection.clone());
         let (libraries, projections, providers) = Libraries::from_contributions([
             (LEFT_LIBRARY, old),
             (RIGHT_LIBRARY, right),
@@ -653,8 +637,8 @@ mod tests {
             Some("replacement")
         );
         assert_eq!(projections.len(), 2);
-        assert!(Rc::ptr_eq(&projections[0], &replacement_projection));
-        assert!(Rc::ptr_eq(&projections[1], &right_projection));
+        assert!(Rc::ptr_eq(&projections[0].1, &replacement_projection));
+        assert!(Rc::ptr_eq(&projections[1].1, &right_projection));
         assert_eq!(providers.len(), 1);
         for kind in [
             crate::display::CompletionKind::Value,
@@ -686,7 +670,6 @@ mod tests {
                 LEFT_LIBRARY,
                 "library",
                 Definitions::default(),
-                crate::display::runtime_partial(|_| None),
             ),
         )]);
         let description = name::record("library", []);
@@ -702,14 +685,11 @@ mod tests {
     fn unnamed_native_definitions_have_an_empty_description() {
         let (libraries, _, _) = Libraries::from_contributions([(
             LEFT_LIBRARY,
-            Library::<crate::Editor, crate::frame::Hovered>::new(
-                Definitions::from_parts(
-                    Cells::new(),
-                    ForeignFunctions::default()
-                        .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
-                ),
-                crate::display::runtime_partial(|_| None),
-            ),
+            Library::<crate::Editor, crate::frame::Hovered>::new(Definitions::from_parts(
+                Cells::new(),
+                ForeignFunctions::default()
+                    .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
+            )),
         )]);
         assert_eq!(
             ::grap::evaluate_value(&SHARED_FUNCTION.into(), &libraries, 20).result,
@@ -733,7 +713,6 @@ mod tests {
                 ForeignFunctions::default()
                     .register(SHARED_CELL, ForeignFunction::from_value(left_function)),
             ),
-            crate::display::runtime_partial(|_| None),
         );
         let mut right_cells = Cells::new();
         right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
@@ -741,7 +720,6 @@ mod tests {
             RIGHT_LIBRARY,
             "right",
             Definitions::from_parts(right_cells, ForeignFunctions::default()),
-            crate::display::runtime_partial(|_| None),
         );
         let (mut libraries, _, _) =
             Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);

@@ -369,8 +369,8 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
     let shape_function = new_cell_id();
     let calls = Rc::new(std::cell::Cell::new(0));
     let count = calls.clone();
-    let library = crate::libraries::Library::<(), ()>::new(
-        crate::libraries::Definitions::from_parts(
+    let library =
+        crate::libraries::Library::<(), ()>::new(crate::libraries::Definitions::from_parts(
             Cells::new(),
             grap::ForeignFunctions::default().register(
                 shape_function,
@@ -379,9 +379,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
                     Ok(layout_data::rect(0.0, 0.0, 10.0, 10.0))
                 }),
             ),
-        ),
-        crate::display::partial(|_| None),
-    );
+        ));
     let libraries = Libraries::from_contributions([(new_cell_id(), library)]).0;
     let doc = Document {
         root: None,
@@ -494,7 +492,6 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
                         }),
                     ),
                 ),
-                crate::display::partial(|_| None),
             ),
         )])
         .0

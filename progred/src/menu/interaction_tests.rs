@@ -178,7 +178,15 @@ fn bar_hit_height_tracks_display_scale() {
     let mut runner = runner();
     for scale in [1.0, 1.5, 2.0] {
         runner.refresh_frame(scale, VIEWPORT);
-        for index in 0..definition(&runner.editor.stack.libraries).len() {
+        for index in 0..definition(
+            runner
+                .editor
+                .stack
+                .projections()
+                .map(|(library, _)| library),
+        )
+        .len()
+        {
             let point = point_for(&runner, Hover::Heading(index));
             for y in [0.5, bar_height(scale) - 0.5] {
                 assert_eq!(
@@ -202,7 +210,15 @@ fn headings_fill_the_bar_and_popup_rows_share_their_hit_width() {
     }
     click(&mut runner, examples);
     let mut width = None;
-    for command in commands(&definition(&runner.editor.stack.libraries)[1..2]) {
+    for command in commands(
+        &definition(
+            runner
+                .editor
+                .stack
+                .projections()
+                .map(|(library, _)| library),
+        )[1..2],
+    ) {
         let hover = Hover::Item(command);
         let point = point_for(&runner, hover);
         let columns: Vec<_> = (0..VIEWPORT.width as usize)
@@ -237,10 +253,16 @@ fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
     let mut runner = EditorRunner::new(editor);
     runner.refresh_frame(1.0, VIEWPORT);
     let command = Command::Doc(DocCommand::Projection(color::ID));
-    let heading = definition(&runner.editor.stack.libraries)
-        .iter()
-        .position(|menu| menu.label == "Projections")
-        .unwrap();
+    let heading = definition(
+        runner
+            .editor
+            .stack
+            .projections()
+            .map(|(library, _)| library),
+    )
+    .iter()
+    .position(|menu| menu.label == "Projections")
+    .unwrap();
     // A color draws as a swatch and its hex; only with the color library's
     // projection off is it the stored record, whose `rgb` field is drawn.
     let rgb = [gid::Step::Key(color::vocabulary::RGB)];

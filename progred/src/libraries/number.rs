@@ -40,7 +40,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "number",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
-        crate::display::runtime_partial(|_| None),
     )
 }
 
@@ -179,7 +178,9 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             id,
             self.name,
             crate::libraries::Definitions::from_parts(cells, functions),
-            crate::display::compose_partials(before.into_iter().chain([
+        )
+        .with_projection(crate::display::compose_partials(before.into_iter().chain(
+            [
                 crate::display::runtime_partial(move |input| {
                     infix_display(self.tag, &infix, input)
                 }),
@@ -192,8 +193,8 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                         layout
                     })
                 }),
-            ])),
-        )
+            ],
+        )))
         .with_completions(move |request| {
             (request.scope == crate::display::CompletionScope::Everything
                 && request.kind == crate::display::CompletionKind::Value)

@@ -125,8 +125,8 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "text",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::runtime_partial(display),
     )
+    .with_projection(crate::display::runtime_partial(display))
     .with_completions(completions)
 }
 
@@ -190,7 +190,7 @@ mod tests {
             select_with: std::rc::Rc::new(|_, _| false),
             hover: crate::libraries::test_widgets::hover(vec![]),
         };
-        let display = (library().projection)(&ProjectionInput {
+        let display = (library().projection.unwrap())(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             env: &NoEval,
             value: Some(&value("hi").into()),

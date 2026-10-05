@@ -464,12 +464,12 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "toolpaths",
         Definitions::from_parts(cells, cutter::functions(functions())),
-        crate::display::compose_partials([
-            crate::display::runtime_partial(cutter::display),
-            crate::display::runtime_partial(preview::display),
-            crate::display::runtime_partial(fidget::display),
-            crate::display::runtime_partial(mesh::display),
-            crate::display::runtime_partial(refined::display),
-        ]),
     )
+    .with_projection(crate::display::compose_partials([
+        crate::display::runtime_partial(cutter::display),
+        crate::display::runtime_partial(preview::display),
+        crate::display::runtime_partial(fidget::display),
+        crate::display::runtime_partial(mesh::display),
+        crate::display::runtime_partial(refined::display),
+    ]))
 }

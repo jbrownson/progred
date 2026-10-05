@@ -1250,15 +1250,15 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "fidget",
         crate::libraries::Definitions::from_parts(cells, functions()),
-        crate::display::compose_partials([
-            crate::display::runtime_partial(move |input| {
-                representation::infix_display(vocabulary::FIDGET, &infix, input)
-            }),
-            crate::display::runtime_partial(projection::field),
-            crate::display::runtime_partial(move |input| display(input, &renderer)),
-            crate::display::runtime_partial(mesh::display),
-        ]),
     )
+    .with_projection(crate::display::compose_partials([
+        crate::display::runtime_partial(move |input| {
+            representation::infix_display(vocabulary::FIDGET, &infix, input)
+        }),
+        crate::display::runtime_partial(projection::field),
+        crate::display::runtime_partial(move |input| display(input, &renderer)),
+        crate::display::runtime_partial(mesh::display),
+    ]))
     .with_completions(completion::offers)
 }
 

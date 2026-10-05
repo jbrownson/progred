@@ -248,11 +248,11 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "presentation",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
-        crate::display::compose_partials([
-            crate::display::runtime_partial(display),
-            crate::display::partial(outline::display),
-        ]),
     )
+    .with_projection(crate::display::compose_partials([
+        crate::display::runtime_partial(display),
+        crate::display::partial(outline::display),
+    ]))
 }
 
 #[cfg(test)]

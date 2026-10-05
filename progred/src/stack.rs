@@ -14,7 +14,7 @@ pub struct Stack<World> {
     pub projection: Projection<World>,
     pub pane_projection: Projection<World>,
     pub completions: crate::display::CompletionProvider,
-    /// Each library's own projection, in load order, so an area can leave
+    /// The projections libraries bring, in load order, so an area can leave
     /// some of them off.
     partials: Rc<[(gid::CellId, crate::display::Partial<World, Hovered>)]>,
 }
@@ -28,6 +28,15 @@ impl<World> Clone for Stack<World> {
             completions: self.completions.clone(),
             partials: self.partials.clone(),
         }
+    }
+}
+
+impl<World> Stack<World> {
+    /// Each library that brings a projection, and its name, in load order.
+    pub fn projections(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
+        self.libraries
+            .named()
+            .filter(|(library, _)| self.partials.iter().any(|(id, _)| id == library))
     }
 }
 
@@ -70,7 +79,7 @@ fn compose(
 ) -> Stack<crate::Editor> {
     let (libraries, partials, providers) = Libraries::from_contributions(contributions);
     let completions = crate::libraries::completion::combine(providers);
-    let partials: Rc<[_]> = libraries.ids().zip(partials).collect();
+    let partials: Rc<[_]> = partials.into();
     let (projection, pane_projection) =
         projections(partials.iter().map(|(_, partial)| partial.clone()));
     Stack {
@@ -164,5 +173,14 @@ mod tests {
         assert_eq!(load_selected(&[]).unwrap().libraries.iter().count(), 0);
         assert!(load_selected(&[gid::new_cell_id()]).is_err());
         assert_eq!(load().libraries.iter().count(), BUILT_INS.len());
+    }
+
+    #[test]
+    fn only_libraries_that_bring_a_projection_offer_one() {
+        let stack = load_selected(&[name::ID, text::ID, random::ID, color::ID]).unwrap();
+        assert_eq!(
+            stack.projections().collect::<Vec<_>>(),
+            [(text::ID, "text"), (color::ID, "color")]
+        );
     }
 }

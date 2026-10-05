@@ -34,7 +34,6 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         ID,
         "path",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
-        crate::display::runtime_partial(|_| None),
     )
 }
 
