@@ -42,12 +42,8 @@ mkdir -p "$cargo_home" "$sandbox_home" "$sandbox_tmp" "$target_dir"
 main_git_dir=$(cd "$project_root" && /usr/bin/git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$project_root/.git")
 ancestor_cargo_config=$(dirname "$main_git_dir")/.cargo/config.toml
 
-# Build code can't read Git data, so the build is told which commit it is,
-# for the editor to show; uncommitted changes mark it dirty.
-commit=$(cd "$project_root" && /usr/bin/git rev-parse --short=8 HEAD 2>/dev/null || true)
-if [ -n "$commit" ] && ! (cd "$project_root" && /usr/bin/git diff --quiet HEAD -- 2>/dev/null); then
-    commit="$commit-dirty"
-fi
+# Build code can't read Git data, so the build is told which commit it is.
+commit=$("$tool_dir/progred-commit")
 
 run_sandboxed() {
     allow_network=$1

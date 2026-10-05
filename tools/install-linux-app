@@ -16,6 +16,7 @@ fi
 env \
     CARGO_NET_OFFLINE=false \
     CARGO_TARGET_DIR="$project_root/target/native" \
+    PROGRED_COMMIT="$("$tool_dir/progred-commit")" \
     RUSTC_WRAPPER= \
     cargo build --release --locked -p progred
 
