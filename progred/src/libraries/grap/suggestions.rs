@@ -82,7 +82,10 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
         if !templated {
             offers.extend(quote(request));
         }
-        offers.push(text::completion(text::query_spelling(request.query)));
+        // A string, when the text library is loaded to make one.
+        if (request.resolve)(text::vocabulary::UTF8).is_some() {
+            offers.push(text::completion(text::query_spelling(request.query)));
+        }
         Some(offers)
     })
 }

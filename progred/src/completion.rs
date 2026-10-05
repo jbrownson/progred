@@ -361,14 +361,21 @@ pub(crate) fn completion_entries_with(
     let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
     let spelling = text::query_spelling(query);
     let atom_leads = quoted || blob.is_some();
-    let text_entry = blob
-        .is_some()
-        .then(|| completion_entry(sources, text::completion(query), kind))
-        .flatten();
-    let atom_entry = match kind {
+    // Libraries read the query as their values, like text from any query.
+    let literal = CompletionRequest {
+        scope: CompletionScope::Literal,
+        ..*request
+    };
+    let literals = providers
+        .filter(|_| !labels)
+        .and_then(|provider| provider(&literal))
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|offer| completion_entry(sources, offer, kind));
+    let atoms: Vec<_> = match kind {
         CompletionKind::Field => {
             let spelling = spelling.to_string();
-            Entry {
+            vec![Entry {
                 display: spelling.clone(),
                 detail: Some("new label".to_string()),
                 matches: Vec::new(),
@@ -382,13 +389,13 @@ pub(crate) fn completion_entries_with(
                         Some(crate::libraries::selection::pending_at(&[])),
                     )
                 }),
-            }
+            }]
         }
-        CompletionKind::Value => entry(
-            sources,
-            blob.map(blob::completion)
-                .unwrap_or_else(|| text::completion(spelling)),
-        ),
+        CompletionKind::Value => blob
+            .map(|blob| entry(sources, blob::completion(blob)))
+            .into_iter()
+            .chain(literals)
+            .collect(),
     };
     let reference_selection = if labels {
         crate::libraries::selection::pending_at(&[])
@@ -479,8 +486,7 @@ pub(crate) fn completion_entries_with(
         .map(|offers| contextual_entries(sources, offers, request))
         .unwrap_or_default();
     if atom_leads {
-        entries.push(atom_entry);
-        entries.extend(text_entry);
+        entries.extend(atoms);
         entries.extend(value_entries);
         entries.extend(references.into_iter().map(|(entry, _)| entry));
     } else {
@@ -492,7 +498,7 @@ pub(crate) fn completion_entries_with(
         entries.extend(exact);
         entries.extend(strong.into_iter().map(|(entry, _)| entry));
         entries.extend(other);
-        entries.push(atom_entry);
+        entries.extend(atoms);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }
     (entries, true)

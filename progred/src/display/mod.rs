@@ -141,6 +141,10 @@ impl Completion {
 pub enum CompletionScope {
     Suggested,
     Everything,
+    /// What was typed, read as one of a library's values, like a string from
+    /// any query. Asked on every request, so a provider answers it cheaply;
+    /// the picker lists it where a typed value goes instead of ranking it.
+    Literal,
 }
 
 /// Read-only definition metadata; native implementations are never exposed here.

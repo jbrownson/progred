@@ -782,22 +782,31 @@ fn completion_interpretation_order_is_independent_of_the_value_type() {
             )]
         })
     });
-    let entries = completion_entries_with(
-        &src(&document, &libraries),
-        false,
-        &CompletionKind::Value,
-        "custom",
-        Some(&provider),
-        None,
-        true,
-    );
+    let values = |provider: &crate::display::CompletionProvider| {
+        completion_entries_with(
+            &src(&document, &libraries),
+            false,
+            &CompletionKind::Value,
+            "custom",
+            Some(provider),
+            None,
+            true,
+        )
+        .iter()
+        .map(|entry| activated(entry).value.unwrap())
+        .collect::<Vec<_>>()
+    };
+    let with_text = crate::libraries::completion::combine([
+        provider.clone(),
+        text::library().completions.unwrap(),
+    ]);
     assert_eq!(
-        entries
-            .iter()
-            .map(|entry| activated(entry).value.unwrap())
-            .collect::<Vec<_>>(),
-        [Value::record([]), cell.into(), text::value("custom"),]
+        values(&with_text),
+        [Value::record([]), cell.into(), text::value("custom")]
     );
+    // Strings come from the text library, so without it nothing reads the
+    // query as text.
+    assert_eq!(values(&provider), [Value::record([]), cell.into()]);
 }
 
 #[test]
@@ -903,6 +912,43 @@ fn expression_list_insertion(callable: CellId) {
             .iter()
             .any(|entry| entry.detail.as_deref() == Some("call"))
     );
+}
+
+#[test]
+fn without_the_text_library_nothing_offers_a_string() {
+    let parameter = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(parameter, name::record("growth", []));
+    let document = Document {
+        root: Some(Value::record([(
+            grap::vocabulary::PARAMS,
+            Value::list([parameter.into()]),
+        )])),
+        cells,
+    };
+    let path = vec![Step::Key(grap::vocabulary::BODY)];
+    let ids = crate::stack::load()
+        .libraries
+        .iter()
+        .map(|(id, _)| id)
+        .filter(|id| *id != text::ID)
+        .collect::<Vec<_>>();
+    let stack = crate::stack::load_selected(&ids).unwrap();
+    for (query, expanded) in [("\"hello", false), ("\"hello", true), ("hello", true)] {
+        let mut selected =
+            crate::selection::pending_with_query(&crate::test_root(), path.clone(), query);
+        if expanded {
+            selected.set_completion_view(0.0, 0, true);
+        }
+        let entries = projected_completion_entries_in(&stack, &document, &selected, None, None);
+        assert!(
+            entries
+                .iter()
+                .all(|entry| inserted_value(&document, &selected, entry)
+                    .is_none_or(|value| text::read(&value).is_none())),
+            "{query:?}, expanded: {expanded}"
+        );
+    }
 }
 
 #[test]
@@ -1514,7 +1560,16 @@ fn projected_completion_entries_with(
     projection: Option<&Projection<crate::Editor>>,
     provider: Option<&crate::display::CompletionProvider>,
 ) -> Vec<Entry<crate::Editor>> {
-    let stack = crate::stack::load();
+    projected_completion_entries_in(&crate::stack::load(), doc, selection, projection, provider)
+}
+
+fn projected_completion_entries_in(
+    stack: &crate::stack::Stack<crate::Editor>,
+    doc: &Document,
+    selection: &Selection,
+    projection: Option<&Projection<crate::Editor>>,
+    provider: Option<&crate::display::CompletionProvider>,
+) -> Vec<Entry<crate::Editor>> {
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
     let annotations = Annotations::default();
     let mut fonts = parley::FontContext::new();

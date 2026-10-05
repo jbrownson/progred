@@ -127,6 +127,16 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         crate::libraries::Definitions::from_parts(cells, functions()),
         crate::display::runtime_partial(display),
     )
+    .with_completions(completions)
+}
+
+/// Whatever was typed reads as text.
+fn completions(
+    request: &crate::display::CompletionRequest<'_>,
+) -> Option<Vec<crate::display::Completion>> {
+    use crate::display::{CompletionKind, CompletionScope};
+    (request.scope == CompletionScope::Literal && request.kind == CompletionKind::Value)
+        .then(|| vec![completion(query_spelling(request.query))])
 }
 
 #[cfg(test)]
