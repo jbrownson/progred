@@ -20,22 +20,6 @@ if ! command -v rustup >/dev/null 2>&1; then
 fi
 rustup toolchain install "$web_toolchain" --profile minimal --component rust-src,llvm-tools
 
-bindgen_version=$(python3 -c 'import tomllib; print(next(p["version"] for p in tomllib.load(open("Cargo.lock", "rb"))["package"] if p["name"] == "wasm-bindgen"))')
-bindgen_root="$project_root/target/ci-tools/wasm-bindgen-$bindgen_version"
-bindgen_archive="wasm-bindgen-$bindgen_version-x86_64-unknown-linux-musl.tar.gz"
-bindgen_release="https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$bindgen_version"
-mkdir -p "$bindgen_root"
-if [ ! -x "$bindgen_root/wasm-bindgen" ]; then
-    curl -fLsS --retry 3 "$bindgen_release/$bindgen_archive" -o "$bindgen_root/$bindgen_archive"
-    curl -fLsS --retry 3 "$bindgen_release/$bindgen_archive.sha256sum" -o "$bindgen_root/$bindgen_archive.sha256sum"
-    (
-        cd "$bindgen_root"
-        digest=$(cut -d ' ' -f 1 "$bindgen_archive.sha256sum")
-        printf '%s  %s\n' "$digest" "$bindgen_archive" | sha256sum -c -
-        tar -xzf "$bindgen_archive" --strip-components=1
-    )
-fi
-
 # The editor shows which commit it was built from.
 PROGRED_COMMIT=$("$project_root/tools/progred-commit")
 export PROGRED_COMMIT
@@ -48,7 +32,7 @@ export CARGO_NET_GIT_FETCH_WITH_CLI=true
 export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="$web_rustflags"
 cargo +"$web_toolchain" build --release --locked --bin progred -p progred \
     -Z "build-std=$web_build_std" --target "$web_target"
-"$bindgen_root/wasm-bindgen" --target web --no-typescript \
+"$project_root/tools/wasm-bindgen" --target web --no-typescript \
     --out-dir web/pkg --out-name progred \
     "$CARGO_TARGET_DIR/$web_target/release/progred.wasm"
 
