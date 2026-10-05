@@ -142,7 +142,8 @@ are Command+1…4; the drawn menu on other hosts uses Ctrl+1…4.
   to the full vocabulary. The **Raw** view exposes the underlying structure.
 - The **Projections** menu switches one library's projection off or back on
   in the selected pane or the document, the way the home page peels its
-  forest. The library stays loaded, so code still runs and keys keep their
+  forest; its last entry does the same for the libraries the document
+  declares. The library stays loaded, so code still runs and keys keep their
   names.
 - **Zoom In**, **Zoom Out**, and **Actual Size** in the View menu
   (Command-+, Command-−, Command-0) scale everything in the window, as the

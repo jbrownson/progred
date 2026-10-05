@@ -39,6 +39,7 @@ impl<World> Stack<World> {
         self.libraries
             .named()
             .filter(|(library, _)| self.partials.iter().any(|(id, _)| id == library))
+            .chain([(workspace::vocabulary::LIBRARIES, "document libraries")])
     }
 }
 
@@ -54,6 +55,7 @@ impl Stack<crate::Editor> {
                 .iter()
                 .filter(|(id, _)| !hidden.contains(id))
                 .map(|(_, partial)| partial.clone()),
+            !hidden.contains(&workspace::vocabulary::LIBRARIES),
         )
     }
 }
@@ -83,7 +85,7 @@ fn compose(
     let completions = crate::libraries::completion::combine(providers);
     let partials: Rc<[_]> = partials.into();
     let (projection, pane_projection) =
-        projections(partials.iter().map(|(_, partial)| partial.clone()));
+        projections(partials.iter().map(|(_, partial)| partial.clone()), true);
     Stack {
         libraries,
         pane_projection,
@@ -97,13 +99,14 @@ fn compose(
 /// entry may present its value instead.
 fn projections(
     partials: impl IntoIterator<Item = crate::display::Partial<crate::Editor, Hovered>>,
+    document_libraries: bool,
 ) -> (Projection<crate::Editor>, Projection<crate::Editor>) {
     let partials: Vec<_> = partials.into_iter().collect();
     let loaded = crate::display::compose_partials(partials.clone());
     let projection = Projection::new(
         partials
             .into_iter()
-            .chain([presentation::document_libraries(loaded)]),
+            .chain(document_libraries.then(|| presentation::document_libraries(loaded))),
     );
     let pane = projection
         .clone()
@@ -182,7 +185,11 @@ mod tests {
         let stack = load_selected(&[name::ID, text::ID, random::ID, color::ID]).unwrap();
         assert_eq!(
             stack.projections().collect::<Vec<_>>(),
-            [(text::ID, "text"), (color::ID, "color")]
+            [
+                (text::ID, "text"),
+                (color::ID, "color"),
+                (workspace::vocabulary::LIBRARIES, "document libraries")
+            ]
         );
     }
 }

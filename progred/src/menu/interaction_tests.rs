@@ -309,3 +309,55 @@ fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
         assert_eq!(stored(&runner), !on);
     }
 }
+
+#[test]
+fn the_document_libraries_entry_switches_the_documents_own_projections() {
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../../examples/libraries.gid")).unwrap();
+    let mut editor = crate::test_editor(doc);
+    editor.drawn_menu = true;
+    editor.command_modifier = puri::keyboard::CommandModifier::Control;
+    let mut runner = EditorRunner::new(editor);
+    runner.refresh_frame(1.0, VIEWPORT);
+    let command = Command::Doc(DocCommand::Projection(
+        crate::libraries::workspace::vocabulary::LIBRARIES,
+    ));
+    let heading = definition(
+        runner
+            .editor
+            .stack
+            .projections()
+            .map(|(library, _)| library),
+    )
+    .iter()
+    .position(|menu| menu.label == "Projections")
+    .unwrap();
+    // The document's fraction library stacks a fraction's parts; the stored
+    // record lists them on one line.
+    let stacked = |runner: &EditorRunner| {
+        let part = |key: &str| {
+            runner
+                .frame
+                .dispatch
+                .descends
+                .iter()
+                .find(|landmark| {
+                    landmark.path.first() == Some(&gid::Step::Key(names["fractions"]))
+                        && landmark.path.last() == Some(&gid::Step::Key(names[key]))
+                })
+                .unwrap()
+                .rect
+        };
+        part("over").y1 <= part("under").y0
+    };
+    assert!(stacked(&runner));
+    for on in [false, true] {
+        let projections = point_for(&runner, Hover::Heading(heading));
+        click(&mut runner, projections);
+        let entry = point_for(&runner, Hover::Item(command));
+        click(&mut runner, entry);
+        runner.refresh_frame(1.0, VIEWPORT);
+        assert_eq!(runner.editor.menu_toggles().checked(command), on);
+        assert_eq!(stacked(&runner), on);
+    }
+}
