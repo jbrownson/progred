@@ -192,7 +192,9 @@ pub(crate) fn document_libraries(
             let layout = match layout {
                 // The view chose what to show; only a field being added
                 // follows it.
-                Some(layout) => crate::display::structure::with_extra_fields(input, |_| true, layout),
+                Some(layout) => {
+                    crate::display::structure::with_extra_fields(input, |_| true, layout)
+                }
                 None if evaluation.completed && !evaluation.result.is_absent() => {
                     crate::display::at_with_projection(
                         [Step::Key(vocabulary::RESULT)],
