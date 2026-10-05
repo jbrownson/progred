@@ -296,9 +296,21 @@ impl Libraries {
     /// The names libraries give themselves, in load order.
     #[cfg(any(test, target_arch = "wasm32"))]
     pub fn names(&self) -> impl Iterator<Item = &str> + '_ {
-        self.entries
-            .iter()
-            .filter_map(|(id, definitions)| definitions.value(*id).and_then(name::read))
+        self.named().map(|(_, name)| name)
+    }
+
+    /// Each library and the name it gives itself, in load order.
+    pub fn named(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
+        self.entries.iter().filter_map(|(id, definitions)| {
+            definitions
+                .value(*id)
+                .and_then(name::read)
+                .map(|name| (*id, name))
+        })
+    }
+
+    pub(crate) fn ids(&self) -> impl Iterator<Item = gid::CellId> + '_ {
+        self.entries.iter().map(|(id, _)| *id)
     }
 
     /// Each loaded library's definition of `cell`, in load order.

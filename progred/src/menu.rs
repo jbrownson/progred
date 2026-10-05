@@ -41,7 +41,8 @@ fn drawn_label(shortcut: command::Shortcut, command: puri::keyboard::CommandModi
     )
 }
 
-pub fn definition() -> Vec<Menu> {
+/// One `Projections` menu entry per loaded library, after the fixed menus.
+pub fn definition(libraries: &crate::libraries::Libraries) -> Vec<Menu> {
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
     #[cfg(target_arch = "wasm32")]
     let file_entries = vec![Entry::Command(C::App(A::New))];
@@ -57,7 +58,7 @@ pub fn definition() -> Vec<Menu> {
         Entry::Separator,
         Entry::Command(C::App(A::Quit)),
     ];
-    vec![
+    let mut menus = vec![
         Menu {
             label: "File",
             entries: file_entries,
@@ -91,7 +92,18 @@ pub fn definition() -> Vec<Menu> {
                 Entry::Command(C::Doc(D::DebugGeometry)),
             ],
         },
-    ]
+    ];
+    let projections = libraries
+        .named()
+        .map(|(library, _)| Entry::Command(C::Doc(D::Projection(library))))
+        .collect::<Vec<_>>();
+    if !projections.is_empty() {
+        menus.push(Menu {
+            label: "Projections",
+            entries: projections,
+        });
+    }
+    menus
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -254,7 +266,11 @@ pub fn shortcut(
     event: &KeyboardEvent,
     command: puri::keyboard::CommandModifier,
 ) -> Option<Command> {
-    command::shortcut(event, command, commands(&definition()))
+    command::shortcut(
+        event,
+        command,
+        commands(&definition(&crate::libraries::Libraries::default())),
+    )
 }
 
 mod view {
@@ -280,6 +296,8 @@ mod view {
         pub state: State,
         pub availability: Availability,
         pub toggles: Toggles,
+        /// The loaded libraries, which name the Projections menu's entries.
+        pub libraries: crate::libraries::Libraries,
         pub scale: f64,
         pub width: f64,
     }
@@ -440,7 +458,15 @@ mod view {
         } else {
             &styles.disabled
         };
-        let label = crate::render::text(tcx, spec.label, style);
+        let name = match command {
+            Command::Doc(crate::command::DocCommand::Projection(library)) => description
+                .libraries
+                .named()
+                .find(|(id, _)| *id == library)
+                .map(|(_, name)| name),
+            _ => None,
+        };
+        let label = crate::render::text(tcx, name.unwrap_or(spec.label), style);
         let shortcut = crate::render::text(
             tcx,
             &spec
@@ -593,7 +619,7 @@ mod view {
     pub fn view(tcx: &mut TextCtx, description: Description) -> View<HoverPass<Editor>> {
         let palette = description.palette;
         let styles = styles(palette);
-        let definition = definition();
+        let definition = definition(&description.libraries);
         let mut x = 0.0;
         let mut popup_x = 0.0;
         let headings = definition
@@ -793,7 +819,7 @@ mod tests {
 
     #[test]
     fn arrows_walk_enabled_items_and_wrap() {
-        let menus = definition();
+        let menus = definition(&crate::libraries::Libraries::default());
         let mut availability = all_enabled();
         availability.undo = false;
         // Edit is [Undo, Redo]; with Undo disabled the cursor lands on
@@ -832,7 +858,7 @@ mod tests {
 
     #[test]
     fn horizontal_arrows_switch_menus_and_select_the_first_enabled_item() {
-        let menus = definition();
+        let menus = definition(&crate::libraries::Libraries::default());
         let mut state = State::default();
         state.toggle(0);
         assert!(matches!(
@@ -871,7 +897,7 @@ mod tests {
 
     #[test]
     fn keyboard_entry_endpoints_and_dismissal() {
-        let menus = definition();
+        let menus = definition(&crate::libraries::Libraries::default());
         let mut state = State::default();
         navigate(&mut state, &menus, all_enabled(), &named(NamedKey::F10));
         assert_eq!(state.open(), Some(0));
@@ -913,7 +939,7 @@ mod tests {
 
     #[test]
     fn the_drawn_tree_lists_every_command_once() {
-        let definition = definition();
+        let definition = definition(&crate::libraries::Libraries::default());
         let commands = commands(&definition).collect::<Vec<_>>();
         assert_eq!(commands.len(), 17 + Example::ALL.len());
         for (index, command) in commands.iter().enumerate() {
@@ -923,7 +949,7 @@ mod tests {
 
     #[test]
     fn the_file_menu_carries_the_application_lifecycle() {
-        let definition = definition();
+        let definition = definition(&crate::libraries::Libraries::default());
         assert_eq!(
             definition.iter().map(|menu| menu.label).collect::<Vec<_>>(),
             vec!["File", "Examples", "Edit", "View"]
@@ -946,7 +972,7 @@ mod tests {
 
     #[test]
     fn catalog_shortcuts_are_unique_across_the_drawn_tree() {
-        let definition = definition();
+        let definition = definition(&crate::libraries::Libraries::default());
         let shortcuts = commands(&definition)
             .filter_map(|command| command::spec(command).shortcut)
             .collect::<Vec<_>>();

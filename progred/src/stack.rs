@@ -7,12 +7,16 @@ use crate::libraries::{
     random, selection, sequence, site, text, toolpath, tree, u64, workspace,
 };
 use crate::projection::Projection;
+use std::rc::Rc;
 
 pub struct Stack<World> {
     pub libraries: Libraries,
     pub projection: Projection<World>,
     pub pane_projection: Projection<World>,
     pub completions: crate::display::CompletionProvider,
+    /// Each library's own projection, in load order, so an area can leave
+    /// some of them off.
+    partials: Rc<[(gid::CellId, crate::display::Partial<World, Hovered>)]>,
 }
 
 impl<World> Clone for Stack<World> {
@@ -22,7 +26,24 @@ impl<World> Clone for Stack<World> {
             projection: self.projection.clone(),
             pane_projection: self.pane_projection.clone(),
             completions: self.completions.clone(),
+            partials: self.partials.clone(),
         }
+    }
+}
+
+impl Stack<crate::Editor> {
+    /// The document and pane projections with `hidden` libraries' own
+    /// projections left off.
+    pub fn without(
+        &self,
+        hidden: &[gid::CellId],
+    ) -> (Projection<crate::Editor>, Projection<crate::Editor>) {
+        projections(
+            self.partials
+                .iter()
+                .filter(|(id, _)| !hidden.contains(id))
+                .map(|(_, partial)| partial.clone()),
+        )
     }
 }
 
@@ -47,24 +68,38 @@ pub fn load_selected(ids: &[gid::CellId]) -> Result<Stack<crate::Editor>, String
 fn compose(
     contributions: impl IntoIterator<Item = (gid::CellId, Library<crate::Editor, Hovered>)>,
 ) -> Stack<crate::Editor> {
-    let (libraries, projections, providers) = Libraries::from_contributions(contributions);
+    let (libraries, partials, providers) = Libraries::from_contributions(contributions);
     let completions = crate::libraries::completion::combine(providers);
-    let loaded = crate::display::compose_partials(projections.clone());
+    let partials: Rc<[_]> = libraries.ids().zip(partials).collect();
+    let (projection, pane_projection) =
+        projections(partials.iter().map(|(_, partial)| partial.clone()));
+    Stack {
+        libraries,
+        pane_projection,
+        projection,
+        completions,
+        partials,
+    }
+}
+
+/// Libraries' projections composed for the document, and for a pane, whose
+/// entry may present its value instead.
+fn projections(
+    partials: impl IntoIterator<Item = crate::display::Partial<crate::Editor, Hovered>>,
+) -> (Projection<crate::Editor>, Projection<crate::Editor>) {
+    let partials: Vec<_> = partials.into_iter().collect();
+    let loaded = crate::display::compose_partials(partials.clone());
     let projection = Projection::new(
-        projections
+        partials
             .into_iter()
             .chain([presentation::document_libraries(loaded)]),
     );
-    Stack {
-        libraries,
-        pane_projection: projection
-            .clone()
-            .with_entry(crate::display::runtime_partial(
-                presentation::projected_display,
-            )),
-        projection,
-        completions,
-    }
+    let pane = projection
+        .clone()
+        .with_entry(crate::display::runtime_partial(
+            presentation::projected_display,
+        ));
+    (projection, pane)
 }
 
 type BuildLibrary = fn() -> Library<crate::Editor, Hovered>;

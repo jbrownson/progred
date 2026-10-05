@@ -376,19 +376,16 @@ impl Editor {
     }
 
     pub(crate) fn menu_toggles(&self) -> command::Toggles {
+        let area = self.model.workspace.selected_or_document(
+            self.model
+                .selection
+                .as_ref()
+                .map(selection::Selection::root),
+        );
         command::Toggles {
-            raw: self
-                .model
-                .workspace
-                .selected_or_document(
-                    self.model
-                        .selection
-                        .as_ref()
-                        .map(selection::Selection::root),
-                )
-                .projection
-                == workspace::Projection::Raw,
+            raw: area.projection == workspace::Projection::Raw,
             debug_geometry: self.model.view.debug_geometry,
+            hidden: area.hidden.clone(),
         }
     }
 
@@ -537,6 +534,17 @@ impl Editor {
                     .cloned();
                 self.model.workspace.toggle_projection(selected.as_ref());
             }
+            DocCommand::Projection(library) => {
+                let selected = self
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(selection::Selection::root)
+                    .cloned();
+                self.model
+                    .workspace
+                    .toggle_library_projection(selected.as_ref(), library);
+            }
             DocCommand::DebugGeometry => {
                 self.model.view.debug_geometry = !self.model.view.debug_geometry
             }
@@ -558,7 +566,12 @@ impl Editor {
             self.choose_menu(command, geometry);
             return true;
         }
-        match menu::navigate(&mut self.menu, &menu::definition(), availability, event) {
+        match menu::navigate(
+            &mut self.menu,
+            &menu::definition(&self.stack.libraries),
+            availability,
+            event,
+        ) {
             menu::Navigation::Activate(command) => {
                 self.choose_menu(command, geometry);
                 true

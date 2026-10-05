@@ -129,6 +129,9 @@ pub enum DocCommand {
     MovePaneLeft,
     MovePaneRight,
     Raw,
+    /// One library's projection in the selected area. Menus label it with
+    /// the library's name.
+    Projection(gid::CellId),
     DebugGeometry,
 }
 
@@ -285,6 +288,7 @@ pub fn spec(command: Command) -> Spec {
         Command::Doc(DocCommand::MovePaneLeft) => item("Move Pane Left", None),
         Command::Doc(DocCommand::MovePaneRight) => item("Move Pane Right", None),
         Command::Doc(DocCommand::Raw) => toggle("Raw", Some(Shortcut::plain(ShortcutKey::R))),
+        Command::Doc(DocCommand::Projection(_)) => toggle("Projection", None),
         Command::Doc(DocCommand::DebugGeometry) => {
             toggle("Debug Geometry", Some(Shortcut::plain(ShortcutKey::D)))
         }
@@ -320,7 +324,7 @@ impl Availability {
             DocCommand::MovePaneDown => self.move_down,
             DocCommand::MovePaneLeft => self.move_left,
             DocCommand::MovePaneRight => self.move_right,
-            DocCommand::Raw | DocCommand::DebugGeometry => true,
+            DocCommand::Raw | DocCommand::Projection(_) | DocCommand::DebugGeometry => true,
         }
     }
 
@@ -334,16 +338,19 @@ impl Availability {
 
 /// Which toggle commands are on for the target editor. Frontends only
 /// display this answer.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 pub struct Toggles {
     pub raw: bool,
     pub debug_geometry: bool,
+    /// Libraries whose projections the selected area leaves off.
+    pub hidden: Vec<gid::CellId>,
 }
 
 impl Toggles {
-    pub fn checked(self, command: Command) -> bool {
+    pub fn checked(&self, command: Command) -> bool {
         match command {
             Command::Doc(DocCommand::Raw) => self.raw,
+            Command::Doc(DocCommand::Projection(library)) => !self.hidden.contains(&library),
             Command::Doc(DocCommand::DebugGeometry) => self.debug_geometry,
             _ => false,
         }

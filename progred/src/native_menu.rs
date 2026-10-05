@@ -59,7 +59,7 @@ impl MenuTarget {
 /// platform idiom ("Quit Progred" in the application menu).
 enum Entry {
     Command(Command),
-    Labeled(Command, &'static str),
+    Labeled(Command, String),
     Separator,
     /// An AppKit-implemented item routed through the responder chain.
     Native(Native),
@@ -85,7 +85,8 @@ struct Section {
     windows_menu: bool,
 }
 
-fn definition() -> Vec<Section> {
+/// One `Projections` entry per loaded library, before the Window menu.
+fn definition(libraries: &crate::libraries::Libraries) -> Vec<Section> {
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
     let section = |label, entries| Section {
         label,
@@ -104,7 +105,7 @@ fn definition() -> Vec<Section> {
                 Entry::Native(Native::HideOthers),
                 Entry::Native(Native::ShowAll),
                 Entry::Separator,
-                Entry::Labeled(C::App(A::Quit), "Quit Progred"),
+                Entry::Labeled(C::App(A::Quit), "Quit Progred".into()),
             ],
         ),
         section(
@@ -153,6 +154,13 @@ fn definition() -> Vec<Section> {
                 Entry::Separator,
                 Entry::Native(Native::Fullscreen),
             ],
+        ),
+        section(
+            "Projections",
+            libraries
+                .named()
+                .map(|(library, name)| Entry::Labeled(C::Doc(D::Projection(library)), name.into()))
+                .collect(),
         ),
         Section {
             label: "Window",
@@ -330,7 +338,7 @@ impl Menu {
         let mut windows = None;
         let mut services = None;
 
-        for section in definition() {
+        for section in definition(&crate::stack::load().libraries) {
             let submenu = NSMenu::new(mtm);
             submenu.setTitle(&NSString::from_str(section.label));
             submenu.setAutoenablesItems(false);
@@ -341,7 +349,7 @@ impl Menu {
                         add_command(mtm, &submenu, &target, &mut items, command, None)
                     }
                     Entry::Labeled(command, label) => {
-                        add_command(mtm, &submenu, &target, &mut items, command, Some(label))
+                        add_command(mtm, &submenu, &target, &mut items, command, Some(&label))
                     }
                     Entry::Separator => submenu.addItem(&NSMenuItem::separatorItem(mtm)),
                     Entry::Native(native) => {
@@ -392,13 +400,17 @@ impl Menu {
             item.setEnabled(match command {
                 Command::App(AppCommand::Close) => doc.is_some(),
                 Command::App(_) => true,
-                Command::Doc(command) => {
-                    doc.is_some_and(|(availability, _)| availability.doc_enabled(*command))
-                }
+                Command::Doc(command) => doc
+                    .as_ref()
+                    .is_some_and(|(availability, _)| availability.doc_enabled(*command)),
             });
             if command::spec(*command).toggle {
                 item.setState(
-                    if checked(*command, doc.map(|(_, toggles)| toggles), appearance) {
+                    if checked(
+                        *command,
+                        doc.as_ref().map(|(_, toggles)| toggles),
+                        appearance,
+                    ) {
                         NSControlStateValueOn
                     } else {
                         NSControlStateValueOff
@@ -411,7 +423,7 @@ impl Menu {
 
 fn checked(
     command: Command,
-    doc: Option<Toggles>,
+    doc: Option<&Toggles>,
     appearance: Option<winit::window::Theme>,
 ) -> bool {
     match command {
@@ -438,16 +450,28 @@ mod tests {
 
     #[test]
     fn the_native_tree_lists_every_command_once() {
-        let definition = definition();
+        let libraries = crate::stack::load().libraries;
+        let definition = definition(&libraries);
         assert_eq!(
             definition
                 .iter()
                 .map(|section| section.label)
                 .collect::<Vec<_>>(),
-            vec!["Progred", "File", "Examples", "Edit", "View", "Window"]
+            vec![
+                "Progred",
+                "File",
+                "Examples",
+                "Edit",
+                "View",
+                "Projections",
+                "Window"
+            ]
         );
         let commands = commands(&definition);
-        assert_eq!(commands.len(), 20 + Example::ALL.len());
+        assert_eq!(
+            commands.len(),
+            20 + Example::ALL.len() + libraries.named().count()
+        );
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }
@@ -455,9 +479,10 @@ mod tests {
 
     #[test]
     fn both_menu_systems_expose_the_same_commands_except_native_appearance() {
-        let mut native = commands(&definition());
+        let libraries = crate::stack::load().libraries;
+        let mut native = commands(&definition(&libraries));
         native.retain(|command| !matches!(command, Command::App(AppCommand::Appearance(_))));
-        let drawn_definition = crate::menu::definition();
+        let drawn_definition = crate::menu::definition(&libraries);
         let mut drawn = crate::menu::commands(&drawn_definition).collect::<Vec<_>>();
         let key = |command: &Command| format!("{command:?}");
         native.sort_by_key(key);
@@ -477,7 +502,7 @@ mod tests {
                 for choice in choices {
                     let command = Command::App(AppCommand::Appearance(choice));
                     assert!(command::spec(command).toggle);
-                    assert_eq!(checked(command, doc, selected), choice == selected);
+                    assert_eq!(checked(command, doc.as_ref(), selected), choice == selected);
                 }
             }
         }

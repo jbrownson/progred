@@ -140,6 +140,10 @@ are Command+1…4; the drawn menu on other hosts uses Ctrl+1…4.
   highlights their output without the modifier.
 - Click an empty location to choose a completion. `…` expands the suggestions
   to the full vocabulary. The **Raw** view exposes the underlying structure.
+- The **Projections** menu switches one library's projection off or back on
+  in the selected pane or the document, the way the home page peels its
+  forest. The library stays loaded, so code still runs and keys keep their
+  names.
 
 Examples replace the current document after the desktop's unsaved-changes
 confirmation. New Document does the same; New Window opens another window.

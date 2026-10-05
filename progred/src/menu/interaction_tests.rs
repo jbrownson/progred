@@ -178,7 +178,7 @@ fn bar_hit_height_tracks_display_scale() {
     let mut runner = runner();
     for scale in [1.0, 1.5, 2.0] {
         runner.refresh_frame(scale, VIEWPORT);
-        for index in 0..definition().len() {
+        for index in 0..definition(&runner.editor.stack.libraries).len() {
             let point = point_for(&runner, Hover::Heading(index));
             for y in [0.5, bar_height(scale) - 0.5] {
                 assert_eq!(
@@ -202,7 +202,7 @@ fn headings_fill_the_bar_and_popup_rows_share_their_hit_width() {
     }
     click(&mut runner, examples);
     let mut width = None;
-    for command in commands(&definition()[1..2]) {
+    for command in commands(&definition(&runner.editor.stack.libraries)[1..2]) {
         let hover = Hover::Item(command);
         let point = point_for(&runner, hover);
         let columns: Vec<_> = (0..VIEWPORT.width as usize)
@@ -223,4 +223,44 @@ fn a_popup_near_the_right_edge_stays_inside_the_viewport() {
     let point = point_for(&runner, raw);
     assert_eq!(hover_at(&runner, Point::new(348.0, point.y)), Some(raw));
     assert_eq!(hover_at(&runner, Point::new(350.0, point.y)), None);
+}
+
+#[test]
+fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
+    use crate::libraries::color;
+    let mut editor = crate::test_editor(Document {
+        root: Some(color::value(puri::Color::from_rgb8(0x50, 0x96, 0xdc))),
+        cells: Cells::new(),
+    });
+    editor.drawn_menu = true;
+    editor.command_modifier = puri::keyboard::CommandModifier::Control;
+    let mut runner = EditorRunner::new(editor);
+    runner.refresh_frame(1.0, VIEWPORT);
+    let command = Command::Doc(DocCommand::Projection(color::ID));
+    let heading = definition(&runner.editor.stack.libraries)
+        .iter()
+        .position(|menu| menu.label == "Projections")
+        .unwrap();
+    // A color draws as a swatch and its hex; only with the color library's
+    // projection off is it the stored record, whose `rgb` field is drawn.
+    let rgb = [gid::Step::Key(color::vocabulary::RGB)];
+    let stored = |runner: &EditorRunner| {
+        runner
+            .frame
+            .dispatch
+            .descends
+            .iter()
+            .any(|landmark| landmark.path.as_ref() == rgb)
+    };
+    assert!(runner.editor.menu_toggles().checked(command));
+    assert!(!stored(&runner));
+    for on in [false, true] {
+        let projections = point_for(&runner, Hover::Heading(heading));
+        click(&mut runner, projections);
+        let entry = point_for(&runner, Hover::Item(command));
+        click(&mut runner, entry);
+        runner.refresh_frame(1.0, VIEWPORT);
+        assert_eq!(runner.editor.menu_toggles().checked(command), on);
+        assert_eq!(stored(&runner), !on);
+    }
 }

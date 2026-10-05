@@ -549,10 +549,15 @@ fn project_workspace_view(
         workspace::Target::Pane { path } if !raw => projection::viewport::entry(sources, path),
         _ => None,
     };
+    let peeled = (!view.hidden.is_empty()).then(|| stack.without(&view.hidden));
+    let (document_projection, pane_projection) = match &peeled {
+        Some((document, pane)) => (document, pane),
+        None => (&stack.projection, &stack.pane_projection),
+    };
     let viewport = viewport.map(|entry| {
         (
             entry,
-            projection::viewport::projection(&stack.projection, size / scale),
+            projection::viewport::projection(document_projection, size / scale),
         )
     });
     let margin = if viewport.is_some() {
@@ -565,7 +570,7 @@ fn project_workspace_view(
     let (root, projection) = match view.root.target() {
         workspace::Target::Document => {
             root_path = Vec::new();
-            (sources.root(), &stack.projection)
+            (sources.root(), document_projection)
         }
         workspace::Target::Pane { path } => {
             if let Some((entry, projection)) = &viewport {
@@ -573,7 +578,7 @@ fn project_workspace_view(
                 (Some(entry.value), projection)
             } else {
                 root_path = path.clone();
-                (sources.resolve_path(path), &stack.pane_projection)
+                (sources.resolve_path(path), pane_projection)
             }
         }
     };
@@ -767,7 +772,7 @@ fn project_frame(
         computations,
         focused,
         drawn_menu,
-        toggles,
+        ref toggles,
         model,
         stack,
         menu,
@@ -801,7 +806,8 @@ fn project_frame(
                 command_modifier,
                 state: menu,
                 availability,
-                toggles,
+                toggles: toggles.clone(),
+                libraries: stack.libraries.clone(),
                 scale,
                 width: viewport_width,
             },
@@ -2242,6 +2248,7 @@ mod frame_tests {
             let raw = workspace::View {
                 root: pane.root.clone(),
                 projection: workspace::Projection::Raw,
+                hidden: Vec::new(),
                 annotations: Default::default(),
                 scroll: Vec2::ZERO,
             };

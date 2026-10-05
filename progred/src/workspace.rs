@@ -30,6 +30,9 @@ pub use crate::display::widget::view::{Root, Target};
 pub struct View {
     pub root: Root,
     pub projection: Projection,
+    /// Libraries whose projections this area leaves off. Their
+    /// definitions stay loaded, so code still runs and keys keep names.
+    pub hidden: Vec<CellId>,
     /// Sparse projection-local state. Two views over the same GID
     /// location deliberately do not share folds or other annotations.
     pub annotations: Annotations,
@@ -42,6 +45,7 @@ impl View {
         Self {
             root,
             projection: Projection::Standard,
+            hidden: Vec::new(),
             annotations: Annotations::default(),
             scroll: Vec2::ZERO,
         }
@@ -387,6 +391,23 @@ impl Workspace {
         match selected.and_then(|root| self.view_mut(root)) {
             Some(view) => toggle(view),
             None => toggle(&mut self.document),
+        }
+    }
+
+    /// Switch one library's projection off, or back on, in the selected
+    /// area.
+    pub fn toggle_library_projection(&mut self, selected: Option<&Root>, library: CellId) {
+        fn toggle(view: &mut View, library: CellId) {
+            match view.hidden.iter().position(|hidden| *hidden == library) {
+                Some(index) => {
+                    view.hidden.remove(index);
+                }
+                None => view.hidden.push(library),
+            }
+        }
+        match selected.and_then(|root| self.view_mut(root)) {
+            Some(view) => toggle(view, library),
+            None => toggle(&mut self.document, library),
         }
     }
 
