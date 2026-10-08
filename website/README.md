@@ -63,7 +63,8 @@ for a free port when running an additional preview alongside this one.
 - `public/index.html` is the home page: the pitch, a live forest whose projections
   and names you can switch off (`public/peel.js`), the key ideas, what works today, the three
   tutorials, and the Zulip links. Phones load the live forest too.
-  `make images` regenerates the forest still the link preview uses, and the
+  `make images` regenerates the forest still the link preview uses, the
+  document-libraries still beside "Projections are programs", and the
   copies of the [README screenshots](../docs/images/README.md), after editor changes.
 - `public/tutorial.html` is the exercise tutorial described below. `public/story.html` and
   `public/lab/peel.html` are the alternative tutorials the home page asks

@@ -1710,6 +1710,36 @@ fn svg_bench_renders_a_pending_edge() {
     render(&doc, Some(&typing), 320.0, "pending_field_slot.svg");
 }
 
+/// The home page's picture of the libraries example: its fractions and dials,
+/// drawn by the projections the document declares, ahead of those
+/// declarations.
+#[test]
+#[ignore = "regenerates the website's document-libraries image"]
+fn website_libraries_image() {
+    use crate::libraries::workspace::vocabulary::LIBRARIES;
+    let (mut doc, _) =
+        crate::gid_text::parse(include_str!("../../../../../examples/libraries.gid")).unwrap();
+    let root = doc.root.take().unwrap();
+    let fields = root.as_record().unwrap();
+    let declarations = fields.get(&LIBRARIES).unwrap().clone();
+    doc.root = Some(Value::record(
+        fields
+            .iter()
+            .filter(|(key, _)| *key != LIBRARIES)
+            .map(|(key, value)| (*key, value.clone()))
+            .chain([(LIBRARIES, declarations)]),
+    ));
+    let mut editor = crate::test_editor(doc);
+    editor.font_cx = crate::fonts::bundled_font_context();
+    editor.palette = crate::styles::Theme::Light.palette();
+    editor.drawn_menu = false;
+    render_editor(
+        editor,
+        kurbo::Size::new(704.0, 234.0),
+        "website_libraries.svg",
+    );
+}
+
 /// The home page's link preview: the forest drawn with the nine libraries it
 /// uses.
 #[test]

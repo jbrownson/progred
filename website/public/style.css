@@ -101,7 +101,7 @@ h1, h2 { font-size: clamp(1.4rem, 2.2vw, 1.8rem); font-weight: 550; letter-spaci
   border-top: 1px solid var(--border);
   scroll-margin-top: 1.5rem;
 }
-.exercise:first-child, .variant-note + .exercise { border-top: 0; padding-block-start: 0; }
+.exercise:first-child, .variant-note + .exercise, .hero + .exercise { border-top: 0; padding-block-start: 0; }
 .exercise > p { margin-block: 0 1.25rem; }
 .lede { font-size: 1.125rem; }
 ol { padding-left: 1.35rem; margin-block: 1.35rem; }
@@ -174,6 +174,7 @@ sub.tag { font-size: 0.65em; color: var(--muted); vertical-align: -0.3em; margin
 .idea .idea-links { margin-top: 0.4rem; font-size: 0.85rem; color: var(--muted); }
 .idea-links a { color: var(--accent); }
 figure { margin: 1.5rem 0; }
+.idea-figure { margin: 0.9rem 0 0; }
 figure img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--editor); }
 figcaption { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted); }
 .today ul, .missing ul { padding-left: 1.35rem; }

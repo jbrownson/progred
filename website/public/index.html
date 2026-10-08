@@ -67,15 +67,7 @@
     <main class="home">
       <section class="hero" aria-labelledby="pitch">
         <h1 id="pitch">Excel meets JSON, but a graph, and it’s projected.</h1>
-        <p class="lede">Progred is a pre-alpha programming environment. Your program is a document, and everything you see, including the code, is a projection of it drawn by some library. Working in it feels more like a spreadsheet than a text file: change a value, and whatever depends on it updates. Progred is a minimal prototype that demonstrates these ideas, not a finished product.</p>
-        <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also live in a cell, which has its own identity, so any number of places can point to it; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
-        <p><strong>Progred is public early to get feedback.</strong> Share on Zulip what clicks, what doesn’t, and where you get lost.</p>
-        <p class="actions">
-          <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Chat about it on Zulip</a>
-          <a class="button" href="try">Try the editor</a>
-          <a class="button" href="#ways-in">Try a tutorial</a>
-          <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">Source on GitHub</a>
-        </p>
+        <p class="lede">Progred is a pre-alpha programming environment. Your program is a document, and everything you see, including the code, is a projection of it drawn by some library.</p>
       </section>
 
       <section class="exercise showcase" id="peel" aria-labelledby="peel-title">
@@ -86,6 +78,19 @@
           <div class="peel-controls"><label class="peel-slider">Peel <input type="range" id="peel-depth" min="0" value="0" step="1"></label><div id="peel-layers" class="peel-layers"></div></div>
           <p id="peel-caption" class="peel-caption" aria-live="polite"></p>
         </div>
+      </section>
+
+      <section class="pitch" id="what" aria-labelledby="what-title">
+        <h2 id="what-title">What it is</h2>
+        <p>Working in Progred feels more like a spreadsheet than a text file: change a value, and whatever depends on it updates. It’s a minimal prototype that demonstrates the ideas below, not a finished product.</p>
+        <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also live in a cell, which has its own identity, so any number of places can point to it; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
+        <p><strong>Progred is public early to get feedback.</strong> Share on Zulip what clicks, what doesn’t, and where you get lost.</p>
+        <p class="actions">
+          <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Chat about it on Zulip</a>
+          <a class="button" href="try">Try the editor</a>
+          <a class="button" href="#ways-in">Try a tutorial</a>
+          <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">Source on GitHub</a>
+        </p>
       </section>
 
       <section class="ideas" id="ideas" aria-labelledby="ideas-title">
@@ -103,7 +108,7 @@
         </article>
         <article class="idea" id="meaning">
           <h4>Libraries give data its meaning</h4>
-          <p>Text is a blob under the text library’s <code>utf8</code> key, and a 64-bit float is an eight-byte blob under the f64 library’s key; the small <sub class="tag">f64</sub> beside a number names that library. Other libraries read numbers their own way (f32, u64, and Fidget, whose arithmetic builds 3D shapes), and each has its own <code>+</code>. The tag on an operator records whose arithmetic you chose.</p>
+          <p>Text is a blob under the text library’s <code>utf8</code> key, and a 64-bit float is an eight-byte blob under the f64 library’s key; the little <sub class="tag">f64</sub> beside a number names that library. Other libraries read numbers their own way (f32, u64, and Fidget, whose arithmetic builds 3D shapes), and each has its own <code>+</code>. The tag on an operator records whose arithmetic you chose.</p>
           <p class="idea-links"><a href="lab/peel.html#bytes">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#packages-and-libraries">Libraries</a></p>
         </article>
         <h3 class="idea-group">Projections and language</h3>
@@ -125,11 +130,12 @@
         <article class="idea" id="views">
           <h4>Projections are programs</h4>
           <p>A projection is an ordinary function, so a document can declare its own libraries with projections written in Grap. Each library names the keys it owns, and every record carrying one is drawn by its projection, a fraction stacked over a rule or an angle as a dial, while the parts it shows stay editable.</p>
+          <figure class="idea-figure"><img src="images/libraries-light.png" alt="Fractions stacked over rules and angles drawn as dials, beside the key each library owns." width="1408" height="468" loading="lazy" /></figure>
           <p class="idea-links"><a href="editor/?example=libraries" target="_blank" rel="noopener">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md">Projections</a></p>
         </article>
         <article class="idea" id="panes">
           <h4>The workspace is part of the document</h4>
-          <p>Panes are an ordinary <code>panes: {left: […], right: […]}</code> record in the document. Opening or moving a pane edits that record, so the layout saves and undoes with everything else.</p>
+          <p>Panes are an ordinary record in the document, <code>panes: {left: […], right: […]}</code>. Opening or moving a pane edits that record, so the layout saves and undoes with everything else.</p>
           <p class="idea-links"><a href="https://github.com/jbrownson/progred/blob/master/docs/model.md#panes">Panes</a></p>
         </article>
         <h3 class="idea-group">Underneath</h3>
