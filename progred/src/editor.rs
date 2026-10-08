@@ -532,7 +532,9 @@ impl Editor {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::Save => self.menu_save(false),
             #[cfg(target_arch = "wasm32")]
-            DocCommand::Save => self.web_save(),
+            DocCommand::Save => self.web_save(false),
+            #[cfg(target_arch = "wasm32")]
+            DocCommand::SaveAs => self.web_save(true),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::SaveAs => self.menu_save(true),
             DocCommand::Undo => self.step_history(true, geometry),
@@ -662,23 +664,31 @@ impl Editor {
         }
     }
 
-    /// The browser's save is a download of the document's text, named as
-    /// the file it came from.
+    /// The browser's save is a download of the document's text. As on the
+    /// desktop, an untitled document asks for its name, which then sticks;
+    /// save-as always asks. A cancelled prompt saves nothing.
     #[cfg(target_arch = "wasm32")]
-    fn web_save(&mut self) {
-        let name = self
+    fn web_save(&mut self, save_as: bool) {
+        let current = self
             .doc_path
             .as_deref()
             .and_then(|path| path.file_name())
-            .map_or_else(
-                || "untitled.gid".to_owned(),
-                |name| name.to_string_lossy().into_owned(),
-            );
+            .map(|name| name.to_string_lossy().into_owned());
+        let name = match (save_as, current) {
+            (false, Some(name)) => name,
+            (_, current) => {
+                let Some(name) = crate::web::ask_name(current.as_deref().unwrap_or("untitled.gid"))
+                else {
+                    return;
+                };
+                name
+            }
+        };
         match crate::web::download(&name, &gid_text::print(&self.model.doc, &self.text_binders)) {
             Ok(()) => {
                 self.model.mark_saved();
                 self.finish_gesture();
-                self.refresh_title();
+                self.adopt_doc_path(PathBuf::from(name));
             }
             Err(error) => web_sys::console::error_1(&error),
         }
@@ -758,7 +768,6 @@ impl Editor {
         }
     }
 
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn adopt_doc_path(&mut self, path: PathBuf) {
         // An in-place save keeps its frame claim; only a new document
         // identity renames it.

@@ -51,6 +51,7 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
         Entry::Command(C::App(A::Open)),
         Entry::Separator,
         Entry::Command(C::Doc(D::Save)),
+        Entry::Command(C::Doc(D::SaveAs)),
     ];
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let file_entries = vec![

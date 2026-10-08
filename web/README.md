@@ -112,8 +112,8 @@ enabled item, and Enter/Space activates it. Escape, Tab, an outside click, or
 losing focus dismisses the menu. The displayed Cmd/Ctrl shortcuts work with menus
 open or closed. The native macOS menu remains separate. File's Open… takes a
 `.gid` file the browser uploads, asking first when the document has unsaved
-changes, and Save downloads the document under the name it was opened as, or
-`untitled.gid`.
+changes. Save downloads the document under the name it was opened or last
+saved as; an untitled document, or Save As…, asks for the name first.
 
 The menu bar's far end shows Progred's stage and the commit the build came
 from, as native window titles do, so a screenshot says which version it shows.

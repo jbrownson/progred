@@ -119,7 +119,7 @@ pub enum DocCommand {
     /// On the web, a file the browser downloads.
     #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
     Save,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
     SaveAs,
     Undo,
     Redo,
@@ -299,7 +299,7 @@ pub fn spec(command: Command) -> Spec {
         ),
         #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
         Command::Doc(DocCommand::Save) => item("Save", Some(Shortcut::plain(ShortcutKey::S))),
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
         Command::Doc(DocCommand::SaveAs) => {
             item("Save As…", Some(Shortcut::shifted(ShortcutKey::S)))
         }
@@ -362,7 +362,7 @@ impl Availability {
         match command {
             #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             DocCommand::Save => self.save,
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             DocCommand::SaveAs => true,
             DocCommand::Undo => self.undo,
             DocCommand::Redo => self.redo,

@@ -127,6 +127,23 @@ pub fn computation_finished() {
     });
 }
 
+/// Ask what to call a saved file; `None` is a cancelled prompt. A name
+/// without the extension gets it, so a bare "forest" saves as forest.gid.
+pub(crate) fn ask_name(default: &str) -> Option<String> {
+    let answer = web_sys::window()?
+        .prompt_with_message_and_default("Save as", default)
+        .ok()??;
+    let answer = answer.trim();
+    if answer.is_empty() {
+        return None;
+    }
+    Some(if answer.ends_with(".gid") {
+        answer.to_owned()
+    } else {
+        format!("{answer}.gid")
+    })
+}
+
 /// Hand the browser a file to save: a link to the text, clicked.
 pub(crate) fn download(name: &str, text: &str) -> Result<(), wasm_bindgen::JsValue> {
     let document = web_sys::window()
