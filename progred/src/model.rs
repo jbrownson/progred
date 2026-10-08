@@ -57,7 +57,6 @@ impl Model {
         };
     }
 
-    #[cfg(any(test, target_os = "macos", target_os = "linux"))]
     pub fn mark_saved(&mut self) {
         self.saved = self.doc.clone();
         selection::break_edit_run(self.selection.as_mut());

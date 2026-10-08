@@ -66,6 +66,9 @@ pub(crate) enum AfterDiscard {
         doc: gid::Document,
         binders: gid_text::Binders,
     },
+    /// Offer the browser's file picker; its file arrives as an event.
+    #[cfg(target_arch = "wasm32")]
+    Open,
     #[cfg(target_arch = "wasm32")]
     Quit,
 }
@@ -416,7 +419,7 @@ impl Editor {
             .as_ref()
             .map(selection::Selection::root);
         command::Availability {
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             save: self.model.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
@@ -528,6 +531,8 @@ impl Editor {
         match command {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::Save => self.menu_save(false),
+            #[cfg(target_arch = "wasm32")]
+            DocCommand::Save => self.web_save(),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::SaveAs => self.menu_save(true),
             DocCommand::Undo => self.step_history(true, geometry),
@@ -654,6 +659,28 @@ impl Editor {
                     eprintln!("failed to save {}: {error}", path.display());
                 }
             }
+        }
+    }
+
+    /// The browser's save is a download of the document's text, named as
+    /// the file it came from.
+    #[cfg(target_arch = "wasm32")]
+    fn web_save(&mut self) {
+        let name = self
+            .doc_path
+            .as_deref()
+            .and_then(|path| path.file_name())
+            .map_or_else(
+                || "untitled.gid".to_owned(),
+                |name| name.to_string_lossy().into_owned(),
+            );
+        match crate::web::download(&name, &gid_text::print(&self.model.doc, &self.text_binders)) {
+            Ok(()) => {
+                self.model.mark_saved();
+                self.finish_gesture();
+                self.refresh_title();
+            }
+            Err(error) => web_sys::console::error_1(&error),
         }
     }
 

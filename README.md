@@ -82,9 +82,9 @@ browser currently runs expensive jobs synchronously.
 - **Complete libraries in documents.** A document can declare a library that
   draws its own records, but the library can't offer completions yet, and other
   documents can't load it.
-- **A full browser version.** The web editor can't open or save documents, so
-  edits are lost on reload. Its copy and paste stay inside the page, and IME and
-  dictation don't work in it.
+- **A full browser version.** The web editor saves a document as a download
+  and opens one as an upload, and a reload loses anything unsaved. Its copy and
+  paste stay inside the page, and IME and dictation don't work in it.
 - **Accessibility.** The editor draws to a canvas without an accessibility
   tree, so screen readers can't read it.
 - **A stable format.** The document format, Grap, and the libraries are all

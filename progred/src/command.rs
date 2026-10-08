@@ -58,7 +58,8 @@ pub enum AppCommand {
     New,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     NewWindow,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    /// On the web, a file the browser uploads.
+    #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
     Open,
     /// Close the focused window.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -115,7 +116,8 @@ impl Example {
 /// menu's own window for the drawn one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DocCommand {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    /// On the web, a file the browser downloads.
+    #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
     Save,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     SaveAs,
@@ -185,13 +187,13 @@ pub enum ShortcutKey {
     Digit5,
     D,
     N,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
     O,
     P,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Q,
     R,
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
     S,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     W,
@@ -214,13 +216,13 @@ impl ShortcutKey {
             Self::Digit5 => "5",
             Self::D => "D",
             Self::N => "N",
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             Self::O => "O",
             Self::P => "P",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             Self::Q => "Q",
             Self::R => "R",
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             Self::S => "S",
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             Self::W => "W",
@@ -262,7 +264,7 @@ pub fn spec(command: Command) -> Spec {
         Command::App(AppCommand::NewWindow) => {
             item("New Window", Some(Shortcut::shifted(ShortcutKey::N)))
         }
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
         Command::App(AppCommand::Open) => item("Open…", Some(Shortcut::plain(ShortcutKey::O))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::App(AppCommand::Close) => item("Close", Some(Shortcut::plain(ShortcutKey::W))),
@@ -295,7 +297,7 @@ pub fn spec(command: Command) -> Spec {
             "Document Libraries",
             Some(Shortcut::plain(ShortcutKey::Digit5)),
         ),
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
         Command::Doc(DocCommand::Save) => item("Save", Some(Shortcut::plain(ShortcutKey::S))),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::SaveAs) => {
@@ -338,7 +340,7 @@ pub fn spec(command: Command) -> Spec {
 /// live.
 #[derive(Clone, Copy)]
 pub struct Availability {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
     pub save: bool,
     pub undo: bool,
     pub redo: bool,
@@ -358,7 +360,7 @@ pub struct Availability {
 impl Availability {
     pub fn doc_enabled(self, command: DocCommand) -> bool {
         match command {
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             DocCommand::Save => self.save,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::SaveAs => true,

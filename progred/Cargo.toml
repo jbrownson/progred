@@ -62,10 +62,17 @@ wasm-bindgen-rayon = { version = "1.3", features = ["no-bundler"] }
 wasm-bindgen-futures = "0.4"
 web-sys = { workspace = true, features = [
     "console",
+    "Blob",
+    "BlobPropertyBag",
     "CanvasRenderingContext2d",
     "Document",
+    "File",
+    "FileList",
+    "HtmlAnchorElement",
     "HtmlCanvasElement",
+    "HtmlInputElement",
     "KeyboardEvent",
+    "Url",
     "Window",
 ] }
 

@@ -127,6 +127,56 @@ pub fn computation_finished() {
     });
 }
 
+/// Hand the browser a file to save: a link to the text, clicked.
+pub(crate) fn download(name: &str, text: &str) -> Result<(), wasm_bindgen::JsValue> {
+    let document = web_sys::window()
+        .and_then(|window| window.document())
+        .ok_or("no document")?;
+    let options = web_sys::BlobPropertyBag::new();
+    options.set_type("text/plain");
+    let parts = web_sys::js_sys::Array::of1(&text.into());
+    let blob = web_sys::Blob::new_with_str_sequence_and_options(&parts, &options)?;
+    let url = web_sys::Url::create_object_url_with_blob(&blob)?;
+    let link: web_sys::HtmlAnchorElement = document.create_element("a")?.unchecked_into();
+    link.set_href(&url);
+    link.set_download(name);
+    link.click();
+    web_sys::Url::revoke_object_url(&url)
+}
+
+/// Offer the browser's file picker; the chosen file's text arrives as
+/// [`UserEvent::Opened`] once read.
+pub(crate) fn pick_document(proxy: winit::event_loop::EventLoopProxy<UserEvent>) {
+    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
+        return;
+    };
+    let Ok(element) = document.create_element("input") else {
+        return;
+    };
+    let input: web_sys::HtmlInputElement = element.unchecked_into();
+    input.set_type("file");
+    input.set_accept(".gid");
+    let picked = input.clone();
+    let chosen = wasm_bindgen::closure::Closure::once(move || {
+        let Some(file) = picked.files().and_then(|files| files.get(0)) else {
+            return;
+        };
+        let name = file.name();
+        wasm_bindgen_futures::spawn_local(async move {
+            match wasm_bindgen_futures::JsFuture::from(file.text()).await {
+                Ok(text) => {
+                    let source = text.as_string().unwrap_or_default();
+                    let _ = proxy.send_event(UserEvent::Opened { name, source });
+                }
+                Err(error) => web_sys::console::error_1(&error),
+            }
+        });
+    });
+    input.set_onchange(Some(chosen.as_ref().unchecked_ref()));
+    chosen.forget();
+    input.click();
+}
+
 /// A bundled example's document, named by its file without `.gid`.
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn example_source(name: &str) -> Option<String> {

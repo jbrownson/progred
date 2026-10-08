@@ -110,7 +110,10 @@ heading switches to it. Mouse and keyboard share one highlighted item.
 F10 opens/closes the menu bar, arrows navigate, Home/End select the first/last
 enabled item, and Enter/Space activates it. Escape, Tab, an outside click, or
 losing focus dismisses the menu. The displayed Cmd/Ctrl shortcuts work with menus
-open or closed. The native macOS menu remains separate.
+open or closed. The native macOS menu remains separate. File's Open… takes a
+`.gid` file the browser uploads, asking first when the document has unsaved
+changes, and Save downloads the document under the name it was opened as, or
+`untitled.gid`.
 
 The menu bar's far end shows Progred's stage and the commit the build came
 from, as native window titles do, so a screenshot says which version it shows.

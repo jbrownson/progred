@@ -46,7 +46,12 @@ fn drawn_label(shortcut: command::Shortcut, command: puri::keyboard::CommandModi
 pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Menu> {
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
     #[cfg(target_arch = "wasm32")]
-    let file_entries = vec![Entry::Command(C::App(A::New))];
+    let file_entries = vec![
+        Entry::Command(C::App(A::New)),
+        Entry::Command(C::App(A::Open)),
+        Entry::Separator,
+        Entry::Command(C::Doc(D::Save)),
+    ];
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     let file_entries = vec![
         Entry::Command(C::App(A::New)),

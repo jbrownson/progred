@@ -26,7 +26,6 @@ use crate::{gid_text, stack};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{modifiers, platform, styles, text_store};
 use kurbo::Size;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::path::PathBuf;
 use std::sync::Arc;
 use web_time::Instant;
@@ -238,6 +237,17 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             UserEvent::Command(command) => self.run_command(event_loop, command),
+            #[cfg(target_arch = "wasm32")]
+            UserEvent::Opened { name, source } => match gid_text::parse(&source) {
+                Ok((doc, binders)) => {
+                    if let Some(index) = self.focused_index() {
+                        self.editors[index].adopt_model(doc, Some(PathBuf::from(name)), binders);
+                    }
+                }
+                Err(error) => {
+                    web_sys::console::error_1(&format!("failed to open {name}: {error}").into())
+                }
+            },
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             UserEvent::Discard { window, accepted } => {
                 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -764,6 +774,12 @@ impl App {
                     }
                 }
             }
+            #[cfg(target_arch = "wasm32")]
+            AppCommand::Open => {
+                if let Some(index) = self.focused_index() {
+                    self.request_discard(event_loop, index, AfterDiscard::Open);
+                }
+            }
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             AppCommand::Close => {
                 if let Some(index) = self.focused_index() {
@@ -909,6 +925,8 @@ impl App {
                     self.sync_menus(index);
                 }
             }
+            #[cfg(target_arch = "wasm32")]
+            AfterDiscard::Open => crate::web::pick_document(self.proxy.clone()),
             #[cfg(target_arch = "wasm32")]
             AfterDiscard::Quit => event_loop.exit(),
         }
