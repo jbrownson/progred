@@ -21,7 +21,7 @@ const layers = [
     label: "Calculations",
     names: "grap, control, sequence, absent",
     libraries: ["f7735b90f6826b25c350a8fd83af8c47", "ec17915df2d42377574dc90f22500fe2", "0ad8124ba821acd5fbf2c868371e1492", "873c68ac371dbbb98a4f198546d60241"],
-    off: "Grap, the language, is a library, and so is the way it draws code. With that projection off, a call is the record it always was: a <code>function</code> key and its arguments filed under their parameters. Names in parentheses, like <code>(forest)</code> and <code>(slider)</code>, point at cells defined elsewhere, in this document or a library. The <code>\"</code> and <code>`</code> came off too: <code>\"</code> was a call to <code>quote</code>, which returns its expression as data with each <code>unquote</code> filled in.",
+    off: "Grap, the language, is a library, and so is the way it draws code. With that projection off, a call is the record it always was: a <code>function</code> key and its arguments filed under their parameters. Names in parentheses, like <code>(forest)</code> and <code>(slider)</code>, are cells defined elsewhere, in this document or a library. The <code>\"</code> and <code>`</code> came off too: <code>\"</code> was a call to <code>quote</code>, which returns its expression as data with each <code>unquote</code> filled in.",
   },
   {
     id: "numbers",

@@ -66,9 +66,9 @@ for a free port when running an additional preview alongside this one.
   `make images` regenerates the forest still the link preview uses, the
   document-libraries still beside "Projections are programs", and the
   copies of the [README screenshots](../docs/images/README.md), after editor changes.
-- `public/tutorial.html` is the exercise tutorial described below. `public/story.html` and
-  `public/lab/peel.html` are the alternative tutorials the home page asks
-  visitors to compare.
+- `public/story.html` is the tutorial the home page recommends; `public/tutorial.html`
+  (the exercise tutorial described below) and `public/lab/peel.html` are the
+  alternatives it lists after it.
 - `public/style.css`, `public/lessons.js`, and `public/appearance.js` are shared. Edit and refresh.
 - `public/lessons/*.gid` are the small, ordinary documents used by the exercises.
   They are fetched at startup, not compiled into the editor.

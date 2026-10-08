@@ -57,7 +57,7 @@
     </header>
 
     <main class="story">
-      <p class="variant-note">Progred is pre-alpha, and this is one of <a href="./#ways-in">three tutorials</a> being compared. Share on <a href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Zulip</a> which one works for you, and what confused you or broke.</p>
+      <p class="variant-note">Progred is pre-alpha, and this is the tutorial to start with; <a href="./#ways-in">two others</a> take different routes. Share on <a href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Zulip</a> what clicked, and what confused you or broke.</p>
       <section class="exercise showcase" id="growing" aria-label="A growing forest">
         <p class="lede"><strong>This forest is a program.</strong> Drag the slider and it grows.</p>
         <p class="lede">Progred is an editor where a program is structure, not text. What you see are drawings of that structure, and you can edit through any of them. This forest started as a single dot. Below, you’ll rebuild it step by step, strip it down to the records it’s made of, and end with a forest of your own.</p>
@@ -117,7 +117,6 @@
           <li data-task="bigger"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make both dots bigger again. It’s one edit now.</span></li>
           <li data-task="pick"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click a dot. This time you land inside <code>dot</code>, on the <code>fill</code> that painted it. A click finds the deepest code on screen that drew what you clicked.</span></li>
         </ol>
-        <p class="aside">If you use Figma: <code>dot</code> is a main component, and each call is an instance.</p>
       </section>
 
       <section class="exercise" id="trunks" aria-labelledby="trunks-title">
@@ -150,7 +149,7 @@
           <li data-task="top"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the <strong>60</strong> in the top view. It lights up in all three.</span></li>
           <li data-task="bottom"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Now find it in the bottom view and click it there.</span></li>
         </ol>
-        <p class="aside">At the bottom nothing is interpreted. A call is a <strong>record</strong>, values filed under keys, and its keys are identities: <code>…10115</code> is x, and the word <strong>x</strong> is a label drawn on top. <code>0x…4e40</code> is your 60, stored as the eight bytes of a floating-point number, and <code>(…)</code> is the recipe, folded; click the dots to open it. The call points at the recipe by identity, which is why renaming was safe. Everything in Progred is built from four things: records <code>{ }</code>, lists <code>[ ]</code>, blobs of raw bytes <code>0x…</code>, and cells <code>( )</code>, values with an identity of their own.</p>
+        <p class="aside">At the bottom nothing is interpreted. A call is a <strong>record</strong>, values filed under keys, and its keys are identities: <code>…10115</code> is x, and the word <strong>x</strong> is a label drawn on top. <code>0x…4e40</code> is your 60, stored as the eight bytes of a floating-point number, and <code>(…)</code> is the recipe, folded; click the dots to open it. The recipe sits in the call as a cell, by identity, which is why renaming was safe. Everything in Progred is built from four things: records <code>{ }</code>, lists <code>[ ]</code>, blobs of raw bytes <code>0x…</code>, and cells <code>( )</code>, values with an identity of their own.</p>
       </section>
 
       <section class="exercise" id="heights" aria-labelledby="heights-title">
@@ -171,7 +170,7 @@
 
       <section class="exercise" id="growth" aria-labelledby="growth-title">
         <h2 id="growth-title">Growing together</h2>
-        <p>The leaves now sit at <code>160 - height</code>, like the trunks, so each tree computes its own, the way a spreadsheet formula does. To make the forest grow, every tree’s height has to follow one shared number. The parentheses around each <strong>1</strong> mark a <strong>cell</strong>, a value with its own identity. All three calls point at the same one, the way formulas point at a spreadsheet cell.</p>
+        <p>The leaves now sit at <code>160 - height</code>, like the trunks, so each tree computes its own, the way a spreadsheet formula does. To make the forest grow, every tree’s height has to follow one shared number. The parentheses around each <strong>1</strong> mark a <strong>cell</strong>, a value with its own identity. All three calls hold the same one, the way three formulas can use one spreadsheet cell.</p>
         <div class="editor-example">
           <iframe src="./editor/?document=../lessons/story/growth.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=growth-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees whose heights share one growth value" loading="lazy"></iframe>
           <div class="editor-actions">
@@ -183,7 +182,7 @@
           <li data-task="shrink"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change any of the <strong>1</strong>s to <strong>0.5</strong>, or hold <kbd data-command-key>Ctrl</kbd> and drag it. Every tree shrinks at once.</span></li>
           <li data-task="plant"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Plant a fourth tree by hand: click between the last two <code>tree</code> lines, type <code>tree</code>, press <kbd>Enter</kbd>, and give it an x and a height.</span></li>
         </ol>
-        <p class="aside">Parameters have identities too: <code>(x)</code> and <code>(height)</code> are what each call’s labels point at, which is how the rename worked.</p>
+        <p class="aside">Parameters have identities too: each call files its arguments under those same <code>(x)</code> and <code>(height)</code> cells, which is how the rename worked.</p>
       </section>
 
       <section class="exercise" id="counted" aria-labelledby="counted-title">
@@ -205,7 +204,7 @@
 
       <section class="next feedback" aria-labelledby="feedback-title">
         <h2 id="feedback-title">Did this one work for you?</h2>
-        <p>This is one of three tutorials being compared. Share on Zulip whether it made Progred click and where you got lost; the answers shape which one gets built out.</p>
+        <p>Share on Zulip whether this made Progred click and where you got lost; the answers shape what gets built out. Two other tutorials take different routes from here.</p>
         <p class="actions"><a class="button primary" href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Share on Zulip</a> <a class="button" href="./#ways-in">Try another way in</a></p>
         <p class="session-note">Edits aren’t saved when you reload. <a href="try" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a></p>
       </section>

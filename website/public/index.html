@@ -81,12 +81,12 @@
       <section class="pitch" id="what" aria-labelledby="what-title">
         <h2 id="what-title">What it is</h2>
         <p>Progred is a pre-alpha programming environment. Your program is a document, and everything you see, including the code, is a projection of it drawn by some library. Working in it feels more like a spreadsheet than a text file: change a value, and whatever depends on it updates. It’s a minimal prototype that demonstrates the ideas below, not a finished product.</p>
-        <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also live in a cell, which has its own identity, so any number of places can point to it; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
+        <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also be a cell, which has its own identity, and the same cell can sit in any number of places; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
         <p><strong>Progred is public early to get feedback.</strong> Share on Zulip what clicks, what doesn’t, and where you get lost.</p>
         <p class="actions">
           <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Chat about it on Zulip</a>
           <a class="button" href="try">Try the editor</a>
-          <a class="button" href="#ways-in">Try a tutorial</a>
+          <a class="button" href="story.html">Start the tutorial</a>
           <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">Source on GitHub</a>
         </p>
       </section>
@@ -96,7 +96,7 @@
         <h3 class="idea-group">The data</h3>
         <article class="idea" id="structure">
           <h4>Structure, not text</h4>
-          <p>A Progred document is built from four things: records, lists, blobs, and cells. Records map keys to values and lists keep them in order; blobs, runs of raw bytes, are the leaves; a cell is a value with its own identity that any number of places can point to, which makes a document a graph rather than a tree. Nothing is parsed, and there’s no source text to keep in sync. The <code>.gid</code> files in the repository are a temporary text bridge for Git and tools.</p>
+          <p>A Progred document is built from four things: records, lists, blobs, and cells. Records map keys to values and lists keep them in order; blobs, runs of raw bytes, are the leaves; a cell is a value with its own identity, and the same cell can sit in any number of places, which makes a document a graph rather than a tree. Nothing is parsed, and there’s no source text to keep in sync. The <code>.gid</code> files in the repository are a temporary text bridge for Git and tools.</p>
           <p class="idea-links"><a href="lab/peel.html#cells">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/gid.md">GID</a></p>
         </article>
         <article class="idea" id="identity">
@@ -193,12 +193,12 @@
       </section>
 
       <section class="ways-in" id="ways-in" aria-labelledby="ways-in-title">
-        <h2 id="ways-in-title">Three ways in. Which one works?</h2>
-        <p>There’s no settled way to introduce Progred yet, so here are three tutorials on the same editor, each taking a different route. Try one or two, then share on Zulip which made it click and where you got lost. They’re best on a laptop.</p>
+        <h2 id="ways-in-title">Where to start</h2>
+        <p>Start with the story: one program grows from a dot into the forest above, and each step adds one idea. Two more tutorials take other routes through the same editor; try one after, then share on Zulip which made it click and where you got lost. They’re best on a laptop.</p>
         <ol class="tutorials">
-          <li><a href="tutorial.html"><strong>Change a program, see what happens</strong><span>A guided tour in short exercises: values, views, cells, calculations, functions, and drawings, with tasks that check themselves.</span></a></li>
-          <li><a href="story.html"><strong>How the forest was made</strong><span>One program grows from a single dot into a forest, and each step adds one idea.</span></a></li>
+          <li><a href="story.html"><strong>How the forest was made</strong><span>Start here. One program grows from a single dot into a forest, and each step adds one idea.</span></a></li>
           <li><a href="lab/peel.html"><strong>Peel the forest</strong><span>Start from the finished forest and switch off what its libraries draw until only structure is left, then open six doors into what you saw.</span></a></li>
+          <li><a href="tutorial.html"><strong>Change a program, see what happens</strong><span>A guided tour in short exercises: values, views, cells, calculations, functions, and drawings, with tasks that check themselves.</span></a></li>
         </ol>
         <p class="actions"><a class="button primary" href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Share which worked</a></p>
       </section>
