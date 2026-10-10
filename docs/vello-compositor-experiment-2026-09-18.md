@@ -91,7 +91,7 @@ large CPU images. It can support GPU-resident mesh output later. Before adopting
 ## Reproduce
 
 The tests now exercise production code rather than retaining a duplicate
-experimental implementation. Sources: [test entry](../progred/tests/compositor_experiment.rs),
+experimental implementation. Sources: [test entry](../ui/puri-vello/tests/compositor.rs),
 [canvas interpreter](../ui/puri-vello/src/compositor/canvas.rs),
 [GPU composition](../ui/puri-vello/src/compositor.rs), and
 [blend shader](../ui/puri-vello/src/compositor/blend.wgsl).
@@ -99,14 +99,14 @@ experimental implementation. Sources: [test entry](../progred/tests/compositor_e
 Build with the repository wrapper:
 
 ```sh
-./tools/sandbox-cargo test --release -p progred --test compositor_experiment --no-run
+./tools/sandbox-cargo test --release -p puri-vello --features capture --test compositor --no-run
 ```
 
 Run the resulting test executable with `--ignored --nocapture --test-threads=1`
 in an environment with explicitly authorized GPU access. The Seatbelt build
 environment does not provide that access. This is headless, not an app launch.
 Pixel comparisons write reference, composite, and amplified-difference PNGs into
-`target/compositor-experiment/` for inspection.
+`compositor/` under the build directory for inspection.
 
 ## Native integration follow-up
 

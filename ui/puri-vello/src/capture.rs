@@ -1,3 +1,5 @@
+//! Headless GPU textures and readback for tests that compare rendered pixels.
+
 use vello::wgpu;
 
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -24,7 +26,7 @@ impl Gpu {
 
     pub fn texture(&self, width: u32, height: u32) -> wgpu::Texture {
         self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("compositor experiment"),
+            label: Some("capture"),
             size: wgpu::Extent3d {
                 width,
                 height,

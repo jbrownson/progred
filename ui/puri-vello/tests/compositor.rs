@@ -1,10 +1,10 @@
 //! Headless checks of the production compositor; never launches the app.
-#[path = "compositor_experiment/gpu.rs"]
-mod gpu;
+//! Run with `--features capture -- --ignored`.
+#![cfg(feature = "capture")]
 
-use gpu::Gpu;
 use puri::draw::{Canvas, CanvasSink};
 use puri_vello::VelloCanvas;
+use puri_vello::capture::Gpu;
 use puri_vello::compositor::{Compositor, Layer, Resources, SplitCanvas};
 use std::{path::Path, time::Instant};
 use vello::{
@@ -150,7 +150,10 @@ fn compositor_pixels() {
     let mut compositor = Compositor::new(&gpu.device, &gpu.queue).unwrap();
     let mut resources = Resources::default();
     let pattern = pattern();
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/compositor-experiment");
+    let dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"))
+        .join("compositor");
     std::fs::create_dir_all(&dir).unwrap();
     for complex in [false, true] {
         let mut original = Scene::new();

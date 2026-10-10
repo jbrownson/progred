@@ -2663,7 +2663,6 @@ dependencies = [
  "clipboard-rs",
  "console_error_panic_hook",
  "fidget",
- "fidget-wgpu",
  "futures-intrusive",
  "getrandom 0.3.4",
  "gid",
@@ -2720,6 +2719,8 @@ name = "puri-vello"
 version = "0.1.0"
 dependencies = [
  "nalgebra",
+ "png",
+ "pollster",
  "puri",
  "vello",
 ]

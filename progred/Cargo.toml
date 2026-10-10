@@ -7,8 +7,6 @@ license.workspace = true
 [features]
 cam-profile = []
 layout-profile = []
-mesh-experiment = []
-gpu-experiment = ["dep:fidget-wgpu", "fidget-wgpu/experimental-spills"]
 
 [[example]]
 name = "cam_profile"
@@ -41,7 +39,6 @@ puri-vello = { path = "../ui/puri-vello" }
 vello.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-fidget-wgpu = { path = "../vendor/fidget-wgpu", optional = true }
 fidget-engine = { package = "fidget", git = "https://github.com/mkeeter/fidget", rev = "0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6", default-features = false, features = ["wgpu"] }
 pollster.workspace = true
 
@@ -94,6 +91,7 @@ raw-window-metal = "1.1.0"
 [dev-dependencies]
 base64 = "0.22.1"
 png = "0.18.1"
+puri-vello = { path = "../ui/puri-vello", features = ["capture"] }
 skrifa.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

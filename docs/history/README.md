@@ -32,6 +32,9 @@ The [iPad host notes](ipad-host.md) describe the feasibility port removed on
 The [Roc comparison notes](roc-notes.md) retain the former porting backlog
 as proposals rather than current tasks.
 
+The [lambda calculus exploration](lambda-calculus-exploration.md) records the
+July 2026 line of thought, dead ends included, behind the values-and-cells model.
+
 The [Rust pivot](rust-pivot.md) and [prototype survey](prototype-survey.md)
 are older handoffs. Use [current documentation](../README.md) for the active
 implementation, and confirm behavior in code and tests when making changes.

@@ -12,9 +12,7 @@ use vello::{AaConfig, RenderParams, Renderer, RendererOptions, Scene};
 
 mod mesh;
 
-#[path = "../../../../tests/compositor_experiment/gpu.rs"]
-#[allow(dead_code)]
-mod gpu;
+use puri_vello::capture as gpu;
 
 #[test]
 #[ignore = "headless CAM hover GPU regression"]

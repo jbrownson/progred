@@ -1,5 +1,7 @@
 //! Vello drawing and ordered composition with independently owned images.
 
+#[cfg(feature = "capture")]
+pub mod capture;
 pub mod compositor;
 pub mod mesh;
 

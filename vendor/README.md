@@ -25,9 +25,9 @@ Local source changes, each including regression tests:
   independent of the others below.
 - [Core SSA access patch](../docs/experiments/fidget-core-ssa.patch): expose the
   existing SSA tape, lower a caller-supplied valid tape with its variable map,
-  and wrap a function as a shape. These additive APIs support the test-only
-  persistent-expression experiment; they do not change existing evaluation or
-  rendering. This patch is independent of the others below.
+  and wrap a function as a shape. These additive APIs supported the test-only
+  persistent-expression experiment, retired on 2026-10-10; they do not change
+  existing evaluation or rendering. This patch is independent of the others below.
 - [AArch64 JIT patch](../docs/experiments/fidget-jit-aarch64.patch): full-width
   spill addresses and stack adjustment, preservation of callee-saved registers,
   and long bulk-loop exits. Small tapes retain the short addressing form.
@@ -64,7 +64,8 @@ Local source changes, each including regression tests:
   interval work to lose performance; it remains outside the app.
   **Not ready for app use or an upstream proposal.** See the
   [experiment report](../docs/fidget-gpu-experiment-2026-09-16.md). Its tests use
-  the core SSA access patch above.
+  the core SSA access patch above. Progred no longer enables
+  `experimental-spills`: its diagnostic was retired on 2026-10-10.
 
 These patch files apply to upstream in the order listed, with no manifest adaptation, and are
 intended for upstream review, except the explicitly experimental GPU patch.

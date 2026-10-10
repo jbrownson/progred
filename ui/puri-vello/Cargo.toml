@@ -4,9 +4,15 @@ version = "0.1.0"
 edition = "2024"
 license.workspace = true
 
+[features]
+# Headless GPU readback for pixel tests here and in dependent crates.
+capture = ["dep:pollster"]
+
 [dependencies]
+pollster = { workspace = true, optional = true }
 puri.workspace = true
 vello.workspace = true
 
 [dev-dependencies]
 nalgebra = "0.35"
+png = "0.18.1"

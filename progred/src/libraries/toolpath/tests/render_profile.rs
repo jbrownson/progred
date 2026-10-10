@@ -259,53 +259,6 @@ fn cam_render_profile() {
         }
         return;
     }
-    #[cfg(all(not(target_arch = "wasm32"), feature = "gpu-experiment"))]
-    if std::env::var("CAM_GPU").is_ok() {
-        let objects = if std::env::var("CAM_GPU_STOCK").is_ok() {
-            vec![stock]
-        } else {
-            paths
-                .iter()
-                .chain(tool.iter())
-                .chain(std::iter::once(&stock))
-                .cloned()
-                .collect()
-        };
-        implicit::raster::diagnostics::compare_gpu(&preview(objects));
-        return;
-    }
-    if std::env::var("CAM_SCENE_TILES").is_ok()
-        || std::env::var("CAM_SCENE_PREPARE").is_ok()
-        || std::env::var("CAM_TILE_PUBLICATION").is_ok()
-        || std::env::var("CAM_RETAINED_REGIONS").is_ok()
-    {
-        let objects: Vec<_> = paths
-            .iter()
-            .chain(tool.iter())
-            .chain(std::iter::once(&stock))
-            .cloned()
-            .collect();
-        if std::env::var("CAM_RETAINED_REGIONS").is_ok() {
-            let stock_index = objects.len() - 1;
-            implicit::raster::diagnostics::compare_retained_regions(&preview(objects), stock_index);
-        } else if std::env::var("CAM_TILE_PUBLICATION").is_ok() {
-            implicit::raster::diagnostics::compare_tile_publication(&preview(objects));
-        } else if std::env::var("CAM_SCENE_PREPARE").is_ok() {
-            implicit::raster::diagnostics::compare_scene_preparation(&preview(objects));
-        } else {
-            implicit::raster::diagnostics::compare_scene_tiles(&preview(objects));
-        }
-        return;
-    }
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    if std::env::var("CAM_JIT").is_ok() {
-        implicit::raster::diagnostics::compare_jit(&preview(vec![stock]));
-        return;
-    }
-    if std::env::var("CAM_TILES").is_ok() {
-        implicit::raster::diagnostics::compare_tiles(&preview(vec![stock]));
-        return;
-    }
     if std::env::var("CAM_STOCK_AB").is_ok() {
         let mut cuts = Vec::new();
         recording

@@ -1,5 +1,7 @@
 # Shared-memory browser worker experiment — 2026-09-19
 
+**Removed 2026-10-10:** the `web_worker_probe` example, `worker-probe.html`, and `tools/test-web-worker.cjs` were retired once the worker was integrated. The commands below no longer run; this note is a record of the measurements.
+
 ## Status
 
 **Integrated after the synchronization fixes below.** `make build-web` and

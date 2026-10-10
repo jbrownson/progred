@@ -1,8 +1,9 @@
 # Retained progressive Fidget experiment — 2026-09-15
 
+**Removed 2026-10-10:** the retained-renderer experiment and its raster diagnostics were retired. The commands below no longer run; this note is a record of the measurements.
+
 This is an experiment, **not the application's renderer**. The renderers
-are confined to the test-only
-[raster diagnostics](../progred/src/libraries/fidget/raster/diagnostics/progressive.rs).
+are confined to the test-only raster diagnostics.
 The retained-renderer experiments did not change production scheduling, quality
 defaults, dependency versions, or UI. A subsequent app scheduling trial is
 recorded at the end of this report.

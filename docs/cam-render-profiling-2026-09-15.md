@@ -1,5 +1,7 @@
 # CAM rendering investigation — 2026-09-15
 
+**Removed 2026-10-10:** the raster diagnostics behind the tile, JIT, and scene comparisons were retired; `cam_render_profile` keeps its other modes. The commands below no longer run; this note is a record of the measurements.
+
 ## Scope and conclusion
 
 Profiled the current `toolpaths.gid`: both operations, tilted ball cuts and the
@@ -335,7 +337,7 @@ and long-branch coverage. No GUI was launched.
 
 ### Repeat the checked-in comparison
 
-The [comparison](../progred/src/libraries/fidget/raster/diagnostics/jit.rs) is
+The comparison (in the since-removed raster diagnostics) is
 compiled only for tests on Apple Silicon macOS. No temporary feature, manifest,
 or lockfile edits are needed:
 

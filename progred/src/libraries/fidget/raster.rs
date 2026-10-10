@@ -3,12 +3,11 @@
 use super::*;
 use incremental::background::Progress;
 
-#[cfg(test)]
-pub(crate) mod diagnostics;
-
 mod partial;
 #[cfg(feature = "cam-profile")]
 pub(crate) mod performance;
+#[cfg(test)]
+mod reference;
 pub(crate) use puri::mesh::DepthImage as Frame;
 
 // Meshing keeps VmShape independently; JIT benefits the much denser raster work.

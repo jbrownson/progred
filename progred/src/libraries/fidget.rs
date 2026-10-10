@@ -25,8 +25,6 @@ use gid::{CellId, Cells, Value};
 mod completion;
 pub(crate) mod interaction;
 pub(crate) mod mesh;
-#[cfg(all(test, feature = "mesh-experiment"))]
-mod mesh_experiment;
 mod projection;
 pub(crate) mod raster;
 

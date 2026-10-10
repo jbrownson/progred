@@ -1,5 +1,7 @@
 # GPU spill experiment — 2026-09-16
 
+**Removed 2026-10-10:** the `gpu-experiment` feature and its diagnostic were retired; the vendored spill patch remains. The commands below no longer run; this note is a record of the measurements.
+
 This is a headless experiment, **not an app renderer change**. Command+9 still
 uses the CPU implicit renderer. All tests below used the current Apple Silicon
 Mac's Metal backend; no editor/window was launched.
