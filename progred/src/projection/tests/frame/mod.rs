@@ -398,10 +398,6 @@ fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, E
     place_with_pointer(doc, selection, width, None)
 }
 
-fn key(s: &str) -> Step {
-    Step::Key(crate::test_values::label(s))
-}
-
 mod completion;
 #[cfg(not(target_arch = "wasm32"))]
 mod compositor;

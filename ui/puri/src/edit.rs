@@ -773,7 +773,7 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
     let scale = tcx.scale;
     let ghost = placeholder
         .filter(|_| state.text.is_empty() && !state.is_composing() && !presentation.dressed())
-        .map(|(text, style)| build_layout(tcx, text, style, None, None));
+        .map(|(text, style)| build_layout(tcx, text, style));
     let editor = state.editor(&presentation, tcx.fonts, tcx.layouts, scale);
     let text = match &state.preedit {
         Some(preedit) => {

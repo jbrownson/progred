@@ -28,7 +28,6 @@ pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack<Editor>
 /// projections away. Every library's definitions stay loaded, so keys and
 /// functions keep their names; with names off, each slot shows the base
 /// projection.
-#[cfg(any(test, target_arch = "wasm32"))]
 pub(crate) fn peeled(
     libraries: Option<&str>,
     projections: &str,
@@ -55,7 +54,6 @@ pub(crate) fn peeled(
 /// The document view's content height in CSS pixels from the top of the
 /// editor. The first frame is built before winit has measured the canvas, in
 /// an empty window, so its layout says nothing and reports none.
-#[cfg(any(test, target_arch = "wasm32"))]
 pub(crate) fn content_height(regions: &[crate::placed::ViewRegion], scale: f64) -> Option<f64> {
     regions.iter().find_map(|region| {
         let content = region.content?;
