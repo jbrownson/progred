@@ -15,13 +15,27 @@ if [ "$(uname -s)" != Linux ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    echo "usage: tools/linux-cargo <cargo command> [arguments...]" >&2
+    echo "usage: tools/linux-cargo resolve | <cargo command> [arguments...]" >&2
     exit 2
 fi
 
-exec env \
-    CARGO_NET_OFFLINE=false \
-    CARGO_TARGET_DIR="$project_root/target/native" \
-    PROGRED_COMMIT="$("$tool_dir/progred-commit")" \
-    RUSTC_WRAPPER= \
-    cargo --locked "$@"
+run() {
+    offline=$1
+    shift
+    env \
+        CARGO_NET_OFFLINE="$offline" \
+        CARGO_TARGET_DIR="$project_root/target/native" \
+        PROGRED_COMMIT="$("$tool_dir/progred-commit")" \
+        RUSTC_WRAPPER= \
+        cargo "$@"
+}
+
+# After declaring a dependency, record it in Cargo.lock from the local cache
+# alone, so no newly published registry release can enter the graph.
+if [ "$1" = resolve ]; then
+    shift
+    run true --offline metadata --format-version 1 "$@" >/dev/null
+    exit
+fi
+
+run false --locked "$@"
