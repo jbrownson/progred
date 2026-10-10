@@ -148,10 +148,10 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
                 .and_then(|point| probe.answer(point, self.input.prior, self.input.reach_px))
                 .map(|claim| (self.root.clone(), claim)),
         );
-        if self.input.debug_geometry {
-            if let Some(region) = probe.retention_region(self.input.reach_px) {
-                self.output.debug_regions.push(region);
-            }
+        if self.input.debug_geometry
+            && let Some(region) = probe.retention_region(self.input.reach_px)
+        {
+            self.output.debug_regions.push(region);
         }
         self.output
             .hover_geometry

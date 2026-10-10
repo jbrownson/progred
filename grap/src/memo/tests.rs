@@ -11,7 +11,7 @@ fn definitions(runtime: &Runtime, table: Table) -> (Input<Table>, Definitions<Ta
             table
                 .iter()
                 .find(|(cell, _, _)| cell == key)
-                .map(|(_, origin, value)| (origin.clone(), value.clone())),
+                .map(|(_, origin, value)| (*origin, value.clone())),
         )
     });
     (input, source)

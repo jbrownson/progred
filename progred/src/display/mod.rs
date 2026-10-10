@@ -1006,6 +1006,24 @@ pub fn overlay_value(current: &Value, patch: Value) -> Value {
     }
 }
 
+pub fn drawing_program(
+    extent: measured::Extent,
+    fuel: usize,
+    program: grap::RuntimeValue,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    Layout::widget(Rc::new(move |context| {
+        crate::projection::drawing::program_leaf(
+            context.inputs,
+            context.path,
+            extent.width,
+            extent.ascent,
+            extent.descent,
+            fuel,
+            program.clone(),
+        )
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1213,22 +1231,4 @@ mod tests {
             ProjectionCall::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
     }
-}
-
-pub fn drawing_program(
-    extent: measured::Extent,
-    fuel: usize,
-    program: grap::RuntimeValue,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
-    Layout::widget(Rc::new(move |context| {
-        crate::projection::drawing::program_leaf(
-            context.inputs,
-            context.path,
-            extent.width,
-            extent.ascent,
-            extent.descent,
-            fuel,
-            program.clone(),
-        )
-    }))
 }

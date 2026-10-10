@@ -95,7 +95,7 @@ fn empty_slots_make_values_through_the_picker() {
         for character in typed.chars() {
             key(
                 &mut world,
-                Key::Character(character.to_string().into()),
+                Key::Character(character.to_string()),
                 Modifiers::empty(),
             );
         }
@@ -498,7 +498,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     let point = placed
         .descends
         .iter()
-        .find(|descend| descend.path.as_ref() == &path)
+        .find(|descend| descend.path.as_ref() == path)
         .expect("color descend")
         .rect
         .center();
@@ -571,7 +571,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     let line = active
         .descends
         .iter()
-        .find(|descend| descend.path.as_ref() == &path)
+        .find(|descend| descend.path.as_ref() == path)
         .expect("active color descend")
         .rect;
     let mut double = event.clone();
@@ -1194,7 +1194,7 @@ fn press_key(runner: &mut crate::EditorRunner, key: Key) {
 fn deleting_empties_a_place_then_removing_it_moves_toward_the_key() {
     for (key, lands) in [(NamedKey::Backspace, 0), (NamedKey::Delete, 2)] {
         let (mut runner, paths) = three_lists();
-        press_key(&mut runner, Key::Named(key.clone()));
+        press_key(&mut runner, Key::Named(key));
         let hole = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(hole.path(), paths[1], "{key:?} keeps the place selected");
         assert_eq!(hole.stage(&runner.editor.sources()), Stage::Pending);
@@ -1209,7 +1209,7 @@ fn deleting_empties_a_place_then_removing_it_moves_toward_the_key() {
                 .map(|list| list.len()),
             Some(2)
         );
-        press_key(&mut runner, Key::Named(key.clone()));
+        press_key(&mut runner, Key::Named(key));
         let landed = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(landed.path(), paths[lands], "{key:?} removes the hole");
         assert_eq!(landed.stage(&runner.editor.sources()), Stage::Edge);

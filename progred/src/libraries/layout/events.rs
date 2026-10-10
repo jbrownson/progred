@@ -286,6 +286,93 @@ fn pointer_cancel_value(event: &PointerInfo) -> Value {
     )
 }
 
+fn scroll_value(
+    placement: Placement,
+    scale: f64,
+    event: &PointerScrollEvent,
+    command: fn(&Modifiers) -> bool,
+) -> Value {
+    let mut fields = pointer_fields(placement, scale, &event.state, command);
+    let (x, y) = match event.delta {
+        ScrollDelta::PageDelta(x, y) | ScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
+        ScrollDelta::PixelDelta(delta) => (delta.x, delta.y),
+    };
+    fields.extend([
+        (layout_data::vocabulary::DELTA_X, f64_convention::value(x)),
+        (layout_data::vocabulary::DELTA_Y, f64_convention::value(y)),
+    ]);
+    event_value(layout_data::vocabulary::SCROLL, fields)
+}
+
+fn gesture_value(
+    placement: Placement,
+    scale: f64,
+    event: &PointerGestureEvent,
+    command: fn(&Modifiers) -> bool,
+) -> Value {
+    let mut fields = pointer_fields(placement, scale, &event.state, command);
+    let (kind, delta) = match event.gesture {
+        PointerGesture::Pinch(delta) => (layout_data::vocabulary::PINCH, delta),
+        PointerGesture::Rotate(delta) => (layout_data::vocabulary::ROTATION, delta),
+    };
+    fields.push((
+        layout_data::vocabulary::DELTA,
+        f64_convention::value(f64::from(delta)),
+    ));
+    event_value(kind, fields)
+}
+
+fn key_value(event: &KeyboardEvent, command: fn(&Modifiers) -> bool) -> Value {
+    let mut fields = vec![
+        (
+            layout_data::vocabulary::EVENT_STATE,
+            Value::Cell(match event.state {
+                KeyState::Down => layout_data::vocabulary::DOWN,
+                KeyState::Up => layout_data::vocabulary::UP,
+            }),
+        ),
+        (
+            layout_data::vocabulary::CONTENT,
+            text::value(event.key.to_string()),
+        ),
+    ];
+    if event.repeat {
+        fields.push((layout_data::vocabulary::REPEAT, marker()));
+    }
+    fields.push(modifier_field(&event.modifiers, command));
+    event_value(layout_data::vocabulary::KEY, fields)
+}
+
+fn ime_value(event: &ImeEvent) -> Value {
+    let mut fields = Vec::new();
+    let state = match event {
+        ImeEvent::Enabled => layout_data::vocabulary::IME_ENABLED,
+        ImeEvent::Disabled => layout_data::vocabulary::IME_DISABLED,
+        ImeEvent::Preedit(content, cursor) => {
+            fields.push((layout_data::vocabulary::CONTENT, text::value(content)));
+            if let Some((start, end)) = cursor {
+                fields.extend([
+                    (
+                        layout_data::vocabulary::START,
+                        f64_convention::value(*start as f64),
+                    ),
+                    (
+                        layout_data::vocabulary::END,
+                        f64_convention::value(*end as f64),
+                    ),
+                ]);
+            }
+            layout_data::vocabulary::IME_PREEDIT
+        }
+        ImeEvent::Commit(content) => {
+            fields.push((layout_data::vocabulary::CONTENT, text::value(content)));
+            layout_data::vocabulary::IME_COMMIT
+        }
+    };
+    fields.push((layout_data::vocabulary::EVENT_STATE, Value::Cell(state)));
+    event_value(layout_data::vocabulary::IME, fields)
+}
+
 #[cfg(test)]
 mod motion_tests {
     use super::*;
@@ -395,91 +482,4 @@ mod motion_tests {
             assert_eq!(earlier, &Value::list(expected));
         }
     }
-}
-
-fn scroll_value(
-    placement: Placement,
-    scale: f64,
-    event: &PointerScrollEvent,
-    command: fn(&Modifiers) -> bool,
-) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.state, command);
-    let (x, y) = match event.delta {
-        ScrollDelta::PageDelta(x, y) | ScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
-        ScrollDelta::PixelDelta(delta) => (delta.x, delta.y),
-    };
-    fields.extend([
-        (layout_data::vocabulary::DELTA_X, f64_convention::value(x)),
-        (layout_data::vocabulary::DELTA_Y, f64_convention::value(y)),
-    ]);
-    event_value(layout_data::vocabulary::SCROLL, fields)
-}
-
-fn gesture_value(
-    placement: Placement,
-    scale: f64,
-    event: &PointerGestureEvent,
-    command: fn(&Modifiers) -> bool,
-) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.state, command);
-    let (kind, delta) = match event.gesture {
-        PointerGesture::Pinch(delta) => (layout_data::vocabulary::PINCH, delta),
-        PointerGesture::Rotate(delta) => (layout_data::vocabulary::ROTATION, delta),
-    };
-    fields.push((
-        layout_data::vocabulary::DELTA,
-        f64_convention::value(f64::from(delta)),
-    ));
-    event_value(kind, fields)
-}
-
-fn key_value(event: &KeyboardEvent, command: fn(&Modifiers) -> bool) -> Value {
-    let mut fields = vec![
-        (
-            layout_data::vocabulary::EVENT_STATE,
-            Value::Cell(match event.state {
-                KeyState::Down => layout_data::vocabulary::DOWN,
-                KeyState::Up => layout_data::vocabulary::UP,
-            }),
-        ),
-        (
-            layout_data::vocabulary::CONTENT,
-            text::value(event.key.to_string()),
-        ),
-    ];
-    if event.repeat {
-        fields.push((layout_data::vocabulary::REPEAT, marker()));
-    }
-    fields.push(modifier_field(&event.modifiers, command));
-    event_value(layout_data::vocabulary::KEY, fields)
-}
-
-fn ime_value(event: &ImeEvent) -> Value {
-    let mut fields = Vec::new();
-    let state = match event {
-        ImeEvent::Enabled => layout_data::vocabulary::IME_ENABLED,
-        ImeEvent::Disabled => layout_data::vocabulary::IME_DISABLED,
-        ImeEvent::Preedit(content, cursor) => {
-            fields.push((layout_data::vocabulary::CONTENT, text::value(content)));
-            if let Some((start, end)) = cursor {
-                fields.extend([
-                    (
-                        layout_data::vocabulary::START,
-                        f64_convention::value(*start as f64),
-                    ),
-                    (
-                        layout_data::vocabulary::END,
-                        f64_convention::value(*end as f64),
-                    ),
-                ]);
-            }
-            layout_data::vocabulary::IME_PREEDIT
-        }
-        ImeEvent::Commit(content) => {
-            fields.push((layout_data::vocabulary::CONTENT, text::value(content)));
-            layout_data::vocabulary::IME_COMMIT
-        }
-    };
-    fields.push((layout_data::vocabulary::EVENT_STATE, Value::Cell(state)));
-    event_value(layout_data::vocabulary::IME, fields)
 }

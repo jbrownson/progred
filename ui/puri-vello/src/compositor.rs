@@ -265,8 +265,8 @@ impl Compositor {
         base_color: Color,
     ) -> Result<(), vello::Error> {
         self.renderer.render_to_texture(
-            &gpu.device,
-            &gpu.queue,
+            gpu.device,
+            gpu.queue,
             scene,
             &texture.create_view(&Default::default()),
             &RenderParams {
@@ -478,7 +478,7 @@ impl Compositor {
                 Layer::Vector(scene) => {
                     self.vello(gpu, scene, vector, Color::TRANSPARENT)?;
                     self.counts.vector_passes += 1;
-                    self.blend(gpu, &vector, None, Affine::IDENTITY, false, target, scissor);
+                    self.blend(gpu, vector, None, Affine::IDENTITY, false, target, scissor);
                 }
                 Layer::Image(image, transform) => {
                     let source = match resources.images.entry(ImageKey::new(image)) {

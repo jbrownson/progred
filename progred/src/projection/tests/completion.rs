@@ -1441,27 +1441,24 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
             selected.stage(&src(document, &stack.libraries)),
             Stage::Pending
         );
-        let choices = projected_completion_entries(&document, &selected);
+        let choices = projected_completion_entries(document, selected);
         if field == fidget::vocabulary::FIDGET {
             assert!(
                 choices
                     .iter()
-                    .any(|choice| inserted_value(&document, selected, choice)
+                    .any(|choice| inserted_value(document, selected, choice)
                         == Some(grap::call(fidget::vocabulary::SPHERE.into(), [])))
             );
         } else {
             for value in [Value::record([]), Value::list([])] {
-                assert!(
-                    choices
-                        .iter()
-                        .any(|choice| inserted_value(&document, &selected, choice)
-                            == Some(value.clone()))
-                );
+                assert!(choices.iter().any(
+                    |choice| inserted_value(document, selected, choice) == Some(value.clone())
+                ));
             }
         }
         let filled = crate::completion::prepare(
-            &src(&document, &stack.libraries),
-            &selected,
+            &src(document, &stack.libraries),
+            selected,
             &annotations,
             Value::record([]),
             None,

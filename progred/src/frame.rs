@@ -1096,7 +1096,7 @@ mod frame_tests {
                             descent: 0.0,
                         },
                         move |output, placement| {
-                            let target = Hovered::Tree(if value as u64 % 2 == 0 {
+                            let target = Hovered::Tree(if (value as u64).is_multiple_of(2) {
                                 hover::Hover::Value(Rc::from([]))
                             } else {
                                 hover::Hover::Toggle(Rc::from([]))

@@ -848,7 +848,7 @@ fn lowered_field(fields: &[(CellId, Expression)], label: CellId) -> Option<Expre
         .map(|index| fields[index].1.clone())
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Environment {
     indices: CellIndices,
     frame: Option<Rc<EnvironmentFrame>>,
@@ -858,15 +858,6 @@ pub struct Environment {
 struct EnvironmentFrame {
     parent: Option<Rc<EnvironmentFrame>>,
     bindings: Vec<(CellIndex, RuntimeValue)>,
-}
-
-impl Default for Environment {
-    fn default() -> Self {
-        Self {
-            indices: CellIndices::default(),
-            frame: None,
-        }
-    }
 }
 
 impl PartialEq for Environment {
@@ -2524,7 +2515,7 @@ impl<'a> Context<'a> {
                 let arguments: Rc<[Option<Expression>]> = closure
                     .params
                     .iter()
-                    .map(|parameter| self.field(&call, parameter.cell))
+                    .map(|parameter| self.field(call, parameter.cell))
                     .collect();
                 if let Some(slot) = plan {
                     *slot.borrow_mut() = Some(CallPlan {
@@ -3121,7 +3112,7 @@ mod tests {
         let functions = [function];
         let origin = RefCell::new(None);
         let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
-            *origin.borrow_mut() = context.source_origin(&call);
+            *origin.borrow_mut() = context.source_origin(call);
             Ok(blob("result"))
         };
         let wrapper = Value::record([(vocabulary::VALUE, call(function.into(), []))]);
@@ -3174,7 +3165,7 @@ mod tests {
             .register(
                 repeat,
                 ForeignFunction::new(move |context, call, environment| {
-                    let Some(argument) = context.field(&call, argument) else {
+                    let Some(argument) = context.field(call, argument) else {
                         return Ok(context.missing_runtime_argument(argument));
                     };
                     context.eval(argument.clone(), environment)?;
@@ -3220,7 +3211,7 @@ mod tests {
             .register(
                 run_scoped,
                 ForeignFunction::new(move |context, call, environment| {
-                    let Some(argument) = context.field(&call, argument) else {
+                    let Some(argument) = context.field(call, argument) else {
                         return Ok(context.missing_runtime_argument(argument));
                     };
                     let before = context.eval(argument.clone(), environment)?;
@@ -3414,7 +3405,7 @@ mod tests {
         let held = call(Value::from(hold), [(input, call_shaped_data.clone())]);
         let foreign = ForeignFunctions::default().register(
             hold,
-            ForeignFunction::from_value(|context, call, _| match context.field(&call, INPUT) {
+            ForeignFunction::from_value(|context, call, _| match context.field(call, INPUT) {
                 Some(value) => Ok(context.value(&value).clone()),
                 None => Ok(context.missing_argument(INPUT)),
             }),
@@ -3440,7 +3431,7 @@ mod tests {
         let foreign = ForeignFunctions::default().register(
             echo,
             ForeignFunction::from_value(|context, call, environment| {
-                match context.field(&call, INPUT) {
+                match context.field(call, INPUT) {
                     Some(value) => context.eval_to_value(value, environment),
                     None => Ok(context.missing_argument(INPUT)),
                 }
@@ -3475,7 +3466,7 @@ mod tests {
         let foreign = ForeignFunctions::default().register(
             echo,
             ForeignFunction::from_value(|context, call, environment| {
-                match context.field(&call, INPUT) {
+                match context.field(call, INPUT) {
                     Some(value) => context.eval_to_value(value, environment),
                     None => Ok(context.missing_argument(INPUT)),
                 }
@@ -3508,13 +3499,13 @@ mod tests {
         let foreign = ForeignFunctions::default().register(
             choose,
             ForeignFunction::from_value(|context, call, environment| {
-                let Some(condition) = context.field(&call, CONDITION) else {
+                let Some(condition) = context.field(call, CONDITION) else {
                     return Ok(context.missing_argument(CONDITION));
                 };
-                let Some(yes) = context.field(&call, YES) else {
+                let Some(yes) = context.field(call, YES) else {
                     return Ok(context.missing_argument(YES));
                 };
-                let Some(no) = context.field(&call, NO) else {
+                let Some(no) = context.field(call, NO) else {
                     return Ok(context.missing_argument(NO));
                 };
                 if context.eval_to_value(condition, environment)? == blob("true") {
@@ -3582,10 +3573,10 @@ mod tests {
         let foreign = ForeignFunctions::default().register(
             bind,
             ForeignFunction::from_value(|context, call, environment| {
-                let Some(value) = context.field(&call, VALUE) else {
+                let Some(value) = context.field(call, VALUE) else {
                     return Ok(context.missing_argument(VALUE));
                 };
-                let Some(body) = context.field(&call, BODY) else {
+                let Some(body) = context.field(call, BODY) else {
                     return Ok(context.missing_argument(BODY));
                 };
                 let value = context.eval_to_value(value, environment)?;
@@ -3767,10 +3758,10 @@ mod tests {
         let foreign = ForeignFunctions::default().register(
             function,
             ForeignFunction::from_value(|context, call, _| {
-                let Some(function) = context.field(&call, vocabulary::FUNCTION) else {
+                let Some(function) = context.field(call, vocabulary::FUNCTION) else {
                     return Ok(context.missing_argument(vocabulary::FUNCTION));
                 };
-                let Some(value) = context.field(&call, PARAMETER) else {
+                let Some(value) = context.field(call, PARAMETER) else {
                     return Ok(context.missing_argument(PARAMETER));
                 };
                 assert!(context.value(&function).as_cell().is_some());
@@ -3860,7 +3851,7 @@ mod tests {
         let foreign = ForeignFunctions::default().register(
             function,
             ForeignFunction::from_value(|context, call, environment| {
-                let argument = context.field(&call, CellId::from_u128(7)).unwrap();
+                let argument = context.field(call, CellId::from_u128(7)).unwrap();
                 context.eval_to_value(argument, environment)
             }),
         );
@@ -3885,7 +3876,7 @@ mod tests {
             .register(
                 foreign,
                 ForeignFunction::from_value(move |context, call, environment| {
-                    let function = context.field(&call, vocabulary::FUNCTION).unwrap();
+                    let function = context.field(call, vocabulary::FUNCTION).unwrap();
                     assert_eq!(
                         context
                             .value(&function)
@@ -3893,14 +3884,14 @@ mod tests {
                             .and_then(|fields| fields.get(&decoration)),
                         Some(&blob("retained")),
                     );
-                    let argument = context.field(&call, argument).unwrap();
+                    let argument = context.field(call, argument).unwrap();
                     context.eval_to_value(argument, environment)
                 }),
             )
             .register(
                 control,
                 ForeignFunction::from_value(move |context, call, environment| {
-                    let callable = context.field(&call, callable).unwrap();
+                    let callable = context.field(call, callable).unwrap();
                     let callable = context.prepare_callable(callable, environment)?;
                     context.call_prepared_value(&callable, [(argument, blob("passed"))])
                 }),
@@ -4012,7 +4003,7 @@ mod tests {
             .register(
                 repeat,
                 ForeignFunction::from_value(move |context, call, environment| {
-                    let body = context.field(&call, body).unwrap();
+                    let body = context.field(call, body).unwrap();
                     context.eval_to_value(body.clone(), environment)?;
                     context.eval_to_value(body.clone(), environment)
                 }),
@@ -4057,7 +4048,7 @@ mod tests {
             .register(
                 invoke,
                 ForeignFunction::from_value(move |context, call, environment| {
-                    let function = context.field(&call, function).unwrap();
+                    let function = context.field(call, function).unwrap();
                     let function = context.prepare_callable(function, environment)?;
                     context.call_prepared_value(&function, [])
                 }),
@@ -4103,7 +4094,7 @@ mod tests {
         let source = RefCell::new(None);
         let functions = [foreign];
         let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
-            *source.borrow_mut() = context.source_origin(&call);
+            *source.borrow_mut() = context.source_origin(call);
             Ok(blob("drawn"))
         };
         let overlay = ForeignOverlay::from_value(&functions, &scoped);
@@ -4139,7 +4130,7 @@ mod tests {
         for source in [Resolution::Document, Resolution::Library(new_cell_id())] {
             let origin = RefCell::new(None);
             let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
-                *origin.borrow_mut() = context.source_origin(&call);
+                *origin.borrow_mut() = context.source_origin(call);
                 Ok(blob("drawn"))
             };
             let overlay = ForeignOverlay::from_value(&functions, &scoped);

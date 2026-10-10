@@ -134,7 +134,7 @@ fn evaluated(
     field: CellId,
 ) -> Result<Option<Value>, Halt> {
     context
-        .field(&call, field)
+        .field(call, field)
         .map(|expression| context.eval_to_value(expression, environment))
         .transpose()
 }
@@ -890,18 +890,10 @@ fn cpu_volume(
     raster::SoftwareScene::new(objects, cancellation)?.render(view, cancellation)
 }
 
+#[derive(Default)]
 pub(crate) struct PreviewRenderer {
     #[cfg(not(target_arch = "wasm32"))]
     gpu: GpuState,
-}
-
-impl Default for PreviewRenderer {
-    fn default() -> Self {
-        Self {
-            #[cfg(not(target_arch = "wasm32"))]
-            gpu: GpuState::default(),
-        }
-    }
 }
 
 impl PreviewRenderer {

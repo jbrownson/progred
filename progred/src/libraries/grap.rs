@@ -945,7 +945,7 @@ mod tests {
                     step,
                     projection: Some(projection),
                     ..
-                } = &inspect(&(*child))
+                } = &inspect(child)
                 else {
                     panic!("a declaration follows the cell definition");
                 };

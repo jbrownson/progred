@@ -102,7 +102,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                         GROUP => group(
                             context,
                             expression,
-                            context.source_origin(&call),
+                            context.source_origin(call),
                             environment,
                             &output,
                         ),
@@ -117,7 +117,7 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                             result
                         }
                         LEAF => {
-                            let source = context.source_origin(&call);
+                            let source = context.source_origin(call);
                             let mut value = context.eval(expression, environment)?;
                             let maps = output
                                 .maps

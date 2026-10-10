@@ -140,7 +140,7 @@ fn evaluated_field(
     field: CellId,
 ) -> Result<Option<Value>, grap::Halt> {
     context
-        .field(&call, field)
+        .field(call, field)
         .map(|value| context.eval_to_value(value, environment))
         .transpose()
 }
@@ -184,11 +184,10 @@ fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::Shape> {
 
 fn evaluated_transform(value: &grap::RuntimeValue) -> Option<Affine> {
     use layout_data::vocabulary::{ROTATE, TRANSLATE, X, Y};
-    let Some(operations) = value.list_values() else {
+    let Some(mut operations) = value.list_values() else {
         return layout_data::read_transform(&value.to_value());
     };
-    operations.fold(Some(Affine::IDENTITY), |transform, operation| {
-        let transform = transform?;
+    operations.try_fold(Affine::IDENTITY, |transform, operation| {
         Some(match operation.field(TRANSLATE) {
             Some(point) => {
                 transform * Affine::translate((coordinate(&point, X)?, coordinate(&point, Y)?))
@@ -447,7 +446,7 @@ mod tests {
             crate::libraries::Definitions::from_parts(fallback, Default::default()),
         );
         let drawing = record_program(
-            &sequence(vec![
+            sequence(vec![
                 grap::call(draw::PATH.into(), []),
                 point(draw::MOVE_TO, 0.0, 0.0),
                 point(draw::LINE_TO, 10.0, 10.0),
@@ -514,7 +513,7 @@ mod tests {
                 libraries: &libraries,
             };
             let drawing = record_program(
-                &grap::call(Value::from(function), []),
+                grap::call(Value::from(function), []),
                 &sources,
                 &Faces::new(&crate::styles::editor(
                     crate::styles::Theme::Light.palette(),

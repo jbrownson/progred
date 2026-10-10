@@ -93,7 +93,7 @@ impl Selection {
                 let editor = payload::editor_text(&payload)
                     .filter(|_| scope.writable(sources, &path))
                     .map(|fallback| Editor {
-                        line: payload::editor_line(&payload, &fallback),
+                        line: payload::editor_line(&payload, fallback),
                         query: scope.read(sources, &path).is_none(),
                         recorded: false,
                     });

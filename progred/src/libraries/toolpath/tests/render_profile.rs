@@ -310,13 +310,11 @@ fn cam_render_profile() {
         let mut cuts = Vec::new();
         recording
             .playback(progress, |a, b, axis, tool, complete| {
-                if complete {
-                    if let Some(field) = tool.unwrap().sweep(a, b, axis, 0.001)? {
-                        cuts.push((
-                            std::array::from_fn::<_, 3, _>(|i| (a[i] + b[i]) * 0.5),
-                            field,
-                        ));
-                    }
+                if complete && let Some(field) = tool.unwrap().sweep(a, b, axis, 0.001)? {
+                    cuts.push((
+                        std::array::from_fn::<_, 3, _>(|i| (a[i] + b[i]) * 0.5),
+                        field,
+                    ));
                 }
                 Ok::<_, InvalidPath>(())
             })

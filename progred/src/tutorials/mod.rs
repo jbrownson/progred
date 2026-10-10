@@ -707,7 +707,7 @@ impl Embed {
                 character.is_ascii_uppercase() || "~!@#$%^&*()_+{}|:\"<>?".contains(character);
             assert!(
                 self.keystroke(
-                    Key::Character(character.to_string().into()),
+                    Key::Character(character.to_string()),
                     if shifted {
                         Modifiers::SHIFT
                     } else {

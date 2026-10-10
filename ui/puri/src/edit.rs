@@ -906,7 +906,7 @@ mod tests {
             content(self);
             let children = std::mem::replace(&mut self.list.0, outer);
             self.list.0.push(DrawCmd::Clip {
-                shape: shape.into(),
+                shape,
                 transform,
                 children,
             });

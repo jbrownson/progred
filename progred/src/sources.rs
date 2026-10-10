@@ -390,7 +390,7 @@ mod tests {
                                _: &grap::Environment| {
                     origins
                         .borrow_mut()
-                        .push(context.source_origin(&call).unwrap());
+                        .push(context.source_origin(call).unwrap());
                     Ok(context.value(&context.field(call, result).unwrap()).clone())
                 };
                 let overlay = grap::ForeignOverlay::from_value(&functions, &observe);

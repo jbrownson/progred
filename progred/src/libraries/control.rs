@@ -215,7 +215,7 @@ fn match_prepare(context: &Context, call: &Expression) -> Stage {
     let subject = context.field(call, vocabulary::VALUE);
     let compiled =
         context
-            .field(&call, vocabulary::CASES)
+            .field(call, vocabulary::CASES)
             .map(|cases| match context.elements(&cases) {
                 None => CompiledCases::Deferred(cases),
                 Some(elements) => CompiledCases::Cases(

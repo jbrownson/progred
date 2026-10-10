@@ -127,7 +127,7 @@ pub(super) fn display(
                 [gid::Step::Key(
                     crate::libraries::presentation::vocabulary::RESULT,
                 )],
-                &absent::with_reason(INVALID_INPUT),
+                absent::with_reason(INVALID_INPUT),
             )
             .measure(context, build);
         };

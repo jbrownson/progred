@@ -564,7 +564,7 @@ fn explicit_jump_can_establish_a_source_below_at() {
             if fields.contains_key(&marker) {
                 Some(d::at(
                     [Step::Key(computed)],
-                    &Value::record([(computed, Value::record([]))]),
+                    Value::record([(computed, Value::record([]))]),
                 ))
             } else if fields.contains_key(&computed) {
                 Some(d::jump([Step::Key(occurrence)], [Step::Key(source)]))

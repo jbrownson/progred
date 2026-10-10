@@ -1137,7 +1137,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     let point = placed
         .descends
         .iter()
-        .find(|descend| descend.path.as_ref() == &path)
+        .find(|descend| descend.path.as_ref() == path)
         .expect("color descend")
         .rect
         .center();

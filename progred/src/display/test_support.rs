@@ -103,7 +103,7 @@ fn recorder_preserves_local_and_descendant_projection_inputs() {
         descend(step.clone(), Some(local.clone()), Some(default.clone())),
         at_with_projection(
             [step],
-            &Value::record([]),
+            Value::record([]),
             Some(local.clone()),
             Some(default.clone()),
         ),

@@ -232,7 +232,7 @@ impl Editor {
             let bytes = clipboard_rs::ClipboardContext::new()
                 .ok()
                 .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
-            return selection::from_structure(&bytes);
+            selection::from_structure(&bytes)
         }
         #[cfg(any(test, target_arch = "wasm32"))]
         self.text_clipboard.structure.clone()

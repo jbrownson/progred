@@ -386,14 +386,13 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         // Following the same source through jumps must not bypass cycle checks.
         if let Some(source) = cx.edits.source(&path) {
             for (i, step) in source.iter().enumerate() {
-                if matches!(step, Step::Follow(_)) {
-                    if let Some(cell) = cx
+                if matches!(step, Step::Follow(_))
+                    && let Some(cell) = cx
                         .sources
                         .resolve_path(&source[..i])
                         .and_then(Value::as_cell)
-                    {
-                        ancestry.cells.insert(cell);
-                    }
+                {
+                    ancestry.cells.insert(cell);
                 }
             }
         }
@@ -889,11 +888,11 @@ fn prepare_descend_path(
     let mut ancestors = ancestors.clone();
     let mut value = parent.cloned();
     for step in steps {
-        if let Step::Follow(source) = &step {
-            if let Some(cell) = value.as_ref().and_then(grap::RuntimeValue::as_cell) {
-                ancestors.cells.insert(cell);
-                ancestors.enclosing = Some((cell, *source, path.len() + 1));
-            }
+        if let Step::Follow(source) = &step
+            && let Some(cell) = value.as_ref().and_then(grap::RuntimeValue::as_cell)
+        {
+            ancestors.cells.insert(cell);
+            ancestors.enclosing = Some((cell, *source, path.len() + 1));
         }
         path.push(step.clone());
         let mapped = (!cx.edits.is_identity())

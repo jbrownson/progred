@@ -569,45 +569,45 @@ impl<I: Clone + Send + 'static, T: Send + Sync + 'static> AsyncNode<I, T> {
             state.progress = (!state.awaiting_start).then_some(progress);
             state.changed = revision;
         }
-        if let Some((generation, report)) = state.pending_report.take() {
-            if generation == state.generation {
-                state.changed = revision;
-                let current = state
-                    .running_input
-                    .as_ref()
-                    .zip(state.input.as_ref())
-                    .is_some_and(|(running, wanted)| Rc::ptr_eq(running, wanted));
-                match report {
-                    Report::WorkProgress(_) => unreachable!("collected separately from values"),
-                    Report::Value(value) => {
-                        state.value = Rc::new(if current {
-                            Availability::Refining(Arc::new(value))
-                        } else {
-                            Availability::Pending {
-                                previous: Some(Arc::new(value)),
-                            }
-                        })
-                    }
-                    Report::Finished(completed) => {
-                        state.progress = None;
-                        state.running_input = None;
-                        let completed = completed.unwrap_or_else(|panic| {
-                            state.input = None;
-                            std::panic::resume_unwind(panic)
-                        });
-                        match completed {
-                            Ok(value) => {
-                                state.value = Rc::new(if current {
-                                    Availability::Ready(Arc::new(value))
-                                } else {
-                                    Availability::Pending {
-                                        previous: Some(Arc::new(value)),
-                                    }
-                                })
-                            }
-                            Err(error) if current => state.failure = Some(error),
-                            Err(_) => {}
+        if let Some((generation, report)) = state.pending_report.take()
+            && generation == state.generation
+        {
+            state.changed = revision;
+            let current = state
+                .running_input
+                .as_ref()
+                .zip(state.input.as_ref())
+                .is_some_and(|(running, wanted)| Rc::ptr_eq(running, wanted));
+            match report {
+                Report::WorkProgress(_) => unreachable!("collected separately from values"),
+                Report::Value(value) => {
+                    state.value = Rc::new(if current {
+                        Availability::Refining(Arc::new(value))
+                    } else {
+                        Availability::Pending {
+                            previous: Some(Arc::new(value)),
                         }
+                    })
+                }
+                Report::Finished(completed) => {
+                    state.progress = None;
+                    state.running_input = None;
+                    let completed = completed.unwrap_or_else(|panic| {
+                        state.input = None;
+                        std::panic::resume_unwind(panic)
+                    });
+                    match completed {
+                        Ok(value) => {
+                            state.value = Rc::new(if current {
+                                Availability::Ready(Arc::new(value))
+                            } else {
+                                Availability::Pending {
+                                    previous: Some(Arc::new(value)),
+                                }
+                            })
+                        }
+                        Err(error) if current => state.failure = Some(error),
+                        Err(_) => {}
                     }
                 }
             }

@@ -454,7 +454,6 @@ impl<K: Eq> Roots<K> {
             value
                 .clone()
                 .downcast()
-                .ok()
                 .expect("the stored type matches its key")
         } else {
             drop(entries);

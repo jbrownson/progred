@@ -387,13 +387,13 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
         !editing_frame(&mut world, false)
             .descends
             .iter()
-            .any(|d| d.path.as_ref() == &extra_path)
+            .any(|d| d.path.as_ref() == extra_path)
     );
     assert!(
         editing_frame(&mut world, true)
             .descends
             .iter()
-            .any(|d| d.path.as_ref() == &extra_path)
+            .any(|d| d.path.as_ref() == extra_path)
     );
     let pending = pending_edge(
         &crate::test_root(),

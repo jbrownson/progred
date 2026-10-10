@@ -717,7 +717,7 @@ fn sample_text_line_claims_its_own_hover() {
     let rect = bench
         .descends
         .iter()
-        .find(|descend| descend.path.as_ref() == &path)
+        .find(|descend| descend.path.as_ref() == path)
         .expect("color descend")
         .rect;
     let (bench, _) = place_with_pointer(&doc, None, 900.0, Some(rect.center()));
@@ -827,19 +827,19 @@ fn expression_children_are_real() {
         bench
             .descends
             .iter()
-            .any(|descend| descend.path.as_ref() == &record)
+            .any(|descend| descend.path.as_ref() == record)
     );
     assert!(
         bench
             .descends
             .iter()
-            .any(|descend| descend.path.as_ref() == &result)
+            .any(|descend| descend.path.as_ref() == result)
     );
     assert!(
         bench
             .descends
             .iter()
-            .any(|descend| descend.path.as_ref() == &source_note)
+            .any(|descend| descend.path.as_ref() == source_note)
     );
 }
 
@@ -1438,7 +1438,7 @@ fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
     let list = bench
         .descends
         .iter()
-        .find(|descend| descend.path.as_ref() == &parent)
+        .find(|descend| descend.path.as_ref() == parent)
         .expect("the list has a landmark");
     let (claimed, _) = place_with_pointer(
         &doc,
@@ -1448,7 +1448,7 @@ fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
     );
     assert!(matches!(
         &claimed.hit,
-        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.as_ref() == &parent
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.as_ref() == parent
     ));
 }
 

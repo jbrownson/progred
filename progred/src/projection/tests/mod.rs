@@ -198,7 +198,7 @@ fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -
     if let Some(target) = placed
         .descends
         .iter()
-        .find(|target| target.path.as_ref() == &path)
+        .find(|target| target.path.as_ref() == path)
     {
         (target.select)(&mut world, None);
     }

@@ -1484,7 +1484,7 @@ mod tests {
         };
         for release in [
             PointerEvent::Up(button.clone()),
-            PointerEvent::Cancel(button.pointer.clone()),
+            PointerEvent::Cancel(button.pointer),
         ] {
             runner.pointer_event(&PointerEvent::Down(button.clone()), 1.0, VIEWPORT);
             assert!(*runner.editor.computations.runtime.read(&pressed).unwrap());

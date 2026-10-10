@@ -96,7 +96,7 @@ pub fn collapsed(annotations: &Annotations, path: &[Step], in_cycle: bool) -> bo
 /// Stays sparse: an override matching the default clears instead of
 /// storing.
 pub fn set_collapsed(annotations: &mut Annotations, path: &[Step], default: bool, next: bool) {
-    let state = (next != default).then(|| Value::Cell(if next { FOLDED } else { EXPANDED }));
+    let state = (next != default).then_some(Value::Cell(if next { FOLDED } else { EXPANDED }));
     annotations.set_field(path, FOLD, state);
 }
 
