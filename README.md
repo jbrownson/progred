@@ -65,8 +65,7 @@ clearance, or a safe machining plan.**
   viewport uses a mesh while implicit images refine in the background.
 
 macOS is the primary development platform, and the only one tested recently.
-There are also Linux and browser hosts. They do not yet have feature or performance parity: in particular, the
-browser currently runs expensive jobs synchronously.
+There are also Linux and browser hosts. They do not yet have feature or performance parity.
 
 ## What isn't there yet
 

@@ -101,7 +101,7 @@ multiline outline, document-authored side-by-side and offset-baseline columns,
 and content after a block; [examples/README.md](../examples/README.md) says what
 to try. Collector tests in `navigation/logical/tests.rs` drive the collector
 through shapes mirroring the layout traversal; frame tests exercise the same
-policies through real projections and the Cmd+5 document.
+policies through real projections and the navigation example document.
 
 The timing canary for navigation's frame cost:
 

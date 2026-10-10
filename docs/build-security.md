@@ -48,6 +48,8 @@ On Linux, the same target delegates to `tools/run-linux`, which performs an
 ordinary locked Cargo run in `target/native`. This is not sandboxed. The
 checked-in launcher is the deliberate Linux exception to the Cargo tripwire;
 do not reproduce its `RUSTC_WRAPPER` override in ad-hoc commands.
+`make install-linux` runs `tools/install-linux-app`, which makes the same
+unsandboxed locked release build before installing it for the current user.
 
 `website/build-ci.sh` is a second explicit exception, for publishing from a
 disposable x86_64 Linux CI runner with `CI=true`. It compiles only the browser

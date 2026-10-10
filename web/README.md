@@ -161,7 +161,7 @@ images upload when replaced, with the same depth and clipping behavior. If no
 WebGPU adapter is available, the host retains the slower Canvas2D/CPU-mesh
 fallback. Startup logs the selected presentation backend and worker count.
 
-`website/Preview.command` builds and opens the whole website. See
+`website/Preview.command` builds and serves the whole website. See
 [the website README](../website/README.md) and
 [worker diagnostics](../docs/web-worker-experiment-2026-09-19.md).
 See also the [performance comparison](../docs/browser-native-profile-2026-09-19.md).

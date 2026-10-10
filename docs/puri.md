@@ -294,8 +294,7 @@ pointer starts, while active motion/release can still reach their handlers.
 A floating card carries its owning view even when it covers another pane.
 
 Hover is derived for each pass. The frame is built without a resolved hover
-input; deferred paint receives the answer after the hover continuation runs. `LazyPointer` is
-an input-side dead-zone filter for small gaps. Pressed interactions retain the
+input; deferred paint receives the answer after the hover continuation runs. Pressed interactions retain the
 anchor they need as explicit caller-owned gesture state. While a press holds
 the prior hover, its owning view is retained too, both when probing installed
 geometry and when building a successor. Release resumes normal probing.

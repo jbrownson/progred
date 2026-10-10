@@ -80,7 +80,7 @@ graph and sandboxed build. On a supported desktop JIT platform:
 ./tools/sandbox-cargo test --release -p fidget-core -p fidget-jit -p fidget-raster --lib
 ```
 
-For iOS/Web builds, select `-p progred` as the normal platform targets do: the
+For browser builds, select `-p progred` as the normal platform targets do: the
 JIT package itself does not support those platforms. Progred enables JIT only
 on Apple Silicon macOS, using its native recommended raster tiles. Other
 platforms and all meshing retain the VM. The macOS bundle requires the standard

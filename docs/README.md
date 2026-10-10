@@ -44,12 +44,16 @@ proposals separately; they are not required reading for ordinary changes.
 [Layout continuations](layout-continuations.md) describes the box/widget
 boundary, the frame stages, and their verification.
 [Layout navigation](navigation.md) describes logical-line navigation and its
-checkpoint measurements. The superseded [neighbor callback experiment](history/navigation-neighbor-experiment-2026-09-26.md)
+timing canary; earlier measurements are in history.
+[Native CAM source scrolling](native-scroll-profile-2026-09-26.md) is a dated
+measurement of source-frame cost. The superseded [neighbor callback experiment](history/navigation-neighbor-experiment-2026-09-26.md)
 is preserved as history.
 
 [Performance checks](performance.md) describes the shared headless frame harness
 and the IoP/Fidget canaries. [Tree profiling](tree-profile-2026-09-04.md) is a
 dated measurement report.
+[CAM rendering investigation](cam-render-profiling-2026-09-15.md) is a dated
+profile of the toolpath example's rendering.
 [Fidget meshing](fidget-meshing-2026-09-13.md) records the headless cube experiment
 and its quality limitations. The [mesh viewport](fidget-mesh.md) describes the
 subsequent in-app option. Its toolpath variant now retains dependency-tracked
@@ -76,6 +80,8 @@ The [release checklist](release-checklist.md) covers distribution concerns.
 
 [Examples](../examples/README.md) lists the bundled documents, shortcuts, and
 the formulas behind the Fidget shapes.
+[Fidget cube](fidget-cube.md) describes the Rhino-derived cube model and its
+standalone regression fixture.
 [Toolpaths](toolpaths.md) describes the first streaming CAM geometry library
 and its Rhino-derived combined model-and-path preview.
 [Tool profiles](tool-profiles.md) describes revolved cutter sections and the

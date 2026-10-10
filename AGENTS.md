@@ -115,7 +115,7 @@ projections), `docs/model.md` (selection, completion, panes), and
 
 - Test pure logic directly; don't write UI tests that just verify strings pass through to draw calls
 - Pure `render`/`update` functions mean snapshot/property tests on draw-list data need no windowing harness — prefer them; use vello headless readback only when a visual golden is genuinely needed
-- Visual changes are checkable without launching the app: `./tools/sandbox-cargo test -p progred svg_bench` renders the sample and focused Grap demo through the real projection to `target/raw_projection.svg` and `target/grap_demo.svg`, and `./tools/sandbox-cargo run -p puri --example delimiter_bench` renders the drawn-delimiter family against the font's own outlines; view any of them with `qlmanage -t -s 1600 -o <dir> <svg>`
+- Visual changes are checkable without launching the app: `./tools/sandbox-cargo test -p progred svg_bench` renders the sample and focused Grap demo through the real projection to `target/sandbox/build/raw_projection.svg` and `target/sandbox/build/grap_demo.svg`, and `./tools/sandbox-cargo run -p puri --example delimiter_bench` renders the drawn-delimiter family against the font's own outlines; view any of them with `qlmanage -t -s 1600 -o <dir> <svg>`
 
 ## Code Style
 
