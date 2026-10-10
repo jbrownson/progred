@@ -181,8 +181,10 @@ four destinations. One ordinary `Event::Navigate(direction)` handler retains
 their paths and arrives through each destination's landmark; no full graph or
 logical layout survives in the installed frame. Each view has an independent collection. Raw controls and
 editing handlers get first refusal of arrows, including modified arrows; only
-an unhandled key becomes Navigate. The shell reveals the resulting selection
-using existing landmarks.
+an unhandled key becomes Navigate. The editor's structural keys are the frame's
+lowest-priority handler: it lowers that key, dispatches Navigate through the
+whole frame handler, and reveals the resulting selection using existing
+landmarks.
 
 Left/Right visit stops in logical reading order and wrap between lines. Up/Down
 visit the first stop on the adjacent logical line. Arrival direction reaches

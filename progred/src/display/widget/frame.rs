@@ -354,6 +354,9 @@ impl<H: Clone + PartialEq> HoverGeometry<H> {
 /// The settled target is an explicit dispatch input, never an input to
 /// description or placement. Accepted handlers perform their own actions.
 pub struct DispatchContext<C, Hover> {
+    /// The frame's whole handler, so a handler can lower its input into
+    /// another event that every handler sees in the usual order.
+    pub handler: Rc<Handler<C, DispatchContext<C, Hover>>>,
     pub descends: std::rc::Rc<[Landmark<C>]>,
     pub view_regions: std::rc::Rc<[ViewRegion]>,
     pub root: Option<Root>,
@@ -364,6 +367,7 @@ pub struct DispatchContext<C, Hover> {
 impl<C, Hover> Default for DispatchContext<C, Hover> {
     fn default() -> Self {
         Self {
+            handler: Default::default(),
             descends: Default::default(),
             view_regions: Default::default(),
             root: None,

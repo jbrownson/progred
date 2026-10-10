@@ -28,7 +28,7 @@ pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 
 #[derive(Default)]
 pub(crate) struct Dispatch {
-    pub(crate) handler: Handler<Editor, placed::DispatchContext<Editor>>,
+    pub(crate) handler: Rc<Handler<Editor, placed::DispatchContext<Editor>>>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
     pub(crate) descends: Rc<[navigate::Descend<Editor>]>,
     pub(crate) view_regions: Rc<[placed::ViewRegion]>,
@@ -72,8 +72,14 @@ impl Dispatch {
         }
     }
 
+    /// The handler is shared only while a dispatch context is alive.
+    pub(crate) fn handler_mut(&mut self) -> &mut Handler<Editor, placed::DispatchContext<Editor>> {
+        Rc::get_mut(&mut self.handler).expect("no dispatch is in progress")
+    }
+
     pub(crate) fn context(&self, hover: Option<Hovered>) -> placed::DispatchContext<Editor> {
         placed::DispatchContext {
+            handler: self.handler.clone(),
             descends: self.descends.clone(),
             view_regions: self.view_regions.clone(),
             ..placed::DispatchContext::new(self.pointer_root.clone(), hover)
@@ -222,16 +228,22 @@ fn prepare_frame(
         .set(pointer.pressed);
     let (layout, keyboard) = project_frame(&description, resources);
     let mut frame = compute_hover(layout, &description, pointer);
+    let placed = std::mem::take(frame.dispatch.handler_mut());
     // Structural paste precedes a pending's text query, while menu handling
-    // still takes precedence over all document editing when installed.
-    frame.dispatch.handler.on(|editor, event, _| {
-        let handled = match &event {
-            Event::Key(key) => editor.pending_paste_key(key),
-            _ => false,
-        };
-        puri::handler::EventOutcome::from_handled(event, handled)
-    });
-    frame.dispatch.handler = frame.dispatch.handler.over(keyboard);
+    // still takes precedence over all document editing when installed. The
+    // editor's structural keys answer only what every placed handler declines.
+    *frame.dispatch.handler_mut() = crate::input::structural_keys(description.scale)
+        .over(placed)
+        .over(Handler::from_function(
+            |editor: &mut Editor, event, _: &mut placed::DispatchContext<Editor>| {
+                let handled = match &event {
+                    Event::Key(key) => editor.pending_paste_key(key),
+                    _ => false,
+                };
+                puri::handler::EventOutcome::from_handled(event, handled)
+            },
+        ))
+        .over(keyboard);
     frame
 }
 
@@ -313,7 +325,7 @@ fn compute_hover(
         scroll_probes,
         hover,
         dispatch: Dispatch {
-            handler: handler.unwrap_or_else(Handler::new),
+            handler: Rc::new(handler.unwrap_or_else(Handler::new)),
             pointer_root,
             descends: descends.into(),
             view_regions: view_regions.into(),
@@ -1310,7 +1322,7 @@ mod frame_tests {
             cells: Cells::new(),
         }));
         let roots = Rc::new(std::cell::RefCell::new(Vec::new()));
-        runner.frame.dispatch.handler.on({
+        runner.frame.dispatch.handler_mut().on({
             let roots = roots.clone();
             move |_, event, input| {
                 if matches!(event, Event::HoverChanged) {
