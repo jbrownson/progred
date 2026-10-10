@@ -99,7 +99,7 @@ Install stable Rust through `rustup` and Apple's command-line developer tools
 ```sh
 git clone https://github.com/jbrownson/progred.git
 cd progred
-make sandbox-fetch
+make fetch
 make run
 ```
 
@@ -221,11 +221,9 @@ format is future work. See [GID](docs/gid.md) and [the text bridge](docs/gid-tex
 Questions, ideas, and criticism are welcome on
 [the Progred Zulip](https://progred.zulipchat.com).
 
-On macOS:
-
 ```sh
-make sandbox-check
-make sandbox-test
+make check
+make test
 ```
 
 Start with [the motivation](MOTIVATION.md), then the

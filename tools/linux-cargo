@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# Locked Cargo for Linux, which has no repository sandbox yet. This is the
+# single deliberate Linux exception to the .cargo/config.toml tripwire: build
+# scripts and procedural macros run with the invoking user's permissions.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+
+if [ "$(uname -s)" != Linux ]; then
+    echo "linux-cargo requires Linux; use tools/sandbox-cargo on macOS" >&2
+    exit 1
+fi
+
+if [ "$#" -eq 0 ]; then
+    echo "usage: tools/linux-cargo <cargo command> [arguments...]" >&2
+    exit 2
+fi
+
+exec env \
+    CARGO_NET_OFFLINE=false \
+    CARGO_TARGET_DIR="$project_root/target/native" \
+    PROGRED_COMMIT="$("$tool_dir/progred-commit")" \
+    RUSTC_WRAPPER= \
+    cargo --locked "$@"

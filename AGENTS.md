@@ -16,21 +16,24 @@ Cargo build scripts and procedural macros execute dependency code. The
 checked-in `.cargo/config.toml` refuses ordinary Cargo builds and updates as an
 accidental-use tripwire. Do not bypass it by clearing `RUSTC_WRAPPER` manually.
 
-Use the repository's macOS Seatbelt wrapper, which has its own Cargo home and
-target directory under `target/sandbox`:
+Use the Make targets, which choose the platform's wrapper:
 
 ```bash
-make sandbox-check
-make sandbox-test
-make sandbox-build
-./tools/sandbox-cargo <cargo command> [arguments...]
+make check
+make test
+make build
 ```
+
+On macOS they run under the repository's Seatbelt wrapper, which has its own
+Cargo home and target directory under `target/sandbox`; use
+`./tools/sandbox-cargo <cargo command> [arguments...]` for anything else. Linux
+has no repository sandbox yet: `./tools/linux-cargo` is the single checked-in
+exception there, an ordinary locked Cargo run in `target/native`.
 
 Use `make run` in place of `cargo run --release`. On macOS it builds under
 Seatbelt, packages and ad-hoc signs the app with its App Sandbox entitlements,
-launches a fresh instance, and waits for it to exit. On Linux the checked-in
-`tools/run-linux` launcher intentionally performs an ordinary locked Cargo run;
-there is no repository-provided Linux sandbox yet. Agents still must not launch
+launches a fresh instance, and waits for it to exit. On Linux it runs the app
+through `tools/linux-cargo`. Agents still must not launch
 the app; the user runs and visually tests it. See `docs/build-security.md` for
 the boundary and the separate fetch/update commands.
 
