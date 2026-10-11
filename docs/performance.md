@@ -27,7 +27,8 @@ workload's lowest median, with that round's p95, and reports the spread of the
 medians as a percentage of the lowest. A change from the last record is flagged
 when it exceeds 5% or twice either run's spread. Frame canaries measure 60
 frames; the four voxel orbits measure 12. Single-shot workloads, such as stock
-meshing, report one sample per round.
+meshing and the software render of the CAM example's fully cut stock, report
+one sample per round.
 
 [`performance-log.tsv`](performance-log.tsv) has one row per workload per
 recorded run:

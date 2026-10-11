@@ -21,8 +21,8 @@ in the Fidget language or merely hide their completions.
 
 Keep the full stock-removal scene off the GPU by default until the 2026-09-14
 readback stall is understood. Async scheduling prevents UI blocking but can't
-cancel already submitted GPU work. The stock tape spills (794 loads and stores
-at 35% playback, 12,914 at completion), and Fidget's GPU interpreter leaves
+cancel already submitted GPU work. The stock tape still needs spill slots
+(1,455 at 35% playback, 2,813 at completion), and Fidget's GPU interpreter leaves
 `OP_MEM` unimplemented, so Command+3 renders implicit images in software; see
 [toolpaths](toolpaths.md#playback). Don't resubmit this program to the GPU
 merely to repeat the stall. Ask upstream whether the GPU interpreter should

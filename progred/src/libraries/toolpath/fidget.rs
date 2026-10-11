@@ -134,13 +134,38 @@ pub(super) fn coordinate(point: Point3) -> Result<[f32; 3], InvalidPath> {
         .ok_or(InvalidPath::CoordinateRange)
 }
 
+/// The coordinate along unit vector `v`, measured from `origin`.
+///
+/// Fidget merges equal subexpressions. Written as `v·p - v·origin`, sweeps
+/// along the same axis share only `v·p`. The equivalent `v·(p - origin)`
+/// shares terms like `x - origin.x` between any sweeps with a coordinate in
+/// common, however far apart; each stays live from its first use to its last,
+/// and in the CAM example's stock that spilled tens of thousands of registers.
+pub(super) fn along(v: nalgebra::Vector3<f32>, origin: [f32; 3]) -> Tree {
+    Tree::x() * v.x + Tree::y() * v.y + Tree::z() * v.z - v.dot(&nalgebra::Vector3::from(origin))
+}
+
+#[cfg(test)]
 pub(super) fn capsule(a: [f32; 3], b: [f32; 3], radius: f32) -> Result<Tree, InvalidPath> {
     let direction = std::array::from_fn::<_, 3, _>(|i| b[i] - a[i]);
+    capsule_at(
+        [Tree::x() - a[0], Tree::y() - a[1], Tree::z() - a[2]],
+        direction,
+        radius,
+    )
+}
+
+/// A capsule around the segment from the origin to `direction`, in orthonormal
+/// coordinates `p` relative to the segment's start.
+pub(super) fn capsule_at(
+    p: [Tree; 3],
+    direction: [f32; 3],
+    radius: f32,
+) -> Result<Tree, InvalidPath> {
     let length_squared: f32 = direction.iter().map(|n| n * n).sum();
     if !length_squared.is_finite() {
         return Err(InvalidPath::CoordinateRange);
     }
-    let p = [Tree::x() - a[0], Tree::y() - a[1], Tree::z() - a[2]];
     let t = if length_squared == 0.0 {
         Tree::constant(0.0)
     } else {

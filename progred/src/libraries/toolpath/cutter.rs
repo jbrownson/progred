@@ -1,6 +1,6 @@
 //! Cutter geometry shared by direct mesh display, implicit display, and subtraction.
 use super::{
-    fidget::{capsule, coordinate, read_radius},
+    fidget::{along, capsule_at, coordinate, read_radius},
     paths::{Axis, InvalidPath, Point3},
 };
 use fidget_engine::context::Tree;
@@ -39,16 +39,14 @@ impl BallEnd {
     pub fn sweep(&self, a: Point3, b: Point3, axis: Axis) -> Result<Tree, InvalidPath> {
         let a = coordinate(a)?;
         let b = coordinate(b)?;
-        let ball = capsule(a, b, self.radius)?;
         let basis = axis.basis();
         let direction = nalgebra::Vector3::from(b) - nalgebra::Vector3::from(a);
         let d = basis.map(|v| v.dot(&direction));
         if !d.into_iter().all(f32::is_finite) {
             return Err(InvalidPath::CoordinateRange);
         }
-        let world = [Tree::x() - a[0], Tree::y() - a[1], Tree::z() - a[2]];
-        let p =
-            basis.map(|v| world[0].clone() * v.x + world[1].clone() * v.y + world[2].clone() * v.z);
+        let p = basis.map(|v| along(v, a));
+        let ball = capsule_at(p.clone(), d, self.radius)?;
         let height = self.flute_height();
         let xy_squared = d[0] * d[0] + d[1] * d[1];
 
