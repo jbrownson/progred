@@ -265,8 +265,8 @@ impl Compositor {
         base_color: Color,
     ) -> Result<(), vello::Error> {
         self.renderer.render_to_texture(
-            &gpu.device,
-            &gpu.queue,
+            gpu.device,
+            gpu.queue,
             scene,
             &texture.create_view(&Default::default()),
             &RenderParams {
@@ -332,6 +332,7 @@ impl Compositor {
         uniform
             .slice(..)
             .get_mapped_range_mut()
+            .unwrap()
             .copy_from_slice(&bytes);
         uniform.unmap();
         let bindings = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -478,7 +479,7 @@ impl Compositor {
                 Layer::Vector(scene) => {
                     self.vello(gpu, scene, vector, Color::TRANSPARENT)?;
                     self.counts.vector_passes += 1;
-                    self.blend(gpu, &vector, None, Affine::IDENTITY, false, target, scissor);
+                    self.blend(gpu, vector, None, Affine::IDENTITY, false, target, scissor);
                 }
                 Layer::Image(image, transform) => {
                     let source = match resources.images.entry(ImageKey::new(image)) {

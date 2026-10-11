@@ -29,7 +29,7 @@ fn native_annotation_handler_retains_the_projected_site() {
             }),
         ))
     })]);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::TextCache::default();
     let measured = project(
@@ -64,11 +64,7 @@ fn native_annotation_handler_retains_the_projected_site() {
     let placed = crate::display::widget::frame::place(measured, placement, &Default::default());
     let mut writes = crate::test_editor(doc.clone());
     let event = PointerScrollEvent {
-        pointer: PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        },
+        pointer: crate::display::test_support::mouse(),
         state: PointerState {
             position: (placement.rect.center().x, placement.rect.center().y).into(),
             ..Default::default()
@@ -119,7 +115,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
     let lib = core_libraries();
     let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -361,11 +357,13 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
             .collect::<Vec<_>>(),
         [1.0, -2.0]
     );
-    let mut key = KeyboardEvent::default();
-    key.modifiers = if cfg!(target_os = "macos") {
-        Modifiers::META
-    } else {
-        Modifiers::CONTROL
+    let key = KeyboardEvent {
+        modifiers: if cfg!(target_os = "macos") {
+            Modifiers::META
+        } else {
+            Modifiers::CONTROL
+        },
+        ..Default::default()
     };
     assert!(handler.dispatch_key(&mut events, &key));
     let key_fields = events

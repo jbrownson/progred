@@ -1,5 +1,5 @@
 //! Headless SVG bench for tuning drawn delimiters against the system
-//! font. Writes target/delimiter_bench.svg: (A) parametric shapes
+//! font. Writes delimiter_bench.svg into the build directory: (A) parametric shapes
 //! overlaid on the font's own glyph outlines at 8x, (B) a stretch
 //! series, (C) mock projection lines with real shaped text. Prints the
 //! measured glyph ratios that calibrate `DelimStyle::for_text_size`.
@@ -405,7 +405,10 @@ fn main() {
     });
 
     writeln!(svg.0, "</svg>").unwrap();
-    let out = "target/delimiter_bench.svg";
-    std::fs::write(out, svg.0).unwrap();
-    println!("wrote {out}");
+    let out = std::path::PathBuf::from(
+        std::env::var_os("CARGO_TARGET_DIR").unwrap_or_else(|| "target".into()),
+    )
+    .join("delimiter_bench.svg");
+    std::fs::write(&out, svg.0).unwrap();
+    println!("wrote {}", out.display());
 }

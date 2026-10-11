@@ -17,7 +17,7 @@
 //! [`output_color`](MergeWorkspace::output_color).
 //! Note that if color has not been computed, `output_color` will return `None`.
 use crate::{
-    CopyVarsError, Gpu, RegPipeline, TapeStorage,
+    CopyVarsError, Gpu, RegPipeline,
     buf::{BufferSizeError, FlexBuffer, buffer_ro, buffer_rw, buffer_uniform},
     color::{ColorWorkspace as GenericColorWorkspace, ShapeColorBuffers},
     pixel::{PixelBufferTag, RawDistancePixel},
@@ -39,15 +39,14 @@ fn merge_shader() -> String {
     MERGE_SHADER.to_owned() + shaders::COMMON + super::DISTANCE_PIXEL_SHADER
 }
 
-fn color_shader(storage: TapeStorage) -> String {
+fn color_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code
         + COLOR_SHADER
         + super::TRANSFORM_INPUT
         + super::DISTANCE_PIXEL_SHADER
         + shaders::COMMON
-        + shaders::PRIVATE_SPILLS
         + shaders::TAPE_INTERPRETER
         + shaders::DUMMY_STACK
         + shaders::FLOAT_OPS
@@ -102,6 +101,8 @@ pub struct MergeWorkspace {
     config: wgpu::Buffer,
     distance: FlexBuffer<PixelDistanceBufferTag>,
     color: FlexBuffer<PixelColorBufferTag>,
+
+    color_bind_group: std::cell::OnceCell<wgpu::BindGroup>,
 
     /// Number of images merged together
     image_count: usize,
@@ -243,12 +244,25 @@ impl Context {
                 .into());
             }
         } else {
-            buf.distance
-                .grow_to_fit(&self.gpu.device, size)
-                .map_err(MergeError::OutputSize)?;
-            buf.color
-                .grow_to_fit(&self.gpu.device, size)
-                .map_err(MergeError::OutputSize)?;
+            // Resize the buffers, clearing the bind group if either has
+            // changed.  It would be incorrect for one to change and not the
+            // other, so we also have an assertion to make sure they agree!
+            let distance_changed = !matches!(
+                buf.distance
+                    .grow_to_fit(&self.gpu.device, size)
+                    .map_err(MergeError::OutputSize)?,
+                std::cmp::Ordering::Equal
+            );
+            let color_changed = !matches!(
+                buf.color
+                    .grow_to_fit(&self.gpu.device, size)
+                    .map_err(MergeError::OutputSize)?,
+                std::cmp::Ordering::Equal
+            );
+            assert_eq!(distance_changed, color_changed, "mismatched buffers");
+            if distance_changed {
+                buf.color_bind_group = Default::default();
+            }
         }
         buf.has_color = false;
         let mut encoder = self.gpu.device.create_command_encoder(
@@ -342,6 +356,7 @@ impl Context {
             config,
             distance,
             color,
+            color_bind_group: Default::default(),
             image_count: 0,
             has_color: false,
         }
@@ -477,15 +492,15 @@ impl ColorContext {
                 immediate_size: 0u32,
             });
         let device_ = device.clone();
-        let color_pipeline = RegPipeline::build(Box::new(move |storage| {
-            let shader_code = color_shader(storage);
+        let color_pipeline = RegPipeline::build(Box::new(move |reg_count| {
+            let shader_code = color_shader(reg_count);
             let shader_module =
                 device_.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: None,
                     source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                 });
             device_.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("color ({storage:?})")),
+                label: Some(&format!("color ({reg_count})")),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
                 entry_point: Some("color_main"),
@@ -556,12 +571,7 @@ impl ColorContext {
                     timestamp_writes: None, // TODO add timestamps?
                 });
             compute_pass.set_bind_group(0, config_bg, &[]);
-
-            // TODO this creates a bind group for every evaluation, instead of
-            // caching it somewhere.  However, *where* to cache it is not
-            // obvious, because it combines fields from two different buffer
-            // objects.
-            let image_bg =
+            let image_bg = image.color_bind_group.get_or_init(|| {
                 gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("color image bind group"),
                     layout: &self.image_bind_group_layout,
@@ -575,10 +585,11 @@ impl ColorContext {
                             resource: image.color.bind_active(),
                         },
                     ],
-                });
-            compute_pass.set_bind_group(1, &image_bg, &[]);
+                })
+            });
+            compute_pass.set_bind_group(1, image_bg, &[]);
             compute_pass
-                .set_pipeline(&self.color_pipeline.get(shape.storage()));
+                .set_pipeline(self.color_pipeline.get(shape.reg_count()));
             compute_pass.dispatch_workgroups(
                 size.width().div_ceil(8),
                 size.height().div_ceil(8),
@@ -604,7 +615,7 @@ mod test {
 
     #[test]
     fn compile_color_shader() {
-        crate::compile_shader(&color_shader(TapeStorage::new(16, 0)), "color");
+        crate::compile_shader(&color_shader(16), "color");
     }
 
     #[test]
@@ -618,7 +629,7 @@ mod test {
     #[test]
     fn color_config_layout() {
         crate::test::compare_struct_layout::<ColorConfig>(
-            &color_shader(TapeStorage::new(16, 0)),
+            &color_shader(16),
             "Config",
         );
     }

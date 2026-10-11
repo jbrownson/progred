@@ -220,7 +220,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
             crate::test_values::text("1.5"),
         ),
     ]);
-    let edit = |doc: &Document, path: Vec<Step>| make_editing_selection(doc, &lib, path);
+    let edit = |doc: &Document, path: Vec<Step>| make_projected_editing_selection(doc, &lib, path);
     assert_eq!(
         edit(
             &doc,
@@ -638,7 +638,7 @@ fn payload_conversion_preserves_an_explicit_caret() {
         text::value("hello"),
     )]);
     let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
-    let mut selection = make_editing_selection(&doc, &libraries, path.clone());
+    let mut selection = make_projected_editing_selection(&doc, &libraries, path.clone());
     assert_eq!(selection.edit().unwrap().selection_offsets(), (5, 5));
     selection.edit_mut().unwrap().cursor_to_start();
     assert_eq!(selection.edit().unwrap().selection_offsets(), (0, 0));
@@ -661,7 +661,7 @@ fn edits_write_through_to_the_field() {
         crate::test_values::text("old"),
     )]);
     let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
-    let mut selection = make_editing_selection(&doc, &lib, path.clone());
+    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
     write_text(&mut doc, &lib, &mut selection);
     assert_eq!(
@@ -745,7 +745,7 @@ fn compact_f64_values_edit_as_decimal_text() {
         cells,
     });
     let path = vec![Step::Follow(gid::Resolution::Document)];
-    let mut selection = make_editing_selection(&doc, &lib, path.clone());
+    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
     assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
     selection.edit_mut().unwrap().set_text("7.25");
     assert!(write_with(&mut doc, &lib, &mut selection, |s, c| {
@@ -787,7 +787,7 @@ fn editing_an_f64_keeps_unrelated_fields() {
         cells,
     });
     let path = vec![Step::Follow(gid::Resolution::Document)];
-    let mut selection = make_editing_selection(&doc, &lib, path.clone());
+    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("8");
     assert!(write_with(&mut doc, &lib, &mut selection, |s, c| {
         crate::libraries::number::edit(s, c, f64::value)
@@ -820,7 +820,7 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
 
     // Editing an element writes the whole rebuilt list at the
     // owning cell; the sibling keeps its position and value.
-    let mut selection = make_editing_selection(&doc, &lib, element.clone());
+    let mut selection = make_projected_editing_selection(&doc, &lib, element.clone());
     selection.edit_mut().unwrap().set_text("9");
     assert!(write_text(&mut doc, &lib, &mut selection));
     assert_eq!(
@@ -1036,7 +1036,7 @@ fn write_through_opens_one_step_per_editor_life() {
         crate::test_values::text("a"),
     )]);
     let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
-    let mut selection = make_editing_selection(&doc, &lib, path);
+    let mut selection = make_projected_editing_selection(&doc, &lib, path);
 
     // First write opens the step; the rest of the run is silent,
     // as are no-op rewrites.
@@ -1052,7 +1052,7 @@ fn write_through_opens_one_step_per_editor_life() {
     assert!(write_text(&mut doc, &lib, &mut selection));
 
     // A re-minted editor is a new run by construction.
-    let mut fresh = make_editing_selection(
+    let mut fresh = make_projected_editing_selection(
         &doc,
         &lib,
         vec![Step::Follow(gid::Resolution::Document), key("name")],
@@ -1446,7 +1446,7 @@ fn a_simple_name_is_an_ordinary_editable_field() {
         Step::Key(name::vocabulary::NAME),
     ];
 
-    let mut selection = make_editing_selection(&doc, &lib, path.clone());
+    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
     assert!(write_text(&mut doc, &lib, &mut selection));
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some("new"));
@@ -1557,11 +1557,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
     let mut world = editing_world(&doc, &lib);
     let idle = editing_frame(&mut world, false);
     let original = world.model.doc.clone();
-    let marker = idle
-        .descends
-        .iter()
-        .find(|d| d.path.as_ref() == path)
-        .unwrap();
+    let marker = idle.descends.landmark(&path).unwrap();
     let point = marker.rect.center();
     let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
     assert_eq!(

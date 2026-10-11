@@ -143,7 +143,7 @@ impl Renderer {
                     &texture.texture.create_view(&Default::default()),
                 );
                 device.queue.submit([encoder.finish()]);
-                texture.present();
+                device.queue.present(texture);
                 Ok(true)
             }
         }

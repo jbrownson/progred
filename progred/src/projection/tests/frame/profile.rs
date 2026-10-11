@@ -77,7 +77,7 @@ fn iterations() -> usize {
 fn distribution(label: &str, samples: impl Iterator<Item = Duration>) {
     let mut samples: Vec<_> = samples.collect();
     samples.sort_unstable();
-    let percentile = |percent: usize| samples[(samples.len() * percent).div_ceil(100) - 1];
+    let percentile = |percent| crate::perf::percentile(&samples, percent);
     eprintln!(
         "  {label}: median {:.2?}, p95 {:.2?}, max {:.2?}",
         percentile(50),
@@ -128,6 +128,7 @@ fn profile(name: &str, mut frame: impl FnMut(usize) -> Bench, check: impl Fn(&Be
         warm.iter().map(|t| t.phases.paint),
     );
     distribution("output disposal", warm.iter().map(|t| t.disposal));
+    crate::perf::record("", warm.iter().map(|t| t.total));
 }
 
 fn fixture(source: &str) -> Document {
@@ -329,7 +330,8 @@ fn cam_editor_scroll_profile_loop() {
             samples.push(elapsed);
         }
     }
-    distribution("CAM full editor source scrolling", samples.into_iter());
+    distribution("CAM full editor source scrolling", samples.iter().copied());
+    crate::perf::record("", samples);
 }
 
 fn orbit(path: &[Step], frame: usize) -> Annotations {

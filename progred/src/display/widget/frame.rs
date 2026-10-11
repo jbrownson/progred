@@ -148,10 +148,10 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
                 .and_then(|point| probe.answer(point, self.input.prior, self.input.reach_px))
                 .map(|claim| (self.root.clone(), claim)),
         );
-        if self.input.debug_geometry {
-            if let Some(region) = probe.retention_region(self.input.reach_px) {
-                self.output.debug_regions.push(region);
-            }
+        if self.input.debug_geometry
+            && let Some(region) = probe.retention_region(self.input.reach_px)
+        {
+            self.output.debug_regions.push(region);
         }
         self.output
             .hover_geometry
@@ -354,6 +354,9 @@ impl<H: Clone + PartialEq> HoverGeometry<H> {
 /// The settled target is an explicit dispatch input, never an input to
 /// description or placement. Accepted handlers perform their own actions.
 pub struct DispatchContext<C, Hover> {
+    /// The frame's whole handler, so a handler can lower its input into
+    /// another event that every handler sees in the usual order.
+    pub handler: Rc<Handler<C, DispatchContext<C, Hover>>>,
     pub descends: std::rc::Rc<[Landmark<C>]>,
     pub view_regions: std::rc::Rc<[ViewRegion]>,
     pub root: Option<Root>,
@@ -364,6 +367,7 @@ pub struct DispatchContext<C, Hover> {
 impl<C, Hover> Default for DispatchContext<C, Hover> {
     fn default() -> Self {
         Self {
+            handler: Default::default(),
             descends: Default::default(),
             view_regions: Default::default(),
             root: None,
@@ -652,9 +656,7 @@ mod tests {
 
     #[test]
     fn view_scope_hides_other_views_hover_without_hiding_input() {
-        use puri::handler::{
-            Event, EventOutcome, PointerInfo, PointerState, PointerType, PointerUpdate,
-        };
+        use puri::handler::{Event, EventOutcome, PointerState, PointerUpdate};
         let own = Root::document();
         let other = Root::document();
         let mut pass: HoverPass<Vec<(u8, Option<u8>)>, u8> = HoverPass::new(&Default::default());
@@ -676,11 +678,7 @@ mod tests {
         }
         let handler = pass.finish().bind(Default::default()).handler.unwrap();
         let update = PointerUpdate {
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             current: PointerState::default(),
             coalesced: vec![],
             predicted: vec![],

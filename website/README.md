@@ -5,7 +5,7 @@ there is no separate demo implementation, framework, or hosting dependency.
 
 ## Open it
 
-On macOS, double-click **Preview.command** in Finder, or run `make run-website`
+On macOS, double-click **Preview.command** in Finder, or run `make run-web`
 from the repository root. It starts a loopback-only web server and leaves the
 URL as the last line in the terminal. Open that link in whichever browser you
 want. Leave the terminal running; Control+C stops the server. Website and lesson
@@ -14,7 +14,7 @@ visible with the URL repeated below them, so ordinary browsing doesn't bury it.
 
 The local address is always <http://127.0.0.1:8081/>. Closing a browser tab does
 not stop the server: reopen that link in Safari, Chrome, or another browser.
-It doesn't launch a browser unless requested with `make run-website ARGS=--open`.
+It doesn't launch a browser unless requested with `make run-web ARGS=--open`.
 The server must remain running; after stopping it or restarting the computer,
 start it again. There is no background service or automatic login startup.
 
@@ -26,12 +26,9 @@ build can take a while. `--no-build` reuses the existing generated files
 without checking for changes, building only if they're missing. Restart the
 launcher to pick up editor changes; website files only need a browser refresh.
 
-The browser build uses `nightly-2026-08-27` with `rust-src` and `llvm-tools`,
-and `wasm-bindgen-cli` matching the locked `wasm-bindgen` version. It rebuilds
-`std` with atomics and enables SIMD for the shared-memory browser build, inside
-the normal Cargo sandbox. The browser must support WebAssembly SIMD.
-One-time setup is described in [the browser host notes](../web/README.md).
-No Node or package installation is needed for the site.
+The browser build needs a one-time toolchain setup, described in
+[the browser host notes](../web/README.md). No Node or package installation is
+needed for the site.
 
 The header's GitHub link uses the standard Octicon and the site's light/dark
 palette. A small local script requests the star count once from GitHub's public
@@ -78,8 +75,8 @@ for a free port when running an additional preview alongside this one.
 - Each iframe owns an independent editor session. Its Reset button reloads only
   that iframe, discarding that exercise's edits and history. Full-page editor links open a
   new session; they do not transfer the embedded document.
-- Browser edits are currently in memory only. Do not author something you need
-  to keep here yet; document import/export is a useful next step.
+- Edits live in memory until saved: the editor's File → Save downloads the
+  document as a `.gid` file, and File → Open loads one.
 
 The exercise tutorial opens with a growing forest. A slider scrubs growth forward or backward;
 the visible `drawing with controls` call connects it to a forest function with editable
@@ -259,17 +256,10 @@ sender, iframe, and channel; reset advances the channel so queued notifications
 from the old editor cannot complete the new checklist. The full editor does
 not subscribe, serialize state, or send these messages.
 
-CAM stock meshing and implicit rendering use a shared-memory coordinator and
-Rayon worker pool (up to eight rendering workers). The editor starts only after
-the pool is ready; there is no synchronous computation fallback.
-The server supplies the COOP/COEP headers required for cross-origin isolation
-on both the website and embedded editor. Existing preview servers need to be
-restarted after this change, not just refreshed. Projection and toolpath generation
-remain on the page thread. Presentation uses the native compositor via WebGPU,
-including GPU mesh drawing. Canvas2D/CPU mesh drawing remains a fallback when
-WebGPU is unavailable.
-
-For deployment, use HTTPS and configure those same headers. GitHub Pages alone
+The editor's shared-memory workers need cross-origin isolation, so the
+preview server supplies COOP/COEP headers for the website and the embedded
+editor; [the browser host notes](../web/README.md) describe the workers and
+presentation. For deployment, use HTTPS and configure those same headers. GitHub Pages alone
 does not provide the header configuration this threaded build requires. The
 Cloudflare configuration below supplies them without a service worker.
 
@@ -294,8 +284,8 @@ nightly and the official wasm-bindgen CLI release matching `Cargo.lock`, builds
 the browser binary, runs the website tests, and packages the assets. The CLI
 download is checked against the release's SHA-256 file. This path deliberately
 uses ordinary Cargo, not Seatbelt; don't use it as a local sandbox bypass.
-`tools/web-build-settings.sh` supplies the same Rust version, target, and threaded
-WASM/SIMD flags to both build paths. No native editor code changes are required.
+`tools/web-build-settings.sh` supplies the same Rust version, target, threaded
+WASM/SIMD flags, and Cargo and wasm-bindgen arguments to both build paths. No native editor code changes are required.
 
 One-time Cloudflare setup, after the deployment changes are committed and the
 chosen commit is pushed to a `website-live` branch on GitHub:

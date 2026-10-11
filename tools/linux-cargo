@@ -1,0 +1,62 @@
+#!/bin/sh
+
+# Locked Cargo for Linux, which has no repository sandbox yet. This is the
+# single deliberate Linux exception to the .cargo/config.toml tripwire: build
+# scripts and procedural macros run with the invoking user's permissions.
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+
+if [ "$(uname -s)" != Linux ]; then
+    echo "linux-cargo requires Linux; use tools/sandbox-cargo on macOS" >&2
+    exit 1
+fi
+
+if [ "$#" -eq 0 ]; then
+    echo "usage: tools/linux-cargo update | resolve | <cargo command> [arguments...]" >&2
+    exit 2
+fi
+
+# Release builds carry the commit they came from, since they're what people
+# run and share. Development builds, tests included, leave it out: progred's
+# source reads it, so every commit would otherwise rebuild progred.
+stamp() {
+    for arg in "$@"; do
+        case $arg in
+            --) return ;;
+            --release | -r) "$tool_dir/progred-commit"; return ;;
+        esac
+    done
+}
+
+run() {
+    offline=$1
+    shift
+    env \
+        CARGO_NET_OFFLINE="$offline" \
+        CARGO_TARGET_DIR="$project_root/target/native" \
+        PROGRED_COMMIT="$(stamp "$@")" \
+        RUSTC_WRAPPER= \
+        cargo "$@"
+}
+
+# Updates exclude registry releases less than seven days old, as
+# sandbox-cargo's do. Resolution runs no dependency code.
+if [ "$1" = update ]; then
+    shift
+    run false +nightly-2026-08-27 update -Z min-publish-age \
+        --config 'registry.global-min-publish-age="7 days"' "$@"
+    exit
+fi
+
+# After declaring a dependency, record it in Cargo.lock from the local cache
+# alone, so no newly published registry release can enter the graph.
+if [ "$1" = resolve ]; then
+    shift
+    run true --offline metadata --format-version 1 "$@" >/dev/null
+    exit
+fi
+
+run false --locked "$@"

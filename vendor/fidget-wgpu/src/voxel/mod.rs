@@ -98,14 +98,13 @@
 
 use crate::{
     CopyVarsChanged, CopyVarsError, Gpu, RegPipeline, RenderShape,
-    TAPE_DATA_CAPACITY, TapeStorage, TapeWord,
+    TAPE_DATA_CAPACITY, TapeWord,
     buf::{
         BufferSizeError, BufferType, FlexBuffer, ReadBuffer, buffer_ro,
         buffer_ro_dyn, buffer_rw,
     },
     shaders, tag,
 };
-use fidget_core::eval::Function;
 use fidget_core::{
     render::{ImageSize, VoxelSize},
     shape::{MissingVar, ShapeVars},
@@ -113,12 +112,7 @@ use fidget_core::{
 use fidget_raster::voxel::{GeometryPixel, Image};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
-#[cfg(all(feature = "experimental-spills", not(target_arch = "wasm32")))]
-#[doc(hidden)]
-pub mod diagnostics;
 pub mod effects;
-mod scratch;
-pub use scratch::ScratchError;
 
 pub use fidget_raster::voxel::{RenderConfig, RenderSize};
 
@@ -248,9 +242,6 @@ pub struct BufferError {
 /// Error returned when submitting a voxel rasterization job to the GPU
 #[derive(Debug, thiserror::Error)]
 pub enum SubmitError {
-    /// The scratch budget cannot fit one evaluation workgroup.
-    #[error(transparent)]
-    Scratch(#[from] ScratchError),
     /// Missing variable when evaluating
     #[error(transparent)]
     MissingVar(#[from] MissingVar),
@@ -303,13 +294,6 @@ struct Config {
 
     /// Length of the root tape
     root_tape_len: u32,
-
-    /// Bounded number of concurrent spilling invocations (zero if no spills).
-    spill_lanes: u32,
-
-    /// Scratch begins after the read-only variable prefix, in floats.
-    spill_base: u32,
-    _spill_pad: [u32; 2],
     // This is followed by a flexible array member containing tape data
 }
 
@@ -361,27 +345,17 @@ impl TileRenderSize {
     }
 }
 
-/// Chooses scratch storage without changing the interpreter's op semantics.
-fn tape_interpreter(storage: TapeStorage) -> String {
-    let spills = if storage.external_spills {
-        include_str!("shaders/storage_spills.wgsl")
-    } else {
-        shaders::PRIVATE_SPILLS
-    };
-    spills.to_owned() + shaders::TAPE_INTERPRETER
-}
-
-/// Returns a shader for interval root tiles.
-fn interval_root_shader(storage: TapeStorage) -> String {
+/// Returns a shader for interval root tiles
+fn interval_root_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code += COMMON_SHADER;
     shader_code += INTERVAL_ROOT_SHADER;
     shader_code += INTERVAL_INPUT;
     shader_code += TRANSFORM_INPUT;
     shader_code += shaders::INTERVAL_OPS;
     shader_code += shaders::COMMON;
-    shader_code += &tape_interpreter(storage);
+    shader_code += shaders::TAPE_INTERPRETER;
     shader_code += shaders::STACK;
     shader_code += shaders::TAPE_SIMPLIFY;
     shader_code
@@ -406,45 +380,45 @@ fn sort_shader() -> String {
 }
 
 /// Returns a shader for interval tile evaluation
-fn interval_tiles_shader(storage: TapeStorage) -> String {
+fn interval_tiles_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code += INTERVAL_TILES_SHADER;
     shader_code += INTERVAL_INPUT;
     shader_code += TRANSFORM_INPUT;
     shader_code += COMMON_SHADER;
     shader_code += shaders::INTERVAL_OPS;
     shader_code += shaders::COMMON;
-    shader_code += &tape_interpreter(storage);
+    shader_code += shaders::TAPE_INTERPRETER;
     shader_code += shaders::STACK;
     shader_code += shaders::TAPE_SIMPLIFY;
     shader_code
 }
 
 /// Returns a shader for voxel tile evaluation
-fn voxel_tiles_shader(storage: TapeStorage) -> String {
+fn voxel_tiles_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code += VOXEL_TILES_SHADER;
     shader_code += TRANSFORM_INPUT;
     shader_code += COMMON_SHADER;
     shader_code += shaders::FLOAT_OPS;
     shader_code += shaders::COMMON;
-    shader_code += &tape_interpreter(storage);
+    shader_code += shaders::TAPE_INTERPRETER;
     shader_code += shaders::DUMMY_STACK;
     shader_code
 }
 
 /// Returns a shader for normals evaluation
-fn normals_shader(storage: TapeStorage) -> String {
+fn normals_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code += NORMALS_SHADER;
     shader_code += TRANSFORM_INPUT;
     shader_code += COMMON_SHADER;
     shader_code += shaders::GRAD_OPS;
     shader_code += shaders::COMMON;
-    shader_code += &tape_interpreter(storage);
+    shader_code += shaders::TAPE_INTERPRETER;
     shader_code += shaders::DUMMY_STACK;
     shader_code
 }
@@ -505,15 +479,15 @@ impl RootContext {
                 immediate_size: 0u32,
             });
         let device_ = device.clone();
-        let root_pipeline = RegPipeline::build(Box::new(move |storage| {
-            let shader_code = interval_root_shader(storage);
+        let root_pipeline = RegPipeline::build(Box::new(move |reg_count| {
+            let shader_code = interval_root_shader(reg_count);
             let shader_module =
                 device_.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some("interval root"),
                     source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                 });
             device_.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("interval root ({storage:?})")),
+                label: Some(&format!("interval root ({reg_count})")),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
                 entry_point: Some("interval_root_main"),
@@ -532,29 +506,19 @@ impl RootContext {
         &self,
         ctx: &Context,
         workspace: &Workspace,
-        storage: TapeStorage,
+        reg_count: u8,
         render_size: TileRenderSize,
-        scratch_lanes: u32,
         compute_pass: &mut wgpu::ComputePass,
     ) {
         let bind_group = workspace.bind_groups.root(ctx, workspace);
-        compute_pass.set_pipeline(&self.root_pipeline.get(storage));
+        compute_pass.set_pipeline(self.root_pipeline.get(reg_count));
         compute_pass.set_bind_group(1, bind_group, &[]);
 
         // Workgroup is 4x4x4, so we divide by 4 here on each axis
         let nx = render_size.nx().div_ceil(4);
         let ny = render_size.ny().div_ceil(4);
         let nz = render_size.nz().div_ceil(4);
-        if scratch_lanes > 0 {
-            let count = render_size.nx() * render_size.ny() * render_size.nz();
-            compute_pass.dispatch_workgroups(
-                count.div_ceil(64).min(scratch_lanes / 64),
-                1,
-                1,
-            );
-        } else {
-            compute_pass.dispatch_workgroups(nx, ny, nz);
-        }
+        compute_pass.dispatch_workgroups(nx, ny, nz);
     }
 }
 
@@ -692,31 +656,25 @@ impl IntervalContext {
         let device_ = device.clone();
         let interval_pipeline_layout_ = interval_pipeline_layout.clone();
         let interval64_pipeline =
-            RegPipeline::build(Box::new(move |storage| {
-                let shader_code = interval_tiles_shader(storage);
+            RegPipeline::build(Box::new(move |reg_count| {
+                let shader_code = interval_tiles_shader(reg_count);
                 // SAFETY: the shader is carefully written
                 let shader_module = unsafe {
                     device_.create_shader_module_trusted(
                         wgpu::ShaderModuleDescriptor {
                             label: Some(&format!(
-                                "interval64 tiles shader ({storage:?})"
+                                "interval64 tiles shader ({reg_count})"
                             )),
                             source: wgpu::ShaderSource::Wgsl(
                                 shader_code.into(),
                             ),
                         },
-                        wgpu::ShaderRuntimeChecks {
-                            bounds_checks: false,
-                            force_loop_bounding: false,
-                            ray_query_initialization_tracking: false,
-                            task_shader_dispatch_tracking: false,
-                            mesh_shader_primitive_indices_clamp: false,
-                        },
+                        wgpu::ShaderRuntimeChecks::unchecked(),
                     )
                 };
                 device_.create_compute_pipeline(
                     &wgpu::ComputePipelineDescriptor {
-                        label: Some(&format!("interval64 ({storage:?})")),
+                        label: Some(&format!("interval64 ({reg_count})")),
                         layout: Some(&interval_pipeline_layout_),
                         module: &shader_module,
                         entry_point: Some("interval_tile_main"),
@@ -734,31 +692,25 @@ impl IntervalContext {
 
         let device_ = device.clone();
         let interval16_pipeline =
-            RegPipeline::build(Box::new(move |storage| {
-                let shader_code = interval_tiles_shader(storage);
+            RegPipeline::build(Box::new(move |reg_count| {
+                let shader_code = interval_tiles_shader(reg_count);
                 // SAFETY: the shader is carefully written
                 let shader_module = unsafe {
                     device_.create_shader_module_trusted(
                         wgpu::ShaderModuleDescriptor {
                             label: Some(&format!(
-                                "interval16 tiles shader ({storage:?})"
+                                "interval16 tiles shader ({reg_count})"
                             )),
                             source: wgpu::ShaderSource::Wgsl(
                                 shader_code.into(),
                             ),
                         },
-                        wgpu::ShaderRuntimeChecks {
-                            bounds_checks: false,
-                            force_loop_bounding: false,
-                            ray_query_initialization_tracking: false,
-                            task_shader_dispatch_tracking: false,
-                            mesh_shader_primitive_indices_clamp: false,
-                        },
+                        wgpu::ShaderRuntimeChecks::unchecked(),
                     )
                 };
                 device_.create_compute_pipeline(
                     &wgpu::ComputePipelineDescriptor {
-                        label: Some(&format!("interval16 ({storage:?})")),
+                        label: Some(&format!("interval16 ({reg_count})")),
                         layout: Some(&interval_pipeline_layout),
                         module: &shader_module,
                         entry_point: Some("interval_tile_main"),
@@ -801,13 +753,7 @@ impl IntervalContext {
                     label: Some("sort shader module"),
                     source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                 },
-                wgpu::ShaderRuntimeChecks {
-                    bounds_checks: false,
-                    force_loop_bounding: false,
-                    ray_query_initialization_tracking: false,
-                    task_shader_dispatch_tracking: false,
-                    mesh_shader_primitive_indices_clamp: false,
-                },
+                wgpu::ShaderRuntimeChecks::unchecked(),
             )
         };
         let sort16_pipeline =
@@ -850,14 +796,14 @@ impl IntervalContext {
         ctx: &Context,
         workspace: &Workspace,
         strata: u64,
-        storage: TapeStorage,
+        reg_count: u8,
         compute_pass: &mut wgpu::ComputePass,
     ) {
         let strata_bytes =
             u64::try_from(workspace.strata_size_bytes()).unwrap();
         let offset_bytes = strata * strata_bytes;
         let bind_group16 = workspace.bind_groups.interval16(ctx, workspace);
-        compute_pass.set_pipeline(&self.interval64_pipeline.get(storage));
+        compute_pass.set_pipeline(self.interval64_pipeline.get(reg_count));
         compute_pass.set_bind_group(
             1,
             bind_group16,
@@ -875,7 +821,7 @@ impl IntervalContext {
             .dispatch_workgroups_indirect(workspace.tile16.tiles.data(), 0);
 
         let bind_group4 = workspace.bind_groups.interval4(ctx, workspace);
-        compute_pass.set_pipeline(&self.interval16_pipeline.get(storage));
+        compute_pass.set_pipeline(self.interval16_pipeline.get(reg_count));
         compute_pass.set_bind_group(1, bind_group4, &[0]);
         compute_pass
             .dispatch_workgroups_indirect(workspace.tile16.sorted.data(), 0);
@@ -924,8 +870,8 @@ impl VoxelContext {
                 immediate_size: 0u32,
             });
         let device_ = device.clone();
-        let voxel_pipeline = RegPipeline::build(Box::new(move |storage| {
-            let shader_code = voxel_tiles_shader(storage);
+        let voxel_pipeline = RegPipeline::build(Box::new(move |reg_count| {
+            let shader_code = voxel_tiles_shader(reg_count);
             // SAFETY: The shader is careful, good luck
             let shader_module = unsafe {
                 device_.create_shader_module_trusted(
@@ -933,17 +879,11 @@ impl VoxelContext {
                         label: Some("voxel shader module"),
                         source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                     },
-                    wgpu::ShaderRuntimeChecks {
-                        bounds_checks: false,
-                        force_loop_bounding: false,
-                        ray_query_initialization_tracking: false,
-                        task_shader_dispatch_tracking: false,
-                        mesh_shader_primitive_indices_clamp: false,
-                    },
+                    wgpu::ShaderRuntimeChecks::unchecked(),
                 )
             };
             device_.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("voxels ({storage:?})")),
+                label: Some(&format!("voxels ({reg_count})")),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
                 entry_point: Some("voxel_ray_main"),
@@ -962,11 +902,11 @@ impl VoxelContext {
         &self,
         ctx: &Context,
         workspace: &Workspace,
-        storage: TapeStorage,
+        reg_count: u8,
         compute_pass: &mut wgpu::ComputePass,
     ) {
         let bind_group = workspace.bind_groups.voxel(ctx, workspace);
-        compute_pass.set_pipeline(&self.voxel_pipeline.get(storage));
+        compute_pass.set_pipeline(self.voxel_pipeline.get(reg_count));
         compute_pass.set_bind_group(1, bind_group, &[]);
 
         // Each workgroup is 4x4x4, i.e. covering a 4x4 splat of pixels with 4x
@@ -1009,15 +949,15 @@ impl NormalsContext {
                 immediate_size: 0u32,
             });
         let device_ = device.clone();
-        let normals_pipeline = RegPipeline::build(Box::new(move |storage| {
-            let shader_code = normals_shader(storage);
+        let normals_pipeline = RegPipeline::build(Box::new(move |reg_count| {
+            let shader_code = normals_shader(reg_count);
             let shader_module =
                 device_.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some("normals shader module"),
                     source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                 });
             device_.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("normals ({storage:?})")),
+                label: Some(&format!("normals ({reg_count})")),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
                 entry_point: Some("normals_main"),
@@ -1036,29 +976,18 @@ impl NormalsContext {
         &self,
         ctx: &Context,
         workspace: &Workspace,
-        storage: TapeStorage,
-        scratch_lanes: u32,
+        reg_count: u8,
         compute_pass: &mut wgpu::ComputePass,
     ) {
         let bind_group = workspace.bind_groups.normals(ctx, workspace);
-        compute_pass.set_pipeline(&self.normals_pipeline.get(storage));
+        compute_pass.set_pipeline(self.normals_pipeline.get(reg_count));
         compute_pass.set_bind_group(1, bind_group, &[]);
 
-        if scratch_lanes > 0 {
-            let pixels =
-                workspace.image_size.width() * workspace.image_size.height();
-            compute_pass.dispatch_workgroups(
-                pixels.div_ceil(64).min(scratch_lanes / 64),
-                1,
-                1,
-            );
-        } else {
-            compute_pass.dispatch_workgroups(
-                workspace.image_size.width().div_ceil(8),
-                workspace.image_size.height().div_ceil(8),
-                1,
-            );
-        }
+        compute_pass.dispatch_workgroups(
+            workspace.image_size.width().div_ceil(8),
+            workspace.image_size.height().div_ceil(8),
+            1,
+        );
     }
 }
 
@@ -1363,12 +1292,7 @@ impl RootTileBuffers {
     }
 }
 
-tag!(
-    TileTapesBufferTag,
-    u32,
-    usize,
-    STORAGE | COPY_SRC | COPY_DST
-);
+tag!(TileTapesBufferTag, u32, usize, STORAGE | COPY_DST);
 tag!(VoxelsBufferTag, u32, VoxelSize, STORAGE | COPY_DST);
 tag!(pub GeomBufferTag, GeometryPixel, VoxelSize, STORAGE | COPY_SRC | COPY_DST,
     "Tag for a on-GPU buffer storing [`GeometryPixel`] values");
@@ -1481,7 +1405,8 @@ impl BindGroups {
                                 .tiles
                                 .data()
                                 .slice(0..16)
-                                .into(),
+                                .try_into()
+                                .unwrap(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
@@ -1490,7 +1415,8 @@ impl BindGroups {
                                 .sorted
                                 .data()
                                 .slice(0..16)
-                                .into(),
+                                .try_into()
+                                .unwrap(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
@@ -1499,7 +1425,8 @@ impl BindGroups {
                                 .tiles
                                 .data()
                                 .slice(0..16)
-                                .into(),
+                                .try_into()
+                                .unwrap(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 3,
@@ -1508,7 +1435,8 @@ impl BindGroups {
                                 .sorted
                                 .data()
                                 .slice(0..16)
-                                .into(),
+                                .try_into()
+                                .unwrap(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 4,
@@ -1615,7 +1543,8 @@ impl BindGroups {
                                 .strata
                                 .data()
                                 .slice(0..strata_bytes) // dynamic offset!
-                                .into(),
+                                .try_into()
+                                .unwrap(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
@@ -1631,7 +1560,11 @@ impl BindGroups {
                         },
                         wgpu::BindGroupEntry {
                             binding: 4,
-                            resource: workspace.z_hist_buf.slice(0..16).into(),
+                            resource: workspace
+                                .z_hist_buf
+                                .slice(0..16)
+                                .try_into()
+                                .unwrap(),
                         },
                     ],
                 })
@@ -1643,7 +1576,7 @@ impl BindGroups {
             Self::sort_bind_group(
                 ctx,
                 &workspace.tile16,
-                workspace.z_hist_buf.slice(0..16).into(),
+                workspace.z_hist_buf.slice(0..16).try_into().unwrap(),
             )
         })
     }
@@ -1653,7 +1586,7 @@ impl BindGroups {
             Self::sort_bind_group(
                 ctx,
                 &workspace.tile4,
-                workspace.z_hist_buf.slice(256..320).into(),
+                workspace.z_hist_buf.slice(256..320).try_into().unwrap(),
             )
         })
     }
@@ -1718,7 +1651,8 @@ impl BindGroups {
                             resource: workspace
                                 .z_hist_buf
                                 .slice(256..320)
-                                .into(),
+                                .try_into()
+                                .unwrap(),
                         },
                     ],
                 })
@@ -1808,9 +1742,7 @@ impl Workspace {
             size: (std::mem::size_of::<Config>()
                 + TAPE_DATA_CAPACITY * std::mem::size_of::<TapeWord>())
                 as u64,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -2051,7 +1983,7 @@ impl Context {
                 entries: &[
                     buffer_rw(0), // config (including tape buffer)
                     buffer_rw(1), // tile_tape (hierarchical)
-                    buffer_rw(2), // variables followed by spill scratch
+                    buffer_ro(2), // vars
                 ],
             },
         );
@@ -2195,25 +2127,19 @@ impl Context {
         Ok(())
     }
 
-    fn prepare_with_vars(
+    /// Encodes a single image to be rendered on the GPU, with extra variables
+    ///
+    /// See [`submit`](Self::submit) for additional details.
+    pub fn encode_with_vars(
         &self,
         shape: &RenderShape,
         vars: &ShapeVars<f32>,
         workspace: &mut Workspace,
         settings: &RenderConfig,
-    ) -> Result<(TileRenderSize, TapeStorage, scratch::Scratch), SubmitError>
-    {
+        encoder: &mut wgpu::CommandEncoder,
+    ) -> Result<(), SubmitError> {
         workspace.set_image_size(&self.gpu.device, settings.image_size)?;
         let render_size = TileRenderSize::from(workspace.image_size);
-        let scratch = scratch::plan(
-            shape.spill_count(),
-            shape.shape.inner().vars().len(),
-            u64::from(self.gpu.device.limits().max_storage_buffer_binding_size),
-        )?;
-        let storage = TapeStorage {
-            external_spills: scratch.lanes > 0,
-            ..shape.storage()
-        };
 
         let mat =
             settings.world_to_model * workspace.image_size.screen_to_world();
@@ -2228,11 +2154,7 @@ impl Context {
                 render_size.height(),
                 render_size.depth(),
             ],
-            tape_data_capacity: ((workspace.config_buf.size()
-                - std::mem::size_of::<Config>() as u64)
-                / std::mem::size_of::<TapeWord>() as u64)
-                .try_into()
-                .unwrap(),
+            tape_data_capacity: TAPE_DATA_CAPACITY.try_into().unwrap(),
             image_size: [
                 workspace.image_size.width(),
                 workspace.image_size.height(),
@@ -2240,9 +2162,6 @@ impl Context {
             ],
             tape_data_offset: start_offset,
             root_tape_len: start_offset,
-            spill_lanes: scratch.lanes,
-            spill_base: shape.shape.inner().vars().len().try_into().unwrap(),
-            _spill_pad: [0; 2],
         };
 
         {
@@ -2270,32 +2189,11 @@ impl Context {
         // Copy vars (if present), then reset relevant bind groups if the buffer
         // size has changed.
         if matches!(
-            shape.copy_vars(
-                &self.gpu,
-                vars,
-                &mut workspace.vars_buf,
-                scratch.floats
-            )?,
+            shape.copy_vars(&self.gpu, vars, &mut workspace.vars_buf)?,
             CopyVarsChanged::BufferChanged
         ) {
             workspace.bind_groups.common = Default::default();
         }
-
-        Ok((render_size, storage, scratch))
-    }
-
-    /// Encodes a single image to be rendered on the GPU, with extra variables.
-    /// See [`submit`](Self::submit) for additional details.
-    pub fn encode_with_vars(
-        &self,
-        shape: &RenderShape,
-        vars: &ShapeVars<f32>,
-        workspace: &mut Workspace,
-        settings: &RenderConfig,
-        encoder: &mut wgpu::CommandEncoder,
-    ) -> Result<(), SubmitError> {
-        let (render_size, storage, scratch) =
-            self.prepare_with_vars(shape, vars, workspace, settings)?;
 
         // Initial buffer reset pass
         self.reset_ctx.run(encoder, workspace);
@@ -2314,9 +2212,8 @@ impl Context {
         self.root_ctx.run(
             self,
             workspace,
-            storage,
+            shape.bytecode.reg_count(),
             render_size,
-            scratch.lanes,
             &mut compute_pass,
         );
         // Repack root tiles into strata
@@ -2330,19 +2227,22 @@ impl Context {
                 self,
                 workspace,
                 strata,
-                storage,
+                shape.bytecode.reg_count(),
                 &mut compute_pass,
             );
-            self.voxel_ctx
-                .run(self, workspace, storage, &mut compute_pass);
+            self.voxel_ctx.run(
+                self,
+                workspace,
+                shape.bytecode.reg_count(),
+                &mut compute_pass,
+            );
 
             // Merge filled tiles from large -> small, populating the heightmap
             self.merge_ctx.run(self, workspace, &mut compute_pass);
             self.normals_ctx.run(
                 self,
                 workspace,
-                storage,
-                scratch.lanes,
+                shape.bytecode.reg_count(),
                 &mut compute_pass,
             );
 
@@ -2544,57 +2444,22 @@ mod test {
 
     #[test]
     fn compile_interval_root_shader() {
-        crate::compile_shader(
-            &interval_root_shader(TapeStorage::new(16, 0)),
-            "interval root",
-        );
+        crate::compile_shader(&interval_root_shader(16), "interval root");
     }
 
     #[test]
     fn compile_interval_tiles_shader() {
-        crate::compile_shader(
-            &interval_tiles_shader(TapeStorage::new(16, 0)),
-            "interval tiles",
-        );
+        crate::compile_shader(&interval_tiles_shader(16), "interval tiles");
     }
 
     #[test]
     fn compile_voxel_tiles_shader() {
-        crate::compile_shader(
-            &voxel_tiles_shader(TapeStorage::new(16, 0)),
-            "voxel tiles",
-        );
+        crate::compile_shader(&voxel_tiles_shader(16), "voxel tiles");
     }
 
     #[test]
     fn compile_normals_shader() {
-        crate::compile_shader(
-            &normals_shader(TapeStorage::new(16, 0)),
-            "normals tiles",
-        );
-    }
-
-    #[test]
-    fn compile_spilling_shaders() {
-        for external_spills in [false, true] {
-            let storage = TapeStorage {
-                external_spills,
-                ..TapeStorage::new(255, 1024)
-            };
-            crate::compile_shader(
-                &interval_root_shader(storage),
-                "spilling root",
-            );
-            crate::compile_shader(
-                &interval_tiles_shader(storage),
-                "spilling intervals",
-            );
-            crate::compile_shader(
-                &voxel_tiles_shader(storage),
-                "spilling voxels",
-            );
-            crate::compile_shader(&normals_shader(storage), "spilling normals");
-        }
+        crate::compile_shader(&normals_shader(16), "normals tiles");
     }
 
     #[test]

@@ -28,7 +28,7 @@ pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 
 #[derive(Default)]
 pub(crate) struct Dispatch {
-    pub(crate) handler: Handler<Editor, placed::DispatchContext<Editor>>,
+    pub(crate) handler: Rc<Handler<Editor, placed::DispatchContext<Editor>>>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
     pub(crate) descends: Rc<[navigate::Descend<Editor>]>,
     pub(crate) view_regions: Rc<[placed::ViewRegion]>,
@@ -72,8 +72,14 @@ impl Dispatch {
         }
     }
 
+    /// The handler is shared only while a dispatch context is alive.
+    pub(crate) fn handler_mut(&mut self) -> &mut Handler<Editor, placed::DispatchContext<Editor>> {
+        Rc::get_mut(&mut self.handler).expect("no dispatch is in progress")
+    }
+
     pub(crate) fn context(&self, hover: Option<Hovered>) -> placed::DispatchContext<Editor> {
         placed::DispatchContext {
+            handler: self.handler.clone(),
             descends: self.descends.clone(),
             view_regions: self.view_regions.clone(),
             ..placed::DispatchContext::new(self.pointer_root.clone(), hover)
@@ -222,16 +228,22 @@ fn prepare_frame(
         .set(pointer.pressed);
     let (layout, keyboard) = project_frame(&description, resources);
     let mut frame = compute_hover(layout, &description, pointer);
+    let placed = std::mem::take(frame.dispatch.handler_mut());
     // Structural paste precedes a pending's text query, while menu handling
-    // still takes precedence over all document editing when installed.
-    frame.dispatch.handler.on(|editor, event, _| {
-        let handled = match &event {
-            Event::Key(key) => editor.pending_paste_key(key),
-            _ => false,
-        };
-        puri::handler::EventOutcome::from_handled(event, handled)
-    });
-    frame.dispatch.handler = frame.dispatch.handler.over(keyboard);
+    // still takes precedence over all document editing when installed. The
+    // editor's structural keys answer only what every placed handler declines.
+    *frame.dispatch.handler_mut() = crate::input::structural_keys(description.scale)
+        .over(placed)
+        .over(Handler::from_function(
+            |editor: &mut Editor, event, _: &mut placed::DispatchContext<Editor>| {
+                let handled = match &event {
+                    Event::Key(key) => editor.pending_paste_key(key),
+                    _ => false,
+                };
+                puri::handler::EventOutcome::from_handled(event, handled)
+            },
+        ))
+        .over(keyboard);
     frame
 }
 
@@ -313,7 +325,7 @@ fn compute_hover(
         scroll_probes,
         hover,
         dispatch: Dispatch {
-            handler: handler.unwrap_or_else(Handler::new),
+            handler: Rc::new(handler.unwrap_or_else(Handler::new)),
             pointer_root,
             descends: descends.into(),
             view_regions: view_regions.into(),
@@ -904,6 +916,7 @@ fn project_frame(
 #[cfg(test)]
 mod frame_tests {
     use super::*;
+    use crate::display::test_support::Landmarks;
     use gid::{CellId, Cells, Document, Step, Value};
 
     type HoverLog = Rc<std::cell::RefCell<Vec<(&'static str, f64)>>>;
@@ -911,18 +924,14 @@ mod frame_tests {
 
     #[test]
     fn scrolling_a_view_that_no_longer_exists_declines() {
-        use ui_events::pointer::{PointerInfo, PointerScrollEvent, PointerType};
+        use ui_events::pointer::PointerScrollEvent;
         let mut editor = crate::test_editor(Document {
             root: Some(Value::record([])),
             cells: Cells::new(),
         });
         let gone = crate::workspace::Root::pane(vec![Step::Key(gid::new_cell_id())]);
         let event = PointerScrollEvent {
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             delta: ui_events::ScrollDelta::LineDelta(0.0, 1.0),
             state: Default::default(),
         };
@@ -1084,7 +1093,7 @@ mod frame_tests {
                             descent: 0.0,
                         },
                         move |output, placement| {
-                            let target = Hovered::Tree(if value as u64 % 2 == 0 {
+                            let target = Hovered::Tree(if (value as u64).is_multiple_of(2) {
                                 hover::Hover::Value(Rc::from([]))
                             } else {
                                 hover::Hover::Toggle(Rc::from([]))
@@ -1135,14 +1144,10 @@ mod frame_tests {
     }
 
     fn move_hover_pointer(runner: &mut EditorRunner, point: Point) {
-        use ui_events::pointer::{PointerEvent, PointerInfo, PointerState, PointerUpdate};
+        use ui_events::pointer::{PointerEvent, PointerState, PointerUpdate};
         assert!(runner.pointer_event(
             &PointerEvent::Move(PointerUpdate {
-                pointer: PointerInfo {
-                    pointer_id: None,
-                    persistent_device_id: None,
-                    pointer_type: ui_events::pointer::PointerType::Mouse,
-                },
+                pointer: crate::display::test_support::mouse(),
                 current: PointerState {
                     position: (point.x, point.y).into(),
                     ..Default::default()
@@ -1310,7 +1315,7 @@ mod frame_tests {
             cells: Cells::new(),
         }));
         let roots = Rc::new(std::cell::RefCell::new(Vec::new()));
-        runner.frame.dispatch.handler.on({
+        runner.frame.dispatch.handler_mut().on({
             let roots = roots.clone();
             move |_, event, input| {
                 if matches!(event, Event::HoverChanged) {
@@ -1392,13 +1397,7 @@ mod frame_tests {
                 .unwrap()
                 .clone(),
         )];
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!(target.rect.y0 > viewport.height);
         let target = target.clone();
         assert!(runner.update_frame(1.0, viewport, |editor, dispatch, _| {
@@ -1406,13 +1405,7 @@ mod frame_tests {
         }));
         assert_eq!(projected.replace(0), per_frame);
         assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!((0.0..viewport.height).contains(&target.rect.y0));
 
         // Scrolling away from an unchanged selection must not reveal it again.
@@ -1423,11 +1416,7 @@ mod frame_tests {
                     .dispatch_scroll(
                         editor,
                         &ui_events::pointer::PointerScrollEvent {
-                            pointer: ui_events::pointer::PointerInfo {
-                                pointer_id: None,
-                                persistent_device_id: None,
-                                pointer_type: ui_events::pointer::PointerType::Mouse,
-                            },
+                            pointer: crate::display::test_support::mouse(),
                             state: ui_events::pointer::PointerState {
                                 position: (200.0, 200.0).into(),
                                 ..Default::default()
@@ -1475,23 +1464,11 @@ mod frame_tests {
             .find(|region| region.root == root)
             .unwrap()
             .rect;
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
         crate::editing::select(&mut runner.editor, &root, previous);
         runner.refresh_frame(1.0, viewport);
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
 
         assert!(runner.keyboard_event(
@@ -1504,13 +1481,7 @@ mod frame_tests {
             viewport,
         ));
         assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!(target.rect.y0 >= region.y0 && target.rect.y1 <= region.y1);
     }
 
@@ -1800,13 +1771,7 @@ mod frame_tests {
         });
         assert_eq!(projected.replace(0), 41);
         assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!(target.rect.y0 > viewport.height);
 
         runner.refresh_frame(1.0, viewport);
@@ -1990,7 +1955,7 @@ mod frame_tests {
             ),
         );
         let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-        let mut fonts = FontContext::new();
+        let mut fonts = crate::fonts::bundled_font_context();
         let mut layouts = LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
         let mut tcx = TextCtx {
@@ -2192,7 +2157,7 @@ mod frame_tests {
             (Size::new(700.0, 400.0), 2.0),
         ] {
             let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
-            let mut fonts = FontContext::new();
+            let mut fonts = crate::fonts::bundled_font_context();
             let mut layouts = LayoutContext::new();
             let mut cache = puri::text::TextCache::default();
             let mut tcx = TextCtx {
@@ -2304,7 +2269,7 @@ mod frame_tests {
         let lower = model.workspace.left.panes[1].view.root.clone();
         let stack = crate::stack::load();
         let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-        let mut fonts = FontContext::new();
+        let mut fonts = crate::fonts::bundled_font_context();
         let mut layouts = LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
         let mut tcx = TextCtx {

@@ -1,0 +1,87 @@
+diff --git a/fidget-wgpu/src/color.rs b/fidget-wgpu/src/color.rs
+index ec472e5..5a0932e 100644
+--- a/fidget-wgpu/src/color.rs
++++ b/fidget-wgpu/src/color.rs
+@@ -144,6 +144,10 @@ where
+ /// Error type when constructing a [`ShapeColorBuffers`]
+ #[derive(Debug, thiserror::Error)]
+ pub enum ShapeColorError {
++    /// A channel needs register spills, which the GPU interpreter leaves
++    /// unimplemented
++    #[error("color needs {0} spill slots, which the GPU does not support")]
++    SpillsUnsupported(u32),
+     /// The shape uses a reserved register
+     #[error(transparent)]
+     RegisterError(#[from] ReservedRegister),
+@@ -269,6 +273,11 @@ impl ShapeColorBuffers {
+                     channel.inner().data(),
+                     &local_var_map,
+                 )?;
++                if bytecode.mem_count() > 0 {
++                    return Err(ShapeColorError::SpillsUnsupported(
++                        bytecode.mem_count(),
++                    ));
++                }
+                 bytecode_data.extend(bytecode.data());
+                 reg_count = reg_count.max(bytecode.reg_count());
+             }
+diff --git a/fidget-wgpu/src/lib.rs b/fidget-wgpu/src/lib.rs
+index 3ef205b..7f0c8f7 100644
+--- a/fidget-wgpu/src/lib.rs
++++ b/fidget-wgpu/src/lib.rs
+@@ -404,6 +404,10 @@ pub struct RenderShape {
+ /// Error type when constructing a [`RenderShape`]
+ #[derive(Debug, thiserror::Error)]
+ pub enum RenderShapeError {
++    /// The shape needs register spills, which the GPU interpreter leaves
++    /// unimplemented
++    #[error("shape needs {0} spill slots, which the GPU does not support")]
++    SpillsUnsupported(u32),
+     /// The shape doesn't fit in the GPU tape buffer
+     #[error(
+         "shape bytecode is {0} tape words (8 bytes each), which exceeds \
+@@ -420,6 +424,11 @@ impl RenderShape {
+     pub fn new(shape: &VmShape) -> Result<Self, RenderShapeError> {
+         // Generate bytecode for the root tape
+         let bytecode = Bytecode::new(shape.inner().data())?;
++        if bytecode.mem_count() > 0 {
++            return Err(RenderShapeError::SpillsUnsupported(
++                bytecode.mem_count(),
++            ));
++        }
+         if bytecode.len() / 2 > TAPE_DATA_CAPACITY {
+             return Err(RenderShapeError::TooLong(bytecode.len() / 2));
+         }
+@@ -559,6 +568,32 @@ mod test {
+     use super::*;
+     use std::collections::HashSet;
+ 
++    #[test]
++    fn spilling_shapes_are_rejected() {
++        use fidget_core::context::Tree;
++        let terms: Vec<_> = (0..512).map(|i| (Tree::x() + i).sin()).collect();
++        let sum = terms.iter().cloned().reduce(|a, b| a + b).unwrap();
++        let squares = terms
++            .iter()
++            .map(|t| t.clone().square())
++            .reduce(|a, b| a + b)
++            .unwrap();
++        let shape = VmShape::from(sum / squares);
++        assert!(matches!(
++            RenderShape::new(&shape),
++            Err(RenderShapeError::SpillsUnsupported(_))
++        ));
++        let color = color::ShapeColor::Rgb {
++            r: shape.clone(),
++            g: shape.clone(),
++            b: shape,
++        };
++        assert!(matches!(
++            color::ShapeColorBuffers::new(&[color]),
++            Err(color::ShapeColorError::SpillsUnsupported(_))
++        ));
++    }
++
+     #[test]
+     fn shader_has_all_ops() {
+         for (op, _) in fidget_bytecode::iter_ops() {

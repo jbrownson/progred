@@ -25,8 +25,6 @@ use gid::{CellId, Cells, Value};
 mod completion;
 pub(crate) mod interaction;
 pub(crate) mod mesh;
-#[cfg(all(test, feature = "mesh-experiment"))]
-mod mesh_experiment;
 mod projection;
 pub(crate) mod raster;
 
@@ -134,7 +132,7 @@ fn evaluated(
     field: CellId,
 ) -> Result<Option<Value>, Halt> {
     context
-        .field(&call, field)
+        .field(call, field)
         .map(|expression| context.eval_to_value(expression, environment))
         .transpose()
 }
@@ -890,18 +888,10 @@ fn cpu_volume(
     raster::SoftwareScene::new(objects, cancellation)?.render(view, cancellation)
 }
 
+#[derive(Default)]
 pub(crate) struct PreviewRenderer {
     #[cfg(not(target_arch = "wasm32"))]
     gpu: GpuState,
-}
-
-impl Default for PreviewRenderer {
-    fn default() -> Self {
-        Self {
-            #[cfg(not(target_arch = "wasm32"))]
-            gpu: GpuState::default(),
-        }
-    }
 }
 
 impl PreviewRenderer {
@@ -1500,6 +1490,23 @@ mod tests {
             .render(&preview, Camera::default(), PixelRenderSize::from(64))
             .unwrap();
         assert_eq!(rgba, vec![0; 64 * 64 * 4]);
+    }
+
+    /// Names the adapter that implicit previews will use, for `tools/perf.py`.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    #[ignore = "reports the GPU adapter for performance records"]
+    fn report_gpu_adapter() {
+        match pollster::block_on(Gpu::init()) {
+            Ok(gpu) => {
+                let info = gpu.device.adapter_info();
+                eprintln!(
+                    "perf-gpu\t{} ({:?}, {:?})\t{:?}",
+                    info.name, info.backend, info.device_type, info.device_type
+                );
+            }
+            Err(error) => eprintln!("perf-gpu\tnone ({error})\tNone"),
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]

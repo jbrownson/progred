@@ -30,10 +30,10 @@ export CARGO_NET_OFFLINE=false
 export CARGO_TARGET_DIR="$project_root/target/ci-web"
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
 export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="$web_rustflags"
-cargo +"$web_toolchain" build --release --locked --bin progred -p progred \
+# The shared argument lists are unquoted so they split into words.
+cargo +"$web_toolchain" build --locked $web_cargo_args \
     -Z "build-std=$web_build_std" --target "$web_target"
-"$project_root/tools/wasm-bindgen" --target web --no-typescript \
-    --out-dir web/pkg --out-name progred \
+"$project_root/tools/wasm-bindgen" $web_bindgen_args \
     "$CARGO_TARGET_DIR/$web_target/release/progred.wasm"
 
 python3 -B -m unittest discover -s website -p 'test_*.py'

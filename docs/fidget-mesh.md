@@ -17,7 +17,7 @@ to the structural fallback, as with the existing preview.
 The cube in Examples → Implicit CAD Shapes (Command+2 / Ctrl+2) explicitly uses this
 function at depth 5, through the document's `meshed` function. Edit that call to
 change the depth or replace its function with `preview 3d` for comparison. The toolpath example
-(Command+4 / Ctrl+4) uses `preview paths refined`: a mesh draft followed by
+(Command+3 / Ctrl+3) uses `preview paths refined`: a mesh draft followed by
 final-quality implicit stock/model tiles. Paths and the displayed tool remain
 directly generated triangle meshes, depth-tested against the implicit surface.
 Standalone `preview paths mesh` and progressive `preview paths 3d` remain available.
@@ -86,7 +86,7 @@ and earlier objects win equal-depth ties.
 
 ## Checks and limitations
 
-The [initial experiment](fidget-meshing-2026-09-13.md) measures generation cost and
+The [initial experiment](history/fidget-meshing-2026-09-13.md) measures generation cost and
 records mesh-quality caveats, including zero-area triangles. The viewport does
 not silently weld or repair them and makes no manufacturing-validity guarantee.
 Stock/model draft meshes use triangle normals. Path tubes interpolate analytic
@@ -103,15 +103,15 @@ does not fall back to CPU. It checks the shader, transparent background, empty
 draws, non-aligned readback row widths, and resource resizing/reuse.
 
 The existing `fidget_cube_profile_loop` exercises the mesh fixture and remeshes;
-`fidget_toolpaths_profile_loop` follows the Command+4 fixture, recording deferred
+`fidget_toolpaths_profile_loop` follows the Command+3 fixture, recording deferred
 mesh drawing. Its timing no longer includes GPU rendering; the paired
 `cam_mesh_roundtrip_profile` covers drawing plus full-editor composition.
 The updated default depth and cutter size differ from prior baselines.
 The ignored
 `editor_mesh_svg_capture` test captures the full editor with this example without
-opening a window; `editor_toolpath_mesh_svg_capture` captures Command+4. These
+opening a window; `editor_toolpath_mesh_svg_capture` captures Command+3. These
 use the real partial and the CPU interpretation of its mesh drawing operation.
 
-See the [direct-composition measurements](fidget-hybrid-2026-09-18.md#direct-mesh-composition)
+See the [direct-composition measurements](history/fidget-hybrid-2026-09-18.md#direct-mesh-composition)
 and the ignored GPU regressions for multiple same-sized previews, clipping,
 vector overlays, depth-only changes, and transparent surface pixels.

@@ -56,9 +56,8 @@ mod font_tests {
     use parley::LayoutContext;
     use puri::text::{GenericFamily, TextCache, TextCtx, TextStyle, line_layout};
 
-    #[test]
-    fn bundled_fonts_shape_grap_symbols_without_system_fallback() {
-        let mut fonts = bundled_font_context();
+    /// Asserts that every family shapes every text with real glyphs.
+    fn shapes_all(mut fonts: FontContext, texts: &[&str]) {
         let mut layouts = LayoutContext::new();
         let mut cache = TextCache::default();
         let mut ctx = TextCtx {
@@ -72,7 +71,7 @@ mod font_tests {
             GenericFamily::SansSerif,
             GenericFamily::Monospace,
         ] {
-            for text in ["→", "input + 2 → 5", "λ x → x", "…"] {
+            for text in texts {
                 let layout = line_layout(
                     &mut ctx,
                     text,
@@ -95,5 +94,20 @@ mod font_tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn bundled_fonts_shape_grap_symbols_without_system_fallback() {
+        shapes_all(
+            bundled_font_context(),
+            &["→", "input + 2 → 5", "λ x → x", "…"],
+        );
+    }
+
+    /// Tests lay out text with the bundled fonts, so they match on every
+    /// machine; this covers the native app's system fonts.
+    #[test]
+    fn system_fonts_shape_text() {
+        shapes_all(font_context(), &["Progred", "input + 2"]);
     }
 }

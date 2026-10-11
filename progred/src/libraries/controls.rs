@@ -143,17 +143,18 @@ fn apply_change(
         &ForeignOverlay::from_value(&[UPDATE], &update),
         ::grap::DEFAULT_FUEL,
     );
-    if result.completed && !result.result.declines() {
-        if let Some(value) = staged.into_inner() {
-            let mut editor = scope.open(crate::editing::Access::new(editor));
-            let mut annotation = editor
-                .annotation(root, path)
-                .and_then(Value::as_record)
-                .cloned()
-                .unwrap_or_default();
-            annotation.insert(STATE, value);
-            editor.annotate(root, path, Value::Record(annotation));
-        }
+    if result.completed
+        && !result.result.declines()
+        && let Some(value) = staged.into_inner()
+    {
+        let mut editor = scope.open(crate::editing::Access::new(editor));
+        let mut annotation = editor
+            .annotation(root, path)
+            .and_then(Value::as_record)
+            .cloned()
+            .unwrap_or_default();
+        annotation.insert(STATE, value);
+        editor.annotate(root, path, Value::Record(annotation));
     }
 }
 
@@ -480,7 +481,7 @@ fn controls_output(
             let result = match frame.inputs.computations {
                 Some(computations) => tree::prepared(
                     computations,
-                    &frame.inputs.view,
+                    frame.inputs.view,
                     &frame
                         .path
                         .iter()

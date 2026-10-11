@@ -2,17 +2,16 @@
 name = "fidget-core"
 description = "Core infrastructure for Fidget"
 readme = "README.md"
-version = "0.5.0"
-
+version = "0.5.1"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/mkeeter/fidget"
 authors = ["Matt Keeter <matt.j.keeter@gmail.com>"]
-rust-version = "1.92"
+rust-version = "1.95"
 
 [dependencies]
 facet = { version = "0.46", features = ["reflect", "doc"] }
-nalgebra = { version = "0.35", features = ["serde-serialize"] }
+nalgebra = { version = "0.35", default-features = false, features = ["std", "serde-serialize"] }
 ordered-float = "5"
 rand = "0.10"
 rayon = "1.10"
@@ -20,7 +19,7 @@ serde = { version = "1.0", features = ["derive", "rc"] }
 strum = { version = "0.28", features = ["derive"] }
 thiserror = "2"
 
-workspace-hack = { git = "https://github.com/mkeeter/fidget", rev = "0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6" }
+workspace-hack = "0.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Feature unification hacks to get webassembly working

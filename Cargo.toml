@@ -1,12 +1,3 @@
-# Whole-program optimization is reserved for distributed builds: it
-# measured ~0-1% on the Grap interpreter bench (2026-08) while roughly
-# doubling link time. Profile-guided optimization remains unset until
-# the example set is broad enough to provide representative training.
-[profile.shipping]
-inherits = "release"
-lto = true
-codegen-units = 1
-
 [workspace]
 resolver = "3"
 members = [
@@ -29,28 +20,43 @@ members = [
 [workspace.package]
 license = "MIT"
 
-# Local patches against the pinned upstream revision; see vendor/README.md.
-[patch."https://github.com/mkeeter/fidget"]
+# Local patches against the published release; see vendor/README.md.
+[patch.crates-io]
 fidget-core = { path = "vendor/fidget-core" }
 fidget-jit = { path = "vendor/fidget-jit" }
 fidget-raster = { path = "vendor/fidget-raster" }
 fidget-wgpu = { path = "vendor/fidget-wgpu" }
 
 [workspace.dependencies]
+fidget-engine = { package = "fidget", version = "0.5.1", default-features = false }
 getrandom = "0.3"
 gid = { path = "gid" }
 incremental = { path = "incremental" }
 kurbo = "0.13.1"
-parley = "0.9.0"
+parley = "0.11.1"
 peniko = "0.6.1"
 pollster = "0.4"
 puri = { path = "ui/puri" }
 puri-widgets = { path = "ui/puri-widgets" }
 serde = "1.0"
 serde_json = "1.0"
-skrifa = "0.42.1"
+skrifa = "0.44.0"
 ui-events = "0.3"
 uig = { path = "ui/uig" }
-vello = "0.9.0"
+vello = "0.11.0"
 wasm-bindgen = "0.2"
 web-sys = "0.3"
+
+# Tests and debug builds spend most of their time in dependency code such as
+# Fidget, Vello, and text shaping, in Grap, and in Puri's drawing. Optimizing
+# everything but progred cut `make test` from 239 s to 31 s on a 4-core VM,
+# while progred, the crate most often edited, stays unoptimized so it rebuilds
+# quickly. Line tables keep the optimized frames in backtraces. To step through
+# one, override it, as in `--config 'profile.dev.package.grap.opt-level=0'`.
+[profile.dev]
+opt-level = 2
+debug = "line-tables-only"
+
+[profile.dev.package.progred]
+opt-level = 0
+debug = true

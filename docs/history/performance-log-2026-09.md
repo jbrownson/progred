@@ -1,0 +1,1386 @@
+# Performance log — September 2026
+
+Dated measurements moved here from `performance.md` on 2026-10-10. They record
+what was measured at the time and are not current baselines; see
+[frame performance checks](../performance.md) for the harness itself.
+
+## IoP picture: evaluator waste — 2026-09-29
+
+Interleaved release runs of `iop_tree_profile_loop` (best of four rounds, same
+machine) tracked the uncached IoP picture back to 24.2 ms on 2026-09-08. It rose
+to 26.7 ms by 2026-09-14 and to 36.5 ms across the 2026-09-19–23 runtime-value
+work; those steps were accepted as simplifications and not revisited. Sampling
+the current frame then found plain waste:
+
+| Change | IoP picture |
+| --- | --- |
+| Before | 36.7 ms |
+| Quoted templates sized up front again (`0e08bbb9`, a same-day regression) | recovered 0.8 ms |
+| Expression-keyed caches hashed by address instead of SipHash | 31.4 ms |
+| `let` frames reserved for their bindings before binding | 30.7 ms |
+| Numeric operations staged: operands found once per call site | 30.0 ms |
+| Variable slots resolved when references compile | 29.5 ms |
+
+Reserving a frame for a `let` evaluated without one measured within noise and
+was not kept. Two more were measured and reverted: storing each node's compiled
+closure in the node instead of the address-hashed map (within noise once the
+hash was cheap; the evaluation must still own the closures, since some capture
+their own node), and restoring the never-bound skip lost in the runtime-value
+work (0.9 ms slower: marking every parameter binding now costs more than the
+skipped frame walks save). The remaining leaders are by design: the frame walk in variable
+lookup, live foreign-scope resolution, and argument reads in unstaged
+built-ins.
+
+## CAM pane resizing — 2026-09-18
+
+The divider drag exposed a misplaced computation boundary: the viewport's
+size-dependent closure also built the program tree. Width and height entered
+the environments of generated cutting functions, invalidating path recording
+even though the resulting cuts were unchanged. A diagnostic at successive
+widths measured about 6 ms rebuilding the tree/control declaration and
+263–265 ms recording the same paths. Equal recording results could preserve
+downstream geometry, but only after that synchronous work had already run.
+
+The example now uses the viewport declaration's optional `prepare` function to
+build its tree without dimensions. Its tracked application has the same
+definition/effect observation rules as existing evaluation memos; the ordinary
+viewport function receives the prepared result plus width and height.
+
+The release regression below measures preparation, controls-declaration
+construction, and recording demand at four changed sizes: 18–72 µs after the
+initial build. It asserts that resizes retain the exact tree storage and
+recording result, then changes tilt and checks that both invalidate. This is
+not a whole-frame or input-to-display measurement: layout, mesh presentation,
+and camera-sized implicit images still have their normal resize costs.
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib cam_resize_retains -- --nocapture
+```
+
+## Uncached CAM program construction — 2026-09-17
+
+The 504-leaf, five-level toolpath example exposed repeated expansion of shared
+runtime containers and closure environments when converting results to GID.
+The runtime already shared those values; the conversion did not. Separately,
+`with controls` converted each argument before constructing its result.
+
+It now retains runtime arguments until a GID boundary, and that conversion
+preserves existing shared subgraphs. A conversion-local address table remembers
+every traversed runtime container and environment; it is not a cross-evaluation
+cache or content interner. Reference counts cannot identify every repeated visit:
+different closure environments can share an outer frame that owns a container
+only once. Shadowed environment bindings are not materialized. Closure capture
+remains unchanged.
+
+Run the explicitly uncached canary with:
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  profile_program_tree_construction -- --ignored --nocapture
+```
+
+Five local release runs before/after measured:
+
+| Computation | Before | After |
+| --- | --- | --- |
+| Program tree alone | 62–94 ms | 5.3–7.0 ms |
+| Tree plus controls/view declaration | 226–255 ms | 5.1–6.7 ms |
+
+The second measurement includes tree construction; these times are not
+additive. They measure direct `grap::apply`/`evaluate`, with no computation memo,
+Fidget geometry, rendering, or editor frame. They are not whole-frame latency
+claims. The declaration-to-projection controls boundary remains in place.
+
+The follow-up shared-outer-environment regression exposed a missed case in the
+reference-count shortcut. Removing that shortcut preserves those containers too.
+Local uncached warm samples moved from roughly 5–7 ms to 6–8 ms for construction;
+remembering all traversed allocations adds bookkeeping. Memo-hit demands still
+take a few microseconds and do not materialize the result again. This is a
+sharing-correctness tradeoff, not another measured orbit speedup.
+
+The same canary also times deriving path-based hierarchy selectors from the
+504-leaf tree. After the selection-intent change, five samples took 33–83 µs.
+This includes building keyed hierarchy/row descriptions, not placement or paint.
+
+### Owned-result experiment — 2026-09-17
+
+An experimental `evaluate_owned`/`apply_owned` API retained runtime results and
+their shared code storage beyond one evaluation, with explicit GID conversion.
+The API, supporting evaluator changes, benchmarks, and trial app migration were
+removed: neither tested consumer justified the extra ownership, storage-lifetime,
+and cross-evaluation capability machinery. Existing within-evaluation lowered
+values and sharing-preserving GID conversion remain.
+
+Five local release trials built the 504-leaf program tree in 4.2–4.9 ms, then
+materialized it in 1.8–2.7 ms. Recording all leaves was slower through retained
+results: 351–400 ms versus 314–335 ms through GID, with matching segments and
+fuel use. Adding the API did not establish a meaningful regression in the
+existing GID construction canary, which remained around 6–9 ms.
+
+A controls/presentation migration initially raised the controls-only frame
+median from 0.128 ms to 2.23 ms by materializing a captured program tree just to
+inspect nested lists. Direct runtime-list inspection removed that cost, but
+three paired release runs still measured retained callbacks at 0.147, 0.151,
+and 0.157 ms versus GID callbacks at 0.130, 0.137, and 0.138 ms. Each sample used
+five warm-up frames and 60 measured frames including disposal, with 3D work
+replaced by a placeholder. First-frame timings were not compared; the cases
+ran in fixed order and shared initialization. These are headless canaries,
+not native orbit latencies or a statistical study.
+
+The existing memoized GID result already shares large data and avoids repeating
+conversion on unchanged frames. Reconsider retained runtime results only with
+a demonstrated consumer benefit, measuring the receiving computation rather
+than conversion savings alone. Avoid materializing whole closure environments
+merely to inspect container structure.
+
+### Runtime callback handoffs — 2026-09-23
+
+The new owned runtime representation now serves a concrete consumer: closures
+returned through presentation, controls, layouts, drawing programs, and event
+handlers retain their code origins. The forest hover regression is enabled and
+finds the innermost available displayed call. Inline evaluated expressions are
+anchored to their original occurrence; creator call stacks are not retained.
+Existing GID-oriented projections still use explicit conversion adapters.
+
+Local optimized canaries compare:
+
+| Version | Warm uncached tree construction | Controls-only frame median |
+| --- | --- | --- |
+| Before owned results, `15985033` | 7.6–8.5 ms | 0.305–0.309 ms |
+| Ownership checkpoint, `9c676235` | 9.2–10.8 ms | 0.332–0.341 ms |
+| Runtime consumer migration | 9.5–11.4 ms | 0.333–0.345 ms |
+
+The final three frame medians were 344.58, 332.75, and 339.29 µs. Each uses five
+warm-up frames and 60 measured frames including disposal, with 3D work replaced
+by a placeholder. Two final construction runs each had five samples; the first
+sample of each is excluded from the warm range. Memo hits took about 2–3 µs.
+Builds and other test runs were finished before these final measurements.
+
+This is approximately unchanged from the ownership checkpoint, not a recovered
+speedup. Against the pre-ownership baseline there remains roughly 20–40%
+uncached-construction overhead and 8–13% controls-frame overhead. These short
+local runs are not a statistical study, native orbit latency, browser performance,
+or Fidget rendering measurements. The earlier baselines were measured before
+the consumer migration rather than interleaved with it. Source continuity is the
+demonstrated benefit; more conversion removal remains possible.
+
+Use `profile_program_tree_construction` and `cam_controls_profile_loop` with
+`--release --ignored --nocapture --test-threads=1`. Keep separate build outputs
+for archived source copies: sharing a target directory during the earlier
+comparison reused incompatible artifacts.
+
+### Runtime projection inspection — 2026-09-23
+
+Fold classification, collapsed display/picking, source highlighting, text/blob
+partials, and empty partials no longer request whole-runtime-value conversion.
+Runtime f64 record inspection reads only the numeric field, including when
+unrelated metadata contains closures. Expanded structural display and other
+legacy partials still request GID views.
+
+The same release canaries measured a controls-only frame median of 317.54 µs
+before this pass and 329.75, 324.58, and 328.71 µs afterward (five warm-ups,
+60 frames per run). Warm uncached construction was 9.05–11.58 ms before and
+9.79–10.76 ms after; memo hits stayed around 1–3 µs. These sequential local
+measurements demonstrate no speedup, and do not recover the ownership overhead
+above. This pass removes unnecessary conversion requests rather than proving
+an end-to-end performance improvement. The remaining adapters can still
+materialize the same value later in projection dispatch.
+
+### Computed control clauses — 2026-09-23
+
+Computed `match` cases and `let`/`where` bindings now retain their runtime lists
+and executable children instead of materializing the entire list as GID.
+Individual patterns still adapt to the existing matcher. A regression failed
+before this change because a returned closure was reconstructed; it now retains
+code identity, lexical captures, and its original inline source location.
+
+The same release controls-only canary measured 320.62 µs before and 317.58,
+328.92, and 326.96 µs afterward. Warm uncached tree construction measured
+9.54–9.79 ms before and 9.34–9.88 ms afterward. These local sequential canaries
+show no meaningful end-to-end speedup; they do not isolate computed-clause cost.
+The demonstrated benefit is source/closure continuity, not recovered ownership
+overhead. All compilation and other tests had finished before measurement.
+
+### Expanded runtime projections — 2026-09-23
+
+Expanded structural lists/records now inspect keys/positions without converting
+their children. Color and control-form partials, plus shallow Grap references
+and declarations, likewise inspect runtime inputs. General Grap call/lambda and
+numeric/domain adapters remain.
+
+Three final serial controls-only frame medians were 326.25, 324.17, and
+320.79 µs. Warm uncached tree construction was 9.27–9.84 ms. These overlap the
+preceding checkpoint's ranges; there is no demonstrated end-to-end speedup.
+A preliminary pre-edit sample was unusually high at 461.96 µs, so interpreting
+that one sample as a 30% improvement would not be justified. Final runs began
+after builds and the correctness suite finished.
+
+The unchanged controls canary still uses a GID-oriented stub for the omitted
+3D preview. That stub requests materialization before library dispatch, so this
+comparison does not isolate the conversion savings of the migrated partials.
+An eventual focused conversion-cost comparison should account for that test
+boundary rather than treating these frame times as proof of no savings.
+
+### Runtime calls and numeric projections — 2026-09-23
+
+General Grap call/lambda/value/FFI projections and numeric facets/notation now
+inspect runtime values. Numeric scrubbing materializes the edited record only
+when the gesture starts. Callable parameter discovery and the evaluate
+projection's source interface remain narrower GID boundaries.
+
+The unchanged controls-only canary measured 323.21, 321.00, and 337.54 µs after
+the preceding checkpoint's 326.25, 324.17, and 320.79 µs. Warm uncached program
+construction was 9.31–9.48 ms versus 9.27–9.84 ms. These short serial runs show
+no meaningful overall performance change; the preview-stub caveat above still
+applies. Compilation and correctness testing had finished before measurements.
+
+### Runtime evaluation inputs — 2026-09-23
+
+Callable parameter discovery now inspects native closure parameters without
+materializing code or captures. The `evaluate` and `render` projection boundaries,
+including the memo input, accept runtime syntax and retain embedded closures.
+Located runtime lowering supplies origins for generated containers without
+rebasing retained closure bodies. Memo input comparison preserves those identities.
+
+After builds and correctness tests completed, three serial controls-only frame
+medians were 317.92, 325.87, and 330.17 µs, compared with 323.21, 321.00, and
+337.54 µs at the previous checkpoint. Warm uncached program construction was
+9.44–9.91 ms versus 9.31–9.48 ms. These short runs show no clear overall gain;
+they do not establish recovery of the ownership overhead. The existing
+GID-oriented preview-stub caveat above still applies. All 83 Grap tests and
+878 editor tests passed (50 editor tests ignored); the threaded web build passed.
+
+### Runtime layout helpers — 2026-09-23
+
+Scoped layout execution now keeps runtime results through nested child
+collection and absence checks. The `drawing` constructor retains its runtime
+configuration, and picking converts its payload only on activation. The full
+editor suite passed 880 tests (50 ignored); the browser build passed.
+
+Isolated controls-frame medians were 325.21, 324.54, and 331.46 µs versus the
+preceding checkpoint's 317.92, 325.87, and 330.17 µs: no clear change. These
+canaries do not isolate the layout-helper conversions.
+
+The layout-specific benchmark exposed its stale 100-row fuel assumption; see
+[the corrected fixture](../performance.md#inputs-and-measurements). The 20-row fixture measured
+70.62/97.67 µs for stored descriptions and 106.42/108.04 µs for scoped layout
+calls in two serial runs. This is a new baseline, not a before/after speedup
+measurement. A separate passing regression confirms that returned layout code
+has an independent execution allowance.
+
+### Runtime border and declaration composition — 2026-09-23
+
+Border wrappers now capture the runtime projection instead of embedding a GID
+copy in their generated code. Their argument/result and the declaration
+projection's callable stay runtime values. The expression-facing FFI contract
+is unchanged; regressions cover delayed syntax, native captures, original call
+locations, and real-frame border equivalence. All 83 Grap tests and 885 editor
+tests passed (50 editor tests ignored), as did the threaded web build.
+
+Serial release controls-frame medians were 318.42, 343.42, and 329.58 µs versus
+the preceding checkpoint's 325.21, 324.54, and 331.46 µs. The 20-row layout
+fixture measured 68.50/70.88 µs for stored descriptions and 104.54/106.04 µs for
+scoped calls. These checks show no clear overall change; they do not isolate
+border conversion cost or demonstrate recovery of the ownership overhead.
+
+### Runtime toolpath execution — 2026-09-23
+
+Nested path programs, point/axis mappers, scope results, and the 2D preview now
+retain runtime values. The tree collector and 3D preview/recording adapters
+remain GID boundaries. The full editor suite passed 888 tests (51 ignored),
+including retained-callable/capture/origin and absence-detail regressions; the
+threaded web build passed.
+
+The new `runtime_mapping_profile` release fixture records 256 segments through
+two nested captured point mappers. It compares a retained native mapper with
+its materialized GID equivalent in the same implementation, alternating order
+each iteration with five warm-ups and 30 measured samples. The two recordings
+must match. One-time materialization is outside timing; repeated execution and
+recording disposal are inside it.
+
+Three serial runs measured native-mapper medians of 694.21, 680.63, and 698.13 µs
+versus GID-mapper medians of 2.318, 2.288, and 2.429 ms: roughly 3.4× faster for
+this fixture. This isolates representation cost, not a before/after full-app
+comparison or Fidget-rendering speedup. The third run had noisy tails (1.99 ms
+native and 5.94 ms GID p95).
+
+Controls-only frame medians were 337.21, 332.58, and 336.38 µs versus the preceding
+checkpoint's 318.42, 343.42, and 329.58 µs: no clear overall improvement. Builds
+and correctness tests had finished before timing; the preview-stub caveat above
+still applies. This does not establish recovery of the earlier ownership cost.
+
+### Runtime tree-to-3D pipeline — 2026-09-23
+
+Tree collection/mapping, the tree memo, the program cursor's returned items,
+all three 3D preview constructors/projections, and path recording now retain
+runtime values. Memo comparisons preserve code/capture/source distinctions.
+Workers still receive recorded geometry, not runtime closures. Domain decoders
+for model, playback, appearance, and tools remain explicit GID boundaries.
+
+An intermediate migration exposed a repeated-frame regression: retaining native
+tree leaves while materializing them downstream raised the controls-only canary
+to 3.19 ms. Migrating the 3D consumers alone left about 3.0 ms. A three-second
+CPU sample of a 6,000-frame headless run located the dominant remaining cost in
+`projection::prepare`: constructing a widget context unconditionally requested
+the displayed value's GID representation. The context now borrows the runtime
+value. Picking converts at the actual edit; ordinary widget preparation does
+not. Fidget/cutter partials also inspect their identifying fields before asking
+their data decoders for a GID view. No cache was added.
+
+After all builds and correctness tests finished, three serial controls-frame
+medians were 334.38, 331.17, and 325.58 µs, versus 337.21, 332.58, and 336.38 µs
+at the preceding checkpoint: essentially unchanged, not an established speedup.
+The preview stub now reads its marker directly from the runtime value, matching
+the real 3D projections rather than introducing a conversion of its own.
+The usual five warm-up and 60 measured frames include disposal and exclude 3D
+geometry generation/rasterization; these are not native orbit timings.
+
+Two five-trial runs split uncached construction from optional materialization:
+excluding each first trial, the 504-leaf runtime tree took 4.03–4.47 ms; an
+explicit GID view cost another 2.33–2.60 ms. The sum was 6.36–7.01 ms, versus
+the earlier GID-returning construction canaries' 9.2–11.4 ms. The preview no
+longer needs that view, so the runtime construction is the relevant new cost;
+this does not measure subsequent recording or Fidget rendering. Warm memo
+demands took about 1–8 µs. The editor suite passed 892 tests (51 ignored), the
+threaded web build passed, and the optional profiling examples compiled.
+
+### Closure source metadata round trips — 2026-09-23
+
+Native closures now materialize optional body-origin metadata in their ordinary
+GID representation, and reload that metadata when called. The existing path
+codec is shared with the editor. Retained native code/captures and invocation
+stacks are unchanged; no eager origin encoding or new computation cache was
+added. Generated code without a source remains unannotated.
+
+A controls-only release canary measured 322.12 µs before and 331.00 / 340.00 µs
+after (five warm-up, 60 measured frames). These are small absolute differences,
+not evidence of a speedup or a precisely established regression. Two serial
+five-trial tree canaries, excluding each first trial, measured 4.13–4.71 ms for
+the native 504-leaf tree, versus the preceding checkpoint's 4.03–4.47 ms.
+Explicit materialization took 3.45–3.81 ms, versus 2.33–2.60 ms previously:
+preserving the additional source data costs roughly another millisecond at that
+boundary. The normal runtime preview does not request that complete GID view.
+These measurements exclude Fidget geometry/rendering and native presentation.
+
+The evaluator suite passed 88 tests, the editor suite 892 (51 ignored), and
+the threaded web check passed. Tests cover cross-evaluation captures/current
+call stacks, repeated serialization, absent/malformed annotations, unavailable
+source libraries, nested closures, and nearest-cell anchors independent of the
+reference occurrence.
+
+### Forest runtime-boundary check — 2026-09-23
+
+Two opt-in headless canaries now use the actual growing-forest lesson and its
+tutorial projection at 720 × 684 @1. The slider canary changes the control's
+annotation directly, then rebuilds and paints the successor frame. The hover
+canary dispatches real pointer motion between a tree and empty margin with the
+platform command modifier held, including retained hit testing, source linking,
+successor builds, and painting. Both dispose their drawing-command output inside
+the measurement. Neither measures browser overhead, GPU work, or display latency.
+
+After five warm-up frames, a 40,000-frame slider run measured 334 µs median /
+387 µs p95. Longer runs used for CPU sampling measured 330 / 379 µs for slider
+updates (200,000 frames) and 687 / 766 µs for source-hover transitions (120,000).
+The latter alternates entering and leaving a source target; these transitions
+need not have the same cost. These are current-state measurements, not a
+before/after speedup claim.
+
+Three-second native CPU samples attributed about 43% of the test thread's samples
+to recording/evaluating the drawing program in each case. They did not show a
+prominent runtime-to-GID materialization hotspot. Inspection agrees: drawing
+coordinates use runtime numeric evaluation, while the remaining paint adapter
+reads small color values. The older radio and range-control adapters are not
+exercised by this lesson. There is no evidence here for migrating those controls
+or adding another cache to improve the forest. Production code is unchanged.
+
+```sh
+./tools/sandbox-cargo test -p progred --lib --release \
+  --config 'env.FRAME_PROFILE_ITERATIONS="6000"' \
+  frame::profile::forest:: -- --ignored --nocapture --test-threads=1
+```
+
+The existing website regressions still cover slider-dependent drawing changes
+and source-hover fallback to the displayed forest call (17 passed, four optional
+capture tests ignored).
+
+### Repeated-frame regression
+
+The uncached construction improvement alone missed a frame-level regression:
+the `with controls` constructor lacked its tracked-read declaration. This made
+the surrounding evaluation memo rerun each frame, then compare freshly rebuilt
+closure environments with the previous result. A CPU sample attributed about
+22% of the headless viewport test to that result comparison, versus about 5%
+to the evaluation itself (most remaining time was the CPU mesh rasterizer).
+
+The constructor now declares its reads tracked. This uses the existing memo;
+controls and view callbacks still run each frame, and effectful or untracked
+arguments still prevent reuse. A regression test covers reuse, unrelated edits,
+changed inputs, and both kinds of non-reusable argument.
+
+The same 400×600 @2 headless viewport test fell from a 108.9 ms median to
+79.7 ms. This test uses the CPU triangle fallback, not the app's GPU mesh path,
+so these are not native input-latency figures. A separate
+`cam_controls_profile_loop` retains the viewport, declaration memo, controls,
+and view-call evaluation but replaces the final 3D projection with a placeholder.
+After the fix, that pipeline measured 0.127 ms median / 0.155 ms p95 over 60
+warm frames. The construction canary now also measures repeated demands of one
+stable memo root; these took 2.6–8.3 µs after the first evaluation.
+
+### Native orbit: GPU mesh buffer packing
+
+A 20-second sample of the running editor during orbiting found a separate
+main-thread hotspot in the GPU mesh adapter: nested byte iterators packing
+vertices, and flattening padded image-readback rows. This path is not exercised
+by the headless CPU raster benchmark above. The app was using GPU triangle
+rendering; the expensive work was CPU-side copying around that render.
+
+The adapter now reserves the exact output capacity and appends component bytes
+and complete rows with slice copies. No geometry cache, unsafe casts, scheduling,
+or rendering-policy change is involved. Tests compare output bytes, including
+signed zero and NaN payloads, and verify readback padding removal.
+
+The isolated `mesh_gpu_packing_profile` benchmark uses 500,000 vertices and
+1,600 readback rows (5,000 pixel bytes plus 120 padding bytes each). Initial
+release measurements were about 22 ms → 3.5 ms for vertices and
+4.2 ms → 0.4 ms for readback copying. These are synthetic packing costs, not
+app frame times. An index-packing loop was also tried but was slower than the
+existing iterator, so that code is unchanged. Run the benchmark without a GPU:
+
+```sh
+./tools/sandbox-cargo test --release -p progred --lib \
+  mesh_gpu_packing_profile -- --ignored --nocapture
+```
+
+### Remaining orbit comparison
+
+After the packing fix, compare equivalent workloads before attributing a small
+subjective difference to the evaluator or controls. The pre-hierarchy example
+at `29b83063` starts playback at 35%; the hierarchy starts at zero, so more
+upcoming paths are visible. With the current code and both fixtures set to zero,
+the headless mesh-orbit canary measured 75.9 ms versus 77.0 ms median over 20
+frames. The old fixture at its original 35% measured 58.2 ms. These are CPU
+fallback numbers, not native GPU/input-latency measurements; background implicit
+work and native presentation pacing are excluded.
+
+Separately, with ordinary initial folds, `cam_source_profile_loop` measured
+6.9 ms for the old example versus 7.9 ms for the current example at 600×900 @2.
+The controls-only canary measured 0.077 ms versus 0.121 ms. Both comparisons run
+the same current executable against the two fixtures, isolating example growth
+rather than claiming a complete old-binary/new-binary comparison.
+
+The orbit canary now discovers the preview's actual occurrence through a
+test-composed partial and asserts that camera updates change the image. Its
+previous one-result-step assumption missed the CAM controls/render wrappers,
+so older CAM measurements above rendered a fixed camera despite their orbit
+label. They still measured repeated-frame work, not actual changing-camera cost.
+
+`CAM_PROFILE_SOURCE` optionally chooses a fixture for the CAM source, controls,
+and orbit canaries. Supply benchmark variables through Cargo configuration:
+the sandbox wrapper intentionally clears inherited environment variables.
+Keep comparison fixtures under `target/sandbox` where the test can read them.
+
+```sh
+./tools/sandbox-cargo --config 'env.FRAME_PROFILE_ITERATIONS="20"' \
+  --config 'env.CAM_PROFILE_SOURCE="/absolute/path/to/target/sandbox/before.gid"' \
+  test --release -p progred --lib fidget_toolpaths_profile_loop -- --ignored --nocapture
+```
+
+### Implicit stock quality and cancellation investigation — 2026-09-14
+
+The opt-in `implicit_stock_diagnostics` and `implicit_normal_sampling_diagnostic`
+tests in `libraries/fidget/raster/diagnostics.rs` exercise the checked-in Grap
+toolpath's stock subtraction without a window. Run with the same optimized sandbox test command and
+`--ignored --nocapture`. The stock test writes `stock_*.png` captures.
+
+Two runs at 600 × 600, camera zoom 1.2, 0.125-inch diameter and 0.22-inch length
+measured stock-expression construction below 1 ms and compilation at 8–20 ms
+for playback 0.35, 0.7 and 1.0. Native stock rasterization ranged from roughly
+0.29 to 1.8 seconds. These isolate stock; they omit future-path/tool scene
+construction and editor work. They do not establish total interactive latency.
+
+The stock captures had no transparent gaps within occupied scanlines and no
+zero/nonfinite normals. Extra Z samples reduced jagged shading seams; rendering
+at twice X/Y resolution and box-filtering the shaded colors reduced aliasing.
+The latter diagnostic is a simple byte-space average, not the final production
+antialiasing policy. Neither observation identifies an arbitrary user screenshot.
+
+Fidget's pinned software renderer checks cancellation between top-level tiles,
+not inside their recursive evaluation. With the fully cut stock, its default
+`[128, 64, 32, 16, 8]` tiles rendered in 1.28 s and returned about 1.24 s after
+a cancellation requested 20 ms into rendering. `[64, 32, 16, 8]` took 0.73 s
+and 0.29 s respectively; `[32, 16, 8]` took 0.66 s and 18 ms. All three PNGs
+were byte-identical. These are local measurements, not bounds on cancellation.
+The outer request still rejects cancelled results even when Fidget finishes
+an already-running tile without observing its token. Smaller tiles use an
+existing public Fidget setting; no upstream modification is necessary.
+
+The normal diagnostic confirmed a separate integration defect: Fidget returns
+gradients in sampling coordinates. Our software shading originally normalized
+them without accounting for unequal sampling-axis scale. A fixed `x + z` plane
+changes from RGB 158 to 172 as resolution changes, although its physical normal
+is constant. Dividing gradient components by the lengths of the corresponding
+screen-to-model matrix columns recovers the same normal at every tested level.
+This is a shading correction, not a repair for missing geometry.
+
+The subsequent `implicit_tool_rim_diagnostic` isolates the user's cap/side seam
+with the actual ball-end tool expression (0.125-inch diameter, 0.22-inch length).
+It compares Fidget pixels against analytic ray intersections with the flat cap
+at 300 × 300, pitch 40 degrees. Of 9,635 rays strictly inside the cap rim, native
+depth sampling missed 39 and gave another 857 a non-cap normal. At 4× depth
+these counts were 17 and 194; at 16× depth they were 2 and 55. Captures are
+`tool_rim_z1.png`, `tool_rim_z4.png`, and `tool_rim_z16.png`. They reproduce the
+sawtooth rim without other scene objects. Initial captures used uncorrected
+shading; rerunning uses the current corrected lighting.
+These distinguish two finite-depth-sampling effects: a ray can traverse a thin
+cap/side wedge between samples without an inside sample, or its first inside
+sample can select the side's gradient rather than the cap's. The earlier stock
+scanline check did not exclude either behavior at the tool rim.
+
+Splitting those analytic cap intersections into near/far halves confirms that
+missing coverage is only the far-side problem in this fixture. At the current
+4× depth, the near half has zero missing pixels and 98 wrong-normal pixels;
+the far half has 17 missing pixels and 96 wrong-normal pixels. The near-side
+sawteeth are shaded cylinder-wall normals, not holes in the solid tool.
+
+### Software raster fixes and final depth refinement — 2026-09-14
+
+Production software shading now removes sample-axis scale from gradients;
+the fixed-plane diagnostic returns RGB 173 at every tested resolution.
+Regression tests cover camera rotation, zoom, rectangular images and the final
+depth pass. Software rasterization uses `[32, 16, 8]` tiles through Fidget's
+existing public setting. A same-process full-stock comparison measured 1.22 s
+with default tiles and 0.56 s with the smaller tiles. The resulting PNGs are
+byte-identical, and an ordinary test compares the two paths on a clipped sphere.
+
+CAM requests one additional native-size pass with 4× depth sampling. The native
+image is published first, while that pass runs; only the last result clears the
+pending indication. The multiplier is an explicit software-refinement argument,
+not a rule in the async scheduler. Depth refinement preserves the camera,
+render volume, X/Y coordinates and normal weighting. No supersampling or
+post-render gap filling is applied. Tests cover preserved geometry, final output,
+and cancellation after the native image but before the finer-depth pass.
+
+An optimized 1000 × 750 headless-editor run published 42 × 94 at 208 ms,
+84 × 188 at 395 ms, 167 × 375 at 567 ms, native 333 × 750 at 871 ms,
+and the same-size 4×-depth image at 1612 ms. These include prior capture overhead
+and are not native display timings or a controlled comparison with earlier runs.
+The capture test now records depth-only updates even though dimensions repeat.
+
+At 600 × 600, stock-only rasterization with the new tiles took 0.20–0.53 s
+across playback 0.35, 0.7 and 1.0; 4× depth took 0.42–1.25 s. Cancellation
+requested 20 ms into rendering returned after 7–204 ms over 18 native/finer-depth
+trials, most in tens of milliseconds. Default tiles in the same run delayed it
+1.19 s. These remain cooperative checks between root tiles, not a latency bound;
+expression construction and compilation still check only around their work.
+
+### Toolpath canary runs — 2026-09-13 and later
+
+A 2026-09-13 sandboxed run of the mesh toolpath canary on the M3 Pro measured
+40.03 ms median (44.22 ms maximum) across eight frames after five warm-up frames,
+at an 800 × 1200 raster. This includes Grap path generation, direct tube mesh
+construction, cube remeshing at depth 5, and **CPU triangle rasterization**;
+Seatbelt exposed no GPU adapter. The first frame was 50.88 ms. These are
+headless viewport-build timings, not native GPU or input-to-display latency.
+
+After adding playback and Grap surface-normal compensation later that day, the
+same sandbox canary measured 66.34 ms median (70.03 ms maximum), first frame
+78.31 ms, with five warm-up and eight measured frames. This is a changed workload:
+it includes the extra Grap mapping, an evaluation-local seekable recording, cutter
+and stock geometry, and a measured control strip that reduces the raster height.
+It still uses CPU rasterization. It is not an isolated measurement of slider
+overhead and does not predict native GPU interaction latency.
+
+With the now-removed heightfield stock-removal experiment enabled (160 grid cells per XY
+axis across the then-1.1-unit stock, progress 0.35), the same headless canary later measured 63.23 ms median
+(66.26 ms maximum), first frame 79.95 ms, again five warm-up/eight measured
+frames with CPU rasterization. This includes rebuilding the stock and its mesh
+on every frame. The small difference from the preceding 66.34 ms run is not an
+isolated speedup claim; it shows no obvious overall regression in this workload.
+Native GPU responsiveness still needs an interactive check.
+
+The fixture subsequently changed to one-inch stock and now omits the reference
+solid while stock is enabled, avoiding coplanar surfaces. The historical timings
+above include reference-cube meshing that this mode no longer performs.
+
+### Volumetric stock subtraction — 2026-09-14
+
+The heightfield experiment is replaced by ordinary Fidget box-minus-sweep
+expressions. The same M3 Pro sandbox canary (400 × 600 logical @2, playback 0.35,
+five warm-up and 60 measured frames) measured:
+
+| One-inch stock, no reference solid | Median | p95 | Maximum | First frame |
+| --- | ---: | ---: | ---: | ---: |
+| Heightfield, before replacement | 50.09 ms | 54.79 ms | 59.90 ms | 70.56 ms |
+| Fidget subtraction, mesh depth 7 | 256.91 ms | 272.24 ms | 311.57 ms | 283.39 ms |
+
+Both use CPU triangle rasterization because the sandbox has no Metal adapter.
+This compares usable implementations, not equal geometric approximations:
+Fidget can represent roofs and through-cuts, and depth 7 was chosen because
+depth 5 visibly distorted the narrow grooves. Completed path lines are now
+omitted. At this checkpoint every expression, stock mesh, and image was
+recomputed; the later dependency-graph comparison below supersedes that policy.
+
+To separate the geometry costs from rasterization:
+
+```bash
+./tools/sandbox-cargo test -p progred --release stock_meshing_profile -- --ignored --nocapture
+```
+
+One isolated run measured the following at depth 7. Each row is a single sample,
+not a median; meshing includes octree construction and dual-contour extraction.
+Fixture parsing, library setup, and Grap path generation are outside these
+columns (51.90 ms together in that run).
+
+| Playback | Build stock expression | Compile | Mesh + extract | Triangles |
+| --- | ---: | ---: | ---: | ---: |
+| 0% | 0.012 ms | 0.019 ms | 41.31 ms | 24,630 |
+| 35% | 0.333 ms | 8.17 ms | 218.18 ms | 61,266 |
+| 100% | 1.03 ms | 20.80 ms | 323.48 ms | 66,178 |
+
+The dominant cost is CPU meshing, not constructing the sweep expressions.
+Native GPU triangle drawing will not remove that cost. Remeshing every frame
+is therefore expected to be choppy; retained geometry and asynchronous work
+remain separate design decisions, not hidden fallbacks in this experiment.
+
+### Dependency-tracked CAM geometry — 2026-09-14
+
+These measurements used the earlier mesh fixture. Command+9 now automatically
+refines its mesh fallback with implicit images. Its default mesh depth is 6 rather than 7,
+and the cutter diameter is now 0.125 inches; keep these geometry changes in mind
+when comparing fresh measurements with this table.
+
+The same `fidget_toolpaths_profile_loop` (400 × 600 logical @2, playback 0.35,
+five warm-up and 60 measured orbit frames) before/after the general memo graph:
+
+| Configuration | Median | p95 | Maximum | First frame |
+| --- | ---: | ---: | ---: | ---: |
+| Recompute geometry each frame | 259.83 ms | 283.33 ms | 348.41 ms | 267.27 ms |
+| Dependency-tracked recording, stock, mesh | 12.22 ms | 12.58 ms | 12.82 ms | 271.14 ms |
+
+Both runs used the CPU triangle rasterizer because the build sandbox exposes no
+Metal adapter. This is roughly 21× faster warm orbiting, not faster meshing or
+an input-to-screen latency measurement. The image changes with the camera and is
+rendered every frame. Geometry edits and first demand still pay synchronous
+recording/meshing cost. See [the boundaries and limitations](../incremental.md).
+
+A repeat measured 12.41 ms median / 12.90 ms p95 (286.19 ms first frame).
+After refactoring the example so CAM consumes the cube's surface and normal
+functions, the same canary measured 12.13 ms median / 12.79 ms p95
+(276.27 ms first frame). Geometry-parameter regression tests also verify that
+cached paths invalidate on edits and equal freshly evaluated paths.
+The unchanged, uncached IoP canaries measured 26.12 ms for the picture and
+3.76 ms for source in this pass; there was no fresh pre-change IoP A/B run,
+so these are canary observations, not a quantified regression comparison.
+
+The synchronous toolpath orbit canary explicitly selects `preview paths mesh`
+in its copy of the current fixture. It must not run the automatic renderer with
+an inline executor and mistake synchronous completion of the entire implicit
+refinement sequence for interactive orbit cost.
+
+After separating stock meshing from path appearance and tightening memo failure
+recovery, the final run measured 12.51 ms median / 13.27 ms p95 / 14.26 ms maximum,
+with a 285.26 ms first frame. A regression test verifies that path color/thickness
+changes retain the identical shared stock-mesh result; playback and depth changes
+replace it.
+
+### Automatic mesh/implicit handoff — 2026-09-15
+
+The headless `editor_toolpath_refined_svg_captures` test uses the production
+Command+9 document at 1000 × 750 logical @1 (333 × 750 viewport). Work is queued
+explicitly and executed on a worker; mesh painting uses the CPU triangle backend
+because Seatbelt exposes no Metal adapter. Before restoring intermediate implicit
+resolutions, one run measured an 8.30 ms full-editor
+orbit frame using the retained mesh, a current native-XY implicit image after
+358 ms, and final four-times-depth after 1155 ms. Playback's first frame took
+6.76 ms with the moved tool and desaturated previous stock, followed by 245 ms
+of meshing. These are single-run timings, not native input-to-display latency
+or a before/after speedup claim.
+
+Camera/framing tests compare both renderers, including rectangular views and zoom.
+The software normal conversion now also reverses sample Y into the upward camera
+axis used by triangle lighting, avoiding a light-direction change at handoff.
+
+The standalone mesh-orbit canary on the current fixture measured 10.29 ms median,
+10.75 ms p95, and 11.26 ms maximum over 60 frames after five warm-ups; its inline
+first frame took 221.67 ms. Fixture/depth changes prevent treating differences
+from the older depth-7 tables as a speedup attributable to this composition.
+
+### Background CAM stock — 2026-09-14
+
+The generic async boundary preserves the warm-orbit canary: 12.55 ms median /
+13.04 ms p95 / 13.64 ms maximum. This canary deliberately uses the inline
+headless executor, so its 297.26 ms first frame still includes all geometry work.
+
+The separate `editor_toolpath_async_svg_captures` check uses the full editor at
+1500 × 1050, a controlled queue, and an actual worker thread. It renders a frame
+before allowing each queued stock job to run. One release run measured:
+
+| Stage | Frame build and headless paint | Separate stock job |
+| --- | ---: | ---: |
+| First pending frame | 72.77 ms | 223.49 ms |
+| First ready frame | 11.78 ms | — |
+| Playback changed from 0.35 to 0.70, old stock visible | 9.78 ms | 282.46 ms |
+| Replacement stock ready | 10.03 ms | — |
+
+This verifies that the responding frame does not wait for meshing, not native
+input-to-display latency or performance under worker/UI CPU contention. Initial
+Grap path generation remains synchronous. The sandbox used CPU rasterization;
+SVG serialization is excluded. The test writes first/ready/updating/updated
+captures, including the stale-stock color treatment, without opening a window:
+
+```bash
+./tools/sandbox-cargo test -p progred --release editor_toolpath_async_svg_captures -- --ignored --nocapture
+```
+
+## Scoped layout FFIs and construct profile — 2026-09-07
+
+Two interleaved, feature-free runs of 180 measured frames (five warm-up pairs)
+on the same local ARM64 Mac:
+
+| 100 two-text rows | Run 1 median | Run 2 median |
+| --- | ---: | ---: |
+| Grap builds GID layout, then decode | 0.366 ms | 0.372 ms |
+| Grap emits native layout through scoped FFIs | 0.321 ms | 0.333 ms |
+
+That is 10–12% less complete-frame time on this synthetic workload. Preparation
+alone improved about 4–7%; disposal and later phases also contribute to the
+difference. The timing includes creation/reification and application of the one
+ordinary layout-program closure, so it does not hide that boundary's cost.
+It is not a 10–12% improvement to the editor: existing source projections are
+already native Rust, and these examples have not been rewritten to use the new
+FFIs. This test establishes the cost of the optional Grap construction path.
+
+The ordinary canaries remained comparable to the preceding pass: IoP source
+4.35 ms median (4.53 ms p95), picture 22.61 ms (23.73 ms p95). The five Fidget
+canaries also passed: original 8.84 ms, torus 6.69 ms, tanglecube 43.13 ms,
+gyroid 28.53 ms, cube 14.01 ms median. These retain the headless sandbox's
+automatic backend and exclude Vello/presentation, as described above.
+
+The separately instrumented IoP source run had about 105,600 allocation/reallocation
+requests per frame. Its largest exclusive buckets were:
+
+| Scope | Instrumented time/frame | Time share | Allocation requests/frame |
+| --- | ---: | ---: | ---: |
+| Native recursion/adaptation (`Program`) | 1.107 ms | 22.6% | 26,610 |
+| Projection construction | 0.710 ms | 14.5% | 30,626 |
+| Hover and handler assembly | 1.181 ms | 24.1% | 12,179 |
+| Placement | 0.415 ms | 8.5% | 11,692 |
+| Shared-node preparation overhead | 0.309 ms | 6.3% | 2,078 |
+| Choice resolution and geometry | 0.299 ms | 6.1% | 5,833 |
+| LineEdit construction/preparation | 0.114 ms | 2.3% | 3,304 |
+
+Other scopes account for the remainder. LineEdit's later placement/hover work is
+included in those phase totals, not in its 2.3%. This does not justify a special
+lowered LineEdit constructor by itself. The stronger next leads are the numerous
+short-lived path/target/layout allocations during projection and adaptation,
+and the general continuation/output assembly in placement and hover. Profile
+those call sites before changing representations; no such optimization is part
+of this pass.
+
+## Shared list-position bytes — 2026-09-07
+
+Tracing the allocation-heavy path handling found that every `Position` clone
+copied a `Vec<u8>`, including each list step in a copied path. Positions now
+share immutable bytes with `Arc<[u8]>`; equality, hashing, ordering, and the
+path encoding still use the bytes, not allocation identity. This adds no cache,
+interner, or invalidation. New positions convert their construction buffer to
+shared storage once; clones no longer allocate, and GID remains Send/Sync.
+
+Feature-free source runs used the same two saved release test executables,
+under the Cargo sandbox, in A/B, B/A, A/B order. Each run used five warm-up
+frames and 180 measured frames at 1400 × 900, scale 1:
+
+| Source frame, including disposal | Pair 1 | Pair 2 | Pair 3 |
+| --- | ---: | ---: | ---: |
+| Copied position bytes | 4.32 ms | 4.36 ms | 4.34 ms |
+| Shared position bytes | 4.07 ms | 4.07 ms | 4.10 ms |
+
+That is about 6% less frame time. Preparation fell from about 2.14 ms to
+1.96 ms; final output disposal fell from about 0.115 ms to 0.079 ms.
+The separately instrumented run counted 105,597 versus 91,857 allocation/
+reallocation requests per source frame: 13,740 fewer (13%). Most of that
+reduction was in recursion/adaptation (26,610 → 17,056).
+
+All eight canaries also passed in A/B and B/A order at 60 measured frames.
+The IoP picture remained about 22.3–22.6 ms; the Fidget CPU-fallback measurements
+varied slightly in both directions. This is a source construction/disposal
+improvement, not a claimed speedup of drawing or GPU rendering. No change to
+hover composition or projection callbacks was included in this experiment.
+
+## Initial baseline — 2026-09-06
+
+Local ARM64 Mac, macOS 26.6.2, release build under Seatbelt. Five warm-up frames
+then 60 measured frames, run serially:
+
+| Workload | First frame | Warm median | Warm p95 | Warm maximum |
+| --- | ---: | ---: | ---: | ---: |
+| IoP picture | 23.29 ms | 23.01 ms | 23.62 ms | 24.51 ms |
+| IoP source | 22.71 ms | 4.52 ms | 4.66 ms | 4.74 ms |
+| Fidget orbit, CPU fallback | 17.79 ms | 9.63 ms | 10.98 ms | 11.59 ms |
+
+A separate one-second stack sample of a longer Fidget run confirmed execution
+in `fidget_raster::voxel::render` and its CPU workers. **These are not native GPU
+preview timings.** A separate 2,000-frame run had an 8.62 ms median, 10.47 ms p95,
+and 27.90 ms maximum, illustrating why one short run isn't a precise promise.
+The sampled run was deliberately stopped afterward and is not used for timing
+statistics. Local sampling evidence is in
+`target/sandbox/tmp/fidget-frame-profile-2026-09-06.sample.txt` (not committed).
+
+The remaining gap is a GPU-capable profiling runner, with an explicit rendering
+backend report, separate from the restricted Cargo build environment. Until
+then this Fidget canary covers projection/lowering and CPU rendering only on
+this setup. Do not relax the build sandbox or treat these numbers as a check of
+Metal, readback, Vello, or interactive scheduling.
+
+## Additional Fidget examples — 2026-09-06
+
+Same machine and sandbox, all four documents at 400 × 600 points, scale 2,
+five warm-up frames and 60 measured frames:
+
+| Document | First frame | Warm median | Warm p95 | Warm maximum |
+| --- | ---: | ---: | ---: | ---: |
+| Original Fidget | 9.14 ms | 8.71 ms | 10.16 ms | 10.68 ms |
+| Torus | 8.80 ms | 6.69 ms | 7.53 ms | 8.00 ms |
+| Tanglecube | 45.35 ms | 46.57 ms | 55.38 ms | 71.17 ms |
+| Gyroid sphere | 42.09 ms | 28.74 ms | 35.62 ms | 39.99 ms |
+
+These use the same CPU-fallback setup as above, not the application's GPU
+backend. The tanglecube costs more than the visually denser gyroid here; surface
+appearance or operator count alone does not predict rendering cost. Keep all
+four as distinct workloads rather than treating their names as a performance
+ordering.
+
+After adding the Fidget arithmetic source projections, the same IoP source
+canary measured 4.56 ms median and 4.73 ms p95 (60 frames), consistent with the
+earlier 4.52 ms baseline. This is a check for unrelated dispatch overhead, not
+a before/after measurement of the Fidget documents themselves.
+
+After the projection-scope and missing-value changes, the 1400 × 900 @1 IoP
+source canary measured 3.65 ms median and 3.80 ms p95 (60 frames). The preceding
+run before default picker selection and name suggestions was 3.62 ms median;
+this shows no material regression, not a claimed speedup. This source-only
+canary has no active selection and does not measure picker interaction latency.
+
+## Layout builder and placement consolidation — 2026-09-07
+
+The native layout frontend is now a reusable program over `Builder`, with a
+production choice-graph builder and a test recorder. The chosen graph places
+directly; `Measured` no longer contains another container enum. Alternative
+selection policy and per-frame sharing are unchanged. This completes the
+native representation consolidation, not a direct Grap-to-native-layout FFI
+bridge: stored Grap layout forms still decode from GID.
+
+Local ARM64 Mac, same restricted release harness as above. Immediately before
+this pass, 60-frame canaries measured IoP source at 4.57 ms and picture at
+23.72 ms median. An early post-change run measured 4.86 / 24.18 ms; after the
+final borrowed-leaf cleanup, an isolated 60-frame source repeat was 4.35 ms.
+The final seven-workload run used 180 measured frames:
+
+| Workload | Median | p95 | Maximum |
+| --- | ---: | ---: | ---: |
+| IoP source | 4.36 ms | 4.52 ms | 4.76 ms |
+| IoP picture | 22.38 ms | 22.86 ms | 23.77 ms |
+| Fidget orbit | 8.65 ms | 9.82 ms | 10.33 ms |
+| Torus orbit | 6.76 ms | 7.53 ms | 8.91 ms |
+| Tanglecube orbit | 42.95 ms | 51.16 ms | 95.88 ms |
+| Gyroid sphere orbit | 28.33 ms | 35.78 ms | 41.28 ms |
+| Fidget cube orbit | 13.84 ms | 16.20 ms | 16.89 ms |
+
+These small before/after differences are not a controlled speedup claim. There
+was no interleaved checkout A/B, and the short runs vary enough to change the
+sign of the difference. The earlier continuation and bracket changes also
+changed costs and line breaks. This pass does not establish that the entire
+refactor is faster than the original implementation. Fidget numbers remain
+sandbox CPU-fallback canaries, not measurements of interactive Metal rendering.
+
+IoP source phase medians from that final run:
+
+| Phase | Median |
+| --- | ---: |
+| Preparation | 2.14 ms |
+| Choices and settled geometry | 0.29 ms |
+| Placement | 0.40 ms |
+| Hover and handler construction | 1.18 ms |
+| Paint and handler disposal | 0.23 ms |
+| Output disposal | 0.12 ms |
+
+The picture spends 22.28 ms in paint/handler disposal; all preceding phases
+together take about 0.01 ms. Each Fidget viewport spends essentially its entire
+time in preparation, which includes the actual Fidget render. Neither points
+to alternative search as the picture bottleneck.
+
+A separate five-second, 1 ms stack sample of a 2,000-frame source run found
+about 35% of the benchmark thread's samples ending inside the system allocator
+(allocation, freeing, and resizing). This is a conservative count of reported
+allocator leaf symbols, not a separately additive phase. Copying/clearing memory
+also features prominently. Application self-time includes temporary builder
+result consumption, definition lookup, settled geometry, and hover output
+ordering (`Fragment::reverse_since` and `controls_below`). Optimized symbols and
+inlining limit finer attribution. The sample run overlapped a compile briefly
+and is not used for timing comparisons.
+
+The actionable distinction is construction/disposal versus layout search:
+preparation and hover/handler construction dominate the source frame, while
+choice resolution is about 7%. Reusable layout closures, captured paths,
+handlers, and hover scoping still allocate. Fewer representations do not by
+themselves remove those costs. Investigate those allocations before changing
+the search policy or adding caches. No runtime profiling or new cross-frame
+state was introduced.
+
+For a repeatable CPU sample, start `sample` waiting for the headless test
+executable's process name, then run the source filter with
+`--config 'env.FRAME_PROFILE_ITERATIONS="2000"'`. Use that run for call stacks
+only and take clean wall-time measurements separately.
+
+## Hover-output borrowing and empty handlers — 2026-09-07
+
+Baseline: `318341c`, including shared list-position bytes. A temporary finer
+breakdown counted 7,305 hover callbacks and 1,124 mapped output scopes per IoP
+source frame. The latter isolate child output, restore its public ordering, and
+merge it back. A separate five-second CPU sample also found buffer reversal,
+control composition, memory movement, and allocation/freeing in this phase.
+The extra scopes substantially perturb timing, so their times are not used as
+speedup measurements. They were removed after the investigation.
+
+Two small changes preserve the continuation and ordering contracts:
+
+- `HoverContext` borrows the accumulating `Fragment`, instead of taking and
+  restoring the complete output for every callback. Its lifetime is confined to
+  the callback; paint and event continuations still own their captures.
+- `Handler` represents its empty identity explicitly. Combining a function with
+  an empty handler returns that function directly, without allocating another
+  composition closure. Ordinary declining handlers are not treated as empty.
+
+Feature-free release binaries were saved separately and alternated in
+before/after/after/before/before/after order, with five warm-up and 300 measured
+frames per run, at 1400 × 900 logical pixels and scale 1:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Whole-frame medians across three runs | 4.07 / 4.07 / 4.07 ms | 3.96 / 3.95 / 3.96 ms |
+| Hover + handlers, median | 1.14 ms | 1.03–1.04 ms |
+| Paint + handler disposal, median | 0.214–0.216 ms | 0.194–0.195 ms |
+| Hover-phase allocations per frame | 12,179 | 10,911 |
+| All allocations per frame | 91,857 | 90,589 |
+
+This is about a 3% whole-source-frame improvement, not a large architectural
+speedup. The handler-only experiment was much smaller: before medians
+4.06 / 4.09 / 4.03 ms versus 4.00 / 4.03 / 4.03 ms, mostly saving disposal work.
+The allocation reduction comes from removing 1,268 empty-handler composition
+closures; borrowing the output removes moves, not allocations.
+
+All eight canaries were also run in before/after/after/before order with 60
+measured frames each. IoP picture medians were 22.30 / 22.24 ms before and
+22.49 / 22.12 ms after; the Fidget CPU-fallback and layout-FFI canaries likewise
+showed no consistent regression. These workloads do little hover construction,
+so this change is not expected to materially accelerate their rendering.
+
+Mapped child output still has buffer/reversal costs. Avoiding all of those
+would require changing how arbitrary output transformations are represented;
+this pass deliberately leaves that alone. Alternative selection, hover
+precedence, clipping, navigation, and optional painting are unchanged. No cache,
+partial invalidation, or runtime instrumentation was added.
+
+## Direct delimiter painting — 2026-09-07
+
+Baseline: `637b5eb`. Delimiters still built a one-command `Drawing` during
+hover, then interpreted it during paint. Temporary diagnostic scopes counted
+830 delimiter constructions, about 0.38 ms and 3,452 allocations per IoP source
+frame. Only 304 of those delimiters reached painting: the ordinary leaf clip
+had already discarded the other paint continuations, but their outlines had
+been built anyway.
+
+Delimiter measurement still reports the same advance and minimum span. Its
+paint continuation now constructs the outline and calls the canvas directly,
+without a drawing-command vector or interpreter. The backend still receives
+the same Bezier path. Square brackets also extend that path from rectangle
+iterators rather than allocating two temporary paths. Geometry, brush,
+transforms, hover, and clipping policy are unchanged. Skipping paint skips
+outline construction naturally; there is no additional visibility test or cache.
+
+Feature-free release binaries were alternated in before/after/after/before/
+before/after order, with five warm-up and 300 measured frames per run, at
+1400 × 900 logical pixels and scale 1:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Whole-frame medians across three runs | 4.07 / 4.05 / 3.99 ms | 3.71 / 3.70 / 3.70 ms |
+| Hover + handlers, median | 1.05–1.07 ms | 0.658–0.662 ms |
+| Paint + handler disposal, median | 0.195–0.201 ms | 0.317–0.319 ms |
+| All allocations per frame | 90,589 | 87,941 |
+
+The whole-source-frame improvement is about 8–9%. Some time intentionally
+moves from hover into paint; the whole-frame numbers include both phases and
+disposal. The rectangle-iterator change alone is small: direct-paint medians
+3.71 / 3.75 ms versus 3.68 / 3.75 ms with the iterators. It removes another 208
+allocations per frame without changing the path elements.
+
+All eight canaries also ran in before/after/after/before order with 60 measured
+frames. IoP picture medians were 22.95 / 23.01 ms before and 22.64 / 22.46 ms
+after; this does not indicate a meaningful picture-rendering speedup. Fidget
+CPU-fallback timings fluctuated across runs, as before; those viewports do not
+exercise the changed delimiter painter. These are headless measurements, not
+on-screen frame rates. The temporary finer profiling scopes were removed.
+
+The 19 SVG outputs exercised by the headless projection tests were compared
+with the saved baseline. Fifteen are byte-identical; the sample and its pending
+variant differ only in glyph outlines for newly minted short cell IDs. All
+delimiter and other non-text geometry is identical. Workspace tests, native
+all-target checks, and the web target check pass.
+
+## Direct color controls and image leaves — 2026-09-07
+
+Baseline: `21692b7`. Native color controls built command vectors, mapped their
+brushes into semantic paints, then interpreted them. The alpha checkerboard
+and markers also built temporary vectors. They now call `CanvasSink` directly,
+through one deferred painter per control. A small `widget::paint` combinator
+composes the existing measured leaf and render continuation; swatches,
+delimiters, and Fidget image leaves use it too. Fidget still renders in
+projection, at the same resolution and with the same camera inputs; only its
+one-image drawing wrapper is gone. Explicitly stored drawing descriptions
+retain their interpreter.
+
+The new open-RGBA-picker canary exercises these controls independently of the
+large documents. Feature-free release binaries were alternated in
+before/after/after/before/before/after order, with five warm-up and 3,000 measured
+frames each, at 600 × 400 logical pixels and scale 2. The isolated color change
+gave:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Whole-frame medians across three runs | 15.58 / 15.62 / 15.58 µs | 12.46 / 11.67 / 11.46 µs |
+| Preparation, median | 9.04–9.17 µs | 5.42–5.88 µs |
+| Paint + handler disposal, median | 2.79 µs | 2.46–2.67 µs |
+| All allocations per picker frame | 254 | 241 |
+
+This is roughly 20–25% of this very small frame: only 3–4 µs saved. It is not a
+claim of a noticeable whole-editor improvement. IoP source remains at 87,941
+allocations per frame. All nine feature-free canaries also passed in an
+interleaved before/after/after/before run with 60 measured frames each; source,
+picture, and Fidget CPU-fallback results showed no consistent timing change.
+The image-wrapper cleanup is not expected to materially accelerate Fidget.
+A further six-run source check with 300 measured frames gave before medians
+3.67 / 3.81 / 4.03 ms and after medians 4.11 / 4.13 / 3.71 ms. The changing
+costs across unchanged phases make this noisy, not evidence of a source
+speedup; small effects remain unresolved.
+
+A temporary recording comparison confirmed identical geometry, brushes,
+gradients, transforms, and command order for all three picker controls, three
+colors, and two display scales. The temporary test was removed; permanent
+tests check marker and fill geometry at several positions and scales, swatch
+metrics and its inset border, raster-image transforms, and paint deferral and
+clipping. Workspace tests and native all-target checks pass. The web check
+passes with its existing unused `drawn_menu` and `Quit` warnings. No cache,
+partial invalidation, event-policy change, or runtime profiling was added.
+
+## Compose value decorations before wrapping layout — 2026-09-07
+
+Baseline: `2a5b751`. Temporary finer allocation scopes split projection
+construction from its editor adaptation. An IoP source frame attributed about
+25,100 allocations to partial/fallback construction, 7,100 to its value-level
+wrappers, 3,180 to materializing widget sites, 2,736 to projection targets, and
+1,410 to appending descendant paths. Copying the cycle-detection ancestry was
+only 155 allocations. These are exclusive diagnostic scopes, not additive
+wall-time speedup estimates; the temporary scopes were removed afterward.
+
+`prepare_value` separately wrapped the same child for its navigation/highlight,
+optional reference background, and pick backstop. All three preserve its extent.
+It now applies those same functions, in the same order, inside one
+`ChoiceLayout::map`. This removes intermediate choice-graph wrappers without
+changing the callbacks, placement outputs, input order, or alternative policy.
+There is no new layout operation or special-case search optimization.
+
+Feature-free release binaries were alternated in before/after/after/before/
+before/after order, with five warm-up and 300 measured frames each, at
+1400 × 900 logical pixels and scale 1:
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Whole-source-frame medians across three runs | 3.70 / 3.69 / 3.70 ms | 3.61 / 3.65 / 3.63 ms |
+| Choices + settled geometry, median | 279–283 µs | 238–246 µs |
+| Value-wrapper allocations per frame | 7,096 | 4,496 |
+
+The whole-frame gain is about 2%, with 2,600 fewer allocations. The reduced
+choice time is from visiting fewer geometry-preserving wrappers, not from
+searching less accurately or selecting different alternatives. Actual placement,
+hover, and paint retain the existing continuations. No cache or partial
+invalidation was introduced.
+
+All nine canaries passed in an additional before/after/after/before run with
+60 measured frames. IoP picture medians were 22.40 / 22.39 ms before and
+22.51 / 22.70 ms after; this pass does not improve drawing-program execution.
+Fidget CPU-fallback results remained comparable across the alternating runs.
+Workspace tests and native all-target checks pass; the browser check retains
+its two existing unused-code warnings. Fifteen of the 19 SVG fixtures are
+byte-identical. The four sample variants differ only in the dim glyph paths
+for freshly minted short cell IDs; surrounding geometry and paint order match.
+
+## Shared blobs and narrower widget capabilities — 2026-09-08
+
+Baseline: `235a5a8`. The storage experiment compared `Vec<u8>`, `Arc<[u8]>`,
+`Arc<Vec<u8>>`, and a test-only enum that shares above 64 bytes. Representative
+medians from seven interleaved rounds on the same ARM64 Mac:
+
+| Operation | Owned vector | Shared vector |
+| --- | ---: | ---: |
+| Construct/dispose 8 bytes | 13.4 ns | 28.8 ns |
+| Clone/dispose 8 bytes | 13.0 ns | 3.5 ns |
+| Construct 8 bytes, clone/dispose four times | 67.0 ns | 37.2 ns |
+| Construct/dispose 4 MiB | 49.6 µs | 49.6 µs |
+| Clone/dispose 4 MiB | 49.8 µs | about 6 ns |
+| Clone, edit, dispose a shared 4 MiB value | 50.0 µs | 50.2 µs |
+
+These are hot microbenchmarks, not frame-speedup predictions. Construction
+includes copying the input fixture into an owned vector; adopting that vector
+into `Arc<Vec<u8>>` adds only its control allocation. Converting it into
+`Arc<[u8]>` copies the payload again: the 4 MiB construction case measured
+111.8 µs. The threshold variant preserves small-vector construction cost but
+also its clone cost; there was no need to carry that second representation into
+production to retain the frame performance below.
+
+`gid::Blob` now wraps `Arc<Vec<u8>>`. Reads remain byte slices, `Value::from`
+still accepts vectors, and `make_mut` performs ordinary copy-on-write. There
+is no cutoff, byte interner, cache, or new serialization convention. Tests check
+adoption without copying, shared clones, unique/shared edits, content equality,
+hashing, and the existing GID serialization and text-bridge round trips.
+
+The separate widget change splits the former combined `Site`: selection and
+picking request only their target/value/callback; line controls request a
+`LineSite` whose `LineInput` is absent at read-only locations. The host no longer
+builds line-edit callbacks for selectable delimiters, or editing/selection
+callbacks for read-only lines. Writable line behavior, default caret placement,
+and library-value selection are unchanged. Tests make line-capability access
+panic for delimiter controls, and verify read-only lines emit no input handlers.
+
+Saved feature-free release binaries were run in baseline / blobs / both / both /
+blobs / baseline order, five warm-up and 180 measured frames per workload:
+
+| Whole-frame medians | Baseline | Shared blobs | Plus narrower capabilities |
+| --- | --- | --- | --- |
+| IoP source, 1400 × 900 @1 | 3.93 / 3.67 ms | 3.63 / 3.65 ms | 3.60 / 3.59 ms |
+| IoP picture, 500 × 500 @1 | 23.22 / 22.92 ms | 23.07 / 23.09 ms | 23.14 / 23.35 ms |
+
+The first baseline source run was noisier (4.45 ms p95); do not attribute that
+whole difference to blobs. The source stays in its previous range, with a small
+improvement from narrower capabilities; the picture shows no meaningful change.
+An earlier baseline/blob/blob/baseline run passed all nine canaries, including
+the five Fidget CPU-fallback workloads. No native GPU/presentation claim follows
+from these headless results.
+
+The final combined build also passed all nine canaries, the full workspace test
+suite, and the native all-target check. The browser check passes with its existing
+unused `drawn_menu` and `Quit` warnings. No runtime profiling or new dependencies
+were added; storage alternatives live only in the opt-in test.
+
+## Direct editor widget handlers — 2026-09-08
+
+Progred's display and library modules now live in the application crate.
+Document-aware widgets borrow their current inputs while preparing, then their
+handlers receive `&mut Editor` and call ordinary editing helpers. This removes
+the projection `Hooks` dictionary, the narrower `Site`/`LineSite` callback
+factories, and the drawn menu's hook bundle. Puri and the measured box algebra
+remain independent; this introduces no cache or action-dispatch layer.
+
+Feature-free release test binaries from `df8c6bf` and the refactor were run
+alternately under the same Seatbelt policy, with five warm-up and 90 measured
+frames per workload:
+
+| Whole-frame medians | Before (two runs) | After (two runs) |
+| --- | --- | --- |
+| IoP source, 1400 × 900 @1 | 4.01 / 3.92 ms | 3.90 / 3.91 ms |
+| IoP picture, 500 × 500 @1 | 24.19 / 24.19 ms | 24.34 / 24.78 ms |
+
+Treat this as effectively neutral performance, not an optimization win. The
+picture's second after run was noisier (46.39 ms maximum); its paint/evaluator
+work remains overwhelmingly dominant. These are headless projection/recording
+checks, not measurements of native GPU presentation.
+
+After the final gesture-adapter and test cleanup, the same 90-frame checks
+measured 3.59 ms for source and 23.30 ms for picture. The full workspace suite
+passed 629 tests; native and browser builds still check successfully.
+
+## Native continuations and widget-owned scrubbing — 2026-09-08
+
+Native completion offers now select through staged Rust continuations rather
+than constructing and evaluating Grap functions. Completion insertion and
+gesture edit runs no longer carry callback dictionaries. Precision-aware scrub
+spelling belongs to the number widget's selected line editor, not the frame
+pipeline. The test-only line-description observer was removed; tests use pure
+descriptions/conversions or actual editor handlers instead.
+
+The same feature-free release checks (five warm-up, 90 measured frames) measured
+3.57 ms median / 3.71 ms p95 for IoP source at 1400 × 900 @1, and 23.48 ms median /
+24.16 ms p95 for its picture at 500 × 500 @1. Compared with the preceding
+3.59 / 23.30 ms check, this is neutral at the precision of these separate runs,
+not evidence of a speedup. These remain headless checks, not GPU presentation
+measurements. All 632 workspace tests pass. Native checks are clean; the web
+check retains its existing `drawn_menu` and `Quit` warnings.
+
+## Streaming hover and explicit after-hover binding — 2026-09-08
+
+Settled placements now run ordinary hover probes in painting order. Only
+floating placements are queued. The retained hover-callback sequence and its
+paint/navigation reversal bookkeeping are gone. Puri's generic `AfterHover`
+collection binds the final hover before producing independent paint and
+handlers; paint callbacks retain that frame's input rather than reading live
+editor hover during presentation. No cross-frame memo or native render enum
+was added.
+
+Feature-free release checks used five warm-up and 90 measured frames:
+
+| Whole-frame median | Before | After, two runs |
+| --- | --- | --- |
+| IoP source, 1400 × 900 @1 | 3.71 ms | 3.39 / 3.50 ms |
+| IoP picture, 500 × 500 @1 | 23.63 ms | 23.82 / 23.90 ms |
+
+This suggests a modest source improvement, with effectively neutral picture
+cost. These are headless checks, not GPU presentation measurements. Phase
+timings now label placement and hover together, followed by after-hover
+binding, so their individual columns are not directly comparable to old runs.
+On the final source run those phases took 0.716 and 0.149 ms respectively;
+the old placement plus hover/handler phases took 0.414 plus 0.700 ms.
+
+The full workspace suite passed 634 tests, followed by an additional passing
+nested-floater ordering regression. Browser checks retain only the existing
+`drawn_menu` and `Quit` warnings.
+
+## Hover attribution: shared versus derived at use — 2026-09-08
+
+The preceding source canary had no pointer, so it did not measure the benefit
+of sharing the hovered source's attribution. A temporary headless experiment
+exercised `Editor::build_frame` and its actual paint continuations at 1400 × 900
+@1, with real visible source hover targets in the IoP document. Source-only
+removed the pane declaration; the other case kept the source and picture panes.
+
+Four variants rotated order each iteration: both descriptors shared, secondary
+identity derived at each use, canvas source trace derived at each use, and both
+derived at use. At-use variants skipped the corresponding eager derivation.
+Temporary test-only accessors counted actual consumers and used an immutable
+document/library snapshot established outside timing. The same accessor/counting
+overhead applied to shared variants. Render commands were compared outside
+timing for every variant/target combination. The initial run used 90 samples;
+the expanded repeat used five warm-up and 120 measured samples per variant.
+All experimental hooks and the temporary test were removed afterward.
+
+| Source-only build + paint median | Shared | Secondary at each use |
+| --- | --- | --- |
+| Deep value hover (21 path steps) | 3.415 ms | 3.570 ms |
+| Shallow value hover (4 steps) | 3.407 ms | 3.441 ms |
+| No hover | 3.433 ms | 3.426 ms |
+
+These times include handler disposal, but not final draw-list disposal or GPU
+presentation. The deep-hover result repeated the initial 3.421 → 3.571 ms result.
+There were 439 secondary-identity consumers with a value hovered (440 with no
+hover). Isolated derivation took roughly 0.33 µs for the deep path and 0.05 µs for
+the shallow path: cheap individually, but repeated enough to add about 4.5% or
+1% respectively. No-hover differences were noise.
+
+With both panes, 301 secondary consumers and one canvas-trace consumer ran;
+total build + paint was about 26 ms, dominated by drawing evaluation. Moving
+trace derivation to its consumer had no stable measurable impact across runs.
+One trace derivation took about 0.18 µs for the deep path and 0.04 µs for the
+shallow path. Unlike secondary identity, trace derivation can allocate an owned
+cell-relative path slice, but it does not repeat per drawing command.
+
+Keep shared secondary attribution: it avoids hundreds of redundant graph walks
+without a cross-frame cache. Eager canvas-trace derivation has no demonstrated
+performance advantage in this workload; its placement is an API/design choice,
+not a measured optimization requirement.
+
+## Pointer hover over retained frame geometry — 2026-09-13
+
+A temporary headless comparison used the complete IoP document at 1400 × 900
+@1, alternating between two drawing-source targets with source linking enabled.
+Both variants rebuilt all content. The old ordering built to discover hover,
+dispatched its reaction, then rebuilt; the new ordering queried the installed
+frame's probes, dispatched the reaction, then built once. Variant order alternated
+each iteration, with five warm-ups and 60 measured transitions per variant.
+
+| Motion through completed headless painting | Median | p95 |
+| --- | ---: | ---: |
+| Fresh build before hover reaction | 55.94 ms | 60.28 ms |
+| Retained probes before hover reaction | 28.73 ms | 30.91 ms |
+| Retained hit-test alone (1,000 queries) | 6.75 µs | 7.00 µs |
+
+The variants produced identical hover targets, source scroll offsets, and draw
+commands after normalizing only per-context font allocation identities. These
+times include building and headless painting, not native GPU/display latency.
+The temporary comparison was removed; permanent tests cover single-build pointer
+reactions, paint-gated follow-ups, probe ordering/clipping/view ownership, and
+drawing probes reusing the installed recording without reevaluating Grap.
+
+Separate 90-frame canaries measured source at 3.38 ms before and 3.50 ms after,
+and picture at 24.04 ms before and 23.60 ms after. Retaining source probes has a
+small construction/storage cost; these separate runs do not establish its exact
+size or a picture speedup. No successor frame reuses the previous drawing's
+evaluation: retained geometry belongs only to the installed frame's input handling.
+
+## Layout continuation verification — 2026-09
+
+Moved from `layout-continuations.md` on 2026-10-10.
+
+The continuation and geometry passes had mixed performance results, including
+regressions. They are not justified as speed improvements. The consolidated
+builder's phase timings and sampling findings are in
+[its section above](#layout-builder-and-placement-consolidation--2026-09-07).
+
+The consolidated version passes all 612 workspace library unit tests (eight
+opt-in tests excluded), all seven release frame canaries, the native
+workspace/all-target check, and the wasm32 library check. The web check retains
+two existing menu dead-code warnings. Sample, Grap, and cube headless SVGs were
+visually inspected; the application was not launched.
+
+The subsequent scoped-FFI pass passed the workspace library tests, all eight
+release canaries (including the new interleaved A/B test), native all-target
+checking, and wasm32 checking with those same existing warnings. Its full-frame
+test compares native emission with GID construction/decoding, including the
+unchanged border combinator. Scope tests cover lexical capture, nested child
+buffers, invalid inputs, fuel exhaustion, and non-escaping capabilities. The
+Grap evaluator itself remains unchanged.
+
+## Toolpath GPU findings — 2026-09-13 and 14
+
+Moved from `toolpaths.md` on 2026-10-11.
+
+The initial single-field version's headless sandbox check (2026-09-13, CPU
+fallback, 800 × 1200 raster) took a median 1.60 seconds across three measured
+frames after five warm-up frames.
+That is not a measurement of interactive native GPU performance.
+
+The initial single-field version failed on the native GPU backend: a 2026-09-13
+trace at 599 × 1280 × 640 measured 1.4–1.9 seconds per render and zero path
+pixels before depth merging. Its VM tape contains 6,736 register-spill
+load/store operations. The pinned Fidget shader's `OP_MEM` handler is explicitly
+unimplemented and returns without a result, although `RenderShape::new` accepts
+the bytecode. The CPU backend supports these operations. CPU screenshots and
+successful bytecode construction therefore do not establish native rendering
+support. Keeping each continuous path separate avoids spilling in this example;
+the regression test checks every path for load/store instructions. A sufficiently
+large individual path can still encounter this upstream limitation. There is no
+spill emulation or automatic CPU fallback for it. Before shipping, follow up
+upstream on implementing or rejecting these instructions; no issue has been filed
+yet. The user confirmed that the split version renders the paths and accepts
+orbit drags, but remains choppy. A subsequent native trace of 50 renders at
+599 × 1280 × 640 averaged 234 ms (196–279 ms), with 215 ms on average in
+wait/readback. This is rendering time, not a complete input-to-display latency
+measurement. The [cube meshing experiment](fidget-meshing-2026-09-13.md) motivated
+the current mesh viewport, which bypasses the GPU VM entirely. It now retains
+geometry through the general dependency graph.
+
+**Experimental limitation (2026-09-14):** the CPU implicit captures complete and
+show correct playback. A native Metal run of the stock-removal example waited
+over a minute in GPU readback and was terminated. Small GPU color/constant-field
+tests pass. The bytecode diagnostic after accepting the updated Xcode license
+confirmed unsupported memory instructions in the stock expression: at progress
+0 it has 15 instructions and no memory operations; at 0.35 it has 17,473
+instructions including 794 loads/stores; at 1.0 it has 53,228 instructions
+including 12,914 loads/stores. The pinned GPU interpreter and tape simplifier
+both leave `OP_MEM` unimplemented. Async scheduling cannot make that bytecode
+valid on this backend. A further native submission of this known-unsupported
+program was deliberately avoided. Command+3's implicit refinement uses the explicit
+software path; GPU implicit CAM was blocked by that missing implementation.
+No GPU timeout was added. The later [GPU spill experiment](fidget-gpu-experiment-2026-09-16.md)
+implements spill instructions behind an opt-in build feature, but is not used by
+the app. Bounded external scratch now lets the full stock match CPU geometry
+without exceeding Metal's private stack, but the measured GPU path remains much
+slower than the CPU. The GPU work is paused; CAM remains on the CPU renderer.

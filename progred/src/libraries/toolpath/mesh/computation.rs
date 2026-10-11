@@ -199,13 +199,12 @@ fn updating_color(color: [f32; 3]) -> [f32; 3] {
 
 fn remaining_shape(request: &Surface) -> Outcome<fidget::mesh::Shape> {
     let mut shape = request.model.clone();
-    if let Some((path, playback)) = &request.removal {
-        if let Some(stock) = playback
+    if let Some((path, playback)) = &request.removal
+        && let Some(stock) = playback
             .remaining_stock(path)
             .map_err(|_| absent::with_reason(INVALID_INPUT))?
-        {
-            shape.objects = vec![stock];
-        }
+    {
+        shape.objects = vec![stock];
     }
     Ok(shape)
 }

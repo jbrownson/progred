@@ -67,7 +67,7 @@ impl ScrollOutcome {
             ScrollDelta::PixelDelta(delta) => delta.x == 0.0 && delta.y == 0.0,
         };
         (!empty).then(|| PointerScrollEvent {
-            pointer: original.pointer.clone(),
+            pointer: original.pointer,
             delta: self.remaining,
             state: original.state.clone(),
         })

@@ -17,7 +17,6 @@ fn simplify_tape(end: u32, tape_len: u32, stack: ptr<function, Stack>) -> u32 {
     }
 
     var live: array<bool, REG_COUNT>;
-    var mem_live: array<u32, (MEM_COUNT + 31u) / 32u>;
     while true {
         i = i - 1;
         j = j - 1; // reserve space
@@ -54,16 +53,7 @@ fn simplify_tape(end: u32, tape_len: u32, stack: ptr<function, Stack>) -> u32 {
             j = nj - 1;
         }
 
-        if op[0] == OP_MEM && op[1] == 255u {
-            // A store defines a spill slot, not register 255.
-            let mask = 1u << (imm_u % 32u);
-            if (mem_live[imm_u / 32u] & mask) == 0u {
-                j += 1;
-                continue;
-            }
-            mem_live[imm_u / 32u] &= ~mask;
-            live[op[2]] = true;
-        } else if op[0] == OP_OUTPUT {
+        if op[0] == OP_OUTPUT {
             // Mark the input register as live
             live[op[1]] = true;
         } else if !live[op[1]] {
@@ -179,9 +169,8 @@ fn simplify_tape(end: u32, tape_len: u32, stack: ptr<function, Stack>) -> u32 {
             }
 
             case OP_MEM: {
-                if op[1] != 255u {
-                    mem_live[imm_u / 32u] |= 1u << (imm_u % 32u);
-                }
+                // Not implemented!
+                return 0u;
             }
             default: {
                 return 0u;

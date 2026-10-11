@@ -233,7 +233,6 @@ fn iop_tree_at_size(size: kurbo::Size) {
         None,
         source,
     );
-    eprintln!("IoP tree rebuilt frame: {:.1?}", rebuilt.frame_elapsed);
     assert_eq!(rebuilt.list.0.len(), bench.list.0.len());
     let (ground, scene) = bench.list.0.split_first().expect("the pane paints");
     assert!(matches!(
@@ -266,27 +265,8 @@ fn iop_tree_at_size(size: kurbo::Size) {
         "unexpected drawing link: {:?}",
         linked.hit
     );
-    let native_iterations = 16;
-    let native_start = std::time::Instant::now();
-    let (native, native_stats) = (1..native_iterations).fold(
-        {
-            let mut frame = DrawList::new();
-            let stats = super::iop_tree_native::draw(&mut frame, size.width, size.height, outer);
-            (frame, stats)
-        },
-        |_, _| {
-            let mut frame = DrawList::new();
-            let stats = super::iop_tree_native::draw(&mut frame, size.width, size.height, outer);
-            std::hint::black_box(&frame);
-            (frame, stats)
-        },
-    );
-    let native_elapsed = native_start.elapsed() / native_iterations;
-    let grap_elapsed = bench.frame_elapsed;
-    eprintln!(
-        "IoP tree: Grap {grap_elapsed:.1?}, native {native_elapsed:.1?}, {:.0}x",
-        grap_elapsed.as_secs_f64() / native_elapsed.as_secs_f64(),
-    );
+    let mut native = DrawList::new();
+    let native_stats = super::iop_tree_native::draw(&mut native, size.width, size.height, outer);
     assert_eq!((extent.width, extent.height()), (size.width, size.height));
     assert_eq!(native_stats.branches, 511);
     assert_eq!(native_stats.blossoms, 7_680);

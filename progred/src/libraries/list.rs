@@ -58,7 +58,7 @@ fn evaluated(
     field: gid::CellId,
 ) -> Result<Option<RuntimeValue>, Halt> {
     context
-        .field(&call, field)
+        .field(call, field)
         .map(|value| context.eval(value, environment))
         .transpose()
 }

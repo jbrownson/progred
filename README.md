@@ -58,15 +58,15 @@ clearance, or a safe machining plan.**
   range from a torus and a gyroid to a parameterized, chamfered fidget cube.
 - **Early CAM:** Grap-generated toolpaths, a playback slider, revolved cutter
   profiles, and stock subtraction using continuous fixed-orientation sweeps.
-  The cube example separates top-and-side machining from a bottom operation;
-  chamfer machining, tool changes, and machine output are still ahead.
+  The cube example machines its indents with a ball end mill and its twelve
+  chamfers with a square tool, in two operations; roughing, links between
+  passes, collision checks, and machine output are still ahead.
 - **Responsive expensive views:** explicit dependency-tracked computations,
   cancellable background work, and progressive rendering. The combined CAM
   viewport uses a mesh while implicit images refine in the background.
 
 macOS is the primary development platform, and the only one tested recently.
-There are also Linux and browser hosts. They do not yet have feature or performance parity: in particular, the
-browser currently runs expensive jobs synchronously.
+There are also Linux and browser hosts. They do not yet have feature or performance parity.
 
 ## What isn't there yet
 
@@ -100,7 +100,7 @@ Install stable Rust through `rustup` and Apple's command-line developer tools
 ```sh
 git clone https://github.com/jbrownson/progred.git
 cd progred
-make sandbox-fetch
+make fetch
 make run
 ```
 
@@ -167,15 +167,13 @@ described in [`web/README.md`](web/README.md). Then run:
 make run-web
 ```
 
-It builds any editor changes, then serves `http://127.0.0.1:8080/editor/` on
+It builds any editor changes, then serves `http://127.0.0.1:8081/editor/` on
 this machine only; the server does not listen on other network interfaces.
 
-On Linux, `make run` uses the native launcher and performs a regular locked
-Cargo build; **the Linux build is not sandboxed**. The macOS `sandbox-*` commands
-do not apply there.
-
-An earlier iPad feasibility port has been removed; see the
-[platform notes](docs/platforms.md). visionOS is deferred, not an implemented port.
+On Linux, `make run` performs a regular locked Cargo build; **the Linux build
+is not sandboxed**. `make install-linux` installs it as a desktop application.
+The [platform notes](docs/platforms.md) list the runtime libraries it needs and
+cover the other ports.
 
 ## How it fits together
 
@@ -207,26 +205,24 @@ format is future work. See [GID](docs/gid.md) and [the text bridge](docs/gid-tex
 
 ## Repository layout
 
-- [`gid/`](gid/) — values, cells, documents, and positions
-- [`grap/`](grap/) — evaluator
-- [`incremental/`](incremental/) — dependency graph and background computations
-- [`progred/`](progred/) — editor application; libraries and projections live in
-  [`progred/src/libraries/`](progred/src/libraries/), layout in
-  [`progred/src/display/`](progred/src/display/)
-- [`ui/`](ui/) — Puri, reusable widgets, measurement, and drawing backends
-- [`examples/`](examples/) — bundled documents
-- [`docs/`](docs/) — current references, experiments, and deferred work
+- [`gid/`](gid) — values, cells, documents, and positions
+- [`grap/`](grap) — evaluator
+- [`incremental/`](incremental) — dependency graph and background computations
+- [`progred/`](progred) — editor application; libraries and projections live in
+  [`progred/src/libraries/`](progred/src/libraries), layout in
+  [`progred/src/display/`](progred/src/display)
+- [`ui/`](ui) — Puri, reusable widgets, measurement, and drawing backends
+- [`examples/`](examples) — bundled documents
+- [`docs/`](docs) — current references, deferred work, and history
 
 ## Development and further reading
 
 Questions, ideas, and criticism are welcome on
 [the Progred Zulip](https://progred.zulipchat.com).
 
-On macOS:
-
 ```sh
-make sandbox-check
-make sandbox-test
+make check
+make test
 ```
 
 Start with [the motivation](MOTIVATION.md), then the
@@ -238,7 +234,7 @@ Start with [the motivation](MOTIVATION.md), then the
 
 Earlier TypeScript, Swift, egui, Haskell, and nested Linebender prototypes are
 preserved at `archive/pre-root-promotion`; `archive/multi-prototype` retains an
-earlier milestone. Their design notes are in [history](docs/history/).
+earlier milestone. Their design notes are in [history](docs/history).
 
 ## License
 

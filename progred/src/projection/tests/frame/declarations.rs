@@ -88,11 +88,7 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
         Step::Follow(gid::Resolution::Document),
     ];
     let frame = editing_frame(&mut world, false);
-    let target = frame
-        .descends
-        .iter()
-        .find(|target| target.path.as_ref() == path)
-        .unwrap();
+    let target = frame.descends.landmark(&path).unwrap();
     assert!((target.select)(&mut world, None));
     assert!(
         editing_frame(&mut world, false)
@@ -144,11 +140,7 @@ fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
                 .iter()
                 .any(|d| d.path.last() == Some(&Step::Key(metadata)))
         );
-        let target = frame
-            .descends
-            .iter()
-            .find(|d| d.path.as_ref() == path)
-            .unwrap();
+        let target = frame.descends.landmark(&path).unwrap();
         assert!((target.select)(&mut world, None));
         let frame = editing_frame(&mut world, false);
         assert!(frame.resolve_for_dispatch().dispatch_key(
@@ -186,11 +178,7 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
     });
     let frame = editing_frame(&mut world, false);
     let name_path = [Step::Key(name::vocabulary::NAME)];
-    let name_slot = frame
-        .descends
-        .iter()
-        .find(|d| d.path.as_ref() == name_path)
-        .unwrap();
+    let name_slot = frame.descends.landmark(&name_path).unwrap();
     assert!(!frame.descends.iter().any(|d| d.path.as_ref()
         == [
             Step::Key(grap::vocabulary::VALUE),
@@ -215,8 +203,7 @@ fn anonymous_lambda_marker_still_opens_name_completion_when_clicked() {
     let name_path = [Step::Key(name::vocabulary::NAME)];
     let marker = editing_frame(&mut world, false)
         .descends
-        .iter()
-        .find(|d| d.path.as_ref() == name_path)
+        .landmark(&name_path)
         .unwrap()
         .rect
         .center();
@@ -330,14 +317,7 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
             ])
             .collect::<Path>();
         let (bench, _) = place(&doc, None, 1200.0);
-        let rect = |path: &[Step]| {
-            bench
-                .descends
-                .iter()
-                .find(|d| d.path.as_ref() == path)
-                .unwrap()
-                .rect
-        };
+        let rect = |path: &[Step]| bench.descends.landmark(&path).unwrap().rect;
         let cell_rect = rect(&binder_path);
         let name_rect = rect(&name_path);
         let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(name_rect.center()));
@@ -387,13 +367,13 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
         !editing_frame(&mut world, false)
             .descends
             .iter()
-            .any(|d| d.path.as_ref() == &extra_path)
+            .any(|d| d.path.as_ref() == extra_path)
     );
     assert!(
         editing_frame(&mut world, true)
             .descends
             .iter()
-            .any(|d| d.path.as_ref() == &extra_path)
+            .any(|d| d.path.as_ref() == extra_path)
     );
     let pending = pending_edge(
         &crate::test_root(),

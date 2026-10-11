@@ -3,12 +3,11 @@
 use super::*;
 use incremental::background::Progress;
 
-#[cfg(test)]
-pub(crate) mod diagnostics;
-
 mod partial;
 #[cfg(feature = "cam-profile")]
 pub(crate) mod performance;
+#[cfg(test)]
+mod reference;
 pub(crate) use puri::mesh::DepthImage as Frame;
 
 // Meshing keeps VmShape independently; JIT benefits the much denser raster work.
@@ -192,6 +191,138 @@ fn refine_depth(mut view: VolumeView, multiplier: u32) -> Option<VolumeView> {
     view.size = VoxelRenderSize::new(view.size.width(), view.size.height(), depth);
     view.world_to_model *= Scale3::new(1.0, 1.0, 1.0 / multiplier as f32).to_homogeneous();
     Some(view)
+}
+
+impl Request {
+    pub fn new(preview: VolumePreview, state: Option<&Value>, scale: f64) -> Option<Self> {
+        Some(Self {
+            pixels: raster_size(preview.size, scale)?,
+            preview,
+            camera: camera(state),
+        })
+    }
+
+    pub fn view(&self) -> ViewRequest {
+        ViewRequest {
+            min: self.preview.min,
+            max: self.preview.max,
+            camera: self.camera,
+            pixels: self.pixels,
+        }
+    }
+
+    /// One-shot rendering for diagnostics without a dependency-tracked scene.
+    #[cfg(any(test, feature = "cam-profile"))]
+    pub fn render_software_tiles(
+        &self,
+        passes: Passes,
+        final_depth_multiplier: u32,
+        cancel: &incremental::Cancellation,
+        publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
+        progress: Option<&(dyn Fn(Progress) + Sync)>,
+    ) -> Result<Option<Frame>, incremental::Error> {
+        cancel.check()?;
+        let scene = SoftwareScene::new(&self.preview.objects, cancel);
+        cancel.check()?;
+        let Some(scene) = scene else { return Ok(None) };
+        self.view().render(
+            &scene,
+            passes,
+            final_depth_multiplier,
+            cancel,
+            publish,
+            progress,
+        )
+    }
+}
+
+impl ViewRequest {
+    fn resolutions(&self, first_max_edge: u32) -> Vec<PixelRenderSize> {
+        assert!(first_max_edge > 0);
+        let mut sizes = vec![self.pixels];
+        let mut size = self.pixels;
+        while size.width().max(size.height()) > first_max_edge {
+            size = PixelRenderSize::new(size.width().div_ceil(2), size.height().div_ceil(2));
+            sizes.push(size);
+        }
+        sizes.reverse();
+        sizes
+    }
+
+    fn view_at(&self, pixels: PixelRenderSize) -> VolumeView {
+        let mut view = volume_view_bounds(self.min, self.max, self.camera, pixels);
+        // Pixel rounding must not change the camera's aspect ratio between passes.
+        if pixels != self.pixels {
+            let ratio = pixels.height() as f32 / self.pixels.height() as f32;
+            let half_pixel = 1.0 / pixels.width().min(pixels.height()) as f32;
+            // Adjust the frustum before the pixel-center translation.
+            view.world_to_model *= Translation3::new(-half_pixel, 0.0, 0.0).to_homogeneous()
+                * Scale3::new(
+                    self.pixels.width() as f32 / pixels.width() as f32 * ratio,
+                    1.0,
+                    1.0,
+                )
+                .to_homogeneous()
+                * Translation3::new(half_pixel, 0.0, 0.0).to_homogeneous();
+        }
+        view
+    }
+
+    fn refinements(
+        &self,
+        first_max_edge: u32,
+        final_depth_multiplier: u32,
+    ) -> Option<Vec<VolumeView>> {
+        let mut views: Vec<_> = self
+            .resolutions(first_max_edge)
+            .into_iter()
+            .map(|pixels| self.view_at(pixels))
+            .collect();
+        if final_depth_multiplier != 1 {
+            views.push(refine_depth(
+                self.view_at(self.pixels),
+                final_depth_multiplier,
+            )?);
+        }
+        Some(views)
+    }
+    /// Publish completed tile batches, retaining the previous level in
+    /// unfinished regions. The first level reports coverage for a mesh fallback.
+    pub fn render(
+        &self,
+        scene: &SoftwareScene,
+        passes: Passes,
+        final_depth_multiplier: u32,
+        cancel: &incremental::Cancellation,
+        publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
+        progress: Option<&(dyn Fn(Progress) + Sync)>,
+    ) -> Result<Option<Frame>, incremental::Error> {
+        cancel.check()?;
+        let views = match passes {
+            Passes::Final => refine_depth(self.view_at(self.pixels), final_depth_multiplier)
+                .map(|view| vec![view]),
+            Passes::Progressive { first_max_edge } => {
+                self.refinements(first_max_edge, final_depth_multiplier)
+            }
+        };
+        let Some(views) = views else {
+            return Ok(None);
+        };
+        let mut previous = None;
+        let mut views = views.into_iter().peekable();
+        while let Some(view) = views.next() {
+            cancel.check()?;
+            let frame =
+                partial::render(scene, &view, previous.as_ref(), cancel, publish, progress)?;
+            let Some(frame) = frame else { return Ok(None) };
+            if views.peek().is_none() {
+                return Ok(Some(frame));
+            }
+            publish(frame.clone())?;
+            previous = Some(frame);
+        }
+        unreachable!("the native resolution is always present")
+    }
 }
 
 #[cfg(test)]
@@ -439,7 +570,8 @@ mod tests {
 
     #[test]
     fn software_lighting_is_independent_of_sampling_density() {
-        let mut request = request(333.0, 751.0);
+        // Small odd sizes still give four halvings and a depth refinement.
+        let mut request = request(42.0, 94.0);
         request.preview.objects[0].tree = Tree::x() * 0.3 + Tree::y() * 0.2 + Tree::z();
         let shape = VmShape::from(request.preview.objects[0].tree.clone());
         for camera in [
@@ -460,7 +592,7 @@ mod tests {
             let normal = rotation.inverse() * Vector3::new(0.3, 0.2, 1.0).normalize();
             let light = Vector3::new(0.35, -0.45, 1.0).normalize();
             let expected = (200.0 * (0.22 + 0.78 * normal.dot(&light).max(0.0))) as u8;
-            for view in request.view().refinements(128, 4).unwrap() {
+            for view in request.view().refinements(16, 4).unwrap() {
                 let config = VoxelRenderConfig {
                     image_size: view.size,
                     world_to_model: view.world_to_model,
@@ -555,137 +687,5 @@ mod tests {
         })
         .join()
         .unwrap();
-    }
-}
-
-impl Request {
-    pub fn new(preview: VolumePreview, state: Option<&Value>, scale: f64) -> Option<Self> {
-        Some(Self {
-            pixels: raster_size(preview.size, scale)?,
-            preview,
-            camera: camera(state),
-        })
-    }
-
-    pub fn view(&self) -> ViewRequest {
-        ViewRequest {
-            min: self.preview.min,
-            max: self.preview.max,
-            camera: self.camera,
-            pixels: self.pixels,
-        }
-    }
-
-    /// One-shot rendering for diagnostics without a dependency-tracked scene.
-    #[cfg(any(test, feature = "cam-profile"))]
-    pub fn render_software_tiles(
-        &self,
-        passes: Passes,
-        final_depth_multiplier: u32,
-        cancel: &incremental::Cancellation,
-        publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
-        progress: Option<&(dyn Fn(Progress) + Sync)>,
-    ) -> Result<Option<Frame>, incremental::Error> {
-        cancel.check()?;
-        let scene = SoftwareScene::new(&self.preview.objects, cancel);
-        cancel.check()?;
-        let Some(scene) = scene else { return Ok(None) };
-        self.view().render(
-            &scene,
-            passes,
-            final_depth_multiplier,
-            cancel,
-            publish,
-            progress,
-        )
-    }
-}
-
-impl ViewRequest {
-    fn resolutions(&self, first_max_edge: u32) -> Vec<PixelRenderSize> {
-        assert!(first_max_edge > 0);
-        let mut sizes = vec![self.pixels];
-        let mut size = self.pixels;
-        while size.width().max(size.height()) > first_max_edge {
-            size = PixelRenderSize::new(size.width().div_ceil(2), size.height().div_ceil(2));
-            sizes.push(size);
-        }
-        sizes.reverse();
-        sizes
-    }
-
-    fn view_at(&self, pixels: PixelRenderSize) -> VolumeView {
-        let mut view = volume_view_bounds(self.min, self.max, self.camera, pixels);
-        // Pixel rounding must not change the camera's aspect ratio between passes.
-        if pixels != self.pixels {
-            let ratio = pixels.height() as f32 / self.pixels.height() as f32;
-            let half_pixel = 1.0 / pixels.width().min(pixels.height()) as f32;
-            // Adjust the frustum before the pixel-center translation.
-            view.world_to_model *= Translation3::new(-half_pixel, 0.0, 0.0).to_homogeneous()
-                * Scale3::new(
-                    self.pixels.width() as f32 / pixels.width() as f32 * ratio,
-                    1.0,
-                    1.0,
-                )
-                .to_homogeneous()
-                * Translation3::new(half_pixel, 0.0, 0.0).to_homogeneous();
-        }
-        view
-    }
-
-    fn refinements(
-        &self,
-        first_max_edge: u32,
-        final_depth_multiplier: u32,
-    ) -> Option<Vec<VolumeView>> {
-        let mut views: Vec<_> = self
-            .resolutions(first_max_edge)
-            .into_iter()
-            .map(|pixels| self.view_at(pixels))
-            .collect();
-        if final_depth_multiplier != 1 {
-            views.push(refine_depth(
-                self.view_at(self.pixels),
-                final_depth_multiplier,
-            )?);
-        }
-        Some(views)
-    }
-    /// Publish completed tile batches, retaining the previous level in
-    /// unfinished regions. The first level reports coverage for a mesh fallback.
-    pub fn render(
-        &self,
-        scene: &SoftwareScene,
-        passes: Passes,
-        final_depth_multiplier: u32,
-        cancel: &incremental::Cancellation,
-        publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
-        progress: Option<&(dyn Fn(Progress) + Sync)>,
-    ) -> Result<Option<Frame>, incremental::Error> {
-        cancel.check()?;
-        let views = match passes {
-            Passes::Final => refine_depth(self.view_at(self.pixels), final_depth_multiplier)
-                .map(|view| vec![view]),
-            Passes::Progressive { first_max_edge } => {
-                self.refinements(first_max_edge, final_depth_multiplier)
-            }
-        };
-        let Some(views) = views else {
-            return Ok(None);
-        };
-        let mut previous = None;
-        let mut views = views.into_iter().peekable();
-        while let Some(view) = views.next() {
-            cancel.check()?;
-            let frame =
-                partial::render(scene, &view, previous.as_ref(), cancel, publish, progress)?;
-            let Some(frame) = frame else { return Ok(None) };
-            if views.peek().is_none() {
-                return Ok(Some(frame));
-            }
-            publish(frame.clone())?;
-            previous = Some(frame);
-        }
-        unreachable!("the native resolution is always present")
     }
 }

@@ -1,9 +1,9 @@
-use crate::frame::{Dispatch, frame_disposition};
+use crate::frame::frame_disposition;
 #[cfg(test)]
 use crate::selection;
 use crate::{Editor, EditorRunner, navigate, placed};
 use kurbo::{Point, Rect, Size};
-use puri::handler::{Event, ImeEvent};
+use puri::handler::{Event, Handler, ImeEvent, NavigationDirection};
 use std::borrow::Cow;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{KeyboardEvent, Modifiers};
@@ -104,34 +104,38 @@ pub(super) fn window_pointer(position: Point, size: Size) -> Option<Point> {
         .then_some(position)
 }
 
-fn keyboard(
+/// The editor's structural keys, beneath every placed handler. An arrow
+/// nothing claimed is lowered into navigation the whole frame sees.
+pub(crate) fn structural_keys(scale: f64) -> Handler<Editor, placed::DispatchContext<Editor>> {
+    let mut handler = Handler::<Editor, placed::DispatchContext<Editor>>::new();
+    handler.on_key_with(move |editor, event, input| {
+        let geometry = input.geometry(scale);
+        editor.paste_key(event)
+            || editor.delete_key(geometry, event)
+            || editor.insert_key(geometry, event)
+            || editor.replace_key(geometry, event)
+            || navigate::keyboard(editor, geometry, event)
+            || navigate::direction(event)
+                .is_some_and(|direction| navigate_frame(editor, direction, input, scale))
+    });
+    handler
+}
+
+fn navigate_frame(
     editor: &mut Editor,
-    dispatch: &Dispatch,
-    hover: Option<&crate::frame::Hovered>,
-    event: &KeyboardEvent,
+    direction: NavigationDirection,
+    input: &mut placed::DispatchContext<Editor>,
     scale: f64,
 ) -> bool {
-    let mut input = dispatch.context(hover.cloned());
-    let geometry = dispatch.geometry(scale);
-    // Frame handlers precede the editor's structural fallbacks.
-    dispatch
+    let handled = input
         .handler
-        .dispatch_key_with(editor, event, &mut input)
-        || editor.paste_key(event)
-        || editor.delete_key(geometry, event)
-        || editor.insert_key(geometry, event)
-        || editor.replace_key(geometry, event)
-        || navigate::keyboard(editor, geometry, event)
-        || navigate::direction(event).is_some_and(|direction| {
-            let handled = dispatch
-                .handler
-                .dispatch(editor, Event::Navigate(direction), &mut input)
-                .handled();
-            if handled {
-                geometry.reveal_selection(editor);
-            }
-            handled
-        })
+        .clone()
+        .dispatch(editor, Event::Navigate(direction), input)
+        .handled();
+    if handled {
+        input.geometry(scale).reveal_selection(editor);
+    }
+    handled
 }
 
 /// Merge `next` into the pending batch, or return the batch it cannot join.
@@ -240,7 +244,14 @@ impl EditorRunner {
     ) -> bool {
         self.editor.focused
             && self.update_frame(scale, viewport, |editor, dispatch, hover| {
-                frame_disposition(keyboard(editor, dispatch, hover, event, scale), false)
+                frame_disposition(
+                    dispatch.handler.dispatch_key_with(
+                        editor,
+                        event,
+                        &mut dispatch.context(hover.cloned()),
+                    ),
+                    false,
+                )
             })
     }
 
@@ -848,7 +859,7 @@ mod tests {
         runner.editor.pressed = true;
         runner.editor.pointer = Some(Point::new(20.0, 20.0));
         let cancelled = Rc::new(std::cell::Cell::new(false));
-        runner.frame.dispatch.handler.on_pointer_cancel({
+        runner.frame.dispatch.handler_mut().on_pointer_cancel({
             let cancelled = cancelled.clone();
             move |_, _| {
                 cancelled.set(true);
@@ -1006,7 +1017,7 @@ mod tests {
         let root = runner.editor.model.workspace.document_root().clone();
         runner.frame.hover = Some(hover.clone());
         runner.frame.dispatch.pointer_root = Some(root.clone());
-        runner.frame.dispatch.handler.on({
+        runner.frame.dispatch.handler_mut().on({
             let log = log.clone();
             move |editor, event, input| {
                 if let Event::ModifiersChanged(modifiers) = event {
@@ -1061,7 +1072,7 @@ mod tests {
             let descends = runner.frame.dispatch.descends.clone();
             let regions = runner.frame.dispatch.view_regions.clone();
             let calls = Rc::new(std::cell::Cell::new(0));
-            runner.frame.dispatch.handler = puri::handler::Handler::from_function({
+            *runner.frame.dispatch.handler_mut() = puri::handler::Handler::from_function({
                 let calls = calls.clone();
                 move |_, event, input: &mut crate::placed::DispatchContext<Editor>| {
                     if matches!(event, Event::HoverChanged) {
@@ -1077,11 +1088,7 @@ mod tests {
             });
             let button = PointerButtonEvent {
                 button: Some(puri::handler::PointerButton::Primary),
-                pointer: PointerInfo {
-                    pointer_id: None,
-                    persistent_device_id: None,
-                    pointer_type: PointerType::Mouse,
-                },
+                pointer: crate::display::test_support::mouse(),
                 state: PointerState {
                     position: (20.0, 20.0).into(),
                     ..Default::default()
@@ -1144,7 +1151,7 @@ mod tests {
         runner
             .frame
             .dispatch
-            .handler
+            .handler_mut()
             .on_gesture_batch(|editor, events| {
                 assert_eq!(events.len(), 2);
                 let mut zoom = 1.0;
@@ -1200,22 +1207,18 @@ mod tests {
         runner.refresh_frame(1.0, VIEWPORT);
         log.take();
         let events = [10.0, -10.0].map(|y| PointerScrollEvent {
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: PointerState {
                 position: (20.0, 20.0).into(),
                 ..Default::default()
             },
             delta: ScrollDelta::PixelDelta((0.0, y).into()),
         });
-        runner.frame.dispatch.handler = puri::handler::Handler::new();
+        *runner.frame.dispatch.handler_mut() = puri::handler::Handler::new();
         runner
             .frame
             .dispatch
-            .handler
+            .handler_mut()
             .on_scroll_batch(|editor, events| {
                 assert_eq!(events.len(), 2);
                 puri::scroll::each(events, |event| {
@@ -1248,11 +1251,7 @@ mod tests {
         let mut runner = instrumented_runner(&log);
         runner.refresh_frame(1.0, VIEWPORT);
         log.borrow_mut().clear();
-        let pointer = PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        };
+        let pointer = crate::display::test_support::mouse();
         let current = PointerState {
             position: (20.0, 20.0).into(),
             ..Default::default()
@@ -1346,11 +1345,7 @@ mod tests {
             position: (20.0, 20.0).into(),
             ..Default::default()
         };
-        let pointer = PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        };
+        let pointer = crate::display::test_support::mouse();
         let motion = PointerEvent::Move(PointerUpdate {
             pointer,
             current: state.clone(),
@@ -1464,16 +1459,12 @@ mod tests {
         });
         let button = PointerButtonEvent {
             button: Some(puri::handler::PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: PointerState::default(),
         };
         for release in [
             PointerEvent::Up(button.clone()),
-            PointerEvent::Cancel(button.pointer.clone()),
+            PointerEvent::Cancel(button.pointer),
         ] {
             runner.pointer_event(&PointerEvent::Down(button.clone()), 1.0, VIEWPORT);
             assert!(*runner.editor.computations.runtime.read(&pressed).unwrap());

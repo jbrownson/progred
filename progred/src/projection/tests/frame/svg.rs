@@ -335,153 +335,6 @@ fn render_editor(editor: crate::Editor, size: kurbo::Size, out_path: &str) {
     write_svg_on(&list, size.width, size.height, paper, out_path);
 }
 
-#[test]
-#[ignore = "writes website exercise captures without launching the app"]
-fn website_lesson_svg_captures() {
-    use crate::libraries::{absent, blob, color, control, f64, grap, layout, name, number, text};
-    for (name, source, libraries) in [
-        (
-            "forest",
-            include_str!("../../../../../website/public/lessons/forest.gid"),
-            &[
-                name::ID,
-                text::ID,
-                blob::ID,
-                absent::ID,
-                color::ID,
-                control::ID,
-                number::ID,
-                f64::ID,
-                grap::ID,
-                layout::ID,
-            ][..],
-        ),
-        (
-            "values",
-            include_str!("../../../../../website/public/lessons/values.gid"),
-            &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
-        ),
-        (
-            "cells",
-            include_str!("../../../../../website/public/lessons/cells.gid"),
-            &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
-        ),
-        (
-            "model",
-            include_str!("../../../../../website/public/lessons/model.gid"),
-            &[name::ID, text::ID, blob::ID, number::ID, f64::ID][..],
-        ),
-        (
-            "projections",
-            include_str!("../../../../../website/public/lessons/projections.gid"),
-            &[
-                name::ID,
-                text::ID,
-                blob::ID,
-                absent::ID,
-                number::ID,
-                f64::ID,
-                grap::ID,
-            ][..],
-        ),
-        (
-            "grap",
-            include_str!("../../../../../website/public/lessons/grap.gid"),
-            &[
-                name::ID,
-                text::ID,
-                blob::ID,
-                absent::ID,
-                number::ID,
-                f64::ID,
-                grap::ID,
-            ][..],
-        ),
-        (
-            "functions",
-            include_str!("../../../../../website/public/lessons/functions.gid"),
-            &[
-                name::ID,
-                text::ID,
-                blob::ID,
-                absent::ID,
-                number::ID,
-                f64::ID,
-                grap::ID,
-            ][..],
-        ),
-        (
-            "drawing",
-            include_str!("../../../../../website/public/lessons/drawing.gid"),
-            &[
-                name::ID,
-                text::ID,
-                blob::ID,
-                absent::ID,
-                color::ID,
-                control::ID,
-                number::ID,
-                f64::ID,
-                grap::ID,
-                layout::ID,
-            ][..],
-        ),
-    ] {
-        let (doc, fields) = crate::gid_text::parse(source).unwrap();
-        for (theme_name, theme) in [
-            ("light", crate::styles::Theme::Light),
-            ("dark", crate::styles::Theme::Dark),
-        ] {
-            for width in [320.0, 620.0] {
-                let mut editor = crate::test_editor_with_stack(
-                    doc.clone(),
-                    crate::stack::load_selected(libraries).unwrap(),
-                );
-                if matches!(
-                    name,
-                    "model" | "projections" | "grap" | "functions" | "drawing" | "forest"
-                ) {
-                    let slots: &[(&str, &str)] = match name {
-                        "drawing" | "forest" => &[("third", ""), ("first", ""), ("second", "")],
-                        "projections" => &[("first", ""), ("second", ":plain"), ("third", ":raw")],
-                        "model" => &[("first", ""), ("second", ":raw")],
-                        _ => &[("first", ""), ("second", ""), ("third", "")],
-                    };
-                    editor.stack.projection = crate::web_embed::tutorial_slots(
-                        Some(
-                            &slots
-                                .iter()
-                                .map(|(key, level)| format!("{}{level}", fields[*key]))
-                                .collect::<Vec<_>>()
-                                .join(","),
-                        ),
-                        editor.stack.projection,
-                        &editor.stack.libraries,
-                    )
-                    .unwrap();
-                }
-                editor.font_cx = crate::fonts::bundled_font_context();
-                editor.palette = theme.palette();
-                editor.drawn_menu = false;
-                render_editor(
-                    editor,
-                    kurbo::Size::new(
-                        width,
-                        if name == "forest" {
-                            768.0
-                        } else if name == "drawing" {
-                            384.0
-                        } else {
-                            304.0
-                        },
-                    ),
-                    &format!("website_{name}_{width}_{theme_name}.svg"),
-                );
-            }
-        }
-    }
-}
-
 pub(super) fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
         absent, blob, color, control, controls, f64, grap, layout, list, logic, name, number,
@@ -518,7 +371,6 @@ pub(super) fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text
         &editor.stack.libraries,
     )
     .unwrap();
-    editor.font_cx = crate::fonts::bundled_font_context();
     editor.drawn_menu = false;
     (editor, fields)
 }
@@ -571,9 +423,8 @@ fn website_forest_hover_finds_the_available_call() {
 fn website_growing_forest_controls_and_edits_change_the_drawing() {
     use crate::libraries::{color, controls, presentation};
     fn circles(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, peniko::Brush)> {
-        commands
-            .iter()
-            .flat_map(|command| match command {
+        crate::display::test_support::painted(commands)
+            .filter_map(|command| match command {
                 DrawCmd::Fill {
                     shape: puri::Shape::Circle(circle),
                     brush,
@@ -582,10 +433,9 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
                     || *brush == peniko::Brush::from(Color::from_rgb8(220, 90, 40))
                     || *brush == peniko::Brush::from(Color::from_rgb8(248, 201, 112)) =>
                 {
-                    vec![(*circle, brush.clone())]
+                    Some((*circle, brush.clone()))
                 }
-                DrawCmd::Clip { children, .. } => circles(children),
-                _ => Vec::new(),
+                _ => None,
             })
             .collect()
     }
@@ -699,16 +549,6 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
     }
 }
 
-#[test]
-#[ignore = "writes the growing forest showcase without launching the app"]
-fn website_growing_forest_svg_capture() {
-    render_editor(
-        website_growing_forest_editor().0,
-        kurbo::Size::new(720.0, 684.0),
-        "website_growing_forest.svg",
-    );
-}
-
 fn website_growing_forest_insert(
     editor: &mut crate::Editor,
     names: &crate::gid_text::Binders,
@@ -766,18 +606,14 @@ fn website_growing_forest_add_clouds(
 #[test]
 fn website_growing_forest_all_keeps_drawing_after_incomplete_clouds() {
     fn circles(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, peniko::Brush)> {
-        commands
-            .iter()
-            .flat_map(|command| match command {
+        crate::display::test_support::painted(commands)
+            .filter_map(|command| match command {
                 DrawCmd::Fill {
                     shape: puri::Shape::Circle(circle),
                     brush,
                     ..
-                } => {
-                    vec![(*circle, brush.clone())]
-                }
-                DrawCmd::Clip { children, .. } => circles(children),
-                _ => Vec::new(),
+                } => Some((*circle, brush.clone())),
+                _ => None,
             })
             .collect()
     }
@@ -805,16 +641,14 @@ fn website_growing_forest_all_keeps_drawing_after_incomplete_clouds() {
 fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
     use crate::libraries::{controls, presentation};
     fn cloud_circles(commands: &[DrawCmd]) -> Vec<kurbo::Circle> {
-        commands
-            .iter()
-            .flat_map(|command| match command {
+        crate::display::test_support::painted(commands)
+            .filter_map(|command| match command {
                 DrawCmd::Fill {
                     shape: puri::Shape::Circle(circle),
                     brush,
                     ..
-                } if *brush == peniko::Brush::from(Color::WHITE) => vec![*circle],
-                DrawCmd::Clip { children, .. } => cloud_circles(children),
-                _ => Vec::new(),
+                } if *brush == peniko::Brush::from(Color::WHITE) => Some(*circle),
+                _ => None,
             })
             .collect()
     }
@@ -877,26 +711,19 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
     }
 }
 
-#[test]
-#[ignore = "writes the optional clouds scene without launching the app"]
-fn website_growing_forest_clouds_svg_capture() {
-    let (mut editor, names) = website_growing_forest_editor();
-    website_growing_forest_add_clouds(&mut editor, &names, 1.0);
-    render_editor(
-        editor,
-        kurbo::Size::new(720.0, 960.0),
-        "website_growing_forest_clouds.svg",
-    );
-}
-
+/// The shape lesson with a mesh-only preview: its tests inspect the mesh, and
+/// running the lesson's implicit refinement inline would double their time.
 fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
         absent, blob, color, control, controls, conversion, f32, f64, fidget, geometry, grap,
         layout, list, logic, name, number, presentation, text, toolpath, tree, u64,
     };
-    let (doc, fields) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/shape.gid"
-    ))
+    let (doc, fields) = crate::gid_text::parse(
+        &include_str!("../../../../../website/public/lessons/shape.gid").replace(
+            &toolpath::vocabulary::PREVIEW_REFINED.to_string(),
+            &toolpath::vocabulary::PREVIEW_MESH.to_string(),
+        ),
+    )
     .unwrap();
     let mut editor = crate::test_editor_with_stack(
         doc,
@@ -931,7 +758,6 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
         &editor.stack.libraries,
     )
     .unwrap();
-    editor.font_cx = crate::fonts::bundled_font_context();
     editor.drawn_menu = false;
     (editor, fields)
 }
@@ -940,12 +766,10 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
 fn website_shape_edits_and_playback_change_the_rendered_mesh() {
     use crate::libraries::{controls, presentation};
     fn meshes(commands: &[DrawCmd]) -> Vec<puri::mesh::Scene> {
-        commands
-            .iter()
-            .flat_map(|command| match command {
-                DrawCmd::Mesh { scene, .. } => vec![scene.clone()],
-                DrawCmd::Clip { children, .. } => meshes(children),
-                _ => Vec::new(),
+        crate::display::test_support::painted(commands)
+            .filter_map(|command| match command {
+                DrawCmd::Mesh { scene, .. } => Some(scene.clone()),
+                _ => None,
             })
             .collect()
     }
@@ -1034,35 +858,6 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
 }
 
 #[test]
-#[ignore = "writes the machining website showcase without launching the app"]
-fn website_shape_svg_capture() {
-    render_editor(
-        website_shape_editor().0,
-        kurbo::Size::new(720.0, 520.0),
-        "website_shape.svg",
-    );
-}
-
-#[test]
-#[ignore = "writes drawn-menu layout captures without launching the app"]
-fn drawn_menu_svg_captures() {
-    for (menu, file, width) in [
-        (0, "menu_file.svg", 640.0),
-        (1, "menu_examples.svg", 640.0),
-        (3, "menu_view.svg", 350.0),
-    ] {
-        let mut editor = crate::test_editor(Document {
-            root: None,
-            cells: Cells::new(),
-        });
-        editor.drawn_menu = true;
-        editor.model.workspace.toggle_projection(None);
-        editor.menu.toggle(menu);
-        render_editor(editor, kurbo::Size::new(width, 420.0), file);
-    }
-}
-
-#[test]
 #[ignore = "writes full-editor captures, including Fidget rasterization"]
 fn editor_svg_captures() {
     use crate::command::Example;
@@ -1102,69 +897,6 @@ fn editor_toolpath_mesh_svg_capture() {
 }
 
 #[test]
-#[ignore = "captures Model and Stock with identical playback without opening the editor"]
-fn editor_toolpath_model_stock_svg_captures() {
-    use crate::libraries::controls::vocabulary::STATE;
-    let (_, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    let cursor = cam_position(0.35);
-    for (mode, file) in [("model", "cam_model.svg"), ("stock", "cam_stock.svg")] {
-        let mut editor = cam_editor(crate::libraries::toolpath::vocabulary::PREVIEW_MESH);
-        let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
-            .path
-            .clone();
-        let mut state = cursor.as_record().unwrap().clone();
-        state.insert(names["preview_mode"], names[mode].into());
-        editor.model.workspace.left.panes[0]
-            .view
-            .annotations
-            .set_field(&cam_controls_path(&path), STATE, Some(Value::Record(state)));
-        render_editor(editor, kurbo::Size::new(1200.0, 850.0), file);
-    }
-}
-
-#[test]
-#[ignore = "captures focused CAM groups without opening the editor"]
-fn editor_toolpath_focus_svg_captures() {
-    use crate::libraries::controls::{tree_range, vocabulary::STATE};
-    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    let libraries = crate::stack::load().libraries;
-    let sources = crate::sources::Sources {
-        doc: &doc,
-        libraries: &libraries,
-    };
-    let tree = ::grap::apply_value(&names["program_tree"].into(), [], &sources, 300_000).result;
-    for (ranges, file) in [
-        (vec![(4, 0..1), (3, 0..1), (2, 0..1)], "cam_focus_top.svg"),
-        (vec![(4, 1..2)], "cam_focus_op2.svg"),
-        (
-            vec![(4, 0..1), (3, 0..1), (2, 0..1), (1, 0..1), (0, 10..11)],
-            "cam_focus_line.svg",
-        ),
-    ] {
-        let selection = ranges.into_iter().fold(
-            tree_range::Selection::new(&tree, None),
-            |selection, (level, range)| selection.select(level, range),
-        );
-        let mut editor = cam_editor(crate::libraries::toolpath::vocabulary::PREVIEW_MESH);
-        let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
-            .path
-            .clone();
-        editor.model.workspace.left.panes[0]
-            .view
-            .annotations
-            .set_field(
-                &cam_controls_path(&path),
-                STATE,
-                Some(Value::record([(
-                    names["focus"],
-                    tree_range::cursor_state(&selection, selection.leaves.start as f64),
-                )])),
-            );
-        render_editor(editor, kurbo::Size::new(1200.0, 850.0), file);
-    }
-}
-
-#[test]
 #[ignore = "captures mesh CAM's first pending frame and retained stock during an async update"]
 fn editor_toolpath_async_svg_captures() {
     capture_cam_async(crate::libraries::toolpath::vocabulary::PREVIEW_MESH);
@@ -1186,14 +918,13 @@ fn editor_toolpath_progressive_svg_captures() {
     };
 
     fn image_sizes(commands: &[DrawCmd], sizes: &mut Vec<(u32, u32)>) {
-        for command in commands {
-            match command {
-                DrawCmd::Image { image, .. } => sizes.push((image.width, image.height)),
-                DrawCmd::Mesh { scene, .. } => sizes.push((scene.view.width, scene.view.height)),
-                DrawCmd::Clip { children, .. } => image_sizes(children, sizes),
-                _ => {}
-            }
-        }
+        sizes.extend(
+            crate::display::test_support::painted(commands).filter_map(|command| match command {
+                DrawCmd::Image { image, .. } => Some((image.width, image.height)),
+                DrawCmd::Mesh { scene, .. } => Some((scene.view.width, scene.view.height)),
+                _ => None,
+            }),
+        );
     }
 
     let mut editor = cam_editor(crate::libraries::toolpath::vocabulary::PREVIEW_3D);
@@ -1328,34 +1059,6 @@ fn capture_cam_async(mode: CellId) {
     complete(&mut runner);
     capture(&mut runner, "cam_async_updated.svg");
     assert!(queue.lock().unwrap().is_empty());
-}
-
-#[test]
-#[ignore = "writes remote-review captures at three playback positions"]
-fn editor_toolpath_playback_svg_captures() {
-    use crate::libraries::controls::vocabulary::STATE;
-    let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    for (progress, file) in [
-        (0.0, "playback_start.svg"),
-        (0.35, "playback_middle.svg"),
-        (1.0, "playback_end.svg"),
-    ] {
-        let mut editor = crate::test_editor(doc.clone());
-        editor
-            .model
-            .workspace
-            .sync_declared(&crate::workspace::declarations(doc.root.as_ref()));
-        let pane = &mut editor.model.workspace.left.panes[0];
-        let path = crate::workspace::declarations(doc.root.as_ref())[0]
-            .path
-            .clone();
-        pane.view.annotations.set_field(
-            &cam_controls_path(&path),
-            STATE,
-            Some(cam_position(progress)),
-        );
-        render_editor(editor, kurbo::Size::new(1500.0, 1050.0), file);
-    }
 }
 
 #[test]
@@ -1730,7 +1433,6 @@ fn website_libraries_image() {
             .chain([(LIBRARIES, declarations)]),
     ));
     let mut editor = crate::test_editor(doc);
-    editor.font_cx = crate::fonts::bundled_font_context();
     editor.palette = crate::styles::Theme::Light.palette();
     editor.drawn_menu = false;
     render_editor(
@@ -1775,7 +1477,6 @@ fn website_preview_image() {
         )
         .unwrap(),
     );
-    editor.font_cx = crate::fonts::bundled_font_context();
     editor.palette = crate::styles::Theme::Light.palette();
     editor.drawn_menu = false;
     render_editor(

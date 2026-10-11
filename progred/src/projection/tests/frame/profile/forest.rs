@@ -2,7 +2,7 @@ use super::*;
 use crate::hover::{Hover, SourceTrace};
 use crate::libraries::{controls, presentation};
 use ui_events::keyboard::Modifiers;
-use ui_events::pointer::{PointerEvent, PointerInfo, PointerState, PointerUpdate};
+use ui_events::pointer::{PointerEvent, PointerState, PointerUpdate};
 
 const SIZE: kurbo::Size = kurbo::Size::new(720.0, 684.0);
 
@@ -22,7 +22,8 @@ fn measure(label: &str, mut frame: impl FnMut(usize)) {
             samples.push(start.elapsed());
         }
     }
-    distribution(label, samples.into_iter());
+    distribution(label, samples.iter().copied());
+    crate::perf::record("", samples);
 }
 
 /// Complete successor frames for changing slider values, not slider hit testing
@@ -83,11 +84,7 @@ fn forest_source_hover_profile_loop() {
         };
         runner.pointer_event(
             &PointerEvent::Move(PointerUpdate {
-                pointer: PointerInfo {
-                    pointer_id: None,
-                    persistent_device_id: None,
-                    pointer_type: ui_events::pointer::PointerType::Mouse,
-                },
+                pointer: crate::display::test_support::mouse(),
                 current: PointerState {
                     position: (point.x, point.y).into(),
                     modifiers,

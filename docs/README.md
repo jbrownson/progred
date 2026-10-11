@@ -16,73 +16,42 @@ Start with:
   composition, and host boundaries.
 - [Dependency-tracked computations](incremental.md): memo graphs, Grap observations,
   cancellable background jobs, and the first CAM integration.
-- [Puri and the editor frame](puri.md): ownership, layout, events, hover, and
-  drawing.
-- [Build security](build-security.md): sandboxed build/test commands.
-- [Platforms](platforms.md): the native and browser hosts.
+- [Puri and the editor frame](puri.md): ownership, layout, widgets, events,
+  hover, the frame stages, and drawing.
+- [Build security](build-security.md): the build sandbox and dependency policy.
+- [Testing](testing.md): test layers, the headless driver, SVG captures, and
+  opt-in GPU and performance tests.
+- [Platforms](platforms.md): building and running on macOS, Linux, and the
+  browser.
 
-[Browser worker experiment](web-worker-experiment-2026-09-19.md) records the
-shared-memory closure probe, the UI-thread synchronization fixes, and the
-browser executor/Rayon integration. [Browser setup](../web/README.md) covers the host.
-[Browser/native profiling](browser-native-profile-2026-09-19.md) compares the
-actual CAM document's computation and retained mesh drawing on both backends,
-including the browser worker-pool and WebGPU improvements.
-[Browser SIMD profiling](browser-simd-profile-2026-09-19.md) measures the smaller
-compiler-flag improvement and checks final color/depth outputs.
-[Fidget bulk-loop experiment](browser-fidget-bulk-profile-2026-09-19.md) profiles
-the actual browser rendering workers and tests a safe slice-loop rewrite that
-enables vectorization; the measured patch is now applied to the vendored core.
-[Browser orbit profiling](browser-orbit-profile-2026-09-19.md) follows the actual
-frame/gesture path and separates source-pane construction from background
-worker contention.
-[Allocator experiments](browser-allocator-experiment-2026-09-19.md) compare two
-alternative WASM allocator configurations against that same orbit replay.
+Working on the editor:
 
-[Deferred work](deferred.md) records the unresolved items set aside during the
-review. [Historical notes](history/README.md) preserve earlier models and
-proposals separately; they are not required reading for ordinary changes.
-[Layout continuations](layout-continuations.md) describes the box/widget
-boundary, the frame stages, and their verification.
-[Layout navigation](navigation.md) describes logical-line navigation and its
-checkpoint measurements. The superseded [neighbor callback experiment](history/navigation-neighbor-experiment-2026-09-26.md)
-is preserved as history.
+- [Navigation](navigation.md): logical-line navigation and its timing canary.
+- [Controls](controls.md): reusable sliders and Grap control composition used by
+  toolpath playback.
+- [Final-encoded trees](trees.md): scoped hierarchy construction and
+  source-linked collection shared by the CAM controls and preview.
+- [Performance checks](performance.md): `make perf`, the shared headless frame
+  harness and its canaries, and the [performance log](performance-log.tsv).
+- [Browser setup](../web/README.md): the browser host and its diagnostics.
 
-[Performance checks](performance.md) describes the shared headless frame harness
-and the IoP/Fidget canaries. [Tree profiling](tree-profile-2026-09-04.md) is a
-dated measurement report.
-[Fidget meshing](fidget-meshing-2026-09-13.md) records the headless cube experiment
-and its quality limitations. The [mesh viewport](fidget-mesh.md) describes the
-subsequent in-app option. Its toolpath variant now retains dependency-tracked
-geometry; ordinary mesh previews still remesh each frame.
-[Retained progressive rendering](fidget-progressive-experiment-2026-09-15.md)
-records test-only whole-view, bounded-tile, exact-program-sharing, subtree
-census, and persistent-expression measurements. CAM now tries mesh → final-quality
-implicit tiles; the standalone implicit preview retains independent refinement passes.
-[Hybrid CAM rendering](fidget-hybrid-2026-09-18.md) records the subsequent split:
-implicit model/stock color and depth combined with mesh paths and cutters.
-[Graphics memory](graphics-memory-2026-09-16.md) records the idle-footprint
-investigation and isolated Vello resource-retention measurements.
-[Separate image composition](vello-compositor-experiment-2026-09-18.md) records the
-experiment and native integration around Vello's image atlas, including clipping,
-upload reuse, GPU-texture handoff, and single-/multiple-preview presentation costs.
-Direct GPU mesh drawing now uses that same ordered compositor on native and
-WebGPU; the browser retains Canvas2D/CPU drawing as a fallback.
-[GPU spills](fidget-gpu-experiment-2026-09-16.md) records the paused, opt-in GPU
-interpreter experiment, CPU comparisons, program-arena pressure, and batching
-tradeoffs. CAM remains on the CPU renderer.
-[Library resolution](library-resolution-2026-09-05.md) records the later
-definition-storage change and its performance checks.
-The [release checklist](release-checklist.md) covers distribution concerns.
+CAM and Fidget:
 
-[Examples](../examples/README.md) lists the bundled documents, shortcuts, and
-the formulas behind the Fidget shapes.
-[Toolpaths](toolpaths.md) describes the first streaming CAM geometry library
-and its Rhino-derived combined model-and-path preview.
-[Tool profiles](tool-profiles.md) describes revolved cutter sections and the
-remaining tool-change/chamfer work.
-[Tool-sweep experiment](tool-sweep-experiment.md) records the test-only analytic
-bull-mill candidate and why it has not replaced the working approximation.
-[Controls](controls.md) describes reusable sliders and Grap control composition
-used by toolpath playback.
-[Final-encoded trees](trees.md) describes scoped hierarchy construction and
-source-linked collection shared by the CAM controls and preview.
+- [Examples](../examples/README.md): the bundled documents, shortcuts, and the
+  formulas behind the Fidget shapes.
+- [Fidget cube](fidget-cube.md): the Rhino-derived cube model and its standalone
+  regression fixture.
+- [Mesh viewport](fidget-mesh.md): in-app meshing. The toolpath variant retains
+  dependency-tracked geometry; ordinary mesh previews remesh each frame.
+- [Toolpaths](toolpaths.md): the streaming CAM geometry library and its combined
+  model-and-path preview.
+- [Tool profiles](tool-profiles.md): revolved cutter sections and the square
+  tool's chamfer strategies.
+
+Also:
+
+- [Deferred work](deferred.md): open questions and unscheduled next steps.
+- [Release checklist](release-checklist.md): distribution concerns.
+- [macOS follow-ups](macos-followups.md): cleanup changes still to check on macOS.
+- [History](history/README.md): earlier models and proposals, and dated
+  measurements and experiments. Not required reading for ordinary changes.

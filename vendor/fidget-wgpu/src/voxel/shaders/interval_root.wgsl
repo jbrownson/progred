@@ -7,23 +7,8 @@ const TILE_SIZE: u32 = 64;
 
 @compute @workgroup_size(4, 4, 4)
 fn interval_root_main(
-    @builtin(global_invocation_id) tile_corner: vec3u,
-    @builtin(workgroup_id) workgroup_id: vec3u,
-    @builtin(local_invocation_index) local_index: u32,
-    @builtin(num_workgroups) groups: vec3u,
+    @builtin(global_invocation_id) tile_corner: vec3u
 ) {
-    if config.spill_lanes == 0u {
-        interval_root_worker(tile_corner);
-    } else {
-        spill_lane = workgroup_id.x * 64u + local_index;
-        let size = config.render_size / 64u;
-        for (var i = spill_lane; i < size.x * size.y * size.z; i += groups.x * 64u) {
-            interval_root_worker(vec3u(i % size.x, (i / size.x) % size.y, i / (size.x * size.y)));
-        }
-    }
-}
-
-fn interval_root_worker(tile_corner: vec3u) {
     // Calculate render size in tile units
     let size64 = config.render_size / 64;
 
@@ -40,9 +25,6 @@ fn interval_root_worker(tile_corner: vec3u) {
     // Tile's lower z position, in voxels
     let corner_pos = tile_corner * TILE_SIZE;
     let corner_z = corner_pos.z;
-    if corner_pos.x >= config.image_size.x || corner_pos.y >= config.image_size.y {
-        return;
-    }
 
     // Compute transformed interval regions
     let m = interval_inputs(tile_corner, TILE_SIZE);

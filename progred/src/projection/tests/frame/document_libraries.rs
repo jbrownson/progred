@@ -194,12 +194,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
                 Step::Follow(gid::Resolution::Document),
                 key(name),
             ];
-            frame
-                .descends
-                .iter()
-                .find(|landmark| landmark.path.as_ref() == path)
-                .unwrap()
-                .rect
+            frame.descends.landmark(&path).unwrap().rect
         };
         let (over, under) = (part("over"), part("under"));
         assert!(
@@ -344,14 +339,7 @@ fn the_example_views_select_what_they_draw() {
     let under = [fraction.clone(), vec![key("under")]].concat();
     let angle = vec![key("angles"), Step::Element(first(&world, "angles"))];
     let frame = settle(editing_frame(&mut world, false));
-    let rect = |path: &[Step]| {
-        frame
-            .descends
-            .iter()
-            .find(|landmark| landmark.path.as_ref() == path)
-            .unwrap()
-            .rect
-    };
+    let rect = |path: &[Step]| frame.descends.landmark(&path).unwrap().rect;
     let (over_rect, under_rect, angle_rect) = (rect(&over), rect(&under), rect(&angle));
     let selected = |world: &crate::Editor| world.model.selection.as_ref().unwrap().path().to_vec();
 

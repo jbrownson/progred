@@ -134,22 +134,34 @@ pub(super) fn coordinate(point: Point3) -> Result<[f32; 3], InvalidPath> {
         .ok_or(InvalidPath::CoordinateRange)
 }
 
+/// `v·(p - origin)` for the evaluated point `p`.
+///
+/// Fidget merges equal subexpressions. Written as `v·p - v·origin`, sweeps
+/// along the same vector share only `v·p`. The equivalent `v·(p - origin)`
+/// shares terms like `x - origin.x` between any sweeps with a coordinate in
+/// common, however far apart; each stays live from its first use to its last,
+/// and in the CAM example's stock that spilled tens of thousands of registers.
+pub(super) fn along(v: nalgebra::Vector3<f32>, origin: [f32; 3]) -> Tree {
+    Tree::x() * v.x + Tree::y() * v.y + Tree::z() * v.z - v.dot(&nalgebra::Vector3::from(origin))
+}
+
+/// Distance-like field of a capsule around segment `a`-`b`. It stays in world
+/// coordinates, where its interval bounds over the axis-aligned cells of
+/// meshing and rendering are tightest, and offsets the closest point rather
+/// than the evaluated point, sharing nothing with other segments (see `along`).
 pub(super) fn capsule(a: [f32; 3], b: [f32; 3], radius: f32) -> Result<Tree, InvalidPath> {
-    let direction = std::array::from_fn::<_, 3, _>(|i| b[i] - a[i]);
-    let length_squared: f32 = direction.iter().map(|n| n * n).sum();
+    let direction = nalgebra::Vector3::from(b) - nalgebra::Vector3::from(a);
+    let length_squared = direction.norm_squared();
     if !length_squared.is_finite() {
         return Err(InvalidPath::CoordinateRange);
     }
-    let p = [Tree::x() - a[0], Tree::y() - a[1], Tree::z() - a[2]];
     let t = if length_squared == 0.0 {
         Tree::constant(0.0)
     } else {
-        ((p[0].clone() * direction[0] + p[1].clone() * direction[1] + p[2].clone() * direction[2])
-            / length_squared)
-            .max(0.0)
-            .min(1.0)
+        (along(direction, a) / length_squared).max(0.0).min(1.0)
     };
-    let q = std::array::from_fn::<_, 3, _>(|i| p[i].clone() - t.clone() * direction[i]);
+    let axes = [Tree::x(), Tree::y(), Tree::z()];
+    let q = std::array::from_fn::<_, 3, _>(|i| axes[i].clone() - (t.clone() * direction[i] + a[i]));
     Ok(q[0].square() + q[1].square() + q[2].square() - radius * radius)
 }
 

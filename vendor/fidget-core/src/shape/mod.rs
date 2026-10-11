@@ -176,11 +176,6 @@ impl<F: Function + Clone> Shape<F> {
 }
 
 impl<F> Shape<F> {
-    /// Wraps a function as a shape without rebuilding its expression.
-    pub fn from_function(f: F) -> Self {
-        Self { f }
-    }
-
     /// Borrows the inner [`Function`] object
     pub fn inner(&self) -> &F {
         &self.f

@@ -1,7 +1,6 @@
 struct Value {
     v: f32,
 }
-const VALUE_COMPONENTS: u32 = 1u;
 
 fn build_imm(imm: f32) -> Value {
     return Value(imm);
@@ -142,5 +141,3 @@ fn op_rand(lhs: Value) -> Value {
 fn op_mod(lhs: Value, rhs: Value) -> Value {
     return Value(rem_euclid(lhs.v, rhs.v));
 }
-fn pack_spill(v: Value) -> vec4f { return vec4f(v.v, 0.0, 0.0, 0.0); }
-fn unpack_spill(v: vec4f) -> Value { return Value(v.x); }

@@ -95,7 +95,7 @@ fn empty_slots_make_values_through_the_picker() {
         for character in typed.chars() {
             key(
                 &mut world,
-                Key::Character(character.to_string().into()),
+                Key::Character(character.to_string()),
                 Modifiers::empty(),
             );
         }
@@ -261,11 +261,7 @@ fn list_insertion_through_a_comma_and_whole_list_selection() {
 
 fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
     let frame = editing_frame(world, false);
-    let target = frame
-        .descends
-        .iter()
-        .find(|target| target.path.as_ref() == path)
-        .unwrap();
+    let target = frame.descends.landmark(&path).unwrap();
     assert!((target.select)(world, None));
     for (key, modifiers) in [
         (
@@ -404,12 +400,7 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
         let rect = node.extent.rect_at(Point::ZERO);
         let frame =
             crate::display::widget::frame::place(node, Placement::root(rect), &Default::default());
-        let profile = frame
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == selected_path)
-            .unwrap()
-            .rect;
+        let profile = frame.descends.landmark(&selected_path).unwrap().rect;
         // Inside the 110 × 180 profile, clear of both its text and delimiters.
         let pointer = Point::new(profile.x0 + 55.0, profile.y0 + 90.0);
         let frame = crate::display::widget::frame::place(
@@ -454,7 +445,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     .expect("the sample parses");
     let stack = crate::stack::load();
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -497,8 +488,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         crate::display::widget::frame::place(node, Placement::root(rect), &Default::default());
     let point = placed
         .descends
-        .iter()
-        .find(|descend| descend.path.as_ref() == &path)
+        .landmark(&path)
         .expect("color descend")
         .rect
         .center();
@@ -533,7 +523,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     // double click selects its word, and a later single click can
     // collapse that selection to a new caret. This is distinct from
     // the first click above, which mounts the editor.
-    let mut frame_fonts = parley::FontContext::new();
+    let mut frame_fonts = crate::fonts::bundled_font_context();
     let mut frame_layouts = parley::LayoutContext::new();
     let mut frame_cache = puri::text::TextCache::default();
     let mut frame_tcx = TextCtx {
@@ -570,8 +560,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         crate::display::widget::frame::place(active, Placement::root(rect), &Default::default());
     let line = active
         .descends
-        .iter()
-        .find(|descend| descend.path.as_ref() == &path)
+        .landmark(&path)
         .expect("active color descend")
         .rect;
     let mut double = event.clone();
@@ -972,22 +961,13 @@ fn lesson_world(
     let (doc, names) = crate::gid_text::parse(file).unwrap();
     let mut world =
         crate::test_editor_with_stack(doc, crate::stack::load_selected(libraries).unwrap());
-    world.stack.projection = crate::web_embed::tutorial_slots(
-        Some(&slots.map(|slot| names[slot].to_string()).join(",")),
-        world.stack.projection.clone(),
-        &world.stack.libraries,
-    )
-    .unwrap();
+    tutorial_slots(&mut world, &slots.map(|slot| names[slot]));
     (world, names)
 }
 
 fn select_occurrence(world: &mut crate::Editor, path: &[Step]) {
     let frame = editing_frame(world, false);
-    let target = frame
-        .descends
-        .iter()
-        .find(|d| d.path.as_ref() == path)
-        .unwrap();
+    let target = frame.descends.landmark(&path).unwrap();
     assert!((target.select)(world, None));
 }
 
@@ -1194,7 +1174,7 @@ fn press_key(runner: &mut crate::EditorRunner, key: Key) {
 fn deleting_empties_a_place_then_removing_it_moves_toward_the_key() {
     for (key, lands) in [(NamedKey::Backspace, 0), (NamedKey::Delete, 2)] {
         let (mut runner, paths) = three_lists();
-        press_key(&mut runner, Key::Named(key.clone()));
+        press_key(&mut runner, Key::Named(key));
         let hole = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(hole.path(), paths[1], "{key:?} keeps the place selected");
         assert_eq!(hole.stage(&runner.editor.sources()), Stage::Pending);
@@ -1209,7 +1189,7 @@ fn deleting_empties_a_place_then_removing_it_moves_toward_the_key() {
                 .map(|list| list.len()),
             Some(2)
         );
-        press_key(&mut runner, Key::Named(key.clone()));
+        press_key(&mut runner, Key::Named(key));
         let landed = runner.editor.model.selection.as_ref().unwrap();
         assert_eq!(landed.path(), paths[lands], "{key:?} removes the hole");
         assert_eq!(landed.stage(&runner.editor.sources()), Stage::Edge);
@@ -1416,12 +1396,7 @@ fn a_read_only_swatch_selects_its_color() {
     // The evaluated result is computed, so it's read-only.
     let result = vec![Step::Key(RESULT)];
     let frame = settle(editing_frame(&mut world, false));
-    let rect = frame
-        .descends
-        .iter()
-        .find(|landmark| landmark.path.as_ref() == result)
-        .unwrap()
-        .rect;
+    let rect = frame.descends.landmark(&result).unwrap().rect;
     assert!(click_at(&mut world, Point::new(rect.x0 + 7.0, rect.center().y)).is_some());
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(selection.path(), result);

@@ -486,12 +486,12 @@ fn sweep_outline(points: &[Point], a: Point3, b: Point3, axis: Axis) -> Result<T
     let a = coordinate(a)?;
     let b = coordinate(b)?;
     let z = axis.basis()[2];
-    let along = (Tree::x() - a[0]) * z.x + (Tree::y() - a[1]) * z.y + (Tree::z() - a[2]) * z.z;
+    let axial = along(z, a);
     let dz = z.dot(&(nalgebra::Vector3::from(b) - nalgebra::Vector3::from(a)));
     let bottom = first.axial as f32 + dz.min(0.0);
     let top = last.axial as f32 + dz.max(0.0);
     if [bottom, top].into_iter().all(f32::is_finite) {
-        Ok(field.max(bottom - along.clone()).max(along - top))
+        Ok(field.max(bottom - axial.clone()).max(axial - top))
     } else {
         Err(InvalidPath::CoordinateRange)
     }
@@ -535,8 +535,7 @@ fn frustum(
     {
         return Err(InvalidPath::CoordinateRange);
     }
-    let world = [Tree::x() - a[0], Tree::y() - a[1], Tree::z() - a[2]];
-    let p = basis.map(|v| world[0].clone() * v.x + world[1].clone() * v.y + world[2].clone() * v.z);
+    let p = basis.map(|v| along(v, a));
     let radius = r0 + k * (p[2].clone() - z0);
     let (lo, hi) = if d[2] == 0.0 {
         (Tree::constant(0.0), Tree::constant(1.0))

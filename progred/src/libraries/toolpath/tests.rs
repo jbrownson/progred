@@ -841,6 +841,12 @@ fn stock_meshing_profile() {
             };
             let now = Instant::now();
             let mesh = Octree::build(&shape, &settings).unwrap().walk_dual();
+            if depth == 7 {
+                crate::perf::record(
+                    &format!("{progress:.2}"),
+                    [expression + compile + now.elapsed()],
+                );
+            }
             eprintln!(
                 "stock {progress:.2}, depth {depth}: expression {expression:.2?}, compile {compile:.2?}, mesh {:.2?}, {} triangles",
                 now.elapsed(),

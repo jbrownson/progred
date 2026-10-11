@@ -12,9 +12,7 @@ use vello::{AaConfig, RenderParams, Renderer, RendererOptions, Scene};
 
 mod mesh;
 
-#[path = "../../../../tests/compositor_experiment/gpu.rs"]
-#[allow(dead_code)]
-mod gpu;
+use puri_vello::capture as gpu;
 
 #[test]
 #[ignore = "headless CAM hover GPU regression"]
@@ -103,12 +101,10 @@ fn cam_hover_compositor_pixels() {
     let mut baseline: Option<Vec<u8>> = None;
     let mut baseline_meshes = None;
     fn meshes(commands: &[DrawCmd]) -> Vec<(puri::mesh::Scene, kurbo::Affine)> {
-        commands
-            .iter()
-            .flat_map(|command| match command {
-                DrawCmd::Mesh { scene, transform } => vec![(scene.clone(), *transform)],
-                DrawCmd::Clip { children, .. } => meshes(children),
-                _ => Vec::new(),
+        crate::display::test_support::painted(commands)
+            .filter_map(|command| match command {
+                DrawCmd::Mesh { scene, transform } => Some((scene.clone(), *transform)),
+                _ => None,
             })
             .collect()
     }
@@ -313,6 +309,8 @@ fn editor_compositor_profile() {
                 assert!(*errors.last().unwrap() <= 5);
             }
         }
+        crate::perf::record(&format!("{example:?}/direct"), direct.iter().copied());
+        crate::perf::record(&format!("{example:?}/composed"), composed.iter().copied());
         direct.sort();
         composed.sort();
         eprintln!(

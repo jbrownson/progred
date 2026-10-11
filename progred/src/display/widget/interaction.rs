@@ -111,16 +111,12 @@ mod tests {
     use super::*;
     use measured::Extent;
     use puri::Rect;
-    use puri::handler::{PointerButton, PointerInfo, PointerState, PointerType};
+    use puri::handler::{PointerButton, PointerState};
 
     fn press(x: f64) -> PointerButtonEvent {
         PointerButtonEvent {
             button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: PointerState {
                 position: (x, 5.0).into(),
                 ..Default::default()

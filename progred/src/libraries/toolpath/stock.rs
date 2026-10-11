@@ -35,7 +35,12 @@ impl Stock {
         tolerance: f64,
     ) -> Result<(), InvalidPath> {
         if let Some(sweep) = tool.sweep(a, b, axis, tolerance)? {
-            self.field = self.field.max(-sweep);
+            // Fidget numbers a max's right operand first and orders
+            // commutative operands by number. With the stock on the right,
+            // each sweep is evaluated just before the max that removes it;
+            // the other way round, every sweep is evaluated before the first
+            // max, and all of them stay live at once.
+            self.field = (-sweep).max(self.field.clone());
         }
         Ok(())
     }

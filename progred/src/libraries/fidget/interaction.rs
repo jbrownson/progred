@@ -57,7 +57,7 @@ mod tests {
     };
     use gid::{Cells, Document, Value};
     use kurbo::Size;
-    use puri::handler::{PointerInfo, PointerState, PointerType, ScrollDelta};
+    use puri::handler::{PointerInfo, PointerState, ScrollDelta};
     use ui_events::pointer::{
         PointerEvent, PointerGesture, PointerGestureEvent, PointerScrollEvent,
     };
@@ -107,11 +107,7 @@ mod tests {
     }
 
     fn pointer() -> PointerInfo {
-        PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        }
+        crate::display::test_support::mouse()
     }
 
     fn scroll(runner: &mut EditorRunner, position: (f64, f64), delta: (f64, f64)) {

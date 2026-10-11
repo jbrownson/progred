@@ -212,7 +212,7 @@ pub(crate) mod tests {
             &interpret,
         );
         let result = ::grap::apply_value_scoped(
-            &grap_at(&[child.clone()], pending()),
+            &grap_at(std::slice::from_ref(&child), pending()),
             [],
             &crate::libraries::TestHost(|cell| {
                 functions

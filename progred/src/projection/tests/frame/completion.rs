@@ -99,11 +99,7 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
         let frame = editing_frame(&mut world, false);
         let mut event = PointerButtonEvent {
             button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: Default::default(),
         };
         event.state.position = (point.x, point.y).into();
@@ -315,7 +311,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
             *attempts += 1;
         }),
     }];
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -514,7 +510,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         },
     ];
     let place_card = |pointer| {
-        let mut fonts = parley::FontContext::new();
+        let mut fonts = crate::fonts::bundled_font_context();
         let mut layouts = parley::LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
         let mut tcx = TextCtx {
@@ -584,7 +580,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         })
         .collect();
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -819,29 +815,20 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             &mut drawing,
         );
         fn highlights(commands: &[DrawCmd]) -> Vec<Rect> {
-            commands
-                .iter()
-                .flat_map(|command| match command {
-                    DrawCmd::Clip { children, .. } => highlights(children),
+            let washes = [0.14, 0.08].map(|alpha| {
+                crate::styles::Theme::Light
+                    .palette()
+                    .accent
+                    .with_alpha(alpha)
+            });
+            crate::display::test_support::painted(commands)
+                .filter_map(|command| match command {
                     DrawCmd::Fill {
                         shape: Shape::RoundedRect(rect),
                         brush: Brush::Solid(color),
                         ..
-                    } if [
-                        crate::styles::Theme::Light
-                            .palette()
-                            .accent
-                            .with_alpha(0.14),
-                        crate::styles::Theme::Light
-                            .palette()
-                            .accent
-                            .with_alpha(0.08),
-                    ]
-                    .contains(color) =>
-                    {
-                        vec![rect.rect()]
-                    }
-                    _ => Vec::new(),
+                    } if washes.contains(color) => Some(rect.rect()),
+                    _ => None,
                 })
                 .collect()
         }
@@ -952,7 +939,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         }),
     }];
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -1093,7 +1080,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     .expect("the sample parses");
     let stack = crate::stack::load();
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -1136,8 +1123,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         crate::display::widget::frame::place(node, Placement::root(rect), &Default::default());
     let point = placed
         .descends
-        .iter()
-        .find(|descend| descend.path.as_ref() == &path)
+        .landmark(&path)
         .expect("color descend")
         .rect
         .center();

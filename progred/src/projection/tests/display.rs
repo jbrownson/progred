@@ -112,7 +112,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
                 calls.borrow_mut().push(input.value.cloned());
                 match mode {
                     0 => Some(descend(Step::Follow(gid::Resolution::Document), None, None)),
-                    1 => Some(at([Step::Key(field)], &Value::from(vec![7]))),
+                    1 => Some(at([Step::Key(field)], Value::from(vec![7]))),
                     _ => None,
                 }
             },
@@ -530,7 +530,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     let lib = core_libraries();
     let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut width = |selection: Option<&Selection>, annotations: &Annotations| {
@@ -641,7 +641,7 @@ fn a_projection_defined_as_data_realizes() {
     let lib = core_libraries();
     let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {

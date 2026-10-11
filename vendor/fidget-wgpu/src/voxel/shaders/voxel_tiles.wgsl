@@ -11,7 +11,6 @@ fn voxel_ray_main(
     @builtin(num_workgroups) num_workgroups: vec3u,
     @builtin(local_invocation_id) local_id: vec3u
 ) {
-    spill_lane = workgroup_id.x * 64u + local_id.x + 4u * local_id.y + 16u * local_id.z;
     // We dispatch with workgroups only on the X axis
     for (var i=workgroup_id.x; i < tiles_in.count; i += num_workgroups.x) {
         voxel_tile_worker(i, local_id);
@@ -36,9 +35,6 @@ fn voxel_tile_worker(
 
     // Subtile corner position, in voxels
     let corner_pos = tile4_corner * 4 + local_id;
-    if corner_pos.x >= config.image_size.x || corner_pos.y >= config.image_size.y {
-        return;
-    }
 
     let tile4_index_xy = tx + ty * size4.x;
     let pixel_index_xy = corner_pos.x + corner_pos.y * config.render_size.x;

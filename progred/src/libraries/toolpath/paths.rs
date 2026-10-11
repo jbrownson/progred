@@ -355,6 +355,48 @@ fn distance(a: Point3, b: Point3) -> f64 {
     (b[0] - a[0]).hypot(b[1] - a[1]).hypot(b[2] - a[2])
 }
 
+impl Sink for Recording {
+    type Error = InvalidPath;
+
+    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error> {
+        if !point.into_iter().all(f64::is_finite) {
+            return Err(InvalidPath::NonFinitePoint);
+        }
+        self.entries
+            .push(Entry::Move(Command::StartAt(point, axis)));
+        self.started = true;
+        Ok(())
+    }
+
+    fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
+        if !self.started {
+            return Err(InvalidPath::MissingStart);
+        }
+        if !point.into_iter().all(f64::is_finite) {
+            return Err(InvalidPath::NonFinitePoint);
+        }
+        self.entries.push(Entry::Move(Command::LineTo(point)));
+        Ok(())
+    }
+
+    fn end_path(&mut self) {
+        self.started = false;
+    }
+
+    fn enter_tool(&mut self, tool: &Tool) {
+        self.end_path();
+        self.scopes
+            .push((tool.clone(), std::mem::take(&mut self.entries)));
+    }
+
+    fn leave_tool(&mut self) {
+        self.end_path();
+        let (tool, parent) = self.scopes.pop().expect("balanced tool scope");
+        let children = std::mem::replace(&mut self.entries, parent);
+        self.entries.push(Entry::WithTool(tool, children));
+    }
+}
+
 #[cfg(test)]
 mod playback_tests {
     use super::*;
@@ -524,47 +566,5 @@ mod playback_tests {
         path.start_at([-f64::MAX; 3], Axis::Z).unwrap();
         path.line_to([f64::MAX; 3]).unwrap();
         assert!(path.length().is_err());
-    }
-}
-
-impl Sink for Recording {
-    type Error = InvalidPath;
-
-    fn start_at(&mut self, point: Point3, axis: Axis) -> Result<(), Self::Error> {
-        if !point.into_iter().all(f64::is_finite) {
-            return Err(InvalidPath::NonFinitePoint);
-        }
-        self.entries
-            .push(Entry::Move(Command::StartAt(point, axis)));
-        self.started = true;
-        Ok(())
-    }
-
-    fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
-        if !self.started {
-            return Err(InvalidPath::MissingStart);
-        }
-        if !point.into_iter().all(f64::is_finite) {
-            return Err(InvalidPath::NonFinitePoint);
-        }
-        self.entries.push(Entry::Move(Command::LineTo(point)));
-        Ok(())
-    }
-
-    fn end_path(&mut self) {
-        self.started = false;
-    }
-
-    fn enter_tool(&mut self, tool: &Tool) {
-        self.end_path();
-        self.scopes
-            .push((tool.clone(), std::mem::take(&mut self.entries)));
-    }
-
-    fn leave_tool(&mut self) {
-        self.end_path();
-        let (tool, parent) = self.scopes.pop().expect("balanced tool scope");
-        let children = std::mem::replace(&mut self.entries, parent);
-        self.entries.push(Entry::WithTool(tool, children));
     }
 }

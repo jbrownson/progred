@@ -168,14 +168,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                     ordinary,
                 ]);
                 let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-                let rect = |path: &Path| {
-                    frame
-                        .descends
-                        .iter()
-                        .find(|stop| stop.path.as_ref() == path)
-                        .unwrap()
-                        .rect
-                };
+                let rect = |path: &Path| frame.descends.landmark(&path).unwrap().rect;
                 assert_eq!(rect(&children[1]).y0 > rect(&children[0]).y1, vertical);
                 let (forward, backward, across) = if vertical {
                     (Down, Up, Left)
@@ -316,8 +309,8 @@ fn navigation_arrival_through_jump_retains_editing_context() {
             }),
             ordinary.partial,
         ]);
-        let frame = editing_frame_with_projection(world, false, Some(&projection));
-        frame
+
+        editing_frame_with_projection(world, false, Some(&projection))
     };
     let frame = build(&mut world);
     assert!(frame.navigate(&mut world, Direction::Right));
@@ -434,7 +427,7 @@ fn navigation_example_cells() -> (World, Vec<Path>) {
         .find(|(_, value)| value.as_cell() == Some(binders["parameters"]))
         .unwrap();
     let section = section.as_cell().unwrap();
-    let prefix = vec![
+    let prefix = [
         Step::Key(OUTLINE),
         Step::Element(section_position.clone()),
         Step::Key(section),
@@ -617,7 +610,7 @@ fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
             for (key, expected) in moves {
                 assert!(runner.keyboard_event(
                     &KeyboardEvent {
-                        key: Key::Named(key.clone()),
+                        key: Key::Named(*key),
                         state: KeyState::Down,
                         ..Default::default()
                     },
@@ -856,7 +849,7 @@ fn navigation_empty_cell_stops_before_entering_missing_contents() {
         for expected in stops {
             assert!(runner.keyboard_event(
                 &KeyboardEvent {
-                    key: Key::Named(direction.clone()),
+                    key: Key::Named(direction),
                     state: KeyState::Down,
                     ..Default::default()
                 },
@@ -885,9 +878,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
     });
     let ordinary = sample_projection();
     let projection = Projection::new([
-        d::runtime_partial(|input| {
-            crate::libraries::text::display(input).map(|child| nav::nav_group(child))
-        }),
+        d::runtime_partial(|input| crate::libraries::text::display(input).map(nav::nav_group)),
         ordinary.partial,
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));
@@ -910,7 +901,7 @@ fn navigation_example_lists_leave_vertical_navigation_to_the_outer_list() {
         .iter()
         .find(|(_, value)| value.as_cell() == Some(section))
         .unwrap();
-    let prefix = vec![
+    let prefix = [
         Step::Key(OUTLINE),
         Step::Element(section_position.clone()),
         Step::Key(section),
@@ -1132,7 +1123,7 @@ fn content_after_a_multiline_block_stays_on_its_content_line() {
         runner.refresh_frame(1.0, viewport);
         assert!(runner.keyboard_event(
             &KeyboardEvent {
-                key: Key::Named(key.clone()),
+                key: Key::Named(key),
                 state: KeyState::Down,
                 ..Default::default()
             },

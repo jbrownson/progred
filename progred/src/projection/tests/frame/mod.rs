@@ -186,6 +186,22 @@ impl puri::draw::CanvasSink for Bench {
     }
 }
 
+/// Configure the editor's projection slots as a tutorial page does.
+fn tutorial_slots(world: &mut crate::Editor, slots: &[CellId]) {
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(
+            &slots
+                .iter()
+                .map(CellId::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        world.stack.projection.clone(),
+        &world.stack.libraries,
+    )
+    .unwrap();
+}
+
 fn place_with_pointer(
     doc: &Document,
     selection: Option<&Selection>,
@@ -251,7 +267,7 @@ impl BenchContext {
             computations: crate::computations::Computations::default(),
             stack: crate::stack::load(),
             styles: crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
-            fonts: parley::FontContext::new(),
+            fonts: crate::fonts::bundled_font_context(),
             layouts: parley::LayoutContext::new(),
             cache: puri::text::TextCache::default(),
         }
@@ -396,10 +412,6 @@ impl BenchContext {
 
 fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {
     place_with_pointer(doc, selection, width, None)
-}
-
-fn key(s: &str) -> Step {
-    Step::Key(crate::test_values::label(s))
 }
 
 mod completion;

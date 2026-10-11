@@ -10,7 +10,7 @@
 //! - Apply shading to a [`PackedVoxel`] buffer, producing an RGBA image buffer
 
 use crate::{
-    CopyVarsError, Gpu, RegPipeline, TapeStorage,
+    CopyVarsError, Gpu, RegPipeline,
     buf::{BufferSizeError, FlexBuffer, buffer_ro, buffer_rw, buffer_uniform},
     color::{ColorWorkspace as GenericColorWorkspace, ShapeColorBuffers},
     shaders, tag,
@@ -71,15 +71,14 @@ fn blur_shader() -> String {
     BLUR_SHADER.to_owned() + COMMON_SHADER + shaders::COMMON
 }
 
-fn color_shader(storage: TapeStorage) -> String {
+fn color_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code
         + COLOR_SHADER
         + COMMON_SHADER
         + super::TRANSFORM_INPUT
         + shaders::COMMON
-        + shaders::PRIVATE_SPILLS
         + shaders::TAPE_INTERPRETER
         + shaders::DUMMY_STACK
         + shaders::FLOAT_OPS
@@ -990,6 +989,7 @@ impl SsaoContext {
             fidget_raster::effects::ssao_kernel(KERNEL_SIZE);
         ssao_kernel
             .get_mapped_range_mut(0..ssao_kernel_size_bytes as u64)
+            .unwrap()
             .copy_from_slice(ssao_kernel_values.as_slice().as_bytes());
         ssao_kernel.unmap();
 
@@ -1004,6 +1004,7 @@ impl SsaoContext {
         let ssao_noise_values = fidget_raster::effects::ssao_noise(NOISE_SIZE);
         ssao_noise
             .get_mapped_range_mut(0..ssao_noise_size_bytes as u64)
+            .unwrap()
             .copy_from_slice(ssao_noise_values.as_slice().as_bytes());
         ssao_noise.unmap();
 
@@ -1253,15 +1254,15 @@ impl ColorContext {
                 immediate_size: 0u32,
             });
         let device_ = device.clone();
-        let color_pipeline = RegPipeline::build(Box::new(move |storage| {
-            let shader_code = color_shader(storage);
+        let color_pipeline = RegPipeline::build(Box::new(move |reg_count| {
+            let shader_code = color_shader(reg_count);
             let shader_module =
                 device_.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: None,
                     source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                 });
             device_.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("color ({storage:?})")),
+                label: Some(&format!("color ({reg_count})")),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
                 entry_point: Some("color_main"),
@@ -1355,7 +1356,7 @@ impl ColorContext {
                 });
             compute_pass.set_bind_group(1, &image_bg, &[]);
             compute_pass
-                .set_pipeline(&self.color_pipeline.get(shape.storage()));
+                .set_pipeline(self.color_pipeline.get(shape.reg_count()));
             compute_pass.dispatch_workgroups(
                 size.width().div_ceil(8),
                 size.height().div_ceil(8),
@@ -1408,7 +1409,7 @@ mod test {
 
     #[test]
     fn compile_color_shader() {
-        crate::compile_shader(&color_shader(TapeStorage::new(16, 0)), "color");
+        crate::compile_shader(&color_shader(16), "color");
     }
 
     /// Render a sphere-plane union and check for occlusion bias
@@ -1497,7 +1498,7 @@ mod test {
     #[test]
     fn color_config_layout() {
         crate::test::compare_struct_layout::<ColorConfig>(
-            &color_shader(TapeStorage::new(16, 0)),
+            &color_shader(16),
             "Config",
         );
     }

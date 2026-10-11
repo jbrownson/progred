@@ -30,7 +30,7 @@ fn evaluated(
     field: gid::CellId,
 ) -> Result<Option<Value>, Halt> {
     context
-        .field(&call, field)
+        .field(call, field)
         .map(|value| context.eval_to_value(value, environment))
         .transpose()
 }
@@ -228,12 +228,12 @@ mod tests {
             pair,
             ForeignFunction::from_value(move |context, call, environment| {
                 let first = context
-                    .field(&call, first_field)
+                    .field(call, first_field)
                     .map(|expression| context.eval_to_value(expression, environment))
                     .transpose()?
                     .unwrap_or_else(|| context.missing_argument(first_field));
                 let second = context
-                    .field(&call, second_field)
+                    .field(call, second_field)
                     .map(|expression| context.eval_to_value(expression, environment))
                     .transpose()?
                     .unwrap_or_else(|| context.missing_argument(second_field));

@@ -9,6 +9,8 @@ mod commands;
 mod completion;
 mod computations;
 mod display;
+#[cfg(test)]
+mod driver;
 mod editing;
 mod editor;
 mod filter;
@@ -35,6 +37,8 @@ mod native_menu;
 mod navigate;
 #[cfg(feature = "cam-profile")]
 pub mod orbit_profile;
+#[cfg(test)]
+mod perf;
 mod placed;
 mod platform;
 mod projection;
@@ -121,7 +125,10 @@ pub(crate) enum UserEvent {
     NativeMenu(native_menu::Event),
     /// A file the browser's Open picked, as its name and text.
     #[cfg(target_arch = "wasm32")]
-    Opened { name: String, source: String },
+    Opened {
+        name: String,
+        source: String,
+    },
     Command(Command),
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     Discard {

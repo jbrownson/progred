@@ -40,4 +40,4 @@ pub use kurbo::{
     Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Size, Stroke, Vec2,
 };
 pub use peniko::{Brush, Color, ColorStop, Gradient, ImageAlphaType, ImageData, ImageFormat};
-pub use text::{Text, TextCache, TextCtx, TextMetrics, TextStyle, paragraph, text};
+pub use text::{Text, TextCache, TextCtx, TextMetrics, TextStyle, text};

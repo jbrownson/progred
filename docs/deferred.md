@@ -1,8 +1,8 @@
 # Deferred work
 
-These are open questions carried forward from the review, not tasks scheduled
-for the next cleanup. The current implementation is documented in
-[model.md](model.md), [projections.md](projections.md), and [puri.md](puri.md).
+Open questions and next steps that aren't scheduled. The other docs describe
+what exists; proposals belong here, and what must happen before a release is in
+the [release checklist](release-checklist.md).
 
 ## Active insertion hidden by a specialized projection
 
@@ -128,71 +128,45 @@ not assume every absent warrants an alert.
 
 ## General computation reuse
 
-The former canvas memo observed less than evaluation could use. It remains
-removed; canvas programs record once per visible frame. The new general
-[computation graph](incremental.md) first serves CAM geometry and observes selected
-definitions, missing lookups, native implementations, and declared FFI inputs.
-Native CAM stock jobs now use the graph's generic background boundary; implicit
-CAM jobs publish coarse-to-fine images through its progressive-result interface.
-Browser workers, Grap-language memo/async boundaries, user-facing quality controls, durability
-tiers, and further integrations are deferred. Future readers of ordered contributor sets must
-observe that set, not just a selected definition. Do not add an ad-hoc cache
-or event-specific relevance checks alongside this mechanism.
+The [computation graph](incremental.md) serves CAM geometry; canvas programs
+still record once per visible frame, and other projections aren't converted.
+Grap path generation is synchronous, and there are no Grap-language memo or
+async boundaries, user-facing quality controls, or durability tiers. Future
+readers of ordered contributor sets must observe that set, not just a selected
+definition. Do not add an ad-hoc cache or event-specific relevance checks
+alongside this mechanism. Incremental lambda calculus and incremental Fidget
+algorithms are separate research.
 
-The [2026-09-04 tree profile](tree-profile-2026-09-04.md) records measurements
+The [2026-09-04 tree profile](history/tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
 
 ### Lowered results across evaluator boundaries
 
-Public evaluation/application APIs return owned `RuntimeValue`; code and
-lexical environments have shared ownership, while execution caches and host
-capabilities remain evaluation-local. The projection/presentation/controls/drawing
-chain and retained event handlers now preserve runtime callbacks. Inline origins
-are anchored to their original occurrence. The
-`website_forest_hover_finds_the_available_call` regression is enabled and passes.
+Public evaluation and application return owned `RuntimeValue`s, and the
+projection, presentation, controls, drawing, layout, toolpath, and tree chains
+retain runtime callbacks and results. Still GID-oriented, by explicit adapters:
 
-Data-oriented projections and native functions still have explicit GID adapters;
-these can materialize runtime containers even when a later runtime-aware
-projection ultimately handles them. Reducing that conversion work is a remaining
-optimization. Closure code origins now round-trip as explicit GID metadata;
-keeping values lowered is an efficiency choice, not the only way to preserve
-their source annotations. Do not preserve a creator's dynamic stack as a caller.
-Fold classification, collapsed display, source highlighting, text/blob/color
-partials, empty partials, expanded structural lists/records, control-form
-partials, shallow Grap reference/declaration helpers, general call/lambda/value/FFI
-projections, and numeric facets/notation now avoid requesting a whole GID view.
-Domain and other legacy projections still need migration. Callable parameter
-discovery and the `evaluate`/`render` source interfaces now retain runtime values,
-including embedded closures through memoized evaluation. Explicitly expanding
-a native closure's representation still materializes its body/environment. Computed
-`match` cases and `let`/`where` bindings retain their runtime lists and executable
-children; individual patterns still adapt to the GID-oriented matcher, and
-repeated-binder equality still compares materialized data. Document edits and
-copying are intentional GID boundaries.
-Scoped layout execution, nested child results, and the `drawing` constructor now
-preserve runtime values, including callbacks in absence details. Layout picking
-materializes only on activation. Border-projection composition and declaration
-application now retain runtime callables and results too. Narrow path, paint,
-and drawing-command parsers remain GID-oriented, as does the viewport preparation
-memo's input (currently read directly from the stored declaration).
-Toolpath sequence/mapping execution and the 2D path preview now retain runtime
-callbacks and results. The tree collector and its memo/control handoff now do
-likewise, comparing runtime inputs/results with source-aware equality. The 3D
-preview/recording pipeline also retains executable programs; model/playback/
-appearance decoders and render-failure outcomes still adapt their data to GID.
-Radio options and the older list-based range-control inputs remain GID-oriented.
-The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
-measured an earlier, removed implementation. Its results motivate profiling
-the new consumers, not assuming that keeping runtime values is always faster.
+- data-oriented projections and native functions, which can materialize runtime
+  containers a later runtime-aware projection would have handled;
+- domain and other legacy projections not yet migrated;
+- individual `match` patterns, which adapt to the GID matcher, and
+  repeated-binder equality, which compares materialized data;
+- the narrow path, paint, and drawing-command parsers, and the viewport
+  preparation memo's input;
+- the 3D model, playback, and appearance decoders and render-failure outcomes;
+- radio options and the older list-based range-control inputs.
 
-The [2026-09-23 comparison](performance.md#runtime-callback-handoffs--2026-09-23)
-covers the pre-ownership baseline, the ownership checkpoint, and the consumer
-migration. The newer [tree-to-3D comparison](performance.md#runtime-tree-to-3d-pipeline--2026-09-23)
-improves uncached construction; steady-state controls frames remain roughly at
-the ownership checkpoint. Profile remaining conversions before broadening
-the migration. Exclude compilation and isolate build outputs for each source
-tree: sharing a target directory between archived copies reused incompatible
-artifacts.
+Explicitly expanding a native closure's representation materializes its body
+and environment, and document edits and copying are intentional GID boundaries.
+Do not preserve a creator's dynamic stack as a caller. Keeping values lowered is
+an efficiency choice, not the only way to preserve source annotations: closure
+code origins round-trip as explicit GID metadata.
+
+The [performance log](history/performance-log-2026-09.md#runtime-callback-handoffs--2026-09-23)
+records the migration's measurements. Profile remaining conversions before
+broadening it; keeping runtime values is not automatically faster. Exclude
+compilation and give each compared source tree its own build output, since
+sharing a target directory between archived copies reused incompatible artifacts.
 
 `with controls` still returns a declaration interpreted by its partial. Direct
 widget emission remains separate, deferred work. Profile uncached construction
@@ -201,7 +175,7 @@ as well as memo hits before changing that boundary.
 ### Fidget refinement and sharp edges
 
 When we next examine Fidget internals for Progred's needs, revisit the
-[analytic tool-sweep experiment](tool-sweep-experiment.md). Its point signs pass
+[analytic tool-sweep experiment](history/tool-sweep-experiment-2026-09-15.md). Its point signs pass
 the sampled checks, but meshing yields invalid vertices and is slower than the
 working approximation. Investigate stable gradients and interval behavior then,
 alongside incremental/progressive computation; do not turn the current tool
@@ -212,20 +186,18 @@ Future upstream investigation may cover reuse across progressive resolutions or
 model edits, and more accurate surface-hit/normal evaluation at sharp edges.
 Current raster refinement recomputes each level; finer depth sampling reduces
 both missed thin intersections and wrong-face normals but does not eliminate
-them. See the [tool-rim diagnostics](performance.md#implicit-stock-quality-and-cancellation-investigation--2026-09-14).
-Command+4 now uses a retained mesh as the immediate camera-dependent fallback
-while current implicit images refine it. That removes the need to finish an
-obsolete coarse implicit image just to provide orbit feedback. Standalone
-implicit previews still cancel even their first stage on new input. Revisit
-finish-coarse scheduling only if a consumer without a usable fallback needs it;
-obsolete results must never become the current computation's result. Skipping
-intermediate meshes during rapid geometry edits is another possible policy,
-with the tradeoff of an older mesh when the user next orbits.
+them. See the [tool-rim diagnostics](history/performance-log-2026-09.md#implicit-stock-quality-and-cancellation-investigation--2026-09-14).
+Standalone implicit previews cancel even their first stage on new input. Revisit
+finish-coarse scheduling only if a consumer without a usable fallback, such as
+Command+3's retained mesh, needs it; obsolete results must never become the
+current computation's result. Skipping intermediate meshes during rapid geometry
+edits is another possible policy, with the tradeoff of an older mesh when the
+user next orbits.
 
 ## Report Vello image-atlas flashing
 
 Prepare an upstream bug report for the reproducible Vello 0.9.0 image omissions
-documented in the [wide-preview investigation](graphics-memory-2026-09-16.md#wide-preview-flashing-follow-up-2026-09-18).
+documented in the [wide-preview investigation](history/graphics-memory-2026-09-16.md#wide-preview-flashing-follow-up-2026-09-18).
 Repeated 4200 × 2800 image replacements drop every third image while 4000 × 2800
 replacements work. The atlas protects obsolete recent images and silently omits
 the current image when allocation fails. Reusing a registered texture works at
@@ -235,12 +207,10 @@ Before filing, check for an existing upstream issue and reproduce against the
 then-current release with a minimal standalone example, including version,
 backend, physical image dimensions, and expected/actual pixel readbacks. No
 report has been filed. The owner prefers avoiding local Vello patches. The
-[separate compositor](vello-compositor-experiment-2026-09-18.md) now bypasses the
+[separate compositor](history/vello-compositor-experiment-2026-09-18.md) now bypasses the
 atlas for native draw-image operations, with per-window upload ownership and
 headless fidelity, resize, lifetime, and performance checks. Image brushes still
-use Vello's atlas. Direct mesh drawing, including replacing partial implicit-image
-coverage over a GPU mesh fallback, remains a separate step; the mesh pipeline
-still performs readback.
+use Vello's atlas.
 
 ## CAM preview navigation and execution grouping
 
@@ -252,20 +222,10 @@ ordering and names are not settled. Reusable tools and orientations need not
 be owned by that tree: execution occurrences can reference the same definitions
 in several places.
 
-A first version of the notched range controls now follows ordinary nested
-program lists, with coarse groups at the bottom and continuous playback at the
-top. It uses equal-width notches without permanent names; Cmd-hover source
-attribution remains a useful next step. Adjusting a coarser row resets every
-finer row to `All`, except when clicking its amber-marked current item, which
-preserves finer selections. Playback markers identify the current section in each row.
-`All` includes future items; explicit bounds include insertions between their
-endpoints. Uneven branches align from the fine-grained end. Playback retains its leaf-path cursor
-when it remains in the selected range. Producers that reconstruct lists can
-still change their positions; preserving correspondence through Grap list
+The [notched range controls](controls.md) follow ordinary nested program lists
+and impose no such taxonomy. Producers that rebuild lists can change positions
+the controls store; preserving that correspondence through Grap list
 construction is separate work, not solved by inventing identities in the widget.
-Prior cuts remain in stock history.
-See [controls](controls.md) and [toolpaths](toolpaths.md). This does not impose
-an operation/orientation/tool taxonomy on programs.
 
 ## Keyboard navigation and list reordering
 
@@ -274,12 +234,21 @@ Tab navigation, grow-selection commands, directional history, and moving a list
 item with a modifier-plus-arrow shortcut remain separate decisions. The range
 controls also remain pointer/touch-only.
 
-## Website as an interactive explanation
+## Inline lists with block children
 
-The owner has registered `prog.red`. Consider developing its presentation
-alongside editor UX: a section for each of Progred's central ideas, with an
-embedded editor demonstrating that idea. This is a proposed direction, not a
-website implementation or hosting decision.
+An ordinary list's inline row uses its children's preferred forms, which can be
+multiline. A possible standard-projection rule is to reserve inline sequences
+for inline children, while allowing delimiters to enclose a block and explicit
+layouts to put blocks side by side.
+
+## CAM next steps
+
+The toolpath example finishes indents and chamfers. Roughing, variable
+orientation, collision checking for the non-cutting profiles, explicit links
+between passes, and machine/postprocessor output are ahead. Render-quality
+controls can use the controls library; path-generation tolerance belongs to the
+program and is distinct from mesh/raster resolution. Upcoming-path windows and
+transparency are also open.
 
 ## CAM machine-axis alignment
 
@@ -324,43 +293,30 @@ up only when text entry becomes a focus:
 
 ## Platform work
 
-### Fidget constant fields on the GPU — verify adopted upstream fix
+### Opening documents from the macOS shell
 
-Fidget 0.5.0's GPU `RenderShape` allocates its variable buffer from the compiled
-variable count. A constant field therefore creates a zero-byte buffer and tries
-to bind it as storage. Creating a zero-sized WebGPU buffer is allowed; binding
-a zero-sized range is not. This is platform-independent validation, not a Metal
-quirk; see [WebGPU buffer creation](https://gpuweb.github.io/gpuweb/#buffer-creation)
-and [bind-group validation](https://gpuweb.github.io/gpuweb/#dom-gpudevice-createbindgroup).
-
-Upstream checked on 2026-09-05 at main commit
-[`94123ea`](https://github.com/mkeeter/fidget/blob/94123ea4a351fedf66df404c31f3fed0e1474b0e/fidget-wgpu/src/lib.rs#L280-L293):
-this is already fixed by allocating at least four bytes. The change landed on
-2026-08-25 in [PR #461](https://github.com/mkeeter/fidget/pull/461), commit
-[`19a9049`](https://github.com/mkeeter/fidget/commit/19a904926a72a4e8509d02060bfef109fe37e488).
-Searches of open/closed issues and PRs for constants, buffers, and bindings found
-no separate matching bug report. The older [PR #318](https://github.com/mkeeter/fidget/pull/318)
-fixes a different constant-evaluation problem. Do not file a duplicate report
-for the allocation/binding defect already fixed in #461.
-
-The 2026-09-13 dependency update adopts this fix through the reviewed upstream
-revision `0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6`. There is no constant-field
-workaround. The ordinary CPU backend remains available when no GPU is available
-and on the web; its tests do not verify GPU behavior.
-
-Still test zero, positive, negative, and computed constant fields on the real
-GPU. The ignored `gpu_colors_constants_and_workspace_reuse` test exercises
-these and multi-object colors without allowing CPU fallback, but its attempted
-run inside Seatbelt found no Metal adapter. Normal CPU tests pass.
-If validation still fails, prepare a minimal standalone Fidget reproducer and
-capture the exact validation error, dependency versions, OS, and adapter/backend
-for an upstream report. The original Progred crash did not preserve the GPU
-validation message, so its precise cause remains inferred from this code path.
-Metal itself is unavailable inside the build sandbox. Do not forbid constant
-fields in the Fidget language or merely hide their completions.
+The sandboxed app opens documents only through File > Open. A
+sandbox-authorized shell open needs Launch Services to deliver
+`application:openURLs:` rather than passing the path in `argv`, but Winit 0.30
+owns the application delegate and panics if it is replaced
+([#4015](https://github.com/rust-windowing/winit/issues/4015),
+[#4458](https://github.com/rust-windowing/winit/issues/4458)). Winit 0.31
+removes its custom macOS delegate. Revisit when 0.31 is stable or an upgrade is
+otherwise useful; don't patch the Objective-C runtime around 0.30 for this.
 
 ### Additional ports
 
 The iPad feasibility host was removed while macOS/Linux mature; its notes are in
-[history](history/ipad-host.md). Older visionOS and language-extension ideas remain
+[history](history/ipad-host.md). Older language-extension ideas remain
 uncommitted possibilities in the historical notes.
+
+A visionOS version is interesting specifically for CAD/CAM: the same GID/Grap
+model could project into spatial geometry while ordinary windows retain source,
+parameters, and other editor projections. This should be treated as a spatial
+projection/backend design, not merely the two-dimensional editor placed in a
+headset.
+
+Questions for that spike include the RealityKit/Metal boundary, spatial
+selection and manipulation, and how existing source-to-output provenance maps
+onto three-dimensional geometry. None requires changing the GID or Grap model
+in advance.

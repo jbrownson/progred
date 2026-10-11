@@ -21,20 +21,11 @@ struct Neighbors {
 
 /// Concatenation needs only endpoints and the neighbors of a selected stop.
 /// Everything in between is dropped as soon as it is passed.
+#[derive(Default)]
 struct Line {
     first: Option<Occurrence>,
     last: Option<Occurrence>,
     selected: Option<Neighbors>,
-}
-
-impl Default for Line {
-    fn default() -> Self {
-        Self {
-            first: None,
-            last: None,
-            selected: None,
-        }
-    }
 }
 
 impl Line {
@@ -68,6 +59,7 @@ impl Line {
 /// One content row: `lead` holds the stops before its first multiline block
 /// (all of them if there is none). Stops before the first block join its entry
 /// line; stops after it stay on the line they are drawn on.
+#[derive(Default)]
 struct Row {
     lead: Line,
     block: Option<Block>,
@@ -80,15 +72,6 @@ struct Block {
     drawn: Line,
     entries: Vec<Line>,
     attach: usize,
-}
-
-impl Default for Row {
-    fn default() -> Self {
-        Self {
-            lead: Line::default(),
-            block: None,
-        }
-    }
 }
 
 impl Row {
@@ -133,18 +116,10 @@ impl Row {
 
 /// Content rows align using the actual column baseline; block entry levels
 /// stay inside each row. These are summaries, not a copy of the layout.
+#[derive(Default)]
 struct Lines {
     baseline: usize,
     rows: Vec<Row>,
-}
-
-impl Default for Lines {
-    fn default() -> Self {
-        Self {
-            baseline: 0,
-            rows: Vec::new(),
-        }
-    }
 }
 
 impl Lines {
@@ -292,10 +267,10 @@ impl Accumulator {
                 self.lines.merge_at(child, offset);
             }
             Composition::Row(alignment) => {
-                if let RowAlignment::Top { baseline } = alignment {
-                    if self.child_index == baseline {
-                        self.lines.baseline = child.baseline;
-                    }
+                if let RowAlignment::Top { baseline } = alignment
+                    && self.child_index == baseline
+                {
+                    self.lines.baseline = child.baseline;
                 }
                 self.lines.merge_at(child, 0);
             }
@@ -310,21 +285,12 @@ impl Accumulator {
     }
 }
 
+#[derive(Default)]
 pub(crate) struct Construction {
     current: Accumulator,
     parents: Vec<Accumulator>,
     /// Open whole-value stops; `None` marks one that refined an outer stop.
     containers: Vec<Option<Stop>>,
-}
-
-impl Default for Construction {
-    fn default() -> Self {
-        Self {
-            current: Accumulator::default(),
-            parents: Vec::new(),
-            containers: Vec::new(),
-        }
-    }
 }
 
 impl Construction {

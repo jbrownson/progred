@@ -4,11 +4,11 @@
 
 use crate::draw::{CanvasSink, Glyph, GlyphRun};
 use crate::geometry::Placement;
-use kurbo::{Affine, Line, Point, Stroke};
+use kurbo::{Affine, Line, Stroke};
 use parley::layout::{Alignment, Layout, PositionedLayoutItem};
 use parley::style::FontWeight;
 pub use parley::style::GenericFamily;
-use parley::{AlignmentOptions, Cursor, LineHeight, StyleProperty};
+use parley::{AlignmentOptions, StyleProperty};
 pub use parley::{FontContext, LayoutContext};
 use peniko::Brush;
 use std::collections::HashMap;
@@ -112,7 +112,7 @@ impl Text {
 /// Single line, no wrapping; width includes trailing whitespace so
 /// inline fragments compose without collapsing.
 pub fn text(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Text {
-    measured_text(build_layout(ctx, s, style, None, None), true)
+    measured_text(build_layout(ctx, s, style))
 }
 
 /// Script glyphs retain the surrounding baseline for alignment; their
@@ -142,42 +142,14 @@ pub fn scripted_text(ctx: &mut TextCtx, s: &str, style: &TextStyle, script: Scri
     }
 }
 
-/// Wrapped to `max_width`; the baseline is the first line's.
-pub fn paragraph(
-    ctx: &mut TextCtx,
-    s: &str,
-    style: &TextStyle,
-    line_height: f32,
-    max_width: f32,
-) -> Text {
-    measured_text(
-        build_layout(ctx, s, style, Some(line_height), Some(max_width)),
-        false,
-    )
-}
-
 /// The single-line layout [`text`] draws for `s`, shared through the
 /// cache — for callers that hit-test a text leaf after the fact.
 pub fn line_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Rc<Layout<Brush>> {
-    build_layout(ctx, s, style, None, None)
+    build_layout(ctx, s, style)
 }
 
-/// The caret boundary nearest `point` (leaf-local, physical pixels),
-/// as a byte index into the laid-out text.
-pub fn caret_index(layout: &Layout<Brush>, point: Point) -> usize {
-    Cursor::from_point(layout, point.x as f32, point.y as f32).index()
-}
-
-pub(crate) fn build_layout(
-    ctx: &mut TextCtx,
-    s: &str,
-    style: &TextStyle,
-    line_height: Option<f32>,
-    max_width: Option<f32>,
-) -> Rc<Layout<Brush>> {
-    let key = (line_height.is_none() && max_width.is_none())
-        .then(|| text_key(s, style, ctx.scale))
-        .flatten();
+pub(crate) fn build_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Rc<Layout<Brush>> {
+    let key = text_key(s, style, ctx.scale);
     if let Some(key) = &key
         && let Some(hit) = ctx.cache.0.get_mut(key)
     {
@@ -191,11 +163,8 @@ pub(crate) fn build_layout(
     if let Some(weight) = style.weight {
         builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
     }
-    if let Some(line_height) = line_height {
-        builder.push_default(LineHeight::FontSizeRelative(line_height));
-    }
     let mut layout: Layout<Brush> = builder.build(s);
-    layout.break_all_lines(max_width);
+    layout.break_all_lines(None);
     layout.align(Alignment::Start, AlignmentOptions::default());
     let layout = Rc::new(layout);
     if let Some(key) = key {
@@ -210,16 +179,11 @@ pub(crate) fn build_layout(
     layout
 }
 
-fn measured_text(layout: Rc<Layout<Brush>>, include_trailing_whitespace: bool) -> Text {
+fn measured_text(layout: Rc<Layout<Brush>>) -> Text {
     let first = layout.lines().next().map(|line| *line.metrics());
     let baseline = first.map(|m| m.baseline as f64).unwrap_or(0.0);
-    let width = if include_trailing_whitespace {
-        first.map(|m| m.advance as f64).unwrap_or(0.0)
-    } else {
-        layout.width() as f64
-    };
     let metrics = TextMetrics {
-        width,
+        width: first.map(|m| m.advance as f64).unwrap_or(0.0),
         ascent: baseline,
         descent: layout.height() as f64 - baseline,
     };

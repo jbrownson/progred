@@ -255,7 +255,7 @@ structurally visible.
 Decided across the lambda-foundations exploration (the
 ~/git/lambda-editor sessions, 2026-07-14..20; verified research map
 in the session artifact; journey record with the dead ends in
-experiments/lambda-calculus-exploration.md). Written as a brief so
+[lambda-calculus-exploration.md](lambda-calculus-exploration.md)). Written as a brief so
 the next session starts warm; SHIPPED that session, same day — see
 the postscript for what landed and the corrections made in
 conversation (the brief was an LLM summary of the exploration and

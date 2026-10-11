@@ -2,7 +2,7 @@ use super::completion::{completion_card, completion_placement};
 use super::*;
 use crate::annotations::Annotations;
 use crate::completion::{Entry, Offers};
-use crate::display::test_support::ResolveForDispatch;
+use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::hover::hover_secondary;
 use crate::identity::short_id;
 use crate::libraries::layout as layout_data;
@@ -195,11 +195,7 @@ fn editing_frame_with_annotations(
 fn make_projected_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
     let mut world = editing_world(doc, libraries);
     let placed = editing_frame(&mut world, false);
-    if let Some(target) = placed
-        .descends
-        .iter()
-        .find(|target| target.path.as_ref() == &path)
-    {
+    if let Some(target) = placed.descends.landmark(&path) {
         (target.select)(&mut world, None);
     }
     world
@@ -219,10 +215,6 @@ fn make_projected_editing_selection(
         .resolve_for_dispatch()
         .dispatch_key(&mut world, &arrow(NamedKey::End));
     world.model.selection.unwrap()
-}
-
-fn make_editing_selection(doc: &Document, libraries: &Libraries, path: Path) -> Selection {
-    make_projected_editing_selection(doc, libraries, path)
 }
 
 fn write_text(doc: &mut Rc<Document>, libraries: &Libraries, selected: &mut Selection) -> bool {

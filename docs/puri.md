@@ -1,6 +1,6 @@
 # Puri and the editor frame
 
-Current implementation, 2026-09-04. This describes the code and its boundaries;
+This describes the current code and its boundaries;
 it does not attribute the earlier framework comparisons or future plans to the
 owner. Those notes are retained in [history](history/puri-notes.md).
 
@@ -85,6 +85,8 @@ Canvas clips are separate: they constrain ink and can use arbitrary shapes.
 An axis-aligned layout clip neither describes nor replaces an arbitrary canvas
 clip. Clipping does not in itself remove navigation or active handlers.
 
+Layout places boxes with opaque continuations. Projection, navigation,
+selection, hover policy, and event interpretation are not box primitives.
 Progred composes boxes by width, ascent, and descent. Rows align baselines,
 top edges, or centers; top-aligned rows and columns choose a child's baseline.
 Wrappers pad, overlay, or decorate the result. With ordered alternatives, this
@@ -119,20 +121,79 @@ positioning function. The ordinary [popover widget](../progred/src/display/widge
 composes its padding, panel ink, and input blocking explicitly; the layout
 interpreter does not add these to a floating box.
 
+The [layout builder interface](../progred/src/display/builder.rs) belongs to
+`progred::display` and accepts box composition and opaque leaf and preparation
+functions. Rows, columns, overlays, padding, floating, sharing, and alternatives
+own geometry. `before` and `after` compose placement work without interpreting
+it. `Layout` is a reusable program over that interface, not an enum
+description.
+
+[`display::measure`](../progred/src/display/measure.rs) is the production
+interpreter: it prepares the choice graph. Its `Node` results are temporary
+interpreter-local slots, consumed by parent operations; they are not persistent
+identities or paths. Shared children use an explicit sharing key and prepare
+only once per frame. The selected graph invokes its leaves directly, and opaque
+wrappers receive a child's extent and placement callback once choices have
+settled. [`recording`](../progred/src/display/recording.rs) is a test-only
+implementation of the same calls that retains structure for inspection without
+executing opaque widget programs; production has no layout enum. Layout
+programs are reusable closures, so their captures and the choice graph still
+allocate; this is not an allocation-free or entirely streaming layout engine.
+
+Pane sizing precedes content projection. Ordinary document panes scroll over
+content-sized output; explicit viewport panes pass their assigned size to a
+content function and clip its output without adding padding or scrolling.
+Both use the same placement, clipping, and handler contracts; viewport functions
+do not add a stretch/flex policy to the baseline layout algebra.
+
+## Widgets and hover continuations
+
 Native widgets use `progred::display::widget::Widget`: a measurement function
-whose result feeds settled placements into a running `HoverPass`. Each leaf
-answers hover immediately and contributes a continuation for after hover settles.
-`finish` returns `HoverOutput`; binding its continuations produces paint and
-handlers independently. There is no catalogue of ordinary hover callbacks. Puri
-supplies generic `AfterHover<H, O>` composition,
-without knowing a layout system or Progred's source identities.
-`LineEdit` uses this path, with no control-specific layout constructor. Native
-handlers receive the current settled hover as an
-explicit dispatch input; the host suppresses that target outside its owning view.
-`CanvasSink` is the object-safe primitive drawing interface implemented by
-Vello, Canvas2D, and recorders; `Canvas` adds generic convenience methods.
-Native render closures outlive measurement without fixing a rendering backend
-or constructing GID drawing data.
+whose result feeds settled placements into a running
+[`HoverPass`](../progred/src/display/widget/frame.rs). A `Program` can instead
+prepare a subtree with choices, using the same per-frame `ChoiceBuild`. Neither
+is a catalogue of control variants; `LineEdit` uses this path with no
+control-specific layout constructor. Puri's plain text and drawing leaves are
+measured by [`widget::drawing`](../progred/src/display/widget/drawing.rs) and
+contain no document or interaction information.
+
+Each leaf answers hover immediately and contributes a continuation for after
+hover settles; there is no catalogue of ordinary hover callbacks. `HoverContext`
+is the transient interface a widget uses to answer probes, declare navigation,
+and supply `after_hover` continuations. `render` is a combinator over that boundary: native handlers that don't need the
+winner are lifted into it at the end of the widget's contribution, and handlers
+that do are constructed inside `after_hover`. `finish` runs floating placements
+and returns `HoverOutput`. Its consuming `bind` uses `Attribution` to assemble
+`Effects` and returns a distinct `FrameOutput`: canvas-only renders, one
+function-over-`Event` handler chain, and settled navigation, view, and hover
+geometry. A hover output can't be bound twice or masquerade as a completed
+frame. Nor is it a Canvas: it retains whole-widget render continuations and
+executes their draw calls directly after hover settles, rather than allocating
+a deferred closure per drawing operation. Native render closures outlive
+measurement without fixing a rendering backend or constructing GID drawing data.
+
+[`puri::frame::AfterHover<H, O>`](../ui/puri/src/frame.rs) owns this reusable
+phase composition. Its resolved input and output are generic, with no
+dependency on Progred, its identities, or `measured`; it is optional plumbing
+for widgets, not a required Puri protocol. Puri also owns probes and claim
+precedence. Progred owns source attribution, view identity, navigation, and
+popup policy. Native handlers receive the current settled hover as an explicit
+dispatch input; the host suppresses that target outside its owning view.
+
+Hover and continuation collection run in painting order, with no reversed paint
+or navigation segments. Scoped wrappers map a child's output, consuming
+navigation overrides without affecting siblings or ancestors. Floating
+placements escape enclosing clip and navigation scopes but retain their owning
+view.
+
+Progred's `attribute` function reads the hovered and selected occurrences'
+secondary identities off their landmarks, which recorded them during layout,
+and derives the hovered source trace once. `Attribution` shares those results
+within the frame, so each painted occurrence only compares. It is constructed
+for each frame, not retained as a memo. Debug geometry is editor configuration
+captured while constructing the frame, not hover data; debug hover footprints
+are collected only when requested and don't change the claim.
+
 Document-aware widgets live inside Progred. During preparation they borrow
 the current sources, selection, view, and path, requesting document-site state
 only when needed; inert decorators construct no editing state or capabilities.
@@ -154,9 +215,6 @@ by the current projection, using its displayed value and fold default without
 requiring a document source. A detached occurrence has no document source;
 read-only behavior follows from that rather than a widget-specific write veto.
 Ordinary decorations do not resolve paths or inspect selection.
-A hover output is not a Canvas: it retains
-whole-widget render continuations, then executes their draw calls directly after
-hover settles, rather than allocating a deferred closure per drawing operation.
 
 The native completion card uses those same outputs. Its rows draw directly
 through `CanvasSink`; it never needs a document resolver or Grap interpreter.
@@ -170,34 +228,21 @@ afterward, outside ancestor clips.
 The [navigation combinators](../progred/src/display/widget/navigation.rs) supply
 selectable leaf and whole-value stops. Progred consumes the box engine's
 `ObserveLayout` traversal, folding each child into line summaries as it finishes:
-columns concatenate, while rows align the declared logical baselines. See
-[navigation](navigation.md) for how whole values and multiline blocks join lines.
-No deferred neighbor providers, independent navigation axes, or pixel-distance
-search remain. Puri does not know this policy; it still receives ordinary events
-and handlers.
+columns concatenate, while rows align the declared logical baselines. After
+placement only the selected occurrence's four destinations remain, in one
+ordinary `Event::Navigate` handler; no graph or logical layout survives in the
+installed frame. Landmarks separately retain rectangles for selection and
+reveal, and a control's arrival override is consumed by its nearest landmark.
+Discarded alternatives contribute no navigation, hover, handlers, or painting.
+Puri does not know this policy; it still receives ordinary events and handlers.
+[Navigation](navigation.md) covers how whole values and multiline blocks join
+lines, dispatch, the arrow policy, and arrival.
 
-After placement, the temporary summaries resolve the selected occurrence's
-four destinations. One ordinary `Event::Navigate(direction)` handler retains
-their paths and arrives through each destination's landmark; no full graph or
-logical layout survives in the installed frame. Each view has an independent collection. Raw controls and
-editing handlers get first refusal of arrows, including modified arrows; only
-an unhandled key becomes Navigate. The shell reveals the resulting selection
-using existing landmarks.
-
-Left/Right visit stops in logical reading order and wrap between lines. Up/Down
-visit the first stop on the adjacent logical line. Arrival direction reaches
-the destination widget: text uses beginning/end caret placement for Right/Left,
-and ordinary defaults for vertical arrival. There is no directional history.
-Landmarks separately retain geometry and direct selection behavior for
-pointer/source selection and Select All. Stops through `jump` keep their editing
-context; `at` results remain read-only.
-
-The [projection helpers](../progred/src/display/projection.rs) now only declare
-whole-value/leaf stops and compose common inline-or-indented head/body layouts.
-They use the ordinary layout functions, with no navigation-specific row/column
-wrappers. `group(content)` uses the generic `widget::around` placement boundary,
-not a layout opcode. See [layout navigation](navigation.md) for the precise
-logical-line policy, tests, and current limitations.
+The [projection helpers](../progred/src/display/projection.rs) only declare
+whole-value and leaf stops and compose common inline-or-indented head/body
+layouts. They use the ordinary layout functions, with no navigation-specific
+row/column wrappers. `group(content)` uses the generic `widget::around`
+placement boundary, not a layout opcode.
 
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,
@@ -214,31 +259,55 @@ handlers. `after` reverses that order when requested; borders use it to paint
 above content without installing handlers. Only the chosen alternative invokes
 its placement callbacks.
 
-`libraries::layout::on_event` is the Grap adapter over that same interface.
-It encodes events and installs one native handler that calls the
-site-scoped interpreter directly. Ordinary native widgets do not touch
-this interpreter. Layout has no Grap-event constructor or interpretation arm.
-
-The [layout builder interface](../progred/src/display/builder.rs) belongs to
-`progred::display`. `Layout` is a reusable program over that interface; its
-production interpreter prepares the choice graph, while a test-only recorder
-retains structure for inspection. There is no production layout enum.
-Projection recursion uses ordinary preparation functions with an explicit
-source scope, not path-bearing Layout variants. Native widgets and the editor
-share one placement output; there is no editor-side Layout interpreter.
-See [layout and widget continuations](layout-continuations.md) for the complete
-chain and the distinction between preparation and placement.
-
-Pane sizing precedes content projection. Ordinary document panes scroll over
-content-sized output; explicit viewport panes pass their assigned size to a
-content function and clip its output without adding padding or scrolling.
-Both use the same placement, clipping, and handler contracts; viewport functions
-do not add a stretch/flex policy to the baseline layout algebra.
-
 `around` lets a consumer control whether or when its subtree places; `before` and
 `decorate` express ordinary placement/paint ordering, including ordinary
 leading work, without special cases. These belong to the
 consumer's layout composition, not to a Puri widget's return type.
+
+## Projection recursion and Grap layout
+
+`descend`, `at`, and `jump` build ordinary preparation functions using an
+explicit [projection scope](../progred/src/display/widget/project.rs). The app
+supplies source lookup, cycle detection, conject, and the selected current and
+descendant partials. There are no path-bearing layout operations, and the editor
+doesn't interpret layouts; native widgets and the editor share one placement
+output.
+
+Preparation interleaves projection and measurement. These functions run before
+choice resolution and placement, not eagerly while a partial first constructs
+its description. That retains sharing: a descendant referenced by several
+alternatives prepares once in that frame. The next frame starts a fresh builder.
+
+`current` and `default` remain separate explicit projection inputs. Missing
+locations pass `None` to the chosen partial and fall back to the ordinary
+pending widget; computed roots remain read-only. The GID layout library's
+path-bearing forms decode through the common path library into these functions,
+not a second path opcode interpreter.
+
+Grap can return stored GID layout forms for decoding, or produce an explicit
+`layout program`. The latter holds an ordinary Grap closure; its partial applies
+that closure with borrowed FFIs closed over a Rust output buffer. Box and widget
+calls emit native layouts into that buffer, never native objects or handles into
+Grap. Grouping calls evaluate a raw body while collecting its children, then
+emit their parent. The buffer is evaluation-local, and a halt or invalid builder
+call discards it. See [the scoped interface](../progred/src/libraries/layout/scope.rs).
+
+The effect boundary is explicit so existing value-returning projection
+combinators keep their semantics. For example, `border` can wrap a returned
+layout program just as it wraps another projected value. It does not inspect
+or intercept the builder's effects. Native widgets do not take either GID path,
+and neither path encodes every drawing operation as GID before painting.
+`libraries::layout::on_event` is the Grap adapter for handlers: it encodes
+events and installs one native handler that calls the site-scoped interpreter
+directly. Layout has no Grap-event constructor or interpretation arm.
+
+Line editing, delimiters, pointer actions, hover feedback, scrubbing, state
+scrolling, borders, and popovers are native widget functions and combinators.
+Completion and drawing-program functions call app adapters during preparation;
+the adapters own document-specific offers, evaluation, and source attribution,
+and return the same measured widget output. They are not operations of the box
+interpreter. Completion providers remain explicit lazy inputs and run only for
+the active picker.
 
 ## Dispatch and hover
 
@@ -292,52 +361,154 @@ pointer starts, while active motion/release can still reach their handlers.
 A floating card carries its owning view even when it covers another pane.
 
 Hover is derived for each pass. The frame is built without a resolved hover
-input; deferred paint receives the answer after the hover continuation runs. `LazyPointer` is
-an input-side dead-zone filter for small gaps. Pressed interactions retain the
+input; deferred paint receives the answer after the hover continuation runs. Pressed interactions retain the
 anchor they need as explicit caller-owned gesture state. While a press holds
 the prior hover, its owning view is retained too, both when probing installed
 geometry and when building a successor. Release resumes normal probing.
 
 ## Frame lifecycle
 
-The [application shell](../progred/src/lib.rs) adapts Winit events and supplies
-platform capabilities. Each window owns an `EditorRunner`: the mutable `Editor`
-beside its saved `FrameState` (dispatch, settled hover, and pending painting).
-Widget handlers receive only `&mut Editor`, not their own saved dispatch. The
-runner borrows those separate fields directly and owns the input batches and
-frame replacement. Window setup builds the initial frame; reset uses a no-op
-dispatch until the successor is built.
+The [application shell](../progred/src/app.rs) adapts Winit events, supplies
+platform capabilities, and schedules painting; it contains no keyboard chain or
+pointer selection rules. Each window owns an `EditorRunner`: the mutable
+`Editor` beside its `FrameState` (dispatch, settled hover, and optional pending
+painting), plus queued continuous input. Widget handlers receive only
+`&mut Editor`; the saved handler is never part of the state passed back to
+itself.
+
+[`input.rs`](../progred/src/input.rs) interprets keyboard, pointer, and IME
+events. Its `update_frame` calls run the installed frame's handler, then build
+its successor. `update_frame` takes an ordinary event-interpreting function, not
+another event encoding or an action queue. It borrows the editor mutably and the
+previous dispatch and hover immutably, then installs the successor after
+dispatch returns; there is no temporary no-op substitution, handler clone, or
+restore step. Dispatch is always present: its default, an empty handler and
+navigation data, is only the initial and reset frame. Window setup builds the
+initial frame once the window size is known, so event handling has no
+frame-initialization branch. Unhandled events with unchanged frame inputs retain
+the installed frame.
+
+Document replacement has the same separation: the editor finalizes gestures and
+replaces document-owned state; the runner clears old frame outputs, queued
+input, and hover-notification state, then builds the successor immediately when
+a window is active. No replacement flag or snapshot comparison is needed to
+discover that the frame was invalidated.
+
+### Building a frame
+
+`refresh_frame` in [`frame.rs`](../progred/src/frame.rs) builds the successor:
+
+1. Partials produce `Layout<World, Hover>` programs, above the total structural
+   fallback. Each program calls the layout builder interface; it is not an enum
+   description. Native functions supply controls and projection recursion.
+2. The production builder prepares one `ChoiceLayout<HoverPass<World, Hover>>`
+   graph. Resolution chooses alternatives and settles the selected geometry in
+   that graph. Its root is exposed as `Measured<HoverPass<World, Hover>>`: an
+   extent and a one-shot placement function, not another container tree.
+3. Placement calls only the chosen continuations with their full rectangle and
+   effective enclosing clip. They run hover probes immediately, in painting
+   order, against the current pointer and retention inputs. No painting or event
+   dispatch runs here. Later direct hits and occluders supersede earlier claims;
+   an extended claim only retains a target when there is no stronger claim.
+4. Floating placements run after ordinary content. A floater's nested floaters
+   run before the next sibling floater. The resulting `HoverOutput` contains the
+   winning claim, the probes that produced it, navigation declarations, and
+   `AfterHover` continuations. Widget placement callbacks are one-shot;
+   only their settled hit tests are retained.
+5. The app constructs `Attribution` and binds the continuations. This produces
+   rendering and handlers independently. Each render is a canvas-only
+   callback capturing the resolved input from this frame. Presenting it cannot
+   read a newer hover or debug setting. Painting remains optional.
+
+The overall sequence is:
+
+```rust,ignore
+// Input: run the previous handler, then project, place, and resolve hover.
+runner.update_frame(scale, viewport, handle_event);
+
+// The platform's later paint request consumes the latest completed frame.
+puri::frame::render(runner.prepare_paint(scale, viewport).renders, canvas);
+// After successful submission, schedule another redraw if hover has a follow-up.
+let redraw = runner.frame_presented();
+```
+
+`compute_hover` owns the whole hover stage: probing, preserving the prior target
+during a press, attributing the winner, and binding the continuations. It returns
+a completed `Frame`; it never updates the runner's stored hover. Paint is not
+required to produce the handlers.
+
+Two ordering boundaries remain explicit. Touch establishes a hover target before
+its first press because it has no preceding pointer motion. Continuous input is
+batched: scroll runs and settles geometry before the paired motion handler runs.
+That scroll frame already includes the latest pointer position, so unhandled
+paired motion needs no second frame. Motion on its own still rebuilds hover.
+Handled motion produces a successor as usual. The batching does not reuse a
+frame after its inputs change; it avoids projecting the same settled inputs twice.
+
+Painting is separate because input and redraw requests have different schedules.
+Several input transitions may replace unpainted frames, but their handlers still
+run in order. `prepare_paint` consumes the staged painting, or builds a frame when
+the viewport changed or no staged frame remains. Render callbacks run only there;
+updating a frame never calls the canvas.
+
+### Selection and reveal
+
+Selection and scrolling are separate operations. Navigation arrival explicitly
+selects and reveals; deletion, pending insertion/cancellation, and Undo/Redo
+explicitly reveal their resulting selection. Native and drawn menus use the same
+commands. `navigate::Geometry` borrows the installed frame's landmarks, view
+regions, and scale; a reveal immediately adjusts the appropriate view's offset.
+Ordinary pointer selection, completion, and low-level selection/payload setters
+do not implicitly scroll. Widgets that navigate elsewhere can compose selection
+with `reveal_path` or `reveal_selection`, as canvas picking does through `arrive`.
+`update_frame` neither compares selections nor processes reveal requests.
+A missing path leaves the offset unchanged, with no deferred retry.
+Substantially reflowed destinations are deliberately best-effort. There is no
+reveal flag, remembered target, corrective build, or new layout/hover boundary.
+
+### Hover notifications
 
 `HoverChanged` and `ModifiersChanged` use the ordinary Puri event chain, with
-the settled hover supplied in the caller's dispatch context. Progred emits a
-hover notification when the target or its owning view changes. Pointer motion
-first probes the installed frame's geometry, allowing the notification to run
-before building a successor. It uses the same probes and precedence as
-placement, not navigation rectangles or a second approximate hover algorithm.
-The successor still computes its own hover from fresh geometry. An accepted
-notification builds one successor; any further hover reaction waits for an
-actual paint/submission before continuing. Oscillating reactions yield across
-painted frames rather than recursively dispatching, panicking, or reaching an
-iteration cutoff. The runner remembers the last notified identity and the paint
-boundary, not a queue of handlers from discarded frames. Intervening input can
-replace an unpainted successor, and the notification uses the current frame.
-See [the scheduling contract](layout-continuations.md#event-and-frame-cycle).
+the settled hover supplied in the dispatch context. The installed dispatch owns
+`HoverGeometry`: the frame's probes in painting order, including their clips,
+retention policy, exact shape tests, and owning views. It uses the same probes
+and precedence as placement, not navigation rectangles or a second approximate
+hover algorithm. A motion batch probes this geometry at its latest position and
+dispatches any `HoverChanged` before its ordinary motion handler and successor
+build. This lets a hover reaction, such as revealing drawing source, contribute
+to that one successor instead of first building a frame just to discover the
+hover. Probing does not rerun projection or layout. Drawing probes keep the
+installed frame's recorded shapes alive after painting; they do not evaluate the
+next frame's drawing early or reuse the recording to build that next frame.
 
-Placement runs hover contributions over settled geometry, then the resolved
-hover binds independent handlers and deferred painting. Paint is not required
-to produce the handlers. [`frame`](../progred/src/frame.rs) builds and installs
-the frame; [`input`](../progred/src/input.rs) interprets input into its successor.
-See [layout continuations](layout-continuations.md) for the phase boundaries.
+The successor still computes hover over fresh geometry. After installing a
+different hover target or owning view, the runner dispatches
+`Event::HoverChanged` through that frame's ordinary handler chain. The dispatch
+context supplies the settled target and navigation/view geometry. An accepted
+notification builds one successor, regardless of whether the handler wrote any
+state. There is no recursive dispatch or attempt to infer which inputs a widget
+depends on.
 
-A changed frame input remints a whole frame. The event-to-redraw pending frame
-stages the already-built successor for presentation; it avoids building it
-again at redraw. There is no event-specific list of changes considered
-irrelevant to rendering, and no partial invalidation. Explicit library
-computations may reuse results through the caller-owned
-[dependency graph](incremental.md); frame construction still runs. If whole
-frames become too slow, the remedy is one general dependency-tracked
-invalidation system, observing missing definitions and ordered definition sets
-too, not event-specific special cases.
+Further hover reactions wait until that successor has been painted and submitted.
+`frame_presented` releases the boundary and requests another redraw when the
+current hover still differs from the last notification. Preparing or discarding
+paint, and failed native presentation attempts, do not release it. A handler
+which keeps changing hover therefore advances across painted frames, yielding to
+the event loop between them, without a cycle panic or iteration cutoff. An
+accepted no-op stops because the successor has the same hover.
+
+Notifications describe the current settled hover, not a history of discarded
+frames. As with other staged frames, intervening input may replace an unpainted
+successor; notification then uses the latest target and its current handler,
+never a saved callback into the replaced document.
+
+The drawing widget handles hover changes by explicitly revealing the winning
+source in the navigation geometry. Its ordinary `ModifiersChanged` handler
+does the same when Cmd is pressed over a stationary pointer. Both require the
+link modifier, the owning view, and a pointer inside the drawing's clipped
+placement. The frame runner contains no canvas-specific reveal operation.
+
+### Input batching and gestures
 
 Pointer motion, pressed or unpressed, accumulates until a redraw or discrete
 event. Each dispatch receives one `PointerUpdate`: `coalesced` contains earlier
@@ -378,6 +549,8 @@ and gesture input flushes the earlier batch; gesture end/cancel also flushes.
 Grap handlers receive `gesture` events with sample records under `content`;
 each names `pinch` (fractional scale) or `rotation` (clockwise radians) and `delta`.
 
+### Timers
+
 Puri's timer capability creates a one-shot handle and a weak completion handle
 for the shell. Dropping the owning handle cancels it; delivery clears its
 deadline and cannot affect a replacement handle. Progred retains only the weak
@@ -393,6 +566,8 @@ recovers on the next frame. Only implicit pixel-job submission waits; input,
 immediate mesh drawing, and other previews continue independently. The shell
 knows nothing about scrolling, debounce durations, or render admission.
 
+### Focus
+
 Leaving a window clears its hover position, not its active drag. Captured motion
 and release retain their unbounded coordinates. Focus loss cancels through the
 same pointer-cancellation handlers and clears the adapter's pressed state.
@@ -405,6 +580,18 @@ iframe document's focus must both be present; standard window focus/blur events
 cover leaving the iframe while its canvas remains the active element. Loading an
 embed does not focus it automatically.
 
+### Reuse across frames
+
+A changed frame input remints a whole frame. The event-to-redraw pending frame
+stages the already-built successor for presentation; it avoids building it
+again at redraw. There is no event-specific list of changes considered
+irrelevant to rendering, and no partial invalidation. Explicit library
+computations may reuse results through the caller-owned
+[dependency graph](incremental.md); frame construction still runs. If whole
+frames become too slow, the remedy is one general dependency-tracked
+invalidation system, observing missing definitions and ordered definition sets
+too, not event-specific special cases.
+
 Cross-frame reuse consists of caller-threaded text shaping and the explicit
 caller-owned [computation graph](incremental.md), currently used by CAM geometry.
 Visible Grap canvas programs record once per frame, sharing commands and
@@ -415,11 +602,14 @@ handlers for subsequent input targeting. Replacement drops both. Neither Puri
 nor layout owns the computation graph or decides which library results to retain,
 and neither keeps a hidden cache.
 
-## Drawing and testing
+## Drawing
 
-`Canvas` is a drawing interface over shapes, brushes, glyph runs, images, meshes, and
-scoped clips. Production code can draw into Vello or Canvas2D; `DrawList`
-records the same operations for inspection and replay. Rectangles remain
+[`CanvasSink`](../ui/puri/src/draw.rs) is the object-safe drawing interface over
+shapes, brushes, glyph runs, images, meshes, and scoped clips, implemented by
+Vello, Canvas2D, and the test recorder; `Canvas` supplies generic convenience
+methods above it. Whole-widget render closures call that interface directly;
+there is no backend-specific fragment conversion or new GID drawing list.
+`DrawList` records the same operations for inspection and replay. Rectangles remain
 rectangles in recordings rather than becoming paths merely for transport.
 Parley owns text shaping. Puri does not depend on a platform clipboard library.
 
@@ -444,8 +634,8 @@ without a CPU round trip. Its renderer retains one mesh upload and surface
 color/depth upload, not evaluated widgets or raster results. `DrawList` and the
 initial `Drawing` representation retain the mesh operation; the default canvas
 interpretation rasterizes it on the CPU for browser/export consumers.
-See [image composition measurements](vello-compositor-experiment-2026-09-18.md)
-and [direct mesh measurements](fidget-hybrid-2026-09-18.md#direct-mesh-composition).
+See [image composition measurements](history/vello-compositor-experiment-2026-09-18.md)
+and [direct mesh measurements](history/fidget-hybrid-2026-09-18.md#direct-mesh-composition).
 
 Text leaves may request subscript typography: Puri shapes a smaller font and
 reports ascent/descent relative to the surrounding baseline. Ordinary rows
@@ -488,16 +678,5 @@ function and `slot` combinator use it, as do pending values and their selection
 outlines; there is no empty-slot layout opcode. Completion behavior and the meaning of an empty slot remain
 in Progred; the widget owns only metrics and drawing.
 
-Tests can drive pure descriptions and handlers without a window. Projection
-fixtures, interaction regressions, SVG export, and profiling live in
-[`projection/tests`](../progred/src/projection/tests/mod.rs). SVG tests are a
-focused filter rather than the home of all interaction regressions:
-
-```sh
-./tools/sandbox-cargo test -p progred svg_bench
-```
-
-This writes sample SVG files under `target/`. The ignored IoP profiling loops
-are in [frame/profile.rs](../progred/src/projection/tests/frame/profile.rs).
-See [build security](build-security.md) for sandboxed commands. Agents do not
-launch the application; the owner performs visual testing.
+Tests drive pure descriptions and handlers without a window; see
+[testing](testing.md).

@@ -16,14 +16,9 @@ fn selection_marks(commands: &[DrawCmd], alpha: f32) -> usize {
             .accent
             .with_alpha(alpha),
     );
-    commands
-        .iter()
-        .map(|command| match command {
-            DrawCmd::Fill { brush, .. } if *brush == color => 1,
-            DrawCmd::Clip { children, .. } => selection_marks(children, alpha),
-            _ => 0,
-        })
-        .sum()
+    crate::display::test_support::painted(commands)
+        .filter(|command| matches!(command, DrawCmd::Fill { brush, .. } if *brush == color))
+        .count()
 }
 
 #[test]
@@ -45,11 +40,9 @@ fn changing_palette_repaints_without_losing_edits_selection_or_history() {
     ));
     let document = runner.editor.model.doc.clone();
     fn has_ink(commands: &[DrawCmd], color: Color) -> bool {
-        commands.iter().any(|command| match command {
-            DrawCmd::GlyphRun(run) => run.brush == Brush::from(color),
-            DrawCmd::Clip { children, .. } => has_ink(children, color),
-            _ => false,
-        })
+        crate::display::test_support::painted(commands).any(
+            |command| matches!(command, DrawCmd::GlyphRun(run) if run.brush == Brush::from(color)),
+        )
     }
     for theme in [crate::styles::Theme::Dark, crate::styles::Theme::Light] {
         assert!(runner.palette_changed(theme.palette(), 1.0, VIEWPORT));

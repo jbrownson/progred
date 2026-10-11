@@ -4,7 +4,7 @@
 //! clones retain structural sharing.
 
 use crate::{CellId, Value};
-use im::HashMap;
+use imbl::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -53,11 +53,6 @@ impl Cells {
                 self.data.insert(cell, value);
             }
         }
-    }
-
-    pub fn merged(mut self, other: Cells) -> Self {
-        self.merge(other);
-        self
     }
 
     pub fn ptr_eq(&self, other: &Self) -> bool {

@@ -4,7 +4,7 @@
 //! analogous (down to the naming of types).
 use crate::{
     CopyVarsChanged, CopyVarsError, Gpu, RegPipeline, RenderShape,
-    TAPE_DATA_CAPACITY, TapeStorage, TapeWord,
+    TAPE_DATA_CAPACITY, TapeWord,
     buf::{
         BufferSizeError, BufferType, FlexBuffer, ReadBuffer, buffer_ro,
         buffer_rw,
@@ -32,9 +32,9 @@ const PIXEL_TILES_SHADER: &str = include_str!("shaders/pixel_tiles.wgsl");
 const MERGE_SHADER: &str = include_str!("shaders/merge.wgsl");
 
 /// Returns a shader for interval root tiles
-fn interval_root_shader(storage: TapeStorage) -> String {
+fn interval_root_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code += COMMON_SHADER;
     shader_code += DISTANCE_PIXEL_SHADER;
     shader_code += INTERVAL_ROOT_SHADER;
@@ -42,7 +42,6 @@ fn interval_root_shader(storage: TapeStorage) -> String {
     shader_code += TRANSFORM_INPUT;
     shader_code += shaders::INTERVAL_OPS;
     shader_code += shaders::COMMON;
-    shader_code += shaders::PRIVATE_SPILLS;
     shader_code += shaders::TAPE_INTERPRETER;
     shader_code += shaders::STACK;
     shader_code += shaders::TAPE_SIMPLIFY;
@@ -50,9 +49,9 @@ fn interval_root_shader(storage: TapeStorage) -> String {
 }
 
 /// Returns a shader for interval tile -> subtile reduction
-fn interval_tiles_shader(storage: TapeStorage) -> String {
+fn interval_tiles_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code += COMMON_SHADER;
     shader_code += DISTANCE_PIXEL_SHADER;
     shader_code += INTERVAL_TILES_SHADER;
@@ -60,7 +59,6 @@ fn interval_tiles_shader(storage: TapeStorage) -> String {
     shader_code += TRANSFORM_INPUT;
     shader_code += shaders::INTERVAL_OPS;
     shader_code += shaders::COMMON;
-    shader_code += shaders::PRIVATE_SPILLS;
     shader_code += shaders::TAPE_INTERPRETER;
     shader_code += shaders::STACK;
     shader_code += shaders::TAPE_SIMPLIFY;
@@ -68,16 +66,15 @@ fn interval_tiles_shader(storage: TapeStorage) -> String {
 }
 
 /// Returns a shader for pixel tile evaluation
-fn pixel_tiles_shader(storage: TapeStorage) -> String {
+fn pixel_tiles_shader(reg_count: u8) -> String {
     let mut shader_code = shaders::opcode_constants();
-    shader_code += &storage.constants();
+    shader_code += &format!("const REG_COUNT: u32 = {reg_count};");
     shader_code += PIXEL_TILES_SHADER;
     shader_code += TRANSFORM_INPUT;
     shader_code += COMMON_SHADER;
     shader_code += DISTANCE_PIXEL_SHADER;
     shader_code += shaders::FLOAT_OPS;
     shader_code += shaders::COMMON;
-    shader_code += shaders::PRIVATE_SPILLS;
     shader_code += shaders::TAPE_INTERPRETER;
     shader_code += shaders::DUMMY_STACK;
     shader_code
@@ -166,15 +163,15 @@ impl RootContext {
             });
 
         let device_ = device.clone();
-        let root_pipeline = RegPipeline::build(Box::new(move |storage| {
-            let shader_code = interval_root_shader(storage);
+        let root_pipeline = RegPipeline::build(Box::new(move |reg_count| {
+            let shader_code = interval_root_shader(reg_count);
             let shader_module =
                 device_.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: None,
                     source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                 });
             device_.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("interval root ({storage:?})")),
+                label: Some(&format!("interval root ({reg_count})")),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
                 entry_point: Some("interval_root_main"),
@@ -193,12 +190,12 @@ impl RootContext {
         &self,
         ctx: &Context,
         workspace: &Workspace,
-        storage: TapeStorage,
+        reg_count: u8,
         render_size: TileRenderSize,
         compute_pass: &mut wgpu::ComputePass,
     ) {
         let bind_group = workspace.bind_groups.root_tiles(ctx, workspace);
-        compute_pass.set_pipeline(&self.root_pipeline.get(storage));
+        compute_pass.set_pipeline(self.root_pipeline.get(reg_count));
         compute_pass.set_bind_group(1, bind_group, &[]);
 
         // Workgroup is 8x8x8, so we divide by 8 here on each axis
@@ -244,15 +241,15 @@ impl IntervalTilesContext {
             });
 
         let device_ = device.clone();
-        let tiles_pipeline = RegPipeline::build(Box::new(move |storage| {
-            let shader_code = interval_tiles_shader(storage);
+        let tiles_pipeline = RegPipeline::build(Box::new(move |reg_count| {
+            let shader_code = interval_tiles_shader(reg_count);
             let shader_module =
                 device_.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: None,
                     source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                 });
             device_.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("interval tiles ({storage:?})")),
+                label: Some(&format!("interval tiles ({reg_count})")),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
                 entry_point: Some("interval_tiles_main"),
@@ -271,11 +268,11 @@ impl IntervalTilesContext {
         &self,
         ctx: &Context,
         workspace: &Workspace,
-        storage: TapeStorage,
+        reg_count: u8,
         compute_pass: &mut wgpu::ComputePass,
     ) {
         let bind_group = workspace.bind_groups.interval_tiles(ctx, workspace);
-        compute_pass.set_pipeline(&self.tiles_pipeline.get(storage));
+        compute_pass.set_pipeline(self.tiles_pipeline.get(reg_count));
         compute_pass.set_bind_group(1, bind_group, &[]);
 
         // Indirect dispatch based on previous tile output
@@ -320,15 +317,15 @@ impl PixelTilesContext {
             });
 
         let device_ = device.clone();
-        let tiles_pipeline = RegPipeline::build(Box::new(move |storage| {
-            let shader_code = pixel_tiles_shader(storage);
+        let tiles_pipeline = RegPipeline::build(Box::new(move |reg_count| {
+            let shader_code = pixel_tiles_shader(reg_count);
             let shader_module =
                 device_.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: None,
                     source: wgpu::ShaderSource::Wgsl(shader_code.into()),
                 });
             device_.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("pixel tiles ({storage:?})")),
+                label: Some(&format!("pixel tiles ({reg_count})")),
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
                 entry_point: Some("pixel_tiles_main"),
@@ -347,11 +344,11 @@ impl PixelTilesContext {
         &self,
         ctx: &Context,
         workspace: &Workspace,
-        storage: TapeStorage,
+        reg_count: u8,
         compute_pass: &mut wgpu::ComputePass,
     ) {
         let bind_group = workspace.bind_groups.pixel_tiles(ctx, workspace);
-        compute_pass.set_pipeline(&self.tiles_pipeline.get(storage));
+        compute_pass.set_pipeline(self.tiles_pipeline.get(reg_count));
         compute_pass.set_bind_group(1, bind_group, &[]);
 
         // Indirect dispatch based on previous tile output
@@ -1160,7 +1157,7 @@ impl Context {
         // Copy vars (if present), then reset relevant bind groups if the buffer
         // size has changed.
         if matches!(
-            shape.copy_vars(&self.gpu, vars, &mut workspace.vars_buf, 0)?,
+            shape.copy_vars(&self.gpu, vars, &mut workspace.vars_buf)?,
             CopyVarsChanged::BufferChanged
         ) {
             workspace.bind_groups.common = Default::default();
@@ -1188,16 +1185,20 @@ impl Context {
         self.root_ctx.run(
             self,
             workspace,
-            shape.storage(),
+            shape.bytecode.reg_count(),
             render_size,
             &mut compute_pass,
         );
-        self.tiles_ctx
-            .run(self, workspace, shape.storage(), &mut compute_pass);
+        self.tiles_ctx.run(
+            self,
+            workspace,
+            shape.bytecode.reg_count(),
+            &mut compute_pass,
+        );
         self.pixels_ctx.run(
             self,
             workspace,
-            shape.storage(),
+            shape.bytecode.reg_count(),
             &mut compute_pass,
         );
 
@@ -1322,26 +1323,17 @@ mod test {
 
     #[test]
     fn compile_interval_root_shader() {
-        crate::compile_shader(
-            &interval_root_shader(TapeStorage::new(16, 0)),
-            "interval root",
-        );
+        crate::compile_shader(&interval_root_shader(16), "interval root");
     }
 
     #[test]
     fn compile_interval_tiles_shader() {
-        crate::compile_shader(
-            &interval_tiles_shader(TapeStorage::new(16, 0)),
-            "interval tiles",
-        );
+        crate::compile_shader(&interval_tiles_shader(16), "interval tiles");
     }
 
     #[test]
     fn compile_pixel_tiles_shader() {
-        crate::compile_shader(
-            &pixel_tiles_shader(TapeStorage::new(16, 0)),
-            "pixel tiles",
-        );
+        crate::compile_shader(&pixel_tiles_shader(16), "pixel tiles");
     }
 
     #[test]

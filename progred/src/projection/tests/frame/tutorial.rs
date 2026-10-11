@@ -1,29 +1,10 @@
 use super::*;
 
-fn configure(world: &mut crate::Editor, slots: &[CellId]) {
-    world.stack.projection = crate::web_embed::tutorial_slots(
-        Some(
-            &slots
-                .iter()
-                .map(|id| id.to_string())
-                .collect::<Vec<_>>()
-                .join(","),
-        ),
-        world.stack.projection.clone(),
-        &world.stack.libraries,
-    )
-    .unwrap();
-}
-
 fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Descend<crate::Editor> {
-    frame
-        .descends
-        .iter()
-        .find(|target| target.path.as_ref() == path)
-        .expect("tutorial slot")
+    frame.descends.landmark(&path).expect("tutorial slot")
 }
 
 fn top_slots(frame: &placed::HoverOutput<crate::Editor>) -> Vec<CellId> {
@@ -43,7 +24,7 @@ fn empty_tutorial_slots_stay_visible_in_a_short_embed() {
     let slots = [names["first"], names["second"], names["third"]];
     let mut editor = crate::test_editor(doc);
     editor.drawn_menu = false;
-    configure(&mut editor, &slots);
+    tutorial_slots(&mut editor, &slots);
     let mut runner = crate::EditorRunner::new(editor);
     let size = kurbo::Size::new(600.0, 304.0);
     runner.refresh_frame(1.0, size);
@@ -75,7 +56,7 @@ fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
         ])),
         cells: Cells::new(),
     });
-    configure(&mut world, &slots);
+    tutorial_slots(&mut world, &slots);
     let frame = editing_frame(&mut world, false);
     assert_eq!(top_slots(&frame), slots);
     let path = [Step::Key(slots[1])];
@@ -120,7 +101,7 @@ fn tutorial_slots_have_no_gap_insertions_and_do_not_override_children() {
         ])),
         cells,
     });
-    configure(&mut world, &slots);
+    tutorial_slots(&mut world, &slots);
     let frame = editing_frame(&mut world, false);
     let first = stop(&frame, &[Step::Key(slots[0])]).rect;
     let second = stop(&frame, &[Step::Key(slots[1])]).rect;
@@ -219,7 +200,7 @@ fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
         root: None,
         cells: Cells::new(),
     });
-    configure(&mut world, &slots);
+    tutorial_slots(&mut world, &slots);
     let frame = editing_frame(&mut world, false);
     assert!(top_slots(&frame).is_empty());
     assert!(world.model.doc.root.is_none());

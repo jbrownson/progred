@@ -32,11 +32,7 @@ fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Descend<crate::Editor> {
-    frame
-        .descends
-        .iter()
-        .find(|d| d.path.as_ref() == path)
-        .expect("outline occurrence")
+    frame.descends.landmark(&path).expect("outline occurrence")
 }
 
 fn entry_paths(value: &Value, parent: &[Step], key: CellId) -> Vec<Path> {
@@ -402,18 +398,16 @@ fn outline_library_tint_stops_at_the_heading() {
     );
 
     fn tints(commands: &[DrawCmd]) -> Vec<Rect> {
-        commands
-            .iter()
-            .flat_map(|command| match command {
-                DrawCmd::Clip { children, .. } => tints(children),
+        crate::display::test_support::painted(commands)
+            .filter_map(|command| match command {
                 DrawCmd::Fill {
                     shape: Shape::RoundedRect(rect),
                     brush: Brush::Solid(color),
                     ..
                 } if *color == crate::styles::Theme::Light.palette().readonly_ground => {
-                    vec![rect.rect()]
+                    Some(rect.rect())
                 }
-                _ => vec![],
+                _ => None,
             })
             .collect()
     }

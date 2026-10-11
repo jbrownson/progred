@@ -276,7 +276,7 @@ Puri widget, composed as an overlay without changing layout or hover.
 
 ### Mesh fallback with implicit refinement
 
-`preview paths refined` (Command+4) composes those native mesh and image recipes
+`preview paths refined` (Command+3) composes those native mesh and image recipes
 over **one** recorded Grap evaluation. One settings input describes the current
 scene, playback, appearance, camera, and image size. A derived memo removes the
 camera and image size for mesh generation; equal derived settings retain the
@@ -334,11 +334,3 @@ the general submission condition; the CAM adapter chooses the interaction policy
 
 Ordinary Fidget mesh/voxel previews, IoP drawing, completions, and other UI
 projections are not converted.
-
-## Deferred
-
-Grap path generation and mesh-preview rasterization/readback remain synchronous.
-The implicit CAM image job includes software rasterization. There is no
-user-facing quality controls, durability tier, or Grap-language memo/async
-syntax yet. Incremental lambda calculus and
-incremental Fidget algorithms remain separate research.

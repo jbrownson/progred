@@ -1,9 +1,7 @@
 //! Readback adapter for headless GPU assertions and round-trip comparisons only.
 use super::*;
 
-#[path = "../../../../tests/compositor_experiment/gpu.rs"]
-#[allow(dead_code)]
-mod capture;
+use puri_vello::capture;
 
 pub(crate) struct Renderer {
     gpu: capture::Gpu,

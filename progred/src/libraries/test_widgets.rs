@@ -48,7 +48,7 @@ pub fn point_update(
     layout: &impl Recordable<Editor, Hovered>,
     point: crate::display::PointEvent,
 ) -> crate::display::PointUpdate {
-    use puri::handler::{PointerButton, PointerButtonEvent, PointerInfo, PointerType};
+    use puri::handler::{PointerButton, PointerButtonEvent};
     let Recorded::Before { before, .. } = layout.record() else {
         panic!("expected a point-control wrapper");
     };
@@ -70,11 +70,7 @@ pub fn point_update(
     );
     let mut event = PointerButtonEvent {
         button: Some(PointerButton::Primary),
-        pointer: PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        },
+        pointer: crate::display::test_support::mouse(),
         state: Default::default(),
     };
     event.state.position = (50.0, 50.0).into();
@@ -200,11 +196,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
     world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
     let event = puri::handler::PointerButtonEvent {
         button: Some(puri::handler::PointerButton::Primary),
-        pointer: puri::handler::PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: puri::handler::PointerType::Mouse,
-        },
+        pointer: crate::display::test_support::mouse(),
         state: puri::handler::PointerState {
             modifiers: puri::handler::Modifiers::META | puri::handler::Modifiers::CONTROL,
             ..Default::default()
