@@ -229,7 +229,7 @@ def main():
     parser.add_argument("--history", type=int, metavar="RUNS", nargs="?", const=8,
                         help="show recorded medians for this machine instead of running")
     parser.add_argument("--features", default="", metavar="LIST",
-                        help="build progred with these Cargo features, such as software-vm")
+                        help="build progred with these Cargo features")
     args = parser.parse_args()
 
     hardware, conditions = machine()

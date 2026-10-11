@@ -521,10 +521,10 @@ New input cancels the old sequence. The controls overlay the bottom of the
 full-size view.
 Implicit CAM rendering explicitly uses the software voxel renderer, directly
 on the existing background executor. It does not attempt GPU evaluation first.
-On Apple Silicon macOS it uses Fidget's JIT with its recommended 64/16/8-pixel
-tiles; other platforms retain the VM with 32/16/8-pixel tiles. Meshing stays on
-the VM. The [local Fidget patches](../vendor/README.md) fix large AArch64 JIT
-tapes and check cancellation within raster subtiles. Software scenes render all
+It uses Fidget's VM with 32/16/8-pixel tiles on every platform, as meshing
+does; the JIT rendered the stock four times slower on Apple Silicon (see
+[performance](performance.md)). The [local Fidget patches](../vendor/README.md)
+check cancellation within raster subtiles. Software scenes render all
 objects within each image tile, retaining separate expressions and preserving
 first-object wins on equal depths. One prepared scene retains root interval
 tapes across the request's refinement levels; view-specific simplifications

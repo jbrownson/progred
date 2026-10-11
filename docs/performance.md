@@ -8,8 +8,8 @@ and the other dated notes indexed in [history](history/README.md).
 
 ## CAM stock: Fidget's JIT against its VM on Apple Silicon — 2026-10-11
 
-`make perf` on an M3 Pro on AC power, default build then `--features
-software-vm`, which keeps Fidget's VM where the JIT would otherwise be used:
+`make perf` on an M3 Pro on AC power, the JIT build then one with Fidget's VM
+in its place, through a temporary `software-vm` feature:
 
 | Workload | JIT | VM |
 | --- | --- | --- |
@@ -19,8 +19,11 @@ software-vm`, which keeps Fidget's VM where the JIT would otherwise be used:
 
 Only the stock render runs in software, and the VM renders it four times
 faster: the JIT's code generation outweighs its evaluation on a program that
-size. The GPU workloads don't change. Choosing the evaluator by program size
-rather than platform is the open follow-up. Three default runs that day, on
+size. The GPU workloads don't change. The example's figures went the other way,
+the JIT about twice as fast on the ring, torus and tanglecube, but those
+render in a millisecond or two either way, while the gyroid took 46 ms on the
+JIT and 36 ms on the VM. The VM is now the software evaluator everywhere, and
+the JIT is gone. Three default runs that day, on
 battery, on AC power after two release builds, and on AC power with the machine
 idle, spread by up to 18% on the heavy workloads, the idle one slowest, so a
 difference under that on a stock or Fidget workload is drift, not a change.
@@ -44,7 +47,7 @@ make perf                                  # three rounds of every canary
 make perf ARGS='--only fidget --rounds 1'  # a quick subset, by test name
 make perf ARGS='--record "what changed"'   # also append the results to the log
 make perf ARGS='--history'                 # recorded medians on this machine
-make perf ARGS='--features software-vm'    # a build with progred features
+make perf ARGS='--features cam-profile'    # a build with progred features
 ```
 
 It builds the progred library tests in an optimized build and runs each canary
@@ -79,9 +82,8 @@ tool runs the test executables directly, outside the macOS build sandbox, so on
 a Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
 offer a software adapter such as Mesa's llvmpipe; the voxel orbits then measure
 it, not the CPU fallback. The two GPU compositor canaries run only on a hardware
-adapter, or with `--gpu`. On Linux, implicit rasterization uses Fidget's VM;
-the JIT is enabled only on Apple Silicon macOS, and the `software-vm` feature
-uses the VM there too. A run with features compares with earlier runs with the
+adapter, or with `--gpu`. Implicit rasterization in software uses
+Fidget's VM on every platform. A run with features compares with earlier runs with the
 same features, or with the default build until there is one.
 
 To add a canary, record its headline timing with `crate::perf::record` and add

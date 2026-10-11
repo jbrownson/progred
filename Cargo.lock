@@ -724,7 +724,6 @@ checksum = "69298d7641ec13971a5359ab20961a92482eab6201c7a89a1372a4ceac1f6987"
 dependencies = [
  "document-features",
  "fidget-core",
- "fidget-jit",
  "fidget-mesh",
  "fidget-raster",
  "fidget-wgpu",

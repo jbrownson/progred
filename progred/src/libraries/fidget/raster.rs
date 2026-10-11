@@ -11,35 +11,14 @@ mod reference;
 pub(crate) use puri::mesh::DepthImage as Frame;
 
 // Meshing keeps VmShape independently; JIT benefits the much denser raster work.
-// The `software-vm` feature keeps the VM on Apple Silicon too, for comparison.
-#[cfg(all(
-    target_os = "macos",
-    target_arch = "aarch64",
-    not(feature = "software-vm")
-))]
-mod software {
-    pub(super) use fidget_engine::jit::{
-        JitFunction as SoftwareFunction, JitShape as SoftwareShape,
-    };
+// Fidget's VM, on every platform. Its JIT rendered the CAM stock four times
+// slower on Apple Silicon, and won only on shapes that render in a millisecond
+// either way; see docs/performance.md.
+use fidget_engine::vm::{VmFunction, VmShape};
 
-    /// The JIT's own recommendation; smaller tiles waste time generating code.
-    pub(super) fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
-        None
-    }
+fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
+    Some(fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap())
 }
-#[cfg(not(all(
-    target_os = "macos",
-    target_arch = "aarch64",
-    not(feature = "software-vm")
-)))]
-mod software {
-    pub(super) use fidget_engine::vm::{VmFunction as SoftwareFunction, VmShape as SoftwareShape};
-
-    pub(super) fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
-        Some(fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap())
-    }
-}
-use software::{SoftwareFunction, SoftwareShape, software_tiles};
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct Request {
@@ -67,7 +46,7 @@ pub(crate) enum Passes {
 /// Immutable compiled objects and root tapes, reusable across camera requests.
 /// Spatial specialization and render scratch remain local to each render job.
 pub(crate) struct SoftwareScene {
-    scene: fidget_engine::raster::voxel::Scene<'static, SoftwareFunction>,
+    scene: fidget_engine::raster::voxel::Scene<'static, VmFunction>,
     colors: Vec<[u8; 3]>,
 }
 
@@ -76,7 +55,7 @@ impl SoftwareScene {
         let mut compiled = Vec::with_capacity(objects.len());
         for object in objects {
             cancel.check().ok()?;
-            compiled.push(SoftwareShape::from(object.tree.clone()).try_into().ok()?);
+            compiled.push(VmShape::from(object.tree.clone()).try_into().ok()?);
         }
         cancel.check().ok()?;
         Some(Self {
