@@ -655,22 +655,28 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
         }
         for query in ["", " \t"] {
             let entries = completion_entries(&sources, raw, false, query);
-            let numbers = entries
+            // Each activation builds an editor, so activate every entry once.
+            let values = entries
                 .iter()
-                .filter_map(|entry| activated(entry).value)
+                .map(|entry| activated(entry).value)
+                .collect::<Vec<_>>();
+            let numbers = values
+                .iter()
+                .flatten()
                 .filter(|value| {
                     f32::read(value).is_some()
                         || f64::read(value).is_some()
                         || u64::read(value).is_some()
                 })
                 .collect::<Vec<_>>();
-            assert_eq!(numbers, [f32::value(0.0), f64::value(0.0), u64::value(0)]);
+            assert_eq!(
+                numbers,
+                [&f32::value(0.0), &f64::value(0.0), &u64::value(0)]
+            );
             if query.is_empty() {
-                let first_number = entries
+                let first_number = values
                     .iter()
-                    .position(|entry| {
-                        activated(entry).value.as_ref().and_then(f32::read) == Some(0.0)
-                    })
+                    .position(|value| value.as_ref().and_then(f32::read) == Some(0.0))
                     .unwrap();
                 for constructor in ["new cell", "new list", "new record"] {
                     assert!(
@@ -681,15 +687,13 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
                             < first_number
                     );
                 }
-                let last_number = entries
+                let last_number = values
                     .iter()
-                    .rposition(|entry| {
-                        activated(entry).value.as_ref().and_then(u64::read) == Some(0)
-                    })
+                    .rposition(|value| value.as_ref().and_then(u64::read) == Some(0))
                     .unwrap();
-                let empty_string = entries
+                let empty_string = values
                     .iter()
-                    .position(|entry| activated(entry).value == Some(text::value("")))
+                    .position(|value| *value == Some(text::value("")))
                     .unwrap();
                 assert!(last_number < empty_string);
             }
