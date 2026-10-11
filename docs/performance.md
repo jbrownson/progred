@@ -6,6 +6,30 @@ launches contain none of their instrumentation. Results recorded since October
 investigations live in the [September log](history/performance-log-2026-09.md)
 and the other dated notes indexed in [history](history/README.md).
 
+## CAM stock: Fidget's JIT against its VM on Apple Silicon — 2026-10-11
+
+`make perf` on an M3 Pro on AC power, default build then `--features
+software-vm`, which keeps Fidget's VM where the JIT would otherwise be used:
+
+| Workload | JIT | VM |
+| --- | --- | --- |
+| `stock_render` | 6.29 s | 1.51 s |
+| `stock_meshing/1.00` | 438 ms | 442 ms |
+| `fidget_orbit` | 16.1 ms | 16.1 ms |
+
+Only the stock render runs in software, and the VM renders it four times
+faster: the JIT's code generation outweighs its evaluation on a program that
+size. The GPU workloads don't change. Choosing the evaluator by program size
+rather than platform is the open follow-up. The same day's AC-power run was
+2–18% slower than the battery run before it on every workload, after two
+release builds back to back, so compare runs taken under like conditions.
+
+Under `software-vm`, `cam_mesh_roundtrip_profile` fails its pixel comparison
+at iteration 23: the direct and image-roundtrip composites differ in a few
+thousand bytes by small amounts, because the slower VM is still refining the
+implicit render between the two reads. The run was recorded with
+`--only "stock|fidget_"`.
+
 ## Tracking performance
 
 Performance can slip a little at a time, and a change can affect it somewhere
