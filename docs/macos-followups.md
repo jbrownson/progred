@@ -10,7 +10,16 @@ empty.
 - **`make check` and `make test`.** They replace `make sandbox-check` and
   `make sandbox-test` and should run the same `sandbox-cargo` commands. The
   Clippy cleanup, the shared test driver, and the experiment retirement were
-  tested only through `tools/linux-cargo`.
+  tested only through `tools/linux-cargo`. `make test` now leaves out the
+  vendored Fidget packages, and development builds optimize dependencies, so
+  the first build afterwards rebuilds every dependency once.
+- **`make test-vendor` and `make test-gpu`.** Both build through `sandbox-cargo`
+  and run the test executables outside the sandbox with
+  `tools/test_binaries.py`, which hasn't run on macOS. `make test-vendor` covers
+  the AArch64 JIT patch and fidget-wgpu's GPU tests, which likely failed inside
+  the sandbox under the old `make test`.
+- **The commit in window titles.** Only release builds carry it now. `make run`
+  should still show it; a development build shouldn't.
 - **Keys in the app.** Paste, delete, insert, replace, Select All, and arrow
   navigation moved from shell code into the frame's lowest-priority handler.
   Try arrows, Backspace and Delete, Enter, Command+V, and Command+A in `make run`.
@@ -40,8 +49,7 @@ Metal or Apple Silicon.
 - **Rust 1.95 or newer.** Fidget 0.5.1 requires it; run `rustup update stable`,
   then `make fetch` for the new crates.
 - **The AArch64 JIT patch.** It was re-applied to 0.5.1 but only compiles on
-  Apple Silicon. Run the vendored tests:
-  `./tools/sandbox-cargo test --release -p fidget-core -p fidget-jit -p fidget-raster --lib`.
+  Apple Silicon. Run the vendored tests with `make test-vendor`.
 - **Presentation and color.** Windows now present through `Queue::present`, and
   wgpu 30 changed Metal color-space handling. Check drawing, resizing, and
   colors in `make run`.
@@ -55,8 +63,7 @@ Metal or Apple Silicon.
 
 The readback helper moved from `progred/tests/compositor_experiment/gpu.rs` into
 `puri-vello`'s `capture` module, behind a `capture` feature. The GPU tests pass
-on lavapipe; run them on Metal as [testing](testing.md#ignored-tests)
-describes.
+on lavapipe; run them on Metal with `make test-gpu`.
 
 ## Simplifications to make where they can be tested
 

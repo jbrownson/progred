@@ -62,11 +62,9 @@ Remove each local package override when a reviewed upstream release includes
 the corresponding fixes. See the [measurements](../docs/history/cam-render-profiling-2026-09-15.md).
 
 The packages are workspace members so their tests share our locked dependency
-graph and sandboxed build. On a supported desktop JIT platform:
-
-```sh
-./tools/sandbox-cargo test --release -p fidget-core -p fidget-jit -p fidget-raster --lib
-```
+graph and sandboxed build. `make test` leaves them out; run them with
+`make test-vendor` after changing a patch or upgrading Fidget. It builds them
+optimized and runs fidget-wgpu's GPU tests outside the macOS build sandbox.
 
 For browser builds, select `-p progred` as the normal platform targets do: the
 JIT package itself does not support those platforms. Progred enables JIT only

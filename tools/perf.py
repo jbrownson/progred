@@ -10,13 +10,14 @@ See docs/performance.md.
 import argparse
 import csv
 import datetime
-import json
 import os
 import platform
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+import test_binaries
 
 ROOT = Path(__file__).resolve().parent.parent
 LOG = ROOT / "docs" / "performance-log.tsv"
@@ -63,25 +64,6 @@ def workload(test, metric):
     name = re.sub(r"(_profile_loop|_profile)$", "", test.rsplit("::", 1)[1])
     name = re.sub(r"^profile_", "", name)
     return f"{name}/{metric}" if metric else name
-
-
-def build():
-    cargo = "./tools/sandbox-cargo" if platform.system() == "Darwin" else "./tools/linux-cargo"
-    result = subprocess.run(
-        [cargo, "test", "--release", "-p", "progred", "--lib", "--no-run",
-         "--message-format=json-render-diagnostics"],
-        cwd=ROOT, stdout=subprocess.PIPE, text=True,
-    )
-    if result.returncode != 0:
-        sys.exit("perf: build failed")
-    executables = [
-        message["executable"]
-        for message in map(json.loads, filter(None, result.stdout.splitlines()))
-        if message.get("reason") == "compiler-artifact"
-        and message.get("executable")
-        and message["target"]["name"] == "progred"
-    ]
-    return executables[-1]
 
 
 def run(executable, test, frames):
@@ -229,7 +211,7 @@ def main():
     args = parser.parse_args()
 
     hardware, conditions = machine()
-    executable = build()
+    [(executable, _)] = test_binaries.build(["--release", "-p", "progred", "--lib"])
     gpu, hardware_gpu = adapter(executable)
     print(f"machine: {hardware}\nconditions: {conditions}\ngpu: {gpu}")
     if args.history:

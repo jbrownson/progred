@@ -14,7 +14,7 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test perf sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test test-vendor test-gpu perf sandbox-app
 
 help:
 	@echo "Development:"
@@ -28,7 +28,9 @@ help:
 	@echo "  make fetch        Download the locked dependencies"
 	@echo "  make check        Type-check the workspace"
 	@echo "  make build        Build the workspace"
-	@echo "  make test         Test the workspace"
+	@echo "  make test         Test the workspace, except the vendored Fidget packages"
+	@echo "  make test-vendor  Test the vendored Fidget packages"
+	@echo "  make test-gpu     Run the tests that need a GPU"
 	@echo "  make perf         Run the performance canaries and compare with the log"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
@@ -79,8 +81,22 @@ check:
 build:
 	$(NATIVE_CARGO) build --workspace
 
+VENDORED := fidget-core fidget-jit fidget-raster fidget-wgpu
+
 test:
-	$(NATIVE_CARGO) test --workspace
+	$(NATIVE_CARGO) test --workspace $(VENDORED:%=--exclude %)
+
+# Upstream's tests of the vendored packages, optimized as vendor/README.md
+# advises. Run them after changing a patch or upgrading Fidget. The binaries
+# run outside the macOS build sandbox because fidget-wgpu's need a GPU.
+test-vendor:
+	$(NATIVE_CARGO) test --release --doc $(VENDORED:%=-p %)
+	@python3 -B tools/test_binaries.py --release $(VENDORED:%=-p %)
+
+# Ignored tests that need a GPU, run outside the macOS build sandbox.
+test-gpu:
+	@python3 -B tools/test_binaries.py --release -p puri-vello --features capture --test compositor -- --ignored --test-threads=1
+	@python3 -B tools/test_binaries.py --release -p progred --lib -- --ignored --test-threads=1 compositor gpu
 
 perf:
 	@python3 -B tools/perf.py $(ARGS)
