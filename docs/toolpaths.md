@@ -451,8 +451,9 @@ than the model alone. This is a first static visualization, not a performance cl
 machine programs. The opt-in toolpath orbit canary in
 [performance checks](performance.md) exercises the real document and preview.
 Fidget's pinned GPU interpreter leaves register-spill loads and stores
-(`OP_MEM`) unimplemented: `RenderShape::new` accepts such bytecode, but it renders
-nothing. Keeping each continuous path separate avoids spilling in this example,
+(`OP_MEM`) unimplemented. Upstream's `RenderShape::new` accepts such bytecode and
+renders nothing; the vendored spill patch instead rejects it with
+`SpillsUnsupported`, and Progred falls back to the CPU on that error. Keeping each continuous path separate avoids spilling in this example,
 and a regression test checks every path for load/store instructions. A large
 enough individual path can still hit this; there is no spill emulation or
 automatic CPU fallback for it. Before shipping, follow up upstream on

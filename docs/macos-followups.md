@@ -55,7 +55,9 @@ Run the first executable with `--ignored --test-threads=1`, and the second with
 
 ## Decisions
 
-- **Unused vendored Fidget patches.** Progred no longer uses the core SSA access
-  patch or the GPU spill patch; their only users were retired experiments. Keep
-  them for a possible upstream proposal, or drop them from `vendor/` and
+- **Vendored Fidget patches.** The core SSA access patch is now unused outside
+  vendored tests. The GPU spill patch's experimental feature is unused, but its
+  default rejection of spilling tapes, `SpillsUnsupported`, is what Progred's
+  GPU-to-CPU fallback relies on. Dropping the experiment means keeping that
+  rejection, either as a small patch or as a bytecode check in Progred. See
   [vendor/README.md](../vendor/README.md).
