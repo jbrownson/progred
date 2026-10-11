@@ -1,6 +1,6 @@
 # Data and editor model
 
-This describes the implementation as of 2026-09-05. It is a reference for
+This describes the current implementation. It is a reference for
 working on the code, not an attribution of design intent to the owner. Earlier
 models and unverified rationale are preserved in [historical notes](history/model-notes.md).
 Open work is listed separately in [deferred work](deferred.md).
@@ -207,52 +207,11 @@ placement remains an explicit interaction. The shell does not inspect values
 or the render tree to infer editability. See
 [navigation](../progred/src/navigate.rs).
 
-Unhandled arrows, regardless of modifiers, become `Event::Navigate(direction)` after focused
-controls and editing handlers decline the raw key. These semantic events run
-through the ordinary handler chain. A frame contains only the handlers for its
-selected occurrence's available directions, not a complete navigation graph
-or special destination table. With no selection, a root navigation handler
-selects the document's root occurrence. Select All remains an explicit command.
-
-Projections declare selectable stops; the chosen layout determines their order.
-During placement, ordinary columns concatenate logical lines and rows align
-their children's logical baselines. No pixel coordinates, measured heights, or
-distance thresholds choose destinations. Padding and inert decorations add no
-stops or lines. Only placed alternatives contribute.
-
-`display::projection::group(content)` adds the whole-value stop before its
-contents. Multiline contents put that stop on an additional leading logical
-line; single-line contents keep it on the same line. The added entry line
-does not itself make enclosing single-line contents multiline. Cells, lists,
-records, and custom forms use this same rule. `group_hug` combines a selectable
-whole with inline/indented head-body alternatives; ordinary `row` and `col`
-need no navigation-specific counterpart.
-
-Left/Right traverse all stops in logical reading order, wrapping between lines.
-Up/Down select the first stop of the adjacent logical line. Thus Down enters a
-multiline cell or list before its first content line, while passing over a
-single-line container to the next line. Different painted heights do not change
-this logical order. Center-aligned rows currently combine top-first. No retained
-column, directional history, geometric tie-breaking, or Tab routing is present.
-
-A call groups its function and argument fields together. Its arguments use
-`record_fragment_with`, arranging fields without another whole-call stop.
-An outline groups its heading and body in a column, then composes sections and
-extras vertically. Extras use `record_fragment` so they do not add a second
-root-record stop. Empty lists stop once; empty cells offer both the reference and
-the missing contents. A leaf facet can supply its widget-specific selection
-callback at the same occurrence as an enclosing whole-value stop without
-adding another navigation stop. Punctuation and other inert decoration do not
-declare separate stops.
-
-Each pane builds its own temporary collection of stops and logical lines.
-After placement, it retains only the current selection's four destinations in
-an ordinary navigation handler and drops the collection. Destinations preserve
-the existing occurrence path and editing/conject context: jumps remain editable,
-and computed children remain read-only. Navigation never resolves document paths
-to choose a destination. Landmarks separately provide geometry for revealing a
-landing, pointer/source selection, and Select All. See
-[layout navigation](navigation.md) for examples and the checkpoint measurements.
+Arrow keys move the selection between stops that projections declare, in an
+order the chosen layout determines; [layout navigation](navigation.md) is the
+reference for how stops are declared, ordered, and dispatched. Destinations
+keep the existing occurrence path and editing or conject context, and
+navigation never resolves document paths to choose one.
 
 Line editing uses the host-supplied keyboard convention: Mac Command+Left/Right
 moves to the content's ends and Option+Left/Right moves by words. Control-based

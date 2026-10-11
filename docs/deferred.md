@@ -144,55 +144,31 @@ from that implementation; timings are historical observations, not guarantees.
 
 ### Lowered results across evaluator boundaries
 
-Public evaluation/application APIs return owned `RuntimeValue`; code and
-lexical environments have shared ownership, while execution caches and host
-capabilities remain evaluation-local. The projection/presentation/controls/drawing
-chain and retained event handlers now preserve runtime callbacks. Inline origins
-are anchored to their original occurrence. The
-`website_forest_hover_finds_the_available_call` regression is enabled and passes.
+Public evaluation and application return owned `RuntimeValue`s, and the
+projection, presentation, controls, drawing, layout, toolpath, and tree chains
+retain runtime callbacks and results. Still GID-oriented, by explicit adapters:
 
-Data-oriented projections and native functions still have explicit GID adapters;
-these can materialize runtime containers even when a later runtime-aware
-projection ultimately handles them. Reducing that conversion work is a remaining
-optimization. Closure code origins now round-trip as explicit GID metadata;
-keeping values lowered is an efficiency choice, not the only way to preserve
-their source annotations. Do not preserve a creator's dynamic stack as a caller.
-Fold classification, collapsed display, source highlighting, text/blob/color
-partials, empty partials, expanded structural lists/records, control-form
-partials, shallow Grap reference/declaration helpers, general call/lambda/value/FFI
-projections, and numeric facets/notation now avoid requesting a whole GID view.
-Domain and other legacy projections still need migration. Callable parameter
-discovery and the `evaluate`/`render` source interfaces now retain runtime values,
-including embedded closures through memoized evaluation. Explicitly expanding
-a native closure's representation still materializes its body/environment. Computed
-`match` cases and `let`/`where` bindings retain their runtime lists and executable
-children; individual patterns still adapt to the GID-oriented matcher, and
-repeated-binder equality still compares materialized data. Document edits and
-copying are intentional GID boundaries.
-Scoped layout execution, nested child results, and the `drawing` constructor now
-preserve runtime values, including callbacks in absence details. Layout picking
-materializes only on activation. Border-projection composition and declaration
-application now retain runtime callables and results too. Narrow path, paint,
-and drawing-command parsers remain GID-oriented, as does the viewport preparation
-memo's input (currently read directly from the stored declaration).
-Toolpath sequence/mapping execution and the 2D path preview now retain runtime
-callbacks and results. The tree collector and its memo/control handoff now do
-likewise, comparing runtime inputs/results with source-aware equality. The 3D
-preview/recording pipeline also retains executable programs; model/playback/
-appearance decoders and render-failure outcomes still adapt their data to GID.
-Radio options and the older list-based range-control inputs remain GID-oriented.
-The [owned-result experiment](history/performance-log-2026-09.md#owned-result-experiment--2026-09-17)
-measured an earlier, removed implementation. Its results motivate profiling
-the new consumers, not assuming that keeping runtime values is always faster.
+- data-oriented projections and native functions, which can materialize runtime
+  containers a later runtime-aware projection would have handled;
+- domain and other legacy projections not yet migrated;
+- individual `match` patterns, which adapt to the GID matcher, and
+  repeated-binder equality, which compares materialized data;
+- the narrow path, paint, and drawing-command parsers, and the viewport
+  preparation memo's input;
+- the 3D model, playback, and appearance decoders and render-failure outcomes;
+- radio options and the older list-based range-control inputs.
 
-The [2026-09-23 comparison](history/performance-log-2026-09.md#runtime-callback-handoffs--2026-09-23)
-covers the pre-ownership baseline, the ownership checkpoint, and the consumer
-migration. The newer [tree-to-3D comparison](history/performance-log-2026-09.md#runtime-tree-to-3d-pipeline--2026-09-23)
-improves uncached construction; steady-state controls frames remain roughly at
-the ownership checkpoint. Profile remaining conversions before broadening
-the migration. Exclude compilation and isolate build outputs for each source
-tree: sharing a target directory between archived copies reused incompatible
-artifacts.
+Explicitly expanding a native closure's representation materializes its body
+and environment, and document edits and copying are intentional GID boundaries.
+Do not preserve a creator's dynamic stack as a caller. Keeping values lowered is
+an efficiency choice, not the only way to preserve source annotations: closure
+code origins round-trip as explicit GID metadata.
+
+The [performance log](history/performance-log-2026-09.md#runtime-callback-handoffs--2026-09-23)
+records the migration's measurements. Profile remaining conversions before
+broadening it; keeping runtime values is not automatically faster. Exclude
+compilation and give each compared source tree its own build output, since
+sharing a target directory between archived copies reused incompatible artifacts.
 
 `with controls` still returns a declaration interpreted by its partial. Direct
 widget emission remains separate, deferred work. Profile uncached construction
@@ -274,13 +250,6 @@ Tab navigation, grow-selection commands, directional history, and moving a list
 item with a modifier-plus-arrow shortcut remain separate decisions. The range
 controls also remain pointer/touch-only.
 
-## Website as an interactive explanation
-
-The owner has registered `prog.red`. Consider developing its presentation
-alongside editor UX: a section for each of Progred's central ideas, with an
-embedded editor demonstrating that idea. This is a proposed direction, not a
-website implementation or hosting decision.
-
 ## CAM machine-axis alignment
 
 Revisit when generating G-code: prefer indexed orientations that let an
@@ -324,43 +293,19 @@ up only when text entry becomes a focus:
 
 ## Platform work
 
-### Fidget constant fields on the GPU — verify adopted upstream fix
-
-Fidget 0.5.0's GPU `RenderShape` allocates its variable buffer from the compiled
-variable count. A constant field therefore creates a zero-byte buffer and tries
-to bind it as storage. Creating a zero-sized WebGPU buffer is allowed; binding
-a zero-sized range is not. This is platform-independent validation, not a Metal
-quirk; see [WebGPU buffer creation](https://gpuweb.github.io/gpuweb/#buffer-creation)
-and [bind-group validation](https://gpuweb.github.io/gpuweb/#dom-gpudevice-createbindgroup).
-
-Upstream checked on 2026-09-05 at main commit
-[`94123ea`](https://github.com/mkeeter/fidget/blob/94123ea4a351fedf66df404c31f3fed0e1474b0e/fidget-wgpu/src/lib.rs#L280-L293):
-this is already fixed by allocating at least four bytes. The change landed on
-2026-08-25 in [PR #461](https://github.com/mkeeter/fidget/pull/461), commit
-[`19a9049`](https://github.com/mkeeter/fidget/commit/19a904926a72a4e8509d02060bfef109fe37e488).
-Searches of open/closed issues and PRs for constants, buffers, and bindings found
-no separate matching bug report. The older [PR #318](https://github.com/mkeeter/fidget/pull/318)
-fixes a different constant-evaluation problem. Do not file a duplicate report
-for the allocation/binding defect already fixed in #461.
-
-The 2026-09-13 dependency update adopts this fix through the reviewed upstream
-revision `0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6`. There is no constant-field
-workaround. The ordinary CPU backend remains available when no GPU is available
-and on the web; its tests do not verify GPU behavior.
-
-Still test zero, positive, negative, and computed constant fields on the real
-GPU. The ignored `gpu_colors_constants_and_workspace_reuse` test exercises
-these and multi-object colors without allowing CPU fallback, but its attempted
-run inside Seatbelt found no Metal adapter. Normal CPU tests pass.
-If validation still fails, prepare a minimal standalone Fidget reproducer and
-capture the exact validation error, dependency versions, OS, and adapter/backend
-for an upstream report. The original Progred crash did not preserve the GPU
-validation message, so its precise cause remains inferred from this code path.
-Metal itself is unavailable inside the build sandbox. Do not forbid constant
-fields in the Fidget language or merely hide their completions.
-
 ### Additional ports
 
 The iPad feasibility host was removed while macOS/Linux mature; its notes are in
-[history](history/ipad-host.md). Older visionOS and language-extension ideas remain
+[history](history/ipad-host.md). Older language-extension ideas remain
 uncommitted possibilities in the historical notes.
+
+A visionOS version is interesting specifically for CAD/CAM: the same GID/Grap
+model could project into spatial geometry while ordinary windows retain source,
+parameters, and other editor projections. This should be treated as a spatial
+projection/backend design, not merely the two-dimensional editor placed in a
+headset.
+
+Questions for that spike include the RealityKit/Metal boundary, spatial
+selection and manipulation, and how existing source-to-output provenance maps
+onto three-dimensional geometry. None requires changing the GID or Grap model
+in advance.

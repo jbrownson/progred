@@ -1,6 +1,6 @@
 # Grap and projections
 
-Current implementation, 2026-09-05. Grap is embedded in ordinary GID values.
+This describes the current implementation. Grap is embedded in ordinary GID values.
 Its evaluator, library conventions, projection composition, and editor
 adaptation have separate responsibilities. Earlier rationale and proposed
 language directions are [historical notes](history/projections-notes.md), not

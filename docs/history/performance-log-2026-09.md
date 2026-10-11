@@ -262,7 +262,7 @@ preceding checkpoint's 317.92, 325.87, and 330.17 µs: no clear change. These
 canaries do not isolate the layout-helper conversions.
 
 The layout-specific benchmark exposed its stale 100-row fuel assumption; see
-[the corrected fixture](#inputs-and-measurements). The 20-row fixture measured
+[the corrected fixture](../performance.md#inputs-and-measurements). The 20-row fixture measured
 70.62/97.67 µs for stored descriptions and 106.42/108.04 µs for scoped layout
 calls in two serial runs. This is a new baseline, not a before/after speedup
 measurement. A separate passing regression confirms that returned layout code
@@ -661,7 +661,7 @@ Both runs used the CPU triangle rasterizer because the build sandbox exposes no
 Metal adapter. This is roughly 21× faster warm orbiting, not faster meshing or
 an input-to-screen latency measurement. The image changes with the camera and is
 rendered every frame. Geometry edits and first demand still pay synchronous
-recording/meshing cost. See [the boundaries and limitations](incremental.md).
+recording/meshing cost. See [the boundaries and limitations](../incremental.md).
 
 A repeat measured 12.41 ms median / 12.90 ms p95 (286.19 ms first frame).
 After refactoring the example so CAM consumes the cube's surface and normal
@@ -1314,3 +1314,26 @@ and picture at 24.04 ms before and 23.60 ms after. Retaining source probes has a
 small construction/storage cost; these separate runs do not establish its exact
 size or a picture speedup. No successor frame reuses the previous drawing's
 evaluation: retained geometry belongs only to the installed frame's input handling.
+
+## Layout continuation verification — 2026-09
+
+Moved from `layout-continuations.md` on 2026-10-10.
+
+The continuation and geometry passes had mixed performance results, including
+regressions. They are not justified as speed improvements. The consolidated
+builder's phase timings and sampling findings are in
+[its section above](#layout-builder-and-placement-consolidation--2026-09-07).
+
+The consolidated version passes all 612 workspace library unit tests (eight
+opt-in tests excluded), all seven release frame canaries, the native
+workspace/all-target check, and the wasm32 library check. The web check retains
+two existing menu dead-code warnings. Sample, Grap, and cube headless SVGs were
+visually inspected; the application was not launched.
+
+The subsequent scoped-FFI pass passed the workspace library tests, all eight
+release canaries (including the new interleaved A/B test), native all-target
+checking, and wasm32 checking with those same existing warnings. Its full-frame
+test compares native emission with GID construction/decoding, including the
+unchanged border combinator. Scope tests cover lexical capture, nested child
+buffers, invalid inputs, fuel exhaustion, and non-escaping capabilities. The
+Grap evaluator itself remains unchanged.

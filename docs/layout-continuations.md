@@ -1,7 +1,5 @@
 # Layout and widget continuations
 
-Current architecture, 2026-09-13.
-
 ## Boundary
 
 Layout places boxes with opaque continuations. Widgets written in the Puri
@@ -314,22 +312,3 @@ footprints are collected only when requested and do not change the claim.
 No search policy or Fidget rendering algorithm changed. Unified event handlers
 still visit unrelated registrations; the opt-in `handler_dispatch_profile`
 retains a focused check of that interface cost.
-
-The continuation and geometry passes had mixed performance results, including
-regressions. They are not justified as speed improvements. The consolidated
-builder's phase timings and sampling findings are recorded in
-[performance.md](history/performance-log-2026-09.md#layout-builder-and-placement-consolidation--2026-09-07).
-
-The consolidated version passes all 612 workspace library unit tests (eight
-opt-in tests excluded), all seven release frame canaries, the native
-workspace/all-target check, and the wasm32 library check. The web check retains
-two existing menu dead-code warnings. Sample, Grap, and cube headless SVGs were
-visually inspected; the application was not launched.
-
-The subsequent scoped-FFI pass passed the workspace library tests, all eight
-release canaries (including the new interleaved A/B test), native all-target
-checking, and wasm32 checking with those same existing warnings. Its full-frame
-test compares native emission with GID construction/decoding, including the
-unchanged border combinator. Scope tests cover lexical capture, nested child
-buffers, invalid inputs, fuel exhaustion, and non-escaping capabilities. The
-Grap evaluator itself remains unchanged.

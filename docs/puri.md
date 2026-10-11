@@ -1,6 +1,6 @@
 # Puri and the editor frame
 
-Current implementation, 2026-09-04. This describes the code and its boundaries;
+This describes the current code and its boundaries;
 it does not attribute the earlier framework comparisons or future plans to the
 owner. Those notes are retained in [history](history/puri-notes.md).
 
@@ -176,23 +176,10 @@ No deferred neighbor providers, independent navigation axes, or pixel-distance
 search remain. Puri does not know this policy; it still receives ordinary events
 and handlers.
 
-After placement, the temporary summaries resolve the selected occurrence's
-four destinations. One ordinary `Event::Navigate(direction)` handler retains
-their paths and arrives through each destination's landmark; no full graph or
-logical layout survives in the installed frame. Each view has an independent collection. Raw controls and
-editing handlers get first refusal of arrows, including modified arrows; only
-an unhandled key becomes Navigate. The editor's structural keys are the frame's
-lowest-priority handler: it lowers that key, dispatches Navigate through the
-whole frame handler, and reveals the resulting selection using existing
-landmarks.
-
-Left/Right visit stops in logical reading order and wrap between lines. Up/Down
-visit the first stop on the adjacent logical line. Arrival direction reaches
-the destination widget: text uses beginning/end caret placement for Right/Left,
-and ordinary defaults for vertical arrival. There is no directional history.
-Landmarks separately retain geometry and direct selection behavior for
-pointer/source selection and Select All. Stops through `jump` keep their editing
-context; `at` results remain read-only.
+After placement only the selected occurrence's four destinations remain, in one
+ordinary `Event::Navigate` handler; no graph or logical layout survives in the
+installed frame. [Layout navigation](navigation.md) covers dispatch, the arrow
+policy, and arrival.
 
 The [projection helpers](../progred/src/display/projection.rs) now only declare
 whole-value/leaf stops and compose common inline-or-indented head/body layouts.

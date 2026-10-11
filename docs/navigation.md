@@ -43,6 +43,21 @@ precedes a deeper block that sits beside its first one.
 A repeated declaration of the innermost open whole value's occurrence is the
 same stop, not a second one.
 
+## Projection stops
+
+`display::projection::group(content)` adds the whole-value stop before its
+contents; cells, lists, records, and custom forms all use it. `group_hug`
+combines a selectable whole with inline or indented head-body alternatives;
+ordinary `row` and `col` need no navigation-specific counterpart. A call groups
+its function and argument fields together, and its arguments use
+`record_fragment_with` to arrange fields without another whole-call stop. An
+outline groups its heading and body in a column, then composes sections and
+extras vertically; extras use `record_fragment` so they add no second
+root-record stop. Empty lists stop once; empty cells offer both the reference
+and the missing contents. A leaf facet can supply its widget-specific selection
+callback at the occurrence of an enclosing whole-value stop without adding a
+stop. Punctuation, padding, and other inert decoration declare no stops or lines.
+
 ## Arrow policy
 
 Left/Right visit adjacent stops in reading order, wrapping between lines. Up/Down
@@ -71,11 +86,18 @@ After placement the collector scans the summaries and installs one ordinary
 An arrow arrives through the destination's landmark in that view, the same
 landmark that reveals it: the landmark owns selecting the occurrence, including
 a line field placing its caret at the edge the arrow came from. A stop without a
-landmark declines rather than selecting something that cannot be revealed. Raw
-text/picker handlers get the first chance at keyboard events, and the shell
-reveals the destination. Offscreen stops remain available; folded or unplaced
-contents do not contribute. Source-less computed results keep their read-only
-selection behavior.
+landmark declines rather than selecting something that cannot be revealed.
+Offscreen stops remain available; folded or unplaced contents do not contribute.
+Stops reached through `jump` keep their editing context; computed results,
+including those reached through `at`, keep their read-only selection behavior.
+
+Every handler in the frame sees an arrow first, modifiers included, so text and
+picker handlers can claim it. Only an arrow nothing claims reaches the editor's
+structural keys, the frame's lowest-priority handler. That handler lowers it to
+`Event::Navigate(direction)`, dispatches it through the whole frame handler, and
+reveals the selection it lands on. With no selection, a root navigation handler
+selects the document's root occurrence. Landmarks also serve pointer and source
+selection and the explicit Select All command.
 
 The anonymous lambda's `λ` marker is clickable to name the function but is not
 an arrow stop; the whole lambda, parameter list, and body remain navigable.
