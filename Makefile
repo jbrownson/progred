@@ -14,7 +14,7 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test perf sandbox-app
 
 help:
 	@echo "Development:"
@@ -29,6 +29,7 @@ help:
 	@echo "  make check        Type-check the workspace"
 	@echo "  make build        Build the workspace"
 	@echo "  make test         Test the workspace"
+	@echo "  make perf         Run the performance canaries and compare with the log"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
 
@@ -80,6 +81,9 @@ build:
 
 test:
 	$(NATIVE_CARGO) test --workspace
+
+perf:
+	@python3 -B tools/perf.py $(ARGS)
 
 sandbox-app:
 	@./tools/build-macos-app

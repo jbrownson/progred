@@ -22,7 +22,8 @@ fn measure(label: &str, mut frame: impl FnMut(usize)) {
             samples.push(start.elapsed());
         }
     }
-    distribution(label, samples.into_iter());
+    distribution(label, samples.iter().copied());
+    crate::perf::record("", samples);
 }
 
 /// Complete successor frames for changing slider values, not slider hit testing

@@ -31,8 +31,8 @@ Working on the editor:
   toolpath playback.
 - [Final-encoded trees](trees.md): scoped hierarchy construction and
   source-linked collection shared by the CAM controls and preview.
-- [Performance checks](performance.md): the shared headless frame harness and
-  its canaries.
+- [Performance checks](performance.md): `make perf`, the shared headless frame
+  harness and its canaries, and the [performance log](performance-log.tsv).
 - [Browser setup](../web/README.md): the browser host and its diagnostics.
 
 CAM and Fidget:

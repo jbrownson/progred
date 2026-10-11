@@ -39,6 +39,11 @@ superseded notes to `docs/history/`.
   branch, add commits as work proceeds and rewrite its history only when asked.
 - Don't run the app for the user to test; they run and test it themselves.
   Running it for your own checks is fine, preferably headlessly.
+- Watch performance over time; it can slip gradually or change somewhere
+  unexpected. Run `make perf` before and after changes that could affect it,
+  such as evaluation, layout, rendering, Fidget, CAM, or dependency upgrades.
+  Investigate the changes it flags, and record a run with a note when such a
+  change lands. See `docs/performance.md`.
 - When a pattern or lesson emerges, propose an addition to this file. Don't add
   it without asking.
 

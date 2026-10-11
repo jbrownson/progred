@@ -247,40 +247,44 @@ mod tests {
         let declaration = sources.resolve_path(&pane.path).unwrap();
         let computations = crate::computations::Computations::from_sources(sources);
         let root = crate::workspace::Root::document();
-        for trial in 0..5 {
-            let start = Instant::now();
-            let tree = crate::libraries::tree::build(
-                &Value::from(names["program_tree"]).into(),
-                &sources,
-                300_000,
-            )
-            .unwrap();
-            let tree_time = start.elapsed();
-            let start = Instant::now();
-            let items = tree.items.as_value();
-            let materialization_time = start.elapsed();
-            let start = Instant::now();
-            let selection = crate::libraries::controls::tree_range::Selection::new(items, None);
-            let selection_time = start.elapsed();
-            assert_eq!(selection.leaves, 0..504);
-            let start = Instant::now();
-            let view = presentation::viewport_output(declaration, &sources, 400.0, 750.0).unwrap();
-            let view_time = start.elapsed();
-            assert!(!absent::is_absent(&view));
-            let start = Instant::now();
-            let memoized = crate::libraries::tree::prepared(
-                &computations,
-                &root,
-                &pane.path,
-                Value::from(names["program_tree"]).into(),
-                300_000,
-            );
-            let memo_time = start.elapsed();
-            assert!(memoized.is_ok());
-            eprintln!(
-                "trial {trial}: tree {tree_time:?}; GID view {materialization_time:?}; selectors {selection_time:?}; controls declaration {view_time:?}; memo demand {memo_time:?}"
-            );
-        }
+        let samples: Vec<_> = (0..5)
+            .map(|trial| {
+                let start = Instant::now();
+                let tree = crate::libraries::tree::build(
+                    &Value::from(names["program_tree"]).into(),
+                    &sources,
+                    300_000,
+                )
+                .unwrap();
+                let tree_time = start.elapsed();
+                let start = Instant::now();
+                let items = tree.items.as_value();
+                let materialization_time = start.elapsed();
+                let start = Instant::now();
+                let selection = crate::libraries::controls::tree_range::Selection::new(items, None);
+                let selection_time = start.elapsed();
+                assert_eq!(selection.leaves, 0..504);
+                let start = Instant::now();
+                let view = presentation::viewport_output(declaration, &sources, 400.0, 750.0).unwrap();
+                let view_time = start.elapsed();
+                assert!(!absent::is_absent(&view));
+                let start = Instant::now();
+                let memoized = crate::libraries::tree::prepared(
+                    &computations,
+                    &root,
+                    &pane.path,
+                    Value::from(names["program_tree"]).into(),
+                    300_000,
+                );
+                let memo_time = start.elapsed();
+                assert!(memoized.is_ok());
+                eprintln!(
+                    "trial {trial}: tree {tree_time:?}; GID view {materialization_time:?}; selectors {selection_time:?}; controls declaration {view_time:?}; memo demand {memo_time:?}"
+                );
+                tree_time + materialization_time
+            })
+            .collect();
+        crate::perf::record("", samples);
     }
 
     fn line(x: f64) -> Value {

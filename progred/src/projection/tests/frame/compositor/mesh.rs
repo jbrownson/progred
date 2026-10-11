@@ -319,6 +319,7 @@ fn cam_mesh_roundtrip_profile() {
             builds[builds.len() / 2]
         );
         for (name, mut times) in ["roundtrip", "direct"].into_iter().zip(timings) {
+            crate::perf::record(&format!("{progress}/{name}"), times.iter().copied());
             times.sort();
             eprintln!(
                 "{name}: median {:?}, max {:?}, min {:?}",

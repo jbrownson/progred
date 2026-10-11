@@ -1,9 +1,56 @@
 # Frame performance checks
 
 These opt-in tests measure headless frame construction; ordinary builds and
-launches contain none of their instrumentation. Dated measurements and
-investigations live in the [performance log](history/performance-log-2026-09.md)
+launches contain none of their instrumentation. Results recorded since October
+2026 are in the [performance log](performance-log.tsv). Earlier measurements and
+investigations live in the [September log](history/performance-log-2026-09.md)
 and the other dated notes indexed in [history](history/README.md).
+
+## Tracking performance
+
+Performance can slip a little at a time, and a change can affect it somewhere
+unexpected. `make perf` runs the canaries below and compares them with the
+latest recorded run on the same machine:
+
+```sh
+make perf                                  # three rounds of every canary
+make perf ARGS='--only fidget --rounds 1'  # a quick subset, by test name
+make perf ARGS='--record "what changed"'   # also append the results to the log
+make perf ARGS='--history'                 # recorded medians on this machine
+```
+
+It builds the progred library tests in an optimized build and runs each canary
+serially. Each canary reports its headline timing on a `perf` line, through
+`crate::perf::record`; the tool names the workload after the test, adding a
+metric name when a test reports several. Over several rounds it keeps each
+workload's lowest median, with that round's p95, and reports the spread of the
+medians as a percentage of the lowest. A change from the last record is flagged
+when it exceeds 5% or twice either run's spread. Frame canaries measure 60
+frames; the four voxel orbits measure 12. Single-shot workloads, such as stock
+meshing, report one sample per round.
+
+[`performance-log.tsv`](performance-log.tsv) has one row per workload per
+recorded run:
+
+- **commit**: with `+` when tracked files had uncommitted changes;
+- **machine**: the hardware, which decides what is comparable;
+- **gpu**: the adapter Fidget's implicit previews select;
+- **environment**: the OS version, power source on macOS, and Rust version;
+- **median_ms** and **p95_ms**, the measured **samples** per round, the
+  **rounds**, and their **spread_pct**;
+- a **note** on what changed or why the run was recorded.
+
+Compare runs only on the same machine and adapter, and keep the environment in
+mind: a different power state, OS, or compiler can account for a change. The
+tool runs the test executables directly, outside the macOS build sandbox, so on
+a Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
+offer a software adapter such as Mesa's llvmpipe; the voxel orbits then measure
+it, not the CPU fallback. The two GPU compositor canaries run only on a hardware
+adapter, or with `--gpu`. On Linux, implicit rasterization uses Fidget's VM;
+the JIT is enabled only on Apple Silicon macOS.
+
+To add a canary, record its headline timing with `crate::perf::record` and add
+the test to the suite in [`tools/perf.py`](../tools/perf.py).
 
 ## Headless editor captures
 
@@ -62,7 +109,8 @@ The opt-in tests in `progred/src/projection/tests/frame/profile.rs` share one
 headless frame harness. They are not assertions about interactive frame rate,
 and ordinary builds and launches contain none of this instrumentation.
 
-Run the current canaries serially in an optimized build:
+`make perf` prints only each canary's headline timing. To see the phases
+below, run the canaries through Cargo, serially in an optimized build:
 
 ```sh
 ./tools/sandbox-cargo test --release -p progred --lib \

@@ -245,12 +245,16 @@ fn grap_layout_ffi_profile_loop() {
             }
         }
     }
-    for (label, timings) in ["GID layout construction + decoding", "Scoped layout FFIs"]
-        .into_iter()
-        .zip(samples)
+    for ((label, metric), timings) in [
+        ("GID layout construction + decoding", "gid"),
+        ("Scoped layout FFIs", "ffi"),
+    ]
+    .into_iter()
+    .zip(samples)
     {
         eprintln!("{label}; {ROWS} two-text rows, {count} interleaved warm frames");
         distribution("frame + disposal", timings.iter().map(|t| t.total));
         distribution("prepare", timings.iter().map(|t| t.phases.prepare));
+        crate::perf::record(metric, timings.iter().map(|t| t.total));
     }
 }

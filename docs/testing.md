@@ -55,7 +55,9 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
 `--release` and `--nocapture`.
 
 - **Performance canaries and profiles** measure headless frame construction and
-  CAM work; see [performance checks](performance.md). Puri's
+  CAM work. `make perf` runs the canaries and compares them with the
+  [performance log](performance-log.tsv); see
+  [performance checks](performance.md). Puri's
   `handler_dispatch_profile` checks the cost of dispatching through unrelated
   handlers.
 - **GPU tests** need a real adapter. Seatbelt provides none, so on macOS build

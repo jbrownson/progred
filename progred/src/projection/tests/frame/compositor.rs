@@ -309,6 +309,8 @@ fn editor_compositor_profile() {
                 assert!(*errors.last().unwrap() <= 5);
             }
         }
+        crate::perf::record(&format!("{example:?}/direct"), direct.iter().copied());
+        crate::perf::record(&format!("{example:?}/composed"), composed.iter().copied());
         direct.sort();
         composed.sort();
         eprintln!(

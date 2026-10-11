@@ -1492,6 +1492,23 @@ mod tests {
         assert_eq!(rgba, vec![0; 64 * 64 * 4]);
     }
 
+    /// Names the adapter that implicit previews will use, for `tools/perf.py`.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    #[ignore = "reports the GPU adapter for performance records"]
+    fn report_gpu_adapter() {
+        match pollster::block_on(Gpu::init()) {
+            Ok(gpu) => {
+                let info = gpu.device.adapter_info();
+                eprintln!(
+                    "perf-gpu\t{} ({:?}, {:?})\t{:?}",
+                    info.name, info.backend, info.device_type, info.device_type
+                );
+            }
+            Err(error) => eprintln!("perf-gpu\tnone ({error})\tNone"),
+        }
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     #[ignore = "requires a GPU; does not use the CPU fallback"]

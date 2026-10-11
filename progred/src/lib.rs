@@ -37,6 +37,8 @@ mod native_menu;
 mod navigate;
 #[cfg(feature = "cam-profile")]
 pub mod orbit_profile;
+#[cfg(test)]
+mod perf;
 mod placed;
 mod platform;
 mod projection;
