@@ -240,6 +240,8 @@ def main():
         for test, frames in SUITE + (GPU_SUITE if hardware_gpu or args.gpu else [])
         if re.search(args.only, test)
     ]
+    if not suite:
+        sys.exit(f"perf: no workloads match {args.only!r}")
     head = commit()
     rounds = []
     for index in range(args.rounds):
