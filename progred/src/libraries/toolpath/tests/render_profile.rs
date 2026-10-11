@@ -13,11 +13,8 @@ fn balanced_union(trees: &[Tree]) -> Tree {
     }
 }
 
-#[test]
-#[ignore = "profiles current CAM scene layers and same-color path grouping"]
-fn cam_render_profile() {
-    use super::super::playback::Draw;
-    let start = Instant::now();
+/// Records the example's `preview_operations`, as the CAM preview does.
+fn record_example() -> (Recording, ::grap::Evaluation) {
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let stack = crate::stack::load();
     let sources = crate::sources::Sources {
@@ -39,6 +36,89 @@ fn cam_render_profile() {
         "{:?}",
         eval.result
     );
+    (recording, eval)
+}
+
+/// Playback that cuts a one-inch stock cube up to `progress`.
+fn stock_settings(progress: f64) -> super::super::playback::Settings {
+    super::super::playback::Settings::read(&Value::record([
+        (PROGRESS, f64::value(progress)),
+        (PROFILE_TOLERANCE, f64::value(0.001)),
+        (STOCK_MIN, point_value([-0.5; 3])),
+        (STOCK_MAX, point_value([0.5; 3])),
+        (
+            STOCK,
+            Value::record([(
+                implicit::vocabulary::COLOR,
+                crate::libraries::color::value(peniko::Color::from_rgb8(184, 155, 109)),
+            )]),
+        ),
+    ]))
+    .unwrap()
+}
+
+/// A preview of `objects` within ±0.85, `height` pixels tall and 4/9 as wide.
+fn volume(objects: Vec<implicit::SceneObject>, height: f64) -> implicit::VolumePreview {
+    use implicit::vocabulary as f;
+    let mut preview = implicit::volume_preview(&Value::record([(
+        f::PREVIEW_3D,
+        Value::record([
+            (f::FIELD, crate::libraries::f32::value(1.0)),
+            (
+                crate::libraries::layout::vocabulary::WIDTH,
+                f64::value(height * 4.0 / 9.0),
+            ),
+            (
+                crate::libraries::layout::vocabulary::HEIGHT,
+                f64::value(height),
+            ),
+            (f::MIN_X, crate::libraries::f32::value(-0.85)),
+            (f::MIN_Y, crate::libraries::f32::value(-0.85)),
+            (f::MIN_Z, crate::libraries::f32::value(-0.85)),
+            (f::MAX_X, crate::libraries::f32::value(0.85)),
+            (f::MAX_Y, crate::libraries::f32::value(0.85)),
+            (f::MAX_Z, crate::libraries::f32::value(0.85)),
+        ]),
+    )]))
+    .unwrap();
+    preview.objects = objects;
+    preview
+}
+
+/// The software implicit render of the example's fully cut stock, the CAM
+/// preview's most expensive layer, at 84 x 188 with its depth refinement.
+#[test]
+#[ignore = "times the software implicit render of the example's fully cut stock"]
+fn stock_render_profile() {
+    let (recording, _) = record_example();
+    let stock = stock_settings(1.0)
+        .remaining_stock(&recording)
+        .unwrap()
+        .unwrap();
+    let request = implicit::raster::Request::new(volume(vec![stock], 188.0), None, 1.0).unwrap();
+    let start = Instant::now();
+    let image = request
+        .render_software_progressive(512, 4, &Default::default(), &mut |_| Ok(()), None)
+        .unwrap()
+        .unwrap();
+    let elapsed = start.elapsed();
+    assert!(
+        image
+            .data
+            .as_ref()
+            .chunks_exact(4)
+            .any(|pixel| pixel[3] > 0)
+    );
+    eprintln!("stock render {}x{}: {elapsed:?}", image.width, image.height);
+    crate::perf::record("", [elapsed]);
+}
+
+#[test]
+#[ignore = "profiles current CAM scene layers and same-color path grouping"]
+fn cam_render_profile() {
+    use super::super::playback::Draw;
+    let start = Instant::now();
+    let (recording, eval) = record_example();
     eprintln!(
         "CAM record {:?}, {} segments",
         start.elapsed(),
@@ -65,20 +145,7 @@ fn cam_render_profile() {
         .unwrap_or("750".into())
         .parse()
         .unwrap();
-    let settings = super::super::playback::Settings::read(&Value::record([
-        (PROGRESS, f64::value(progress)),
-        (PROFILE_TOLERANCE, f64::value(0.001)),
-        (STOCK_MIN, point_value([-0.5; 3])),
-        (STOCK_MAX, point_value([0.5; 3])),
-        (
-            STOCK,
-            Value::record([(
-                implicit::vocabulary::COLOR,
-                crate::libraries::color::value(peniko::Color::from_rgb8(184, 155, 109)),
-            )]),
-        ),
-    ]))
-    .unwrap();
+    let settings = stock_settings(progress);
     let start = Instant::now();
     let stock = settings.remaining_stock(&recording).unwrap().unwrap();
     eprintln!("stock construction {:?}", start.elapsed());
@@ -96,32 +163,7 @@ fn cam_render_profile() {
     );
     let (paths, tool): (Vec<_>, Vec<_>) =
         objects.into_iter().partition(|o| o.color == [240, 174, 80]);
-    let preview = |objects| {
-        use implicit::vocabulary as f;
-        let mut preview = implicit::volume_preview(&Value::record([(
-            f::PREVIEW_3D,
-            Value::record([
-                (f::FIELD, crate::libraries::f32::value(1.0)),
-                (
-                    crate::libraries::layout::vocabulary::WIDTH,
-                    f64::value(height * 4.0 / 9.0),
-                ),
-                (
-                    crate::libraries::layout::vocabulary::HEIGHT,
-                    f64::value(height),
-                ),
-                (f::MIN_X, crate::libraries::f32::value(-0.85)),
-                (f::MIN_Y, crate::libraries::f32::value(-0.85)),
-                (f::MIN_Z, crate::libraries::f32::value(-0.85)),
-                (f::MAX_X, crate::libraries::f32::value(0.85)),
-                (f::MAX_Y, crate::libraries::f32::value(0.85)),
-                (f::MAX_Z, crate::libraries::f32::value(0.85)),
-            ]),
-        )]))
-        .unwrap();
-        preview.objects = objects;
-        preview
-    };
+    let preview = |objects| volume(objects, height);
     let cancel = incremental::Cancellation::default();
     if std::env::var("CAM_HYBRID").is_ok() {
         let model = preview(vec![stock.clone()]);

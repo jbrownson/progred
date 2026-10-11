@@ -41,6 +41,7 @@ SUITE = [
     ("projection::tests::frame::profile::cam_editor_scroll_profile_loop", None),
     ("libraries::toolpath::computation::tests::profile_program_tree_construction", None),
     ("libraries::toolpath::tests::stock_meshing_profile", None),
+    ("libraries::toolpath::tests::render_profile::stock_render_profile", None),
     ("projection::tests::frame::profile::fidget_cube_profile_loop", None),
     ("projection::tests::frame::profile::fidget_toolpaths_profile_loop", None),
     ("projection::tests::frame::profile::fidget_orbit_profile_loop", 12),
