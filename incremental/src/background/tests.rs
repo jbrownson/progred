@@ -554,13 +554,23 @@ fn progressive_values_are_current_and_publish_only_between_revisions() {
     let first = runtime.read(&parent).unwrap();
     assert_eq!(*first, (0, None));
     let worker = std::thread::spawn(queue.next());
-    assert_eq!(staged.recv().unwrap(), 0);
+    assert_eq!(
+        staged
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap(),
+        0
+    );
     assert!(Rc::ptr_eq(&first, &runtime.read(&parent).unwrap()));
     assert!(tasks.poll());
     let coarse = runtime.read(&parent).unwrap();
     assert_eq!(*coarse, (1, Some(10)));
     resume.send(()).unwrap();
-    assert_eq!(staged.recv().unwrap(), 1);
+    assert_eq!(
+        staged
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap(),
+        1
+    );
     assert!(Rc::ptr_eq(&coarse, &runtime.read(&parent).unwrap()));
     assert!(tasks.poll());
     assert_eq!(*runtime.read(&parent).unwrap(), (1, Some(11)));
@@ -596,7 +606,9 @@ fn replacing_a_progressive_request_retains_its_preview_but_rejects_late_reports(
     let parent = observe(&runtime, node);
     assert_eq!(*runtime.read(&parent).unwrap(), (true, None));
     let worker = std::thread::spawn(queue.next());
-    staged.recv().unwrap();
+    staged
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
     tasks.poll();
     assert_eq!(*runtime.read(&parent).unwrap(), (false, Some(10)));
     input.set(2);
@@ -635,7 +647,9 @@ fn unpublished_progress_is_discarded_if_inputs_changed_before_poll() {
     let observed = observe(&runtime, node);
     runtime.read(&observed).unwrap();
     let worker = std::thread::spawn(queue.next());
-    staged.recv().unwrap();
+    staged
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
     input.set(2);
     assert!(tasks.poll());
     assert_eq!(*runtime.read(&observed).unwrap(), (true, None));
@@ -748,7 +762,9 @@ fn running_work_is_cancelled_and_only_the_latest_replacement_runs() {
     let observed = observe(&runtime, node);
     runtime.read(&observed).unwrap();
     let worker = std::thread::spawn(queue.next());
-    let cancel = started_rx.recv().unwrap();
+    let cancel = started_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap();
     input.set(2);
     runtime.read(&observed).unwrap();
     assert_eq!(cancel.check(), Err(Error::Cancelled));
