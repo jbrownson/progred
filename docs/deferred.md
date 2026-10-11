@@ -462,8 +462,51 @@ except for regular structures like the matrix; routing, though generated routing
 for a regular matrix is plausible; and KiCad's format changing between versions.
 Prior art: Ergogen, SKiDL, atopile, tscircuit.
 
+### Editing generated output
+
+Generators that write files for another tool only work one way. Hand edits to
+the output, such as mounting holes or a nudged part, are lost or redone each
+time the generator runs again. Keep those edits in the document instead.
+
+- Where a generated thing comes from a literal or a simple expression, dragging
+  it edits the source, as with the tool-profile handles.
+- Otherwise an edit is an override of the generator's output, keyed by the
+  identity of what it changes and applied after generation. Overrides survive
+  regeneration, and one whose target no longer exists shows as an error rather
+  than vanishing. This is the same mechanism as patching a CAM strategy's
+  output.
+- Generated things need identities derived from their sources, such as the
+  switch for a given key, not positions in a list. CAD's topological naming
+  problem is the failure this avoids.
+- Shared definitions replace aligning one tool's output in another: the board's
+  mounting holes and the case's standoffs come from one list.
+
+Work done in an external tool, such as routing in KiCad, comes back the same
+way, imported as data keyed by identity, so a regenerated board keeps its routes
+where they still connect.
+
+### Version control
+
+Separate from the domains above, but needed for Progred to be complete. GID's
+identity-keyed cells suit structural diff and merge better than text: a change
+is a field of a cell, and two branches conflict only when they change the same
+field of the same cell. A diff is data, so the editor can project it: changed
+values highlighted in place, and geometry before and after overlaid, much as the
+CAM view shows old stock desaturated beside new while it updates. Visual diffs
+would be a real draw for hardware, where comparing versions of a board or a
+model is painful.
+
+A first step can sit on Git. Saving writes canonical text, so a diff driver and
+a merge driver for `.gid` files, keyed by cell ID, would work in ordinary
+repositories. Undo history is the starting point for history inside the
+document, with named versions, branches and merges built on it. Large blobs such
+as scans need content-addressed storage rather than inline text.
+
 ### A common thread
 
 CAM, printing and PCBs share a shape. Progred owns the design logic and its live
 projections, and hands off to a mature tool for the last step: a CAM
 post-processor, a slicer, or KiCad.
+
+The keyboard could tie these together: a whole product, board, plate and case,
+in one document with shared definitions and version control.
