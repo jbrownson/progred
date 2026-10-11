@@ -34,8 +34,9 @@ superseded notes to `docs/history/`.
 - Fix the source of a mismatch instead of compensating for it downstream, for
   example with a hand-tuned offset.
 - Commit when it makes sense, and keep unrelated changes in separate commits;
-  don't bundle housekeeping with feature work. When pushing to a session branch,
-  add commits as work proceeds and rewrite its history only when asked.
+  don't bundle housekeeping with feature work. Before pushing, run
+  `cargo fmt --all -- --check` and `make test`. When pushing to a session
+  branch, add commits as work proceeds and rewrite its history only when asked.
 - Don't run the app for the user to test; they run and test it themselves.
   Running it for your own checks is fine, preferably headlessly.
 - When a pattern or lesson emerges, propose an addition to this file. Don't add
@@ -105,9 +106,9 @@ against upstream and dropped or proposed upstream when it can be.
   and reads by document path through the shell's own event translation.
 - Visual changes are checkable without launching the app: `make test` runs
   `svg_bench`, which renders the sample and the Grap demo to SVG in the build
-  directory, and `./tools/sandbox-cargo run -p puri --example delimiter_bench`
-  renders the drawn delimiters against the font's outlines. Rasterize them with
-  `rsvg-convert`.
+  directory, and running the `delimiter_bench` example of `puri` through the
+  platform's Cargo wrapper renders the drawn delimiters against the font's
+  outlines. Rasterize them with `rsvg-convert`.
 
 ## Code Style
 
