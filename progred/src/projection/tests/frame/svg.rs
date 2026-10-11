@@ -711,14 +711,19 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
     }
 }
 
+/// The shape lesson with a mesh-only preview: its tests inspect the mesh, and
+/// running the lesson's implicit refinement inline would double their time.
 fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
         absent, blob, color, control, controls, conversion, f32, f64, fidget, geometry, grap,
         layout, list, logic, name, number, presentation, text, toolpath, tree, u64,
     };
-    let (doc, fields) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/shape.gid"
-    ))
+    let (doc, fields) = crate::gid_text::parse(
+        &include_str!("../../../../../website/public/lessons/shape.gid").replace(
+            &toolpath::vocabulary::PREVIEW_REFINED.to_string(),
+            &toolpath::vocabulary::PREVIEW_MESH.to_string(),
+        ),
+    )
     .unwrap();
     let mut editor = crate::test_editor_with_stack(
         doc,
