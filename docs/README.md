@@ -18,8 +18,9 @@ Start with:
   cancellable background jobs, and the first CAM integration.
 - [Puri and the editor frame](puri.md): ownership, layout, events, hover, and
   drawing.
-- [Build security](build-security.md): sandboxed build/test commands.
-- [Platforms](platforms.md): the native and browser hosts.
+- [Build security](build-security.md): the build sandbox and dependency policy.
+- [Platforms](platforms.md): building and running on macOS, Linux, and the
+  browser.
 
 Working on the editor:
 

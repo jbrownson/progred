@@ -4,49 +4,14 @@ Cargo build scripts and procedural macros execute native code while a crate is
 compiled. A locked dependency graph makes dependency changes visible, but does
 not make compilation of those dependencies safe.
 
-On macOS, use the repository's isolated build workflow for newly fetched or
-otherwise untrusted dependencies:
+On macOS, the Make targets (`fetch`, `check`, `build`, `test`, `run`, `dev`,
+`sandbox-app`, and `build-web`) compile under the repository's Seatbelt sandbox,
+and `make run` launches the result as an App Sandbox bundle. Use
+`./tools/sandbox-cargo <cargo command> [arguments...]` for other Cargo commands.
+How each platform builds and runs is in [platforms](platforms.md).
 
-```sh
-make fetch
-make check
-make build
-make test
-make sandbox-app
-make build-web
-```
-
-The usual native development command is:
-
-```sh
-make run
-```
-
-On macOS it replaces `cargo run --release`: it performs the isolated release
-build, packages and ad-hoc signs `Progred.app`, launches a fresh instance
-through Launch Services with the App Sandbox entitlement, and waits for the app
-to exit. Launch Services does not safely attach the sandboxed GUI process to
-the invoking terminal's standard streams; use macOS logging when diagnostics
-are needed.
-
-`make dev` keeps an interactive development session open: Ctrl+C stops its
-current build or app, rebuilds, and launches again; Ctrl+\ quits the session.
-Quitting the app (Cmd+Q on macOS) also rebuilds and restarts it. A failed
-command waits for Ctrl+C instead of retrying automatically.
-Closing the terminal stops the session. Restarting discards unsaved changes in
-that development instance, as terminating the previous development loop did.
-
-The helper owns a process group for each command. On macOS, its small native
-launcher opens the signed bundle through `NSWorkspace` and retains the returned
-`NSRunningApplication`, so termination targets that instance rather than every
-process named `progred`. Ordinary `make run` still uses `open -W -n`.
-The loop lives outside Make recipes, so `make -n dev` only prints the command.
-Run `python3 tools/test-dev-native.py` to check its process and terminal behavior
-using disposable subprocesses without launching Progred.
-
-On Linux, `fetch`, `check`, `build`, `test`, `run`, and `install-linux` all go
-through `tools/linux-cargo`, an ordinary locked Cargo invocation in
-`target/native`. This is not sandboxed. That script is the deliberate Linux
+On Linux, the native Make targets go through `tools/linux-cargo`, an ordinary
+locked Cargo invocation in `target/native`. This is not sandboxed. That script is the deliberate Linux
 exception to the Cargo tripwire, and it refuses to run on macOS; do not
 reproduce its `RUSTC_WRAPPER` override in ad-hoc commands.
 
@@ -75,21 +40,18 @@ Use `./tools/sandbox-cargo update ...` for an intentional dependency update.
 That command uses the pinned `nightly-2026-08-27` Cargo solely for its
 minimum-publish-age resolver, excludes registry releases less than seven days
 old, and enables network access and write access to `Cargo.lock` only for the
-update. Install that toolchain with `rustup toolchain install
-nightly-2026-08-27 --profile minimal` if needed. Subsequent compilation remains
-on stable Cargo for native targets, offline, and source-read-only. Once Rust
+update. It's the same toolchain the browser build uses; see
+[its setup](../web/README.md). Subsequent compilation remains on stable Cargo
+for native targets, offline, and source-read-only. Once Rust
 1.100 is stable (12 November 2026), `update` and `resolve` can use stable
 Cargo, where `registry.global-min-publish-age` no longer needs
 `-Z min-publish-age`; the browser build keeps the nightly for `-Z build-std`.
-The browser build is an explicit exception: `web-threaded` uses the same pinned nightly to
-rebuild the standard library with atomics and enable WASM SIMD, under the same
-Seatbelt restrictions, in a separate `target/sandbox/build-web` directory.
-`web-threaded-fetch` only fetches
+The browser build is an explicit exception: `web-threaded`, which
+`make build-web` uses, builds with the same pinned nightly to rebuild the
+standard library with atomics, under the same Seatbelt restrictions, in a
+separate `target/sandbox/build-web` directory. `web-threaded-fetch` only fetches
 that toolchain's locked sysroot dependencies; it does not update the workspace
-lockfile. `make build-web` uses this path; native builds remain on stable. The
-pinned nightly needs `rust-src` and `llvm-tools`. The standalone
-[worker diagnostic](history/web-worker-experiment-2026-09-19.md) uses the same build and
-transport without starting the editor.
+lockfile.
 The browser Rayon pool uses `wasm-bindgen-rayon` 1.3.0 with `no-bundler`.
 Its three added registry packages (`wasm-bindgen-rayon`, `wasm_sync`, and
 `crossbeam-channel`) resolved under the same seven-day publication-age policy;
@@ -194,12 +156,8 @@ repository deliberately does not modify the user's global Rust tooling.
 `target/sandbox/app/Progred.app`, enables Apple's App Sandbox, and signs it
 ad hoc for local use. Its additional capabilities are read/write access to
 files explicitly chosen through the app's native Open and Save panels, and
-JIT-compiled code as described above. Launch
-that bundle, rather than using `cargo run`, to retain the runtime sandbox:
-
-```sh
-open target/sandbox/app/Progred.app
-```
+JIT-compiled code as described above. Launch that bundle, as `make run` does,
+rather than the bare binary, to keep the runtime sandbox.
 
 The current command-line document path is not a user-selected file grant, so
 open external documents through the app's File > Open command; opening them

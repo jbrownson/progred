@@ -170,12 +170,10 @@ make run-web
 It builds any editor changes, then serves `http://127.0.0.1:8081/editor/` on
 this machine only; the server does not listen on other network interfaces.
 
-On Linux, `make run` uses the native launcher and performs a regular locked
-Cargo build; **the Linux build is not sandboxed**. The macOS `sandbox-*` commands
-do not apply there.
-
-An earlier iPad feasibility port has been removed; see the
-[platform notes](docs/platforms.md). visionOS is deferred, not an implemented port.
+On Linux, `make run` performs a regular locked Cargo build; **the Linux build
+is not sandboxed**. `make install-linux` installs it as a desktop application.
+The [platform notes](docs/platforms.md) list the runtime libraries it needs and
+cover the other ports.
 
 ## How it fits together
 

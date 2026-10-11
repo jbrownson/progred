@@ -26,12 +26,9 @@ build can take a while. `--no-build` reuses the existing generated files
 without checking for changes, building only if they're missing. Restart the
 launcher to pick up editor changes; website files only need a browser refresh.
 
-The browser build uses `nightly-2026-08-27` with `rust-src` and `llvm-tools`,
-and `wasm-bindgen-cli` matching the locked `wasm-bindgen` version. It rebuilds
-`std` with atomics and enables SIMD for the shared-memory browser build, inside
-the normal Cargo sandbox. The browser must support WebAssembly SIMD.
-One-time setup is described in [the browser host notes](../web/README.md).
-No Node or package installation is needed for the site.
+The browser build needs a one-time toolchain setup, described in
+[the browser host notes](../web/README.md). No Node or package installation is
+needed for the site.
 
 The header's GitHub link uses the standard Octicon and the site's light/dark
 palette. A small local script requests the star count once from GitHub's public
@@ -259,17 +256,10 @@ sender, iframe, and channel; reset advances the channel so queued notifications
 from the old editor cannot complete the new checklist. The full editor does
 not subscribe, serialize state, or send these messages.
 
-CAM stock meshing and implicit rendering use a shared-memory coordinator and
-Rayon worker pool (up to eight rendering workers). The editor starts only after
-the pool is ready; there is no synchronous computation fallback.
-The server supplies the COOP/COEP headers required for cross-origin isolation
-on both the website and embedded editor. Existing preview servers need to be
-restarted after this change, not just refreshed. Projection and toolpath generation
-remain on the page thread. Presentation uses the native compositor via WebGPU,
-including GPU mesh drawing. Canvas2D/CPU mesh drawing remains a fallback when
-WebGPU is unavailable.
-
-For deployment, use HTTPS and configure those same headers. GitHub Pages alone
+The editor's shared-memory workers need cross-origin isolation, so the
+preview server supplies COOP/COEP headers for the website and the embedded
+editor; [the browser host notes](../web/README.md) describe the workers and
+presentation. For deployment, use HTTPS and configure those same headers. GitHub Pages alone
 does not provide the header configuration this threaded build requires. The
 Cloudflare configuration below supplies them without a service worker.
 
