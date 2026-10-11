@@ -33,23 +33,18 @@ exception there, an ordinary locked Cargo run in `target/native`.
 Use `make run` in place of `cargo run --release`. On macOS it builds under
 Seatbelt, packages and ad-hoc signs the app with its App Sandbox entitlements,
 launches a fresh instance, and waits for it to exit. On Linux it runs the app
-through `tools/linux-cargo`. Agents still must not launch
-the app; the user runs and visually tests it. See `docs/build-security.md` for
-the boundary and the separate fetch/update commands.
+through `tools/linux-cargo`. See `docs/build-security.md` for the boundary and
+the separate fetch/update commands.
 
-Web builds stay on macOS, under Seatbelt; do not add a Linux browser build.
-Once Rust 1.100 is stable (12 November 2026), switch `sandbox-cargo update`
-and `resolve` to stable Cargo: `registry.global-min-publish-age` no longer
-needs `-Z min-publish-age` there. The browser build still needs a nightly for
-`-Z build-std`, which has no scheduled stabilization, so `web-threaded` keeps
-`nightly-2026-08-27`.
+Local browser builds stay on macOS, under Seatbelt; `website/build-ci.sh` is the
+only Linux browser build, for publishing from CI. Do not add another.
 
 ## Workflow
 
 - Don't run the app — the user prefers to run and test it themselves
 - Don't fight the system — avoid hacks/workarounds that go against how frameworks or platforms are designed; push back early when something seems like it's not meant to work that way
 - Keep unrelated changes in separate commits whenever possible; avoid bundling housekeeping with feature work
-- Only commit when explicitly asked
+- Only commit when explicitly asked. When the user asks for work-in-progress pushes, add commits to the session branch as work proceeds, and rewrite its history only when the user asks, such as to tidy it before merging
 - When a design pattern or lesson emerges during work, propose additions to this document so future sessions start with that knowledge
 
 ## Puri Rules
@@ -90,11 +85,10 @@ projections), `docs/model.md` (selection, completion, panes), and
 - Resilient to invalid GID states — projections specify the happy path but must fall through gracefully to default/raw rendering; never crash or hide data on unexpected values.
 - Controls supply sensible defaults for absent selection payload fields. Selecting a writable missing location enters its picker without an explicit pending marker; keep explicit query modes for intentional requests, not as required setup.
 - Normal display is one explicit projection: ordered partial projections above one total structural fallback, passed explicitly through recursion and never buried in display context. Each partial checks its preconditions and fails closed. Puri leaves never acquire document locations, selection payloads, editing rules, or event policy; there is no parallel Progred drawing language and no central action enum or reducer.
-- Documents currently contribute no library cells, foreign functions, or projections. Do not discover configuration through fixed-address cells or other data outside ordinary root reachability.
+- Documents contribute projections only through the libraries their root declares; they contribute no completions or foreign functions, and other documents can't load them. Do not discover configuration through fixed-address cells or other data outside ordinary root reachability.
 - Pane entries are ordinary values in the document's root-reachable side lists; opening, moving, and deleting panes edit those lists and participate in history.
 - Completion is an ordinary native widget placed by the projection that renders the pending location. Providers receive one explicit request and are never hidden in traversal context; applicability decisions stay in libraries, not host hooks. Retain the exact visible offers in the placed frame so hover and commit never reconstruct a different list.
 - Text and number partials call the stock native line widget with a conversion callback owned by the current handler. The caller runs each editing operation, then converts and records undo at that boundary; there is no shell-wide write-through. Line-editor state stays Rust-owned beside the selection payload; never retain and synchronize a second copy.
-- Compile-time code generation must fail loudly — malformed GID data must produce a clear compile error, never be silently skipped.
 - Grap syntax is ordinary `Value` structure interpreted through library cell IDs. Privileged knowledge of a library convention (such as unboxed f64) is an accelerator only, never a capability: each such library must remain expressible externally and read to Grap as an ordinary library.
 - Grap's `{value: expression}` wrapper evaluates its expression in the calling environment; it introduces neither a binding nor memoization.
 - The structural fallback projects cells deeply; Grap expression and callable positions request a shallow named-cell projection. Use explicit composition rather than teaching the raw structural fallback about Grap.
@@ -118,7 +112,8 @@ projections), `docs/model.md` (selection, completion, panes), and
 
 - Test pure logic directly; don't write UI tests that just verify strings pass through to draw calls
 - Pure `render`/`update` functions mean snapshot/property tests on draw-list data need no windowing harness — prefer them; use vello headless readback only when a visual golden is genuinely needed
-- Visual changes are checkable without launching the app: `./tools/sandbox-cargo test -p progred svg_bench` renders the sample and focused Grap demo through the real projection to `target/sandbox/build/raw_projection.svg` and `target/sandbox/build/grap_demo.svg`, and `./tools/sandbox-cargo run -p puri --example delimiter_bench` renders the drawn-delimiter family against the font's own outlines; view any of them with `qlmanage -t -s 1600 -o <dir> <svg>`
+- Drive interactions headlessly with `crate::driver::Driver`: it clicks, types, and reads by document path through the shell's own event translation, and keeps the last painted frame
+- Visual changes are checkable without launching the app: `make test` runs `svg_bench`, which renders the sample and focused Grap demo through the real projection to `raw_projection.svg` and `grap_demo.svg` in the build directory (`target/sandbox/build` on macOS, `target/native` on Linux), and `./tools/sandbox-cargo run -p puri --example delimiter_bench` renders the drawn-delimiter family against the font's own outlines; rasterize any of them with `rsvg-convert`, or `qlmanage -t -s 1600 -o <dir> <svg>` on macOS
 
 ## Code Style
 

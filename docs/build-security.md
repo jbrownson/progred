@@ -77,7 +77,10 @@ minimum-publish-age resolver, excludes registry releases less than seven days
 old, and enables network access and write access to `Cargo.lock` only for the
 update. Install that toolchain with `rustup toolchain install
 nightly-2026-08-27 --profile minimal` if needed. Subsequent compilation remains
-on stable Cargo for native targets, offline, and source-read-only.
+on stable Cargo for native targets, offline, and source-read-only. Once Rust
+1.100 is stable (12 November 2026), `update` and `resolve` can use stable
+Cargo, where `registry.global-min-publish-age` no longer needs
+`-Z min-publish-age`; the browser build keeps the nightly for `-Z build-std`.
 The browser build is an explicit exception: `web-threaded` uses the same pinned nightly to
 rebuild the standard library with atomics and enable WASM SIMD, under the same
 Seatbelt restrictions, in a separate `target/sandbox/build-web` directory.
