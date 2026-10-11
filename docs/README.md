@@ -44,8 +44,8 @@ CAM and Fidget:
   dependency-tracked geometry; ordinary mesh previews remesh each frame.
 - [Toolpaths](toolpaths.md): the streaming CAM geometry library and its combined
   model-and-path preview.
-- [Tool profiles](tool-profiles.md): revolved cutter sections and the remaining
-  tool-change and chamfer work.
+- [Tool profiles](tool-profiles.md): revolved cutter sections and the square
+  tool's chamfer strategies.
 - [Tool-sweep experiment](tool-sweep-experiment.md): the test-only analytic
   bull-mill candidate and why it hasn't replaced the working approximation.
 

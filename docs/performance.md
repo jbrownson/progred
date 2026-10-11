@@ -168,9 +168,10 @@ same helper as the original Fidget canary, changing only the document. Their
 editable formulas and sources are described in [the examples guide](../examples/README.md).
 
 The cube and toolpath fixtures now use [mesh previews](fidget-mesh.md), not voxel
-rendering. Their current canaries include CPU meshing every frame, triangle
-rasterization, and native upload/readback when the GPU is available. The toolpath
-sink generates tube triangles directly, without implicit path fields. Earlier
+rendering. The cube canary remeshes every frame; the toolpath canary retains its
+dependency-tracked geometry and records mesh drawing without GPU rendering, which
+`cam_mesh_roundtrip_profile` covers separately. The toolpath sink generates tube
+triangles directly, without implicit path fields. Earlier
 voxel timings are not unchanged baselines. Other Fidget canaries still use the voxel path
 described below.
 

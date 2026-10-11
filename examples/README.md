@@ -139,8 +139,7 @@ Path positions now locate the tip, after normal compensation and the axial
 ball-center-to-tip shift. At the end of the toolpaths list, `ball tool` evaluates
 the common constructor and `square tool` is an editable profile with a wider,
 tapered non-cutting shank. Each displays a mirrored 2D profile beside its data.
-The square tool is not yet used by the program: tool changes and chamfer passes
-are the next step. See [tool profiles](../docs/tool-profiles.md).
+The square tool cuts the chamfers. See [tool profiles](../docs/tool-profiles.md).
 No links between passes are implied. Mesh's optional `mesh depth` defaults to 6.
 Full-stock implicit GPU rendering is unsupported,
 so the software path is explicit, not a fallback after attempting a GPU render;
@@ -149,8 +148,8 @@ The document includes its own copy of the cube definition;
 its geometry drives the toolpath's contact points. Tan stock starts as a one-inch cube, bounded
 by −0.5…0.5 on every axis (one model unit means one inch in this example); completed
 cuts subtract continuous swept ball-end solids through Fidget. Both operations
-together finish the six indents, but leave the chamfers untouched and do not
-plan roughing, links, or collision clearance. The Model / Stock control above the
+together finish the six indents and twelve chamfers, but do not plan roughing,
+links, or collision clearance. The Model / Stock control above the
 timeline switches between the blue target model with a stock wireframe and the
 tan remaining material, retaining camera, ranges, and playback position. Model
 is the default; stock bounds and color remain editable in the preview function. Both preview

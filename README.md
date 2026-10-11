@@ -58,8 +58,9 @@ clearance, or a safe machining plan.**
   range from a torus and a gyroid to a parameterized, chamfered fidget cube.
 - **Early CAM:** Grap-generated toolpaths, a playback slider, revolved cutter
   profiles, and stock subtraction using continuous fixed-orientation sweeps.
-  The cube example separates top-and-side machining from a bottom operation;
-  chamfer machining, tool changes, and machine output are still ahead.
+  The cube example machines its indents with a ball end mill and its twelve
+  chamfers with a square tool, in two operations; roughing, links between
+  passes, collision checks, and machine output are still ahead.
 - **Responsive expensive views:** explicit dependency-tracked computations,
   cancellable background work, and progressive rendering. The combined CAM
   viewport uses a mesh while implicit images refine in the background.

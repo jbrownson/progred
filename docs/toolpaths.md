@@ -48,7 +48,7 @@ Focus is a playback input, separate from path generation, so selector changes
 reuse the observed recording. Stock meshing and implicit rendering use the
 existing dependency-tracked async pipeline. Focusing an early group can avoid
 much rendering work; focusing a late group still needs the earlier stock cuts.
-No source-hover linkage or keyboard interaction for these controls is added yet.
+These controls don't respond to the keyboard yet.
 
 ## Generation and interpretation
 
@@ -453,13 +453,12 @@ machine programs. The opt-in toolpath orbit canary in
 Fidget's pinned GPU interpreter leaves register-spill loads and stores
 (`OP_MEM`) unimplemented. Upstream's `RenderShape::new` accepts such bytecode and
 renders nothing; the vendored spill patch instead rejects it with
-`SpillsUnsupported`, and Progred falls back to the CPU on that error. Keeping each continuous path separate avoids spilling in this example,
-and a regression test checks every path for load/store instructions. A large
-enough individual path can still hit this; there is no spill emulation or
-automatic CPU fallback for it. Before shipping, follow up upstream on
-implementing or rejecting these instructions; no issue has been filed yet. The
-mesh viewport bypasses the GPU VM entirely and retains geometry through the
-general dependency graph. The 2026-09-13 measurements behind this are in the
+`SpillsUnsupported`, and Progred falls back to the CPU on that error. Keeping
+each continuous path separate avoids spilling in this example, and a regression
+test checks every path for load/store instructions. A large enough individual
+path still spills, and then falls back to the CPU like any spilling tape;
+nothing emulates spills on the GPU. The mesh viewport bypasses the GPU VM
+entirely and retains geometry through the general dependency graph. The 2026-09-13 measurements behind this are in the
 [performance log](history/performance-log-2026-09.md#toolpath-gpu-findings--2026-09-13-and-14).
 
 ## Playback

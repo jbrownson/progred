@@ -288,7 +288,7 @@ geometry and when building a successor. Release resumes normal probing.
 
 ## Frame lifecycle
 
-The [application shell](../progred/src/lib.rs) adapts Winit events and supplies
+The [application shell](../progred/src/app.rs) adapts Winit events and supplies
 platform capabilities. Each window owns an `EditorRunner`: the mutable `Editor`
 beside its saved `FrameState` (dispatch, settled hover, and pending painting).
 Widget handlers receive only `&mut Editor`, not their own saved dispatch. The
@@ -487,5 +487,5 @@ focused filter rather than the home of all interaction regressions:
 
 This writes sample SVG files under `target/`. The ignored IoP profiling loops
 are in [frame/profile.rs](../progred/src/projection/tests/frame/profile.rs).
-See [build security](build-security.md) for sandboxed commands. Agents do not
-launch the application; the owner performs visual testing.
+See [build security](build-security.md) for sandboxed commands. The owner does
+the visual testing; agents run the app only for their own checks.

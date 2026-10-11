@@ -337,7 +337,7 @@ projections are not converted.
 
 ## Deferred
 
-Grap path generation and mesh-preview rasterization/readback remain synchronous.
+Grap path generation remains synchronous.
 The implicit CAM image job includes software rasterization. There is no
 user-facing quality controls, durability tier, or Grap-language memo/async
 syntax yet. Incremental lambda calculus and

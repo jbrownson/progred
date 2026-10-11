@@ -214,9 +214,7 @@ report has been filed. The owner prefers avoiding local Vello patches. The
 [separate compositor](history/vello-compositor-experiment-2026-09-18.md) now bypasses the
 atlas for native draw-image operations, with per-window upload ownership and
 headless fidelity, resize, lifetime, and performance checks. Image brushes still
-use Vello's atlas. Direct mesh drawing, including replacing partial implicit-image
-coverage over a GPU mesh fallback, remains a separate step; the mesh pipeline
-still performs readback.
+use Vello's atlas.
 
 ## CAM preview navigation and execution grouping
 

@@ -78,8 +78,8 @@ for a free port when running an additional preview alongside this one.
 - Each iframe owns an independent editor session. Its Reset button reloads only
   that iframe, discarding that exercise's edits and history. Full-page editor links open a
   new session; they do not transfer the embedded document.
-- Browser edits are currently in memory only. Do not author something you need
-  to keep here yet; document import/export is a useful next step.
+- Edits live in memory until saved: the editor's File → Save downloads the
+  document as a `.gid` file, and File → Open loads one.
 
 The exercise tutorial opens with a growing forest. A slider scrubs growth forward or backward;
 the visible `drawing with controls` call connects it to a forest function with editable

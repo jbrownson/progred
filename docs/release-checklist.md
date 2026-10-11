@@ -51,7 +51,9 @@ GPU interpreter and simplifier leave the corresponding `OP_MEM` unimplemented.
 Do not resubmit this unsupported program to the GPU merely to repeat the stall.
 Command+3 explicitly uses software implicit rendering in the general background
 executor. `editor_toolpath_implicit_async_svg_captures` verifies this path under
-the build sandbox; native implicit GPU support needs an upstream fix.
+the build sandbox; native implicit GPU support needs an upstream fix. Ask
+upstream whether the GPU interpreter should implement or reject `OP_MEM`; no
+issue has been filed yet.
 See [toolpaths](toolpaths.md#playback).
 
 ## Fidget cold start
