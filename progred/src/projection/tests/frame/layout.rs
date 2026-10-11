@@ -714,12 +714,7 @@ fn sample_text_line_claims_its_own_hover() {
         Step::Key(sample_vocabulary::COLOR),
     ];
     let (bench, _) = place(&doc, None, 900.0);
-    let rect = bench
-        .descends
-        .iter()
-        .find(|descend| descend.path.as_ref() == path)
-        .expect("color descend")
-        .rect;
+    let rect = bench.descends.landmark(&path).expect("color descend").rect;
     let (bench, _) = place_with_pointer(&doc, None, 900.0, Some(rect.center()));
     assert_eq!(
         bench.hit,
@@ -983,20 +978,19 @@ fn hovering_a_field_label_targets_its_value() {
     }
     let bench = found.expect("a label claim left of the value");
     assert!(
-        bench.list.0.iter().any(is_hover_wash),
+        crate::display::test_support::painted(&bench.list.0).any(is_hover_wash),
         "the label's hover wash should paint"
     );
 }
 
 fn is_hover_wash(cmd: &DrawCmd) -> bool {
-    match cmd {
+    matches!(
+        cmd,
         DrawCmd::Fill {
             brush: Brush::Solid(color),
             ..
-        } => (color.components[3] - 0.08).abs() < 1e-5,
-        DrawCmd::Clip { children, .. } => children.iter().any(is_hover_wash),
-        _ => false,
-    }
+        } if (color.components[3] - 0.08).abs() < 1e-5
+    )
 }
 
 /// Two flat elements and two block rows, deterministically: the
@@ -1223,14 +1217,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     let project =
         |world: &mut crate::Editor| editing_frame_with_projection(world, false, Some(&projection));
     let between = |frame: &placed::HoverOutput<crate::Editor>, left: &[Step], right: &[Step]| {
-        let rect = |path: &[Step]| {
-            frame
-                .descends
-                .iter()
-                .find(|d| d.path.as_ref() == path)
-                .unwrap()
-                .rect
-        };
+        let rect = |path: &[Step]| frame.descends.landmark(&path).unwrap().rect;
         let (left, right) = (rect(left), rect(right));
         Point::new((left.x1 + right.x0) / 2.0, left.center().y)
     };
@@ -1331,14 +1318,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         )];
         let mut world = crate::test_editor(doc);
         let frame = editing_frame(&mut world, false);
-        let rect = |path: &[Step]| {
-            frame
-                .descends
-                .iter()
-                .find(|d| d.path.as_ref() == path)
-                .unwrap()
-                .rect
-        };
+        let rect = |path: &[Step]| frame.descends.landmark(&path).unwrap().rect;
         let items: Vec<_> = positions
             .iter()
             .map(|p| rect(&[Step::Element(p.clone())]))
@@ -1379,12 +1359,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         let Step::Element(inserted) = &path[0] else {
             unreachable!()
         };
-        let pending = pending_frame
-            .descends
-            .iter()
-            .find(|d| d.path.as_ref() == path)
-            .unwrap()
-            .rect;
+        let pending = pending_frame.descends.landmark(&path).unwrap().rect;
         for (neighbor, before) in [
             (boundary.checked_sub(1).and_then(|i| positions.get(i)), true),
             (positions.get(boundary), false),
@@ -1437,8 +1412,7 @@ fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
     // the container outright — the widened handle.
     let list = bench
         .descends
-        .iter()
-        .find(|descend| descend.path.as_ref() == parent)
+        .landmark(&parent)
         .expect("the list has a landmark");
     let (claimed, _) = place_with_pointer(
         &doc,
@@ -1529,14 +1503,12 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
 fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
     use crate::libraries::{absent, grap::vocabulary::GRAP, presentation, workspace};
     fn fills(commands: &[DrawCmd], brush: &Brush, outline: RoundedRect) -> bool {
-        commands.iter().any(|command| match command {
-            DrawCmd::Fill {
+        crate::display::test_support::painted(commands).any(|command| {
+            matches!(command, DrawCmd::Fill {
                 shape: Shape::RoundedRect(rect),
                 brush: fill,
                 ..
-            } => fill == brush && *rect == outline,
-            DrawCmd::Clip { children, .. } => fills(children, brush, outline),
-            _ => false,
+            } if fill == brush && *rect == outline)
         })
     }
     let program = new_cell_id();

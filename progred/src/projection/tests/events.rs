@@ -64,11 +64,7 @@ fn native_annotation_handler_retains_the_projected_site() {
     let placed = crate::display::widget::frame::place(measured, placement, &Default::default());
     let mut writes = crate::test_editor(doc.clone());
     let event = PointerScrollEvent {
-        pointer: PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        },
+        pointer: crate::display::test_support::mouse(),
         state: PointerState {
             position: (placement.rect.center().x, placement.rect.center().y).into(),
             ..Default::default()

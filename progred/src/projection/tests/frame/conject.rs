@@ -21,8 +21,7 @@ fn stop<'a>(
 ) -> &'a Descend<crate::Editor> {
     frame
         .descends
-        .iter()
-        .find(|d| d.path.as_ref() == path)
+        .landmark(&path)
         .expect("projected occurrence")
 }
 
@@ -40,16 +39,14 @@ fn command(key: Key) -> KeyboardEvent {
 }
 
 fn grounds(commands: &[DrawCmd], color: Color) -> Vec<Rect> {
-    commands
-        .iter()
-        .flat_map(|command| match command {
-            DrawCmd::Clip { children, .. } => grounds(children, color),
+    crate::display::test_support::painted(commands)
+        .filter_map(|command| match command {
             DrawCmd::Fill {
                 shape: Shape::RoundedRect(rect),
                 brush: Brush::Solid(brush),
                 ..
-            } if *brush == color => vec![rect.rect()],
-            _ => vec![],
+            } if *brush == color => Some(rect.rect()),
+            _ => None,
         })
         .collect()
 }

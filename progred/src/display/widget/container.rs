@@ -108,7 +108,7 @@ mod tests {
     use super::*;
     use crate::display::widget::{HoverContext, leaf};
     use puri::draw::{DrawCmd, DrawList, Shape};
-    use puri::handler::{PointerButtonEvent, PointerInfo, PointerState, PointerType, ScrollDelta};
+    use puri::handler::{PointerButtonEvent, PointerState, ScrollDelta};
     use puri::{Affine, Color, Rect};
     use std::{cell::RefCell, rc::Rc};
 
@@ -125,11 +125,7 @@ mod tests {
     fn pointer_at(x: f64, y: f64) -> PointerButtonEvent {
         PointerButtonEvent {
             button: None,
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: PointerState {
                 position: (x, y).into(),
                 ..Default::default()

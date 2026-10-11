@@ -9,6 +9,8 @@ mod commands;
 mod completion;
 mod computations;
 mod display;
+#[cfg(test)]
+mod driver;
 mod editing;
 mod editor;
 mod filter;

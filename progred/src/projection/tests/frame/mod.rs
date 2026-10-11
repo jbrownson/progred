@@ -186,6 +186,22 @@ impl puri::draw::CanvasSink for Bench {
     }
 }
 
+/// Configure the editor's projection slots as a tutorial page does.
+fn tutorial_slots(world: &mut crate::Editor, slots: &[CellId]) {
+    world.stack.projection = crate::web_embed::tutorial_slots(
+        Some(
+            &slots
+                .iter()
+                .map(CellId::to_string)
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        world.stack.projection.clone(),
+        &world.stack.libraries,
+    )
+    .unwrap();
+}
+
 fn place_with_pointer(
     doc: &Document,
     selection: Option<&Selection>,

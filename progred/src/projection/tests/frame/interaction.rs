@@ -261,11 +261,7 @@ fn list_insertion_through_a_comma_and_whole_list_selection() {
 
 fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
     let frame = editing_frame(world, false);
-    let target = frame
-        .descends
-        .iter()
-        .find(|target| target.path.as_ref() == path)
-        .unwrap();
+    let target = frame.descends.landmark(&path).unwrap();
     assert!((target.select)(world, None));
     for (key, modifiers) in [
         (
@@ -404,12 +400,7 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
         let rect = node.extent.rect_at(Point::ZERO);
         let frame =
             crate::display::widget::frame::place(node, Placement::root(rect), &Default::default());
-        let profile = frame
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == selected_path)
-            .unwrap()
-            .rect;
+        let profile = frame.descends.landmark(&selected_path).unwrap().rect;
         // Inside the 110 × 180 profile, clear of both its text and delimiters.
         let pointer = Point::new(profile.x0 + 55.0, profile.y0 + 90.0);
         let frame = crate::display::widget::frame::place(
@@ -497,8 +488,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         crate::display::widget::frame::place(node, Placement::root(rect), &Default::default());
     let point = placed
         .descends
-        .iter()
-        .find(|descend| descend.path.as_ref() == path)
+        .landmark(&path)
         .expect("color descend")
         .rect
         .center();
@@ -570,8 +560,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         crate::display::widget::frame::place(active, Placement::root(rect), &Default::default());
     let line = active
         .descends
-        .iter()
-        .find(|descend| descend.path.as_ref() == path)
+        .landmark(&path)
         .expect("active color descend")
         .rect;
     let mut double = event.clone();
@@ -972,22 +961,13 @@ fn lesson_world(
     let (doc, names) = crate::gid_text::parse(file).unwrap();
     let mut world =
         crate::test_editor_with_stack(doc, crate::stack::load_selected(libraries).unwrap());
-    world.stack.projection = crate::web_embed::tutorial_slots(
-        Some(&slots.map(|slot| names[slot].to_string()).join(",")),
-        world.stack.projection.clone(),
-        &world.stack.libraries,
-    )
-    .unwrap();
+    tutorial_slots(&mut world, &slots.map(|slot| names[slot]));
     (world, names)
 }
 
 fn select_occurrence(world: &mut crate::Editor, path: &[Step]) {
     let frame = editing_frame(world, false);
-    let target = frame
-        .descends
-        .iter()
-        .find(|d| d.path.as_ref() == path)
-        .unwrap();
+    let target = frame.descends.landmark(&path).unwrap();
     assert!((target.select)(world, None));
 }
 
@@ -1416,12 +1396,7 @@ fn a_read_only_swatch_selects_its_color() {
     // The evaluated result is computed, so it's read-only.
     let result = vec![Step::Key(RESULT)];
     let frame = settle(editing_frame(&mut world, false));
-    let rect = frame
-        .descends
-        .iter()
-        .find(|landmark| landmark.path.as_ref() == result)
-        .unwrap()
-        .rect;
+    let rect = frame.descends.landmark(&result).unwrap().rect;
     assert!(click_at(&mut world, Point::new(rect.x0 + 7.0, rect.center().y)).is_some());
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(selection.path(), result);

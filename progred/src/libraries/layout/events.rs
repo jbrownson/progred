@@ -399,11 +399,7 @@ mod motion_tests {
     #[test]
     fn grap_pinch_delta_is_dimensionless_and_position_is_local() {
         let event = PointerGestureEvent {
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: PointerState {
                 position: (25.0, 40.0).into(),
                 ..Default::default()

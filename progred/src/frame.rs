@@ -916,6 +916,7 @@ fn project_frame(
 #[cfg(test)]
 mod frame_tests {
     use super::*;
+    use crate::display::test_support::Landmarks;
     use gid::{CellId, Cells, Document, Step, Value};
 
     type HoverLog = Rc<std::cell::RefCell<Vec<(&'static str, f64)>>>;
@@ -923,18 +924,14 @@ mod frame_tests {
 
     #[test]
     fn scrolling_a_view_that_no_longer_exists_declines() {
-        use ui_events::pointer::{PointerInfo, PointerScrollEvent, PointerType};
+        use ui_events::pointer::PointerScrollEvent;
         let mut editor = crate::test_editor(Document {
             root: Some(Value::record([])),
             cells: Cells::new(),
         });
         let gone = crate::workspace::Root::pane(vec![Step::Key(gid::new_cell_id())]);
         let event = PointerScrollEvent {
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             delta: ui_events::ScrollDelta::LineDelta(0.0, 1.0),
             state: Default::default(),
         };
@@ -1147,14 +1144,10 @@ mod frame_tests {
     }
 
     fn move_hover_pointer(runner: &mut EditorRunner, point: Point) {
-        use ui_events::pointer::{PointerEvent, PointerInfo, PointerState, PointerUpdate};
+        use ui_events::pointer::{PointerEvent, PointerState, PointerUpdate};
         assert!(runner.pointer_event(
             &PointerEvent::Move(PointerUpdate {
-                pointer: PointerInfo {
-                    pointer_id: None,
-                    persistent_device_id: None,
-                    pointer_type: ui_events::pointer::PointerType::Mouse,
-                },
+                pointer: crate::display::test_support::mouse(),
                 current: PointerState {
                     position: (point.x, point.y).into(),
                     ..Default::default()
@@ -1404,13 +1397,7 @@ mod frame_tests {
                 .unwrap()
                 .clone(),
         )];
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!(target.rect.y0 > viewport.height);
         let target = target.clone();
         assert!(runner.update_frame(1.0, viewport, |editor, dispatch, _| {
@@ -1418,13 +1405,7 @@ mod frame_tests {
         }));
         assert_eq!(projected.replace(0), per_frame);
         assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!((0.0..viewport.height).contains(&target.rect.y0));
 
         // Scrolling away from an unchanged selection must not reveal it again.
@@ -1435,11 +1416,7 @@ mod frame_tests {
                     .dispatch_scroll(
                         editor,
                         &ui_events::pointer::PointerScrollEvent {
-                            pointer: ui_events::pointer::PointerInfo {
-                                pointer_id: None,
-                                persistent_device_id: None,
-                                pointer_type: ui_events::pointer::PointerType::Mouse,
-                            },
+                            pointer: crate::display::test_support::mouse(),
                             state: ui_events::pointer::PointerState {
                                 position: (200.0, 200.0).into(),
                                 ..Default::default()
@@ -1487,23 +1464,11 @@ mod frame_tests {
             .find(|region| region.root == root)
             .unwrap()
             .rect;
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
         crate::editing::select(&mut runner.editor, &root, previous);
         runner.refresh_frame(1.0, viewport);
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
 
         assert!(runner.keyboard_event(
@@ -1516,13 +1481,7 @@ mod frame_tests {
             viewport,
         ));
         assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!(target.rect.y0 >= region.y0 && target.rect.y1 <= region.y1);
     }
 
@@ -1812,13 +1771,7 @@ mod frame_tests {
         });
         assert_eq!(projected.replace(0), 41);
         assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == path)
-            .unwrap();
+        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
         assert!(target.rect.y0 > viewport.height);
 
         runner.refresh_frame(1.0, viewport);

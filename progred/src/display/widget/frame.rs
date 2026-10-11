@@ -656,9 +656,7 @@ mod tests {
 
     #[test]
     fn view_scope_hides_other_views_hover_without_hiding_input() {
-        use puri::handler::{
-            Event, EventOutcome, PointerInfo, PointerState, PointerType, PointerUpdate,
-        };
+        use puri::handler::{Event, EventOutcome, PointerState, PointerUpdate};
         let own = Root::document();
         let other = Root::document();
         let mut pass: HoverPass<Vec<(u8, Option<u8>)>, u8> = HoverPass::new(&Default::default());
@@ -680,11 +678,7 @@ mod tests {
         }
         let handler = pass.finish().bind(Default::default()).handler.unwrap();
         let update = PointerUpdate {
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             current: PointerState::default(),
             coalesced: vec![],
             predicted: vec![],

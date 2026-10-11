@@ -86,18 +86,12 @@ pub fn scroll<World: 'static, Hover: 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use puri::handler::{
-        Event, PointerInfo, PointerScrollEvent, PointerState, PointerType, ScrollDelta,
-    };
+    use puri::handler::{Event, PointerScrollEvent, PointerState, ScrollDelta};
     use puri::{Placement, Rect};
 
     fn event(delta: ScrollDelta) -> PointerScrollEvent {
         PointerScrollEvent {
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: PointerState::default(),
             delta,
         }

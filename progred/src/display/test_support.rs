@@ -304,3 +304,35 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         panic!("unexpected projection")
     }
 }
+
+/// Every painted command in painting order, looking through clips. Each
+/// command carries its own complete transform, so nothing is lost.
+pub fn painted(
+    commands: &[puri::draw::DrawCmd],
+) -> Box<dyn Iterator<Item = &puri::draw::DrawCmd> + '_> {
+    Box::new(commands.iter().flat_map(|command| match command {
+        puri::draw::DrawCmd::Clip { children, .. } => painted(children),
+        command => Box::new(std::iter::once(command)),
+    }))
+}
+
+/// Look up a frame's selectable stops by where they lead.
+pub trait Landmarks<World> {
+    /// The stop drawn at `path`.
+    fn landmark(&self, path: &[gid::Step]) -> Option<&widget::navigation::Landmark<World>>;
+}
+
+impl<World> Landmarks<World> for [widget::navigation::Landmark<World>] {
+    fn landmark(&self, path: &[gid::Step]) -> Option<&widget::navigation::Landmark<World>> {
+        self.iter().find(|landmark| landmark.path.as_ref() == path)
+    }
+}
+
+/// The mouse, as a pointer event names it.
+pub fn mouse() -> ui_events::pointer::PointerInfo {
+    ui_events::pointer::PointerInfo {
+        pointer_id: None,
+        persistent_device_id: None,
+        pointer_type: ui_events::pointer::PointerType::Mouse,
+    }
+}

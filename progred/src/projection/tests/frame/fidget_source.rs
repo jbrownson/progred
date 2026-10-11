@@ -17,14 +17,7 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
     let coordinate = [Step::Key(SUM), Step::Key(LEFT), Step::Key(AXIS)];
     let number = vec![Step::Key(SUM), Step::Key(RIGHT)];
     let (bench, _) = place(&doc, None, 400.0);
-    let rect = |path: &[Step]| {
-        bench
-            .descends
-            .iter()
-            .find(|d| d.path.as_ref() == path)
-            .unwrap()
-            .rect
-    };
+    let rect = |path: &[Step]| bench.descends.landmark(&path).unwrap().rect;
     let coordinate_rect = rect(&coordinate);
     let number_rect = rect(&number);
     assert!(

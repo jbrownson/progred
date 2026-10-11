@@ -1088,11 +1088,7 @@ mod tests {
             });
             let button = PointerButtonEvent {
                 button: Some(puri::handler::PointerButton::Primary),
-                pointer: PointerInfo {
-                    pointer_id: None,
-                    persistent_device_id: None,
-                    pointer_type: PointerType::Mouse,
-                },
+                pointer: crate::display::test_support::mouse(),
                 state: PointerState {
                     position: (20.0, 20.0).into(),
                     ..Default::default()
@@ -1211,11 +1207,7 @@ mod tests {
         runner.refresh_frame(1.0, VIEWPORT);
         log.take();
         let events = [10.0, -10.0].map(|y| PointerScrollEvent {
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: PointerState {
                 position: (20.0, 20.0).into(),
                 ..Default::default()
@@ -1259,11 +1251,7 @@ mod tests {
         let mut runner = instrumented_runner(&log);
         runner.refresh_frame(1.0, VIEWPORT);
         log.borrow_mut().clear();
-        let pointer = PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        };
+        let pointer = crate::display::test_support::mouse();
         let current = PointerState {
             position: (20.0, 20.0).into(),
             ..Default::default()
@@ -1357,11 +1345,7 @@ mod tests {
             position: (20.0, 20.0).into(),
             ..Default::default()
         };
-        let pointer = PointerInfo {
-            pointer_id: None,
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        };
+        let pointer = crate::display::test_support::mouse();
         let motion = PointerEvent::Move(PointerUpdate {
             pointer,
             current: state.clone(),
@@ -1475,11 +1459,7 @@ mod tests {
         });
         let button = PointerButtonEvent {
             button: Some(puri::handler::PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: None,
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: crate::display::test_support::mouse(),
             state: PointerState::default(),
         };
         for release in [
