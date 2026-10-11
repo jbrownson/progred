@@ -128,7 +128,8 @@ against RustSec, through the wrapper's `audit` command, and both npm packages'
 against GitHub's. It reports them all before failing. The first `audit` installs
 the pinned `cargo-audit` version: into the sandbox Cargo home on macOS, where
 that installation and every scan run inside the same filesystem and network
-boundary, and under `target/native` on Linux.
+boundary, and under `target/native` on Linux. The weekly
+[dependency check](dependency-checks.md) runs it along with `make outdated`.
 
 ## npm packages
 

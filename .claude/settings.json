@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"$CLAUDE_PROJECT_DIR/tools/dependency-check-due\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}

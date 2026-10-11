@@ -19,6 +19,8 @@ Start with:
 - [Puri and the editor frame](puri.md): ownership, layout, widgets, events,
   hover, the frame stages, and drawing.
 - [Build security](build-security.md): the build sandbox and dependency policy.
+- [Dependency checks](dependency-checks.md): the weekly check for advisories
+  and updates, and its log.
 - [Testing](testing.md): test layers, the headless driver, SVG captures, and
   opt-in GPU and performance tests.
 - [Platforms](platforms.md): building and running on macOS, Linux, and the

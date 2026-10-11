@@ -14,6 +14,8 @@ the code; this file points to them rather than repeating them.
   and editor frame), `docs/navigation.md`, and `docs/incremental.md`
   (dependency-tracked computations).
 - `docs/build-security.md`: the build sandbox and dependency policy.
+- `docs/dependency-checks.md`: the weekly dependency and security check, and
+  its log.
 - `vendor/README.md`: vendored dependencies and their local patches.
 - `docs/deferred.md`, `docs/release-checklist.md`, and `docs/macos-followups.md`:
   open work.
@@ -73,10 +75,14 @@ complexity yet, but don't block other platforms on purpose;
 `website/build-ci.sh` builds it on Linux for publishing.
 
 Update dependencies through the wrapper's `update` command
-(`./tools/sandbox-cargo update` or `./tools/linux-cargo update`), which enforces
-a minimum publish age. Patching a dependency is sometimes the right call, but keep
-an eye on every patch: `vendor/README.md` lists them, and each should be checked
-against upstream and dropped or proposed upstream when it can be.
+(`./tools/sandbox-cargo update` or `./tools/linux-cargo update`), and npm
+packages through `tools/npm-update`; both enforce a minimum publish age. Check
+dependencies and advisories weekly and log each check in
+`docs/dependency-checks.md`. A session-start hook says when the last one is more
+than a week old; then suggest a check to the user. Patching a dependency is
+sometimes the right call, but keep an eye on every patch: `vendor/README.md`
+lists them, and each should be checked against upstream and dropped or proposed
+upstream when it can be.
 
 ## Pre-alpha stance
 

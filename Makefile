@@ -14,7 +14,7 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test test-vendor test-gpu test-web-gpu perf audit sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test test-vendor test-gpu test-web-gpu perf audit outdated sandbox-app
 
 help:
 	@echo "Development:"
@@ -34,6 +34,7 @@ help:
 	@echo "  make test-web-gpu Test the browser presentation in the installed Chrome"
 	@echo "  make perf         Run the performance canaries and compare with the log"
 	@echo "  make audit        Check the Cargo and npm lockfiles for security advisories"
+	@echo "  make outdated     List newer Cargo and npm releases"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
 
@@ -111,6 +112,15 @@ audit:
 		echo "npm audit: $$package"; npm audit --prefix $$package || status=1; \
 	done; \
 	exit $$status
+
+# Cargo's compatible updates that pass the publish-age cutoff, with newer
+# incompatible releases noted as available; then npm's, which may list
+# releases still under the cutoff.
+outdated:
+	@$(NATIVE_CARGO) update --dry-run --verbose
+	@for package in website tools; do \
+		echo "npm outdated: $$package"; npm outdated --prefix $$package || true; \
+	done
 
 # The browser presentation's pixel test, run in the installed Chrome through
 # the playwright-core that tools/package.json pins.
