@@ -51,7 +51,7 @@ CAM and Fidget:
 
 Also:
 
-- [Deferred work](deferred.md): unresolved items set aside during review.
+- [Deferred work](deferred.md): open questions and unscheduled next steps.
 - [Release checklist](release-checklist.md): distribution concerns.
 - [macOS follow-ups](macos-followups.md): cleanup changes still to check on macOS.
 - [History](history/README.md): earlier models and proposals, and dated

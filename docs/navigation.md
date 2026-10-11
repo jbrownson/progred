@@ -112,9 +112,7 @@ edge takes precedence. The margin is not itself a scroll trigger.
 Ordinary lists prefer an inline row and accommodate with a column. Choosing the
 inline alternative uses its children's preferred forms, which can themselves be
 multiline (an outline, for example). There is no general single-line-content
-constraint. A possible standard-projection rule is to reserve inline sequences
-for inline children, while allowing delimiters to enclose a block and explicit
-layouts to put blocks side by side. This is not implemented.
+constraint.
 
 ## Examples and tests
 

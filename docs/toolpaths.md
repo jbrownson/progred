@@ -597,13 +597,7 @@ blending or physical cutting behavior.
 
 The example demonstrates indent and chamfer finishing in two operations.
 Op 1 leaves the bottom indent and its four chamfers for Op 2. It is not yet
-a roughing program or a manufacturing simulation for the entire cube.
-
-Variable orientation, collision checking for the non-cutting profiles, explicit
-links, and machine/postprocessor output remain
-separate next steps. Render-quality controls can use the controls library later;
-path-generation tolerance belongs to the program
-and is distinct from mesh/raster resolution. Upcoming-path windows and transparency
-are also deferred. In
-particular, the existing Fidget cube field is not an exact signed distance;
-subtracting a cutter radius from it would not implement a geometric offset.
+a roughing program or a manufacturing simulation for the entire cube; the
+remaining steps are [deferred](deferred.md#cam-next-steps). The existing Fidget
+cube field is not an exact signed distance, so subtracting a cutter radius from
+it would not implement a geometric offset.

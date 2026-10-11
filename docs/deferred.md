@@ -1,8 +1,8 @@
 # Deferred work
 
-These are open questions carried forward from the review, not tasks scheduled
-for the next cleanup. The current implementation is documented in
-[model.md](model.md), [projections.md](projections.md), and [puri.md](puri.md).
+Open questions and next steps that aren't scheduled. The other docs describe
+what exists; proposals belong here, and what must happen before a release is in
+the [release checklist](release-checklist.md).
 
 ## Active insertion hidden by a specialized projection
 
@@ -128,16 +128,14 @@ not assume every absent warrants an alert.
 
 ## General computation reuse
 
-The former canvas memo observed less than evaluation could use. It remains
-removed; canvas programs record once per visible frame. The new general
-[computation graph](incremental.md) first serves CAM geometry and observes selected
-definitions, missing lookups, native implementations, and declared FFI inputs.
-Native CAM stock jobs now use the graph's generic background boundary; implicit
-CAM jobs publish coarse-to-fine images through its progressive-result interface.
-Browser workers, Grap-language memo/async boundaries, user-facing quality controls, durability
-tiers, and further integrations are deferred. Future readers of ordered contributor sets must
-observe that set, not just a selected definition. Do not add an ad-hoc cache
-or event-specific relevance checks alongside this mechanism.
+The [computation graph](incremental.md) serves CAM geometry; canvas programs
+still record once per visible frame, and other projections aren't converted.
+Grap path generation is synchronous, and there are no Grap-language memo or
+async boundaries, user-facing quality controls, or durability tiers. Future
+readers of ordered contributor sets must observe that set, not just a selected
+definition. Do not add an ad-hoc cache or event-specific relevance checks
+alongside this mechanism. Incremental lambda calculus and incremental Fidget
+algorithms are separate research.
 
 The [2026-09-04 tree profile](history/tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
@@ -189,14 +187,12 @@ model edits, and more accurate surface-hit/normal evaluation at sharp edges.
 Current raster refinement recomputes each level; finer depth sampling reduces
 both missed thin intersections and wrong-face normals but does not eliminate
 them. See the [tool-rim diagnostics](history/performance-log-2026-09.md#implicit-stock-quality-and-cancellation-investigation--2026-09-14).
-Command+3 now uses a retained mesh as the immediate camera-dependent fallback
-while current implicit images refine it. That removes the need to finish an
-obsolete coarse implicit image just to provide orbit feedback. Standalone
-implicit previews still cancel even their first stage on new input. Revisit
-finish-coarse scheduling only if a consumer without a usable fallback needs it;
-obsolete results must never become the current computation's result. Skipping
-intermediate meshes during rapid geometry edits is another possible policy,
-with the tradeoff of an older mesh when the user next orbits.
+Standalone implicit previews cancel even their first stage on new input. Revisit
+finish-coarse scheduling only if a consumer without a usable fallback, such as
+Command+3's retained mesh, needs it; obsolete results must never become the
+current computation's result. Skipping intermediate meshes during rapid geometry
+edits is another possible policy, with the tradeoff of an older mesh when the
+user next orbits.
 
 ## Report Vello image-atlas flashing
 
@@ -226,20 +222,10 @@ ordering and names are not settled. Reusable tools and orientations need not
 be owned by that tree: execution occurrences can reference the same definitions
 in several places.
 
-A first version of the notched range controls now follows ordinary nested
-program lists, with coarse groups at the bottom and continuous playback at the
-top. It uses equal-width notches without permanent names; Cmd-hover source
-attribution remains a useful next step. Adjusting a coarser row resets every
-finer row to `All`, except when clicking its amber-marked current item, which
-preserves finer selections. Playback markers identify the current section in each row.
-`All` includes future items; explicit bounds include insertions between their
-endpoints. Uneven branches align from the fine-grained end. Playback retains its leaf-path cursor
-when it remains in the selected range. Producers that reconstruct lists can
-still change their positions; preserving correspondence through Grap list
+The [notched range controls](controls.md) follow ordinary nested program lists
+and impose no such taxonomy. Producers that rebuild lists can change positions
+the controls store; preserving that correspondence through Grap list
 construction is separate work, not solved by inventing identities in the widget.
-Prior cuts remain in stock history.
-See [controls](controls.md) and [toolpaths](toolpaths.md). This does not impose
-an operation/orientation/tool taxonomy on programs.
 
 ## Keyboard navigation and list reordering
 
@@ -247,6 +233,22 @@ Ordinary arrows now use [layout-derived navigation](navigation.md). Placeholder
 Tab navigation, grow-selection commands, directional history, and moving a list
 item with a modifier-plus-arrow shortcut remain separate decisions. The range
 controls also remain pointer/touch-only.
+
+## Inline lists with block children
+
+An ordinary list's inline row uses its children's preferred forms, which can be
+multiline. A possible standard-projection rule is to reserve inline sequences
+for inline children, while allowing delimiters to enclose a block and explicit
+layouts to put blocks side by side.
+
+## CAM next steps
+
+The toolpath example finishes indents and chamfers. Roughing, variable
+orientation, collision checking for the non-cutting profiles, explicit links
+between passes, and machine/postprocessor output are ahead. Render-quality
+controls can use the controls library; path-generation tolerance belongs to the
+program and is distinct from mesh/raster resolution. Upcoming-path windows and
+transparency are also open.
 
 ## CAM machine-axis alignment
 
@@ -290,6 +292,17 @@ up only when text entry becomes a focus:
   Windows browsers are implemented but unverified.
 
 ## Platform work
+
+### Opening documents from the macOS shell
+
+The sandboxed app opens documents only through File > Open. A
+sandbox-authorized shell open needs Launch Services to deliver
+`application:openURLs:` rather than passing the path in `argv`, but Winit 0.30
+owns the application delegate and panics if it is replaced
+([#4015](https://github.com/rust-windowing/winit/issues/4015),
+[#4458](https://github.com/rust-windowing/winit/issues/4458)). Winit 0.31
+removes its custom macOS delegate. Revisit when 0.31 is stable or an upgrade is
+otherwise useful; don't patch the Objective-C runtime around 0.30 for this.
 
 ### Additional ports
 

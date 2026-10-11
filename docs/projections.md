@@ -977,14 +977,12 @@ when a value comes through a cell or a constructed container. Origin metadata
 preserves both the definition source and the relative path; it cannot identify
 a definition by cell alone. See [source identity](model.md#occurrences-definitions-and-views).
 
-## Examples and deferred work
+## Examples
 
 [grap-demo.gid](../examples/grap-demo.gid) exercises calls, closures, matching,
 quote/unquote, explicit evaluation, and absents. [iop-tree.gid](../examples/iop-tree.gid)
 projects an interpreted tree drawing alongside editable source. Headless tests
 exercise these paths through the production library set.
 
-General invalidation, address-lifetime questions, and hidden active insertions
-are [deferred](deferred.md). Other language ideas in historical notes remain
-proposals. The old Rust-to-wasm compiler/host spike was removed; its source
-remains in Git history. There is no active Wasmtime projection host in this tree.
+Open questions, including address lifetime and hidden active insertions, are in
+[deferred work](deferred.md).

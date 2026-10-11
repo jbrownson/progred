@@ -334,11 +334,3 @@ the general submission condition; the CAM adapter chooses the interaction policy
 
 Ordinary Fidget mesh/voxel previews, IoP drawing, completions, and other UI
 projections are not converted.
-
-## Deferred
-
-Grap path generation remains synchronous.
-The implicit CAM image job includes software rasterization. There is no
-user-facing quality controls, durability tier, or Grap-language memo/async
-syntax yet. Incremental lambda calculus and
-incremental Fidget algorithms remain separate research.
