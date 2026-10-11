@@ -4,8 +4,10 @@
 [build security](build-security.md)), except the vendored Fidget packages'.
 Those are upstream's tests of code we rarely change; `make test-vendor` runs
 them, optimized, after a patch changes or Fidget is upgraded. Development builds
-optimize dependencies, so tests spend little time in Fidget, Vello, or text
-shaping; workspace crates stay unoptimized. To run a subset, pass Cargo's usual
+optimize every crate except progred, which stays quick to rebuild, so tests
+spend little time in Fidget, Vello, text shaping, Grap, or Puri; `make test`
+takes about 30 s on a 4-core Linux VM. Tests lay out text with the bundled Noto
+fonts, so layout is the same on every machine. To run a subset, pass Cargo's usual
 arguments through `./tools/sandbox-cargo test` on macOS or
 `./tools/linux-cargo test` on Linux, for example
 `./tools/linux-cargo test -p progred --lib tutorials`. Nothing here needs a

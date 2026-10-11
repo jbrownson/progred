@@ -11,8 +11,8 @@ empty.
   `make sandbox-test` and should run the same `sandbox-cargo` commands. The
   Clippy cleanup, the shared test driver, and the experiment retirement were
   tested only through `tools/linux-cargo`. `make test` now leaves out the
-  vendored Fidget packages, and development builds optimize dependencies, so
-  the first build afterwards rebuilds every dependency once.
+  vendored Fidget packages, and development builds optimize every crate except
+  progred, so the first build afterwards rebuilds everything once.
 - **`make test-vendor` and `make test-gpu`.** Both build through `sandbox-cargo`
   and run the test executables outside the sandbox with
   `tools/test_binaries.py`, which hasn't run on macOS. `make test-vendor` covers
