@@ -320,3 +320,150 @@ Questions for that spike include the RealityKit/Metal boundary, spatial
 selection and manipulation, and how existing source-to-output provenance maps
 onto three-dimensional geometry. None requires changing the GID or Grap model
 in advance.
+
+## Directions
+
+Larger directions from brainstorming in October 2026, written down so they
+aren't lost. None is scheduled or designed in detail.
+
+### Input fluency
+
+A blank editor gives little guidance, and many completions are still missing.
+This is the biggest weak spot.
+
+- Completion offers come from provider functions that compose as combinators.
+  Ranking and failure reporting, above, belong to the same design.
+- A diagnostics layer attaches errors to layout as metadata, drawn like the
+  selection highlight but red; clicking one shows its messages. It is a
+  combinator over widgets and handlers.
+- Types are one more combinator on top. A type declaration is, or generates, a
+  guard function, and static checking proves the guards hold, so no red outline
+  means no absents from failed guards. Start explicit, with no inference, and
+  structural like TypeScript, using GID's identity tags rather than names.
+- A result records one stack frame today. Capturing a full environment on
+  demand, by re-evaluating with tracing, would explain a result without
+  recording everything.
+
+### External control and a newcomer test
+
+Lift `crate::driver::Driver` out of the tests into a dev binary that holds one
+editor and listens on a Unix socket. Agents drive it with `nc -U`, and Claude
+Code can use the same bridge as an MCP stdio server. Messages are JSON values,
+one per line; `serde_json` is already a dependency. It needs a sanctioned Make
+target.
+
+Start with the commands a person has: a screenshot, a list of what's drawn,
+click, double-click, drag, typing, keys and shortcuts. Targets are named by
+document path, or by visible label for menu items, completion entries and
+toggles; positions inside a target are fractions of its rect. Only drawn targets
+are listed. A path resolves to a point and a real click, so hit-testing and
+occlusion still apply, and the reply says what was actually hit.
+
+The first use is a friction test. A subagent with no knowledge of the code gets
+a short description of Progred, the command sheet and a task, such as a small
+CAM job, and reports where it got stuck. Sessions replay as scripts, so a fixed
+stuck point can become a regression test.
+
+Later come semantic actions. Puri gets one opaque external event, and a Progred
+combinator pairs a named action with its key binding and handler, so projections
+opt in as they do for keys and can list what they accept. The editor's
+structural fallbacks (paste, delete, insert, replace, navigation) move into the
+handler chain as lowest-priority handlers. Grap scripts in GID can follow as a
+second client, with a prelude of library names so scripts never copy cell IDs.
+The live app accepts the same socket behind an opt-in flag.
+
+### Demo moments
+
+- Drag handles on the tool profile picture that update the numbers it was drawn
+  from, disabled where a parameter isn't a plain number or is read-only, plus
+  Cmd-hover and Cmd-click from the picture to its source.
+- CAM strategies a machinist recognizes, like Fusion's, built from constructs
+  that can be inspected and changed, including patching a combinator's output.
+- A chart of tool engagement through the cut.
+- Small immediate delights, such as Cmd-hover to source and card literals,
+  without turning the editor into a box of tricks.
+
+### Decision tables
+
+Jonathan Edwards's schematic tables in Subtext: a two-parameter match with a
+grid projection that can check its cases are complete and don't overlap (compare
+DMN hit policies and Parnas tables). Store the grid as nested records keyed by
+the header cells' identities; each header cell holds a pattern, possibly with a
+bind. This connects to guard-based types.
+
+### Sharing and the Edwards write-up
+
+Edwards asked to see the advantages. The one specific to structure is composing
+semantics as in Lisp while the readable syntax is projected, an output rather
+than an input. In the CAM example the clearest case is the tool definition that
+previews the tool; much of the output display would work in a text system too.
+Be as concrete about the costs: speed, no types, picker-based entry, `quote` and
+`unquote` showing in lessons, outside tools seeing only the text format, and CAM
+without G-code.
+
+Turn the examples into lessons that run well in the browser and share the editor
+link first. The owner rewrites the text in their own voice and sends the draft
+to Edwards before posting. Sending the Fidget patches upstream is on hold.
+
+### 3D printing
+
+More accessible than CAM: many more people own printers, failures are cheap, and
+the slicer owns the machine, so Progred only has to produce a good mesh.
+`fidget-mesh` 0.5.1 already has `Mesh::write_stl`. Export needs a finer mesh
+than previews (depth 8 gives cells about 0.4 mm wide on a 100 mm part), built in
+the background, and a browser download.
+
+- Definitions that preview themselves, like the tool profile: threads, snap
+  fits, hinges, magnet pockets.
+- Printability views, live while dragging a parameter: overhangs shaded from the
+  field's gradient, the bed footprint, thin walls.
+- Tolerances that know what they apply to. Printer calibration becomes a library
+  applied to every hole and clearance; in OpenSCAD a hole is just a subtraction,
+  so nothing can find them all.
+- A deposition preview is the CAM stock with the sign flipped: it unions
+  nozzle-width capsules along the path where the stock subtracts tool sweeps.
+  That leads to designing extrusion paths directly, as FullControl does, and to
+  slicing from composable pieces: perimeters as the field's contours, infill as
+  a gyroid field. That is later work; slicers are mature.
+
+Offsets and clearances need fields close to true distance, and min/max CSG
+distorts distance near corners. Implicit modeling is weak at text and at
+importing STLs for remixing. Prior art includes libfive Studio (by Fidget's
+author), nTop, OpenSCAD and MakerWorld's parametric models. A good first demo is
+a Gridfinity bin generator on prog.red: drag the compartment count, watch the
+overhang shading, download the STL.
+
+### PCB design
+
+Prompted by the owner's keyboard project: an Apple Magic Keyboard's electronics,
+Touch ID included, under a new mechanical switch matrix, designed in KiCad. The
+pain points are many clicks per change, a schematic tied to one board, and no
+way to abstract repeated structure.
+
+In Progred the netlist is the data: parts, pins and nets as records. The
+schematic is one projection among several: a net table, a row-by-column matrix
+grid like the decision-table projection, and the board. Several designs can then
+share or transform one netlist, for example a netlist reverse-engineered from
+the original board and a new design that keeps its controller and connector nets
+and replaces the matrix. A key layout generates the matrix and switch placement
+(KLE JSON is the common layout format), so key spacing or diode orientation is a
+parameter. The same layout could drive the switch plate and a printed case.
+
+KiCad's files are S-expressions, which map easily onto GID. Read footprints and
+symbols, draw them, and write a `.kicad_pcb`, or a netlist for KiCad's own
+import, with placed footprints and nets. Leave routing, design-rule checks and
+fabrication outputs to KiCad. Cell IDs are 128-bit, so they could serve as
+KiCad's UUIDs and keep identity across regeneration, which must not clobber
+traces routed in KiCad. KiCad 9's IPC API is another route, driving a running
+KiCad.
+
+The harder parts are readable schematic layout, which needs stored positions
+except for regular structures like the matrix; routing, though generated routing
+for a regular matrix is plausible; and KiCad's format changing between versions.
+Prior art: Ergogen, SKiDL, atopile, tscircuit.
+
+### A common thread
+
+CAM, printing and PCBs share a shape. Progred owns the design logic and its live
+projections, and hands off to a mature tool for the last step: a CAM
+post-processor, a slicer, or KiCad.
