@@ -543,10 +543,12 @@ Default headless contexts use inline execution; the browser uses its shared-memo
 Implicit CAM rendering uses the software renderer explicitly. Its stock
 expression spills as playback advances, which Fidget's GPU interpreter cannot
 run, so GPU implicit CAM is blocked on that missing implementation. The full
-stock needs 2,813 spill slots. It needed 18,655 while sweeps evaluated out of
+stock needs 6,222 spill slots. It needed 18,655 while sweeps evaluated out of
 cutting order and shared coordinate terms such as `x - a.x`, which kept those
-terms live across distant sweeps; `along` and `Stock::cut` explain the
-formulations that avoid both. A GPU
+terms live across distant sweeps; `along`, `capsule`, and `Stock::cut` explain
+the formulations that avoid both. Ball ends keep their capsule in world
+coordinates: in the tool's tilted frame, interval bounds over axis-aligned cells
+are looser, which made deep meshing about a fifth slower. A GPU
 spill experiment, since retired, matched CPU geometry for the full stock but was
 much slower, so CAM stays on the CPU renderer. The details are in the
 [performance log](history/performance-log-2026-09.md#toolpath-gpu-findings--2026-09-13-and-14).
