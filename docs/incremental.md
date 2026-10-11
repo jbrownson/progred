@@ -258,11 +258,11 @@ The implicit CAM request explicitly uses Fidget's software voxel renderer. It
 runs directly on the general background executor, without a GPU-owning thread,
 GPU submission, or fallback attempt. The GPU VM cannot execute the stock field's
 spill instructions; see [the backend limitation](toolpaths.md#playback).
-Cancellation connects to Fidget's voxel cancellation token; the software
-renderer uses the VM with 32/16/8-pixel tiles. The local raster patch checks
-cancellation during subtile work as well as between root tiles. Expression
-construction and compilation have before/after checks rather than immediate
-interruption. Obsolete results are discarded by the general scheduler.
+Cancellation connects to Fidget's voxel cancellation token in the [software
+renderer](toolpaths.md#playback). The local raster patch checks cancellation
+during subtile work as well as between root tiles. Expression construction and
+compilation have before/after checks rather than immediate interruption.
+Obsolete results are discarded by the general scheduler.
 
 The local raster progress callback counts completed image pixels in finished
 tiles, excluding padding and counting each pixel once across all objects. It reports

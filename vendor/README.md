@@ -53,7 +53,8 @@ Local source changes, each including regression tests:
 
 These patch files apply to the published 0.5.1 sources in the order listed, with
 no manifest adaptation, and are intended for upstream review. Nothing has been
-submitted or pushed upstream.
+submitted or pushed upstream, and proposing them is on hold for now, by the
+owner's choice.
 Keep vendored source and patches in sync; do not accumulate unrelated changes.
 Remove each local package override when a reviewed upstream release includes
 the corresponding fixes. See the [measurements](../docs/history/cam-render-profiling-2026-09-15.md).
@@ -61,4 +62,4 @@ the corresponding fixes. See the [measurements](../docs/history/cam-render-profi
 The packages are workspace members so their tests share our locked dependency
 graph and sandboxed build. `make test` leaves them out; run them with
 `make test-vendor` after changing a patch or upgrading Fidget. It builds them
-optimized and runs fidget-wgpu's GPU tests outside the macOS build sandbox.
+optimized and runs fidget-wgpu's GPU tests outside the build sandbox.

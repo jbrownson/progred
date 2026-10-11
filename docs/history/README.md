@@ -70,6 +70,8 @@ at the time; code some of them describe has since been retired.
   cost around the navigation rewrite.
 - [Analytic tool sweep](tool-sweep-experiment-2026-09-15.md): the test-only
   bull-mill candidate and why it hasn't replaced the working approximation.
+- [Fidget's JIT against its VM](fidget-jit-vm-2026-10-11.md): the Apple Silicon
+  measurements that made the VM the software evaluator everywhere.
 - [Dependency reviews](dependency-reviews-2026.md): the Fidget Git pin, vendoring
   and JIT, publication-age exceptions, and the constant-field upstream check,
   moved from build security and the release checklist on 2026-10-11.

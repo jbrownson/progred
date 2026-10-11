@@ -95,10 +95,11 @@ malicious bypass. Local builds continue through the sandboxes. See the
 
 `sandbox-app` packages the isolated release binary as
 `target/sandbox/app/Progred.app`, enables Apple's App Sandbox, and signs it
-ad hoc for local use. Its additional capabilities are read/write access to
-files explicitly chosen through the app's native Open and Save panels, and
-JIT-compiled code as described below. Launch that bundle, as `make run` does,
-rather than the bare binary, to keep the runtime sandbox.
+ad hoc for local use. Its one additional capability is read/write access to
+files explicitly chosen through the app's native Open and Save panels; it
+declares no allow-JIT entitlement and maps no executable memory, since Fidget's
+VM does the implicit rendering. Launch that bundle, as `make run` does, rather
+than the bare binary, to keep the runtime sandbox.
 
 The current command-line document path is not a user-selected file grant, so
 open external documents through the app's File > Open command; opening them
@@ -168,19 +169,16 @@ Each package's `.npmrc` follows the Cargo policy as far as npm allows:
   npm. Don't use `npm audit fix`: older npm applies no cutoff to it, and
   `--force` replaces the pinned versions.
 
-npm has no sandbox like Seatbelt: Node tooling runs with the invoking user's
-permissions, as the tests do. `npm audit signatures` checks the installed
-packages' registry signatures. Cloudflare's builder installs the website
-package itself on each deploy.
+npm has no sandbox like the Cargo wrappers': Node tooling runs with the invoking
+user's permissions, as the tests do. `npm audit signatures` checks the installed
+packages' registry signatures. Cloudflare's builder installs the website package
+itself on each deploy.
 
 ## Current dependency exceptions
 
-- **Patched Fidget.** Four Fidget packages are vendored from the published
+- **Patched Fidget.** Three Fidget packages are vendored from the published
   0.5.1 with local patches listed in [vendor/README.md](../vendor/README.md);
   Cargo uses them in place of the crates.io packages.
-- **No JIT.** Implicit rasterization uses Fidget's VM on every platform, so
-  the macOS bundle declares no allow-JIT entitlement and the app maps no
-  executable memory.
 
 A review or a clean advisory scan doesn't establish that the dependency graph
 is safe; sandboxed builds remain required. Earlier reviews are in

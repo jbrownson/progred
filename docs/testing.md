@@ -6,8 +6,9 @@ Those are upstream's tests of code we rarely change; `make test-vendor` runs
 them, optimized, after a patch changes or Fidget is upgraded. Development builds
 optimize every crate except progred, which stays quick to rebuild, so tests
 spend little time in Fidget, Vello, text shaping, Grap, or Puri; `make test`
-takes about 30 s on a 4-core Linux VM. Tests lay out text with the bundled Noto
-fonts, so layout is the same on every machine. To run a subset, pass Cargo's usual
+takes about 30 s on a 4-core Linux VM. Progred's tests lay out text with the
+bundled Noto fonts, so layout is the same on every machine; a few of Puri's
+still use system fonts. To run a subset, pass Cargo's usual
 arguments through `./tools/sandbox-cargo test` on macOS or
 `./tools/linux-cargo test` on Linux, for example
 `./tools/linux-cargo test -p progred --lib tutorials`. Nothing here needs a
@@ -66,13 +67,13 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
   [performance checks](performance.md). Puri's
   `handler_dispatch_profile` checks the cost of dispatching through unrelated
   handlers.
-- **GPU tests** need a real adapter: `make test-gpu` runs the compositor
-  tests and Fidget's GPU raster and mesh tests. Seatbelt provides no GPU, so
+- **GPU tests** need a real adapter: `make test-gpu` runs the compositor tests
+  and Fidget's GPU raster and mesh tests. The build sandbox provides no GPU, so
   [`tools/test_binaries.py`](../tools/test_binaries.py) builds the tests through
   the wrapper and runs the executables outside it; it takes `cargo test`
   arguments, then test arguments after `--`. On Linux without a GPU, Mesa's
-  lavapipe driver works. The readback helper is `puri-vello`'s `capture`
-  module, behind its `capture` feature.
+  lavapipe driver works. The readback helper is `puri-vello`'s `capture` module,
+  behind its `capture` feature.
 - **Browser presentation** has its own pixel test: `make test-web-gpu` builds the
   GPU probe, then drives the installed Chrome headlessly through the
   `playwright-core` pinned in `tools/package.json`, on WebGPU and on the

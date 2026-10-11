@@ -12,7 +12,8 @@ pub(crate) use puri::mesh::DepthImage as Frame;
 
 // Software rendering evaluates with Fidget's VM, on every platform. Its JIT
 // rendered the CAM stock four times slower on Apple Silicon, and won only on
-// shapes that render in a millisecond either way; see docs/performance.md.
+// shapes that render in a millisecond either way; see
+// docs/history/fidget-jit-vm-2026-10-11.md.
 use fidget_engine::vm::{VmFunction, VmShape};
 
 fn software_tiles() -> Option<fidget_engine::render::TileSizes> {

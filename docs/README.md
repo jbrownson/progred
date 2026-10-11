@@ -19,6 +19,8 @@ Start with:
 - [Puri and the editor frame](puri.md): ownership, layout, widgets, events,
   hover, the frame stages, and drawing.
 - [Build security](build-security.md): the build sandbox and dependency policy.
+- [Vendored dependencies](../vendor/README.md): the patched Fidget packages and
+  their patches.
 - [Dependency checks](dependency-checks.md): the weekly check for advisories
   and updates, and its log.
 - [Testing](testing.md): test layers, the headless driver, SVG captures, and
@@ -52,7 +54,8 @@ CAM and Fidget:
 
 Also:
 
-- [Deferred work](deferred.md): open questions and unscheduled next steps.
+- [Deferred work](deferred.md): open questions, unscheduled next steps, and the
+  brainstormed directions.
 - [Release checklist](release-checklist.md): distribution concerns.
 - [macOS follow-ups](macos-followups.md): cleanup changes still to check on macOS.
 - [History](history/README.md): earlier models and proposals, and dated

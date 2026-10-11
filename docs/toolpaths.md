@@ -523,7 +523,7 @@ Implicit CAM rendering explicitly uses the software voxel renderer, directly
 on the existing background executor. It does not attempt GPU evaluation first.
 It uses Fidget's VM with 32/16/8-pixel tiles on every platform, as meshing
 does; the JIT rendered the stock four times slower on Apple Silicon (see
-[performance](performance.md)). The [local Fidget patches](../vendor/README.md)
+[the measurements](history/fidget-jit-vm-2026-10-11.md)). The [local Fidget patches](../vendor/README.md)
 check cancellation within raster subtiles. Software scenes render all
 objects within each image tile, retaining separate expressions and preserving
 first-object wins on equal depths. One prepared scene retains root interval
