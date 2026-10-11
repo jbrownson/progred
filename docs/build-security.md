@@ -123,10 +123,12 @@ its provenance before temporarily resolving with
 checked-in default: the ordinary update command should remain strict and may be
 blocked until the reviewed release ages past the threshold.
 
-Use `./tools/sandbox-cargo audit` to check the lockfile against the current
-RustSec advisory database. The first run installs the pinned `cargo-audit`
-version into the sandbox Cargo home; both that installation and every scan run
-inside the same filesystem and network boundary.
+`make audit` checks every lockfile against its advisory database: Cargo's
+against RustSec, through the wrapper's `audit` command, and both npm packages'
+against GitHub's. It reports them all before failing. The first `audit` installs
+the pinned `cargo-audit` version: into the sandbox Cargo home on macOS, where
+that installation and every scan run inside the same filesystem and network
+boundary, and under `target/native` on Linux.
 
 ## npm packages
 
@@ -143,14 +145,16 @@ Each package's `.npmrc` follows the Cargo policy as far as npm allows:
   build`, still do. With install scripts off, Wrangler still installs and a
   dry-run deploy works; the site is static assets, so deploying bundles no code.
 - `min-release-age=7`: installs and updates resolve only releases at least seven
-  days old. npm reads this from version 11.10; older versions silently ignore
-  it, so update with npm 11.10 or later, or pass `--before` with the date seven
-  days back.
+  days old. npm reads this from version 11.10 and older versions silently
+  ignore it, so add or update dependencies with `tools/npm-update website|tools
+  [package@version...]`, which passes the same cutoff as `--before` to older
+  npm. Don't use `npm audit fix`: older npm applies no cutoff to it, and
+  `--force` replaces the pinned versions.
 
 npm has no sandbox like Seatbelt: Node tooling runs with the invoking user's
-permissions, as the tests do. `npm audit` checks a lockfile against GitHub's
-advisory database, and `npm audit signatures` checks registry signatures.
-Cloudflare's builder installs the website package itself on each deploy.
+permissions, as the tests do. `npm audit signatures` checks the installed
+packages' registry signatures. Cloudflare's builder installs the website
+package itself on each deploy.
 
 ## Current dependency exceptions
 

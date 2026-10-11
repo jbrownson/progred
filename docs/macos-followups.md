@@ -23,8 +23,9 @@ empty.
 - **npm.** `playwright-core` 1.63.0 moved to `tools/package.json`, and both npm
   packages now turn off install scripts and require week-old releases in
   `.npmrc`. Check that `npm --version` is 11.10 or later, since older npm
-  ignores `min-release-age`. Then run `make test-web-gpu`, and in `website/`,
-  `npm ci` and `npx wrangler --version`.
+  ignores `min-release-age` (`tools/npm-update` covers that case). Then run
+  `make test-web-gpu` and `make audit`, and in `website/`, `npm ci` and
+  `npx wrangler --version`.
 
 ## Later
 

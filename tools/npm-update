@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# Add or update an npm package's dependencies, holding back releases less than
+# seven days old, as Cargo updates do. npm 11.10 and later read the package's
+# min-release-age from its .npmrc; older npm ignores that setting, so it gets
+# the same cutoff as --before. See docs/build-security.md.
+
+set -eu
+
+if [ "$#" -lt 1 ]; then
+    echo "usage: tools/npm-update website|tools [package@version...]" >&2
+    exit 2
+fi
+package=$1
+shift
+
+version=$(npm --version)
+major=${version%%.*}
+minor=$(echo "$version" | cut -d. -f2)
+if [ "$major" -gt 11 ] || { [ "$major" -eq 11 ] && [ "$minor" -ge 10 ]; }; then
+    cutoff=
+else
+    cutoff=--before=$(node -e 'console.log(new Date(Date.now() - 7 * 864e5).toISOString())')
+fi
+
+if [ "$#" -eq 0 ]; then
+    npm update --prefix "$package" $cutoff
+else
+    npm install --prefix "$package" --save-exact $cutoff "$@" || {
+        echo "npm-update: releases under seven days old are held back" >&2
+        exit 1
+    }
+fi

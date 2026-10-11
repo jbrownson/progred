@@ -15,7 +15,7 @@ if [ "$(uname -s)" != Linux ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    echo "usage: tools/linux-cargo update | resolve | <cargo command> [arguments...]" >&2
+    echo "usage: tools/linux-cargo update | resolve | audit | <cargo command> [arguments...]" >&2
     exit 2
 fi
 
@@ -56,6 +56,18 @@ fi
 if [ "$1" = resolve ]; then
     shift
     run true --offline metadata --format-version 1 "$@" >/dev/null
+    exit
+fi
+
+# The pinned advisory scanner, installed from its lockfile on first use.
+if [ "$1" = audit ]; then
+    shift
+    audit_root="$project_root/target/native/cargo-audit"
+    if [ ! -x "$audit_root/bin/cargo-audit" ]; then
+        run false install cargo-audit \
+            --version '=0.22.2' --locked --no-default-features --root "$audit_root"
+    fi
+    "$audit_root/bin/cargo-audit" audit --file "$project_root/Cargo.lock" "$@"
     exit
 fi
 

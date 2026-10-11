@@ -14,7 +14,7 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test test-vendor test-gpu perf sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test test-vendor test-gpu test-web-gpu perf audit sandbox-app
 
 help:
 	@echo "Development:"
@@ -33,6 +33,7 @@ help:
 	@echo "  make test-gpu     Run the tests that need a GPU"
 	@echo "  make test-web-gpu Test the browser presentation in the installed Chrome"
 	@echo "  make perf         Run the performance canaries and compare with the log"
+	@echo "  make audit        Check the Cargo and npm lockfiles for security advisories"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
 
@@ -101,6 +102,15 @@ test-gpu:
 
 perf:
 	@python3 -B tools/perf.py $(ARGS)
+
+# Every lockfile against its advisory database, reporting all before failing.
+audit:
+	@status=0; \
+	$(NATIVE_CARGO) audit || status=1; \
+	for package in website tools; do \
+		echo "npm audit: $$package"; npm audit --prefix $$package || status=1; \
+	done; \
+	exit $$status
 
 # The browser presentation's pixel test, run in the installed Chrome through
 # the playwright-core that tools/package.json pins.
