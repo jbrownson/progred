@@ -82,7 +82,7 @@ check:
 build:
 	$(NATIVE_CARGO) build --workspace
 
-VENDORED := fidget-core fidget-jit fidget-raster fidget-wgpu
+VENDORED := fidget-core fidget-raster fidget-wgpu
 
 test:
 	$(NATIVE_CARGO) test --workspace $(VENDORED:%=--exclude %)

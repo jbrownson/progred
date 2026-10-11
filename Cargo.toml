@@ -11,7 +11,6 @@ members = [
     "ui/puri-vello",
     "ui/puri-web",
     "ui/uig",
-    "vendor/fidget-jit",
     "vendor/fidget-core",
     "vendor/fidget-raster",
     "vendor/fidget-wgpu",
@@ -23,7 +22,6 @@ license = "MIT"
 # Local patches against the published release; see vendor/README.md.
 [patch.crates-io]
 fidget-core = { path = "vendor/fidget-core" }
-fidget-jit = { path = "vendor/fidget-jit" }
 fidget-raster = { path = "vendor/fidget-raster" }
 fidget-wgpu = { path = "vendor/fidget-wgpu" }
 

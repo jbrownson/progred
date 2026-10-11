@@ -1,10 +1,10 @@
 # Local Fidget patches
 
-`fidget-core`, `fidget-jit`, `fidget-raster`, and `fidget-wgpu` are copied
+`fidget-core`, `fidget-raster`, and `fidget-wgpu` are copied
 from Matt Keeter's [Fidget](https://github.com/mkeeter/fidget) 0.5.1 as
 published on crates.io, whose sources match upstream's `v0.5.1` tag;
 `models/hi.vm` comes from the same tag. They retain upstream's
-[MPL-2.0 license](fidget-LICENSE.txt). Cargo patches only these four packages
+[MPL-2.0 license](fidget-LICENSE.txt). Cargo patches only these three packages
 over crates.io; the remaining Fidget packages are the published 0.5.1. Their
 manifests spell out upstream's inherited package metadata and dependency
 versions.
@@ -24,9 +24,6 @@ Local source changes, each including regression tests:
   behavior is unchanged; the constructor preserves an already-cancelled flag.
   Progred uses this for both meshing and implicit rendering. This patch is
   independent of the others below.
-- [AArch64 JIT patch](patches/fidget-jit-aarch64.patch): full-width
-  spill addresses and stack adjustment, preservation of callee-saved registers,
-  and long bulk-loop exits. Small tapes retain the short addressing form.
 - [Raster cancellation patch](patches/fidget-raster-cancellation.patch):
   pass the existing cancellation observation into subtile work in 2D and 3D;
   unwind incomplete tiles rather than publishing partial output. No public API,
@@ -65,9 +62,3 @@ The packages are workspace members so their tests share our locked dependency
 graph and sandboxed build. `make test` leaves them out; run them with
 `make test-vendor` after changing a patch or upgrading Fidget. It builds them
 optimized and runs fidget-wgpu's GPU tests outside the macOS build sandbox.
-
-For browser builds, select `-p progred` as the normal platform targets do: the
-JIT package itself does not support those platforms. Progred enables JIT only
-on Apple Silicon macOS, using its native recommended raster tiles. Other
-platforms and all meshing retain the VM. The macOS bundle requires the standard
-allow-JIT entitlement; App Sandbox and hardened runtime remain enabled.
