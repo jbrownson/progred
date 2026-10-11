@@ -19,6 +19,8 @@ Start with:
 - [Puri and the editor frame](puri.md): ownership, layout, events, hover, and
   drawing.
 - [Build security](build-security.md): the build sandbox and dependency policy.
+- [Testing](testing.md): test layers, the headless driver, SVG captures, and
+  opt-in GPU and performance tests.
 - [Platforms](platforms.md): building and running on macOS, Linux, and the
   browser.
 

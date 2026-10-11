@@ -476,16 +476,5 @@ function and `slot` combinator use it, as do pending values and their selection
 outlines; there is no empty-slot layout opcode. Completion behavior and the meaning of an empty slot remain
 in Progred; the widget owns only metrics and drawing.
 
-Tests can drive pure descriptions and handlers without a window. Projection
-fixtures, interaction regressions, SVG export, and profiling live in
-[`projection/tests`](../progred/src/projection/tests/mod.rs). SVG tests are a
-focused filter rather than the home of all interaction regressions:
-
-```sh
-./tools/sandbox-cargo test -p progred svg_bench
-```
-
-This writes sample SVG files under `target/`. The ignored IoP profiling loops
-are in [frame/profile.rs](../progred/src/projection/tests/frame/profile.rs).
-See [build security](build-security.md) for sandboxed commands. The owner does
-the visual testing; agents run the app only for their own checks.
+Tests drive pure descriptions and handlers without a window; see
+[testing](testing.md).

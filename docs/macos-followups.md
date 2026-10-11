@@ -25,18 +25,9 @@ empty.
 
 ## GPU tests
 
-These need real GPU access, which Seatbelt doesn't provide. Build the test
-binaries in the sandbox, then run the executables Cargo prints directly. The
-readback helper moved from `progred/tests/compositor_experiment/gpu.rs` into
-`puri-vello`'s `capture` module, behind a `capture` feature.
-
-```sh
-./tools/sandbox-cargo test --release -p puri-vello --features capture --test compositor --no-run
-./tools/sandbox-cargo test --release -p progred --lib --no-run
-```
-
-Run the first executable with `--ignored --test-threads=1`, and the second with
-`compositor --ignored --test-threads=1`.
+The readback helper moved from `progred/tests/compositor_experiment/gpu.rs` into
+`puri-vello`'s `capture` module, behind a `capture` feature, without a GPU run.
+Run the GPU tests as [testing](testing.md#ignored-tests) describes.
 
 ## Simplifications to make where they can be tested
 

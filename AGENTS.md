@@ -104,11 +104,9 @@ against upstream and dropped or proposed upstream when it can be.
   when a visual golden is genuinely needed.
 - Drive interactions headlessly with `crate::driver::Driver`: it clicks, types,
   and reads by document path through the shell's own event translation.
-- Visual changes are checkable without launching the app: `make test` runs
-  `svg_bench`, which renders the sample and the Grap demo to SVG in the build
-  directory, and running the `delimiter_bench` example of `puri` through the
-  platform's Cargo wrapper renders the drawn delimiters against the font's
-  outlines. Rasterize them with `rsvg-convert`.
+- Check visual changes without launching the app, through the SVG captures.
+- `docs/testing.md` covers the layers, captures, and opt-in GPU and performance
+  tests.
 
 ## Code Style
 
