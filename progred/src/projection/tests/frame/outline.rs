@@ -339,11 +339,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
 
     let f = frame(&mut world);
     let select_all = KeyboardEvent {
-        modifiers: if cfg!(target_os = "macos") {
-            Modifiers::META
-        } else {
-            Modifiers::CONTROL
-        },
+        modifiers: crate::modifiers::command(),
         ..key(Key::Character("a".into()))
     };
     let target = crate::navigate::select_all(
@@ -533,11 +529,7 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
     );
     assert!(!world.paste_value(Value::record([])));
     let mut copy = key(Key::Character("c".into()));
-    copy.modifiers = if cfg!(target_os = "macos") {
-        Modifiers::META
-    } else {
-        Modifiers::CONTROL
-    };
+    copy.modifiers = crate::modifiers::command();
     assert!(
         frame(&mut world)
             .resolve_for_dispatch()

@@ -1,7 +1,6 @@
 use super::*;
 use crate::hover::{Hover, SourceTrace};
 use crate::libraries::{controls, presentation};
-use ui_events::keyboard::Modifiers;
 use ui_events::pointer::{PointerEvent, PointerState, PointerUpdate};
 
 const SIZE: kurbo::Size = kurbo::Size::new(720.0, 684.0);
@@ -60,11 +59,7 @@ fn forest_slider_profile_loop() {
 fn forest_source_hover_profile_loop() {
     let (editor, names) = super::super::svg::website_growing_forest_editor();
     let mut runner = crate::EditorRunner::new(editor);
-    let modifiers = if cfg!(target_os = "macos") {
-        Modifiers::META
-    } else {
-        Modifiers::CONTROL
-    };
+    let modifiers = crate::modifiers::command();
     runner.editor.modifiers = modifiers;
     runner.refresh_frame(1.0, SIZE);
     paint(&mut runner);

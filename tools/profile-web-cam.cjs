@@ -1,8 +1,5 @@
 // Runs only the headless diagnostic page, never the editor.
-const { spawn } = require("node:child_process");
-const { once } = require("node:events");
-// tools/package.json pins playwright-core; it drives the installed Chrome.
-const { chromium } = require("playwright-core");
+const { withPreview } = require("./web-diagnostics.cjs");
 
 (async () => {
   const [size, height = size] = (process.argv[2] ?? "512").split("x").map(Number);
@@ -11,22 +8,7 @@ const { chromium } = require("playwright-core");
   const controls = process.argv[5] === "controls";
   const threads = Number(process.argv[6] ?? 8);
   const pkg = process.argv[7] ?? "profile-pkg";
-  const server = spawn("python3", ["-B", "website/preview.py", "--no-open", "--port", "0"], {
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  let browser;
-  try {
-    const url = await new Promise((resolve, reject) => {
-      let output = "";
-      server.stdout.on("data", (chunk) => {
-        output += chunk;
-        const match = output.match(/^(http:\/\/127\.0\.0\.1:\d+\/)$/m);
-        if (match) resolve(match[1]);
-      });
-      server.once("error", reject);
-      server.once("exit", (code) => reject(new Error(`Server exited: ${code}`)));
-    });
-    browser = await chromium.launch({ channel: "chrome", headless: true, chromiumSandbox: true });
+  await withPreview(async (url, browser) => {
     const page = await browser.newPage();
     page.on("pageerror", (error) => console.error(error));
     await page.goto(`${url}editor/cam-profile.html?${new URLSearchParams({ threads, pkg })}`);
@@ -41,12 +23,5 @@ const { chromium } = require("playwright-core");
         console.log(JSON.stringify({ trial, ...result }));
       }
     }
-  } finally {
-    if (browser) await browser.close();
-    if (server.exitCode === null && server.signalCode === null) {
-      const stopped = once(server, "exit");
-      server.kill("SIGTERM");
-      await stopped;
-    }
-  }
+  });
 })().catch((error) => { console.error(error); process.exitCode = 1; });

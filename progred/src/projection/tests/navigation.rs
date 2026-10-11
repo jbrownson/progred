@@ -69,11 +69,7 @@ fn command_a_selects_the_current_views_root() {
     .collect();
     let event = KeyboardEvent {
         key: Key::Character("a".into()),
-        modifiers: if cfg!(target_os = "macos") {
-            Modifiers::META
-        } else {
-            Modifiers::CONTROL
-        },
+        modifiers: crate::modifiers::command(),
         ..arrow(NamedKey::ArrowDown)
     };
     for (root, path) in [(&document, vec![]), (&pane, pane_path)] {

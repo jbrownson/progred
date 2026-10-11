@@ -26,11 +26,7 @@ fn command(key: Key) -> KeyboardEvent {
     KeyboardEvent {
         key,
         state: KeyState::Down,
-        modifiers: if cfg!(target_os = "macos") {
-            ui_events::keyboard::Modifiers::META
-        } else {
-            ui_events::keyboard::Modifiers::CONTROL
-        },
+        modifiers: crate::modifiers::command(),
         ..Default::default()
     }
 }

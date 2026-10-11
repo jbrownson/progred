@@ -371,11 +371,7 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
                 &mut world,
                 &KeyboardEvent {
                     key: Key::Character("v".into()),
-                    modifiers: if cfg!(target_os = "macos") {
-                        Modifiers::META
-                    } else {
-                        Modifiers::CONTROL
-                    },
+                    modifiers: crate::modifiers::command(),
                     ..arrow(NamedKey::End)
                 },
             )
@@ -405,11 +401,7 @@ fn pasting_a_copied_value_over_a_number_or_text_replaces_it() {
     }));
     let chord = |key: &str| KeyboardEvent {
         key: Key::Character(key.into()),
-        modifiers: if cfg!(target_os = "macos") {
-            Modifiers::META
-        } else {
-            Modifiers::CONTROL
-        },
+        modifiers: crate::modifiers::command(),
         ..arrow(NamedKey::End)
     };
     let select = |runner: &mut crate::EditorRunner, index: usize| {

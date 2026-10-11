@@ -358,11 +358,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
         [1.0, -2.0]
     );
     let key = KeyboardEvent {
-        modifiers: if cfg!(target_os = "macos") {
-            Modifiers::META
-        } else {
-            Modifiers::CONTROL
-        },
+        modifiers: crate::modifiers::command(),
         ..Default::default()
     };
     assert!(handler.dispatch_key(&mut events, &key));
