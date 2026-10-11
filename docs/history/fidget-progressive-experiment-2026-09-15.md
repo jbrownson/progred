@@ -379,7 +379,7 @@ interpreter or per-pixel pointer chasing was introduced.
 Three additive APIs in the pinned `fidget-core` support this experiment:
 borrowing a function's SSA tape, lowering a valid SSA tape with its variable
 map, and wrapping a function as a shape. See the standalone
-[patch](experiments/fidget-core-ssa.patch). The package is copied at the same
+[patch](../experiments/fidget-core-ssa.patch). The package is copied at the same
 pinned revision as the already-vendored JIT/raster packages; there is no
 dependency upgrade or change to existing evaluator behavior. One additional
 upstream-package regression test checks the new SSA entry point against the

@@ -139,7 +139,7 @@ tiers, and further integrations are deferred. Future readers of ordered contribu
 observe that set, not just a selected definition. Do not add an ad-hoc cache
 or event-specific relevance checks alongside this mechanism.
 
-The [2026-09-04 tree profile](tree-profile-2026-09-04.md) records measurements
+The [2026-09-04 tree profile](history/tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
 
 ### Lowered results across evaluator boundaries
@@ -181,13 +181,13 @@ likewise, comparing runtime inputs/results with source-aware equality. The 3D
 preview/recording pipeline also retains executable programs; model/playback/
 appearance decoders and render-failure outcomes still adapt their data to GID.
 Radio options and the older list-based range-control inputs remain GID-oriented.
-The [owned-result experiment](performance.md#owned-result-experiment--2026-09-17)
+The [owned-result experiment](history/performance-log-2026-09.md#owned-result-experiment--2026-09-17)
 measured an earlier, removed implementation. Its results motivate profiling
 the new consumers, not assuming that keeping runtime values is always faster.
 
-The [2026-09-23 comparison](performance.md#runtime-callback-handoffs--2026-09-23)
+The [2026-09-23 comparison](history/performance-log-2026-09.md#runtime-callback-handoffs--2026-09-23)
 covers the pre-ownership baseline, the ownership checkpoint, and the consumer
-migration. The newer [tree-to-3D comparison](performance.md#runtime-tree-to-3d-pipeline--2026-09-23)
+migration. The newer [tree-to-3D comparison](history/performance-log-2026-09.md#runtime-tree-to-3d-pipeline--2026-09-23)
 improves uncached construction; steady-state controls frames remain roughly at
 the ownership checkpoint. Profile remaining conversions before broadening
 the migration. Exclude compilation and isolate build outputs for each source
@@ -212,7 +212,7 @@ Future upstream investigation may cover reuse across progressive resolutions or
 model edits, and more accurate surface-hit/normal evaluation at sharp edges.
 Current raster refinement recomputes each level; finer depth sampling reduces
 both missed thin intersections and wrong-face normals but does not eliminate
-them. See the [tool-rim diagnostics](performance.md#implicit-stock-quality-and-cancellation-investigation--2026-09-14).
+them. See the [tool-rim diagnostics](history/performance-log-2026-09.md#implicit-stock-quality-and-cancellation-investigation--2026-09-14).
 Command+3 now uses a retained mesh as the immediate camera-dependent fallback
 while current implicit images refine it. That removes the need to finish an
 obsolete coarse implicit image just to provide orbit feedback. Standalone
@@ -225,7 +225,7 @@ with the tradeoff of an older mesh when the user next orbits.
 ## Report Vello image-atlas flashing
 
 Prepare an upstream bug report for the reproducible Vello 0.9.0 image omissions
-documented in the [wide-preview investigation](graphics-memory-2026-09-16.md#wide-preview-flashing-follow-up-2026-09-18).
+documented in the [wide-preview investigation](history/graphics-memory-2026-09-16.md#wide-preview-flashing-follow-up-2026-09-18).
 Repeated 4200 × 2800 image replacements drop every third image while 4000 × 2800
 replacements work. The atlas protects obsolete recent images and silently omits
 the current image when allocation fails. Reusing a registered texture works at
@@ -235,7 +235,7 @@ Before filing, check for an existing upstream issue and reproduce against the
 then-current release with a minimal standalone example, including version,
 backend, physical image dimensions, and expected/actual pixel readbacks. No
 report has been filed. The owner prefers avoiding local Vello patches. The
-[separate compositor](vello-compositor-experiment-2026-09-18.md) now bypasses the
+[separate compositor](history/vello-compositor-experiment-2026-09-18.md) now bypasses the
 atlas for native draw-image operations, with per-window upload ownership and
 headless fidelity, resize, lifetime, and performance checks. Image brushes still
 use Vello's atlas. Direct mesh drawing, including replacing partial implicit-image

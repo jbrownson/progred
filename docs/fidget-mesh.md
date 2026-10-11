@@ -86,7 +86,7 @@ and earlier objects win equal-depth ties.
 
 ## Checks and limitations
 
-The [initial experiment](fidget-meshing-2026-09-13.md) measures generation cost and
+The [initial experiment](history/fidget-meshing-2026-09-13.md) measures generation cost and
 records mesh-quality caveats, including zero-area triangles. The viewport does
 not silently weld or repair them and makes no manufacturing-validity guarantee.
 Stock/model draft meshes use triangle normals. Path tubes interpolate analytic
@@ -112,6 +112,6 @@ The ignored
 opening a window; `editor_toolpath_mesh_svg_capture` captures Command+3. These
 use the real partial and the CPU interpretation of its mesh drawing operation.
 
-See the [direct-composition measurements](fidget-hybrid-2026-09-18.md#direct-mesh-composition)
+See the [direct-composition measurements](history/fidget-hybrid-2026-09-18.md#direct-mesh-composition)
 and the ignored GPU regressions for multiple same-sized previews, clipping,
 vector overlays, depth-only changes, and transparent surface pixels.

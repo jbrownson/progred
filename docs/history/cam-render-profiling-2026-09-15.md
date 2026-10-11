@@ -11,7 +11,7 @@ headless measurements on the development Mac, not native input-to-display timing
 The first measurements below did not change production rendering. The later
 follow-ups fix two upstream issues and integrate JIT for implicit rendering on
 Apple Silicon macOS, while retaining VM meshing. See the final section for the
-current configuration and [the explicit local patches](../vendor/README.md).
+current configuration and [the explicit local patches](../../vendor/README.md).
 
 The dominant work is Fidget's CPU **VM evaluation**, especially interval
 evaluation. It is not Grap running the program twice or expensive tree
@@ -183,7 +183,7 @@ not a new Progred cache. GPU spilling is separate and unimplemented.
 ## Follow-up: local AArch64 JIT fix
 
 The isolated checkout is `target/sandbox/fidget-jit-investigation`. The
-[upstream-source patch](experiments/fidget-jit-aarch64.patch) is retained outside
+[upstream-source patch](../experiments/fidget-jit-aarch64.patch) is retained outside
 that ignored directory so cleaning build output cannot lose the work. It is
 against the same pinned revision. It was initially isolated; the integration
 below now uses it from the checked-in vendor directory.
@@ -286,7 +286,7 @@ solve prompt cancellation by itself.
 
 Raster cancellation used to be checked between whole root tiles. A root tile can
 contain many smaller interval, float, and gradient evaluations. The
-[raster patch](experiments/fidget-raster-cancellation.patch) passes the existing
+[raster patch](../experiments/fidget-raster-cancellation.patch) passes the existing
 cancellation observation into that recursion and returns `None` all the way out
 when cancelled. A partially filled tile is not a completed image. The public API,
 sampling grid, and geometry math are unchanged; 2D rendering gets the same fix.
@@ -319,7 +319,7 @@ the editor.
 Progred now uses JIT for software implicit rendering **only on Apple Silicon
 macOS**, with Fidget's recommended tiles, while preserving VM meshing and the VM
 backend elsewhere. No scheduling or caching changes were needed.
-The two small crate patches are checked in under [vendor](../vendor/README.md);
+The two small crate patches are checked in under [vendor](../../vendor/README.md);
 they do not depend on a developer-local checkout in `target`.
 
 The signed macOS bundle adds Apple's standard allow-JIT entitlement, retaining

@@ -318,7 +318,7 @@ retains a focused check of that interface cost.
 The continuation and geometry passes had mixed performance results, including
 regressions. They are not justified as speed improvements. The consolidated
 builder's phase timings and sampling findings are recorded in
-[performance.md](performance.md#layout-builder-and-placement-consolidation--2026-09-07).
+[performance.md](history/performance-log-2026-09.md#layout-builder-and-placement-consolidation--2026-09-07).
 
 The consolidated version passes all 612 workspace library unit tests (eight
 opt-in tests excluded), all seven release frame canaries, the native

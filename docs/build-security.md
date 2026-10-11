@@ -88,7 +88,7 @@ Seatbelt restrictions, in a separate `target/sandbox/build-web` directory.
 that toolchain's locked sysroot dependencies; it does not update the workspace
 lockfile. `make build-web` uses this path; native builds remain on stable. The
 pinned nightly needs `rust-src` and `llvm-tools`. The standalone
-[worker diagnostic](web-worker-experiment-2026-09-19.md) uses the same build and
+[worker diagnostic](history/web-worker-experiment-2026-09-19.md) uses the same build and
 transport without starting the editor.
 The browser Rayon pool uses `wasm-bindgen-rayon` 1.3.0 with `no-bundler`.
 Its three added registry packages (`wasm-bindgen-rayon`, `wasm_sync`, and

@@ -16,7 +16,7 @@ Local source changes, each including regression tests:
   No unsafe code, extra allocation, sampling change, or altered math semantics.
   Covers aliases, tail lengths, signed zeros, infinities, and NaNs. This is
   independent of the other patches; see the
-  [browser measurements](../docs/browser-fidget-bulk-profile-2026-09-19.md).
+  [browser measurements](../docs/history/browser-fidget-bulk-profile-2026-09-19.md).
 - [Shared cancellation flag patch](../docs/experiments/fidget-core-cancellation.patch):
   add `CancelToken::from_shared_flag(Arc<AtomicBool>)` so callers can share one
   cancellation signal across libraries without callback bridges. Existing token
@@ -63,7 +63,7 @@ Local source changes, each including regression tests:
   program lifetimes without changing sampling density, but repeats enough
   interval work to lose performance; it remains outside the app.
   **Not ready for app use or an upstream proposal.** See the
-  [experiment report](../docs/fidget-gpu-experiment-2026-09-16.md). Its tests use
+  [experiment report](../docs/history/fidget-gpu-experiment-2026-09-16.md). Its tests use
   the core SSA access patch above. Progred no longer enables
   `experimental-spills`: its diagnostic was retired on 2026-10-10.
 
@@ -72,7 +72,7 @@ intended for upstream review, except the explicitly experimental GPU patch.
 Nothing has been submitted or pushed upstream.
 Keep vendored source and patches in sync; do not accumulate unrelated changes.
 Remove each local package override when a reviewed upstream revision includes
-the corresponding fixes. See the [measurements](../docs/cam-render-profiling-2026-09-15.md).
+the corresponding fixes. See the [measurements](../docs/history/cam-render-profiling-2026-09-15.md).
 
 The packages are workspace members so their tests share our locked dependency
 graph and sandboxed build. On a supported desktop JIT platform:

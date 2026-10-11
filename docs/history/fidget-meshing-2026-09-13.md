@@ -2,7 +2,7 @@
 
 **Removed 2026-10-10:** the `mesh-experiment` feature and its test were retired in favor of the in-app mesh viewport. The commands below no longer run; this note is a record of the measurements.
 
-Subsequent work added an [in-app mesh viewport](fidget-mesh.md), explicitly
+Subsequent work added an [in-app mesh viewport](../fidget-mesh.md), explicitly
 without caching. This report describes the earlier generation experiment.
 
 This is a headless experiment, not a replacement viewport. It uses the actual

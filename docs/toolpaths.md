@@ -471,7 +471,7 @@ yet. The user confirmed that the split version renders the paths and accepts
 orbit drags, but remains choppy. A subsequent native trace of 50 renders at
 599 × 1280 × 640 averaged 234 ms (196–279 ms), with 215 ms on average in
 wait/readback. This is rendering time, not a complete input-to-display latency
-measurement. The [cube meshing experiment](fidget-meshing-2026-09-13.md) motivated
+measurement. The [cube meshing experiment](history/fidget-meshing-2026-09-13.md) motivated
 the current mesh viewport, which bypasses the GPU VM entirely. It now retains
 geometry through the general dependency graph.
 
@@ -566,7 +566,7 @@ both leave `OP_MEM` unimplemented. Async scheduling cannot make that bytecode
 valid on this backend. A further native submission of this known-unsupported
 program was deliberately avoided. Command+3's implicit refinement uses the explicit
 software path; GPU implicit CAM was blocked by that missing implementation.
-No GPU timeout was added. The later [GPU spill experiment](fidget-gpu-experiment-2026-09-16.md)
+No GPU timeout was added. The later [GPU spill experiment](history/fidget-gpu-experiment-2026-09-16.md)
 implements spill instructions behind an opt-in build feature, but is not used by
 the app. Bounded external scratch now lets the full stock match CPU geometry
 without exceeding Metal's private stack, but the measured GPU path remains much

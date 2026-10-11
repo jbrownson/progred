@@ -445,8 +445,8 @@ without a CPU round trip. Its renderer retains one mesh upload and surface
 color/depth upload, not evaluated widgets or raster results. `DrawList` and the
 initial `Drawing` representation retain the mesh operation; the default canvas
 interpretation rasterizes it on the CPU for browser/export consumers.
-See [image composition measurements](vello-compositor-experiment-2026-09-18.md)
-and [direct mesh measurements](fidget-hybrid-2026-09-18.md#direct-mesh-composition).
+See [image composition measurements](history/vello-compositor-experiment-2026-09-18.md)
+and [direct mesh measurements](history/fidget-hybrid-2026-09-18.md#direct-mesh-composition).
 
 Text leaves may request subscript typography: Puri shapes a smaller font and
 reports ascent/descent relative to the surrounding baseline. Ordinary rows

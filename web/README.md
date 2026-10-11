@@ -162,7 +162,39 @@ WebGPU adapter is available, the host retains the slower Canvas2D/CPU-mesh
 fallback. Startup logs the selected presentation backend and worker count.
 
 `website/Preview.command` builds and serves the whole website. See
-[the website README](../website/README.md) and
-[worker diagnostics](../docs/web-worker-experiment-2026-09-19.md).
-See also the [performance comparison](../docs/browser-native-profile-2026-09-19.md).
-The [SIMD comparison](../docs/browser-simd-profile-2026-09-19.md) covers the browser-only build flag.
+[the website README](../website/README.md).
+
+## Diagnostics
+
+Headless Chrome diagnostics measure the real Rust code without starting the
+editor. Each builds an example into its own `web/*-pkg` folder, which Git
+ignores; a Node script then serves the site and drives a diagnostic page. They
+need Node and Playwright with Chrome, which the repository doesn't install.
+
+CAM rendering uses the `cam_profile` example and `cam-profile.html`:
+
+```sh
+./tools/sandbox-cargo web-threaded build --release -p progred --features cam-profile --example cam_profile
+./tools/wasm-bindgen --target web --no-typescript --out-dir web/profile-pkg --out-name profile \
+  target/sandbox/build-web/wasm32-unknown-unknown/release/examples/cam_profile.wasm
+node tools/profile-web-cam.cjs 512 4 0.02,0.5
+```
+
+Its arguments are the image size, trials, playback positions, `controls` or
+`none`, worker threads, and the package folder. The same example runs natively
+for comparison, after `./tools/sandbox-cargo build --release -p progred
+--features cam-profile --example cam_profile`, as
+`target/sandbox/build/release/examples/cam_profile 0.5 512 4`.
+
+Orbit frames use `orbit_profile` and `orbit-profile.html`: build it into
+`web/orbit-pkg` with `--out-name orbit`, then run
+`node tools/profile-web-orbit.cjs 'position=0.5&refined&threads=8' <label>`.
+The query also accepts `collapsed`, `hold-jobs`, `profile-worker`, and
+`package=<folder>` to compare a second build.
+
+WebGPU presentation uses `web_gpu_probe` and `gpu-probe.html`: build it into
+`web/gpu-probe-pkg` with `--out-name probe`, then run `node tools/test-web-gpu.cjs`.
+
+The September 2026 measurements made with these, including the native
+comparison, SIMD, allocator, and worker experiments, are in
+[history](../docs/history/README.md).

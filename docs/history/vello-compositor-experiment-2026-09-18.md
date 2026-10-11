@@ -91,10 +91,10 @@ large CPU images. It can support GPU-resident mesh output later. Before adopting
 ## Reproduce
 
 The tests now exercise production code rather than retaining a duplicate
-experimental implementation. Sources: [test entry](../ui/puri-vello/tests/compositor.rs),
-[canvas interpreter](../ui/puri-vello/src/compositor/canvas.rs),
-[GPU composition](../ui/puri-vello/src/compositor.rs), and
-[blend shader](../ui/puri-vello/src/compositor/blend.wgsl).
+experimental implementation. Sources: [test entry](../../ui/puri-vello/tests/compositor.rs),
+[canvas interpreter](../../ui/puri-vello/src/compositor/canvas.rs),
+[GPU composition](../../ui/puri-vello/src/compositor.rs), and
+[blend shader](../../ui/puri-vello/src/compositor/blend.wgsl).
 
 Build with the repository wrapper:
 

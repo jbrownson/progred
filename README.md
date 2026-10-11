@@ -206,15 +206,15 @@ format is future work. See [GID](docs/gid.md) and [the text bridge](docs/gid-tex
 
 ## Repository layout
 
-- [`gid/`](gid/) — values, cells, documents, and positions
-- [`grap/`](grap/) — evaluator
-- [`incremental/`](incremental/) — dependency graph and background computations
-- [`progred/`](progred/) — editor application; libraries and projections live in
-  [`progred/src/libraries/`](progred/src/libraries/), layout in
-  [`progred/src/display/`](progred/src/display/)
-- [`ui/`](ui/) — Puri, reusable widgets, measurement, and drawing backends
-- [`examples/`](examples/) — bundled documents
-- [`docs/`](docs/) — current references, experiments, and deferred work
+- [`gid/`](gid) — values, cells, documents, and positions
+- [`grap/`](grap) — evaluator
+- [`incremental/`](incremental) — dependency graph and background computations
+- [`progred/`](progred) — editor application; libraries and projections live in
+  [`progred/src/libraries/`](progred/src/libraries), layout in
+  [`progred/src/display/`](progred/src/display)
+- [`ui/`](ui) — Puri, reusable widgets, measurement, and drawing backends
+- [`examples/`](examples) — bundled documents
+- [`docs/`](docs) — current references, experiments, and deferred work
 
 ## Development and further reading
 
@@ -235,7 +235,7 @@ Start with [the motivation](MOTIVATION.md), then the
 
 Earlier TypeScript, Swift, egui, Haskell, and nested Linebender prototypes are
 preserved at `archive/pre-root-promotion`; `archive/multi-prototype` retains an
-earlier milestone. Their design notes are in [history](docs/history/).
+earlier milestone. Their design notes are in [history](docs/history).
 
 ## License
 
