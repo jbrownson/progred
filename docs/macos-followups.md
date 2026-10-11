@@ -27,6 +27,10 @@ empty.
   `make test-web-gpu` and `make audit`, and in `website/`, `npm ci` and
   `npx wrangler --version`.
 
+- **wasm-bindgen 0.2.129.** The lockfile update moved it from 0.2.127, so
+  `make build-web` downloads the matching CLI. Check that the browser editor
+  still runs with `make run-web`.
+
 ## Later
 
 - **Rust 1.100, due 12 November 2026.** Move `sandbox-cargo update` and

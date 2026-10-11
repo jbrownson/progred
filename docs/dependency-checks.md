@@ -31,9 +31,14 @@ to suggest one.
   - **Done today:** Fidget 0.5.1 with wgpu 30, Vello 0.11, parley 0.11.1 and
     skrifa 0.44; `im` replaced by `imbl`; the npm policy, `tools/npm-update`,
     `make audit` and `make outdated`.
-  - **Deferred:** compatible Cargo updates to 46 packages, not yet applied. Of
-    them, `wasm-bindgen-futures` 0.4.79 adds `tokio` to the lockfile, but only
-    for Emscripten with an unstable flag, so it's never built. Breaking: parley
-    0.12 (past the cutoff on 16 October), pollster 1.0, getrandom 0.4, and
-    base64 0.23 for tests; skrifa 0.48 waits on Vello and parley, which require
-    0.44.
+  - **Applied:** compatible Cargo updates to 46 packages, through the sandboxed
+    `update`. New to the lockfile: `tokio` through `wasm-bindgen-futures`
+    0.4.79, but only for Emscripten with an unstable flag, and `zlib-rs`, an
+    optional `flate2` backend we don't enable, so neither is built;
+    `miniz_oxide` 0.9, `flate2`'s default backend; and `smallvec` 2.0.0-beta.2,
+    replacing the alpha Fidget's `facet` used. `make test` passes.
+  - **Deferred:** breaking upgrades to parley 0.12 (past the cutoff on 16
+    October), pollster 1.0, getrandom 0.4, and base64 0.23 for tests; skrifa
+    0.48 waits on Vello and parley, which require 0.44.
+  - **Also today:** Linux builds now run in a namespace sandbox like the macOS
+    one.
