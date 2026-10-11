@@ -41,7 +41,10 @@ recorded run:
 - a **note** on what changed or why the run was recorded.
 
 Compare runs only on the same machine and adapter, and keep the environment in
-mind: a different power state, OS, or compiler can account for a change. The
+mind: a different power state, OS, or compiler can account for a change. A
+shared cloud VM is noisy: its rounds varied by 10–20% in October 2026, so use
+one for interleaved comparisons within a session and keep long-term records on
+a dedicated machine. The
 tool runs the test executables directly, outside the macOS build sandbox, so on
 a Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
 offer a software adapter such as Mesa's llvmpipe; the voxel orbits then measure

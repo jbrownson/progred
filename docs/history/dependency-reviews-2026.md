@@ -95,4 +95,6 @@ research renderer and names `vello_gpu` as the production one. Resolution used
 The native build, the threaded browser build's types, and the tests were
 checked on Linux only. The ignored GPU tests, including the compositor pixel
 checks and Fidget's constant-field and color test, passed on Mesa's lavapipe
-software Vulkan driver.
+software Vulkan driver. `make perf` before and after the upgrade, on the same
+Linux VM, found no change beyond its noise; both runs are in the
+[performance log](../performance-log.tsv).
