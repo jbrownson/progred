@@ -7,11 +7,13 @@ empty.
 
 ## Next
 
-- **`sandbox-cargo` and `make check`.** `sandbox-cargo` now checks the OS
-  before looking for rustup, and takes the pinned nightly for `update` and
-  `resolve` from `tools/web-build-settings.sh`. `make check` now covers every
-  target and the `cam-profile` and `layout-profile` features. Run `make check`
-  and `./tools/sandbox-cargo update --dry-run`.
+- **`sandbox-cargo` and `make check`.** `sandbox-cargo` now shares its
+  commands with `linux-cargo` through `tools/cargo-common.sh`, checks the OS
+  before looking for rustup, takes the pinned nightly from
+  `tools/web-build-settings.sh`, and fetches missing crates before a build as
+  `make fetch` does. `make check` now covers every target and the
+  `cam-profile` and `layout-profile` features. Run `make check`, `make test`,
+  `make build-web` and `./tools/sandbox-cargo update --dry-run`.
 
 ## Later
 

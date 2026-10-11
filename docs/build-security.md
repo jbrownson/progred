@@ -128,12 +128,11 @@ separate `target/sandbox/build-web` directory. `web-threaded-fetch` only fetches
 that toolchain's locked sysroot dependencies; it does not update the workspace
 lockfile.
 
-Use `./tools/sandbox-cargo resolve` after declaring a new dependency when the
-existing locked versions should be preserved; it uses the same publication-age
-policy and network/lockfile boundary without compiling dependency code. On
-Linux, `./tools/linux-cargo resolve` records the change from the sandbox's Cargo
-cache alone, offline, so it can add edges between already-locked packages but
-cannot introduce a newly published release.
+Use the wrapper's `resolve` after declaring a new dependency when the existing
+locked versions should be preserved; it uses the same publication-age policy and
+network/lockfile boundary without compiling dependency code. Both wrappers share
+their commands through `tools/cargo-common.sh`, so they differ only in the
+sandbox.
 If a dependency has no age-compatible resolution, review the exact release and
 its provenance before temporarily resolving with
 `resolver.incompatible-publish-age="allow"`. Do not put that override in the
