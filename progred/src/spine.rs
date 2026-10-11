@@ -76,7 +76,7 @@ mod tests {
     use super::*;
     use gid::{CellId, position};
 
-    fn relation(name: &str) -> CellId {
+    fn label(name: &str) -> CellId {
         CellId::from_u128(match name {
             "name" => 0x7a9138f84ed69a4546f2cd53021a7364,
             "points" => 0x2e20418e4f70b7fbd650cd6675ab920a,
@@ -86,12 +86,8 @@ mod tests {
             "color" => 0x04488199db044b9c5da89f2b6db1a83c,
             "x" => 0x6b040071381df24022a370d51793e9cd,
             "only" => 0xe923cf979e6706d090d6b56ef9e2fc88,
-            _ => unreachable!("fixture relation"),
+            _ => unreachable!("fixture label"),
         })
-    }
-
-    fn label(name: &str) -> CellId {
-        relation(name)
     }
 
     fn blob(text: &str) -> Value {

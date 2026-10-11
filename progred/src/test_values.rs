@@ -3,7 +3,7 @@ use gid::{CellId, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 
-fn sample_relation(name: &str) -> Option<CellId> {
+fn sample_label(name: &str) -> Option<CellId> {
     use crate::sample::sample_vocabulary as sample;
     match name {
         "at" => Some(sample::AT),
@@ -25,20 +25,18 @@ fn sample_relation(name: &str) -> Option<CellId> {
     }
 }
 
-pub fn relation(name: &str) -> CellId {
-    static RELATIONS: OnceLock<Mutex<BTreeMap<String, CellId>>> = OnceLock::new();
-    sample_relation(name).unwrap_or_else(|| {
-        *RELATIONS
+/// The record label a test calls `name`: the sample vocabulary's, or one
+/// minted on first use and kept for the rest of the run.
+pub fn label(name: &str) -> CellId {
+    static LABELS: OnceLock<Mutex<BTreeMap<String, CellId>>> = OnceLock::new();
+    sample_label(name).unwrap_or_else(|| {
+        *LABELS
             .get_or_init(|| Mutex::new(BTreeMap::new()))
             .lock()
-            .expect("test relation table")
+            .expect("test label table")
             .entry(name.to_string())
             .or_insert_with(new_cell_id)
     })
-}
-
-pub fn label(name: &str) -> CellId {
-    relation(name)
 }
 
 pub fn text(text: impl Into<String>) -> Value {
