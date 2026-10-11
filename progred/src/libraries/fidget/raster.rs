@@ -570,7 +570,8 @@ mod tests {
 
     #[test]
     fn software_lighting_is_independent_of_sampling_density() {
-        let mut request = request(333.0, 751.0);
+        // Small odd sizes still give four halvings and a depth refinement.
+        let mut request = request(42.0, 94.0);
         request.preview.objects[0].tree = Tree::x() * 0.3 + Tree::y() * 0.2 + Tree::z();
         let shape = VmShape::from(request.preview.objects[0].tree.clone());
         for camera in [
@@ -591,7 +592,7 @@ mod tests {
             let normal = rotation.inverse() * Vector3::new(0.3, 0.2, 1.0).normalize();
             let light = Vector3::new(0.35, -0.45, 1.0).normalize();
             let expected = (200.0 * (0.22 + 0.78 * normal.dot(&light).max(0.0))) as u8;
-            for view in request.view().refinements(128, 4).unwrap() {
+            for view in request.view().refinements(16, 4).unwrap() {
                 let config = VoxelRenderConfig {
                     image_size: view.size,
                     world_to_model: view.world_to_model,
