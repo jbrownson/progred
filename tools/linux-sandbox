@@ -1,20 +1,28 @@
 #!/bin/sh
 
-# The Linux build sandbox's filesystem view, the counterpart of macOS's
-# tools/cargo-sandbox.sb. tools/linux-cargo runs this as root of new user,
-# mount, PID and (usually) network namespaces; it rearranges mounts that only
-# those namespaces see, then runs the command:
+# The Linux build sandbox, the counterpart of macOS's tools/cargo-sandbox.sb.
+# tools/linux-cargo runs this as root of new user, mount, PID and (usually)
+# network namespaces:
 #
 #   linux-sandbox PROJECT_ROOT BUILD_ROOT TOOLCHAIN_ROOT HOME LOCK_WRITE \
 #       [READABLE_FILE...] -- COMMAND [ARGUMENTS...]
 #
-# The command sees the source tree read-only, without .git, local agent
-# configuration or a root .env; it can write only beneath BUILD_ROOT, and
-# Cargo.lock when LOCK_WRITE is 1. HOME, /tmp, /run, /var/tmp and /dev/shm are
-# empty. The toolchain and each READABLE_FILE, such as a proxy's certificate
-# bundle, stay readable.
+# It builds a new root in which the host's directories are read-only; HOME and
+# /run are empty and read-only; /tmp, /var/tmp and /dev/shm are empty scratch
+# space that vanishes with the sandbox; and /dev holds only the basic devices.
+# The source tree is read-only without .git, local agent configuration or a
+# root .env. Only BUILD_ROOT is writable on the host, and Cargo.lock when
+# LOCK_WRITE is 1. Each READABLE_FILE, such as a proxy's certificate bundle,
+# stays readable. The command runs without capabilities, so it can't change
+# any of this, and in a session of its own, without the terminal.
 
 set -eu
+
+# This shell is the PID namespace's init: when it leaves, every process in the
+# namespace ends, and it handles the terminal's signals by leaving.
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 project_root=$1
 build_root=$2
@@ -22,75 +30,100 @@ toolchain_root=$3
 real_home=$4
 lock_write=$5
 shift 5
-# The working directory still refers to the tree as it was; it's re-entered
-# by path once the new view is in place.
+# The working directory refers to the host's tree; it's re-entered by path.
 cwd=$(pwd)
-readable=
+
+# Binds a directory with everything mounted beneath it, all read-only.
+bind_ro() {
+    mount --rbind "$1" "$2"
+    findmnt -R -n -l -o TARGET -- "$2" | while IFS= read -r mount_point; do
+        mount -o remount,bind,ro "$mount_point" || exit 1
+    done
+}
+
+# The new root is a tmpfs on /tmp, so the host's /tmp is out of reach from
+# here on: neither the project nor a readable file can live there.
+root=/tmp
+mount -t tmpfs sandbox "$root"
+for entry in /*; do
+    name=${entry##*/}
+    case $name in
+        proc | dev | tmp | run | lost+found) continue ;;
+    esac
+    if [ -L "$entry" ]; then
+        ln -s "$(readlink "$entry")" "$root/$name"
+    elif [ -d "$entry" ]; then
+        mkdir "$root/$name"
+        bind_ro "$entry" "$root/$name"
+    fi
+done
+
+mkdir "$root/proc" "$root/dev" "$root/tmp" "$root/run"
+mount -t proc proc "$root/proc"
+mount -t tmpfs dev "$root/dev"
+for device in null zero full random urandom tty; do
+    : >"$root/dev/$device"
+    mount --bind "/dev/$device" "$root/dev/$device"
+done
+ln -s /proc/self/fd "$root/dev/fd"
+ln -s /proc/self/fd/0 "$root/dev/stdin"
+ln -s /proc/self/fd/1 "$root/dev/stdout"
+ln -s /proc/self/fd/2 "$root/dev/stderr"
+mkdir "$root/dev/shm"
+mount -t tmpfs shm "$root/dev/shm"
+mount -o remount,bind,ro "$root/dev"
+mount -t tmpfs tmp "$root/tmp"
+mount -t tmpfs run "$root/run"
+if [ -d "$root/var/tmp" ]; then
+    mount -t tmpfs tmp "$root/var/tmp"
+fi
+if [ -d "$root$real_home" ]; then
+    mount -t tmpfs home "$root$real_home"
+fi
+
+# The project and toolchain again, in case they were under HOME.
+mkdir -p "$root$project_root" "$root$toolchain_root"
+bind_ro "$project_root" "$root$project_root"
+bind_ro "$toolchain_root" "$root$toolchain_root"
+for name in .git .claude .codex; do
+    if [ -d "$root$project_root/$name" ]; then
+        mount -t tmpfs hidden "$root$project_root/$name"
+    elif [ -e "$root$project_root/$name" ]; then
+        mount --bind /dev/null "$root$project_root/$name"
+    fi
+done
+if [ -e "$root$project_root/.env" ]; then
+    mount --bind /dev/null "$root$project_root/.env"
+fi
+
+mount --bind "$build_root" "$root$build_root"
+if [ "$lock_write" = 1 ]; then
+    mount --bind "$project_root/Cargo.lock" "$root$project_root/Cargo.lock"
+fi
+
 while [ "$1" != -- ]; do
-    readable="$readable $1"
+    if [ ! -r "$root$1" ]; then
+        mkdir -p "$root$(dirname "$1")"
+        : >"$root$1"
+        mount --bind "$1" "$root$1"
+        mount -o remount,bind,ro "$root$1"
+    fi
     shift
 done
 shift
-
-# A fresh /tmp hides the real one and holds what must survive hiding the rest,
-# so the project can't live under /tmp; tools/linux-cargo checks.
-mount -t tmpfs sandbox /tmp
-mkdir /tmp/project /tmp/build /tmp/toolchain
-mount --rbind "$project_root" /tmp/project
-mount --rbind "$build_root" /tmp/build
-mount --rbind "$toolchain_root" /tmp/toolchain
-if [ "$lock_write" = 1 ]; then
-    : >/tmp/lock
-    mount --bind "$project_root/Cargo.lock" /tmp/lock
+if [ -d "$root$real_home" ]; then
+    mount -o remount,bind,ro "$root$real_home"
 fi
-index=0
-for file in $readable; do
-    index=$((index + 1))
-    : >"/tmp/readable-$index"
-    mount --bind "$file" "/tmp/readable-$index"
-done
+mount -o remount,bind,ro "$root/run"
 
-mount -t tmpfs hidden "$real_home"
-for dir in /run /var/tmp /dev/shm; do
-    if [ -d "$dir" ]; then
-        mount -t tmpfs hidden "$dir"
-    fi
-done
-
-mkdir -p "$project_root" "$toolchain_root"
-mount --move /tmp/project "$project_root"
-mount -o remount,bind,ro "$project_root"
-mount --move /tmp/build "$build_root"
-mount --move /tmp/toolchain "$toolchain_root"
-mount -o remount,bind,ro "$toolchain_root"
-if [ "$lock_write" = 1 ]; then
-    mount --move /tmp/lock "$project_root/Cargo.lock"
-fi
-index=0
-for file in $readable; do
-    index=$((index + 1))
-    if [ ! -r "$file" ]; then
-        mkdir -p "$(dirname "$file")"
-        : >"$file"
-        mount --move "/tmp/readable-$index" "$file"
-        mount -o remount,bind,ro "$file"
-    fi
-done
-
-for name in .git .claude .codex; do
-    if [ -d "$project_root/$name" ]; then
-        mount -t tmpfs hidden "$project_root/$name"
-    elif [ -e "$project_root/$name" ]; then
-        mount --bind /dev/null "$project_root/$name"
-    fi
-done
-if [ -e "$project_root/.env" ]; then
-    mount --bind /dev/null "$project_root/.env"
-fi
-
-# Leave /tmp empty, as the sandbox's own.
-umount -l /tmp
-mount -t tmpfs sandbox /tmp
-
+mkdir "$root/.host"
+cd "$root"
+pivot_root . .host
+umount -l /.host
+rmdir /.host
+mount -o remount,bind,ro /
 cd "$cwd" 2>/dev/null || cd /
-exec "$@"
+
+setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all --bounding-set=-all \
+    -- setsid -- "$@" &
+wait $!

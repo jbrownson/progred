@@ -1,11 +1,11 @@
 #!/bin/sh
 
-# Locked Cargo for Linux under a namespace sandbox, the counterpart of
+# Locked Cargo for Linux in a namespace sandbox, the counterpart of
 # tools/sandbox-cargo's Seatbelt one: build scripts, procedural macros and
-# tests run without network access, the home directory or other processes,
-# and write only beneath target/sandbox. tools/linux-sandbox sets up that
-# view. This is the single deliberate Linux exception to the
-# .cargo/config.toml tripwire; see docs/build-security.md.
+# tests see a read-only system without the home directory, other processes or
+# (except while fetching) the network, and write only beneath target/sandbox.
+# tools/linux-sandbox sets that up. This is the single deliberate Linux
+# exception to the .cargo/config.toml tripwire; see docs/build-security.md.
 
 set -eu
 
@@ -24,7 +24,7 @@ if [ "$(uname -s)" != Linux ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    echo "usage: tools/linux-cargo fetch | update | resolve | audit | <cargo command> [arguments...]" >&2
+    echo "usage: tools/linux-cargo audit | fetch | update | resolve | <cargo command> [arguments...]" >&2
     exit 2
 fi
 
@@ -35,6 +35,12 @@ case $project_root in
         ;;
 esac
 
+for tool in unshare setpriv setsid findmnt pivot_root; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "linux-cargo: the build sandbox needs $tool, from util-linux" >&2
+        exit 1
+    fi
+done
 if ! unshare --user --map-root-user true 2>/dev/null; then
     cat >&2 <<'EOF'
 linux-cargo: the build sandbox needs unprivileged user namespaces, which this
@@ -44,11 +50,19 @@ EOF
     exit 1
 fi
 
+rustup_path=$(command -v rustup 2>/dev/null || true)
+if [ -z "$rustup_path" ] && [ -x "$HOME/.cargo/bin/rustup" ]; then
+    rustup_path=$HOME/.cargo/bin/rustup
+fi
+
 use_toolchain() {
-    if command -v rustup >/dev/null 2>&1; then
-        cargo_path=$(rustup which cargo --toolchain "$1")
-    else
+    if [ -n "$rustup_path" ]; then
+        cargo_path=$("$rustup_path" which cargo --toolchain "$1")
+    elif [ "$1" = stable ] && command -v cargo >/dev/null 2>&1; then
         cargo_path=$(command -v cargo)
+    else
+        echo "linux-cargo: rustup was not found; install it or add it to PATH" >&2
+        exit 1
     fi
     cargo_path=$(readlink -f "$cargo_path")
     toolchain_root=$(dirname "$(dirname "$cargo_path")")
@@ -69,20 +83,30 @@ stamp() {
     done
 }
 
-# Network access passes a proxy's settings and certificate bundle through.
-readable=
-for file in "${CARGO_HTTP_CAINFO-}" "${SSL_CERT_FILE-}"; do
-    if [ -f "$file" ]; then
-        readable="$readable $file"
-    fi
-done
-
+# Steps with network access also get a proxy's settings, its certificate
+# bundle, and the resolver configuration, which often lives under /run.
 run_sandboxed() {
     allow_network=$1
     allow_lock_write=$2
     shift 2
-    offline=$([ "$allow_network" = 1 ] && echo false || echo true)
-    network=$([ "$allow_network" = 1 ] || echo --net)
+    stamp=$(stamp "$@")
+    set -- -- "$@"
+    if [ "$allow_network" = 1 ]; then
+        network= offline=false
+        https_upper=${HTTPS_PROXY-} https_lower=${https_proxy-}
+        all_upper=${ALL_PROXY-} all_lower=${all_proxy-}
+        no_upper=${NO_PROXY-} no_lower=${no_proxy-}
+        cargo_ca=${CARGO_HTTP_CAINFO-} ssl_ca=${SSL_CERT_FILE-}
+        for file in "$cargo_ca" "$ssl_ca" "$(readlink -f /etc/resolv.conf 2>/dev/null || true)"; do
+            if [ -f "$file" ]; then
+                set -- "$file" "$@"
+            fi
+        done
+    else
+        network=--net offline=true
+        https_upper= https_lower= all_upper= all_lower= no_upper= no_lower=
+        cargo_ca= ssl_ca=
+    fi
     env -i \
         CARGO_HOME="$cargo_home" \
         CARGO_NET_OFFLINE="$offline" \
@@ -90,21 +114,23 @@ run_sandboxed() {
         HOME="$sandbox_home" \
         LOGNAME="$user_name" \
         PATH="$toolchain_root/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
-        PROGRED_COMMIT="$(stamp "$@")" \
+        PROGRED_COMMIT="$stamp" \
         RUSTC="$toolchain_root/bin/rustc" \
         RUSTC_WRAPPER= \
         RUSTDOC="$toolchain_root/bin/rustdoc" \
         TMPDIR="$sandbox_tmp" \
         USER="$user_name" \
-        ${HTTPS_PROXY:+"HTTPS_PROXY=$HTTPS_PROXY"} \
-        ${https_proxy:+"https_proxy=$https_proxy"} \
-        ${NO_PROXY:+"NO_PROXY=$NO_PROXY"} \
-        ${no_proxy:+"no_proxy=$no_proxy"} \
-        ${CARGO_HTTP_CAINFO:+"CARGO_HTTP_CAINFO=$CARGO_HTTP_CAINFO"} \
-        ${SSL_CERT_FILE:+"SSL_CERT_FILE=$SSL_CERT_FILE"} \
+        ${https_upper:+"HTTPS_PROXY=$https_upper"} \
+        ${https_lower:+"https_proxy=$https_lower"} \
+        ${all_upper:+"ALL_PROXY=$all_upper"} \
+        ${all_lower:+"all_proxy=$all_lower"} \
+        ${no_upper:+"NO_PROXY=$no_upper"} \
+        ${no_lower:+"no_proxy=$no_lower"} \
+        ${cargo_ca:+"CARGO_HTTP_CAINFO=$cargo_ca"} \
+        ${ssl_ca:+"SSL_CERT_FILE=$ssl_ca"} \
         unshare --user --map-root-user --mount $network --pid --fork --mount-proc \
         "$tool_dir/linux-sandbox" "$project_root" "$build_root" "$toolchain_root" \
-            "$HOME" "$allow_lock_write" $readable -- "$@"
+            "$HOME" "$allow_lock_write" "$@"
 }
 
 if [ "$1" = fetch ]; then
@@ -114,10 +140,12 @@ if [ "$1" = fetch ]; then
 fi
 
 # Updates exclude registry releases less than seven days old, as
-# sandbox-cargo's do. Resolution runs no dependency code.
+# sandbox-cargo's do, with the toolchain the browser build pins. Resolution
+# runs no dependency code.
 if [ "$1" = update ]; then
     shift
-    use_toolchain nightly-2026-08-27
+    . "$tool_dir/web-build-settings.sh"
+    use_toolchain "$web_toolchain"
     run_sandboxed 1 1 "$cargo_path" update -Z min-publish-age \
         --config 'registry.global-min-publish-age="7 days"' "$@"
     exit
@@ -131,7 +159,8 @@ if [ "$1" = resolve ]; then
     exit
 fi
 
-# The pinned advisory scanner, installed from its lockfile on first use.
+# The pinned advisory scanner, installed from its lockfile on first use. The
+# installation builds with network access, as on macOS.
 if [ "$1" = audit ]; then
     shift
     audit_path="$cargo_home/bin/cargo-audit"

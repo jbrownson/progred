@@ -28,14 +28,19 @@ commands run Cargo under `sandbox-exec` with:
 - write access only beneath `target/sandbox`.
 
 On Linux, `tools/linux-cargo` draws the same boundaries with unprivileged user,
-mount, PID and network namespaces, and `tools/linux-sandbox` arranges the view
-inside them: the source tree is remounted read-only with `.git`, local agent
-configuration and a root `.env` hidden; the home directory, `/tmp`, `/run`,
-`/var/tmp` and `/dev/shm` are empty; other processes are invisible; and only
-`target/sandbox` is writable. Builds are offline. When the locked graph isn't
-all in the sandbox's Cargo home, `linux-cargo` first fetches it with network
-access, which runs no dependency code; steps with network access pass a proxy's
-settings and certificate bundle through. The sandbox needs unprivileged user
+mount, PID and network namespaces, and `tools/linux-sandbox` builds the view
+inside them. It's an allowlist, like the Seatbelt profile: a new root in which
+every host directory is mounted read-only; the home directory and `/run` empty
+and read-only; `/tmp`, `/var/tmp` and `/dev/shm` empty scratch space that
+vanishes with the sandbox; and a `/dev` with only the basic devices. The source
+tree is read-only with `.git`, local agent configuration and a root `.env`
+hidden, and only `target/sandbox` is writable. The command runs with no
+capabilities, so it can't remount or escape any of this, without other processes
+in view, and in a session of its own, so it can't reach the terminal. Builds are
+offline. When the locked graph isn't all in the sandbox's Cargo home,
+`linux-cargo` first fetches it with network access, which runs no dependency
+code; steps with network access also get a proxy's settings, its certificate
+bundle and the resolver configuration. The sandbox needs unprivileged user
 namespaces, which some distributions restrict: Ubuntu does through AppArmor
 (`kernel.apparmor_restrict_unprivileged_userns`).
 
