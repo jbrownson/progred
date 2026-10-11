@@ -37,6 +37,9 @@ to suggest one.
     optional `flate2` backend we don't enable, so neither is built;
     `miniz_oxide` 0.9, `flate2`'s default backend; and `smallvec` 2.0.0-beta.2,
     replacing the alpha Fidget's `facet` used. `make test` passes.
+    `make perf` on the Linux VM shows no slowdowns. The stock canaries ran 5–21%
+    faster than the last record from the same host, but that's within the VM's
+    run-to-run noise, so it isn't attributed to the updates.
   - **Deferred:** breaking upgrades to parley 0.12 (past the cutoff on 16
     October), pollster 1.0, getrandom 0.4, and base64 0.23 for tests; skrifa
     0.48 waits on Vello and parley, which require 0.44.
