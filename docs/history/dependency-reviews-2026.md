@@ -1,0 +1,77 @@
+# Dependency reviews, 2026
+
+Dated records moved from [build security](../build-security.md) and the
+[release checklist](../release-checklist.md) on 2026-10-11. The current policy
+and exceptions are in those documents.
+
+## `chacha20` publish-age exception, 2026-08-28
+
+Adding Fidget 0.5.0 required the `resolver.incompatible-publish-age` exception
+for `chacha20` 0.10.2: Fidget's `rand` requirement cannot resolve to the yanked
+0.10.0 or 0.10.1 releases. The 0.10.2 crate was checked against the signed
+release in the official RustCrypto repository; it has no build script and
+contains a focused SIMD feature-detection correction. Unrelated too-new
+transitive releases were downgraded before checking in the lockfile.
+
+## Fidget constant-field GPU validation, 2026-09-05
+
+Fidget 0.5.0's GPU `RenderShape` allocates its variable buffer from the compiled
+variable count. A constant field therefore creates a zero-byte buffer and tries
+to bind it as storage. Creating a zero-sized WebGPU buffer is allowed; binding
+a zero-sized range is not. This is platform-independent validation, not a Metal
+quirk; see [WebGPU buffer creation](https://gpuweb.github.io/gpuweb/#buffer-creation)
+and [bind-group validation](https://gpuweb.github.io/gpuweb/#dom-gpudevice-createbindgroup).
+The original Progred crash didn't preserve the GPU validation message, so its
+precise cause was inferred from this code path.
+
+Upstream checked on 2026-09-05 at main commit
+[`94123ea`](https://github.com/mkeeter/fidget/blob/94123ea4a351fedf66df404c31f3fed0e1474b0e/fidget-wgpu/src/lib.rs#L280-L293):
+this was already fixed by allocating at least four bytes. The change landed on
+2026-08-25 in [PR #461](https://github.com/mkeeter/fidget/pull/461), commit
+[`19a9049`](https://github.com/mkeeter/fidget/commit/19a904926a72a4e8509d02060bfef109fe37e488).
+Searches of open and closed issues and PRs for constants, buffers, and bindings
+found no separate matching bug report. The older
+[PR #318](https://github.com/mkeeter/fidget/pull/318) fixes a different
+constant-evaluation problem. The ignored GPU regression test's attempted run
+inside Seatbelt found no Metal adapter.
+
+## Fidget Git revision, 2026-09-13
+
+Fidget was pinned to upstream commit
+[`0c89e87`](https://github.com/mkeeter/fidget/commit/0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6)
+(2026-09-12) for its per-object GPU color support, not a local rendering patch.
+The revision also includes the constant-field fix and lazy pipeline
+construction. The upstream changelog then called the next release 0.5.1
+(unpublished).
+
+Review covered the 42-commit delta from 0.5.0, commit provenance, changed
+manifests and build scripts, and current advisory and news checks. This was a
+reviewed exception to the age preference for the Git revision; registry
+resolution kept the seven-day minimum and existing unrelated versions. Cargo's
+built-in Git transport hit a TLS error;
+`./tools/sandbox-cargo resolve --config net.git-fetch-with-cli=true` used the
+system Git transport within the same sandbox.
+
+The RustSec scan had no vulnerability errors, but retained six warnings for the
+existing `im`, `sized-chunks`, `bitmaps`, and `ttf-parser` versions, including
+unsoundness advisories for the first two.
+
+## Fidget vendoring and JIT, 2026-09-15
+
+Two packages from that revision were vendored with local patches: large-tape
+AArch64 JIT fixes and finer-grained raster cancellation (more packages and
+patches followed; see [vendor/README.md](../../vendor/README.md)). Registry
+additions for `dynasmrt` and its assembler dependencies resolved with the
+seven-day minimum; unrelated locked versions were retained. A fresh RustSec
+scan found no new advisories. The 196 headless JIT tests were also exercised in
+a minimal signed bundle with the app's entitlements; that wasn't a GUI
+interaction test.
+
+## Browser Rayon pool, September 2026
+
+The browser Rayon pool added `wasm-bindgen-rayon` 1.3.0 with `no-bundler`. Its
+three added registry packages (`wasm-bindgen-rayon`, `wasm_sync`, and
+`crossbeam-channel`) resolved under the seven-day publication-age policy;
+unrelated locked versions were retained. Browser WebGPU used the existing
+Vello/wgpu dependency graph and shaders. The advisory scan after these
+additions found no new advisories.
