@@ -2,7 +2,8 @@
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
-const { chromium } = require("playwright");
+// The website's package pins playwright-core; it drives the installed Chrome.
+const { chromium } = require(require.resolve("playwright-core", { paths: [`${__dirname}/../website`] }));
 
 (async () => {
   const server = spawn("python3", ["-B", "website/preview.py", "--no-open", "--port", "0"], {

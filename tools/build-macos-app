@@ -7,7 +7,6 @@ project_root=$(dirname "$tool_dir")
 app_root="$project_root/target/sandbox/app"
 app="$app_root/Progred.app"
 executable="$project_root/target/sandbox/build/release/progred"
-identifier=com.progred.prototype
 
 if [ "$(uname -s)" != Darwin ]; then
     echo "build-macos-app requires macOS" >&2
@@ -42,7 +41,6 @@ trap cleanup EXIT HUP INT TERM
 quiet /usr/bin/codesign \
     --force \
     --sign - \
-    --identifier "$identifier" \
     --options runtime \
     --timestamp=none \
     --entitlements "$project_root/macos/Progred.entitlements" \

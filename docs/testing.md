@@ -73,5 +73,9 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
   arguments, then test arguments after `--`. On Linux without a GPU, Mesa's
   lavapipe driver works. The readback helper is `puri-vello`'s `capture`
   module, behind its `capture` feature.
+- **Browser presentation** has its own pixel test: `make test-web-gpu` builds the
+  GPU probe, then drives the installed Chrome headlessly through the
+  `playwright-core` pinned in `website/package.json`, on WebGPU and on the
+  Canvas2D fallback.
 - **Experiments** such as the analytic tool sweep stay test-only; their notes
   are in [history](history/README.md).

@@ -31,6 +31,7 @@ help:
 	@echo "  make test         Test the workspace, except the vendored Fidget packages"
 	@echo "  make test-vendor  Test the vendored Fidget packages"
 	@echo "  make test-gpu     Run the tests that need a GPU"
+	@echo "  make test-web-gpu Test the browser presentation in the installed Chrome"
 	@echo "  make perf         Run the performance canaries and compare with the log"
 	@echo
 	@echo "Native dev controls: Ctrl+C restarts; Ctrl+\\ quits"
@@ -100,6 +101,16 @@ test-gpu:
 
 perf:
 	@python3 -B tools/perf.py $(ARGS)
+
+# The browser presentation's pixel test, run in the installed Chrome through
+# the playwright-core the website's package pins.
+test-web-gpu:
+	@set -e; . ./tools/web-build-settings.sh; \
+	./tools/sandbox-cargo web-threaded build --release -p progred --example web_gpu_probe; \
+	./tools/wasm-bindgen --target web --no-typescript --out-dir web/gpu-probe-pkg --out-name probe \
+		target/sandbox/build-web/$$web_target/release/examples/web_gpu_probe.wasm; \
+	[ -d website/node_modules/playwright-core ] || npm ci --prefix website; \
+	node tools/test-web-gpu.cjs
 
 sandbox-app:
 	@./tools/build-macos-app

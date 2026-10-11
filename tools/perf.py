@@ -102,7 +102,12 @@ def sysctl(name):
 
 def machine():
     """Hardware, which decides comparability, and the conditions that vary on it."""
-    rustc = command(["rustc", "--version"], cwd=ROOT).split(" (")[0]
+    # The toolchain the platform's wrapper builds with, not whatever rustc is on PATH.
+    rustc = command(
+        ["rustup", "run", "stable", "rustc", "--version"] if platform.system() == "Darwin"
+        else ["rustc", "--version"],
+        cwd=ROOT,
+    ).split(" (")[0]
     if platform.system() == "Darwin":
         cores = "+".join(
             f"{sysctl(f'hw.perflevel{level}.physicalcpu')}{kind}"

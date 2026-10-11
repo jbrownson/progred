@@ -30,10 +30,13 @@ if [ "$(uname -s)" != Darwin ]; then
     exit 1
 fi
 
-cargo_path=$("$rustup_path" which cargo --toolchain stable)
-rustc_path=$("$rustup_path" which rustc --toolchain stable)
-rustdoc_path=$("$rustup_path" which rustdoc --toolchain stable)
-toolchain_root=$(dirname "$(dirname "$cargo_path")")
+use_toolchain() {
+    cargo_path=$("$rustup_path" which cargo --toolchain "$1")
+    rustc_path=$("$rustup_path" which rustc --toolchain "$1")
+    rustdoc_path=$("$rustup_path" which rustdoc --toolchain "$1")
+    toolchain_root=$(dirname "$(dirname "$cargo_path")")
+}
+use_toolchain stable
 
 mkdir -p "$cargo_home" "$sandbox_home" "$sandbox_tmp" "$target_dir"
 
@@ -57,9 +60,9 @@ stamp() {
 
 run_sandboxed() {
     allow_network=$1
-    offline=$2
-    allow_lock_write=$3
-    shift 3
+    allow_lock_write=$2
+    shift 2
+    offline=$([ "$allow_network" = 1 ] && echo false || echo true)
     env -i \
         CARGO_HOME="$cargo_home" \
         CARGO_NET_OFFLINE="$offline" \
@@ -92,13 +95,6 @@ run_sandboxed() {
             "$@"
 }
 
-use_toolchain() {
-    cargo_path=$("$rustup_path" which cargo --toolchain "$1")
-    rustc_path=$("$rustup_path" which rustc --toolchain "$1")
-    rustdoc_path=$("$rustup_path" which rustdoc --toolchain "$1")
-    toolchain_root=$(dirname "$(dirname "$cargo_path")")
-}
-
 # Browser workers rebuild std with atomics; native builds stay stable.
 if [ "${1-}" = web-threaded ] || [ "${1-}" = web-threaded-fetch ]; then
     web_command=$1
@@ -107,11 +103,11 @@ if [ "${1-}" = web-threaded ] || [ "${1-}" = web-threaded-fetch ]; then
     use_toolchain "$web_toolchain"
     target_dir="$build_root/build-web"
     if [ "$web_command" = web-threaded-fetch ]; then
-        run_sandboxed 1 false 0 "$cargo_path" fetch --locked \
+        run_sandboxed 1 0 "$cargo_path" fetch --locked \
             --manifest-path "$toolchain_root/lib/rustlib/src/rust/library/sysroot/Cargo.toml" \
             --target "$web_target"
     else
-        run_sandboxed 0 true 0 "$cargo_path" --frozen "$@" \
+        run_sandboxed 0 0 "$cargo_path" --frozen "$@" \
             -Z "build-std=$web_build_std" --target "$web_target"
     fi
     exit
@@ -119,14 +115,14 @@ fi
 
 if [ "${1-}" = fetch ]; then
     shift
-    run_sandboxed 1 false 0 "$cargo_path" fetch --locked "$@"
+    run_sandboxed 1 0 "$cargo_path" fetch --locked "$@"
     exit
 fi
 
 if [ "${1-}" = update ]; then
     shift
     use_toolchain nightly-2026-08-27
-    run_sandboxed 1 false 1 "$cargo_path" update -Z min-publish-age \
+    run_sandboxed 1 1 "$cargo_path" update -Z min-publish-age \
         --config 'registry.global-min-publish-age="7 days"' "$@"
     exit
 fi
@@ -134,7 +130,7 @@ fi
 if [ "${1-}" = resolve ]; then
     shift
     use_toolchain nightly-2026-08-27
-    run_sandboxed 1 false 1 "$cargo_path" metadata -Z min-publish-age \
+    run_sandboxed 1 1 "$cargo_path" metadata -Z min-publish-age \
         --config 'registry.global-min-publish-age="7 days"' \
         --format-version 1 "$@" >/dev/null
     exit
@@ -144,10 +140,10 @@ if [ "${1-}" = audit ]; then
     shift
     audit_path="$cargo_home/bin/cargo-audit"
     if [ ! -x "$audit_path" ]; then
-        run_sandboxed 1 false 0 "$cargo_path" install cargo-audit \
+        run_sandboxed 1 0 "$cargo_path" install cargo-audit \
             --version '=0.22.2' --locked --no-default-features --root "$cargo_home"
     fi
-    run_sandboxed 1 false 0 "$audit_path" audit --file "$project_root/Cargo.lock" "$@"
+    run_sandboxed 1 0 "$audit_path" audit --file "$project_root/Cargo.lock" "$@"
     exit
 fi
 
@@ -156,4 +152,4 @@ if [ "$#" -eq 0 ]; then
     exit 2
 fi
 
-run_sandboxed 0 true 0 "$cargo_path" --frozen "$@"
+run_sandboxed 0 0 "$cargo_path" --frozen "$@"
