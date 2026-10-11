@@ -24,7 +24,7 @@ fn press(world: &mut crate::Editor, path: &[Step], key: KeyboardEvent) -> Annota
     let selected = frame(world);
     let occurrence = selected
         .descends
-        .landmark(&path)
+        .landmark(path)
         .expect("projected occurrence");
     assert!((occurrence.select)(world, None));
     frame(world)

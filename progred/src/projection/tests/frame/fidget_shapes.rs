@@ -60,7 +60,7 @@ fn fidget_figures_preserve_the_standalone_previews_beside_their_code() {
     // A gallery: each figure's code beside its preview, tops aligned, and
     // every preview at the start of its row.
     let frame = settle(editing_frame(&mut world, false));
-    let landmark = |path: &[Step]| frame.descends.landmark(&path).map(|landmark| landmark.rect);
+    let landmark = |path: &[Step]| frame.descends.landmark(path).map(|landmark| landmark.rect);
     for (code, name) in codes {
         let picture = [
             code[0].clone(),

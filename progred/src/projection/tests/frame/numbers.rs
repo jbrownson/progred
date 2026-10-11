@@ -20,7 +20,7 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
         });
         for (path, typed) in [(&name_path[..], " angle"), (&number_path[..], "5")] {
             let frame = editing_frame(&mut world, false);
-            let target = frame.descends.landmark(&path).unwrap();
+            let target = frame.descends.landmark(path).unwrap();
             assert!((target.select)(&mut world, None));
             let frame = editing_frame(&mut world, false);
             assert!(frame.resolve_for_dispatch().dispatch_key(

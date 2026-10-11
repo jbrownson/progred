@@ -339,7 +339,7 @@ fn the_example_views_select_what_they_draw() {
     let under = [fraction.clone(), vec![key("under")]].concat();
     let angle = vec![key("angles"), Step::Element(first(&world, "angles"))];
     let frame = settle(editing_frame(&mut world, false));
-    let rect = |path: &[Step]| frame.descends.landmark(&path).unwrap().rect;
+    let rect = |path: &[Step]| frame.descends.landmark(path).unwrap().rect;
     let (over_rect, under_rect, angle_rect) = (rect(&over), rect(&under), rect(&angle));
     let selected = |world: &crate::Editor| world.model.selection.as_ref().unwrap().path().to_vec();
 

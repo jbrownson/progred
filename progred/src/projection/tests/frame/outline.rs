@@ -32,7 +32,7 @@ fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Descend<crate::Editor> {
-    frame.descends.landmark(&path).expect("outline occurrence")
+    frame.descends.landmark(path).expect("outline occurrence")
 }
 
 fn entry_paths(value: &Value, parent: &[Step], key: CellId) -> Vec<Path> {

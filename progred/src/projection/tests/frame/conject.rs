@@ -19,10 +19,7 @@ fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Descend<crate::Editor> {
-    frame
-        .descends
-        .landmark(&path)
-        .expect("projected occurrence")
+    frame.descends.landmark(path).expect("projected occurrence")
 }
 
 fn command(key: Key) -> KeyboardEvent {

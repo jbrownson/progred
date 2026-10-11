@@ -1217,7 +1217,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     let project =
         |world: &mut crate::Editor| editing_frame_with_projection(world, false, Some(&projection));
     let between = |frame: &placed::HoverOutput<crate::Editor>, left: &[Step], right: &[Step]| {
-        let rect = |path: &[Step]| frame.descends.landmark(&path).unwrap().rect;
+        let rect = |path: &[Step]| frame.descends.landmark(path).unwrap().rect;
         let (left, right) = (rect(left), rect(right));
         Point::new((left.x1 + right.x0) / 2.0, left.center().y)
     };
@@ -1318,7 +1318,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         )];
         let mut world = crate::test_editor(doc);
         let frame = editing_frame(&mut world, false);
-        let rect = |path: &[Step]| frame.descends.landmark(&path).unwrap().rect;
+        let rect = |path: &[Step]| frame.descends.landmark(path).unwrap().rect;
         let items: Vec<_> = positions
             .iter()
             .map(|p| rect(&[Step::Element(p.clone())]))

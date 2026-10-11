@@ -1464,11 +1464,11 @@ mod frame_tests {
             .find(|region| region.root == root)
             .unwrap()
             .rect;
-        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
+        let target = runner.frame.dispatch.descends.landmark(path).unwrap();
         runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
         crate::editing::select(&mut runner.editor, &root, previous);
         runner.refresh_frame(1.0, viewport);
-        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
+        let target = runner.frame.dispatch.descends.landmark(path).unwrap();
         assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
 
         assert!(runner.keyboard_event(
@@ -1481,7 +1481,7 @@ mod frame_tests {
             viewport,
         ));
         assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
-        let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
+        let target = runner.frame.dispatch.descends.landmark(path).unwrap();
         assert!(target.rect.y0 >= region.y0 && target.rect.y1 <= region.y1);
     }
 

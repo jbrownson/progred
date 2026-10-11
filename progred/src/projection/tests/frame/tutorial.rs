@@ -4,7 +4,7 @@ fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Descend<crate::Editor> {
-    frame.descends.landmark(&path).expect("tutorial slot")
+    frame.descends.landmark(path).expect("tutorial slot")
 }
 
 fn top_slots(frame: &placed::HoverOutput<crate::Editor>) -> Vec<CellId> {

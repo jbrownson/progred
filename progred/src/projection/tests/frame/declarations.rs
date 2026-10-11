@@ -140,7 +140,7 @@ fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
                 .iter()
                 .any(|d| d.path.last() == Some(&Step::Key(metadata)))
         );
-        let target = frame.descends.landmark(&path).unwrap();
+        let target = frame.descends.landmark(path).unwrap();
         assert!((target.select)(&mut world, None));
         let frame = editing_frame(&mut world, false);
         assert!(frame.resolve_for_dispatch().dispatch_key(
@@ -317,7 +317,7 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
             ])
             .collect::<Path>();
         let (bench, _) = place(&doc, None, 1200.0);
-        let rect = |path: &[Step]| bench.descends.landmark(&path).unwrap().rect;
+        let rect = |path: &[Step]| bench.descends.landmark(path).unwrap().rect;
         let cell_rect = rect(&binder_path);
         let name_rect = rect(&name_path);
         let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(name_rect.center()));

@@ -261,7 +261,7 @@ fn list_insertion_through_a_comma_and_whole_list_selection() {
 
 fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
     let frame = editing_frame(world, false);
-    let target = frame.descends.landmark(&path).unwrap();
+    let target = frame.descends.landmark(path).unwrap();
     assert!((target.select)(world, None));
     for (key, modifiers) in [
         (
@@ -967,7 +967,7 @@ fn lesson_world(
 
 fn select_occurrence(world: &mut crate::Editor, path: &[Step]) {
     let frame = editing_frame(world, false);
-    let target = frame.descends.landmark(&path).unwrap();
+    let target = frame.descends.landmark(path).unwrap();
     assert!((target.select)(world, None));
 }
 
