@@ -222,7 +222,16 @@ fn grap_layout_ffi_profile_loop() {
             let start = Instant::now();
             let (bench, _) = context.frame(view.frame(&docs[variant], &annotations));
             let build = start.elapsed();
-            assert_eq!(bench.list.0.len(), ROWS * 2, "variant {variant}");
+            assert_eq!(
+                bench
+                    .list
+                    .0
+                    .iter()
+                    .filter(|command| matches!(command, DrawCmd::GlyphRun(_)))
+                    .count(),
+                ROWS * 2,
+                "variant {variant}"
+            );
             let phases = bench.times;
             let cleanup = Instant::now();
             drop(bench);
