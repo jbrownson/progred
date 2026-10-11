@@ -53,5 +53,6 @@ Also:
 
 - [Deferred work](deferred.md): unresolved items set aside during review.
 - [Release checklist](release-checklist.md): distribution concerns.
+- [macOS follow-ups](macos-followups.md): cleanup changes still to check on macOS.
 - [History](history/README.md): earlier models and proposals, and dated
   measurements and experiments. Not required reading for ordinary changes.
