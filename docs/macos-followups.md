@@ -23,6 +23,13 @@ empty.
 - **The delimiter bench.** `./tools/sandbox-cargo run -p puri --example
   delimiter_bench` should now write `target/sandbox/build/delimiter_bench.svg`
   instead of failing outside the sandbox's writable folders.
+- **`make perf`.** Its macOS parts haven't run: the build through
+  `sandbox-cargo` with `--message-format`, the machine description from
+  `sysctl`, `pmset`, and `sw_vers`, and running the test executables outside the
+  sandbox. The system `python3` should be enough. Then record a baseline, such
+  as `make perf ARGS='--record "First Mac baseline"'`, so later changes have
+  something to compare with; it should also run the two GPU compositor
+  canaries on Metal.
 
 ## The Fidget 0.5.1, Vello 0.11, and wgpu 30 upgrade
 
