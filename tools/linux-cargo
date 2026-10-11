@@ -15,7 +15,7 @@ if [ "$(uname -s)" != Linux ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    echo "usage: tools/linux-cargo resolve | <cargo command> [arguments...]" >&2
+    echo "usage: tools/linux-cargo update | resolve | <cargo command> [arguments...]" >&2
     exit 2
 fi
 
@@ -29,6 +29,15 @@ run() {
         RUSTC_WRAPPER= \
         cargo "$@"
 }
+
+# Updates exclude registry releases less than seven days old, as
+# sandbox-cargo's do. Resolution runs no dependency code.
+if [ "$1" = update ]; then
+    shift
+    run false +nightly-2026-08-27 update -Z min-publish-age \
+        --config 'registry.global-min-publish-age="7 days"' "$@"
+    exit
+fi
 
 # After declaring a dependency, record it in Cargo.lock from the local cache
 # alone, so no newly published registry release can enter the graph.

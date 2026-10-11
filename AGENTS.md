@@ -65,8 +65,9 @@ The browser build is supported on macOS. Supporting it elsewhere isn't worth its
 complexity yet, but don't block other platforms on purpose;
 `website/build-ci.sh` builds it on Linux for publishing.
 
-Update dependencies through `./tools/sandbox-cargo update`, which enforces a
-minimum publish age. Patching a dependency is sometimes the right call, but keep
+Update dependencies through the wrapper's `update` command
+(`./tools/sandbox-cargo update` or `./tools/linux-cargo update`), which enforces
+a minimum publish age. Patching a dependency is sometimes the right call, but keep
 an eye on every patch: `vendor/README.md` lists them, and each should be checked
 against upstream and dropped or proposed upstream when it can be.
 

@@ -97,8 +97,9 @@ Use `./tools/sandbox-cargo update ...` for an intentional dependency update.
 That command uses the pinned `nightly-2026-08-27` Cargo solely for its
 minimum-publish-age resolver, excludes registry releases less than seven days
 old, and enables network access and write access to `Cargo.lock` only for the
-update. It's the same toolchain the browser build uses; see
-[its setup](../web/README.md). Subsequent compilation remains on stable Cargo
+update. On Linux, `./tools/linux-cargo update` applies the same policy with the
+same toolchain; resolution runs no dependency code. It's the toolchain the
+browser build uses; see [its setup](../web/README.md). Subsequent compilation remains on stable Cargo
 for native targets, offline, and source-read-only. Once Rust
 1.100 is stable (12 November 2026), `update` and `resolve` can use stable
 Cargo, where `registry.global-min-publish-age` no longer needs
