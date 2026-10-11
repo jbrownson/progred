@@ -44,6 +44,8 @@ superseded notes to `docs/history/`.
   such as evaluation, layout, rendering, Fidget, CAM, or dependency upgrades.
   Investigate the changes it flags, and record a run with a note when such a
   change lands. See `docs/performance.md`.
+- When a user-visible feature lands or goes away, update the README's "What
+  works today" and "What isn't there yet".
 - When a pattern or lesson emerges, propose an addition to this file. Don't add
   it without asking.
 
