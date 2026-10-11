@@ -13,6 +13,7 @@ import datetime
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -68,9 +69,9 @@ def workload(test, metric):
 
 
 def run(executable, test, frames):
-    """Runs one ignored test outside Cargo, as the GPU tests are run on macOS,
-    and returns its stderr lines and test result."""
-    env = dict(os.environ)
+    """Runs one ignored test outside Cargo and the build sandbox, as the GPU
+    tests are run, and returns its stderr lines and test result."""
+    env = {**os.environ, "CARGO_TARGET_DIR": str(test_binaries.TARGET_DIR)}
     if frames:
         env["FRAME_PROFILE_ITERATIONS"] = str(frames)
     result = subprocess.run(
@@ -102,9 +103,9 @@ def sysctl(name):
 
 def machine():
     """Hardware, which decides comparability, and the conditions that vary on it."""
-    # The toolchain the platform's wrapper builds with, not whatever rustc is on PATH.
+    # The toolchain the wrappers build with, not whatever rustc is on PATH.
     rustc = command(
-        ["rustup", "run", "stable", "rustc", "--version"] if platform.system() == "Darwin"
+        ["rustup", "run", "stable", "rustc", "--version"] if shutil.which("rustup")
         else ["rustc", "--version"],
         cwd=ROOT,
     ).split(" (")[0]

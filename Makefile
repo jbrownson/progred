@@ -19,18 +19,18 @@ help:
 	@echo "Development:"
 	@echo "  make run          Run the native app once"
 	@echo "  make dev          Rebuild after app exit or Ctrl+C"
-	@echo "  make run-web      Serve the website and its editor on port 8081"
-	@echo "  make build-web    Build the browser editor (the servers build it first)"
-	@echo "  make build-website  Package the publishable website into target/website"
+	@echo "  make run-web      Serve the website and its editor on port 8081 (macOS)"
+	@echo "  make build-web    Build the browser editor; the servers build it first (macOS)"
+	@echo "  make build-website  Package the publishable website into target/website (macOS)"
 	@echo "  make images       Regenerate the README and website screenshots from the editor"
 	@echo "  make install-linux  Install the app for the current user (Linux)"
 	@echo "  make fetch        Download the locked dependencies"
-	@echo "  make check        Type-check the workspace"
+	@echo "  make check        Type-check the workspace, profiling code included"
 	@echo "  make build        Build the workspace"
 	@echo "  make test         Test the workspace, except the vendored Fidget packages"
 	@echo "  make test-vendor  Test the vendored Fidget packages"
 	@echo "  make test-gpu     Run the tests that need a GPU"
-	@echo "  make test-web-gpu Test the browser presentation in the installed Chrome"
+	@echo "  make test-web-gpu Test the browser presentation in the installed Chrome (macOS)"
 	@echo "  make perf         Run the performance canaries and compare with the log"
 	@echo "  make audit        Check the Cargo and npm lockfiles for security advisories"
 	@echo "  make outdated     List newer Cargo and npm releases"
@@ -77,8 +77,9 @@ images:
 fetch:
 	$(NATIVE_CARGO) fetch
 
+# All targets and the profiling features, which nothing else compiles.
 check:
-	$(NATIVE_CARGO) check --workspace
+	$(NATIVE_CARGO) check --workspace --all-targets --features progred/cam-profile,progred/layout-profile
 
 build:
 	$(NATIVE_CARGO) build --workspace
@@ -90,12 +91,12 @@ test:
 
 # Upstream's tests of the vendored packages, optimized as vendor/README.md
 # advises. Run them after changing a patch or upgrading Fidget. The binaries
-# run outside the macOS build sandbox because fidget-wgpu's need a GPU.
+# run outside the build sandbox because fidget-wgpu's need a GPU.
 test-vendor:
 	$(NATIVE_CARGO) test --release --doc $(VENDORED:%=-p %)
 	@python3 -B tools/test_binaries.py --release $(VENDORED:%=-p %)
 
-# Ignored tests that need a GPU, run outside the macOS build sandbox.
+# Ignored tests that need a GPU, run outside the build sandbox.
 test-gpu:
 	@python3 -B tools/test_binaries.py --release -p puri-vello --features capture --test compositor -- --ignored --test-threads=1
 	@python3 -B tools/test_binaries.py --release -p progred --lib -- --ignored --test-threads=1 compositor gpu
@@ -128,7 +129,7 @@ test-web-gpu:
 	./tools/sandbox-cargo web-threaded build --release -p progred --example web_gpu_probe; \
 	./tools/wasm-bindgen --target web --no-typescript --out-dir web/gpu-probe-pkg --out-name probe \
 		target/sandbox/build-web/$$web_target/release/examples/web_gpu_probe.wasm; \
-	[ -d tools/node_modules/playwright-core ] || npm ci --prefix tools; \
+	[ tools/node_modules/.package-lock.json -nt tools/package-lock.json ] || npm ci --prefix tools; \
 	node tools/test-web-gpu.cjs
 
 sandbox-app:

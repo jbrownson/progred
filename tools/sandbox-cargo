@@ -11,6 +11,11 @@ sandbox_tmp="$build_root/tmp"
 target_dir="$build_root/build"
 user_name=$(id -un)
 
+if [ "$(uname -s)" != Darwin ]; then
+    echo "sandbox-cargo requires macOS sandbox-exec; use tools/linux-cargo on Linux" >&2
+    exit 1
+fi
+
 rustup_path=$(command -v rustup 2>/dev/null || true)
 if [ -z "$rustup_path" ]; then
     for candidate in "$HOME/.cargo/bin/rustup" /opt/homebrew/bin/rustup /usr/local/bin/rustup; do
@@ -22,11 +27,6 @@ if [ -z "$rustup_path" ]; then
 fi
 if [ -z "$rustup_path" ]; then
     echo "rustup was not found; install it or add it to PATH" >&2
-    exit 1
-fi
-
-if [ "$(uname -s)" != Darwin ]; then
-    echo "sandbox-cargo currently requires macOS sandbox-exec" >&2
     exit 1
 fi
 
@@ -121,7 +121,8 @@ fi
 
 if [ "${1-}" = update ]; then
     shift
-    use_toolchain nightly-2026-08-27
+    . "$tool_dir/web-build-settings.sh"
+    use_toolchain "$web_toolchain"
     run_sandboxed 1 1 "$cargo_path" update -Z min-publish-age \
         --config 'registry.global-min-publish-age="7 days"' "$@"
     exit
@@ -129,7 +130,8 @@ fi
 
 if [ "${1-}" = resolve ]; then
     shift
-    use_toolchain nightly-2026-08-27
+    . "$tool_dir/web-build-settings.sh"
+    use_toolchain "$web_toolchain"
     run_sandboxed 1 1 "$cargo_path" metadata -Z min-publish-age \
         --config 'registry.global-min-publish-age="7 days"' \
         --format-version 1 "$@" >/dev/null

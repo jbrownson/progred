@@ -3,18 +3,22 @@
 
     python3 tools/test_binaries.py [CARGO TEST ARGUMENTS] [-- TEST ARGUMENTS]
 
-Building stays inside the macOS sandbox, but the tests run outside it, so they
+Building stays inside the build sandbox, but the tests run outside it, so they
 can reach the GPU the sandbox withholds. Each runs from its package directory,
-as `cargo test` would run it. See docs/testing.md.
+with the sandbox's target directory, as `cargo test` would run it. See
+docs/testing.md.
 """
 
 import json
+import os
 import platform
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Where the wrappers build, and where tests that write files put them.
+TARGET_DIR = ROOT / "target" / "sandbox" / "build"
 
 
 def build(cargo_args):
@@ -41,7 +45,11 @@ def main():
     failed = [
         Path(executable).name
         for executable, directory in build(args[:split])
-        if subprocess.run([executable, *args[split + 1:]], cwd=directory).returncode != 0
+        if subprocess.run(
+            [executable, *args[split + 1:]],
+            cwd=directory,
+            env={**os.environ, "CARGO_TARGET_DIR": str(TARGET_DIR)},
+        ).returncode != 0
     ]
     if failed:
         sys.exit(f"failed: {', '.join(failed)}")
