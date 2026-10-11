@@ -43,8 +43,8 @@ window; the owner does the visual testing.
 ## Pictures
 
 `make test` includes the `svg_bench` tests, which render the sample, the Grap
-demo, and other fixtures to SVG in the build directory (`target/sandbox/build`
-on macOS, `target/native` on Linux). The ignored `editor_svg_captures` and
+demo, and other fixtures to SVG in the build directory, `target/sandbox/build`.
+The ignored `editor_svg_captures` and
 progressive CAM captures paint whole editor frames; see
 [performance checks](performance.md#headless-editor-captures). `make images`
 regenerates the README and website screenshots. The `delimiter_bench` example

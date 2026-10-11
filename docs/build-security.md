@@ -6,9 +6,11 @@ not make compilation of those dependencies safe.
 
 On macOS, the Make targets (`fetch`, `check`, `build`, `test`, `run`, `dev`,
 `sandbox-app`, and `build-web`) compile under the repository's Seatbelt sandbox,
-and `make run` launches the result as an App Sandbox bundle. Use
-`./tools/sandbox-cargo <cargo command> [arguments...]` for other Cargo commands.
-How each platform builds and runs is in [platforms](platforms.md).
+and `make run` launches the result as an App Sandbox bundle. On Linux, the
+native targets compile in a namespace sandbox with the same boundaries; the app
+itself runs outside it. Use `./tools/sandbox-cargo` or `./tools/linux-cargo`
+`<cargo command> [arguments...]` for other Cargo commands. How each platform
+builds and runs is in [platforms](platforms.md).
 
 ## Sandbox boundaries
 
@@ -25,15 +27,29 @@ commands run Cargo under `sandbox-exec` with:
   configuration, and a root `.env` file; and
 - write access only beneath `target/sandbox`.
 
-The isolated macOS target directory is deliberate. A compromised native
-artifact must not be left in the ordinary Cargo target directory for a later
-unsandboxed command to execute. The explicitly unsandboxed Linux launcher uses
-the separate `target/native` directory.
+On Linux, `tools/linux-cargo` draws the same boundaries with unprivileged user,
+mount, PID and network namespaces, and `tools/linux-sandbox` arranges the view
+inside them: the source tree is remounted read-only with `.git`, local agent
+configuration and a root `.env` hidden; the home directory, `/tmp`, `/run`,
+`/var/tmp` and `/dev/shm` are empty; other processes are invisible; and only
+`target/sandbox` is writable. Builds are offline. When the locked graph isn't
+all in the sandbox's Cargo home, `linux-cargo` first fetches it with network
+access, which runs no dependency code; steps with network access pass a proxy's
+settings and certificate bundle through. The sandbox needs unprivileged user
+namespaces, which some distributions restrict: Ubuntu does through AppArmor
+(`kernel.apparmor_restrict_unprivileged_userns`).
+
+The isolated target directory is deliberate. A compromised native artifact must
+not be left in the ordinary Cargo target directory for a later unsandboxed
+command to execute. Some commands do run what the sandbox built outside it: the
+GPU tests, `make perf` and the vendored Fidget tests, which need the GPU, and on
+Linux the app itself, through `make run` and `make install-linux`.
 
 `sandbox-exec` is a deprecated macOS facility, so this is a useful additional
 build-time boundary rather than a permanent security architecture. The signed
 app adds the supported runtime boundary; a VM remains stronger isolation for
-truly hostile code.
+truly hostile code. Linux namespaces are the kernel's supported isolation
+mechanism, the one containers use, but share the same kernel.
 
 ## Tripwire
 
@@ -50,9 +66,9 @@ pointed at the sandbox wrapper rather than invoking Cargo directly.
 
 The checked-in Cargo tripwire is defense against mistakes, not a security
 boundary: a process running as the repository owner can override Cargo config
-or edit the repository. Seatbelt (or a VM) is the boundary. Outside the
-checked-in Linux launcher and hosted website build, do not bypass the tripwire
-with `RUSTC_WRAPPER=` and then reuse those artifacts.
+or edit the repository. The sandboxes (or a VM) are the boundary. Outside the
+two wrappers and the hosted website build, do not bypass the tripwire with
+`RUSTC_WRAPPER=` and then reuse those artifacts.
 
 Cargo configuration cannot redirect `cargo run` itself because aliases may not
 replace Cargo's built-in commands. Doing that transparently would require a
@@ -61,18 +77,13 @@ repository deliberately does not modify the user's global Rust tooling.
 
 ## Exceptions
 
-On Linux, the native Make targets go through `tools/linux-cargo`, an ordinary
-locked Cargo invocation in `target/native`. This is not sandboxed. That script
-is the deliberate Linux exception to the Cargo tripwire, and it refuses to run
-on macOS; do not reproduce its `RUSTC_WRAPPER` override in ad-hoc commands.
-
-`website/build-ci.sh` is a second explicit exception, for publishing from a
+`website/build-ci.sh` is the explicit exception, for publishing from a
 disposable x86_64 Linux CI runner with `CI=true`. It compiles only the browser
 binary using the locked dependencies and shared browser build settings, into
 `target/ci-web`. It installs pinned tooling and has network access; it does not
 provide a sandbox within the runner. Dependency build scripts remain trusted
 within that CI environment. The OS/CI checks prevent accidental local use, not
-malicious bypass. Local macOS builds continue through Seatbelt. See the
+malicious bypass. Local builds continue through the sandboxes. See the
 [website setup](../website/README.md#publishing-on-cloudflare).
 
 ## App Sandbox
@@ -98,7 +109,7 @@ That command uses the pinned `nightly-2026-08-27` Cargo solely for its
 minimum-publish-age resolver, excludes registry releases less than seven days
 old, and enables network access and write access to `Cargo.lock` only for the
 update. On Linux, `./tools/linux-cargo update` applies the same policy with the
-same toolchain; resolution runs no dependency code. It's the toolchain the
+same toolchain and the same boundary. It's the toolchain the
 browser build uses; see [its setup](../web/README.md). Subsequent compilation remains on stable Cargo
 for native targets, offline, and source-read-only. Once Rust
 1.100 is stable (12 November 2026), `update` and `resolve` can use stable
@@ -114,7 +125,7 @@ lockfile.
 Use `./tools/sandbox-cargo resolve` after declaring a new dependency when the
 existing locked versions should be preserved; it uses the same publication-age
 policy and network/lockfile boundary without compiling dependency code. On
-Linux, `./tools/linux-cargo resolve` records the change from the local Cargo
+Linux, `./tools/linux-cargo resolve` records the change from the sandbox's Cargo
 cache alone, offline, so it can add edges between already-locked packages but
 cannot introduce a newly published release.
 If a dependency has no age-compatible resolution, review the exact release and
@@ -126,9 +137,9 @@ blocked until the reviewed release ages past the threshold.
 `make audit` checks every lockfile against its advisory database: Cargo's
 against RustSec, through the wrapper's `audit` command, and both npm packages'
 against GitHub's. It reports them all before failing. The first `audit` installs
-the pinned `cargo-audit` version: into the sandbox Cargo home on macOS, where
-that installation and every scan run inside the same filesystem and network
-boundary, and under `target/native` on Linux. The weekly
+the pinned `cargo-audit` version into the sandbox's Cargo home; that
+installation and every scan run inside the sandbox, with network access. The
+weekly
 [dependency check](dependency-checks.md) runs it along with `make outdated`.
 
 ## npm packages

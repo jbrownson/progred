@@ -27,10 +27,11 @@ and terminal behavior with disposable subprocesses.
 ## Linux
 
 `make run`, `make dev`, `make images`, and the fetch, check, build, and test
-targets go through `tools/linux-cargo`, an ordinary locked Cargo build in
-`target/native`; it isn't sandboxed. `make install-linux` builds a release
-binary and installs it for the current user following the freedesktop
-conventions: the binary in `~/.local/bin`, a desktop entry, and hicolor icons.
+targets go through `tools/linux-cargo`, which builds in a namespace sandbox into
+`target/sandbox/build`; see [build security](build-security.md). The app itself
+runs outside the sandbox. `make install-linux` builds a release binary and
+installs it for the current user following the freedesktop conventions: the
+binary in `~/.local/bin`, a desktop entry, and hicolor icons.
 
 Winit loads its windowing libraries at runtime; under X11 that includes
 `libxkbcommon-x11` (Debian's `libxkbcommon-x11-0`). Rendering needs a Vulkan or

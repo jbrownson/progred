@@ -65,10 +65,9 @@ make build
 make run
 ```
 
-On macOS they run under the repository's Seatbelt wrapper; use
-`./tools/sandbox-cargo <cargo command> [arguments...]` for anything else. Linux
-has no repository sandbox yet, and `./tools/linux-cargo` is its single
-exception to the tripwire. See `docs/build-security.md`.
+They build sandboxed, under Seatbelt through `./tools/sandbox-cargo` on macOS
+and in namespaces through `./tools/linux-cargo` on Linux; use the wrapper for
+any other Cargo command. See `docs/build-security.md`.
 
 The browser build is supported on macOS. Supporting it elsewhere isn't worth its
 complexity yet, but don't block other platforms on purpose;

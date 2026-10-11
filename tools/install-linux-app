@@ -14,7 +14,7 @@ data_home=${XDG_DATA_HOME:-$HOME/.local/share}
 bin_home=$HOME/.local/bin
 
 mkdir -p "$bin_home" "$data_home/applications"
-install -m 755 "$project_root/target/native/release/progred" "$bin_home/progred"
+install -m 755 "$project_root/target/sandbox/build/release/progred" "$bin_home/progred"
 install -m 644 "$project_root/linux/progred.desktop" "$data_home/applications/progred.desktop"
 
 for sized in "$project_root"/linux/icons/hicolor/*/apps/progred.png; do

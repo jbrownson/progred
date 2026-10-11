@@ -1,13 +1,22 @@
 #!/bin/sh
 
-# Locked Cargo for Linux, which has no repository sandbox yet. This is the
-# single deliberate Linux exception to the .cargo/config.toml tripwire: build
-# scripts and procedural macros run with the invoking user's permissions.
+# Locked Cargo for Linux under a namespace sandbox, the counterpart of
+# tools/sandbox-cargo's Seatbelt one: build scripts, procedural macros and
+# tests run without network access, the home directory or other processes,
+# and write only beneath target/sandbox. tools/linux-sandbox sets up that
+# view. This is the single deliberate Linux exception to the
+# .cargo/config.toml tripwire; see docs/build-security.md.
 
 set -eu
 
 tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_root=$(dirname "$tool_dir")
+build_root="$project_root/target/sandbox"
+cargo_home="$build_root/cargo-home"
+sandbox_home="$build_root/home"
+sandbox_tmp="$build_root/tmp"
+target_dir="$build_root/build"
+user_name=$(id -un)
 
 if [ "$(uname -s)" != Linux ]; then
     echo "linux-cargo requires Linux; use tools/sandbox-cargo on macOS" >&2
@@ -15,9 +24,38 @@ if [ "$(uname -s)" != Linux ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-    echo "usage: tools/linux-cargo update | resolve | audit | <cargo command> [arguments...]" >&2
+    echo "usage: tools/linux-cargo fetch | update | resolve | audit | <cargo command> [arguments...]" >&2
     exit 2
 fi
+
+case $project_root in
+    /tmp/* | /run/* | /var/tmp/* | /dev/shm/*)
+        echo "linux-cargo: the build sandbox hides $project_root; move the checkout" >&2
+        exit 1
+        ;;
+esac
+
+if ! unshare --user --map-root-user true 2>/dev/null; then
+    cat >&2 <<'EOF'
+linux-cargo: the build sandbox needs unprivileged user namespaces, which this
+system doesn't allow. Some distributions restrict them; on Ubuntu, AppArmor
+does (kernel.apparmor_restrict_unprivileged_userns). See docs/build-security.md.
+EOF
+    exit 1
+fi
+
+use_toolchain() {
+    if command -v rustup >/dev/null 2>&1; then
+        cargo_path=$(rustup which cargo --toolchain "$1")
+    else
+        cargo_path=$(command -v cargo)
+    fi
+    cargo_path=$(readlink -f "$cargo_path")
+    toolchain_root=$(dirname "$(dirname "$cargo_path")")
+}
+use_toolchain stable
+
+mkdir -p "$cargo_home" "$sandbox_home" "$sandbox_tmp" "$target_dir"
 
 # Release builds carry the commit they came from, since they're what people
 # run and share. Development builds, tests included, leave it out: progred's
@@ -31,22 +69,56 @@ stamp() {
     done
 }
 
-run() {
-    offline=$1
-    shift
-    env \
+# Network access passes a proxy's settings and certificate bundle through.
+readable=
+for file in "${CARGO_HTTP_CAINFO-}" "${SSL_CERT_FILE-}"; do
+    if [ -f "$file" ]; then
+        readable="$readable $file"
+    fi
+done
+
+run_sandboxed() {
+    allow_network=$1
+    allow_lock_write=$2
+    shift 2
+    offline=$([ "$allow_network" = 1 ] && echo false || echo true)
+    network=$([ "$allow_network" = 1 ] || echo --net)
+    env -i \
+        CARGO_HOME="$cargo_home" \
         CARGO_NET_OFFLINE="$offline" \
-        CARGO_TARGET_DIR="$project_root/target/native" \
+        CARGO_TARGET_DIR="$target_dir" \
+        HOME="$sandbox_home" \
+        LOGNAME="$user_name" \
+        PATH="$toolchain_root/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
         PROGRED_COMMIT="$(stamp "$@")" \
+        RUSTC="$toolchain_root/bin/rustc" \
         RUSTC_WRAPPER= \
-        cargo "$@"
+        RUSTDOC="$toolchain_root/bin/rustdoc" \
+        TMPDIR="$sandbox_tmp" \
+        USER="$user_name" \
+        ${HTTPS_PROXY:+"HTTPS_PROXY=$HTTPS_PROXY"} \
+        ${https_proxy:+"https_proxy=$https_proxy"} \
+        ${NO_PROXY:+"NO_PROXY=$NO_PROXY"} \
+        ${no_proxy:+"no_proxy=$no_proxy"} \
+        ${CARGO_HTTP_CAINFO:+"CARGO_HTTP_CAINFO=$CARGO_HTTP_CAINFO"} \
+        ${SSL_CERT_FILE:+"SSL_CERT_FILE=$SSL_CERT_FILE"} \
+        unshare --user --map-root-user --mount $network --pid --fork --mount-proc \
+        "$tool_dir/linux-sandbox" "$project_root" "$build_root" "$toolchain_root" \
+            "$HOME" "$allow_lock_write" $readable -- "$@"
 }
+
+if [ "$1" = fetch ]; then
+    shift
+    run_sandboxed 1 0 "$cargo_path" fetch --locked "$@"
+    exit
+fi
 
 # Updates exclude registry releases less than seven days old, as
 # sandbox-cargo's do. Resolution runs no dependency code.
 if [ "$1" = update ]; then
     shift
-    run false +nightly-2026-08-27 update -Z min-publish-age \
+    use_toolchain nightly-2026-08-27
+    run_sandboxed 1 1 "$cargo_path" update -Z min-publish-age \
         --config 'registry.global-min-publish-age="7 days"' "$@"
     exit
 fi
@@ -55,20 +127,25 @@ fi
 # alone, so no newly published registry release can enter the graph.
 if [ "$1" = resolve ]; then
     shift
-    run true --offline metadata --format-version 1 "$@" >/dev/null
+    run_sandboxed 0 1 "$cargo_path" --offline metadata --format-version 1 "$@" >/dev/null
     exit
 fi
 
 # The pinned advisory scanner, installed from its lockfile on first use.
 if [ "$1" = audit ]; then
     shift
-    audit_root="$project_root/target/native/cargo-audit"
-    if [ ! -x "$audit_root/bin/cargo-audit" ]; then
-        run false install cargo-audit \
-            --version '=0.22.2' --locked --no-default-features --root "$audit_root"
+    audit_path="$cargo_home/bin/cargo-audit"
+    if [ ! -x "$audit_path" ]; then
+        run_sandboxed 1 0 "$cargo_path" install cargo-audit \
+            --version '=0.22.2' --locked --no-default-features --root "$cargo_home"
     fi
-    "$audit_root/bin/cargo-audit" audit --file "$project_root/Cargo.lock" "$@"
+    run_sandboxed 1 0 "$audit_path" audit --file "$project_root/Cargo.lock" "$@"
     exit
 fi
 
-run false --locked "$@"
+# Builds are offline; fetch the locked graph first if anything is missing.
+# Fetching runs no dependency code.
+if ! run_sandboxed 0 0 "$cargo_path" fetch --frozen --quiet 2>/dev/null; then
+    run_sandboxed 1 0 "$cargo_path" fetch --locked
+fi
+run_sandboxed 0 0 "$cargo_path" --frozen "$@"

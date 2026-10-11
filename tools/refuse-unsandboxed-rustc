@@ -12,7 +12,7 @@ Use one of the repository's entry points instead, for example:
     make check
     make test
     ./tools/sandbox-cargo <cargo command> [arguments...]   (macOS, sandboxed)
-    ./tools/linux-cargo <cargo command> [arguments...]     (Linux, unsandboxed)
+    ./tools/linux-cargo <cargo command> [arguments...]     (Linux, sandboxed)
 
 See docs/build-security.md for the boundary and its limitations.
 EOF

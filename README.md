@@ -170,8 +170,9 @@ make run-web
 It builds any editor changes, then serves `http://127.0.0.1:8081/editor/` on
 this machine only; the server does not listen on other network interfaces.
 
-On Linux, `make run` performs a regular locked Cargo build; **the Linux build
-is not sandboxed**. `make install-linux` installs it as a desktop application.
+On Linux, `make run` builds in a namespace sandbox like the macOS one, then
+runs the app outside it. `make install-linux` installs it as a desktop
+application.
 The [platform notes](docs/platforms.md) list the runtime libraries it needs and
 cover the other ports.
 

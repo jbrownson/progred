@@ -1,14 +1,13 @@
 UNAME_S := $(shell uname -s)
 
-# macOS builds under Seatbelt; Linux has no repository sandbox yet.
+# Builds run sandboxed, under Seatbelt on macOS and in namespaces on Linux.
+NATIVE_TARGET_DIR := target/sandbox/build
 ifeq ($(UNAME_S),Darwin)
 NATIVE_RUN_TARGET := run-macos
 NATIVE_CARGO := ./tools/sandbox-cargo
-NATIVE_TARGET_DIR := target/sandbox/build
 else ifeq ($(UNAME_S),Linux)
 NATIVE_RUN_TARGET := run-linux
 NATIVE_CARGO := ./tools/linux-cargo
-NATIVE_TARGET_DIR := target/native
 else
 NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))

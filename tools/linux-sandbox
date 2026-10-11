@@ -1,0 +1,96 @@
+#!/bin/sh
+
+# The Linux build sandbox's filesystem view, the counterpart of macOS's
+# tools/cargo-sandbox.sb. tools/linux-cargo runs this as root of new user,
+# mount, PID and (usually) network namespaces; it rearranges mounts that only
+# those namespaces see, then runs the command:
+#
+#   linux-sandbox PROJECT_ROOT BUILD_ROOT TOOLCHAIN_ROOT HOME LOCK_WRITE \
+#       [READABLE_FILE...] -- COMMAND [ARGUMENTS...]
+#
+# The command sees the source tree read-only, without .git, local agent
+# configuration or a root .env; it can write only beneath BUILD_ROOT, and
+# Cargo.lock when LOCK_WRITE is 1. HOME, /tmp, /run, /var/tmp and /dev/shm are
+# empty. The toolchain and each READABLE_FILE, such as a proxy's certificate
+# bundle, stay readable.
+
+set -eu
+
+project_root=$1
+build_root=$2
+toolchain_root=$3
+real_home=$4
+lock_write=$5
+shift 5
+# The working directory still refers to the tree as it was; it's re-entered
+# by path once the new view is in place.
+cwd=$(pwd)
+readable=
+while [ "$1" != -- ]; do
+    readable="$readable $1"
+    shift
+done
+shift
+
+# A fresh /tmp hides the real one and holds what must survive hiding the rest,
+# so the project can't live under /tmp; tools/linux-cargo checks.
+mount -t tmpfs sandbox /tmp
+mkdir /tmp/project /tmp/build /tmp/toolchain
+mount --rbind "$project_root" /tmp/project
+mount --rbind "$build_root" /tmp/build
+mount --rbind "$toolchain_root" /tmp/toolchain
+if [ "$lock_write" = 1 ]; then
+    : >/tmp/lock
+    mount --bind "$project_root/Cargo.lock" /tmp/lock
+fi
+index=0
+for file in $readable; do
+    index=$((index + 1))
+    : >"/tmp/readable-$index"
+    mount --bind "$file" "/tmp/readable-$index"
+done
+
+mount -t tmpfs hidden "$real_home"
+for dir in /run /var/tmp /dev/shm; do
+    if [ -d "$dir" ]; then
+        mount -t tmpfs hidden "$dir"
+    fi
+done
+
+mkdir -p "$project_root" "$toolchain_root"
+mount --move /tmp/project "$project_root"
+mount -o remount,bind,ro "$project_root"
+mount --move /tmp/build "$build_root"
+mount --move /tmp/toolchain "$toolchain_root"
+mount -o remount,bind,ro "$toolchain_root"
+if [ "$lock_write" = 1 ]; then
+    mount --move /tmp/lock "$project_root/Cargo.lock"
+fi
+index=0
+for file in $readable; do
+    index=$((index + 1))
+    if [ ! -r "$file" ]; then
+        mkdir -p "$(dirname "$file")"
+        : >"$file"
+        mount --move "/tmp/readable-$index" "$file"
+        mount -o remount,bind,ro "$file"
+    fi
+done
+
+for name in .git .claude .codex; do
+    if [ -d "$project_root/$name" ]; then
+        mount -t tmpfs hidden "$project_root/$name"
+    elif [ -e "$project_root/$name" ]; then
+        mount --bind /dev/null "$project_root/$name"
+    fi
+done
+if [ -e "$project_root/.env" ]; then
+    mount --bind /dev/null "$project_root/.env"
+fi
+
+# Leave /tmp empty, as the sandbox's own.
+umount -l /tmp
+mount -t tmpfs sandbox /tmp
+
+cd "$cwd" 2>/dev/null || cd /
+exec "$@"
