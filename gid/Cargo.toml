@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 getrandom.workspace = true
-im = "15"
+imbl = "7"
 serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]

@@ -4,7 +4,7 @@
 //! clones retain structural sharing.
 
 use crate::{CellId, Value};
-use im::HashMap;
+use imbl::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

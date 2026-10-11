@@ -98,3 +98,22 @@ checks and Fidget's constant-field and color test, passed on Mesa's lavapipe
 software Vulkan driver. `make perf` before and after the upgrade, on the same
 Linux VM, found no change beyond its noise; both runs are in the
 [performance log](../performance-log.tsv).
+
+## `im` to `imbl`, 2026-10-11
+
+The cell table moved from `im` 15.1.0, unreleased since April 2022, to `imbl`
+7.0.2 (2026-09-09), its maintained fork with the same persistent hash map API;
+only the import changed. RustSec lists `im` and `sized-chunks` as unmaintained
+and unsound, the latter with a panic-safety use-after-free in the chunk type
+`im`'s maps are built on, and `bitmaps` 2 as unmaintained. `imbl` replaces them
+with `imbl-sized-chunks` 0.2.0, the release that fixes the same bug, and adds
+`archery`, `wide` 0.7 and `safe_arch` 0.7, none with advisories. `rand_core`
+and `rand_xoshiro` moved to 0.9.5 and 0.7.0. The remaining warning is
+`ttf-parser`'s, reached through winit's Linux window decorations.
+
+Resolution used `tools/linux-cargo update --workspace` with the seven-day
+minimum publish age. Advisories were checked against a clone of the RustSec
+database on Linux; `sandbox-cargo audit` hasn't run. Interleaved `make perf`
+runs on one Linux VM, two pairs of three rounds and four more pairs on the three
+workloads that first looked slower, found no change beyond noise; the first
+pair is in the [performance log](../performance-log.tsv).
