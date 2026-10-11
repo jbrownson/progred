@@ -1,6 +1,7 @@
 # macOS follow-ups
 
-Changes from the 2026-10-10 cleanup that were built and tested on Linux only.
+Changes from the October 2026 cloud sessions that were built and tested on
+Linux only.
 Check each on macOS, then delete it from this list; delete the file when it's
 empty.
 
@@ -23,6 +24,25 @@ empty.
   delimiter_bench` should now write `target/sandbox/build/delimiter_bench.svg`
   instead of failing outside the sandbox's writable folders.
 
+## The Fidget 0.5.1, Vello 0.11, and wgpu 30 upgrade
+
+Linux checked the native build, the threaded browser build's types, and
+`make test`; nothing ran on a GPU or on Apple Silicon.
+
+- **Rust 1.95 or newer.** Fidget 0.5.1 requires it; run `rustup update stable`,
+  then `make fetch` for the new crates.
+- **The AArch64 JIT patch.** It was re-applied to 0.5.1 but only compiles on
+  Apple Silicon. Run the vendored tests:
+  `./tools/sandbox-cargo test --release -p fidget-core -p fidget-jit -p fidget-raster --lib`.
+- **Presentation and color.** Windows now present through `Queue::present`, and
+  wgpu 30 changed Metal color-space handling. Check drawing, resizing, and
+  colors in `make run`.
+- **Text.** Parley 0.11 brings a newer shaping engine and Vello 0.11 fixes emoji
+  placement; compare `make images` output and the app's text for drift.
+- **Browser.** Check `make run-web` with WebGPU, and run
+  `node tools/test-web-gpu.cjs` as the [browser notes](../web/README.md#diagnostics)
+  describe.
+
 ## GPU tests
 
 The readback helper moved from `progred/tests/compositor_experiment/gpu.rs` into
@@ -43,12 +63,3 @@ Run the GPU tests as [testing](testing.md#ignored-tests) describes.
   `resolve` to stable Cargo, where `registry.global-min-publish-age` no longer
   needs `-Z min-publish-age`, and merge their near-identical branches. See
   [build security](build-security.md).
-
-## Decisions
-
-- **Vendored Fidget patches.** The core SSA access patch is now unused outside
-  vendored tests. The GPU spill patch's experimental feature is unused, but its
-  default rejection of spilling tapes, `SpillsUnsupported`, is what Progred's
-  GPU-to-CPU fallback relies on. Dropping the experiment means keeping that
-  rejection, either as a small patch or as a bytecode check in Progred. See
-  [vendor/README.md](../vendor/README.md).

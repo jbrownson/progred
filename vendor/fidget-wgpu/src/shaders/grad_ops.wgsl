@@ -1,7 +1,6 @@
 struct Value {
     v: vec4f,
 }
-const VALUE_COMPONENTS: u32 = 4u;
 
 fn op_neg(lhs: Value) -> Value {
     return Value(-lhs.v);
@@ -181,5 +180,3 @@ fn op_atan2(lhs: Value, rhs: Value) -> Value {
         atan2(lhs.v.w, rhs.v.w)
     ));
 }
-fn pack_spill(v: Value) -> vec4f { return v.v; }
-fn unpack_spill(v: vec4f) -> Value { return Value(v); }

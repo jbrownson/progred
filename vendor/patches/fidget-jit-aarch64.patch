@@ -172,70 +172,6 @@ index cae89c2..eaa244b 100644
      }
      /// Copies the given input to `out_reg`
      fn build_input(&mut self, out_reg: u8, src_arg: u32) {
-diff --git a/fidget-jit/src/lib.rs b/fidget-jit/src/lib.rs
-index e927aab..3bd2348 100644
---- a/fidget-jit/src/lib.rs
-+++ b/fidget-jit/src/lib.rs
-@@ -354,18 +354,28 @@ impl<T> AssemblerData<T> {
- #[cfg(target_arch = "aarch64")]
- #[allow(clippy::unnecessary_cast)] // dynasm-rs#106
- impl<T> AssemblerData<T> {
-+    // x9 is caller-saved and scratch in all four evaluators. Do not use a
-+    // callee-saved register to materialize an address or adjust the stack.
-+    fn load_offset(&mut self, offset: usize) {
-+        dynasm!(self.ops; movz x9, (offset & 0xffff) as u32);
-+        for shift in [16, 32, 48] {
-+            let part = ((offset >> shift) & 0xffff) as u32;
-+            if part != 0 {
-+                dynasm!(self.ops; movk x9, part, lsl shift);
-+            }
-+        }
-+    }
-+
-     fn push_stack(&mut self) {
-         if self.mem_offset < 4096 {
-             dynasm!(self.ops
-                 ; sub sp, sp, self.mem_offset as u32
-             );
--        } else if self.mem_offset < 65536 {
-+        } else {
-+            self.load_offset(self.mem_offset);
-             dynasm!(self.ops
--                ; mov w28, self.mem_offset as u32
--                ; sub sp, sp, w28
-+                ; sub sp, sp, x9
-             );
--        } else {
--            panic!("invalid mem offset: {} is too large", self.mem_offset);
-         }
-     }
- 
-@@ -375,13 +385,11 @@ impl<T> AssemblerData<T> {
-             dynasm!(self.ops
-                 ; add sp, sp, self.mem_offset as u32
-             );
--        } else if self.mem_offset < 65536 {
-+        } else {
-+            self.load_offset(self.mem_offset);
-             dynasm!(self.ops
--                ; mov w9, self.mem_offset as u32
--                ; add sp, sp, w9
-+                ; add sp, sp, x9
-             );
--        } else {
--            panic!("invalid mem offset: {}", self.mem_offset);
-         }
- 
-         dynasm!(self.ops
-@@ -405,7 +413,7 @@ struct MmapAssembler {
-     global_labels: [Option<AssemblyOffset>; 26],
-     local_labels: [Option<AssemblyOffset>; 26],
- 
--    global_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 2>,
-+    global_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 3>,
-     local_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 8>,
- }
- 
 diff --git a/fidget-jit/src/aarch64/tests.rs b/fidget-jit/src/aarch64/tests.rs
 new file mode 100644
 index 0000000..d21b336
@@ -373,3 +309,67 @@ index 0000000..d21b336
 +    check!(FloatSliceAssembler, [1.25f32; 8]);
 +    check!(GradSliceAssembler, [Grad::new(1.0, 2.0, 3.0, 4.0); 8]);
 +}
+diff --git a/fidget-jit/src/lib.rs b/fidget-jit/src/lib.rs
+index e927aab..3bd2348 100644
+--- a/fidget-jit/src/lib.rs
++++ b/fidget-jit/src/lib.rs
+@@ -354,18 +354,28 @@ impl<T> AssemblerData<T> {
+ #[cfg(target_arch = "aarch64")]
+ #[allow(clippy::unnecessary_cast)] // dynasm-rs#106
+ impl<T> AssemblerData<T> {
++    // x9 is caller-saved and scratch in all four evaluators. Do not use a
++    // callee-saved register to materialize an address or adjust the stack.
++    fn load_offset(&mut self, offset: usize) {
++        dynasm!(self.ops; movz x9, (offset & 0xffff) as u32);
++        for shift in [16, 32, 48] {
++            let part = ((offset >> shift) & 0xffff) as u32;
++            if part != 0 {
++                dynasm!(self.ops; movk x9, part, lsl shift);
++            }
++        }
++    }
++
+     fn push_stack(&mut self) {
+         if self.mem_offset < 4096 {
+             dynasm!(self.ops
+                 ; sub sp, sp, self.mem_offset as u32
+             );
+-        } else if self.mem_offset < 65536 {
++        } else {
++            self.load_offset(self.mem_offset);
+             dynasm!(self.ops
+-                ; mov w28, self.mem_offset as u32
+-                ; sub sp, sp, w28
++                ; sub sp, sp, x9
+             );
+-        } else {
+-            panic!("invalid mem offset: {} is too large", self.mem_offset);
+         }
+     }
+ 
+@@ -375,13 +385,11 @@ impl<T> AssemblerData<T> {
+             dynasm!(self.ops
+                 ; add sp, sp, self.mem_offset as u32
+             );
+-        } else if self.mem_offset < 65536 {
++        } else {
++            self.load_offset(self.mem_offset);
+             dynasm!(self.ops
+-                ; mov w9, self.mem_offset as u32
+-                ; add sp, sp, w9
++                ; add sp, sp, x9
+             );
+-        } else {
+-            panic!("invalid mem offset: {}", self.mem_offset);
+         }
+ 
+         dynasm!(self.ops
+@@ -405,7 +413,7 @@ struct MmapAssembler {
+     global_labels: [Option<AssemblyOffset>; 26],
+     local_labels: [Option<AssemblyOffset>; 26],
+ 
+-    global_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 2>,
++    global_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 3>,
+     local_relocs: arrayvec::ArrayVec<(PatchLoc<Relocation>, u8), 8>,
+ }
+ 

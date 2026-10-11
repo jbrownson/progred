@@ -34,7 +34,7 @@ fn sort_main(
     let count = atomicAdd(&sorted_subtiles.count, 1u) + 1;
 
     // We dispatch a maximum of [32768, 1, 1] and iterate in the shader
-    let wg_dispatch_x = evaluation_groups(count);
+    let wg_dispatch_x = min(count, 32768u);
     atomicMax(&sorted_subtiles.wg_size[0], wg_dispatch_x);
     atomicMax(&sorted_subtiles.wg_size[1], 1u);
     atomicMax(&sorted_subtiles.wg_size[2], 1u);

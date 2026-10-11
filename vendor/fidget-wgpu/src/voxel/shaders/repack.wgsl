@@ -46,7 +46,7 @@ fn repack_main(
     // Write the workgroup sizes to the first 3 words in the `struct`
     // We dispatch a maximum of [32768, 1, 1] and iterate in the shader
     let count = offset + 1u;
-    let wg_dispatch_x = evaluation_groups(count);
+    let wg_dispatch_x = min(count, 32768u);
     atomicMax(&strata_tiles[i], wg_dispatch_x);
     atomicMax(&strata_tiles[i + 1], 1u);
     atomicMax(&strata_tiles[i + 2], 1u);
@@ -70,3 +70,4 @@ fn strata_size_bytes() -> u32 {
     // Snap to `min_storage_buffer_offset_alignment`
     return next_multiple_of(size_bytes, 256);
 }
+

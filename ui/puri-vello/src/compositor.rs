@@ -332,6 +332,7 @@ impl Compositor {
         uniform
             .slice(..)
             .get_mapped_range_mut()
+            .unwrap()
             .copy_from_slice(&bytes);
         uniform.unmap();
         let bindings = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {

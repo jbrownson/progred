@@ -7,7 +7,7 @@
 //! [`ColorWorkspace<C>`] is specialized to
 //! [`voxel::effects::ColorWorkspace`](crate::voxel::effects::ColorWorkspace)
 use crate::{
-    CopyVarsChanged, CopyVarsError, Gpu, TapeStorage,
+    CopyVarsChanged, CopyVarsError, Gpu,
     buf::{BufferSizeError, ConfigBufferWrite, FlexBuffer, FlexConfigBuffer},
     tag,
     voxel::VarsBufferTag,
@@ -92,7 +92,7 @@ where
         vs: &VarMap,
         vars: &ShapeVars<f32>,
     ) -> Result<(), CopyVarsError> {
-        match crate::copy_vars(gpu, vs, vars, &mut self.vars_buf, 0)? {
+        match crate::copy_vars(gpu, vs, vars, &mut self.vars_buf)? {
             CopyVarsChanged::BufferChanged => {
                 self.bind_group = Default::default()
             }
@@ -144,10 +144,9 @@ where
 /// Error type when constructing a [`ShapeColorBuffers`]
 #[derive(Debug, thiserror::Error)]
 pub enum ShapeColorError {
-    /// The normal GPU backend does not support register spills.
-    #[error(
-        "color needs {0} spill slots; experimental GPU spills are disabled"
-    )]
+    /// A channel needs register spills, which the GPU interpreter leaves
+    /// unimplemented
+    #[error("color needs {0} spill slots, which the GPU does not support")]
     SpillsUnsupported(u32),
     /// The shape uses a reserved register
     #[error(transparent)]
@@ -171,7 +170,6 @@ pub struct ShapeColorBuffers {
 
     /// Maximum number of registers used by any tape
     reg_count: u8,
-    mem_count: u32,
 
     /// Raw bytecode, which should be copied to the GPU config buffer tail
     bytecode: Vec<u32>,
@@ -188,8 +186,8 @@ impl ShapeColorBuffers {
     pub(crate) fn shape_start(&self) -> &[u32] {
         &self.shape_start
     }
-    pub(crate) fn storage(&self) -> TapeStorage {
-        TapeStorage::new(self.reg_count, self.mem_count)
+    pub(crate) fn reg_count(&self) -> u8 {
+        self.reg_count
     }
     pub(crate) fn bytecode(&self) -> &[u32] {
         &self.bytecode
@@ -243,7 +241,6 @@ impl ShapeColorBuffers {
             }
         }
         let mut reg_count = 0;
-        let mut mem_count = 0;
         let mut shape_start = Vec::with_capacity(colors.len());
         let mut bytecode_data: Vec<u32> = Vec::new();
         let mut local_var_map = HashMap::new();
@@ -276,16 +273,13 @@ impl ShapeColorBuffers {
                     channel.inner().data(),
                     &local_var_map,
                 )?;
-                if bytecode.mem_count() > 0
-                    && !cfg!(feature = "experimental-spills")
-                {
+                if bytecode.mem_count() > 0 {
                     return Err(ShapeColorError::SpillsUnsupported(
                         bytecode.mem_count(),
                     ));
                 }
                 bytecode_data.extend(bytecode.data());
                 reg_count = reg_count.max(bytecode.reg_count());
-                mem_count = mem_count.max(bytecode.mem_count());
             }
         }
 
@@ -295,7 +289,6 @@ impl ShapeColorBuffers {
             bytecode: bytecode_data,
             var_map,
             reg_count,
-            mem_count,
         })
     }
 

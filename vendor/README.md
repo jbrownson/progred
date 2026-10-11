@@ -1,12 +1,13 @@
 # Local Fidget patches
 
-`fidget-core`, `fidget-jit`, `fidget-raster`, `fidget-wgpu`, and `models/hi.vm` are copied from Matt Keeter's
-[Fidget](https://github.com/mkeeter/fidget), revision
-`0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6` (2026-09-12).
-They retain upstream's [MPL-2.0 license](fidget-LICENSE.txt).
-Cargo patches only these four packages; the remaining Fidget packages still use
-that exact Git revision. Their manifests spell out upstream's inherited package
-metadata and dependency versions, pinning core and workspace-hack to that revision.
+`fidget-core`, `fidget-jit`, `fidget-raster`, and `fidget-wgpu` are copied
+from Matt Keeter's [Fidget](https://github.com/mkeeter/fidget) 0.5.1 as
+published on crates.io, whose sources match upstream's `v0.5.1` tag;
+`models/hi.vm` comes from the same tag. They retain upstream's
+[MPL-2.0 license](fidget-LICENSE.txt). Cargo patches only these four packages
+over crates.io; the remaining Fidget packages are the published 0.5.1. Their
+manifests spell out upstream's inherited package metadata and dependency
+versions.
 
 Local source changes, each including regression tests:
 
@@ -23,11 +24,6 @@ Local source changes, each including regression tests:
   behavior is unchanged; the constructor preserves an already-cancelled flag.
   Progred uses this for both meshing and implicit rendering. This patch is
   independent of the others below.
-- [Core SSA access patch](patches/fidget-core-ssa.patch): expose the
-  existing SSA tape, lower a caller-supplied valid tape with its variable map,
-  and wrap a function as a shape. These additive APIs supported the test-only
-  persistent-expression experiment, retired on 2026-10-10; they do not change
-  existing evaluation or rendering. This patch is independent of the others below.
 - [AArch64 JIT patch](patches/fidget-jit-aarch64.patch): full-width
   spill addresses and stack adjustment, preservation of callee-saved registers,
   and long bulk-loop exits. Small tapes retain the short addressing form.
@@ -50,31 +46,19 @@ Local source changes, each including regression tests:
   their per-object tile buffer, and an optional borrowed-tile callback exposes
   finished regions before whole-image assembly. Callbacks may run concurrently;
   consumers own publication/assembly policy. Applies after the scene tiling patch.
-- [GPU spill experiment](patches/fidget-wgpu-spills.patch): the normal
-  backend rejects unsupported spilling geometry/color tapes. The non-default
-  `experimental-spills` feature enables spill-aware simplification and bounded
-  external scratch for voxel evaluation (pixel/color still use private arrays).
-  Explicit experimental choice-history sizing supports diagnosis. Full-stock
-  tests now match the CPU without exceeding Metal's private stack, but remain
-  substantially slower; general limits are not established. The headless
-  stage/tape profiler identifies program-arena exhaustion and can test a larger
-  arena without changing the renderer's default. Voxel work now excludes
-  offscreen X/Y padding. A diagnostic screen-region batching experiment bounds
-  program lifetimes without changing sampling density, but repeats enough
-  interval work to lose performance; it remains outside the app.
-  **Not ready for app use or an upstream proposal.** See the
-  [experiment report](../docs/history/fidget-gpu-experiment-2026-09-16.md). Its tests use
-  the core SSA access patch above. Progred no longer enables
-  `experimental-spills`: its diagnostic was retired on 2026-10-10. The patch's
-  default behavior is still in use: without the feature, `RenderShape::new` and
-  `ShapeColorBuffers::new` reject spilling tapes with `SpillsUnsupported`, which
-  Progred's GPU-to-CPU fallback relies on.
+- [GPU spill rejection patch](patches/fidget-wgpu-spill-rejection.patch):
+  `RenderShape::new` and `ShapeColorBuffers::new` reject tapes that need
+  register spills with `SpillsUnsupported`. Upstream accepts them, but its GPU
+  interpreter leaves spill loads and stores unimplemented, so they render
+  nothing. Progred falls back to the CPU on this error. An earlier experiment
+  implemented GPU spills instead; see its
+  [report](../docs/history/fidget-gpu-experiment-2026-09-16.md).
 
-These patch files apply to upstream in the order listed, with no manifest adaptation, and are
-intended for upstream review, except the explicitly experimental GPU patch.
-Nothing has been submitted or pushed upstream.
+These patch files apply to the published 0.5.1 sources in the order listed, with
+no manifest adaptation, and are intended for upstream review. Nothing has been
+submitted or pushed upstream.
 Keep vendored source and patches in sync; do not accumulate unrelated changes.
-Remove each local package override when a reviewed upstream revision includes
+Remove each local package override when a reviewed upstream release includes
 the corresponding fixes. See the [measurements](../docs/history/cam-render-profiling-2026-09-15.md).
 
 The packages are workspace members so their tests share our locked dependency

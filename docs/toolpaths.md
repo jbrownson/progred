@@ -450,7 +450,7 @@ In the voxel preview, many sampled segments produce much larger Fidget expressio
 than the model alone. This is a first static visualization, not a performance claim for large
 machine programs. The opt-in toolpath orbit canary in
 [performance checks](performance.md) exercises the real document and preview.
-Fidget's pinned GPU interpreter leaves register-spill loads and stores
+Fidget's GPU interpreter leaves register-spill loads and stores
 (`OP_MEM`) unimplemented. Upstream's `RenderShape::new` accepts such bytecode and
 renders nothing; the vendored spill patch instead rejects it with
 `SpillsUnsupported`, and Progred falls back to the CPU on that error. Keeping
@@ -541,7 +541,7 @@ depth refinement does not change the light direction or relative axis weighting.
 Default headless contexts use inline execution; the browser uses its shared-memory worker.
 
 Implicit CAM rendering uses the software renderer explicitly. Its stock
-expression spills heavily as playback advances, which the pinned GPU interpreter
+expression spills heavily as playback advances, which Fidget's GPU interpreter
 cannot run, so GPU implicit CAM is blocked on that missing implementation. A GPU
 spill experiment, since retired, matched CPU geometry for the full stock but was
 much slower, so CAM stays on the CPU renderer. The details are in the

@@ -2,7 +2,6 @@
 struct Value {
     v: vec2f,
 }
-const VALUE_COMPONENTS: u32 = 2u;
 
 fn is_nan(v: f32) -> bool {
     let u = bitcast<u32>(v);
@@ -324,5 +323,3 @@ fn op_atan2(lhs: Value, rhs: Value) -> Value {
     }
     return Value(vec2f(-3.141592654, 3.141592654));
 }
-fn pack_spill(v: Value) -> vec4f { return vec4f(v.v, 0.0, 0.0); }
-fn unpack_spill(v: vec4f) -> Value { return Value(v.xy); }

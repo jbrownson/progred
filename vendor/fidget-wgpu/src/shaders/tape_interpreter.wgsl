@@ -10,7 +10,6 @@ fn run_tape(start: u32, xyz: array<Value, 3>, stack: ptr<function, Stack>) -> Ta
     var i: u32 = start;
     var count: u32 = 0u;
     var reg: array<Value, REG_COUNT>;
-    var mem: SpillMemory;
 
     var lhs = Value();
     var rhs = Value();
@@ -87,12 +86,8 @@ fn run_tape(start: u32, xyz: array<Value, 3>, stack: ptr<function, Stack>) -> Ta
             case OP_OR:      { tmp = op_or(lhs, rhs, stack); }
 
             case OP_MEM: {
-                if op[1] == 255u {
-                    spill_store(&mem, imm_u, reg[op[2]]);
-                    continue;
-                } else {
-                    tmp = spill_load(&mem, imm_u);
-                }
+                // Not implemented!
+                return out;
             }
 
             case OP_JUMP: {

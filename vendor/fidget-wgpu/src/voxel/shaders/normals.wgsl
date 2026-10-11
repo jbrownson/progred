@@ -4,21 +4,7 @@
 @compute @workgroup_size(8, 8)
 fn normals_main(
     @builtin(global_invocation_id) global_id: vec3u,
-    @builtin(workgroup_id) workgroup_id: vec3u,
-    @builtin(local_invocation_index) local_index: u32,
-    @builtin(num_workgroups) groups: vec3u,
 ) {
-    if config.spill_lanes == 0u {
-        normals_worker(global_id.xy);
-    } else {
-        spill_lane = workgroup_id.x * 64u + local_index;
-        for (var i = spill_lane; i < config.image_size.x * config.image_size.y; i += groups.x * 64u) {
-            normals_worker(vec2u(i % config.image_size.x, i / config.image_size.x));
-        }
-    }
-}
-
-fn normals_worker(global_id: vec2u) {
     // One compute thread per pixel in the output image
     let px = global_id.x;
     let py = global_id.y;
@@ -80,3 +66,4 @@ fn get_tape_start(corner_pos: vec3u) -> u32 {
         return 0u;
     }
 }
+

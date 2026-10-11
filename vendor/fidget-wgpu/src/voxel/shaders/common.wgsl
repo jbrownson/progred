@@ -25,12 +25,6 @@ struct Config {
     /// `tape_data_offset` should be reset to this value between strata
     root_tape_len: atomic<u32>,
 
-    /// Bounded concurrency for spilled tapes; zero keeps ordinary dispatch.
-    spill_lanes: u32,
-    /// Read-only variable prefix length, in floats.
-    spill_base: u32,
-    _spill_pad: vec2u,
-
     /// Tape data, tightly packed per-tile (flexible array member)
     tape_data: array<TapeWord>,
 }
@@ -44,18 +38,8 @@ struct Config {
 /// this buffer is packed.
 @group(0) @binding(1) var<storage, read_write> tile_tape: array<u32>;
 
-/// Input variables, followed by bounded per-lane spill storage. Sharing this
-/// binding keeps interval evaluation within the standard eight-buffer limit.
-@group(0) @binding(2) var<storage, read_write> var_values: array<f32>;
-
-var<private> spill_lane: u32;
-
-fn evaluation_groups(count: u32) -> u32 {
-    if config.spill_lanes != 0u {
-        return min(count, config.spill_lanes / 64u);
-    }
-    return min(count, 32768u);
-}
+/// Array of values for (non-xyz) variables
+@group(0) @binding(2) var<storage, read> var_values: array<f32>;
 
 /// For a given position and recursion level, return the offset into `tile_tape`
 fn get_tape_offset_for_level(corner_pos: vec3u, level: u32) -> u32 {

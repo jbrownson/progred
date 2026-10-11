@@ -75,3 +75,22 @@ three added registry packages (`wasm-bindgen-rayon`, `wasm_sync`, and
 unrelated locked versions were retained. Browser WebGPU used the existing
 Vello/wgpu dependency graph and shaders. The advisory scan after these
 additions found no new advisories.
+
+## Fidget 0.5.1 and the wgpu 30 stack, 2026-10-11
+
+Fidget moved from the `0c89e87` Git pin to the published 0.5.1 (2026-09-27).
+The published sources of the four vendored packages matched upstream's `v0.5.1`
+tag. Only four upstream commits separate the two: a cached color bind group, a
+comment fix, a dependency update to wgpu 30, and the release. Seven local
+patches re-applied unchanged; the core SSA access patch was dropped as unused,
+and the GPU spill experiment was reduced to its default rejection of spilling
+tapes. Leaving the Git source dropped the extra packages that upstream's real
+`workspace-hack` had pulled into the lockfile.
+
+Sharing a wgpu device with Fidget required the same wgpu major version, so
+Vello moved from 0.9 to 0.11 with wgpu 30.0.1, along with parley 0.11.1 and
+skrifa 0.44. Vello 0.11's README calls the `vello` crate an experimental
+research renderer and names `vello_gpu` as the production one. Resolution used
+`tools/linux-cargo update --workspace` with the seven-day minimum publish age.
+The native build, the threaded browser build's types, and the tests were
+checked on Linux only.

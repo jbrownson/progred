@@ -130,15 +130,9 @@ inside the same filesystem and network boundary.
 
 ## Current dependency exceptions
 
-- **Fidget from Git.** Fidget comes from upstream commit
-  [`0c89e87`](https://github.com/mkeeter/fidget/commit/0c89e87e1b3a6d15cc0976ab6ff05a09f9cf91d6),
-  reviewed as an exception to the publication-age policy, rather than a
-  published release; four of its packages are vendored with local patches
-  listed in [vendor/README.md](../vendor/README.md). Fidget 0.5.1 has since
-  been published; replace the pin with it after review. The Git source uses
-  upstream's real `workspace-hack` dependency unifier, unlike its empty
-  published shim, so it brings extra dependencies and features into the
-  lockfile.
+- **Patched Fidget.** Four Fidget packages are vendored from the published
+  0.5.1 with local patches listed in [vendor/README.md](../vendor/README.md);
+  Cargo uses them in place of the crates.io packages.
 - **JIT.** Fidget's JIT is enabled only for Apple Silicon macOS implicit
   rasterization; meshing and other platforms use VM evaluation. Its build
   script only checks CPU features. The macOS bundle declares Apple's

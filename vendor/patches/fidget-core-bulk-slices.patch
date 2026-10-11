@@ -1,8 +1,8 @@
 diff --git a/fidget-core/src/vm/mod.rs b/fidget-core/src/vm/mod.rs
-index b7886ce0..6c896576 100644
+index a0a45fd..586895d 100644
 --- a/fidget-core/src/vm/mod.rs
 +++ b/fidget-core/src/vm/mod.rs
-@@ -788,6 +788,65 @@ impl<T: From<f32> + Clone> BulkVmEval<T> {
+@@ -786,6 +786,65 @@ impl<T: From<f32> + Clone> BulkVmEval<T> {
      }
  }
  
@@ -68,7 +68,7 @@ index b7886ce0..6c896576 100644
  /// VM-based bulk evaluator for arrays of points, yielding point values
  #[derive(Default)]
  pub struct VmFloatSliceEval<const N: usize>(BulkVmEval<f32>);
-@@ -819,14 +878,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
+@@ -817,14 +876,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                      v[out][0..size].copy_from_slice(&vars[i as usize]);
                  }
                  RegOp::NegReg(out, arg) => {
@@ -85,7 +85,7 @@ index b7886ce0..6c896576 100644
                  }
                  RegOp::RecipReg(out, arg) => {
                      for i in 0..size {
-@@ -834,15 +889,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
+@@ -832,15 +887,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                      }
                  }
                  RegOp::SqrtReg(out, arg) => {
@@ -103,7 +103,7 @@ index b7886ce0..6c896576 100644
                  }
                  RegOp::FloorReg(out, arg) => {
                      for i in 0..size {
-@@ -915,19 +965,13 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
+@@ -913,19 +963,13 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                      }
                  }
                  RegOp::AddRegImm(out, arg, imm) => {
@@ -126,7 +126,7 @@ index b7886ce0..6c896576 100644
                  }
                  RegOp::DivImmReg(out, arg, imm) => {
                      for i in 0..size {
-@@ -950,14 +994,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
+@@ -948,14 +992,10 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                      }
                  }
                  RegOp::SubImmReg(out, arg, imm) => {
@@ -143,7 +143,7 @@ index b7886ce0..6c896576 100644
                  }
                  RegOp::CompareImmReg(out, arg, imm) => {
                      for i in 0..size {
-@@ -1020,24 +1060,16 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
+@@ -1018,24 +1058,16 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                      }
                  }
                  RegOp::AddRegReg(out, lhs, rhs) => {
@@ -172,7 +172,7 @@ index b7886ce0..6c896576 100644
                  }
                  RegOp::CompareRegReg(out, lhs, rhs) => {
                      for i in 0..size {
-@@ -1045,14 +1077,14 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
+@@ -1043,14 +1075,14 @@ impl<const N: usize> BulkEvaluator for VmFloatSliceEval<N> {
                      }
                  }
                  RegOp::MinRegReg(out, lhs, rhs) => {
@@ -193,7 +193,7 @@ index b7886ce0..6c896576 100644
                  }
                  RegOp::AndRegReg(out, lhs, rhs) => {
                      for i in 0..size {
-@@ -1399,6 +1431,80 @@ impl<const N: usize> BulkEvaluator for VmGradSliceEval<N> {
+@@ -1397,6 +1429,80 @@ impl<const N: usize> BulkEvaluator for VmGradSliceEval<N> {
  #[cfg(test)]
  mod test {
      use super::*;

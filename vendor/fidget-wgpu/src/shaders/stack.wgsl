@@ -1,4 +1,4 @@
-// STACK_SIZE_WORDS is supplied by the pipeline's storage configuration.
+const STACK_SIZE_WORDS: u32 = 32; // number of u32 words in the stack
 const STACK_SIZE_BITS: u32 = STACK_SIZE_WORDS * 32u;
 const STACK_SIZE_ITEMS: u32 = STACK_SIZE_WORDS * 16u;
 

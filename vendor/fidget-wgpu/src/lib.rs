@@ -94,8 +94,6 @@ pub(crate) mod shaders {
     pub const STACK: &str = include_str!("shaders/stack.wgsl");
     pub const TAPE_INTERPRETER: &str =
         include_str!("shaders/tape_interpreter.wgsl");
-    pub const PRIVATE_SPILLS: &str =
-        include_str!("shaders/private_spills.wgsl");
     pub const TAPE_SIMPLIFY: &str = include_str!("shaders/tape_simplify.wgsl");
 
     /// Returns a set of constant definitions for each opcode
@@ -358,79 +356,34 @@ impl Gpu {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct TapeStorage {
-    registers: u8,
-    spills: u32,
-    choice_words: u32,
-    external_spills: bool,
-}
-
-impl TapeStorage {
-    fn new(registers: u8, spills: u32) -> Self {
-        Self {
-            registers,
-            spills,
-            choice_words: 32,
-            external_spills: false,
-        }
-    }
-
-    fn for_bytecode(bytecode: &Bytecode) -> Self {
-        Self::new(bytecode.reg_count(), bytecode.mem_count())
-    }
-
-    fn constants(self) -> String {
-        format!(
-            "const REG_COUNT: u32 = {};\nconst MEM_COUNT: u32 = {};\nconst STACK_SIZE_WORDS: u32 = {};\n",
-            self.registers,
-            self.spills.max(1),
-            self.choice_words,
-        )
-    }
-
-    fn bucket(self) -> Self {
-        Self {
-            registers: *REG_PIPELINE_SIZES
-                .iter()
-                .find(|&&r| r >= self.registers)
-                .unwrap(),
-            // Overallocating these private arrays can cross a GPU stack limit.
-            spills: self.spills.max(1),
-            choice_words: self.choice_words,
-            external_spills: self.external_spills,
-        }
-    }
-}
-
-/// Container of multiple pipelines, parameterized by register and spill storage.
+/// Container of multiple pipelines, parameterized by register count
 pub(crate) struct RegPipeline {
-    thunk: Box<dyn Fn(TapeStorage) -> wgpu::ComputePipeline>,
-    cache: std::cell::RefCell<
-        std::collections::HashMap<TapeStorage, wgpu::ComputePipeline>,
-    >,
+    thunk: Box<dyn Fn(u8) -> wgpu::ComputePipeline>,
+    cache:
+        [std::cell::OnceCell<wgpu::ComputePipeline>; REG_PIPELINE_SIZES.len()],
 }
 
 const REG_PIPELINE_SIZES: &[u8] = &[8, 16, 32, 64, 128, 192, 255];
 
 impl RegPipeline {
-    pub fn build(
-        builder: Box<dyn Fn(TapeStorage) -> wgpu::ComputePipeline>,
-    ) -> Self {
+    pub fn build(builder: Box<dyn Fn(u8) -> wgpu::ComputePipeline>) -> Self {
         Self {
             thunk: builder,
-            cache: Default::default(),
+            cache: std::array::from_fn(|_| Default::default()),
         }
     }
 
-    /// Returns a shared pipeline handle with sufficient per-invocation storage.
-    pub fn get(&self, storage: TapeStorage) -> wgpu::ComputePipeline {
-        let storage = storage.bucket();
-        self.cache
-            .borrow_mut()
-            .entry(storage)
-            .or_insert_with(|| (*self.thunk)(storage))
-            .clone()
+    /// Returns the pipeline with sufficient registers to render `reg_count`
+    ///
+    /// # Panics
+    /// If `reg_count` is 256 (which is not allowed in bytecode tapes)
+    pub fn get(&self, reg_count: u8) -> &wgpu::ComputePipeline {
+        let (i, r) = REG_PIPELINE_SIZES
+            .iter()
+            .enumerate()
+            .find(|(_i, r)| reg_count <= **r)
+            .expect("bytecode tape cannot use more than 255 registers");
+        self.cache[i].get_or_init(|| (*self.thunk)(*r))
     }
 }
 
@@ -446,16 +399,14 @@ pub struct RenderShape {
     shape: VmShape,
     /// Serialized bytecode for the shape
     bytecode: Bytecode,
-    choice_words: u32,
 }
 
 /// Error type when constructing a [`RenderShape`]
 #[derive(Debug, thiserror::Error)]
 pub enum RenderShapeError {
-    /// The normal GPU backend does not support register spills.
-    #[error(
-        "shape needs {0} spill slots; experimental GPU spills are disabled"
-    )]
+    /// The shape needs register spills, which the GPU interpreter leaves
+    /// unimplemented
+    #[error("shape needs {0} spill slots, which the GPU does not support")]
     SpillsUnsupported(u32),
     /// The shape doesn't fit in the GPU tape buffer
     #[error(
@@ -473,7 +424,7 @@ impl RenderShape {
     pub fn new(shape: &VmShape) -> Result<Self, RenderShapeError> {
         // Generate bytecode for the root tape
         let bytecode = Bytecode::new(shape.inner().data())?;
-        if bytecode.mem_count() > 0 && !cfg!(feature = "experimental-spills") {
+        if bytecode.mem_count() > 0 {
             return Err(RenderShapeError::SpillsUnsupported(
                 bytecode.mem_count(),
             ));
@@ -485,33 +436,7 @@ impl RenderShape {
         Ok(Self {
             shape: shape.clone(),
             bytecode,
-            choice_words: 32,
         })
-    }
-
-    /// Per-invocation spill slots needed by the GPU tape.
-    pub fn spill_count(&self) -> u32 {
-        self.bytecode.mem_count()
-    }
-
-    /// Sets the experimental per-invocation choice history (16 choices/word).
-    ///
-    /// Larger histories retain more spatial specialization decisions but use
-    /// more GPU stack space. Not a portable guarantee that the shape will fit.
-    #[cfg(feature = "experimental-spills")]
-    pub fn with_choice_stack_words(
-        mut self,
-        words: std::num::NonZeroU32,
-    ) -> Self {
-        self.choice_words = words.get();
-        self
-    }
-
-    fn storage(&self) -> TapeStorage {
-        TapeStorage {
-            choice_words: self.choice_words,
-            ..TapeStorage::for_bytecode(&self.bytecode)
-        }
     }
 
     /// Helper function to return XYZ variable indices
@@ -530,9 +455,8 @@ impl RenderShape {
         gpu: &Gpu,
         vars: &ShapeVars<f32>,
         buf: &mut buf::FlexBuffer<voxel::VarsBufferTag>,
-        scratch_floats: usize,
     ) -> Result<CopyVarsChanged, CopyVarsError> {
-        copy_vars(gpu, self.shape.inner().vars(), vars, buf, scratch_floats)
+        copy_vars(gpu, self.shape.inner().vars(), vars, buf)
     }
 }
 
@@ -541,7 +465,6 @@ pub(crate) fn copy_vars(
     vs: &VarMap,
     vars: &ShapeVars<f32>,
     buf: &mut buf::FlexBuffer<voxel::VarsBufferTag>,
-    scratch_floats: usize,
 ) -> Result<CopyVarsChanged, CopyVarsError> {
     let mut changed = CopyVarsChanged::BufferUnchanged;
     if vs.has_free_vars() {
@@ -560,7 +483,7 @@ pub(crate) fn copy_vars(
         // `true` indicating that things have changed and bind groups should
         // be invalidated.  TODO: only do this if we grow the buffer, since
         // binding an overly-large buffer is fine?
-        let r = buf.grow_to_fit(&gpu.device, vs.len() + scratch_floats)?;
+        let r = buf.grow_to_fit(&gpu.device, vs.len())?;
         if !matches!(r, std::cmp::Ordering::Equal) {
             changed = CopyVarsChanged::BufferChanged;
         }
@@ -585,12 +508,6 @@ pub(crate) fn copy_vars(
                         .copy_from_slice(value.as_bytes());
                 }
             }
-        }
-    } else if scratch_floats > 0 {
-        if buf.grow_to_fit(&gpu.device, vs.len() + scratch_floats)?
-            != std::cmp::Ordering::Equal
-        {
-            changed = CopyVarsChanged::BufferChanged;
         }
     }
     Ok(changed)
@@ -647,12 +564,35 @@ fn compile_shader(src: &str, desc: &str) {
 }
 
 #[cfg(test)]
-mod spill_tests;
-
-#[cfg(test)]
 mod test {
     use super::*;
     use std::collections::HashSet;
+
+    #[test]
+    fn spilling_shapes_are_rejected() {
+        use fidget_core::context::Tree;
+        let terms: Vec<_> = (0..512).map(|i| (Tree::x() + i).sin()).collect();
+        let sum = terms.iter().cloned().reduce(|a, b| a + b).unwrap();
+        let squares = terms
+            .iter()
+            .map(|t| t.clone().square())
+            .reduce(|a, b| a + b)
+            .unwrap();
+        let shape = VmShape::from(sum / squares);
+        assert!(matches!(
+            RenderShape::new(&shape),
+            Err(RenderShapeError::SpillsUnsupported(_))
+        ));
+        let color = color::ShapeColor::Rgb {
+            r: shape.clone(),
+            g: shape.clone(),
+            b: shape,
+        };
+        assert!(matches!(
+            color::ShapeColorBuffers::new(&[color]),
+            Err(color::ShapeColorError::SpillsUnsupported(_))
+        ));
+    }
 
     #[test]
     fn shader_has_all_ops() {
