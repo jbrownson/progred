@@ -29,7 +29,7 @@ fn native_annotation_handler_retains_the_projected_site() {
             }),
         ))
     })]);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::TextCache::default();
     let measured = project(
@@ -115,7 +115,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
     let lib = core_libraries();
     let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {

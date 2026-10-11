@@ -267,7 +267,7 @@ impl BenchContext {
             computations: crate::computations::Computations::default(),
             stack: crate::stack::load(),
             styles: crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
-            fonts: parley::FontContext::new(),
+            fonts: crate::fonts::bundled_font_context(),
             layouts: parley::LayoutContext::new(),
             cache: puri::text::TextCache::default(),
         }

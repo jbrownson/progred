@@ -1955,7 +1955,7 @@ mod frame_tests {
             ),
         );
         let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-        let mut fonts = FontContext::new();
+        let mut fonts = crate::fonts::bundled_font_context();
         let mut layouts = LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
         let mut tcx = TextCtx {
@@ -2157,7 +2157,7 @@ mod frame_tests {
             (Size::new(700.0, 400.0), 2.0),
         ] {
             let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
-            let mut fonts = FontContext::new();
+            let mut fonts = crate::fonts::bundled_font_context();
             let mut layouts = LayoutContext::new();
             let mut cache = puri::text::TextCache::default();
             let mut tcx = TextCtx {
@@ -2269,7 +2269,7 @@ mod frame_tests {
         let lower = model.workspace.left.panes[1].view.root.clone();
         let stack = crate::stack::load();
         let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-        let mut fonts = FontContext::new();
+        let mut fonts = crate::fonts::bundled_font_context();
         let mut layouts = LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
         let mut tcx = TextCtx {

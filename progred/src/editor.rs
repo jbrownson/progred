@@ -797,7 +797,7 @@ pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack<Edi
         modifiers::native(),
         false,
         stack,
-        FontContext::new(),
+        crate::fonts::bundled_font_context(),
         doc,
         None,
         Default::default(),

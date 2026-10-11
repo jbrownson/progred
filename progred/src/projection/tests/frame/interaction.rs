@@ -445,7 +445,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     .expect("the sample parses");
     let stack = crate::stack::load();
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -523,7 +523,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     // double click selects its word, and a later single click can
     // collapse that selection to a new caret. This is distinct from
     // the first click above, which mounts the editor.
-    let mut frame_fonts = parley::FontContext::new();
+    let mut frame_fonts = crate::fonts::bundled_font_context();
     let mut frame_layouts = parley::LayoutContext::new();
     let mut frame_cache = puri::text::TextCache::default();
     let mut frame_tcx = TextCtx {

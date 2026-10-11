@@ -63,7 +63,7 @@ use crate::display::{Partial, widget};
 use gid::{Step, Value};
 use measured::Extent;
 use measured::choices::{ChoiceBuild, ChoiceLayout};
-use puri::text::{FontContext, LayoutContext, TextCache, TextCtx};
+use puri::text::{LayoutContext, TextCache, TextCtx};
 use std::cell::RefCell;
 
 pub enum ProjectionCall<W, H> {
@@ -215,7 +215,7 @@ pub fn with_context<W: 'static, H: 'static, R>(
     project: &dyn widget::project::Project<W, H>,
     run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
 ) -> R {
-    let mut fonts = FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = LayoutContext::new();
     let mut cache = TextCache::default();
     let document = gid::Document {

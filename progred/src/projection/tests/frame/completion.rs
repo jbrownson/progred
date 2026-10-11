@@ -311,7 +311,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
             *attempts += 1;
         }),
     }];
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -510,7 +510,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         },
     ];
     let place_card = |pointer| {
-        let mut fonts = parley::FontContext::new();
+        let mut fonts = crate::fonts::bundled_font_context();
         let mut layouts = parley::LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
         let mut tcx = TextCtx {
@@ -580,7 +580,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         })
         .collect();
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -939,7 +939,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         }),
     }];
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -1080,7 +1080,7 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
     .expect("the sample parses");
     let stack = crate::stack::load();
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {

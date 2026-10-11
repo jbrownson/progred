@@ -1568,7 +1568,7 @@ fn projected_completion_entries_in(
 ) -> Vec<Entry<crate::Editor>> {
     let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
     let annotations = Annotations::default();
-    let mut fonts = parley::FontContext::new();
+    let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
     let mut tcx = TextCtx {

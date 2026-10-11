@@ -371,7 +371,6 @@ pub(super) fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text
         &editor.stack.libraries,
     )
     .unwrap();
-    editor.font_cx = crate::fonts::bundled_font_context();
     editor.drawn_menu = false;
     (editor, fields)
 }
@@ -754,7 +753,6 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
         &editor.stack.libraries,
     )
     .unwrap();
-    editor.font_cx = crate::fonts::bundled_font_context();
     editor.drawn_menu = false;
     (editor, fields)
 }
@@ -1430,7 +1428,6 @@ fn website_libraries_image() {
             .chain([(LIBRARIES, declarations)]),
     ));
     let mut editor = crate::test_editor(doc);
-    editor.font_cx = crate::fonts::bundled_font_context();
     editor.palette = crate::styles::Theme::Light.palette();
     editor.drawn_menu = false;
     render_editor(
@@ -1475,7 +1472,6 @@ fn website_preview_image() {
         )
         .unwrap(),
     );
-    editor.font_cx = crate::fonts::bundled_font_context();
     editor.palette = crate::styles::Theme::Light.palette();
     editor.drawn_menu = false;
     render_editor(
