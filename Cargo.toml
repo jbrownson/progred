@@ -48,41 +48,15 @@ wasm-bindgen = "0.2"
 web-sys = "0.3"
 
 # Tests and debug builds spend most of their time in dependency code such as
-# Fidget, Vello, and text shaping, and in evaluating Grap. Optimizing
-# dependencies halves `make test`, and optimizing Grap, GID, and `incremental`
-# speeds the CAM tests 3-4x for a few seconds more after editing one of them.
-# progred stays unoptimized so it rebuilds quickly. Line tables keep these
-# frames in backtraces. To step through one, override it, as in
-# `--config 'profile.dev.package.grap.opt-level=0'`. Workspace members such as
-# the vendored Fidget packages need their own entries; `"*"` covers the rest.
-[profile.dev.package."*"]
+# Fidget, Vello, and text shaping, in Grap, and in Puri's drawing. Optimizing
+# everything but progred cut `make test` from 239 s to 31 s on a 4-core VM,
+# while progred, the crate most often edited, stays unoptimized so it rebuilds
+# quickly. Line tables keep the optimized frames in backtraces. To step through
+# one, override it, as in `--config 'profile.dev.package.grap.opt-level=0'`.
+[profile.dev]
 opt-level = 2
 debug = "line-tables-only"
 
-[profile.dev.package.fidget-core]
-opt-level = 2
-debug = "line-tables-only"
-
-[profile.dev.package.fidget-jit]
-opt-level = 2
-debug = "line-tables-only"
-
-[profile.dev.package.fidget-raster]
-opt-level = 2
-debug = "line-tables-only"
-
-[profile.dev.package.fidget-wgpu]
-opt-level = 2
-debug = "line-tables-only"
-
-[profile.dev.package.gid]
-opt-level = 2
-debug = "line-tables-only"
-
-[profile.dev.package.grap]
-opt-level = 2
-debug = "line-tables-only"
-
-[profile.dev.package.incremental]
-opt-level = 2
-debug = "line-tables-only"
+[profile.dev.package.progred]
+opt-level = 0
+debug = true
