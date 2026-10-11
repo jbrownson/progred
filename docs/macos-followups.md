@@ -26,8 +26,9 @@ empty.
 
 ## The Fidget 0.5.1, Vello 0.11, and wgpu 30 upgrade
 
-Linux checked the native build, the threaded browser build's types, and
-`make test`; nothing ran on a GPU or on Apple Silicon.
+Linux checked the native build, the threaded browser build's types, `make test`,
+and the GPU tests on Mesa's lavapipe software Vulkan driver; nothing ran on
+Metal or Apple Silicon.
 
 - **Rust 1.95 or newer.** Fidget 0.5.1 requires it; run `rustup update stable`,
   then `make fetch` for the new crates.
@@ -46,8 +47,9 @@ Linux checked the native build, the threaded browser build's types, and
 ## GPU tests
 
 The readback helper moved from `progred/tests/compositor_experiment/gpu.rs` into
-`puri-vello`'s `capture` module, behind a `capture` feature, without a GPU run.
-Run the GPU tests as [testing](testing.md#ignored-tests) describes.
+`puri-vello`'s `capture` module, behind a `capture` feature. The GPU tests pass
+on lavapipe; run them on Metal as [testing](testing.md#ignored-tests)
+describes.
 
 ## Simplifications to make where they can be tested
 

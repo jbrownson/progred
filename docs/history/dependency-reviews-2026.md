@@ -93,4 +93,6 @@ skrifa 0.44. Vello 0.11's README calls the `vello` crate an experimental
 research renderer and names `vello_gpu` as the production one. Resolution used
 `tools/linux-cargo update --workspace` with the seven-day minimum publish age.
 The native build, the threaded browser build's types, and the tests were
-checked on Linux only.
+checked on Linux only. The ignored GPU tests, including the compositor pixel
+checks and Fidget's constant-field and color test, passed on Mesa's lavapipe
+software Vulkan driver.
