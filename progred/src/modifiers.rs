@@ -32,6 +32,15 @@ pub(crate) fn primary_edit(command: CommandModifier) -> fn(&PointerButtonEvent) 
     }
 }
 
+/// The keys of [`native`]'s modifier, for tests that press it.
+#[cfg(test)]
+pub(crate) fn command() -> Modifiers {
+    match native() {
+        CommandModifier::Meta => Modifiers::META,
+        CommandModifier::Control => Modifiers::CONTROL,
+    }
+}
+
 pub(crate) fn plain(modifiers: &Modifiers) -> bool {
     !(modifiers.ctrl() || modifiers.meta() || modifiers.alt() || modifiers.shift())
 }
