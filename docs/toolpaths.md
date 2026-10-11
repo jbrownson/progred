@@ -450,30 +450,16 @@ In the voxel preview, many sampled segments produce much larger Fidget expressio
 than the model alone. This is a first static visualization, not a performance claim for large
 machine programs. The opt-in toolpath orbit canary in
 [performance checks](performance.md) exercises the real document and preview.
-The initial single-field version's headless sandbox check (2026-09-13, CPU
-fallback, 800 × 1200 raster) took a median 1.60 seconds across three measured
-frames after five warm-up frames.
-That is not a measurement of interactive native GPU performance.
-
-The initial single-field version failed on the native GPU backend: a 2026-09-13
-trace at 599 × 1280 × 640 measured 1.4–1.9 seconds per render and zero path
-pixels before depth merging. Its VM tape contains 6,736 register-spill
-load/store operations. The pinned Fidget shader's `OP_MEM` handler is explicitly
-unimplemented and returns without a result, although `RenderShape::new` accepts
-the bytecode. The CPU backend supports these operations. CPU screenshots and
-successful bytecode construction therefore do not establish native rendering
-support. Keeping each continuous path separate avoids spilling in this example;
-the regression test checks every path for load/store instructions. A sufficiently
-large individual path can still encounter this upstream limitation. There is no
-spill emulation or automatic CPU fallback for it. Before shipping, follow up
-upstream on implementing or rejecting these instructions; no issue has been filed
-yet. The user confirmed that the split version renders the paths and accepts
-orbit drags, but remains choppy. A subsequent native trace of 50 renders at
-599 × 1280 × 640 averaged 234 ms (196–279 ms), with 215 ms on average in
-wait/readback. This is rendering time, not a complete input-to-display latency
-measurement. The [cube meshing experiment](history/fidget-meshing-2026-09-13.md) motivated
-the current mesh viewport, which bypasses the GPU VM entirely. It now retains
-geometry through the general dependency graph.
+Fidget's pinned GPU interpreter leaves register-spill loads and stores
+(`OP_MEM`) unimplemented: `RenderShape::new` accepts such bytecode, but it renders
+nothing. Keeping each continuous path separate avoids spilling in this example,
+and a regression test checks every path for load/store instructions. A large
+enough individual path can still hit this; there is no spill emulation or
+automatic CPU fallback for it. Before shipping, follow up upstream on
+implementing or rejecting these instructions; no issue has been filed yet. The
+mesh viewport bypasses the GPU VM entirely and retains geometry through the
+general dependency graph. The 2026-09-13 measurements behind this are in the
+[performance log](history/performance-log-2026-09.md#toolpath-gpu-findings--2026-09-13-and-14).
 
 ## Playback
 
@@ -554,23 +540,12 @@ Lighting corrects sample-space gradients for unequal axis spacing, so
 depth refinement does not change the light direction or relative axis weighting.
 Default headless contexts use inline execution; the browser uses its shared-memory worker.
 
-**Experimental limitation (2026-09-14):** the CPU implicit captures complete and
-show correct playback. A native Metal run of the stock-removal example waited
-over a minute in GPU readback and was terminated. Small GPU color/constant-field
-tests pass. The bytecode diagnostic after accepting the updated Xcode license
-confirmed unsupported memory instructions in the stock expression: at progress
-0 it has 15 instructions and no memory operations; at 0.35 it has 17,473
-instructions including 794 loads/stores; at 1.0 it has 53,228 instructions
-including 12,914 loads/stores. The pinned GPU interpreter and tape simplifier
-both leave `OP_MEM` unimplemented. Async scheduling cannot make that bytecode
-valid on this backend. A further native submission of this known-unsupported
-program was deliberately avoided. Command+3's implicit refinement uses the explicit
-software path; GPU implicit CAM was blocked by that missing implementation.
-No GPU timeout was added. The later [GPU spill experiment](history/fidget-gpu-experiment-2026-09-16.md)
-implements spill instructions behind an opt-in build feature, but is not used by
-the app. Bounded external scratch now lets the full stock match CPU geometry
-without exceeding Metal's private stack, but the measured GPU path remains much
-slower than the CPU. The GPU work is paused; CAM remains on the CPU renderer.
+Implicit CAM rendering uses the software renderer explicitly. Its stock
+expression spills heavily as playback advances, which the pinned GPU interpreter
+cannot run, so GPU implicit CAM is blocked on that missing implementation. A GPU
+spill experiment, since retired, matched CPU geometry for the full stock but was
+much slower, so CAM stays on the CPU renderer. The details are in the
+[performance log](history/performance-log-2026-09.md#toolpath-gpu-findings--2026-09-13-and-14).
 Ordinary Fidget voxel previews retain their existing backend
 selection; unsupported spilling tapes are now rejected before GPU submission,
 allowing the existing CPU fallback. The ignored
