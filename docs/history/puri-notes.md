@@ -416,3 +416,27 @@ for a moment and rolled back — typed channels, composed accumulation),
 and `Canvas` clipping became a scoped closure (`clip(shape, t, |c|
 ...)`) so unbalanced push/pop is unrepresentable — the recorder gains
 nested `Clip { children }` structure in the bargain.
+
+---
+
+## Lineage of layout continuations
+
+Moved from `docs/layout-continuations.md` when it merged into
+[the current Puri notes](../puri.md) on 2026-10-11.
+
+The reference is tag `archive/pre-root-promotion`:
+
+- `prototype-haskell/halay/src/Halay.hs`: `Measured` pairs size with
+  `Placement -> placeM placed`; leaves and decorators contribute continuations.
+- `prototype-haskell/puri/src/Puri/Widget.hs`: a widget takes settled placement
+  and returns rendering plus handlers.
+- `prototype-haskell/progred/src/Progred/Projection.hs`: `descend` resolves a
+  location and calls the projection, rather than emitting a layout opcode.
+
+The sibling `puri-roc` reference reinforces this: `package/Frame.roc` combines
+placement output with a handler, `package/Handler.roc` composes one function over
+input events, and `package/ScrollView.roc` wraps a child placement continuation.
+Its Roclay bridge inserts widgets as leaves and wraps them with `around`.
+
+We retained Progred's baseline box algebra and ordered alternatives, not Clay,
+and preserved its separate settled-geometry hover stage.

@@ -14,8 +14,11 @@ window; the owner does the visual testing.
 - **Frames.** [`projection/tests`](../progred/src/projection/tests/mod.rs)
   builds whole headless frames from an editor state and inspects their draw
   lists, hover, and handlers: projection fixtures, interaction regressions,
-  navigation, and the phase-ordering tests that check placement doesn't run
-  hover and hover doesn't paint or dispatch.
+  navigation, and phase-ordering tests: placement doesn't run hover, hover
+  doesn't paint or dispatch, paint sees the final target, and discarding paint
+  leaves a working handler. Projection-shape tests record layout calls and
+  projection recursion through test-only recorders that production doesn't
+  use.
   [`display/test_support.rs`](../progred/src/display/test_support.rs) records
   projection calls and supplies small helpers such as `painted`, `Landmarks`,
   and `mouse`.
@@ -52,7 +55,9 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
 `--release` and `--nocapture`.
 
 - **Performance canaries and profiles** measure headless frame construction and
-  CAM work; see [performance checks](performance.md).
+  CAM work; see [performance checks](performance.md). Puri's
+  `handler_dispatch_profile` checks the cost of dispatching through unrelated
+  handlers.
 - **GPU tests** need a real adapter. Seatbelt provides none, so on macOS build
   the test binaries in the sandbox and run the executables Cargo prints
   directly:

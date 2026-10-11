@@ -16,8 +16,8 @@ Start with:
   composition, and host boundaries.
 - [Dependency-tracked computations](incremental.md): memo graphs, Grap observations,
   cancellable background jobs, and the first CAM integration.
-- [Puri and the editor frame](puri.md): ownership, layout, events, hover, and
-  drawing.
+- [Puri and the editor frame](puri.md): ownership, layout, widgets, events,
+  hover, the frame stages, and drawing.
 - [Build security](build-security.md): the build sandbox and dependency policy.
 - [Testing](testing.md): test layers, the headless driver, SVG captures, and
   opt-in GPU and performance tests.
@@ -26,8 +26,6 @@ Start with:
 
 Working on the editor:
 
-- [Layout continuations](layout-continuations.md): the box/widget boundary and
-  the frame stages.
 - [Navigation](navigation.md): logical-line navigation and its timing canary.
 - [Controls](controls.md): reusable sliders and Grap control composition used by
   toolpath playback.
