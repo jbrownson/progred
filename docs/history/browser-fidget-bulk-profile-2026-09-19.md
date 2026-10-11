@@ -9,7 +9,7 @@ fell from **2.33 s to 1.63 s (30%)**. Final color/depth fingerprints matched.
 After the investigation, the measured change and its tests were applied to the
 vendored core. The browser editor uses it, as does native meshing; the native
 Apple Silicon implicit JIT path is unchanged. A
-[standalone patch](../experiments/fidget-core-bulk-slices.patch) preserves the exact
+[standalone patch](../../vendor/patches/fidget-core-bulk-slices.patch) preserves the exact
 change for upstream review. Nothing has been submitted upstream.
 
 ## Profile the workers, not the waiting coordinator

@@ -1,4 +1,4 @@
-//! Opt-in experiment, not a production sweep kernel. See docs/tool-sweep-experiment.md.
+//! Opt-in experiment, not a production sweep kernel. See docs/history/tool-sweep-experiment-2026-09-15.md.
 use super::*;
 use std::time::Instant;
 

@@ -183,7 +183,7 @@ not a new Progred cache. GPU spilling is separate and unimplemented.
 ## Follow-up: local AArch64 JIT fix
 
 The isolated checkout is `target/sandbox/fidget-jit-investigation`. The
-[upstream-source patch](../experiments/fidget-jit-aarch64.patch) is retained outside
+[upstream-source patch](../../vendor/patches/fidget-jit-aarch64.patch) is retained outside
 that ignored directory so cleaning build output cannot lose the work. It is
 against the same pinned revision. It was initially isolated; the integration
 below now uses it from the checked-in vendor directory.
@@ -286,7 +286,7 @@ solve prompt cancellation by itself.
 
 Raster cancellation used to be checked between whole root tiles. A root tile can
 contain many smaller interval, float, and gradient evaluations. The
-[raster patch](../experiments/fidget-raster-cancellation.patch) passes the existing
+[raster patch](../../vendor/patches/fidget-raster-cancellation.patch) passes the existing
 cancellation observation into that recursion and returns `None` all the way out
 when cancelled. A partially filled tile is not a completed image. The public API,
 sampling grid, and geometry math are unchanged; 2D rendering gets the same fix.

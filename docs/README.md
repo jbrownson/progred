@@ -47,8 +47,6 @@ CAM and Fidget:
   model-and-path preview.
 - [Tool profiles](tool-profiles.md): revolved cutter sections and the square
   tool's chamfer strategies.
-- [Tool-sweep experiment](tool-sweep-experiment.md): the test-only analytic
-  bull-mill candidate and why it hasn't replaced the working approximation.
 
 Also:
 

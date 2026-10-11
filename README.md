@@ -213,7 +213,7 @@ format is future work. See [GID](docs/gid.md) and [the text bridge](docs/gid-tex
   [`progred/src/display/`](progred/src/display)
 - [`ui/`](ui) — Puri, reusable widgets, measurement, and drawing backends
 - [`examples/`](examples) — bundled documents
-- [`docs/`](docs) — current references, experiments, and deferred work
+- [`docs/`](docs) — current references, deferred work, and history
 
 ## Development and further reading
 

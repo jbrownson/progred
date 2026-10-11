@@ -63,7 +63,7 @@ so the diagnostic ends and discards that page after a failure.
 After approval, `Cancellation` was simplified to `Arc<AtomicBool>` and the
 callback registry removed. Both native and browser meshing/rasterization now
 construct Fidget tokens from that same flag, through the small independent
-[Fidget API patch](../experiments/fidget-core-cancellation.patch). The libraries
+[Fidget API patch](../../vendor/patches/fidget-core-cancellation.patch). The libraries
 remain independent: the shared type belongs to `std`. Tokens created after
 cancellation observe it immediately. A new request gets a new flag, never a
 reset of an old flag.

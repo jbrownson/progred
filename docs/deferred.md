@@ -175,7 +175,7 @@ as well as memo hits before changing that boundary.
 ### Fidget refinement and sharp edges
 
 When we next examine Fidget internals for Progred's needs, revisit the
-[analytic tool-sweep experiment](tool-sweep-experiment.md). Its point signs pass
+[analytic tool-sweep experiment](history/tool-sweep-experiment-2026-09-15.md). Its point signs pass
 the sampled checks, but meshing yields invalid vertices and is slower than the
 working approximation. Investigate stable gradients and interval behavior then,
 alongside incremental/progressive computation; do not turn the current tool

@@ -68,6 +68,8 @@ at the time; code some of them describe has since been retired.
   [browser README](../../web/README.md#diagnostics).
 - [Native CAM source scrolling](native-scroll-profile-2026-09-26.md): source-frame
   cost around the navigation rewrite.
+- [Analytic tool sweep](tool-sweep-experiment-2026-09-15.md): the test-only
+  bull-mill candidate and why it hasn't replaced the working approximation.
 - [Dependency reviews](dependency-reviews-2026.md): the Fidget Git pin, vendoring
   and JIT, publication-age exceptions, and the constant-field upstream check,
   moved from build security and the release checklist on 2026-10-11.

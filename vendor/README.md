@@ -10,47 +10,47 @@ metadata and dependency versions, pinning core and workspace-hack to that revisi
 
 Local source changes, each including regression tests:
 
-- [Bulk float slice patch](../docs/experiments/fidget-core-bulk-slices.patch):
+- [Bulk float slice patch](patches/fidget-core-bulk-slices.patch):
   handle input/output register aliases once per common arithmetic instruction,
   then operate on safely borrowed slices so LLVM can vectorize the loops.
   No unsafe code, extra allocation, sampling change, or altered math semantics.
   Covers aliases, tail lengths, signed zeros, infinities, and NaNs. This is
   independent of the other patches; see the
   [browser measurements](../docs/history/browser-fidget-bulk-profile-2026-09-19.md).
-- [Shared cancellation flag patch](../docs/experiments/fidget-core-cancellation.patch):
+- [Shared cancellation flag patch](patches/fidget-core-cancellation.patch):
   add `CancelToken::from_shared_flag(Arc<AtomicBool>)` so callers can share one
   cancellation signal across libraries without callback bridges. Existing token
   behavior is unchanged; the constructor preserves an already-cancelled flag.
   Progred uses this for both meshing and implicit rendering. This patch is
   independent of the others below.
-- [Core SSA access patch](../docs/experiments/fidget-core-ssa.patch): expose the
+- [Core SSA access patch](patches/fidget-core-ssa.patch): expose the
   existing SSA tape, lower a caller-supplied valid tape with its variable map,
   and wrap a function as a shape. These additive APIs supported the test-only
   persistent-expression experiment, retired on 2026-10-10; they do not change
   existing evaluation or rendering. This patch is independent of the others below.
-- [AArch64 JIT patch](../docs/experiments/fidget-jit-aarch64.patch): full-width
+- [AArch64 JIT patch](patches/fidget-jit-aarch64.patch): full-width
   spill addresses and stack adjustment, preservation of callee-saved registers,
   and long bulk-loop exits. Small tapes retain the short addressing form.
-- [Raster cancellation patch](../docs/experiments/fidget-raster-cancellation.patch):
+- [Raster cancellation patch](patches/fidget-raster-cancellation.patch):
   pass the existing cancellation observation into subtile work in 2D and 3D;
   unwind incomplete tiles rather than publishing partial output. No public API,
   sampling, or geometry change.
-- [Raster progress patch](../docs/experiments/fidget-raster-progress.patch):
+- [Raster progress patch](patches/fidget-raster-progress.patch):
   an optional serialized completed/total root-tile callback for voxel renders,
   excluding unfinished cancelled tiles. This applies after the cancellation
   patch; it does not change sampling or geometry.
-- [Scene tiling patch](../docs/experiments/fidget-raster-scene.patch): render all
+- [Scene tiling patch](patches/fidget-raster-scene.patch): render all
   objects within each image tile before counting its pixels as complete. It
   reuses the ordinary voxel worker and shared tile scheduler, keeps expressions
   separate, and preserves depth, normals, and first-object depth ties. Progress
   has a fixed image-pixel total, without timing estimates or object weights.
   This applies after the progress patch.
-- [Scene refinement patch](../docs/experiments/fidget-raster-refinement.patch):
+- [Scene refinement patch](patches/fidget-raster-refinement.patch):
   a prepared scene retains root interval tapes between passes, workers reuse
   their per-object tile buffer, and an optional borrowed-tile callback exposes
   finished regions before whole-image assembly. Callbacks may run concurrently;
   consumers own publication/assembly policy. Applies after the scene tiling patch.
-- [GPU spill experiment](../docs/experiments/fidget-wgpu-spills.patch): the normal
+- [GPU spill experiment](patches/fidget-wgpu-spills.patch): the normal
   backend rejects unsupported spilling geometry/color tapes. The non-default
   `experimental-spills` feature enables spill-aware simplification and bounded
   external scratch for voxel evaluation (pixel/color still use private arrays).
