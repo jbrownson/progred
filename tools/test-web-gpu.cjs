@@ -1,27 +1,9 @@
 // Pixel checks of the actual browser presentation backend. No editor startup.
 const assert = require("node:assert/strict");
-const { spawn } = require("node:child_process");
-const { once } = require("node:events");
-// tools/package.json pins playwright-core; it drives the installed Chrome.
-const { chromium } = require("playwright-core");
+const { withPreview } = require("./web-diagnostics.cjs");
 
 (async () => {
-  const server = spawn("python3", ["-B", "website/preview.py", "--no-open", "--port", "0"], {
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  let browser;
-  try {
-    const url = await new Promise((resolve, reject) => {
-      let output = "";
-      server.stdout.on("data", chunk => {
-        output += chunk;
-        const match = output.match(/^(http:\/\/127\.0\.0\.1:\d+\/)$/m);
-        if (match) resolve(match[1]);
-      });
-      server.once("error", reject);
-      server.once("exit", code => reject(new Error(`Server exited: ${code}`)));
-    });
-    browser = await chromium.launch({ channel: "chrome", headless: true, chromiumSandbox: true });
+  await withPreview(async (url, browser) => {
     for (const fallback of [false, true]) {
       const page = await browser.newPage();
       const errors = [];
@@ -54,10 +36,5 @@ const { chromium } = require("playwright-core");
       console.log(`PASS: ${setup.backend} ordering, two previews, rectangular/curved clips, partial depth, image upload, resize, geometry replacement`);
       await page.close();
     }
-  } finally {
-    if (browser) await browser.close();
-    if (server.exitCode === null && server.signalCode === null) {
-      const stopped = once(server, "exit"); server.kill("SIGTERM"); await stopped;
-    }
-  }
+  });
 })().catch(error => { console.error(error); process.exitCode = 1; });

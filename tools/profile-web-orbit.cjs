@@ -1,9 +1,6 @@
 // Isolated full-frame replay: no Winit event loop or interactive editor launch.
-const { spawn } = require("node:child_process");
-const { once } = require("node:events");
 const fs = require("node:fs");
-// tools/package.json pins playwright-core; it drives the installed Chrome.
-const { chromium } = require("playwright-core");
+const { withPreview } = require("./web-diagnostics.cjs");
 
 // Playwright exposes page CDP sessions, but not worker sessions. Route the
 // worker's diagnostic commands through Chrome's Target protocol instead.
@@ -40,20 +37,7 @@ async function workerProfiler(browser) {
 (async () => {
   const query = process.argv[2] ?? "position=0.5";
   const label = process.argv[3] ?? "baseline";
-  const server = spawn("python3", ["-B", "website/preview.py", "--no-open", "--port", "0"], { stdio: ["ignore", "pipe", "ignore"] });
-  let browser;
-  try {
-    const url = await new Promise((resolve, reject) => {
-      let output = "";
-      server.stdout.on("data", chunk => {
-        output += chunk;
-        const match = output.match(/^(http:\/\/127\.0\.0\.1:\d+\/)$/m);
-        if (match) resolve(match[1]);
-      });
-      server.once("error", reject);
-      server.once("exit", code => reject(new Error(`Server exited: ${code}`)));
-    });
-    browser = await chromium.launch({ channel: "chrome", headless: true, chromiumSandbox: true });
+  await withPreview(async (url, browser) => {
     const page = await browser.newPage({ viewport: { width: 1240, height: 960 } });
     await page.addInitScript(() => {
       window.meshWrites = 0;
@@ -118,10 +102,5 @@ async function workerProfiler(browser) {
       console.log(`Saved worker CPU profile: target/orbit-${label}-worker.cpuprofile`);
     }
     await page.evaluate(() => window.resumeJobs());
-  } finally {
-    if (browser) await browser.close();
-    if (server.exitCode === null && server.signalCode === null) {
-      const stopped = once(server, "exit"); server.kill("SIGTERM"); await stopped;
-    }
-  }
+  }, { serverErrors: "ignore" });
 })().catch(error => { console.error(error); process.exitCode = 1; });

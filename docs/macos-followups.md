@@ -12,8 +12,10 @@ empty.
   before looking for rustup, takes the pinned nightly from
   `tools/web-build-settings.sh`, and fetches missing crates before a build as
   `make fetch` does. `make check` now covers every target and the
-  `cam-profile` and `layout-profile` features. Run `make check`, `make test`,
-  `make build-web` and `./tools/sandbox-cargo update --dry-run`.
+  `cam-profile` and `layout-profile` features, and the browser diagnostics
+  share their preview-server setup in `tools/web-diagnostics.cjs`. Run
+  `make check`, `make test`, `make build-web`, `make test-web-gpu` and
+  `./tools/sandbox-cargo update --dry-run`.
 
 ## Later
 
