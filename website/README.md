@@ -5,7 +5,7 @@ there is no separate demo implementation, framework, or hosting dependency.
 
 ## Open it
 
-On macOS, double-click **Preview.command** in Finder, or run `make run-website`
+On macOS, double-click **Preview.command** in Finder, or run `make run-web`
 from the repository root. It starts a loopback-only web server and leaves the
 URL as the last line in the terminal. Open that link in whichever browser you
 want. Leave the terminal running; Control+C stops the server. Website and lesson
@@ -14,7 +14,7 @@ visible with the URL repeated below them, so ordinary browsing doesn't bury it.
 
 The local address is always <http://127.0.0.1:8081/>. Closing a browser tab does
 not stop the server: reopen that link in Safari, Chrome, or another browser.
-It doesn't launch a browser unless requested with `make run-website ARGS=--open`.
+It doesn't launch a browser unless requested with `make run-web ARGS=--open`.
 The server must remain running; after stopping it or restarting the computer,
 start it again. There is no background service or automatic login startup.
 
@@ -294,8 +294,8 @@ nightly and the official wasm-bindgen CLI release matching `Cargo.lock`, builds
 the browser binary, runs the website tests, and packages the assets. The CLI
 download is checked against the release's SHA-256 file. This path deliberately
 uses ordinary Cargo, not Seatbelt; don't use it as a local sandbox bypass.
-`tools/web-build-settings.sh` supplies the same Rust version, target, and threaded
-WASM/SIMD flags to both build paths. No native editor code changes are required.
+`tools/web-build-settings.sh` supplies the same Rust version, target, threaded
+WASM/SIMD flags, and Cargo and wasm-bindgen arguments to both build paths. No native editor code changes are required.
 
 One-time Cloudflare setup, after the deployment changes are committed and the
 chosen commit is pushed to a `website-live` branch on GitHub:

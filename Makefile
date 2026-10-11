@@ -14,14 +14,13 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web run-website build-web build-website images fetch check build test sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test sandbox-app
 
 help:
 	@echo "Development:"
 	@echo "  make run          Run the native app once"
 	@echo "  make dev          Rebuild after app exit or Ctrl+C"
-	@echo "  make run-web      Serve the editor in a browser on port 8080"
-	@echo "  make run-website  Serve the website with its lessons on port 8081"
+	@echo "  make run-web      Serve the website and its editor on port 8081"
 	@echo "  make build-web    Build the browser editor (the servers build it first)"
 	@echo "  make build-website  Package the publishable website into target/website"
 	@echo "  make images       Regenerate the README and website screenshots from the editor"
@@ -54,8 +53,9 @@ dev:
 build-website: build-web
 	python3 -B website/package.py
 
-run-website:
-	@./website/Preview.command $(ARGS)
+# The launcher builds editor changes before serving.
+run-web:
+	@python3 website/preview.py $(ARGS)
 
 # Headless captures of the real editor, rasterized by librsvg's rsvg-convert.
 # The CAM capture waits for its progressive render, so it needs --release.
@@ -68,10 +68,6 @@ images:
 	rsvg-convert -z 2 $(NATIVE_TARGET_DIR)/website_preview.svg -o website/public/images/forest-light.png
 	rsvg-convert -z 2 $(NATIVE_TARGET_DIR)/website_libraries.svg -o website/public/images/libraries-light.png
 
-# The launcher builds editor changes before serving.
-run-web:
-	@echo "Open Progred: http://127.0.0.1:8080/editor/"
-	@python3 website/preview.py --no-open --port 8080
 
 fetch:
 	$(NATIVE_CARGO) fetch
@@ -91,8 +87,9 @@ sandbox-app:
 # Cargo skips unchanged builds; wasm-bindgen reruns only for a newer binary,
 # using the release matching Cargo.lock.
 build-web:
-	./tools/sandbox-cargo web-threaded build --release --bin progred -p progred
-	@wasm=target/sandbox/build-web/wasm32-unknown-unknown/release/progred.wasm; \
+	@set -e; . ./tools/web-build-settings.sh; \
+	./tools/sandbox-cargo web-threaded build $$web_cargo_args; \
+	wasm=target/sandbox/build-web/$$web_target/release/progred.wasm; \
 	if [ ! -f web/pkg/progred_bg.wasm ] || [ ! -f web/pkg/progred.js ] || [ "$$wasm" -nt web/pkg/progred_bg.wasm ]; then \
-		./tools/wasm-bindgen --target web --no-typescript --out-dir web/pkg --out-name progred "$$wasm"; \
+		./tools/wasm-bindgen $$web_bindgen_args "$$wasm"; \
 	fi

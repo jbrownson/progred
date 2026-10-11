@@ -166,7 +166,7 @@ described in [`web/README.md`](web/README.md). Then run:
 make run-web
 ```
 
-It builds any editor changes, then serves `http://127.0.0.1:8080/editor/` on
+It builds any editor changes, then serves `http://127.0.0.1:8081/editor/` on
 this machine only; the server does not listen on other network interfaces.
 
 On Linux, `make run` uses the native launcher and performs a regular locked

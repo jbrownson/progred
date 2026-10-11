@@ -6,7 +6,7 @@ From the repository root:
 make run-web
 ```
 
-Open `http://127.0.0.1:8080/editor/` on this machine.
+Open `http://127.0.0.1:8081/editor/` on this machine.
 The built-in documents are under the **Examples** menu.
 
 For a small embedded editor, supply a text-bridge document URL and optionally
