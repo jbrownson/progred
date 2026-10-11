@@ -173,13 +173,9 @@ package itself on each deploy.
 - **Patched Fidget.** Four Fidget packages are vendored from the published
   0.5.1 with local patches listed in [vendor/README.md](../vendor/README.md);
   Cargo uses them in place of the crates.io packages.
-- **JIT.** Fidget's JIT is enabled only for Apple Silicon macOS implicit
-  rasterization; meshing and other platforms use VM evaluation. Its build
-  script only checks CPU features. The macOS bundle declares Apple's
-  [allow-JIT entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.cs.allow-jit)
-  for Fidget's `MAP_JIT` mappings and per-thread write/execute protection. It
-  doesn't allow arbitrary unsigned executable memory or disable the hardened
-  runtime or App Sandbox.
+- **No JIT.** Implicit rasterization uses Fidget's VM on every platform, so
+  the macOS bundle declares no allow-JIT entitlement and the app maps no
+  executable memory.
 
 A review or a clean advisory scan doesn't establish that the dependency graph
 is safe; sandboxed builds remain required. Earlier reviews are in

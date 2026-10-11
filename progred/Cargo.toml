@@ -7,9 +7,6 @@ license.workspace = true
 [features]
 cam-profile = []
 layout-profile = []
-# Render implicit views in software with Fidget's VM where the JIT would
-# otherwise be used, to compare the two.
-software-vm = []
 
 [[example]]
 name = "cam_profile"
@@ -44,10 +41,6 @@ vello.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 fidget-engine = { workspace = true, features = ["wgpu"] }
 pollster.workspace = true
-
-# The patched AArch64 JIT is tested on Apple Silicon macOS. Other targets retain VM.
-[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
-fidget-engine = { workspace = true, features = ["jit"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 clipboard-rs = "0.3.3"

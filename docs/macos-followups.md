@@ -7,26 +7,10 @@ empty.
 
 ## Next
 
-- **Perf on AC power, with the JIT and without.** The first Mac baseline ran on
-  battery. Its `stock_render`, 5.6 s, was the only canary slower than the 4-core
-  Linux VM's (4.2 s), and it's the only one that uses the JIT. On AC power,
-  record a default run, then one with the VM, which compares with the first:
-
-  ```sh
-  make perf ARGS='--record "Mac baseline on AC power"'
-  make perf ARGS='--features software-vm --record "Software rendering on the VM, not the JIT"'
-  ```
-
-  The JIT branch of the switch, in `progred/src/libraries/fidget/raster.rs`,
-  only compiles on Apple Silicon, so these runs are its first build. If the VM
-  wins on the stock, choose the evaluator by program size rather than platform.
-- **npm.** `playwright-core` 1.63.0 moved to `tools/package.json`, and both npm
-  packages now turn off install scripts and require week-old releases in
-  `.npmrc`. Check that `npm --version` is 11.10 or later, since older npm
-  ignores `min-release-age` (`tools/npm-update` covers that case). Then run
-  `make test-web-gpu` and `make audit`, and in `website/`, `npm ci` and
-  `npx wrangler --version`.
-
+- **`make audit`.** Added after the npm check: it runs `sandbox-cargo audit`
+  and `npm audit` for both npm packages, reporting them all before failing.
+  The website's Wrangler advisories are expected until the update due on
+  15 October.
 - **wasm-bindgen 0.2.129.** The lockfile update moved it from 0.2.127, so
   `make build-web` downloads the matching CLI. Check that the browser editor
   still runs with `make run-web`.
