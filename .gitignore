@@ -4,5 +4,6 @@
 /web/pkg
 /web/*-pkg
 /website/node_modules
+/tools/node_modules
 /website/.wrangler
 /website/__pycache__

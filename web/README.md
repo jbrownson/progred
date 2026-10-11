@@ -171,8 +171,8 @@ fallback. Startup logs the selected presentation backend and worker count.
 Headless Chrome diagnostics measure the real Rust code without starting the
 editor. Each builds an example into its own `web/*-pkg` folder, which Git
 ignores; a Node script then serves the site and drives a diagnostic page. They
-need Node and the installed Chrome, which `playwright-core` drives; `npm ci` in
-`website/` installs the version the website's package pins.
+need Node and the installed Chrome, which `playwright-core` drives;
+`npm ci --prefix tools` installs the version `tools/package.json` pins.
 
 CAM rendering uses the `cam_profile` example and `cam-profile.html`:
 

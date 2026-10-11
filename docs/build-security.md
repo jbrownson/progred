@@ -128,6 +128,30 @@ RustSec advisory database. The first run installs the pinned `cargo-audit`
 version into the sandbox Cargo home; both that installation and every scan run
 inside the same filesystem and network boundary.
 
+## npm packages
+
+JavaScript tooling lives in two npm packages, each with exact pins and its own
+lockfile, so installing one never brings in the other's tree: `website/` holds
+Wrangler for publishing, and `tools/` holds `playwright-core` for the browser
+diagnostics. Install with `npm ci`, which follows the lockfile and its integrity
+hashes exactly.
+
+Each package's `.npmrc` follows the Cargo policy as far as npm allows:
+
+- `ignore-scripts=true`: dependency install scripts, npm's counterpart of build
+  scripts, don't run. Scripts named on the command line, such as `npm run
+  build`, still do. With install scripts off, Wrangler still installs and a
+  dry-run deploy works; the site is static assets, so deploying bundles no code.
+- `min-release-age=7`: installs and updates resolve only releases at least seven
+  days old. npm reads this from version 11.10; older versions silently ignore
+  it, so update with npm 11.10 or later, or pass `--before` with the date seven
+  days back.
+
+npm has no sandbox like Seatbelt: Node tooling runs with the invoking user's
+permissions, as the tests do. `npm audit` checks a lockfile against GitHub's
+advisory database, and `npm audit signatures` checks registry signatures.
+Cloudflare's builder installs the website package itself on each deploy.
+
 ## Current dependency exceptions
 
 - **Patched Fidget.** Four Fidget packages are vendored from the published

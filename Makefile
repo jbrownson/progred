@@ -103,13 +103,13 @@ perf:
 	@python3 -B tools/perf.py $(ARGS)
 
 # The browser presentation's pixel test, run in the installed Chrome through
-# the playwright-core the website's package pins.
+# the playwright-core that tools/package.json pins.
 test-web-gpu:
 	@set -e; . ./tools/web-build-settings.sh; \
 	./tools/sandbox-cargo web-threaded build --release -p progred --example web_gpu_probe; \
 	./tools/wasm-bindgen --target web --no-typescript --out-dir web/gpu-probe-pkg --out-name probe \
 		target/sandbox/build-web/$$web_target/release/examples/web_gpu_probe.wasm; \
-	[ -d website/node_modules/playwright-core ] || npm ci --prefix website; \
+	[ -d tools/node_modules/playwright-core ] || npm ci --prefix tools; \
 	node tools/test-web-gpu.cjs
 
 sandbox-app:
