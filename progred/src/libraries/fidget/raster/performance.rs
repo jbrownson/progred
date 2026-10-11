@@ -62,12 +62,6 @@ pub(crate) fn profile(
         control_results.push(backend::<fidget_engine::vm::VmFunction>(
             &preview, &view, true, "vm",
         ));
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        for parallel in [false, true] {
-            control_results.push(backend::<fidget_engine::jit::JitFunction>(
-                &preview, &view, parallel, "jit",
-            ));
-        }
     }
     json!({"mesh_ms":mesh_ms, "stock_vertices":geometry.vertices.len(),
         "stock_triangles":geometry.indices.len()/3, "implicit_ms":implicit_ms,

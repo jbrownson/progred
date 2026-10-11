@@ -10,10 +10,9 @@ pub(crate) mod performance;
 mod reference;
 pub(crate) use puri::mesh::DepthImage as Frame;
 
-// Meshing keeps VmShape independently; JIT benefits the much denser raster work.
-// Fidget's VM, on every platform. Its JIT rendered the CAM stock four times
-// slower on Apple Silicon, and won only on shapes that render in a millisecond
-// either way; see docs/performance.md.
+// Software rendering evaluates with Fidget's VM, on every platform. Its JIT
+// rendered the CAM stock four times slower on Apple Silicon, and won only on
+// shapes that render in a millisecond either way; see docs/performance.md.
 use fidget_engine::vm::{VmFunction, VmShape};
 
 fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
