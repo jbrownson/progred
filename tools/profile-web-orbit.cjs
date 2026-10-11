@@ -2,7 +2,8 @@
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const fs = require("node:fs");
-const { chromium } = require("playwright");
+// The website's package pins playwright-core; it drives the installed Chrome.
+const { chromium } = require(require.resolve("playwright-core", { paths: [`${__dirname}/../website`] }));
 
 // Playwright exposes page CDP sessions, but not worker sessions. Route the
 // worker's diagnostic commands through Chrome's Target protocol instead.

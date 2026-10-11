@@ -1,7 +1,8 @@
 // Runs only the headless diagnostic page, never the editor.
 const { spawn } = require("node:child_process");
 const { once } = require("node:events");
-const { chromium } = require("playwright");
+// The website's package pins playwright-core; it drives the installed Chrome.
+const { chromium } = require(require.resolve("playwright-core", { paths: [`${__dirname}/../website`] }));
 
 (async () => {
   const [size, height = size] = (process.argv[2] ?? "512").split("x").map(Number);

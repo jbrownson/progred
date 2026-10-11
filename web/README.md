@@ -171,7 +171,8 @@ fallback. Startup logs the selected presentation backend and worker count.
 Headless Chrome diagnostics measure the real Rust code without starting the
 editor. Each builds an example into its own `web/*-pkg` folder, which Git
 ignores; a Node script then serves the site and drives a diagnostic page. They
-need Node and Playwright with Chrome, which the repository doesn't install.
+need Node and the installed Chrome, which `playwright-core` drives; `npm ci` in
+`website/` installs the version the website's package pins.
 
 CAM rendering uses the `cam_profile` example and `cam-profile.html`:
 
@@ -194,8 +195,9 @@ Orbit frames use `orbit_profile` and `orbit-profile.html`: build it into
 The query also accepts `collapsed`, `hold-jobs`, `profile-worker`, and
 `package=<folder>` to compare a second build.
 
-WebGPU presentation uses `web_gpu_probe` and `gpu-probe.html`: build it into
-`web/gpu-probe-pkg` with `--out-name probe`, then run `node tools/test-web-gpu.cjs`.
+WebGPU presentation uses `web_gpu_probe` and `gpu-probe.html`: `make test-web-gpu`
+builds it into `web/gpu-probe-pkg`, installs `playwright-core` if needed, and
+runs `node tools/test-web-gpu.cjs`.
 
 The September 2026 measurements made with these, including the native
 comparison, SIMD, allocator, and worker experiments, are in
