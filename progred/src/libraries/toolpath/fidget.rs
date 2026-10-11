@@ -45,7 +45,8 @@ pub(super) fn progress_bar(
     )
 }
 
-// Retained only as the all-implicit benchmark reference.
+// The all-implicit path field: the benchmark reference, and the subject of a
+// regression test that it compiles without GPU memory operations.
 #[cfg(test)]
 pub(super) struct Tubes {
     radius: f32,

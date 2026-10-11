@@ -5,7 +5,6 @@ use crate::libraries::{
 };
 use gid::{Cells, Document, Value, new_cell_id};
 
-#[cfg_attr(not(test), allow(dead_code))]
 pub mod sample_vocabulary {
     use gid::CellId;
 
@@ -28,7 +27,6 @@ pub mod sample_vocabulary {
 
 /// A Grap projection kept as ordinary, root-reachable sample data.
 /// It is not installed into the editor's projection chain.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn at_display_partial() -> Value {
     let bind = |cell| Value::record([(control::vocabulary::BIND, Value::from(cell))]);
     let spliced_text = |binder| {
@@ -203,7 +201,6 @@ fn checked_in_projection_uses_the_current_selection_capabilities() {
 /// computed result.
 /// The app starts EMPTY now; this is the test fixture, and its
 /// text-bridge form is checked in as examples/sample.gid.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn sample_document() -> Document {
     let mut cells = Cells::new();
     for (cell, name) in [

@@ -4,7 +4,8 @@ use crate::libraries::{fidget as implicit, tree};
 use serde_json::json;
 use web_time::Instant;
 
-/// Runs uncached work, not an editor frame. `controls` adds backend comparisons.
+/// Runs uncached work, not an editor frame. `controls` adds Fidget's own voxel
+/// render of the same view, serial and parallel, for comparison.
 pub fn profile_cam(progress: f64, width: u32, height: u32, controls: bool) -> String {
     let start = Instant::now();
     let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
@@ -33,23 +34,7 @@ pub fn profile_cam(progress: f64, width: u32, height: u32, controls: bool) -> St
     let recorded = computations.runtime.read(&recording).unwrap();
     let recording_ms = start.elapsed().as_secs_f64() * 1000.0;
     let path = recorded.path().unwrap();
-    let settings = playback::Settings::read(&Value::record([
-        (PROGRESS, f64::value(progress)),
-        (PROFILE_TOLERANCE, f64::value(0.001)),
-        (STOCK_MIN, point_value([-0.5; 3])),
-        (STOCK_MAX, point_value([0.5; 3])),
-        (
-            STOCK,
-            Value::record([(
-                implicit::vocabulary::COLOR,
-                Value::record([(
-                    crate::libraries::color::vocabulary::RGB,
-                    Value::from(vec![184_u8, 155, 109]),
-                )]),
-            )]),
-        ),
-    ]))
-    .unwrap();
+    let settings = cube_playback(progress);
     let start = Instant::now();
     let stock = settings.remaining_stock(path).unwrap().unwrap();
     let stock_ms = start.elapsed().as_secs_f64() * 1000.0;

@@ -71,6 +71,29 @@ fn point_value(point: Point3) -> Value {
     Value::record([X, Y, Z].into_iter().zip(point.map(f64::value)))
 }
 
+/// Playback that cuts a one-unit stock cube, centred on the origin, up to
+/// `progress`.
+#[cfg(any(test, feature = "cam-profile"))]
+fn cube_playback(progress: f64) -> playback::Settings {
+    playback::Settings::read(&Value::record([
+        (PROGRESS, f64::value(progress)),
+        (PROFILE_TOLERANCE, f64::value(0.001)),
+        (STOCK_MIN, point_value([-0.5; 3])),
+        (STOCK_MAX, point_value([0.5; 3])),
+        (
+            STOCK,
+            Value::record([(
+                crate::libraries::fidget::vocabulary::COLOR,
+                Value::record([(
+                    crate::libraries::color::vocabulary::RGB,
+                    Value::from(vec![184_u8, 155, 109]),
+                )]),
+            )]),
+        ),
+    ]))
+    .unwrap()
+}
+
 fn runtime_point_value(point: Point3) -> RuntimeValue {
     RuntimeValue::record([X, Y, Z].into_iter().zip(point.map(RuntimeValue::f64)))
 }

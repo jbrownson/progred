@@ -2449,7 +2449,6 @@ dependencies = [
  "puri-widgets",
  "raw-window-metal",
  "rfd",
- "serde",
  "serde_json",
  "skrifa",
  "ui-events",

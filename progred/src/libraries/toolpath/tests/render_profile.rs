@@ -39,22 +39,16 @@ fn record_example() -> (Recording, ::grap::Evaluation) {
     (recording, eval)
 }
 
-/// Playback that cuts a one-inch stock cube up to `progress`.
-fn stock_settings(progress: f64) -> super::super::playback::Settings {
-    super::super::playback::Settings::read(&Value::record([
-        (PROGRESS, f64::value(progress)),
-        (PROFILE_TOLERANCE, f64::value(0.001)),
-        (STOCK_MIN, point_value([-0.5; 3])),
-        (STOCK_MAX, point_value([0.5; 3])),
-        (
-            STOCK,
-            Value::record([(
-                implicit::vocabulary::COLOR,
-                crate::libraries::color::value(peniko::Color::from_rgb8(184, 155, 109)),
-            )]),
-        ),
-    ]))
-    .unwrap()
+/// Instructions and spill loads and stores in `shape`'s compiled program.
+fn program_size(shape: &VmShape) -> (usize, usize) {
+    shape
+        .inner()
+        .data()
+        .iter_asm()
+        .fold((0, 0), |(n, spills), op| {
+            let spill = matches!(op, RegOp::Load(..) | RegOp::Store(..));
+            (n + 1, spills + usize::from(spill))
+        })
 }
 
 /// A preview of `objects` within ±0.85, `height` pixels tall and 4/9 as wide.
@@ -91,7 +85,7 @@ fn volume(objects: Vec<implicit::SceneObject>, height: f64) -> implicit::VolumeP
 #[ignore = "times the software implicit render of the example's fully cut stock"]
 fn stock_render_profile() {
     let (recording, _) = record_example();
-    let stock = stock_settings(1.0)
+    let stock = cube_playback(1.0)
         .remaining_stock(&recording)
         .unwrap()
         .unwrap();
@@ -145,7 +139,7 @@ fn cam_render_profile() {
         .unwrap_or("750".into())
         .parse()
         .unwrap();
-    let settings = stock_settings(progress);
+    let settings = cube_playback(progress);
     let start = Instant::now();
     let stock = settings.remaining_stock(&recording).unwrap().unwrap();
     eprintln!("stock construction {:?}", start.elapsed());
@@ -350,14 +344,7 @@ fn cam_render_profile() {
         let mut reference: Option<Vec<u8>> = None;
         for (name, tree) in variants {
             let start = Instant::now();
-            let shape = VmShape::from(tree.clone());
-            let n = shape.inner().data().iter_asm().count();
-            let spills = shape
-                .inner()
-                .data()
-                .iter_asm()
-                .filter(|op| matches!(op, RegOp::Load(..) | RegOp::Store(..)))
-                .count();
+            let (n, spills) = program_size(&VmShape::from(tree.clone()));
             eprintln!(
                 "stock {name}: compile {:?}, {n} instructions, {spills} spills",
                 start.elapsed()
@@ -414,15 +401,10 @@ fn cam_render_profile() {
             .iter()
             .map(|o| VmShape::from(o.tree.clone()))
             .collect();
-        let instructions: usize = shapes
+        let (instructions, spills) = shapes
             .iter()
-            .map(|s| s.inner().data().iter_asm().count())
-            .sum();
-        let spills: usize = shapes
-            .iter()
-            .flat_map(|s| s.inner().data().iter_asm())
-            .filter(|op| matches!(op, RegOp::Load(..) | RegOp::Store(..)))
-            .count();
+            .map(program_size)
+            .fold((0, 0), |(n, spills), (m, more)| (n + m, spills + more));
         eprintln!(
             "{label}: {} objects; {instructions} instructions, {spills} load/stores; compile {:?}",
             objects.len(),

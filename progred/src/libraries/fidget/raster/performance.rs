@@ -1,6 +1,5 @@
 //! Computation timings only: no window, editor, GPU upload or presentation.
 use super::*;
-use fidget_engine::{eval::Function, render::RenderHints, shape::Shape};
 use serde_json::{Value as Json, json};
 use web_time::Instant;
 
@@ -55,13 +54,9 @@ pub(crate) fn profile(
     let mut control_results = Vec::new();
     if controls {
         let view = refine_depth(request.view().view_at(request.pixels), 4).unwrap();
-        control_results.push(backend::<fidget_engine::vm::VmFunction>(
-            &preview, &view, false, "vm",
-        ));
+        control_results.push(control(&preview, &view, false));
         #[cfg(not(target_arch = "wasm32"))]
-        control_results.push(backend::<fidget_engine::vm::VmFunction>(
-            &preview, &view, true, "vm",
-        ));
+        control_results.push(control(&preview, &view, true));
     }
     json!({"mesh_ms":mesh_ms, "stock_vertices":geometry.vertices.len(),
         "stock_triangles":geometry.indices.len()/3, "implicit_ms":implicit_ms,
@@ -79,24 +74,18 @@ fn fingerprint(bytes: impl Iterator<Item = u8>) -> String {
     )
 }
 
-fn backend<F: Function + RenderHints>(
-    preview: &VolumePreview,
-    view: &VolumeView,
-    parallel: bool,
-    label: &str,
-) -> Json
-where
-    Shape<F>: From<Tree>,
-{
+/// Fidget's own voxel render of the same view, serially or on the global
+/// thread pool, without Progred's tiling and publication.
+fn control(preview: &VolumePreview, view: &VolumeView, parallel: bool) -> Json {
     use fidget_engine::{
         raster::voxel::{EvalConfig, Scene},
-        render::{CancelToken, ThreadPool, TileSizes},
+        render::{CancelToken, ThreadPool},
     };
     let start = Instant::now();
     let shapes = preview
         .objects
         .iter()
-        .map(|o| Shape::<F>::from(o.tree.clone()).try_into().ok().unwrap())
+        .map(|o| VmShape::from(o.tree.clone()).try_into().ok().unwrap())
         .collect();
     let scene = Scene::new(shapes, &CancelToken::new()).unwrap();
     let compile_ms = start.elapsed().as_secs_f64() * 1000.0;
@@ -106,7 +95,7 @@ where
     };
     let eval = EvalConfig {
         threads: parallel.then_some(&ThreadPool::Global),
-        tile_sizes: (label == "vm").then(|| TileSizes::new(&[32, 16, 8]).unwrap()),
+        tile_sizes: software_tiles(),
         ..Default::default()
     };
     let start = Instant::now();
@@ -114,8 +103,7 @@ where
     let render_ms = start.elapsed().as_secs_f64() * 1000.0;
     let occupied = pixels.iter().filter(|p| p.geometry.depth != 0).count();
     let depth_sum: u64 = pixels.iter().map(|p| u64::from(p.geometry.depth)).sum();
-    json!({"backend":label,
-        "threads":if parallel {ThreadPool::Global.thread_count()} else {1},
+    json!({"threads":if parallel {ThreadPool::Global.thread_count()} else {1},
         "compile_ms":compile_ms, "render_ms":render_ms,
         "occupied_pixels":occupied, "raw_depth_sum":depth_sum})
 }
