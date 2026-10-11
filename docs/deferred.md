@@ -470,16 +470,29 @@ time the generator runs again. Keep those edits in the document instead.
 
 - Where a generated thing comes from a literal or a simple expression, dragging
   it edits the source, as with the tool-profile handles.
-- Otherwise an edit is an override of the generator's output, keyed by the
-  identity of what it changes and applied after generation. Overrides survive
-  regeneration, and one whose target no longer exists shows as an error rather
-  than vanishing. This is the same mechanism as patching a CAM strategy's
-  output.
-- Generated things need identities derived from their sources, such as the
-  switch for a given key, not positions in a list. CAD's topological naming
-  problem is the failure this avoids.
+- Otherwise an edit is an override, applied to the generator's output after it
+  runs and stored with the generator in the document. Patching a CAM
+  strategy's output is the same mechanism.
 - Shared definitions replace aligning one tool's output in another: the board's
   mounting holes and the case's standoffs come from one list.
+
+An override targets an output by a stable identity: its path through the
+computation, made of call sites and, at each loop or map, the identity of the
+element being processed rather than its index (the switch for key Q, not item
+17). Code refactors change call sites, so a generator can also tag an output
+with an explicit identity, as React keys do. CAD's topological naming problem is
+what happens without this. Drawings already carry a source trace and a call
+trace, which Cmd-click to source uses; values that evaluation mints with fresh
+random IDs would need IDs derived from their path instead. See also address
+lifetime, above.
+
+An override records the generated value it was made against, so regeneration is
+a three-way merge: an override is a patch and regeneration a rebase, sharing
+machinery with version control. It applies cleanly when its base is unchanged.
+When the generated value changed underneath it, or its target is gone or now
+ambiguous, it fails explicitly: the diagnostics layer marks it, and the UI
+offers to keep it against the new value, pick a new target in the output, or
+drop it. Nothing is silently lost.
 
 Work done in an external tool, such as routing in KiCad, comes back the same
 way, imported as data keyed by identity, so a regenerated board keeps its routes
