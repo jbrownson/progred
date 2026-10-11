@@ -20,15 +20,18 @@ software-vm`, which keeps Fidget's VM where the JIT would otherwise be used:
 Only the stock render runs in software, and the VM renders it four times
 faster: the JIT's code generation outweighs its evaluation on a program that
 size. The GPU workloads don't change. Choosing the evaluator by program size
-rather than platform is the open follow-up. The same day's AC-power run was
-2–18% slower than the battery run before it on every workload, after two
-release builds back to back, so compare runs taken under like conditions.
+rather than platform is the open follow-up. Three default runs that day, on
+battery, on AC power after two release builds, and on AC power with the machine
+idle, spread by up to 18% on the heavy workloads, the idle one slowest, so a
+difference under that on a stock or Fidget workload is drift, not a change.
 
-Under `software-vm`, `cam_mesh_roundtrip_profile` fails its pixel comparison
-at iteration 23: the direct and image-roundtrip composites differ in a few
-thousand bytes by small amounts, because the slower VM is still refining the
-implicit render between the two reads. The run was recorded with
-`--only "stock|fidget_"`.
+`cam_mesh_roundtrip_profile` asked for the direct and image-roundtrip
+composites to be identical, and they differ in about 0.08% of pixels, mostly by
+a level or two, with larger differences along the mesh's silhouette, where the
+roundtrip's intermediate image resolves edge coverage differently. The check
+passed once and failed twice that day, with either evaluator; it now allows
+0.1% of pixels to differ by more than two levels. The VM run was recorded with
+`--only "stock|fidget_"` before that.
 
 ## Tracking performance
 
