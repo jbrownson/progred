@@ -344,6 +344,29 @@ This is the biggest weak spot.
   demand, by re-evaluating with tracing, would explain a result without
   recording everything.
 
+### Notebook and REPL
+
+A Grap notebook in the style of Jupyter, but reactive like Pluto, marimo and
+Observable: changing a cell recomputes the cells that use it, so there is no
+hidden state from running cells out of order. Much of it exists already.
+`{evaluate: expression}` shows an expression and its result together, results
+project through the normal projections (pictures, tool previews, 3D views), and
+observed evaluation tracks the cell definitions an evaluation reads. A notebook
+is then mostly a projection of a list of named `evaluate` cells, with
+ergonomics: a new cell on Enter, later cells referring to earlier ones by name,
+and progress and cancellation for long computations.
+
+- A REPL pane evaluates in the scope of the selection. After Cmd-clicking an
+  output, the call that drew it supplies the bindings, as a debugger console
+  does at a breakpoint. This builds on capturing an environment on demand.
+- Entries are cells in a scratch list that can be moved into the document. Later
+  entries refer to earlier results by identity, not by number.
+- Entries that act, such as editing the document or exporting a mesh, need
+  capabilities. The REPL is then the person-facing client of the same commands
+  agents use, so it shares a design with Grap scripts.
+- A prompt that answers whatever is typed is a familiar first step from a blank
+  editor, which makes it part of input fluency too.
+
 ### External control and a newcomer test
 
 Lift `crate::driver::Driver` out of the tests into a dev binary that holds one
