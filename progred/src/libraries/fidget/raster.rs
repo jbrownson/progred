@@ -11,18 +11,35 @@ mod reference;
 pub(crate) use puri::mesh::DepthImage as Frame;
 
 // Meshing keeps VmShape independently; JIT benefits the much denser raster work.
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-use fidget_engine::jit::{JitFunction as SoftwareFunction, JitShape as SoftwareShape};
-#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-use fidget_engine::vm::{VmFunction as SoftwareFunction, VmShape as SoftwareShape};
+// The `software-vm` feature keeps the VM on Apple Silicon too, for comparison.
+#[cfg(all(
+    target_os = "macos",
+    target_arch = "aarch64",
+    not(feature = "software-vm")
+))]
+mod software {
+    pub(super) use fidget_engine::jit::{
+        JitFunction as SoftwareFunction, JitShape as SoftwareShape,
+    };
 
-fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    // Use JIT's own recommendation; smaller VM tiles waste time generating code.
-    return None;
-    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-    Some(fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap())
+    /// The JIT's own recommendation; smaller tiles waste time generating code.
+    pub(super) fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
+        None
+    }
 }
+#[cfg(not(all(
+    target_os = "macos",
+    target_arch = "aarch64",
+    not(feature = "software-vm")
+)))]
+mod software {
+    pub(super) use fidget_engine::vm::{VmFunction as SoftwareFunction, VmShape as SoftwareShape};
+
+    pub(super) fn software_tiles() -> Option<fidget_engine::render::TileSizes> {
+        Some(fidget_engine::render::TileSizes::new(&[32, 16, 8]).unwrap())
+    }
+}
+use software::{SoftwareFunction, SoftwareShape, software_tiles};
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct Request {

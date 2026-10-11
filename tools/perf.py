@@ -3,8 +3,8 @@
 
 Builds the progred library tests, runs each canary serially in an optimized
 build, and compares the medians with the latest logged run on the same machine
-and GPU adapter. `--record NOTE` appends the results to the log.
-See docs/performance.md.
+and GPU adapter, built with the same Cargo features. `--record NOTE` appends
+the results to the log. See docs/performance.md.
 """
 
 import argparse
@@ -152,13 +152,27 @@ def logged():
         return list(csv.DictReader(file, delimiter="\t"))
 
 
-def previous(rows, hardware, gpu):
-    """The latest logged result for each workload on this machine and adapter."""
-    return {
-        row["workload"]: row
-        for row in rows
-        if row["machine"] == hardware and row["gpu"] == gpu
-    }
+def features(row):
+    """The Cargo features a logged run was built with, kept in its environment."""
+    match = re.search(r", features (\S+)$", row["environment"])
+    return match[1] if match else ""
+
+
+def comparable(rows, hardware, gpu, built):
+    return [
+        row for row in rows
+        if row["machine"] == hardware and row["gpu"] == gpu and features(row) == built
+    ]
+
+
+def previous(rows, hardware, gpu, built):
+    """The latest logged result for each workload on this machine and adapter
+    from a build with the same features, else from the default build."""
+    matching = comparable(rows, hardware, gpu, built)
+    if built and not matching:
+        print(f"no records with features {built}; comparing with the default build")
+        matching = comparable(rows, hardware, gpu, "")
+    return {row["workload"]: row for row in matching}
 
 
 def summarize(rounds):
@@ -186,11 +200,11 @@ def show(results, before):
         print(line)
 
 
-def history(rows, hardware, gpu, count, pattern):
-    rows = [r for r in rows if r["machine"] == hardware and r["gpu"] == gpu]
+def history(rows, hardware, gpu, built, count, pattern):
+    rows = comparable(rows, hardware, gpu, built)
     runs = list(dict.fromkeys((r["date"], r["commit"]) for r in rows))[-count:]
     if not runs:
-        sys.exit("perf: no recorded runs on this machine and GPU")
+        sys.exit("perf: no recorded runs on this machine and GPU with these features")
     table = {(r["date"], r["commit"], r["workload"]): r["median_ms"] for r in rows}
     names = [n for n in dict.fromkeys(r["workload"] for r in rows) if re.search(pattern, n)]
     width = max(map(len, names)) + 2
@@ -214,14 +228,21 @@ def main():
                         help="append the results to docs/performance-log.tsv with this note")
     parser.add_argument("--history", type=int, metavar="RUNS", nargs="?", const=8,
                         help="show recorded medians for this machine instead of running")
+    parser.add_argument("--features", default="", metavar="LIST",
+                        help="build progred with these Cargo features, such as software-vm")
     args = parser.parse_args()
 
     hardware, conditions = machine()
-    [(executable, _)] = test_binaries.build(["--release", "-p", "progred", "--lib"])
+    if args.features:
+        conditions += f", features {args.features}"
+    [(executable, _)] = test_binaries.build(
+        ["--release", "-p", "progred", "--lib"]
+        + (["--features", args.features] if args.features else [])
+    )
     gpu, hardware_gpu = adapter(executable)
     print(f"machine: {hardware}\nconditions: {conditions}\ngpu: {gpu}")
     if args.history:
-        history(logged(), hardware, gpu, args.history, args.only)
+        history(logged(), hardware, gpu, args.features, args.history, args.only)
         return
     suite = [
         (test, frames)
@@ -241,7 +262,7 @@ def main():
                 results[workload(test, metric)] = result
         rounds.append(results)
     results = summarize(rounds)
-    show(results, previous(logged(), hardware, gpu))
+    show(results, previous(logged(), hardware, gpu, args.features))
     if args.record is not None:
         new = not LOG.exists()
         date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")

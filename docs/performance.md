@@ -10,13 +10,14 @@ and the other dated notes indexed in [history](history/README.md).
 
 Performance can slip a little at a time, and a change can affect it somewhere
 unexpected. `make perf` runs the canaries below and compares them with the
-latest recorded run on the same machine:
+latest recorded run on the same machine, built with the same Cargo features:
 
 ```sh
 make perf                                  # three rounds of every canary
 make perf ARGS='--only fidget --rounds 1'  # a quick subset, by test name
 make perf ARGS='--record "what changed"'   # also append the results to the log
 make perf ARGS='--history'                 # recorded medians on this machine
+make perf ARGS='--features software-vm'    # a build with progred features
 ```
 
 It builds the progred library tests in an optimized build and runs each canary
@@ -36,7 +37,8 @@ recorded run:
 - **commit**: with `+` when tracked files had uncommitted changes;
 - **machine**: the hardware, which decides what is comparable;
 - **gpu**: the adapter Fidget's implicit previews select;
-- **environment**: the OS version, power source on macOS, and Rust version;
+- **environment**: the OS version, power source on macOS, Rust version, and
+  any Cargo features the build enabled;
 - **median_ms** and **p95_ms**, the measured **samples** per round, the
   **rounds**, and their **spread_pct**;
 - a **note** on what changed or why the run was recorded.
@@ -51,7 +53,9 @@ a Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
 offer a software adapter such as Mesa's llvmpipe; the voxel orbits then measure
 it, not the CPU fallback. The two GPU compositor canaries run only on a hardware
 adapter, or with `--gpu`. On Linux, implicit rasterization uses Fidget's VM;
-the JIT is enabled only on Apple Silicon macOS.
+the JIT is enabled only on Apple Silicon macOS, and the `software-vm` feature
+uses the VM there too. A run with features compares with earlier runs with the
+same features, or with the default build until there is one.
 
 To add a canary, record its headline timing with `crate::perf::record` and add
 the test to the suite in [`tools/perf.py`](../tools/perf.py).

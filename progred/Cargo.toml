@@ -7,6 +7,9 @@ license.workspace = true
 [features]
 cam-profile = []
 layout-profile = []
+# Render implicit views in software with Fidget's VM where the JIT would
+# otherwise be used, to compare the two.
+software-vm = []
 
 [[example]]
 name = "cam_profile"
