@@ -68,13 +68,15 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
   ```
 
   Run the first executable with `--ignored --test-threads=1`, and the second
-  with `compositor --ignored --test-threads=1`, or with a test name such as
-  `gpu_colors_constants_and_workspace_reuse`. On Linux, Cargo can run them
-  directly:
+  with `--ignored --test-threads=1 compositor gpu`, which selects the
+  compositor tests and Fidget's GPU raster and mesh tests. On Linux, Cargo can
+  run them directly, and Mesa's lavapipe driver
+  (`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`) works when there is
+  no GPU:
 
   ```sh
   ./tools/linux-cargo test --release -p puri-vello --features capture --test compositor -- --ignored --test-threads=1
-  ./tools/linux-cargo test --release -p progred --lib compositor -- --ignored --test-threads=1
+  ./tools/linux-cargo test --release -p progred --lib -- --ignored --test-threads=1 compositor gpu
   ```
 
   The readback helper is `puri-vello`'s `capture` module, behind its `capture`
