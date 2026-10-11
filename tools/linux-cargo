@@ -19,13 +19,25 @@ if [ "$#" -eq 0 ]; then
     exit 2
 fi
 
+# Release builds carry the commit they came from, since they're what people
+# run and share. Development builds, tests included, leave it out: progred's
+# source reads it, so every commit would otherwise rebuild progred.
+stamp() {
+    for arg in "$@"; do
+        case $arg in
+            --) return ;;
+            --release | -r) "$tool_dir/progred-commit"; return ;;
+        esac
+    done
+}
+
 run() {
     offline=$1
     shift
     env \
         CARGO_NET_OFFLINE="$offline" \
         CARGO_TARGET_DIR="$project_root/target/native" \
-        PROGRED_COMMIT="$("$tool_dir/progred-commit")" \
+        PROGRED_COMMIT="$(stamp "$@")" \
         RUSTC_WRAPPER= \
         cargo "$@"
 }

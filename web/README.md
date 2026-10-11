@@ -117,9 +117,11 @@ saved as; an untitled document, or Save As…, asks for the name first.
 
 The menu bar's far end shows Progred's stage and the commit the build came
 from, as native window titles do, so a screenshot says which version it shows.
-The macOS sandbox build, the Linux launchers, and `website/build-ci.sh` take
-that stamp from `tools/progred-commit`, since build code can't read Git; a
-local build with uncommitted changes is marked dirty.
+Release builds through `tools/sandbox-cargo` or `tools/linux-cargo`, and
+`website/build-ci.sh`, take that stamp from `tools/progred-commit`, since build
+code can't read Git; a local build with uncommitted changes is marked dirty.
+Development builds and tests go without it, so a commit doesn't rebuild
+progred.
 
 The browser build uses a shared-memory coordinator for the existing CAM background
 jobs. It requires a secure context (localhost or HTTPS) and cross-origin
