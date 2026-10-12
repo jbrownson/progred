@@ -28,7 +28,6 @@ pub(crate) struct Driver<P = ()> {
     pub(crate) page: P,
     painted: DrawList,
     held: ModifiersState,
-    scale: f64,
     viewport: Size,
 }
 
@@ -41,22 +40,26 @@ impl Driver {
 
 impl<P> Driver<P> {
     pub(crate) fn embedded(editor: crate::Editor, viewport: Size, page: P) -> Self {
-        let mut runner = EditorRunner::new(editor);
-        runner.refresh_frame(1.0, viewport);
         let mut driver = Self {
-            runner,
+            runner: EditorRunner::new(editor),
             page,
             painted: DrawList::new(),
             held: ModifiersState::empty(),
-            scale: 1.0,
             viewport,
         };
+        driver.runner.refresh_frame(driver.scale(), viewport);
         driver.present();
         driver
     }
 
     pub(crate) fn editor(&self) -> &crate::Editor {
         &self.runner.editor
+    }
+
+    /// Physical pixels per logical point, as `Editor::scale` gives a window:
+    /// the driven window's pixels are points, so only the zoom scales them.
+    fn scale(&self) -> f64 {
+        self.runner.editor.zoom
     }
 
     /// The last frame's drawing.
@@ -79,7 +82,7 @@ impl<P> Driver<P> {
         for _ in 0..8 {
             self.runner
                 .flush_before_window_event(&WindowEvent::RedrawRequested);
-            let paint = self.runner.prepare_paint(self.scale, self.viewport);
+            let paint = self.runner.prepare_paint(self.scale(), self.viewport);
             self.painted = DrawList::new();
             puri::frame::render(paint.renders, &mut self.painted);
             if !self.runner.frame_presented() {
@@ -97,7 +100,8 @@ impl<P> Driver<P> {
     /// What the window's reducer makes of `event`, stamped with the moment it
     /// arrives.
     fn translate(&mut self, event: &WindowEvent) -> Option<PointerEvent> {
-        match crate::translate_window_event(&mut self.runner.editor.reducer, self.scale, event) {
+        let scale = self.scale();
+        match crate::translate_window_event(&mut self.runner.editor.reducer, scale, event) {
             Some(WindowEventTranslation::Pointer(pointer)) => Some(pointer),
             _ => None,
         }
@@ -108,13 +112,13 @@ impl<P> Driver<P> {
         if let WindowEvent::ModifiersChanged(modifiers) = event {
             self.runner.modifiers_changed(
                 ui_events_winit::keyboard::from_winit_modifier_state(modifiers.state()),
-                self.scale,
+                self.scale(),
                 self.viewport,
             );
         }
         if let Some(pointer) = pointer {
             self.runner
-                .pointer_event(&pointer, self.scale, self.viewport);
+                .pointer_event(&pointer, self.scale(), self.viewport);
         }
         self.present();
     }
@@ -142,10 +146,11 @@ impl<P> Driver<P> {
     /// A moment passes: the next press starts a new click rather than
     /// continuing the last one.
     fn pause(&mut self) {
+        let scale = self.scale();
         self.runner.editor.reducer = Default::default();
         crate::translate_window_event(
             &mut self.runner.editor.reducer,
-            self.scale,
+            scale,
             &WindowEvent::ModifiersChanged(self.held.into()),
         );
     }
@@ -197,7 +202,7 @@ impl<P> Driver<P> {
         self.runner.flush_pending_continuous();
         if self.runner.editor.modifiers != modifiers {
             self.runner
-                .modifiers_changed(modifiers, self.scale, self.viewport);
+                .modifiers_changed(modifiers, self.scale(), self.viewport);
         }
         let event = |state| KeyboardEvent {
             state,
@@ -205,14 +210,14 @@ impl<P> Driver<P> {
             modifiers,
             ..Default::default()
         };
-        let handled = self
-            .runner
-            .keyboard_event(&event(KeyState::Down), self.scale, self.viewport);
+        let handled =
+            self.runner
+                .keyboard_event(&event(KeyState::Down), self.scale(), self.viewport);
         self.runner
-            .keyboard_event(&event(KeyState::Up), self.scale, self.viewport);
+            .keyboard_event(&event(KeyState::Up), self.scale(), self.viewport);
         if !modifiers.is_empty() {
             self.runner
-                .modifiers_changed(Modifiers::empty(), self.scale, self.viewport);
+                .modifiers_changed(Modifiers::empty(), self.scale(), self.viewport);
         }
         self.present();
         handled

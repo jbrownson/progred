@@ -2,6 +2,7 @@ use super::computer::vocabulary::*;
 use super::*;
 use crate::libraries::{absent, f64, text};
 use gid::Step;
+use puri::keyboard::CommandModifier;
 
 fn session(root: Value) -> Rc<RefCell<Session>> {
     Rc::new(RefCell::new(Session::new(
@@ -33,6 +34,20 @@ fn at(point: Point) -> Value {
 
 fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     ::grap::call(Value::from(function), arguments)
+}
+
+/// `key` held with the platform's command modifier, as an agent spells it.
+fn command(key: &str) -> Value {
+    call(
+        KEY,
+        [(
+            TEXT,
+            text::value(match crate::modifiers::native() {
+                CommandModifier::Meta => format!("cmd+{key}"),
+                CommandModifier::Control => format!("ctrl+{key}"),
+            }),
+        )],
+    )
 }
 
 #[test]
@@ -72,6 +87,25 @@ fn actions_answer_why_they_could_not_happen() {
         absent::with_reason(UNKNOWN_KEY)
     );
     assert!(absent::is_absent(&send(&session, call(MOUSE_MOVE, []))));
+}
+
+#[test]
+fn zooming_in_draws_larger_where_clicks_still_land() {
+    let field = gid::new_cell_id();
+    let session = session(Value::record([(field, text::value("hello"))]));
+    let shown = |session: &Rc<RefCell<Session>>| session.borrow().driver.rect(&[Step::Key(field)]);
+    let before = shown(&session);
+    assert_eq!(send(&session, command("plus")), Value::from(DONE));
+    let after = shown(&session);
+    assert!(after.width() > before.width() && after.height() > before.height());
+    assert_eq!(
+        send(
+            &session,
+            call(LEFT_CLICK, [(COORDINATE, at(after.center()))])
+        ),
+        Value::from(DONE)
+    );
+    assert_eq!(session.borrow().driver.selection(), [Step::Key(field)]);
 }
 
 #[test]
