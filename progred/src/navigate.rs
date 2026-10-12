@@ -174,8 +174,9 @@ pub(crate) fn keyboard(
 
 /// Tab moves to the next empty slot in reading order, and Shift+Tab to the
 /// one before, within the selection's view; with nothing selected, Tab
-/// starts at the first. With no slot left it declines, so a browser moves
-/// focus on to the rest of its page.
+/// starts at the first. With no slot left, a browser moves focus on to the
+/// rest of its page, which clears the selection. A window has nowhere else
+/// to go, so there Tab clears the selection itself and the next starts over.
 pub(crate) fn tab(
     editor: &mut crate::Editor,
     geometry: Geometry<'_>,
@@ -189,7 +190,15 @@ pub(crate) fn tab(
     {
         return false;
     }
-    let back = event.modifiers.shift();
+    if advance(editor, geometry, event.modifiers.shift()) {
+        return true;
+    }
+    !cfg!(target_arch = "wasm32") && editor.model.selection.take().is_some()
+}
+
+/// Selects the next empty slot after the selection, or with `back` the one
+/// before it, if there is one.
+pub(crate) fn advance(editor: &mut crate::Editor, geometry: Geometry<'_>, back: bool) -> bool {
     let selection = editor.model.selection.as_ref();
     let root = selection
         .map(Selection::root)

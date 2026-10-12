@@ -106,7 +106,9 @@ With nothing selected, Tab starts at the first. In a picker, Tab first commits
 what was typed, as Enter would. It stays there when that opened a slot of its
 own, such as a new call's first argument, or when no slot is left, so the
 commit shows before focus moves on. A Tab with nothing to commit and nowhere
-to go declines, so an embedding browser moves focus on to the rest of its page.
+to go declines, so a browser moves focus on to the rest of its page, which
+clears the selection. A window has nowhere else to go, so there that Tab clears
+the selection itself, and the next starts over from the first slot.
 
 The anonymous lambda's `λ` marker is clickable to name the function but is not
 an arrow stop; the whole lambda, parameter list, and body remain navigable.

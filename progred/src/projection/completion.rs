@@ -288,7 +288,7 @@ fn query_content(
                     .as_ref()
                     .is_some_and(|selected| selected.stage(&world.sources()) == Stage::Edge)
                 {
-                    crate::navigate::tab(world, input.geometry(scale), event);
+                    crate::navigate::advance(world, input.geometry(scale), event.modifiers.shift());
                 }
                 true
             });

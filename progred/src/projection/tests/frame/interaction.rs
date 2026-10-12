@@ -1413,36 +1413,40 @@ fn tab_goes_from_empty_slot_to_empty_slot_keeping_what_was_typed() {
             selection.stage(&runner.editor.sources()),
         )
     };
-    // From nothing, Tab starts at the first empty slot; there's none before it.
+    let typing = |runner: &mut crate::EditorRunner, text: &str| {
+        for typed in text.chars() {
+            press(
+                runner,
+                Key::Character(typed.to_string().into()),
+                Modifiers::empty(),
+            );
+        }
+    };
+    let cleared = |runner: &crate::EditorRunner| runner.editor.model.selection.is_none();
+    // From nothing, Tab starts at the first empty slot. There's none before
+    // it, so Shift+Tab clears the selection, and the next starts at the end.
     assert!(tab(&mut runner, Modifiers::empty()));
     assert_eq!(selected(&runner), (vec![Step::Key(x)], Stage::Pending));
-    assert!(!tab(&mut runner, Modifiers::SHIFT));
-    assert_eq!(selected(&runner).0, [Step::Key(x)]);
+    assert!(tab(&mut runner, Modifiers::SHIFT));
+    assert!(cleared(&runner));
+    assert!(tab(&mut runner, Modifiers::SHIFT));
+    assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Pending));
+    assert!(tab(&mut runner, Modifiers::SHIFT));
+    assert_eq!(selected(&runner), (vec![Step::Key(x)], Stage::Pending));
     // What was typed goes in, and Tab moves on to the next slot.
-    for typed in ["1", "7", "2"] {
-        press(
-            &mut runner,
-            Key::Character(typed.into()),
-            Modifiers::empty(),
-        );
-    }
+    typing(&mut runner, "172");
     assert!(tab(&mut runner, Modifiers::empty()));
     let root = runner.editor.model.doc.root.clone().unwrap();
     assert!(root.as_record().unwrap().get(&x).is_some(), "x keeps 172");
     assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Pending));
-    // With no slot left either way, Tab lets go, so a browser moves focus on.
-    assert!(!tab(&mut runner, Modifiers::empty()));
-    assert!(!tab(&mut runner, Modifiers::SHIFT));
-    assert_eq!(selected(&runner).0, [Step::Key(height)]);
-    // What's typed in the last slot still goes in, and stays selected; only
-    // then does Tab let go.
-    for typed in ["8", "0"] {
-        press(
-            &mut runner,
-            Key::Character(typed.into()),
-            Modifiers::empty(),
-        );
-    }
+    // Past the last slot, a window's Tab clears the selection, and the next
+    // starts over; a browser moves focus on to its page instead.
+    assert!(tab(&mut runner, Modifiers::empty()));
+    assert!(cleared(&runner));
+    assert!(tab(&mut runner, Modifiers::empty()));
+    assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Pending));
+    // What's typed in the last slot still goes in, and stays selected.
+    typing(&mut runner, "80");
     assert!(tab(&mut runner, Modifiers::empty()));
     let root = runner.editor.model.doc.root.clone().unwrap();
     assert!(
@@ -1450,6 +1454,9 @@ fn tab_goes_from_empty_slot_to_empty_slot_keeping_what_was_typed() {
         "height keeps 80"
     );
     assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Edge));
+    // With every slot filled, Tab clears the selection, then has nowhere to go.
+    assert!(tab(&mut runner, Modifiers::empty()));
+    assert!(cleared(&runner));
     assert!(!tab(&mut runner, Modifiers::empty()));
 }
 
