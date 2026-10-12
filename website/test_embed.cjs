@@ -263,7 +263,7 @@ test("a theme arriving while WASM loads becomes the startup theme", async () => 
 async function lessonPage(platform = "Linux x86_64") {
   const { commandIsMeta } = await import("../web/platform.mjs");
   const commandLabel = { textContent: "Ctrl" };
-  const { lessonProgress } = await import("./public/lesson-progress.mjs");
+  const { lessonHint, lessonProgress } = await import("./public/lesson-progress.mjs");
   const messageListeners = [];
   const tasksByLesson = {
     values: ["rename", "moons", "add", "remove", "restore"],
@@ -275,6 +275,7 @@ async function lessonPage(platform = "Linux x86_64") {
     "growing-forest": [],
     projections: ["full", "plain", "raw"],
     model: ["rename", "add", "key"],
+    ladder: ["top", "bottom"],
   };
   const exercises = Object.keys(tasksByLesson).map((name) => {
     const listeners = {};
@@ -296,14 +297,15 @@ async function lessonPage(platform = "Linux x86_64") {
       addEventListener: (event, callback) => { listeners[event] = callback; },
     };
     const button = { addEventListener: (event, callback) => { listeners[event] = callback; } };
+    const hint = name === "ladder" ? { textContent: "", hidden: true } : undefined;
     return {
-      id: name, frame, status, tasks, listeners,
+      id: name, frame, status, tasks, listeners, hint,
       querySelectorAll: () => tasks,
-      querySelector: (selector) => ({ iframe: frame, ".reset-status": status, ".reset": button })[selector],
+      querySelector: (selector) => ({ iframe: frame, ".reset-status": status, ".reset": button, ".hint": hint })[selector],
     };
   });
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "public/lessons.js"), "utf8").replace(/^import .*;$/gm, ""), {
-    URL, lessonProgress, commandIsMeta, navigator: { platform },
+    URL, lessonHint, lessonProgress, commandIsMeta, navigator: { platform },
     location: { href: "http://localhost/", origin: "http://localhost" },
     window: { addEventListener: (_, callback) => messageListeners.push(callback) },
     document: { querySelectorAll: (selector) => selector === "[data-command-key]" ? [commandLabel] : exercises },
@@ -919,9 +921,10 @@ test("story checks follow the forest's shared cells", async () => {
   const growth = "ad17c2a7379b9ae003d76e833ec41be7";
   const calls = "46cea6ad72d7e838236fcf490ac3695e";
   const x = "2bd03b91a3ab695c54a71efafcb10115";
+  const height = "f747026de922fb0f01823df377de5cb6";
   const forest = (value, xs) => ({ document: { root: record(), cells: {
     [growth]: number(value),
-    [calls]: record(["5fab151c006ae1487c28837f2003f43c", { list: xs.map((at) => record([x, number(at)])) }]),
+    [calls]: record(["5fab151c006ae1487c28837f2003f43c", { list: xs.map((at) => record([x, number(at)], [height, number(60)])) }]),
   } } });
   assert.deepEqual(completedSteps("growth", forest(1, [40, 128, 216])), []);
   assert.deepEqual(completedSteps("growth", forest(0.5, [40, 128, 216])), ["shrink"]);
@@ -932,4 +935,77 @@ test("story checks follow the forest's shared cells", async () => {
   const counted = (value) => ({ document: { root: record(), cells: { [call]: record([count, number(value)]) } } });
   assert.deepEqual(completedSteps("counted", counted(7)), []);
   assert.deepEqual(completedSteps("counted", counted(12)), ["count"]);
+});
+
+const story = {
+  key: "f12dea12c741fe36312750a264f3a235",
+  top: "9940ece27410c72a5308a544890ccc71",
+  bottom: "8ec6740fa565a2b3b0348132d030d03b",
+  x: "2bd03b91a3ab695c54a71efafcb10115",
+  height: "f747026de922fb0f01823df377de5cb6",
+  growth: "ad17c2a7379b9ae003d76e833ec41be7",
+  calls: "46cea6ad72d7e838236fcf490ac3695e",
+  expressions: "5fab151c006ae1487c28837f2003f43c",
+};
+const step = (key) => record([story.key, cell(key)]);
+const raw = (value) => number(value).record[0][1];
+// The two-call ladder with the selection on `value`, under `x` in one view.
+const picked = (view, value) => ({
+  document: { root: null, cells: {} },
+  selection: { view: "document", path: { list: [step(view), step(story.x)] }, value },
+});
+const planted = (...trees) => ({
+  document: { root: null, cells: {
+    [story.growth]: number(1),
+    [story.calls]: record([story.expressions, { list: trees.map(([x, height]) => record(
+      ...(x === undefined ? [] : [[story.x, number(x)]]),
+      ...(height === undefined ? [] : [[story.height, number(height)]]),
+    )) }]),
+  } },
+  selection: null,
+});
+
+test("the ladder ticks for the 60 itself, in either view, as its number or its bytes", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  assert.deepEqual(completedSteps("ladder", picked(story.top, number(60))), ["top"]);
+  assert.deepEqual(completedSteps("ladder", picked(story.top, number(160))), []);
+  assert.deepEqual(completedSteps("ladder", picked(story.bottom, raw(60))), ["bottom"]);
+  assert.deepEqual(completedSteps("ladder", picked(story.bottom, number(60))), ["bottom"]);
+  assert.deepEqual(completedSteps("ladder", picked(story.bottom, raw(160))), []);
+  assert.deepEqual(completedSteps("ladder", { document: { root: null }, selection: null }), []);
+});
+
+test("a planted tree needs both an x and a height", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  const three = [[40, 60], [128, 90], [216, 72]];
+  assert.deepEqual(completedSteps("growth", planted(...three)), []);
+  assert.deepEqual(completedSteps("growth", planted(...three, [172, 80])), ["plant"]);
+  assert.deepEqual(completedSteps("growth", planted(...three, [172, undefined])), []);
+  assert.deepEqual(completedSteps("growth", planted(...three, [undefined, 80])), []);
+});
+
+test("hints name the traps a reader falls into, and nothing otherwise", async () => {
+  const { lessonHint } = await import("./public/lesson-progress.mjs");
+  assert.match(lessonHint("ladder", picked(story.bottom, raw(60))), /raw bytes/);
+  assert.equal(lessonHint("ladder", picked(story.bottom, number(60))), undefined);
+  assert.equal(lessonHint("ladder", picked(story.top, number(60))), undefined);
+  const three = [[40, 60], [128, 90], [216, 72]];
+  assert.equal(lessonHint("growth", planted(...three, [172, undefined])), "Give your tree a height too.");
+  assert.equal(lessonHint("growth", planted(...three, [172, 80])), undefined);
+  assert.equal(lessonHint("values", planet()), undefined);
+});
+
+test("a section's hint shows while its trap holds and clears on reset", async () => {
+  const page = await lessonPage();
+  const index = page.exercises.findIndex((exercise) => exercise.id === "ladder");
+  const { hint, listeners } = page.exercises[index];
+  page.send(index, picked(story.bottom, raw(60)));
+  assert.equal(hint.hidden, false);
+  assert.match(hint.textContent, /raw bytes/);
+  page.send(index, picked(story.bottom, number(60)));
+  assert.equal(hint.hidden, true);
+  page.send(index, picked(story.bottom, raw(60)));
+  listeners.click();
+  assert.equal(hint.hidden, true);
+  assert.equal(hint.textContent, "");
 });

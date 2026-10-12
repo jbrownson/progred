@@ -105,6 +105,13 @@ function number(value) {
   return data?.length === 8 ? new DataView(data.buffer).getFloat64(0, true) : undefined;
 }
 
+// A number, from its f64 record or from the eight raw bytes the base
+// projection shows inside it.
+function float(value) {
+  const data = bytes(value);
+  return number(value) ?? (data?.length === 8 ? new DataView(data.buffer).getFloat64(0, true) : undefined);
+}
+
 function selectedPath(state) {
   const selection = state?.selection;
   return selection?.view === "document" ? selection.path?.list : undefined;
@@ -119,6 +126,24 @@ function references(list) {
   }
   return counts;
 }
+
+// A word for a known trap, read from the same document and selection as the
+// checks; most of the time there is none.
+export function lessonHint(lesson, state) {
+  return storyHints[lesson]?.(state);
+}
+
+const storyHints = {
+  ladder(state) {
+    return bytes(state?.selection?.value) && selectedUnder(state, story.baseSlot, story.x)
+      ? "These are raw bytes, which the views above don't draw, so nothing lights up there. Click the { } around them to select the number itself."
+      : undefined;
+  },
+  growth(state) {
+    return storyCalls(state)?.some((call) => field(call, story.x) !== undefined
+      && field(call, story.height) === undefined) ? "Give your tree a height too." : undefined;
+  },
+};
 
 // Checks describe achievements; the page retains them until this exercise resets.
 export function completedSteps(lesson, state, previous) {
@@ -348,9 +373,10 @@ const storySteps = {
     return name && name !== "dot" ? ["rename"] : [];
   },
   ladder(state) {
+    const sixty = float(state?.selection?.value) === 60;
     return [
-      ...(selectedUnder(state, slots[0], story.x) ? ["top"] : []),
-      ...(selectedUnder(state, story.baseSlot, story.x) ? ["bottom"] : []),
+      ...(sixty && selectedUnder(state, slots[0], story.x) ? ["top"] : []),
+      ...(sixty && selectedUnder(state, story.baseSlot, story.x) ? ["bottom"] : []),
     ];
   },
   heights(state) {
@@ -367,7 +393,8 @@ const storySteps = {
     return [
       ...(Number.isFinite(growth) && growth !== 1 ? ["shrink"] : []),
       ...(Array.isArray(calls) && calls.length > 3
-        && calls.every((call) => Number.isFinite(number(field(call, story.x)))) ? ["plant"] : []),
+        && calls.every((call) => Number.isFinite(number(field(call, story.x)))
+          && field(call, story.height) !== undefined) ? ["plant"] : []),
     ];
   },
   counted(state) {

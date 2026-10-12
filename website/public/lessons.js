@@ -1,4 +1,4 @@
-import { lessonProgress } from "./lesson-progress.mjs";
+import { lessonHint, lessonProgress } from "./lesson-progress.mjs";
 import { commandIsMeta } from "./editor/platform.mjs";
 
 for (const label of document.querySelectorAll("[data-command-key]")) {
@@ -38,6 +38,14 @@ for (const exercise of document.querySelectorAll(".exercise")) {
   let completed = new Set();
   let generation = 0;
   let channel = new URL(frame.getAttribute("src"), location.href).searchParams.get("observe");
+  // Sections that know a trap have a place to say so.
+  const hint = exercise.querySelector(".hint");
+  const advise = (state) => {
+    if (!hint) return;
+    const words = state ? lessonHint(exercise.id, state) : undefined;
+    hint.textContent = words ?? "";
+    hint.hidden = !words;
+  };
   const update = () => {
     for (const [index, task] of tasks.entries()) {
       const done = completed.has(task.dataset.task);
@@ -52,12 +60,14 @@ for (const exercise of document.querySelectorAll(".exercise")) {
       const before = completed.size;
       completed = observe(event.data.state);
       if (completed.size !== before) update();
+      advise(event.data.state);
     }
   });
   exercise.querySelector(".reset").addEventListener("click", () => {
     observe = lessonProgress(exercise.id);
     completed = new Set();
     update();
+    advise();
     status.textContent = "Starting over…";
     const url = new URL(frame.getAttribute("src"), location.href);
     if (tasks.length) {
