@@ -1,4 +1,5 @@
 use super::*;
+use puri::edit::TextClipboard;
 
 #[test]
 fn replacing_query_text_settles_completion_state_before_the_next_edit() {
@@ -358,7 +359,7 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
     for ime in [false, true] {
         let mut world = editing_world(&doc, &libraries);
         world.model.selection = Some(make_selection(vec![]));
-        world.text_clipboard.text = Some(" world".into());
+        world.text_clipboard.set_text(" world");
         let frame = editing_frame(&mut world, false);
         let handler = frame.resolve_for_dispatch();
         assert!(if ime {

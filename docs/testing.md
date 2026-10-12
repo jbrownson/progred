@@ -63,9 +63,10 @@ exporter supports solid brushes only.
 `make control ARGS='--document examples/grap-demo.gid'` builds the
 `progred-control` binary and serves one headless editor on
 `target/control/progred.sock`, which only its owner can connect to. Its window
-is 1280 × 800 at one pixel per logical unit, with the in-app menus. The app's
-own menu items (New, Open, the examples, windows) do nothing there, and saving
-an untitled document asks for no path.
+is 1280 × 800 pixels, one per logical unit at actual size, with the in-app
+menus, and it keeps a clipboard of its own. The app's own menu items (New, Open,
+the examples, windows) do nothing there, and saving an untitled document asks
+for no path.
 
 `tools/control` sends it one action at a time, named and shaped as in
 Anthropic's computer-use tool: `screenshot`, `mouse_move`, `left_click`,

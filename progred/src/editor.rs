@@ -1,6 +1,6 @@
 //! One window's editor and its per-window execution state.
 
-use crate::clipboard::SystemTextClipboard;
+use crate::clipboard::Clipboard;
 use crate::command::{Command, DocCommand};
 use crate::frame::FrameState;
 use crate::input::{PendingGesture, PendingPointer, PendingScroll, continuous_input};
@@ -109,7 +109,7 @@ pub(crate) struct Editor {
     pub(crate) paint_resources: Resources,
     pub(crate) font_cx: FontContext,
     pub(crate) layout_cx: LayoutContext<Brush>,
-    pub(crate) text_clipboard: SystemTextClipboard,
+    pub(crate) text_clipboard: Clipboard,
     pub(crate) text_cache: puri::text::TextCache,
     pub(crate) stack: stack::Stack<Editor>,
     pub(crate) model: Model,
@@ -290,9 +290,9 @@ pub(crate) fn new_editor(
         layout_cx: LayoutContext::new(),
         text_cache: puri::text::TextCache::default(),
         #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-        text_clipboard: SystemTextClipboard,
+        text_clipboard: Clipboard::System,
         #[cfg(any(test, target_arch = "wasm32"))]
-        text_clipboard: SystemTextClipboard::default(),
+        text_clipboard: Clipboard::default(),
         stack,
         model: Model::new(doc),
         doc_path,

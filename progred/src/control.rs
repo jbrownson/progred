@@ -9,6 +9,7 @@
 
 mod computer;
 
+use crate::clipboard::Clipboard;
 use crate::driver::{Driver, keystroke_for};
 use crate::gid_text::{self, Binders};
 use crate::libraries::Libraries;
@@ -90,6 +91,7 @@ impl Session {
         );
         editor.focused = true;
         editor.file_dialogs = false;
+        editor.text_clipboard = Clipboard::default();
         Self {
             driver: Driver::new(editor, WINDOW),
             capture: None,

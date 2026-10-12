@@ -1,8 +1,6 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
 use crate::Editor;
-#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-use crate::clipboard::CLIPBOARD_FORMAT;
 use crate::modifiers;
 use crate::navigate;
 use crate::selection;
@@ -197,45 +195,12 @@ impl Editor {
     /// structure.
     pub(crate) fn copy_value(&mut self, value: &Value) -> bool {
         let (text, structural) = selection::to_clipboard(value);
-        #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-        return clipboard_rs::ClipboardContext::new()
-            .and_then(|cb| {
-                use clipboard_rs::Clipboard;
-                if structural {
-                    // Both representations: the private format says
-                    // "structure", the text reads anywhere.
-                    cb.set(vec![
-                        clipboard_rs::ClipboardContent::Other(
-                            CLIPBOARD_FORMAT.to_string(),
-                            text.clone().into_bytes(),
-                        ),
-                        clipboard_rs::ClipboardContent::Text(text),
-                    ])
-                } else {
-                    cb.set_text(text)
-                }
-            })
-            .is_ok();
-        #[cfg(any(test, target_arch = "wasm32"))]
-        {
-            self.text_clipboard.text = Some(text);
-            self.text_clipboard.structure = structural.then(|| value.clone());
-            true
-        }
+        self.text_clipboard.copy(text, structural.then_some(value))
     }
 
-    /// The private format's payload, when the clipboard carries one.
+    /// The structure a structural copy left, when the clipboard carries one.
     pub(crate) fn clipboard_structure(&mut self) -> Option<Value> {
-        #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-        {
-            use clipboard_rs::Clipboard;
-            let bytes = clipboard_rs::ClipboardContext::new()
-                .ok()
-                .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
-            selection::from_structure(&bytes)
-        }
-        #[cfg(any(test, target_arch = "wasm32"))]
-        self.text_clipboard.structure.clone()
+        self.text_clipboard.structure()
     }
 
     /// Cmd+V while a pending is open and the clipboard CARRIES
