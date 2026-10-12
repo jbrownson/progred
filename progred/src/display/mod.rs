@@ -656,6 +656,43 @@ pub fn center<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     )
 }
 
+/// A right arrow drawn to the size of the dim text beside it, rather than
+/// the font's `→`, which many faces draw tiny. It has the delimiters' stem
+/// and glyph box.
+pub fn arrow<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
+    Layout::widget(Rc::new(|context| {
+        let em = f64::from(context.inputs.styles.dim.size) * context.inputs.styles.scale;
+        let ink = context.inputs.styles.dim.brush.clone();
+        let (ascent, descent) = puri::delim::minimum_span(em);
+        widget::paint(
+            widget::Extent {
+                width: em,
+                ascent,
+                descent,
+            },
+            move |canvas, placement| {
+                let axis = placement.rect.y0 + ascent - 0.27 * em;
+                let (tail, tip) = (placement.rect.x0 + 0.12 * em, placement.rect.x1 - 0.12 * em);
+                let head = 0.24 * em;
+                let mut path = kurbo::BezPath::new();
+                path.move_to((tail, axis));
+                path.line_to((tip, axis));
+                path.move_to((tip - head, axis - 0.85 * head));
+                path.line_to((tip, axis));
+                path.line_to((tip - head, axis + 0.85 * head));
+                canvas.stroke_shape(
+                    puri::draw::Shape::Path(path),
+                    puri::Stroke::new(0.075 * em)
+                        .with_caps(kurbo::Cap::Round)
+                        .with_join(kurbo::Join::Round),
+                    ink,
+                    puri::Affine::IDENTITY,
+                );
+            },
+        )
+    }))
+}
+
 const RULE_SPACE: f64 = 3.0;
 const RULE_THICKNESS: f64 = 1.0;
 

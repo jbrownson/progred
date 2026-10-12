@@ -636,7 +636,11 @@ fn case_display(
     let expression_target = input
         .targets
         .at([Step::Key(::grap::vocabulary::EXPRESSION)]);
-    let arrow = activatable(dim("→"), expression_target.hover, expression_target.select);
+    let arrow = activatable(
+        crate::display::arrow(),
+        expression_target.hover,
+        expression_target.select,
+    );
     Some(group_hug(
         crate::display::centered_row(
             6.0,

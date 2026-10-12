@@ -394,7 +394,11 @@ pub fn lambda_display(
         crate::display::partial(lambda_name),
         &input.default_projection,
     );
-    let arrow = activatable(dim("→"), body_target.hover, body_target.select);
+    let arrow = activatable(
+        crate::display::arrow(),
+        body_target.hover,
+        body_target.select,
+    );
     let head = row(3.0, [lambda, params, arrow]);
     Some(group_hug(
         head,
@@ -459,7 +463,7 @@ pub fn evaluate_display(
     ));
     let shaft_target = input.targets.current();
     let shaft = shared(activatable(
-        dim("→"),
+        crate::display::arrow(),
         shaft_target.hover,
         shaft_target.select,
     ));
