@@ -731,18 +731,18 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         .resolve_for_dispatch()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
     assert_eq!(state.1, entries.len() - 1);
-    let before_tab = state;
-    state.2 = false;
-    frame(state, None)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::Tab));
-    assert_eq!(state, before_tab);
-    assert!(
-        !frame(state, None)
-            .resolve_for_dispatch()
-            .dispatch_key(&mut state, &press(NamedKey::Tab))
-    );
-    assert_eq!(state, before_tab);
+    // Tab is the editor's, for moving on to the next empty slot: the card
+    // leaves it alone, expanded or not.
+    for everything in [false, true] {
+        state.2 = everything;
+        let before_tab = state;
+        assert!(
+            !frame(state, None)
+                .resolve_for_dispatch()
+                .dispatch_key(&mut state, &press(NamedKey::Tab))
+        );
+        assert_eq!(state, before_tab);
+    }
 }
 
 #[test]

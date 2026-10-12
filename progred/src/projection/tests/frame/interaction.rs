@@ -1371,6 +1371,89 @@ fn enter_ends_typing_in_a_value_before_it_adds_anything_beside() {
 }
 
 #[test]
+fn tab_goes_from_empty_slot_to_empty_slot_keeping_what_was_typed() {
+    let size = kurbo::Size::new(600.0, 400.0);
+    use crate::libraries::name;
+    let function = new_cell_id();
+    let [x, height] = [new_cell_id(), new_cell_id()];
+    let mut cells = Cells::new();
+    let tree = grap::lambda([x, height], Value::record([]));
+    let tree = tree
+        .as_record()
+        .unwrap()
+        .clone()
+        .update(name::vocabulary::NAME, text::value("tree"));
+    cells.set_value(function, Value::record(tree));
+    cells.set_value(x, name::record("x", []));
+    cells.set_value(height, name::record("height", []));
+    let mut runner = crate::EditorRunner::new(crate::test_editor(Document {
+        root: Some(grap::call(function.into(), [])),
+        cells,
+    }));
+    runner.refresh_frame(1.0, size);
+    let press = |runner: &mut crate::EditorRunner, key: Key, modifiers: Modifiers| {
+        runner.keyboard_event(
+            &KeyboardEvent {
+                key,
+                state: KeyState::Down,
+                modifiers,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        )
+    };
+    let tab = |runner: &mut crate::EditorRunner, modifiers| {
+        press(runner, Key::Named(NamedKey::Tab), modifiers)
+    };
+    let selected = |runner: &crate::EditorRunner| {
+        let selection = runner.editor.model.selection.as_ref().unwrap();
+        (
+            selection.path().to_vec(),
+            selection.stage(&runner.editor.sources()),
+        )
+    };
+    // From nothing, Tab starts at the first empty slot; there's none before it.
+    assert!(tab(&mut runner, Modifiers::empty()));
+    assert_eq!(selected(&runner), (vec![Step::Key(x)], Stage::Pending));
+    assert!(!tab(&mut runner, Modifiers::SHIFT));
+    assert_eq!(selected(&runner).0, [Step::Key(x)]);
+    // What was typed goes in, and Tab moves on to the next slot.
+    for typed in ["1", "7", "2"] {
+        press(
+            &mut runner,
+            Key::Character(typed.into()),
+            Modifiers::empty(),
+        );
+    }
+    assert!(tab(&mut runner, Modifiers::empty()));
+    let root = runner.editor.model.doc.root.clone().unwrap();
+    assert!(root.as_record().unwrap().get(&x).is_some(), "x keeps 172");
+    assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Pending));
+    // With no slot left either way, Tab lets go, so a browser moves focus on.
+    assert!(!tab(&mut runner, Modifiers::empty()));
+    assert!(!tab(&mut runner, Modifiers::SHIFT));
+    assert_eq!(selected(&runner).0, [Step::Key(height)]);
+    // What's typed in the last slot still goes in, and stays selected; only
+    // then does Tab let go.
+    for typed in ["8", "0"] {
+        press(
+            &mut runner,
+            Key::Character(typed.into()),
+            Modifiers::empty(),
+        );
+    }
+    assert!(tab(&mut runner, Modifiers::empty()));
+    let root = runner.editor.model.doc.root.clone().unwrap();
+    assert!(
+        root.as_record().unwrap().get(&height).is_some(),
+        "height keeps 80"
+    );
+    assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Edge));
+    assert!(!tab(&mut runner, Modifiers::empty()));
+}
+
+#[test]
 fn a_numbers_other_fields_follow_it_including_one_being_added() {
     let (x, note) = (new_cell_id(), new_cell_id());
     let number = f64::value(1.0)

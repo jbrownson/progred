@@ -22,7 +22,7 @@ use puri::text::TextCtx;
 use puri::{Placement, Point};
 use puri_widgets::text_frame;
 use std::rc::Rc;
-use ui_events::keyboard::Key;
+use ui_events::keyboard::{Key, NamedKey};
 
 pub(crate) fn control(
     context: &mut crate::display::widget::Context<'_, '_, crate::Editor, Hovered>,
@@ -262,6 +262,37 @@ fn query_content(
     } else {
         card
     };
+    // Tab commits what's been typed, as Enter would, then moves on to the
+    // next empty slot, unless the commit opened one of its own, such as a new
+    // call's first argument. With no slot left it stays on what it committed;
+    // the next Tab lets go. An empty query leaves Tab to the editor.
+    let typed = (!query.text().is_empty())
+        .then(|| entries.get(choice).map(|entry| entry.activate.clone()))
+        .flatten();
+    let card = before(card, move |p, _| {
+        p.handler()
+            .on_key_with(move |world: &mut crate::Editor, event, input| {
+                let Some(activate) = typed.as_ref().filter(|_| {
+                    event.state.is_down()
+                        && event.key == Key::Named(NamedKey::Tab)
+                        && !(event.modifiers.ctrl()
+                            || event.modifiers.meta()
+                            || event.modifiers.alt())
+                }) else {
+                    return false;
+                };
+                activate(world);
+                if world
+                    .model
+                    .selection
+                    .as_ref()
+                    .is_some_and(|selected| selected.stage(&world.sources()) == Stage::Edge)
+                {
+                    crate::navigate::tab(world, input.geometry(scale), event);
+                }
+                true
+            });
+    });
     placed::floating(trigger, card, move |placement, extent| {
         completion_placement(placement, extent, scale)
     })

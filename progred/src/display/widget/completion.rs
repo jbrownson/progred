@@ -170,11 +170,10 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
                                     true
                                 })
                             }
-                            Key::Named(key @ (NamedKey::Tab | NamedKey::ArrowDown))
+                            Key::Named(NamedKey::ArrowDown)
                                 if !everything
                                     && !command(&event.modifiers)
-                                    && (key == NamedKey::Tab
-                                        || choice == count.saturating_sub(1)) =>
+                                    && choice == count.saturating_sub(1) =>
                             {
                                 expand(world);
                                 true
