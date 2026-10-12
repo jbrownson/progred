@@ -102,6 +102,16 @@ context; neither a path nor a cell-relative trace is a global address.
 Keep occurrence identity, cell identity, definition source, and view identity
 distinct while answering those questions.
 
+## Saving list positions
+
+List elements have fractional positions, minted when a document loads and
+dropped when it saves, so a position means nothing outside its session. A page
+or a script can't name the second call in a list by path across a reload, which
+is why the story tutorial's checks compare selected values instead. Saving the
+positions fixes that, and a CRDT would need them anyway. Reading could still
+accept a plain `[1, 2, 3]` and mint positions for it, while saving always writes
+them, even if the text gets noisier.
+
 ## Completion ranking
 
 Revisit how library-provided offers rank alongside built-in constructors,
@@ -287,6 +297,13 @@ Do not flatten trajectories or alter geometry in the postprocessor without an
 explicit accuracy policy. Setup-up and pull/climb ordering are already explicit
 in the Grap example; machine rotary solutions and fixture clearance are not.
 
+## Peeking into folds
+
+Clicking a fold's `…` opens it with the whole cell selected, so Space closes it
+again. A look inside needn't change the layout at all: hovering the `…` could
+show the contents in a popover, with Space or a click to open it for good, or
+pressing and holding the `…` could open it until release.
+
 ## Hover traversal order
 
 Revisit when the document/widget mix includes more expensive overlapping hover
@@ -382,6 +399,11 @@ This is the biggest weak spot.
   recording everything.
 - Dragging a value onto a slot could link it, as Cmd-clicking does. The first
   newcomer test reached for dragging when it couldn't find picking.
+- Wrap insertions: besides completions at a placeholder, libraries offer ways to
+  wrap the selection. With `42` selected, asking for a wrap lists each operator
+  with the 42 on its left or its right, and typing an operator such as `-` picks
+  its left form. Typing an operator at the end of a number already does this
+  for that one case.
 
 ### Notebook and REPL
 
@@ -594,7 +616,7 @@ as scans need content-addressed storage rather than inline text.
 Several people editing one document at once, perhaps with CRDTs. Cells are
 already keyed by identity, and list elements already have fractional positions,
 the kind of identifiers sequence CRDTs use. Those positions are session-only
-today, minted at load and dropped at save; a CRDT would probably persist them.
+today, minted at load and dropped at save; see saving list positions above.
 
 ### A common thread
 
