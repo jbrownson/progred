@@ -35,6 +35,10 @@ superseded notes to `docs/history/`.
   seem meant to work that way.
 - Fix the source of a mismatch instead of compensating for it downstream, for
   example with a hand-tuned offset.
+- Mint every new cell ID from the OS's random number generator: run
+  `openssl rand -hex 16` for an ID written in source, and use `new_cell_id` at
+  run time. Never make one up, edit one, or derive one from a name; see
+  `docs/gid.md`.
 - Commit when it makes sense, and keep unrelated changes in separate commits;
   don't bundle housekeeping with feature work. Before pushing, run
   `cargo fmt --all -- --check` and `make test`. When pushing to a session
