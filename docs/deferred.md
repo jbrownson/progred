@@ -369,6 +369,8 @@ This is the biggest weak spot.
 - A result records one stack frame today. Capturing a full environment on
   demand, by re-evaluating with tracing, would explain a result without
   recording everything.
+- Dragging a value onto a slot could link it, as Cmd-clicking does. The first
+  newcomer test reached for dragging when it couldn't find picking.
 
 ### Notebook and REPL
 
@@ -395,15 +397,19 @@ and progress and cancellation for long computations.
 
 ### External control and a newcomer test
 
-The [session an agent drives](testing.md#a-session-an-agent-drives) exists.
-Next is the newcomer test: a subagent with no knowledge of the code gets a short
-description of Progred, how to drive the session, and a task such as a small
-CAM job, and reports where it got stuck, keeping friction in Progred apart from
-friction in operating it as an agent. Add help only where that report shows a
-need: the visible text and its boxes, captured as text leaves draw (which
-accessibility needs too), `zoom`, or the computer-use actions left out so far.
-Sessions could replay as scripts, so a fixed stuck point becomes a regression
-test.
+The [session an agent drives](testing.md#a-session-an-agent-drives) exists, and
+a first newcomer test went in blind: a subagent with no knowledge of the code
+got a short description of Progred, how to drive the session, and a small change
+to the Grap demo. It added an input but couldn't make the sum refer to it,
+because Cmd-clicking a value into an open slot can't be found by looking; it
+tried completion, dragging, and copy and paste. Progred needs some explaining,
+so the next newcomer follows a guided tutorial as a reader on prog.red does,
+which tests the tutorial too. Each report keeps friction in the tutorial, in
+Progred, and in operating it as an agent apart. Add help only where a report
+shows a need: the visible text and its boxes, captured as text leaves draw
+(which accessibility needs too), `zoom`, or the computer-use actions left out so
+far. Sessions could replay as scripts, so a fixed stuck point becomes a
+regression test.
 
 Later the live app could accept the same socket behind an opt-in flag, so a
 person can watch, and an MCP bridge could serve Claude Code. An editor made for
