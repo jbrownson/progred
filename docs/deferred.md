@@ -538,6 +538,13 @@ repositories. Undo history is the starting point for history inside the
 document, with named versions, branches and merges built on it. Large blobs such
 as scans need content-addressed storage rather than inline text.
 
+### Multiplayer editing
+
+Several people editing one document at once, perhaps with CRDTs. Cells are
+already keyed by identity, and list elements already have fractional positions,
+the kind of identifiers sequence CRDTs use. Those positions are session-only
+today, minted at load and dropped at save; a CRDT would probably persist them.
+
 ### A common thread
 
 CAM, printing and PCBs share a shape. Progred owns the design logic and its live
