@@ -80,6 +80,13 @@ why the action couldn't happen. The session writes the vocabulary's binders to
 use is to see how an agent that knows nothing of the code copes with the
 editor; see [deferred work](deferred.md#external-control-and-a-newcomer-test).
 
+`tools/web-control` takes the same actions, plus `wait`, on the website.
+`tools/web-control serve story.html` builds and serves the site through the
+preview server, opens the page in a 1280 × 800 headless Chrome, or the browser
+at `$CHROMIUM`, and listens on `target/web-control/browser.sock`; the other
+commands each send it one action. An agent can then take a tutorial as a reader
+does, with its prose, steps and checks.
+
 ## Ignored tests
 
 Ignored tests are opt-in: run them with `-- --ignored`, usually with
