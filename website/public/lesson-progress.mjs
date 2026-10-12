@@ -105,13 +105,6 @@ function number(value) {
   return data?.length === 8 ? new DataView(data.buffer).getFloat64(0, true) : undefined;
 }
 
-// A number, from its f64 record or from the eight raw bytes the base
-// projection shows inside it.
-function float(value) {
-  const data = bytes(value);
-  return number(value) ?? (data?.length === 8 ? new DataView(data.buffer).getFloat64(0, true) : undefined);
-}
-
 function selectedPath(state) {
   const selection = state?.selection;
   return selection?.view === "document" ? selection.path?.list : undefined;
@@ -373,7 +366,7 @@ const storySteps = {
     return name && name !== "dot" ? ["rename"] : [];
   },
   ladder(state) {
-    const sixty = float(state?.selection?.value) === 60;
+    const sixty = number(state?.selection?.value) === 60;
     return [
       ...(sixty && selectedUnder(state, slots[0], story.x) ? ["top"] : []),
       ...(sixty && selectedUnder(state, story.baseSlot, story.x) ? ["bottom"] : []),

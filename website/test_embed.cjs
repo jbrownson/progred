@@ -965,11 +965,11 @@ const planted = (...trees) => ({
   selection: null,
 });
 
-test("the ladder ticks for the 60 itself, in either view, as its number or its bytes", async () => {
+test("the ladder ticks for the 60 itself in either view, and not for its bytes", async () => {
   const { completedSteps } = await import("./public/lesson-progress.mjs");
   assert.deepEqual(completedSteps("ladder", picked(story.top, number(60))), ["top"]);
   assert.deepEqual(completedSteps("ladder", picked(story.top, number(160))), []);
-  assert.deepEqual(completedSteps("ladder", picked(story.bottom, raw(60))), ["bottom"]);
+  assert.deepEqual(completedSteps("ladder", picked(story.bottom, raw(60))), []);
   assert.deepEqual(completedSteps("ladder", picked(story.bottom, number(60))), ["bottom"]);
   assert.deepEqual(completedSteps("ladder", picked(story.bottom, raw(160))), []);
   assert.deepEqual(completedSteps("ladder", { document: { root: null }, selection: null }), []);
