@@ -13,7 +13,7 @@
 // Playwright records with (npx playwright-core install ffmpeg).
 const fs = require("node:fs");
 const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const control = require("./web-control");
 
 const { WINDOW } = control;
@@ -22,6 +22,9 @@ const RATE = 16000;
 const DRAG_STEPS = 10;
 const QUIET = 250;
 const WATCH = 350;
+// More pixels than a blinking caret differing from the tester's own
+// screenshot: the replay has probably gone its own way.
+const UNFAITHFUL = 300;
 
 function run(command, args) {
   execFileSync(command, args, { stdio: ["ignore", "ignore", "inherit"] });
@@ -110,6 +113,9 @@ function overlay() {
       shape(name) {
         pointer.innerHTML = shapes[name] ?? shapes.arrow;
       },
+      hide(hidden) {
+        pointer.style.visibility = hidden ? "hidden" : "visible";
+      },
       ring(x, y) {
         const ring = document.createElement("div");
         Object.assign(ring.style, {
@@ -159,6 +165,19 @@ function shapeOf(cursor) {
   return "arrow";
 }
 
+// How many of two window-sized images' pixels differ visibly: the mean of
+// their thresholded difference, as ffmpeg measures it.
+function differing(first, second) {
+  const { stderr } = spawnSync("ffmpeg", [
+    "-v", "info", "-i", first, "-i", second, "-lavfi",
+    "[0:v]format=rgb24[a];[1:v]format=rgb24[b];[a][b]blend=all_mode=difference,format=gray," +
+      "lut=y='if(gt(val\\,40)\\,255\\,0)',signalstats,metadata=print:key=lavfi.signalstats.YAVG",
+    "-f", "null", "-",
+  ], { encoding: "utf8" });
+  const mean = Number(stderr.match(/YAVG=([\d.]+)/)?.[1] ?? 255);
+  return Math.round((mean / 255) * WINDOW.width * WINDOW.height);
+}
+
 // Until every embedded editor on screen has started.
 async function settled(page) {
   const deadline = Date.now() + 15000;
@@ -192,7 +211,7 @@ function pressed(held, what) {
 
 // Replays the session, returning what the captions and narration need: when
 // each note and action happened, in milliseconds from the recording's start.
-async function replay(page, entries, speech, started) {
+async function replay(page, entries, speech, started, work) {
   const now = () => Date.now() - started;
   const notes = [];
   const actions = [];
@@ -212,7 +231,8 @@ async function replay(page, entries, speech, started) {
     await act();
     actions.push({ start, end: Math.max(now(), start) + 1200, label });
   };
-  for (const { action, error } of entries) {
+  const check = path.join(work, "check.png");
+  for (const [index, { action, error, result }] of entries.entries()) {
     if (error || !Array.isArray(action)) continue;
     const [name, ...args] = action;
     const point = (x, y) => ({ x: Number(x), y: Number(y) });
@@ -224,8 +244,19 @@ async function replay(page, entries, speech, started) {
         await page.waitForTimeout((samples.length / RATE) * 1000 + QUIET);
         continue;
       }
-      case "screenshot":
+      case "screenshot": {
+        // Compare with what the tester saw here, without the drawn pointer.
+        if (!fs.existsSync(result)) continue;
+        await page.evaluate(() => window.__playtest.hide(true));
+        await page.screenshot({ path: check });
+        await page.evaluate(() => window.__playtest.hide(false));
+        const changed = differing(result, check);
+        if (changed > UNFAITHFUL) {
+          fs.copyFileSync(check, path.join(work, `unlike-${index + 1}.png`));
+          console.error(`playtest-video: at action ${index + 1}, ${changed} pixels differ from the tester's screenshot`);
+        }
         continue;
+      }
       case "wait":
         await page.waitForTimeout(Math.min(Number(args[0]) || 1, 3) * 1000);
         continue;
@@ -403,7 +434,7 @@ async function main(sessionPath, out) {
     await page.waitForFunction(() => window.__playtest);
     await settled(page);
     console.error(`playtest-video: replaying ${entries.length} actions`);
-    const timeline = await replay(page, entries, speech, started);
+    const timeline = await replay(page, entries, speech, started, work);
     const video = page.video();
     await context.close();
     const recorded = await video.path();
