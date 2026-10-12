@@ -21,6 +21,9 @@ const control = require("./web-control");
 const { WINDOW } = control;
 const BAR = 150;
 const RATE = 16000;
+// How much faster than the synthesizer's own pace the notes are spoken, with
+// their pitch kept.
+const TEMPO = 2;
 const DRAG_STEPS = 10;
 const QUIET = 250;
 const WATCH = 350;
@@ -68,18 +71,22 @@ function spoken(text) {
     .trim();
 }
 
-// Each note as 16 kHz mono samples, synthesized once and kept by its text.
+// Each note as 16 kHz mono samples at TEMPO, synthesized once and kept by
+// its text.
 function speak(notes, directory) {
   const synthesize = synthesizer();
   fs.mkdirSync(directory, { recursive: true });
   const speech = new Map();
   for (const text of new Set(notes)) {
-    const key = require("node:crypto").createHash("sha256").update(text).digest("hex").slice(0, 16);
+    const key = require("node:crypto").createHash("sha256").update(`${TEMPO} ${text}`).digest("hex").slice(0, 16);
     const raw = path.join(directory, `${key}.raw`);
     if (!fs.existsSync(raw)) {
       const wav = path.join(directory, `${key}.wav`);
       synthesize(spoken(text), wav);
-      run("ffmpeg", ["-y", "-v", "error", "-i", wav, "-ar", String(RATE), "-ac", "1", "-f", "s16le", raw]);
+      run("ffmpeg", [
+        "-y", "-v", "error", "-i", wav, "-filter:a", `atempo=${TEMPO}`,
+        "-ar", String(RATE), "-ac", "1", "-f", "s16le", raw,
+      ]);
     }
     const bytes = fs.readFileSync(raw);
     speech.set(text, new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2));
