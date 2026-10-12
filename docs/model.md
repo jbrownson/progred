@@ -131,9 +131,10 @@ field on the record holding it. Cmd+Enter adds something within it: a field on
 a record, an element appended to a list, or a bare cell's first value. Both
 belong to the view of the container they land in, which offers them through
 `structure::authoring`; its children's handlers run first. The structural
-record, list and cell views offer it, and so do Grap's calls; a view that draws
-a value as one piece, such as a number, text, a color, an infix expression or a
-tutorial's slots, doesn't, so Enter there adds nothing. While typing in a
+record, list and cell views offer it. Grap's calls don't, since their arguments
+are their parameters, shown as slots when missing; nor does a view that draws a
+value as one piece, such as a number, text, a color, an infix expression or a
+tutorial's slots, so Enter there adds nothing. While typing in a
 value, Enter only ends the typing, since the value is already written; the
 text re-spells from it, so a half-typed `6e` goes back to `6`. A key a line
 editor doesn't take never starts its typing.
@@ -290,9 +291,9 @@ not routine disambiguation labels; Raw still shows them as the primary spelling.
 
 The completion library's `labels` helper turns cell identities into label offers;
 `combine` concatenates applicable lazy providers in order, preserving an explicitly
-empty vocabulary. Grap's `parameter_labels` reads an inline or stored lambda's
-declared parameters when asked. The same metadata reader supplies call field order
-and `call_completion`'s initial pending parameter. It follows cell aliases and declines
+empty vocabulary. Grap's parameter reader takes an inline or stored lambda's
+declared parameters when asked, for a call's field order, its slots for missing
+arguments, and `call_completion`'s initial pending parameter. It follows cell aliases and declines
 cycles and computed callables. A native function's description lists the arguments
 its implementation requires under `params`; the reader takes that list as is and
 never interprets a native description as a lambda.

@@ -1749,58 +1749,6 @@ fn root_field_completion_offers_only_root_vocabulary_until_widened() {
 }
 
 #[test]
-fn grap_call_field_completion_offers_missing_parameters() {
-    let function = gid::new_cell_id();
-    let left = gid::new_cell_id();
-    let right = gid::new_cell_id();
-    let mut cells = Cells::new();
-    cells.set_value(
-        function,
-        Value::record([
-            (
-                grap::vocabulary::PARAMS,
-                Value::list([Value::from(left), Value::from(right)]),
-            ),
-            (grap::vocabulary::BODY, Value::record([])),
-        ]),
-    );
-    let document = Document {
-        root: Some(Value::record([(
-            grap::vocabulary::FUNCTION,
-            Value::from(function),
-        )])),
-        cells,
-    };
-    let stack = crate::stack::load();
-    let selection = pending_edge(
-        &crate::test_root(),
-        &src(&document, &stack.libraries),
-        Vec::new(),
-    )
-    .unwrap();
-    let entries = projected_completion_entries(&document, &selection);
-    let parameters = entries
-        .iter()
-        .filter_map(|entry| entry.source)
-        .collect::<Vec<_>>();
-
-    assert_eq!(parameters, [left, right]);
-
-    let document = Document {
-        root: Some(grap::call(function.into(), [(left, Value::record([]))])),
-        ..document
-    };
-    let entries = projected_completion_entries(&document, &selection);
-    assert_eq!(
-        entries
-            .iter()
-            .filter_map(|entry| entry.source)
-            .collect::<Vec<_>>(),
-        [right]
-    );
-}
-
-#[test]
 fn built_in_call_completion_opens_its_first_argument() {
     use crate::libraries::{f64::vocabulary::SUM, number::vocabulary::LEFT};
     let document = Document {
@@ -1824,39 +1772,6 @@ fn built_in_call_completion_opens_its_first_argument() {
             .get(&crate::libraries::selection::vocabulary::STAGE),
         Some(&crate::libraries::selection::vocabulary::PENDING.into())
     );
-}
-
-#[test]
-fn built_in_call_field_completion_offers_its_missing_parameters() {
-    // A named operation, since arithmetic reads infix with its operands as slots.
-    use crate::libraries::{
-        f64::vocabulary::MIN,
-        number::vocabulary::{LEFT, RIGHT},
-    };
-    let document = Document {
-        root: Some(grap::call(MIN.into(), [])),
-        cells: Cells::new(),
-    };
-    let stack = crate::stack::load();
-    let selection = pending_edge(
-        &crate::test_root(),
-        &src(&document, &stack.libraries),
-        Vec::new(),
-    )
-    .unwrap();
-    let offered = |document: &Document| {
-        projected_completion_entries(document, &selection)
-            .iter()
-            .filter_map(|entry| entry.source)
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(offered(&document), [LEFT, RIGHT]);
-
-    let document = Document {
-        root: Some(grap::call(MIN.into(), [(LEFT, Value::record([]))])),
-        ..document
-    };
-    assert_eq!(offered(&document), [RIGHT]);
 }
 
 #[test]
@@ -1979,34 +1894,18 @@ fn fidget_shape_completion_opens_a_real_missing_radius_and_offers_f32() {
             Some(number)
         );
     }
-
-    let fields = pending_edge(
-        &root,
-        &src(&world.model.doc, &stack.libraries),
-        path.clone(),
-    )
-    .unwrap();
-    let entries = projected_completion_entries(&world.model.doc, &fields);
-    assert_eq!(
-        entries
-            .iter()
-            .filter_map(|entry| entry.source)
-            .collect::<Vec<_>>(),
-        [RADIUS]
-    );
 }
 
 #[test]
 fn fidget_call_completions_follow_the_current_lambda_parameters() {
     use fidget::vocabulary::{FIDGET, RADIUS, SPHERE};
-    let stack = crate::stack::load();
     let root = crate::test_root();
     let cell = new_cell_id();
     let extra = new_cell_id();
     let path = vec![Step::Key(FIDGET), Step::Follow(Resolution::Document)];
     let mut cells = Cells::new();
     cells.set_value(SPHERE, grap::lambda([extra, RADIUS], Value::record([])));
-    let mut document = Document {
+    let document = Document {
         root: Some(Value::record([(FIDGET, cell.into())])),
         cells,
     };
@@ -2027,24 +1926,6 @@ fn fidget_call_completions_follow_the_current_lambda_parameters() {
         world.model.selection.as_ref().unwrap().path(),
         [path.as_slice(), &[Step::Key(extra)]].concat()
     );
-
-    document
-        .cells
-        .set_value(cell, grap::call(SPHERE.into(), []));
-    let selected = pending_edge(&root, &src(&document, &stack.libraries), path).unwrap();
-    for parameters in [[extra, RADIUS], [RADIUS, extra]] {
-        document
-            .cells
-            .set_value(SPHERE, grap::lambda(parameters, Value::record([])));
-        let entries = projected_completion_entries(&document, &selected);
-        assert_eq!(
-            entries
-                .iter()
-                .filter_map(|entry| entry.source)
-                .collect::<Vec<_>>(),
-            parameters
-        );
-    }
 }
 
 #[test]
@@ -2166,16 +2047,6 @@ fn fidget_suggestions_cover_source_list_items_and_grap_calls() {
         Step::Element(position),
         Step::Follow(Resolution::Document),
     ];
-    let selected = pending_edge(&root, &sources, path.clone()).unwrap();
-    let entries = projected_completion_entries(&document, &selected);
-    assert_eq!(
-        entries
-            .iter()
-            .filter_map(|entry| entry.source)
-            .collect::<Vec<_>>(),
-        [RADIUS]
-    );
-
     let selected = Selection::from_payload(
         &root,
         &sources,
