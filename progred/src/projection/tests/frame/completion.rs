@@ -746,6 +746,83 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
 }
 
 #[test]
+fn a_card_placed_shorter_scrolls_what_it_cannot_show() {
+    let entries: Vec<_> = (0..20)
+        .map(|index| Entry {
+            display: format!("entry {index}"),
+            detail: None,
+            matches: Vec::new(),
+            face: crate::display::Face::Dim,
+            source: None,
+            activate: Rc::new(|_| {}),
+        })
+        .collect();
+    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
+    let mut fonts = crate::fonts::bundled_font_context();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let height = 60.0;
+    let mut hovered = |(scroll, choice, everything), pointer: Option<Point>| {
+        let layout = completion_card::<(f64, usize, bool)>(
+            &mut tcx,
+            crate::modifiers::native(),
+            &styles,
+            &entries,
+            choice,
+            scroll,
+            everything,
+            |state| Some(state.0),
+            |state, scroll, choice, everything| *state = (scroll, choice, everything),
+        );
+        let natural = layout.extent.rect_at(Point::ZERO);
+        assert!(natural.height() > 2.0 * height);
+        let shortened = Rect::from_origin_size(Point::ZERO, (natural.width(), height));
+        crate::display::widget::frame::place(
+            layout,
+            puri::Placement::root(shortened),
+            &placed::HoverInput {
+                pointer,
+                ..Default::default()
+            },
+        )
+    };
+    let entry = |output: placed::HoverOutput<(f64, usize, bool)>| match output.claim {
+        Some((_, Claim::Direct(Hovered::Tree(Hover::Entry(index))))) => Some(index),
+        _ => None,
+    };
+    let mut state = (0.0, 0, false);
+    assert_eq!(entry(hovered(state, Some(Point::new(10.0, 10.0)))), Some(0));
+    // The card ends where it was placed, though it measured taller.
+    assert!(
+        hovered(state, Some(Point::new(10.0, height + 20.0)))
+            .claim
+            .is_none()
+    );
+    let down = KeyboardEvent {
+        key: Key::Named(NamedKey::ArrowDown),
+        state: KeyState::Down,
+        ..Default::default()
+    };
+    for _ in 0..3 {
+        hovered(state, None)
+            .resolve_for_dispatch()
+            .dispatch_key(&mut state, &down);
+    }
+    // A fourth row is past what a 60-point card shows, so choosing it
+    // scrolls, which eight rows wouldn't, and it can be pointed at.
+    assert_eq!(state.1, 3);
+    assert!(state.0 > 0.0);
+    let mut shown = |y| entry(hovered(state, Some(Point::new(10.0, y as f64))));
+    assert!((0..height as usize).any(|y| shown(y) == Some(3)));
+}
+
+#[test]
 fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
     #[derive(Default)]
     struct State {

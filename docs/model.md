@@ -416,6 +416,9 @@ The editor owns document operations, query state, and popup placement. See
 The card meets the query's painted frame, accounting for the frame outline and
 both border widths. Placement uses those same drawing parameters above or below
 the query, and includes the card's stroke when keeping it within the viewport.
+The card shows up to eight rows and scrolls the rest. It opens below the query
+when it fits there, otherwise above; when it fits neither, it takes the roomier
+side, showing only the rows that fit, rather than covering the query.
 
 A provider starts with its narrow vocabulary. The trailing `…` participates in
 row navigation but activates expansion rather than committing a value. Expansion

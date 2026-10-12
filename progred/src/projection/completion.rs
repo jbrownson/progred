@@ -278,7 +278,9 @@ pub(super) fn completion_placement(
             .rect()
             .inflate(ring_outset, ring_outset);
         let border_outset = completion_border(scale).width / 2.0;
-        let outer = crate::display::widget::popover::rect(
+        // Shortened, the card scrolls what it can't show; it keeps at least
+        // about a row, the field's own height.
+        let outer = crate::display::widget::popover::shortened(
             anchor,
             Size::new(
                 extent.width + 2.0 * border_outset,
@@ -286,6 +288,7 @@ pub(super) fn completion_placement(
             ),
             placement.clip_rect,
             0.0,
+            anchor.height(),
         );
         Placement::new(
             outer.inflate(-border_outset, -border_outset),
