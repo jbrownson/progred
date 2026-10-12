@@ -414,7 +414,10 @@ This is the biggest weak spot.
 - Enter and Cmd+Enter need rethinking together: while typing, which to press is
   hard to remember. Today Enter while typing ends the typing, Enter on a
   selection adds a peer beside it, and Cmd+Enter adds something within it, each
-  offered by the view of the container it lands in.
+  offered by the view of the container it lands in. A selected value being typed
+  in always keeps its caret, unlike a spreadsheet's cell, and that stays; Enter
+  there only re-spells it and returns the caret to its default, where it could
+  move on to the next thing, or in a list select an insertion after.
 - A raw view of one value in place, as the document-wide Raw view shows
   everything. Structure a projection hides, such as a field on a number, would
   be authored there; today only a whole view can be raw.
