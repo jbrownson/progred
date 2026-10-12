@@ -1,12 +1,12 @@
 #!/bin/sh
 
-# Locked Cargo for Linux in a namespace sandbox, the counterpart of
-# tools/sandbox-cargo's Seatbelt one: build scripts, procedural macros and
+# Locked Cargo for Linux under bubblewrap, the counterpart of
+# tools/sandbox-cargo's Seatbelt sandbox: build scripts, procedural macros and
 # tests see a read-only system without the home directory, other processes or
 # (except while fetching) the network, and write only beneath target/sandbox.
-# tools/linux-sandbox sets that up, and tools/cargo-common.sh holds the
-# commands the two wrappers share. This is the single deliberate Linux
-# exception to the .cargo/config.toml tripwire; see docs/build-security.md.
+# tools/cargo-common.sh holds the commands the two wrappers share. This is the
+# single deliberate Linux exception to the .cargo/config.toml tripwire; see
+# docs/build-security.md.
 
 set -eu
 
@@ -19,52 +19,82 @@ fi
 
 . "$tool_dir/cargo-common.sh"
 
-case $project_root in
-    /tmp/* | /run/* | /var/tmp/* | /dev/shm/*)
-        echo "linux-cargo: the build sandbox hides $project_root; move the checkout" >&2
-        exit 1
-        ;;
-esac
-
-for tool in unshare setpriv setsid findmnt pivot_root; do
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "linux-cargo: the build sandbox needs $tool, from util-linux" >&2
-        exit 1
-    fi
-done
-if ! unshare --user --map-root-user true 2>/dev/null; then
-    cat >&2 <<'EOF'
-linux-cargo: the build sandbox needs unprivileged user namespaces, which this
-system doesn't allow. Some distributions restrict them; on Ubuntu, AppArmor
-does (kernel.apparmor_restrict_unprivileged_userns). See docs/build-security.md.
+bwrap_path=$(command -v bwrap 2>/dev/null || true)
+if [ -z "$bwrap_path" ]; then
+    echo "linux-cargo: the build sandbox needs bubblewrap; install your distribution's bubblewrap package" >&2
+    exit 1
+fi
+if ! failure=$("$bwrap_path" --unshare-all --ro-bind / / true 2>&1); then
+    cat >&2 <<EOF
+linux-cargo: bubblewrap couldn't create the build sandbox: $failure
+It needs unprivileged user namespaces, which some distributions restrict; on
+Ubuntu, AppArmor does (kernel.apparmor_restrict_unprivileged_userns). See
+docs/build-security.md.
 EOF
     exit 1
 fi
 
-# Steps with network access also get a proxy's settings, its certificate
-# bundle, and the resolver configuration, which often lives under /run.
+# The host read-only, with /proc, a /dev of the basic devices, and scratch
+# /tmp, /var/tmp and /dev/shm of its own; home and /run empty and read-only;
+# the toolchain and source tree read-only, without .git, local agent
+# configuration or a root .env; and only target/sandbox writable, and
+# Cargo.lock when an update asks. Each mount lands on those before it. Steps
+# with network access also get a proxy's settings, its certificate bundle, and
+# the resolver configuration, which often lives under /run.
 run_sandboxed() {
     allow_network=$1
     allow_lock_write=$2
     shift 2
     stamp=$(stamp "$@")
-    set -- -- "$@"
+    command_words=$#
+    set -- "$@" --unshare-all --die-with-parent --new-session --cap-drop ALL \
+        --ro-bind / / --proc /proc --dev /dev --tmpfs /dev/shm --tmpfs /tmp --tmpfs /run
+    if [ -d /var/tmp ]; then
+        set -- "$@" --tmpfs /var/tmp
+    fi
+    if [ -d "$HOME" ]; then
+        set -- "$@" --tmpfs "$HOME"
+    fi
+    set -- "$@" --ro-bind "$toolchain_root" "$toolchain_root" \
+        --ro-bind "$project_root" "$project_root"
+    for name in .git .claude .codex .env; do
+        if [ -d "$project_root/$name" ]; then
+            set -- "$@" --tmpfs "$project_root/$name" --remount-ro "$project_root/$name"
+        elif [ -e "$project_root/$name" ]; then
+            set -- "$@" --ro-bind /dev/null "$project_root/$name"
+        fi
+    done
+    set -- "$@" --bind "$build_root" "$build_root"
+    if [ "$allow_lock_write" = 1 ]; then
+        set -- "$@" --bind "$project_root/Cargo.lock" "$project_root/Cargo.lock"
+    fi
     if [ "$allow_network" = 1 ]; then
-        network= offline=false
+        offline=false
         https_upper=${HTTPS_PROXY-} https_lower=${https_proxy-}
         all_upper=${ALL_PROXY-} all_lower=${all_proxy-}
         no_upper=${NO_PROXY-} no_lower=${no_proxy-}
         cargo_ca=${CARGO_HTTP_CAINFO-} ssl_ca=${SSL_CERT_FILE-}
+        set -- "$@" --share-net
         for file in "$cargo_ca" "$ssl_ca" "$(readlink -f /etc/resolv.conf 2>/dev/null || true)"; do
             if [ -f "$file" ]; then
-                set -- "$file" "$@"
+                set -- "$@" --ro-bind "$file" "$file"
             fi
         done
     else
-        network=--net offline=true
+        offline=true
         https_upper= https_lower= all_upper= all_lower= no_upper= no_lower=
         cargo_ca= ssl_ca=
     fi
+    if [ -d "$HOME" ]; then
+        set -- "$@" --remount-ro "$HOME"
+    fi
+    set -- "$@" --remount-ro /run --chdir "$PWD" --
+    # The command's words came first; move them after the options.
+    while [ "$command_words" -gt 0 ]; do
+        set -- "$@" "$1"
+        shift
+        command_words=$((command_words - 1))
+    done
     env -i \
         CARGO_HOME="$cargo_home" \
         CARGO_NET_OFFLINE="$offline" \
@@ -87,9 +117,7 @@ run_sandboxed() {
         ${no_lower:+"no_proxy=$no_lower"} \
         ${cargo_ca:+"CARGO_HTTP_CAINFO=$cargo_ca"} \
         ${ssl_ca:+"SSL_CERT_FILE=$ssl_ca"} \
-        unshare --user --map-root-user --mount $network --pid --fork --mount-proc \
-        "$tool_dir/linux-sandbox" "$project_root" "$build_root" "$toolchain_root" \
-            "$HOME" "$allow_lock_write" "$@"
+        "$bwrap_path" "$@"
 }
 
 cargo_command "$@"

@@ -70,7 +70,7 @@ make run
 ```
 
 They build sandboxed, under Seatbelt through `./tools/sandbox-cargo` on macOS
-and in namespaces through `./tools/linux-cargo` on Linux; use the wrapper for
+and under bubblewrap through `./tools/linux-cargo` on Linux; use the wrapper for
 any other Cargo command. See `docs/build-security.md`.
 
 The browser build is supported on macOS and Linux. Supporting it elsewhere isn't

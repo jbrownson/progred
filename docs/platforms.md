@@ -27,9 +27,10 @@ and terminal behavior with disposable subprocesses.
 ## Linux
 
 `make run`, `make dev`, `make images`, and the fetch, check, build, and test
-targets go through `tools/linux-cargo`, which builds in a namespace sandbox into
-`target/sandbox/build`; see [build security](build-security.md). The app itself
-runs outside the sandbox. `make install-linux` builds a release binary and
+targets go through `tools/linux-cargo`, which builds under bubblewrap into
+`target/sandbox/build`; see [build security](build-security.md). Most desktop
+distributions already have bubblewrap, since Flatpak uses it; otherwise install
+the `bubblewrap` package. The app itself runs outside the sandbox. `make install-linux` builds a release binary and
 installs it for the current user following the freedesktop conventions: the
 binary in `~/.local/bin`, a desktop entry, and hicolor icons.
 
