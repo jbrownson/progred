@@ -28,7 +28,12 @@ test("pointer modifiers are forwarded before any focus or click without swallowi
 
 test("focus loss and regain re-observe even identical pointer flags", async () => {
   const { forwardModifiers } = await import("../web/modifiers.mjs");
-  for (const boundary of ["focus", "blur"]) {
+  const held = [false, false, false, true];
+  const released = [false, false, false, false];
+  for (const [boundary, expected] of [
+    ["focus", [held, held, held]],
+    ["blur", [held, released, held, released, held]],
+  ]) {
     const canvas = new EventTarget();
     const host = new EventTarget();
     const changes = [];
@@ -38,8 +43,43 @@ test("focus loss and regain re-observe even identical pointer flags", async () =
       send(target, boundary);
       send(canvas, "pointermove", { metaKey: true });
     }
-    assert.equal(changes.length, 3);
+    assert.deepEqual(changes, expected);
   }
+});
+
+test("a modifier seen over an unfocused editor is released when the pointer leaves", async () => {
+  const { forwardModifiers } = await import("../web/modifiers.mjs");
+  const canvas = new EventTarget();
+  const changes = [];
+  forwardModifiers(canvas, new EventTarget(), (...state) => changes.push(state));
+  // Ctrl is down while the page scrolls this editor past the pointer.
+  send(canvas, "pointerover", { ctrlKey: true });
+  send(canvas, "pointerleave");
+  assert.deepEqual(changes, [[false, true, false, false], [false, false, false, false]]);
+});
+
+test("a focused editor keeps its modifiers when the pointer leaves, since it hears their release", async () => {
+  const { forwardModifiers } = await import("../web/modifiers.mjs");
+  const canvas = new EventTarget();
+  canvas.ownerDocument = { activeElement: canvas };
+  const changes = [];
+  forwardModifiers(canvas, new EventTarget(), (...state) => changes.push(state));
+  send(canvas, "keydown", { ctrlKey: true });
+  send(canvas, "pointerleave");
+  assert.deepEqual(changes, [[false, true, false, false]]);
+});
+
+test("a modifier held when the editor loses focus is released", async () => {
+  const { forwardModifiers } = await import("../web/modifiers.mjs");
+  const canvas = new EventTarget();
+  const host = new EventTarget();
+  const changes = [];
+  forwardModifiers(canvas, host, (...state) => changes.push(state));
+  send(canvas, "keydown", { ctrlKey: true });
+  // Ctrl goes up in another frame, which this canvas never hears.
+  send(canvas, "blur");
+  send(host, "blur");
+  assert.deepEqual(changes, [[false, true, false, false], [false, false, false, false]]);
 });
 
 test("keyboard changes keep the pointer observation in sync", async () => {

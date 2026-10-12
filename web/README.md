@@ -77,6 +77,12 @@ convention. The tutorial imports the same helper for its shortcut instructions.
 focus. This uses the normal modifier-event/reducer path, without focusing the
 editor or cancelling browser events. Unchanged pointer flags are not re-sent;
 focus transitions reset that observation because Winit may clear its own state.
+A canvas hears keys only while focused and sees pointer flags only while the
+pointer is over it, so it releases every modifier once it can do neither: when
+it loses focus, and when the pointer leaves it unfocused. On a page of several
+editors, Ctrl pressed in one and released in another, or held while Ctrl+Home
+scrolls editors past the pointer, would otherwise leave one picking until the
+pointer next crossed it.
 
 `libraries` is a comma-separated list of built-in library CellIds, in projection
 precedence order. These are the library identities, not their field tags or
