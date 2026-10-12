@@ -330,6 +330,17 @@ owns the application delegate and panics if it is replaced
 removes its custom macOS delegate. Revisit when 0.31 is stable or an upgrade is
 otherwise useful; don't patch the Objective-C runtime around 0.30 for this.
 
+### One sandbox for both platforms
+
+The build sandboxes are two descriptions of one boundary: a Seatbelt profile on
+macOS (`tools/cargo-sandbox.sb`) and bubblewrap's options on Linux
+(`tools/linux-cargo`). Anthropic's
+[sandbox runtime](https://github.com/anthropic-experimental/sandbox-runtime)
+(`srt`), which Claude Code uses, drives both from one configuration, and its
+proxy could narrow fetches from the whole network to the registry's domains. It
+calls itself a beta research preview whose configuration may change, and it
+would put Node on every build's path. Revisit when it's stable.
+
 ### Additional ports
 
 The iPad feasibility host was removed while macOS/Linux mature; its notes are in
