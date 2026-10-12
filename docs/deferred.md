@@ -421,6 +421,17 @@ handler chain as lowest-priority handlers. Grap scripts in GID can follow as a
 second client, with a prelude of library names so scripts never copy cell IDs.
 The live app accepts the same socket behind an opt-in flag.
 
+### Accessibility
+
+The editor draws to a canvas with no accessibility tree, so screen readers
+can't read it. A tree needs, for each element a person can reach, its role, a
+name, its value, its bounds and the actions it accepts. AccessKit can hand such
+a tree to each platform's accessibility API. Much of it exists in another form:
+the frame's hit tests already identify every reachable element and its region,
+but drawn text keeps only glyph IDs, so names and values would come from the
+projections that draw them. External control needs the same description of
+what's on screen, so the two can share it.
+
 ### Demo moments
 
 - Drag handles on the tool profile picture that update the numbers it was drawn
