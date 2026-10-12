@@ -9,10 +9,10 @@
 //
 // SESSION defaults to target/web-control/session.jsonl, and OUT to
 // playtest.mp4 beside it. It replays against the browser build as it stands,
-// so don't rebuild between recording and replaying. It needs ffmpeg, a speech
-// synthesizer (pico2wave from libttspico-utils, macOS's say, or espeak-ng),
-// and the ffmpeg build Playwright records with (npx playwright-core install
-// ffmpeg).
+// so don't rebuild between recording and replaying. It needs ffmpeg, the
+// ffmpeg build Playwright records with (npx playwright-core install ffmpeg),
+// and a voice: Kokoro once tools/playtest-voice setup has fetched it, else
+// pico2wave from libttspico-utils, macOS's say, or espeak-ng.
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
@@ -20,10 +20,10 @@ const control = require("./web-control");
 
 const { WINDOW } = control;
 const BAR = 150;
-const RATE = 16000;
-// How much faster than the synthesizer's own pace the notes are spoken, with
-// their pitch kept.
-const TEMPO = 2;
+const RATE = 24000;
+// Kokoro's voice and pace, as fast as the other synthesizers sped up twice.
+const KOKORO_VOICE = process.env.PLAYTEST_VOICE ?? "af_heart";
+const KOKORO_SPEED = 1.75;
 const DRAG_STEPS = 10;
 const QUIET = 250;
 const WATCH = 350;
@@ -44,16 +44,32 @@ function installed(command) {
   }
 }
 
-// The first synthesizer found, writing `text` to a WAV file.
+// The voice: Kokoro once tools/playtest-voice has set it up, else the first
+// synthesizer installed. It writes a batch of {text, file} jobs as WAV files,
+// which `tempo` then speeds up with their pitch kept.
 function synthesizer() {
+  const home = path.join(control.ROOT, "target", "playtest-voice");
+  const python = path.join(home, "venv", "bin", "python");
+  if (fs.existsSync(python) && fs.existsSync(path.join(home, "kokoro-v1.0.int8.onnx"))) {
+    return {
+      name: `kokoro ${KOKORO_VOICE} ${KOKORO_SPEED}`,
+      tempo: 1,
+      synthesize: (jobs) => execFileSync(python, [
+        path.join(__dirname, "playtest-voice"), "speak", KOKORO_VOICE, String(KOKORO_SPEED),
+      ], { input: jobs.map((job) => `${JSON.stringify(job)}\n`).join(""), stdio: ["pipe", "ignore", "inherit"] }),
+    };
+  }
   const engines = [
     ["pico2wave", (text, file) => run("pico2wave", ["-l", "en-US", "-w", file, text])],
     ["say", (text, file) => run("say", ["-o", file, "--file-format=WAVE", "--data-format=LEI16@16000", text])],
     ["espeak-ng", (text, file) => run("espeak-ng", ["-w", file, text])],
   ];
   const found = engines.find(([command]) => installed(command));
-  if (!found) throw new Error("no speech synthesizer: install pico2wave (libttspico-utils) or espeak-ng");
-  return found[1];
+  if (!found) {
+    throw new Error("no voice: run tools/playtest-voice setup, or install pico2wave (libttspico-utils) or espeak-ng");
+  }
+  const [name, one] = found;
+  return { name, tempo: 2, synthesize: (jobs) => jobs.forEach(({ text, file }) => one(text, file)) };
 }
 
 // What a voice should read: words for the symbols and abbreviations a note
@@ -71,24 +87,31 @@ function spoken(text) {
     .trim();
 }
 
-// Each note as 16 kHz mono samples at TEMPO, synthesized once and kept by
+// Each note as mono samples at RATE, synthesized once per voice and kept by
 // its text.
 function speak(notes, directory) {
-  const synthesize = synthesizer();
+  const voice = synthesizer();
+  console.error(`playtest-video: speaking ${notes.length} notes with ${voice.name}`);
   fs.mkdirSync(directory, { recursive: true });
-  const speech = new Map();
-  for (const text of new Set(notes)) {
-    const key = require("node:crypto").createHash("sha256").update(`${TEMPO} ${text}`).digest("hex").slice(0, 16);
-    const raw = path.join(directory, `${key}.raw`);
-    if (!fs.existsSync(raw)) {
-      const wav = path.join(directory, `${key}.wav`);
-      synthesize(spoken(text), wav);
+  const file = (text, extension) => {
+    const key = require("node:crypto").createHash("sha256")
+      .update(`${voice.name} ${voice.tempo} ${text}`).digest("hex").slice(0, 16);
+    return path.join(directory, `${key}.${extension}`);
+  };
+  const missing = [...new Set(notes)].filter((text) => !fs.existsSync(file(text, "raw")));
+  if (missing.length) {
+    voice.synthesize(missing.map((text) => ({ text: spoken(text), file: file(text, "wav") })));
+    for (const text of missing) {
       run("ffmpeg", [
-        "-y", "-v", "error", "-i", wav, "-filter:a", `atempo=${TEMPO}`,
-        "-ar", String(RATE), "-ac", "1", "-f", "s16le", raw,
+        "-y", "-v", "error", "-i", file(text, "wav"),
+        ...(voice.tempo === 1 ? [] : ["-filter:a", `atempo=${voice.tempo}`]),
+        "-ar", String(RATE), "-ac", "1", "-f", "s16le", file(text, "raw"),
       ]);
     }
-    const bytes = fs.readFileSync(raw);
+  }
+  const speech = new Map();
+  for (const text of new Set(notes)) {
+    const bytes = fs.readFileSync(file(text, "raw"));
     speech.set(text, new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2));
   }
   return speech;
@@ -428,7 +451,6 @@ async function main(sessionPath, out) {
   const work = path.join(control.STATE, "video");
   fs.rmSync(path.join(work, "recording"), { recursive: true, force: true });
   const notes = entries.filter(({ action }) => Array.isArray(action) && action[0] === "say").map(({ action }) => action[1]);
-  console.error(`playtest-video: speaking ${notes.length} notes`);
   const speech = speak(notes, path.join(work, "speech"));
   const { server, url } = await control.preview(false);
   const browser = await control.launch();

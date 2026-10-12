@@ -90,8 +90,12 @@ action goes to `target/web-control/session.jsonl` with its timing.
 `tools/playtest-video` replays that log in a fresh browser at a pace a person
 can follow and writes a video beside it: a drawn pointer, the notes spoken and
 captioned under the page, and each action named. It needs ffmpeg, Playwright's
-ffmpeg for recording, and a speech synthesizer: `pico2wave` from
-libttspico-utils, macOS's `say`, or `espeak-ng`.
+ffmpeg for recording, and a voice. `tools/playtest-voice setup` fetches Kokoro,
+an open speech model that runs on the CPU faster than it speaks, into
+`target/playtest-voice`: about 120 MB of model from the kokoro-onnx release and
+a virtual environment with kokoro-onnx. Without it, the video falls back to
+`pico2wave` from libttspico-utils, macOS's `say`, or `espeak-ng`, sped up twice
+over to Kokoro's pace.
 
 ## Ignored tests
 
