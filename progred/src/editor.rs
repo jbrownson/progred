@@ -95,6 +95,13 @@ pub(crate) struct Editor {
     pub(crate) focused: bool,
     /// This window draws its own menu bar (the drawn menu system).
     pub(crate) drawn_menu: bool,
+    /// File commands may ask for a path through the platform's dialogs; a
+    /// headless session has none, so its untitled saves do nothing.
+    #[cfg_attr(
+        target_arch = "wasm32",
+        expect(dead_code, reason = "the browser saves by download")
+    )]
+    pub(crate) file_dialogs: bool,
     pub(crate) state: RenderState,
     /// Multiplies the display's scale, like a browser's page zoom.
     pub(crate) zoom: f64,
@@ -274,6 +281,7 @@ pub(crate) fn new_editor(
         timers: timers::Timers::default(),
         focused: false,
         drawn_menu,
+        file_dialogs: true,
         state: RenderState::Suspended(None),
         zoom: 1.0,
         #[cfg(not(target_arch = "wasm32"))]
@@ -640,15 +648,19 @@ impl Editor {
     pub(crate) fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
         let target = in_place.or_else(|| {
-            let file_name = self
-                .doc_path
-                .as_deref()
-                .and_then(|path| path.file_name())
-                .map_or_else(
-                    || "untitled.gid".to_owned(),
-                    |name| name.to_string_lossy().into_owned(),
-                );
-            text_dialog().set_file_name(file_name).save_file()
+            self.file_dialogs
+                .then(|| {
+                    let file_name = self
+                        .doc_path
+                        .as_deref()
+                        .and_then(|path| path.file_name())
+                        .map_or_else(
+                            || "untitled.gid".to_owned(),
+                            |name| name.to_string_lossy().into_owned(),
+                        );
+                    text_dialog().set_file_name(file_name).save_file()
+                })
+                .flatten()
         });
         if let Some(path) = target {
             match text_store::save(&path, &self.model.doc, &self.text_binders) {
@@ -722,6 +734,7 @@ impl Editor {
             timers,
             focused: _,
             drawn_menu: _,
+            file_dialogs: _,
             state: _,
             zoom: _,
             #[cfg(not(target_arch = "wasm32"))]

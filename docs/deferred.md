@@ -395,31 +395,28 @@ and progress and cancellation for long computations.
 
 ### External control and a newcomer test
 
-Lift `crate::driver::Driver` out of the tests into a dev binary that holds one
-editor and listens on a Unix socket. Agents drive it with `nc -U`, and Claude
-Code can use the same bridge as an MCP stdio server. Messages are JSON values,
-one per line; `serde_json` is already a dependency. It needs a sanctioned Make
-target.
+The [session an agent drives](testing.md#a-session-an-agent-drives) exists.
+Next is the newcomer test: a subagent with no knowledge of the code gets a short
+description of Progred, how to drive the session, and a task such as a small
+CAM job, and reports where it got stuck, keeping friction in Progred apart from
+friction in operating it as an agent. Add help only where that report shows a
+need: the visible text and its boxes, captured as text leaves draw (which
+accessibility needs too), `zoom`, or the computer-use actions left out so far.
+Sessions could replay as scripts, so a fixed stuck point becomes a regression
+test.
 
-Start with the commands a person has: a screenshot, a list of what's drawn,
-click, double-click, drag, typing, keys and shortcuts. Targets are named by
-document path, or by visible label for menu items, completion entries and
-toggles; positions inside a target are fractions of its rect. Only drawn targets
-are listed. A path resolves to a point and a real click, so hit-testing and
-occlusion still apply, and the reply says what was actually hit.
-
-The first use is a friction test. A subagent with no knowledge of the code gets
-a short description of Progred, the command sheet and a task, such as a small
-CAM job, and reports where it got stuck. Sessions replay as scripts, so a fixed
-stuck point can become a regression test.
-
-Later come semantic actions. Puri gets one opaque external event, and a Progred
-combinator pairs a named action with its key binding and handler, so projections
-opt in as they do for keys and can list what they accept. The editor's
-structural fallbacks (paste, delete, insert, replace, navigation) move into the
-handler chain as lowest-priority handlers. Grap scripts in GID can follow as a
-second client, with a prelude of library names so scripts never copy cell IDs.
-The live app accepts the same socket behind an opt-in flag.
+Later the live app could accept the same socket behind an opt-in flag, so a
+person can watch, and an MCP bridge could serve Claude Code. An editor made for
+an LLM is a separate goal: the same editor state and actions presented as text
+and named actions instead of pictures and gestures, as in Phil Freeman's
+comonadic UIs, where a component keeps its space of states and the actions
+that move through it while its presentation changes. It needs actions as values
+apart from the gestures that trigger them. Puri gets one opaque external event,
+and a Progred combinator pairs a named action with its key binding and handler,
+so projections opt in as they do for keys and can list what they accept. The
+editor's structural fallbacks (paste, delete, insert, replace, navigation) move
+into the handler chain as lowest-priority handlers. Completion offers already
+work this way: an offer is data, and choosing one is a commit.
 
 ### Accessibility
 

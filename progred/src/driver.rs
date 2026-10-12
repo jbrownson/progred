@@ -4,13 +4,15 @@
 //! frame. Tests read the frames back through the queries in `inspect`.
 
 use crate::EditorRunner;
-use kurbo::{Point, Size};
+use kurbo::{Point, Size, Vec2};
 use puri::draw::DrawList;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
 use ui_events::pointer::PointerEvent;
 use ui_events_winit::WindowEventTranslation;
 use winit::dpi::PhysicalPosition;
-use winit::event::{DeviceId, ElementState, MouseButton, WindowEvent};
+use winit::event::{
+    DeviceId, ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
+};
 use winit::keyboard::ModifiersState;
 
 #[cfg(test)]
@@ -19,6 +21,10 @@ mod inspect;
 /// `page` is whatever a test knows about where the editor is embedded.
 pub(crate) struct Driver<P = ()> {
     pub(crate) runner: EditorRunner,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "tests read the page an embedded editor sits in")
+    )]
     pub(crate) page: P,
     painted: DrawList,
     held: ModifiersState,
@@ -51,6 +57,22 @@ impl<P> Driver<P> {
 
     pub(crate) fn editor(&self) -> &crate::Editor {
         &self.runner.editor
+    }
+
+    /// The last frame's drawing.
+    pub(crate) fn painted(&self) -> &DrawList {
+        &self.painted
+    }
+
+    /// The wheel turned by `lines` with the pointer at `point`: positive
+    /// `y` scrolls up, positive `x` left.
+    pub(crate) fn scroll_at(&mut self, point: Point, lines: Vec2) {
+        self.move_to(point);
+        self.window_event(WindowEvent::MouseWheel {
+            device_id: DeviceId::dummy(),
+            delta: MouseScrollDelta::LineDelta(lines.x as f32, lines.y as f32),
+            phase: TouchPhase::Moved,
+        });
     }
 
     pub(crate) fn present(&mut self) {

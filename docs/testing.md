@@ -32,9 +32,11 @@ window; the owner does the visual testing.
 - **Interactions.** [`crate::driver::Driver`](../progred/src/driver.rs) drives
   the editor as a person would: pointer and modifier input arrives as Winit
   window events through the shell's own translation, keys as the platform
-  delivers them, and queries read back what is drawn where by document path.
-  The tutorial tests follow each tutorial page's steps with it, and the menu
-  interaction tests use it too.
+  delivers them, and the queries in
+  [`driver/inspect.rs`](../progred/src/driver/inspect.rs) read back what is
+  drawn where by document path. The tutorial tests follow each tutorial page's
+  steps with it, and the menu interaction tests use it too. Its input also
+  serves the [session an agent drives](#a-session-an-agent-drives).
 - **Browser.** The website's server and scripts have their own tests, and
   headless Chrome diagnostics measure the browser build; see the
   [website](../website/README.md) and [browser host](../web/README.md) notes.
@@ -55,6 +57,27 @@ SVGs to PNG with `rsvg-convert` from librsvg.
 These are layout and content captures, not pixel-exact Vello output: Fidget
 falls back to the CPU without a GPU, glyphs are unhinted outlines, and the
 exporter supports solid brushes only.
+
+## A session an agent drives
+
+`make control ARGS='--document examples/grap-demo.gid'` builds the
+`progred-control` binary and serves one headless editor on
+`target/control/progred.sock`, which only its owner can connect to. Its window
+is 1280 × 800 at one pixel per logical unit, with the in-app menus. The app's
+own menu items (New, Open, the examples, windows) do nothing there, and saving
+an untitled document asks for no path.
+
+`tools/control` sends it one action at a time, named and shaped as in
+Anthropic's computer-use tool: `screenshot`, `mouse_move`, `left_click`,
+`double_click`, `left_click_drag`, `scroll`, `key` and `type`. Screenshots are
+saved as PNGs under `target/control/screenshots`. Each request is a GID
+document whose root calls the session's
+[`computer` library](../progred/src/control/computer.rs), and each reply a
+document whose root is the result: `done`, `{png: …}`, or an absent that says
+why the action couldn't happen. The session writes the vocabulary's binders to
+`target/control/vocabulary.gid` for clients to spell requests with. Its first
+use is to see how an agent that knows nothing of the code copes with the
+editor; see [deferred work](deferred.md#external-control-and-a-newcomer-test).
 
 ## Ignored tests
 

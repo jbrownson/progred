@@ -6,7 +6,14 @@ license.workspace = true
 
 [features]
 cam-profile = []
+# The headless editor an agent drives over a local socket: `make control`.
+control = ["puri-vello/capture"]
 layout-profile = []
+
+[[bin]]
+name = "progred-control"
+path = "src/bin/progred-control.rs"
+required-features = ["control"]
 
 [[example]]
 name = "cam_profile"

@@ -8,8 +8,10 @@ mod command;
 mod commands;
 mod completion;
 mod computations;
+#[cfg(any(test, feature = "control"))]
+pub mod control;
 mod display;
-#[cfg(test)]
+#[cfg(any(test, feature = "control"))]
 mod driver;
 mod editing;
 mod editor;

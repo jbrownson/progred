@@ -13,12 +13,13 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev run-web build-web build-website images fetch check build test test-vendor test-gpu test-web-gpu perf audit outdated sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev control run-web build-web build-website images fetch check build test test-vendor test-gpu test-web-gpu perf audit outdated sandbox-app
 
 help:
 	@echo "Development:"
 	@echo "  make run          Run the native app once"
 	@echo "  make dev          Rebuild after app exit or Ctrl+C"
+	@echo "  make control      Serve a headless editor for tools/control (ARGS='--document PATH')"
 	@echo "  make run-web      Serve the website and its editor on port 8081 (macOS)"
 	@echo "  make build-web    Build the browser editor; the servers build it first (macOS)"
 	@echo "  make build-website  Package the publishable website into target/website (macOS)"
@@ -55,6 +56,10 @@ unsupported-native-platform:
 dev:
 	@./tools/dev-native $(ARGS)
 
+control:
+	@$(NATIVE_CARGO) build -p progred --features control --bin progred-control
+	@$(NATIVE_TARGET_DIR)/debug/progred-control $(ARGS)
+
 build-website: build-web
 	python3 -B website/package.py
 
@@ -79,7 +84,7 @@ fetch:
 
 # All targets and the profiling features, which nothing else compiles.
 check:
-	$(NATIVE_CARGO) check --workspace --all-targets --features progred/cam-profile,progred/layout-profile
+	$(NATIVE_CARGO) check --workspace --all-targets --features progred/cam-profile,progred/control,progred/layout-profile
 
 build:
 	$(NATIVE_CARGO) build --workspace

@@ -27,9 +27,22 @@ const LIMIT: usize = 64 << 20;
 /// The longest side shown at the image's own size; larger images shrink to fit.
 const SHOWN: f64 = 480.0;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "control"))]
 pub fn value(bytes: Vec<u8>) -> Value {
     Value::record([(vocabulary::PNG, Value::from(bytes))])
+}
+
+/// Eight-bit straight-alpha RGBA pixels as a PNG.
+#[cfg(any(test, feature = "control"))]
+pub fn encode(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, png::EncodingError> {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header()?;
+    writer.write_image_data(rgba)?;
+    writer.finish()?;
+    Ok(bytes)
 }
 
 pub fn read(value: &Value) -> Option<&[u8]> {

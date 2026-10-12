@@ -9,7 +9,7 @@ pub(crate) fn font_context() -> FontContext {
     bundled_font_context()
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
+#[cfg(any(target_arch = "wasm32", test, feature = "control"))]
 pub(crate) fn bundled_font_context() -> FontContext {
     use parley::fontique::{Blob, Collection, CollectionOptions};
     use parley::style::GenericFamily;
