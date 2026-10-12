@@ -3,8 +3,8 @@
 use crate::frame::Hovered;
 use crate::libraries::{
     Libraries, Library, absent, blob, color, control, controls, conversion, f32, f64, fidget,
-    geometry, grap as grap_library, layout, line_edit, list, logic, name, number, presentation,
-    random, selection, sequence, site, text, toolpath, tree, u64, workspace,
+    geometry, grap as grap_library, layout, line_edit, list, logic, name, number, png,
+    presentation, random, selection, sequence, site, text, toolpath, tree, u64, workspace,
 };
 use crate::projection::Projection;
 use std::rc::Rc;
@@ -122,6 +122,7 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (name::ID, name::library),
     (text::ID, text::library),
     (blob::ID, blob::library),
+    (png::ID, png::library),
     (absent::ID, absent::library),
     (color::ID, color::library),
     (control::ID, control::library),

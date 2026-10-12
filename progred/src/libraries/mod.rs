@@ -27,6 +27,7 @@ pub mod logic;
 pub mod name;
 pub mod number;
 pub mod path;
+pub mod png;
 pub mod presentation;
 pub mod random;
 pub mod representation;

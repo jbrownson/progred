@@ -78,6 +78,11 @@ can't load them.
 Library labels are once-minted random `CellId`s. Their readable names are
 ordinary GID facts, not identifiers derived from names. Text is an open
 `{utf8: blob}` convention; f64 is an open `{f64: eight-byte-blob}` convention.
+A PNG image is an open `{png: blob}` convention holding the encoded file. Its
+projection decodes it each frame and draws the picture at one logical unit per
+pixel, shrunk to fit 480 units on its longer side. Bytes that don't decode, or
+whose RGBA pixels would exceed 64 MiB, decline to the ordinary record view.
+`png width` and `png height` read only the header.
 Additional fields do not invalidate a recognized facet, so a line projection
 still recognizes text or f64 and a more specific wrapper (for example a unit
 around f64) can defer to that facet.
