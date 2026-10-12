@@ -334,6 +334,18 @@ up only when text entry becomes a focus:
 - CJK composition and candidate placement, Linux IME, and AltGr characters in
   Windows browsers are implemented but unverified.
 
+## Tutorial hints
+
+The story tutorial shows a hint when someone strays from a step in a way we can
+predict, read from the same state as its checks: selecting the 60's raw bytes,
+or planting a tree without a height. Review these, and more candidates from the
+newcomer runs, once the tutorial settles:
+
+- repeated plain clicks on a picture, which could point out holding Ctrl;
+- dragging a number without Ctrl, which selects its text instead.
+
+Both need the editor to tell the page about gestures, not just the selection.
+
 ## Platform work
 
 ### Opening documents from the macOS shell
@@ -399,11 +411,25 @@ This is the biggest weak spot.
   recording everything.
 - Dragging a value onto a slot could link it, as Cmd-clicking does. The first
   newcomer test reached for dragging when it couldn't find picking.
+- Enter and Cmd+Enter need rethinking together: while typing, which to press is
+  hard to remember. Today Enter while typing ends the typing, Enter on a
+  selection adds a peer beside it, and Cmd+Enter adds a field within it, except
+  in a value drawn as one piece, such as a number.
+- A raw view of one value in place, as the document-wide Raw view shows
+  everything. Structure a projection hides, such as a field on a number, would
+  be authored there; today only a whole view can be raw.
 - Wrap insertions: besides completions at a placeholder, libraries offer ways to
   wrap the selection. With `42` selected, asking for a wrap lists each operator
   with the 42 on its left or its right, and typing an operator such as `-` picks
   its left form. Typing an operator at the end of a number already does this
   for that one case.
+
+### A second language
+
+Grap is the language the examples are written in, not Progred's own, yet
+newcomers take Progred for a Grap editor. A second language whose programs live
+in the same documents, with its own projections and evaluator, would show the
+difference, and would show where the editor still assumes Grap.
 
 ### Notebook and REPL
 
