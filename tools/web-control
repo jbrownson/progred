@@ -4,6 +4,9 @@
 // serves the site locally, opens PAGE in a 1280 x 800 window, and listens on
 // target/web-control/browser.sock; every other command sends it one action
 // and prints `done`, the saved screenshot's path, or why it couldn't happen.
+// The session's actions, with their timing, go to
+// target/web-control/session.jsonl, which tools/playtest-video replays as a
+// narrated video; `say` adds a tester's thinking aloud to it.
 //
 //   tools/web-control serve [PAGE]       (for example story.html)
 //   tools/web-control screenshot [FILE]
@@ -16,6 +19,7 @@
 //   tools/web-control key KEYS            (for example Return, ctrl+z, shift+Tab)
 //   tools/web-control type TEXT
 //   tools/web-control wait SECONDS
+//   tools/web-control say TEXT            (what you're thinking, for the video)
 //
 // Coordinates are pixels from the window's top left; modifiers are
 // `+`-joined names such as ctrl or ctrl+shift. It drives the installed
@@ -28,6 +32,7 @@ const { spawn } = require("node:child_process");
 const ROOT = path.resolve(__dirname, "..");
 const STATE = path.join(ROOT, "target", "web-control");
 const SOCKET = path.join(STATE, "browser.sock");
+const SESSION = path.join(STATE, "session.jsonl");
 const SCREENSHOTS = path.join(STATE, "screenshots");
 const WINDOW = { width: 1280, height: 800 };
 const SETTLE = 400;
@@ -151,16 +156,19 @@ async function perform(page, [action, ...args]) {
     case "wait":
       await page.waitForTimeout(Math.min(Number(args[0]) || 1, 30) * 1000);
       return "done";
+    case "say":
+      if (!args[0]?.trim()) throw new Error("say needs something to say");
+      return "done";
     default:
       throw new Error(`unknown action: ${action}\n${USAGE}`);
   }
 }
 
-async function serve(pagePath) {
-  const { chromium } = require("playwright-core");
-  const server = spawn("python3", ["-B", "website/preview.py", "--no-open", "--port", "0"], {
-    cwd: ROOT, stdio: ["ignore", "pipe", "inherit"],
-  });
+// The site built and served locally; resolves to the server and its address.
+async function preview(build = true) {
+  const server = spawn("python3", [
+    "-B", "website/preview.py", "--no-open", "--port", "0", ...(build ? [] : ["--no-build"]),
+  ], { cwd: ROOT, stdio: ["ignore", "pipe", "inherit"] });
   const url = await new Promise((resolve, reject) => {
     let output = "";
     server.stdout.on("data", (chunk) => {
@@ -170,13 +178,28 @@ async function serve(pagePath) {
     });
     server.once("exit", (code) => reject(new Error(`the preview server exited: ${code}`)));
   });
-  const browser = await chromium.launch(process.env.CHROMIUM
+  return { server, url };
+}
+
+function launch() {
+  const { chromium } = require("playwright-core");
+  return chromium.launch(process.env.CHROMIUM
     ? { executablePath: process.env.CHROMIUM, headless: true }
     : { channel: "chrome", headless: true });
+}
+
+async function serve(pagePath) {
+  const { server, url } = await preview();
+  const browser = await launch();
   const page = await browser.newPage({ viewport: WINDOW });
   await page.goto(new URL(pagePath, url).href);
   fs.mkdirSync(STATE, { recursive: true, mode: 0o700 });
   if (fs.existsSync(SOCKET)) fs.unlinkSync(SOCKET);
+  // Each action as it happened: when, for how long, and what came of it.
+  const started = Date.now();
+  const session = fs.openSync(SESSION, "w", 0o600);
+  const record = (entry) => fs.writeSync(session, JSON.stringify(entry) + "\n");
+  record({ page: pagePath, window: WINDOW, started: new Date(started).toISOString() });
   // One action at a time, in the order they arrive.
   let queue = Promise.resolve();
   const listener = net.createServer((connection) => {
@@ -185,11 +208,17 @@ async function serve(pagePath) {
       request += chunk;
       if (!request.includes("\n")) return;
       queue = queue.then(async () => {
+        const at = Date.now() - started;
+        let action = request.trim();
+        let reply;
         try {
-          connection.end(JSON.stringify({ result: await perform(page, JSON.parse(request)) }) + "\n");
+          action = JSON.parse(action);
+          reply = { result: await perform(page, action) };
         } catch (error) {
-          connection.end(JSON.stringify({ error: error.message }) + "\n");
+          reply = { error: error.message };
         }
+        record({ at, took: Date.now() - started - at, action, ...reply });
+        connection.end(JSON.stringify(reply) + "\n");
       });
     });
   });
@@ -199,6 +228,7 @@ async function serve(pagePath) {
   });
   const stop = async () => {
     listener.close();
+    fs.closeSync(session);
     await browser.close();
     server.kill("SIGTERM");
     process.exit(0);
@@ -225,6 +255,9 @@ function send(args) {
   });
   connection.write(JSON.stringify(args) + "\n");
 }
+
+module.exports = { ROOT, STATE, SESSION, WINDOW, SETTLE, WHEEL_CLICK, modifiers, chord, holding, preview, launch };
+if (require.main !== module) return;
 
 const [command, ...args] = process.argv.slice(2);
 if (!command) {

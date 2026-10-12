@@ -85,7 +85,13 @@ editor; see [deferred work](deferred.md#external-control-and-a-newcomer-test).
 preview server, opens the page in a 1280 × 800 headless Chrome, or the browser
 at `$CHROMIUM`, and listens on `target/web-control/browser.sock`; the other
 commands each send it one action. An agent can then take a tutorial as a reader
-does, with its prose, steps and checks.
+does, with its prose, steps and checks. It thinks aloud with `say`, and every
+action goes to `target/web-control/session.jsonl` with its timing.
+`tools/playtest-video` replays that log in a fresh browser at a pace a person
+can follow and writes a video beside it: a drawn pointer, the notes spoken and
+captioned under the page, and each action named. It needs ffmpeg, Playwright's
+ffmpeg for recording, and a speech synthesizer: `pico2wave` from
+libttspico-utils, macOS's `say`, or `espeak-ng`.
 
 ## Ignored tests
 
