@@ -279,6 +279,12 @@ impl Changes {
         {
             None
         } else {
+            let sources = editor.sources();
+            let value = editor
+                .model
+                .selection
+                .as_ref()
+                .and_then(|selected| selected.value(&sources));
             let state = serde_json::json!({
                 "document": &*editor.model.doc,
                 "selection": selection.as_ref().map(|selected| serde_json::json!({
@@ -293,6 +299,7 @@ impl Changes {
                         Stage::Pending => "pending",
                         Stage::Label => "label",
                     },
+                    "value": value,
                 })),
             });
             self.previous = Some((editor.model.doc.clone(), selection));
@@ -463,12 +470,17 @@ mod tests {
             serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();
         assert_eq!(pending["selection"]["stage"], "pending");
         assert_eq!(pending["selection"]["view"], "document");
+        assert_eq!(pending["selection"]["value"], serde_json::Value::Null);
         let mut items = list.clone();
         items.insert(position, crate::libraries::text::value("peaches"));
         Rc::make_mut(&mut editor.model.doc).root = Some(Value::List(items));
         let committed: serde_json::Value =
             serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();
         assert_eq!(committed["selection"]["stage"], "value");
+        assert_eq!(
+            committed["selection"]["value"],
+            serde_json::to_value(crate::libraries::text::value("peaches")).unwrap()
+        );
         editor.model.selection = Some(selection::Selection::edge(
             &editor.model.workspace.document.root,
             vec![],
