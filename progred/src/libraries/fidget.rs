@@ -595,41 +595,7 @@ fn image_layout(
         width: raster_size.width(),
         height: raster_size.height(),
     };
-    image_from_data(size, image, false)
-}
-
-pub(crate) fn image_from_data(
-    size: Size,
-    image: ImageData,
-    stale: bool,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
-    let image_transform = Affine::scale_non_uniform(
-        size.width / f64::from(image.width),
-        size.height / f64::from(image.height),
-    );
-    Layout::widget(Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
-        let image = image.clone();
-        widget::paint(
-            widget::Extent {
-                width: size.width * scale,
-                ascent: size.height / 2.0 * scale,
-                descent: size.height / 2.0 * scale,
-            },
-            move |canvas, placement| {
-                let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
-                    * Affine::scale(scale);
-                canvas.draw_image(image, transform * image_transform);
-                if stale {
-                    canvas.fill_shape(
-                        placement.rect.into(),
-                        puri::Color::new([0.9, 0.9, 0.9, 0.35]).into(),
-                        Affine::IDENTITY,
-                    );
-                }
-            },
-        )
-    }))
+    widget::image::image(size, image)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

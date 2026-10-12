@@ -22,6 +22,7 @@ pub mod drawing;
 pub mod frame;
 pub mod gesture;
 pub mod hover;
+pub mod image;
 pub mod interaction;
 pub mod line;
 pub mod list;
