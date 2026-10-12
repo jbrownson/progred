@@ -33,11 +33,18 @@ shift 5
 # The working directory refers to the host's tree; it's re-entered by path.
 cwd=$(pwd)
 
+# Makes a mount read-only. Given only a target, mount would look it up in the
+# host's fstab, whose devices, named by UUID or label, this /dev can't resolve;
+# the mount table already says what's there.
+remount_ro() {
+    mount --options-source=mtab -o remount,bind,ro "$1"
+}
+
 # Binds a directory with everything mounted beneath it, all read-only.
 bind_ro() {
     mount --rbind "$1" "$2"
     findmnt -R -n -l -o TARGET -- "$2" | while IFS= read -r mount_point; do
-        mount -o remount,bind,ro "$mount_point" || exit 1
+        remount_ro "$mount_point" || exit 1
     done
 }
 
@@ -71,7 +78,7 @@ ln -s /proc/self/fd/1 "$root/dev/stdout"
 ln -s /proc/self/fd/2 "$root/dev/stderr"
 mkdir "$root/dev/shm"
 mount -t tmpfs shm "$root/dev/shm"
-mount -o remount,bind,ro "$root/dev"
+remount_ro "$root/dev"
 mount -t tmpfs tmp "$root/tmp"
 mount -t tmpfs run "$root/run"
 if [ -d "$root/var/tmp" ]; then
@@ -106,22 +113,22 @@ while [ "$1" != -- ]; do
         mkdir -p "$root$(dirname "$1")"
         : >"$root$1"
         mount --bind "$1" "$root$1"
-        mount -o remount,bind,ro "$root$1"
+        remount_ro "$root$1"
     fi
     shift
 done
 shift
 if [ -d "$root$real_home" ]; then
-    mount -o remount,bind,ro "$root$real_home"
+    remount_ro "$root$real_home"
 fi
-mount -o remount,bind,ro "$root/run"
+remount_ro "$root/run"
 
 mkdir "$root/.host"
 cd "$root"
 pivot_root . .host
 umount -l /.host
 rmdir /.host
-mount -o remount,bind,ro /
+remount_ro /
 cd "$cwd" 2>/dev/null || cd /
 
 setpriv --no-new-privs --inh-caps=-all --ambient-caps=-all --bounding-set=-all \
