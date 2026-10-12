@@ -46,14 +46,27 @@ fn peel_forest(page: &str) {
     assert!(peel.drawn(&bytes));
 }
 
+/// Clicking an anonymous lambda's λ names it with what's typed, even a word
+/// that also names a function.
+fn name_a_lambda(page: &str) {
+    let mut peel = Embed::open(page, "peel");
+    let name = peel.path(&["first", "follow", "controls", "name"]);
+    peel.click(&name);
+    peel.type_text("slider");
+    peel.press(NamedKey::Enter);
+    assert_eq!(peel.value(&name), crate::libraries::text::value("slider"));
+}
+
 #[test]
 fn home_page() {
     peel_forest("index.html");
+    name_a_lambda("index.html");
 }
 
 #[test]
 fn forest() {
     peel_forest("lab/peel.html");
+    name_a_lambda("lab/peel.html");
 }
 
 #[test]
