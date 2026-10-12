@@ -283,7 +283,8 @@ impl Editor {
         }
     }
 
-    /// Completion handlers own committing their query. Otherwise
+    /// Completion handlers own committing their query, and Enter while
+    /// typing in a value only ends the typing. Otherwise
     /// plain Enter is a new peer BESIDE the selection: a
     /// sibling element in a list (Shift+Enter before), a new field on
     /// the parent record otherwise; the root has nothing beside it
@@ -305,6 +306,16 @@ impl Editor {
                     Some(current) if current.stage(&self.sources()) != selection::Stage::Edge => {
                         self.model.selection = Some(current);
                         false
+                    }
+                    // Typing has already written the value, so Enter only ends
+                    // the typing, and the text re-spells from what was written.
+                    Some(mut current)
+                        if current.value_edit().is_some()
+                            && !self.command_modifier.pressed(&event.modifiers) =>
+                    {
+                        current.clear_editor();
+                        self.model.selection = Some(current);
+                        true
                     }
                     selection => {
                         let sources = self.sources();

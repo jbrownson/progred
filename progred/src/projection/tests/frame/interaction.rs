@@ -1328,6 +1328,49 @@ fn typing_an_operator_after_a_number_makes_it_the_left_operand() {
 }
 
 #[test]
+fn enter_ends_typing_in_a_value_before_it_adds_anything_beside() {
+    let size = kurbo::Size::new(600.0, 400.0);
+    let x = new_cell_id();
+    let mut runner = crate::EditorRunner::new(crate::test_editor(Document {
+        root: Some(Value::record([(x, f64::value(2.0))])),
+        cells: Cells::new(),
+    }));
+    runner.editor.model.selection = Some(make_selection(vec![Step::Key(x)]));
+    runner.refresh_frame(1.0, size);
+    let press = |runner: &mut crate::EditorRunner, key: Key| {
+        runner.keyboard_event(
+            &KeyboardEvent {
+                key,
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        );
+    };
+    // "25e" is still becoming a number, so 25 is what was written.
+    for typed in ["5", "e"] {
+        press(&mut runner, Key::Character(typed.into()));
+    }
+    let selection = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(selection.edit().unwrap().text(), "25e");
+    press(&mut runner, Key::Named(NamedKey::Enter));
+    let selection = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(selection.path(), [Step::Key(x)]);
+    assert_eq!(selection.stage(&runner.editor.sources()), Stage::Edge);
+    assert!(selection.edit().is_none(), "the typing ended");
+    assert_eq!(
+        runner.editor.model.doc.root,
+        Some(Value::record([(x, f64::value(25.0))])),
+        "and nothing was added beside it"
+    );
+    // Enter on the value itself continues beside it, as before.
+    press(&mut runner, Key::Named(NamedKey::Enter));
+    let selection = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(selection.stage(&runner.editor.sources()), Stage::Label);
+}
+
+#[test]
 fn a_numbers_other_fields_follow_it_including_one_being_added() {
     let (x, note) = (new_cell_id(), new_cell_id());
     let number = f64::value(1.0)

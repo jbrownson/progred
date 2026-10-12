@@ -126,6 +126,12 @@ state are optional. This applies to empty roots, bare-cell definitions, missing
 record fields, and inserted list positions, without a special selection callback
 for each. Read-only locations do not enter a picker.
 
+Enter beside a selected value adds a peer: an element after it in a list, or a
+field on the record holding it. While typing in a value, Enter only ends the
+typing, since the value is already written; the text re-spells from it, so a
+half-typed `6e` goes back to `6`. A key a line editor doesn't take never starts
+its typing.
+
 Deleting a selected value keeps its place selected as a hole, so the next
 keystrokes write its replacement; Backspace or Delete on the hole's empty query
 removes it, landing on the stop before it (after it, for Delete). Typing over a

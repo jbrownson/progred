@@ -37,10 +37,15 @@ pub(crate) fn edit(
     line: &crate::display::LineEdit,
     operation: impl FnOnce(&mut LineEditState) -> bool,
 ) -> (bool, bool) {
+    let typing = selection.edit().is_some();
     let state = selection.edit_line_mut(&line.text);
     let before = state.text().to_owned();
     let handled = operation(state);
     let changed = before != state.text();
+    // A key the line didn't take doesn't start typing.
+    if !handled && !typing {
+        selection.clear_editor();
+    }
     let record = handled && changed && commit(doc, libraries, selection, &line.update);
     (handled, record)
 }
