@@ -271,8 +271,8 @@ name decorator descends to the real `name` field with an unquoted text editor;
 the number retains its own editor and scrub target. The numeric target includes
 the representation subscript: clicking it selects the number, and modified
 dragging scrubs just as over the digits. It does not include the name. While
-the command modifier is held, a writable number's digits are outlined in the
-shape of a hovered value's outline, lighter and in the number's own color, and
+the command modifier is held, a writable number's digits are outlined as a
+hovered value is, in the number's own color rather than the selection's, and
 the pointer over it is a left-right arrow, which a drag keeps until release.
 This is
 opt-in library composition, not automatic merging of every matching facet's projection.

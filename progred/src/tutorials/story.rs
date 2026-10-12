@@ -22,7 +22,7 @@ fn outlined(embed: &Embed) -> Vec<kurbo::Rect> {
         crate::styles::Theme::Light
             .palette()
             .literal
-            .with_alpha(0.35),
+            .with_alpha(0.55),
     );
     crate::display::test_support::painted(&embed.painted().0)
         .filter_map(|command| match command {
