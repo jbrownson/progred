@@ -7,10 +7,10 @@ not make compilation of those dependencies safe.
 On macOS, the Make targets (`fetch`, `check`, `build`, `test`, `run`, `dev`,
 `sandbox-app`, and `build-web`) compile under the repository's Seatbelt sandbox,
 and `make run` launches the result as an App Sandbox bundle. On Linux, the
-native targets compile in a namespace sandbox with the same boundaries; the app
-itself runs outside it. Use `./tools/sandbox-cargo` or `./tools/linux-cargo`
-`<cargo command> [arguments...]` for other Cargo commands. How each platform
-builds and runs is in [platforms](platforms.md).
+native targets and `build-web` compile in a namespace sandbox with the same
+boundaries; the app itself runs outside it. Use `./tools/sandbox-cargo` or
+`./tools/linux-cargo` `<cargo command> [arguments...]` for other Cargo commands.
+How each platform builds and runs is in [platforms](platforms.md).
 
 ## Sandbox boundaries
 
@@ -123,7 +123,7 @@ Cargo, where `registry.global-min-publish-age` no longer needs
 `-Z min-publish-age`; the browser build keeps the nightly for `-Z build-std`.
 The browser build is an explicit exception: `web-threaded`, which
 `make build-web` uses, builds with the same pinned nightly to rebuild the
-standard library with atomics, under the same Seatbelt restrictions, in a
+standard library with atomics, under the same sandbox, in a
 separate `target/sandbox/build-web` directory. `web-threaded-fetch` only fetches
 that toolchain's locked sysroot dependencies; it does not update the workspace
 lockfile.

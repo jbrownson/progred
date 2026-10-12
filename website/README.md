@@ -5,12 +5,13 @@ there is no separate demo implementation, framework, or hosting dependency.
 
 ## Open it
 
-On macOS, double-click **Preview.command** in Finder, or run `make run-web`
-from the repository root. It starts a loopback-only web server and leaves the
-URL as the last line in the terminal. Open that link in whichever browser you
-want. Leave the terminal running; Control+C stops the server. Website and lesson
-edits need only a browser refresh. Successful requests are quiet; errors remain
-visible with the URL repeated below them, so ordinary browsing doesn't bury it.
+Run `make run-web` from the repository root, or on macOS double-click
+**Preview.command** in Finder. It starts a loopback-only web server and leaves
+the URL as the last line in the terminal. Open that link in whichever browser
+you want. Leave the terminal running; Control+C stops the server. Website and
+lesson edits need only a browser refresh. Successful requests are quiet; errors
+remain visible with the URL repeated below them, so ordinary browsing doesn't
+bury it.
 
 The local address is always <http://127.0.0.1:8081/>. Closing a browser tab does
 not stop the server: reopen that link in Safari, Chrome, or another browser.

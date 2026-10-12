@@ -73,9 +73,9 @@ They build sandboxed, under Seatbelt through `./tools/sandbox-cargo` on macOS
 and in namespaces through `./tools/linux-cargo` on Linux; use the wrapper for
 any other Cargo command. See `docs/build-security.md`.
 
-The browser build is supported on macOS. Supporting it elsewhere isn't worth its
-complexity yet, but don't block other platforms on purpose;
-`website/build-ci.sh` builds it on Linux for publishing.
+The browser build is supported on macOS and Linux. Supporting it elsewhere isn't
+worth its complexity yet, but don't block other platforms on purpose;
+`website/build-ci.sh` builds it on a Linux CI runner for publishing.
 
 Update dependencies through the wrapper's `update` command
 (`./tools/sandbox-cargo update` or `./tools/linux-cargo update`), and npm

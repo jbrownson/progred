@@ -76,6 +76,7 @@ run_sandboxed() {
         RUSTC="$rustc_path" \
         RUSTC_WRAPPER= \
         RUSTDOC="$rustdoc_path" \
+        CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="${web_rustflags-}" \
         TMPDIR="$sandbox_tmp" \
         USER="$user_name" \
         ${https_upper:+"HTTPS_PROXY=$https_upper"} \

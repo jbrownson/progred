@@ -39,10 +39,11 @@ OpenGL driver; Mesa's software Vulkan driver, lavapipe, works without a GPU.
 
 ## Browser
 
-The browser build is supported on macOS; `website/build-ci.sh` also builds it on
-a Linux CI runner for publishing. It needs a secure context (localhost or HTTPS)
-and cross-origin isolation for its shared-memory workers, so plain LAN HTTP or a
-`file://` URL won't run it. Setup and the host's options are in
+The browser build is supported on macOS and Linux, in the same build sandboxes
+as the native app; `website/build-ci.sh` also builds it on a Linux CI runner for
+publishing. It needs a secure context (localhost or HTTPS) and cross-origin
+isolation for its shared-memory workers, so plain LAN HTTP or a `file://` URL
+won't run it. Setup and the host's options are in
 [the browser host notes](../web/README.md); the website is described in
 [its README](../website/README.md).
 

@@ -20,9 +20,9 @@ help:
 	@echo "  make run          Run the native app once"
 	@echo "  make dev          Rebuild after app exit or Ctrl+C"
 	@echo "  make control      Serve a headless editor for tools/control (ARGS='--document PATH')"
-	@echo "  make run-web      Serve the website and its editor on port 8081 (macOS)"
-	@echo "  make build-web    Build the browser editor; the servers build it first (macOS)"
-	@echo "  make build-website  Package the publishable website into target/website (macOS)"
+	@echo "  make run-web      Serve the website and its editor on port 8081"
+	@echo "  make build-web    Build the browser editor; the servers build it first"
+	@echo "  make build-website  Package the publishable website into target/website"
 	@echo "  make images       Regenerate the README and website screenshots from the editor"
 	@echo "  make install-linux  Install the app for the current user (Linux)"
 	@echo "  make fetch        Download the locked dependencies"
@@ -144,7 +144,7 @@ sandbox-app:
 # using the release matching Cargo.lock.
 build-web:
 	@set -e; . ./tools/web-build-settings.sh; \
-	./tools/sandbox-cargo web-threaded build $$web_cargo_args; \
+	$(NATIVE_CARGO) web-threaded build $$web_cargo_args; \
 	wasm=target/sandbox/build-web/$$web_target/release/progred.wasm; \
 	if [ ! -f web/pkg/progred_bg.wasm ] || [ ! -f web/pkg/progred.js ] || [ "$$wasm" -nt web/pkg/progred_bg.wasm ]; then \
 		./tools/wasm-bindgen $$web_bindgen_args "$$wasm"; \

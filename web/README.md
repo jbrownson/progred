@@ -136,19 +136,19 @@ One-time build prerequisites:
 ```sh
 rustup toolchain install nightly-2026-08-27 --profile minimal
 rustup component add rust-src llvm-tools --toolchain nightly-2026-08-27
-./tools/sandbox-cargo web-threaded-fetch
+./tools/sandbox-cargo web-threaded-fetch  # on Linux, ./tools/linux-cargo
 ```
 
-`make build-web` rebuilds the standard library with atomics and enables SIMD
-under Seatbelt, then generates `web/pkg` with `tools/wasm-bindgen`. That script
-runs the wasm-bindgen CLI matching the lockfile, downloading the release once into
-`target/tools` and checking its published SHA-256, so a separately installed CLI
-can't fall out of step with the crate.
-Native builds continue using stable Rust. The worker instantiates exactly the
-same module with shared memory; ordinary Rust `Send` closures and results stay
-in Rust, while JS transfers job pointers and wake notifications. The page alone
-starts the editor and dispatches completion events. Fatal worker errors require
-a page reload; they are not treated as completed computations.
+`make build-web` rebuilds the standard library with atomics and enables SIMD in
+the build sandbox, then generates `web/pkg` with `tools/wasm-bindgen`. That
+script runs the wasm-bindgen CLI matching the lockfile, downloading the release
+once into `target/tools` and checking its published SHA-256, so a separately
+installed CLI can't fall out of step with the crate. Native builds continue
+using stable Rust. The worker instantiates exactly the same module with shared
+memory; ordinary Rust `Send` closures and results stay in Rust, while JS
+transfers job pointers and wake notifications. The page alone starts the editor
+and dispatches completion events. Fatal worker errors require a page reload;
+they are not treated as completed computations.
 
 The coordinator initializes a `wasm-bindgen-rayon` pool before accepting jobs.
 It uses up to eight rendering workers, leaving one reported hardware thread
@@ -163,8 +163,8 @@ images upload when replaced, with the same depth and clipping behavior. If no
 WebGPU adapter is available, the host retains the slower Canvas2D/CPU-mesh
 fallback. Startup logs the selected presentation backend and worker count.
 
-`website/Preview.command` builds and serves the whole website. See
-[the website README](../website/README.md).
+`make run-web`, or `website/Preview.command` on macOS, builds and serves the
+whole website. See [the website README](../website/README.md).
 
 ## Diagnostics
 
