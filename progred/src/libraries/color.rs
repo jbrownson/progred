@@ -763,7 +763,11 @@ mod tests {
             targets: crate::display::ProjectionTargets::new(&target),
         })
         .expect("selected color projection");
-        let Recorded::Row { children, .. } = layout.record() else {
+        // Selected, it keeps Enter from adding a field within it.
+        let Recorded::After { child, .. } = layout.record() else {
+            panic!("a selected color claims Enter")
+        };
+        let Recorded::Row { children, .. } = *child else {
             panic!("color projection is one row")
         };
         let Recorded::Floating { .. } = &children[0] else {

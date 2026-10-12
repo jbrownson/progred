@@ -144,7 +144,9 @@ right operand's picker; a sign or exponent the number is still becoming stays
 in its text. A picker opened from a key remembers where it was opened, and Escape, or an empty
 query's Backspace or Delete, steps back there. Views that draw a record as one
 value (numbers, text, colors) follow it with a record of its other fields, as a
-call follows its head with its arguments; a field being added appears there.
+call follows its head with its arguments, and a field added beside one of those
+appears among them. Enter or Cmd+Enter on the value itself adds no field within
+it, since it doesn't read as a record there; a rawer view, where it does, can.
 
 The live `LineEditState` owns text, caret, IME, and text-drag state. A projection
 at the selected location receives a GID description derived from that state.

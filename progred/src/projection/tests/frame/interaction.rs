@@ -1454,7 +1454,8 @@ fn tab_goes_from_empty_slot_to_empty_slot_keeping_what_was_typed() {
 }
 
 #[test]
-fn a_numbers_other_fields_follow_it_including_one_being_added() {
+fn a_numbers_other_fields_follow_it_and_take_new_ones_beside_them() {
+    let size = kurbo::Size::new(600.0, 400.0);
     let (x, note) = (new_cell_id(), new_cell_id());
     let number = f64::value(1.0)
         .as_record()
@@ -1475,31 +1476,40 @@ fn a_numbers_other_fields_follow_it_including_one_being_added() {
     };
     assert!(drawn(&mut runner, note));
     assert!(!drawn(&mut runner, f64::vocabulary::F64));
-    runner.editor.model.selection = Some(make_selection(vec![Step::Key(x)]));
-    runner.refresh_frame(1.0, kurbo::Size::new(600.0, 400.0));
-    let command = match runner.editor.command_modifier {
-        puri::keyboard::CommandModifier::Meta => Modifiers::META,
-        puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
+    let enter = |runner: &mut crate::EditorRunner, path: Vec<Step>, modifiers| {
+        runner.editor.model.selection = Some(make_selection(path));
+        runner.refresh_frame(1.0, size);
+        assert!(runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Enter),
+                modifiers,
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        ));
+        let selection = runner.editor.model.selection.as_ref().unwrap();
+        (
+            selection.path().to_vec(),
+            selection.stage(&runner.editor.sources()),
+        )
     };
-    assert!(runner.keyboard_event(
-        &KeyboardEvent {
-            key: Key::Named(NamedKey::Enter),
-            modifiers: command,
-            state: KeyState::Down,
-            ..Default::default()
-        },
-        1.0,
-        kurbo::Size::new(600.0, 400.0),
-    ));
+    // Drawn as one piece, the number takes no field within it.
+    let before = runner.editor.model.doc.root.clone();
     assert_eq!(
-        runner
-            .editor
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .stage(&runner.editor.sources()),
-        Stage::Label
+        enter(&mut runner, vec![Step::Key(x)], crate::modifiers::command()),
+        (vec![Step::Key(x)], Stage::Edge)
+    );
+    assert_eq!(runner.editor.model.doc.root, before);
+    // Beside one of its other fields, a new one goes among them.
+    assert_eq!(
+        enter(
+            &mut runner,
+            vec![Step::Key(x), Step::Key(note)],
+            Modifiers::empty()
+        ),
+        (vec![Step::Key(x)], Stage::Label)
     );
     assert!(
         editing_frame(&mut runner.editor, false)
@@ -1509,6 +1519,52 @@ fn a_numbers_other_fields_follow_it_including_one_being_added() {
     );
     assert!(drawn(&mut runner, note));
     assert!(!drawn(&mut runner, f64::vocabulary::F64));
+}
+
+#[test]
+fn enter_adds_no_field_within_a_number_unless_its_view_shows_a_record() {
+    let size = kurbo::Size::new(600.0, 400.0);
+    let doc = Document {
+        root: Some(f64::value(5.0)),
+        cells: Cells::new(),
+    };
+    let enter = |editor: crate::Editor, command: bool| {
+        let mut runner = crate::EditorRunner::new(editor);
+        runner.editor.model.selection = Some(make_selection(Vec::new()));
+        runner.refresh_frame(1.0, size);
+        let modifiers = if command {
+            crate::modifiers::command()
+        } else {
+            Modifiers::empty()
+        };
+        runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Enter),
+                modifiers,
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        );
+        runner
+            .editor
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .stage(&runner.editor.sources())
+    };
+    // A number at the root has nothing beside it, and nothing within.
+    for command in [false, true] {
+        assert_eq!(enter(crate::test_editor(doc.clone()), command), Stage::Edge);
+    }
+    // Without the number library it reads as the record it is, which takes one.
+    let raw =
+        || crate::test_editor_with_stack(doc.clone(), crate::stack::load_selected(&[]).unwrap());
+    for command in [false, true] {
+        assert_eq!(enter(raw(), command), Stage::Label);
+    }
 }
 
 #[test]

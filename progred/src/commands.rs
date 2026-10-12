@@ -318,39 +318,7 @@ impl Editor {
                         true
                     }
                     selection => {
-                        let sources = self.sources();
-                        let shift = event.modifiers.shift();
-                        let root = selection
-                            .as_ref()
-                            .map(|current| current.root().clone())
-                            .unwrap_or_else(|| self.model.workspace.document_root().clone());
-                        let scope = selection
-                            .as_ref()
-                            .map(|s| s.scope().clone())
-                            .unwrap_or_default();
-                        let started = match selection.as_ref() {
-                            Some(current) if self.command_modifier.pressed(&event.modifiers) => {
-                                selection::pending_insert(
-                                    &root,
-                                    &scope.view(sources),
-                                    current.path(),
-                                    shift,
-                                )
-                            }
-                            Some(current) => selection::pending_enter(
-                                &root,
-                                &scope.view(sources),
-                                current.path(),
-                                shift,
-                            ),
-                            None => selection::pending_root(&root, &sources),
-                        }
-                        .map(|mut pending| {
-                            pending.set_scope(scope);
-                            pending.with_origin(
-                                selection.as_ref().map(|current| current.path().to_vec()),
-                            )
-                        });
+                        let started = self.enter_pending(selection.as_ref(), event);
                         let began = started.is_some();
                         self.model.selection = started.or(selection);
                         if began {
@@ -365,6 +333,37 @@ impl Editor {
                 }
                 _ => false,
             }
+    }
+
+    /// What Enter would start from `selection`, leaving it as it is: a peer
+    /// beside it, with the command chord something within it, or with no
+    /// selection an empty document's root value.
+    pub(crate) fn enter_pending(
+        &self,
+        selection: Option<&selection::Selection>,
+        event: &KeyboardEvent,
+    ) -> Option<selection::Selection> {
+        let sources = self.sources();
+        let shift = event.modifiers.shift();
+        let root = selection
+            .map(|current| current.root().clone())
+            .unwrap_or_else(|| self.model.workspace.document_root().clone());
+        let scope = selection
+            .map(|current| current.scope().clone())
+            .unwrap_or_default();
+        match selection {
+            Some(current) if self.command_modifier.pressed(&event.modifiers) => {
+                selection::pending_insert(&root, &scope.view(sources), current.path(), shift)
+            }
+            Some(current) => {
+                selection::pending_enter(&root, &scope.view(sources), current.path(), shift)
+            }
+            None => selection::pending_root(&root, &sources),
+        }
+        .map(|mut pending| {
+            pending.set_scope(scope);
+            pending.with_origin(selection.map(|current| current.path().to_vec()))
+        })
     }
 
     /// Escape steps back one level: a picker opened from a key returns to

@@ -3,6 +3,8 @@
 
 use super::projection::group;
 use super::*;
+use puri::handler::HasHandler;
+use ui_events::keyboard::{Key, NamedKey};
 
 pub fn list(
     child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
@@ -283,16 +285,44 @@ pub(crate) fn extra_fields(
 }
 
 /// `content` followed by its [`extra_fields`], as a call's head is by its
-/// arguments.
+/// arguments. Drawn as one piece, the value doesn't read as a record here, so
+/// Enter or Cmd+Enter on it adds no field within it; a rawer view, where it
+/// does, can. A field beside one of its others still goes among them.
 pub(crate) fn with_extra_fields(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     drawn: impl Fn(CellId) -> bool,
     content: Layout<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    match extra_fields(input, drawn) {
+    let content = match extra_fields(input, drawn) {
         Some(extras) => super::projection::group_hug(content, extras, 0.0, 20.0),
         None => content,
+    };
+    if input.selection.is_none() || !input.writable {
+        return content;
     }
+    super::widget::after(
+        content,
+        Rc::new(|context| {
+            let root = context.inputs.view.clone();
+            let path = context.path.to_vec();
+            Box::new(move |output, _| {
+                output.handler().on_key(move |editor, event| {
+                    event.state.is_down()
+                        && event.key == Key::Named(NamedKey::Enter)
+                        && editor.model.selection.as_ref().is_some_and(|current| {
+                            current.root() == &root
+                                && current.path() == path.as_slice()
+                                && current.stage(&editor.sources()) == crate::selection::Stage::Edge
+                                && (current.value_edit().is_none()
+                                    || editor.command_modifier.pressed(&event.modifiers))
+                                && editor
+                                    .enter_pending(Some(current), event)
+                                    .is_some_and(|pending| pending.path() == path.as_slice())
+                        })
+                });
+            })
+        }),
+    )
 }
 
 pub(crate) fn pending_field(
