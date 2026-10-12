@@ -637,6 +637,11 @@ repositories. Undo history is the starting point for history inside the
 document, with named versions, branches and merges built on it. Large blobs such
 as scans need content-addressed storage rather than inline text.
 
+Provenance, such as when, where and by whom a value was made, could live in
+fields on the value itself. Views that draw a value as one piece show its other
+fields after it, so they'd need a way to tell such metadata from the value's own
+fields and leave it out.
+
 ### Multiplayer editing
 
 Several people editing one document at once, perhaps with CRDTs. Cells are
