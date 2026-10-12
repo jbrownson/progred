@@ -9,6 +9,7 @@ pixels in the session's 1280 x 800 window, from its top left; modifiers are
     tools/control mouse_move X Y
     tools/control left_click X Y [MODIFIERS]
     tools/control double_click X Y [MODIFIERS]
+    tools/control triple_click X Y [MODIFIERS]
     tools/control left_click_drag X1 Y1 X2 Y2 [MODIFIERS]
     tools/control scroll X Y up|down|left|right AMOUNT [MODIFIERS]
     tools/control key KEYS        (for example Return, ctrl+z, shift+Tab)
@@ -58,7 +59,7 @@ def request(action, arguments):
             return {}
         case "mouse_move", [x, y]:
             return {"coordinate": coordinate(x, y)}
-        case ("left_click" | "double_click"), [x, y, *rest] if len(rest) <= 1:
+        case ("left_click" | "double_click" | "triple_click"), [x, y, *rest] if len(rest) <= 1:
             return {"coordinate": coordinate(x, y), **modifiers(rest)}
         case "left_click_drag", [x1, y1, x2, y2, *rest] if len(rest) <= 1:
             return {

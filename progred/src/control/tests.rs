@@ -66,6 +66,25 @@ fn a_click_selects_what_is_drawn_there() {
 }
 
 #[test]
+fn a_triple_click_selects_all_of_a_text() {
+    let field = gid::new_cell_id();
+    let session = session(Value::record([(field, text::value("hello world"))]));
+    let shown = session.borrow().driver.text_at(&[Step::Key(field)]);
+    assert_eq!(
+        send(&session, call(TRIPLE_CLICK, [(COORDINATE, at(shown))])),
+        Value::from(DONE)
+    );
+    assert_eq!(
+        send(&session, call(TYPE, [(TEXT, text::value("bye"))])),
+        Value::from(DONE)
+    );
+    assert_eq!(
+        session.borrow().driver.value(&[Step::Key(field)]),
+        text::value("bye")
+    );
+}
+
+#[test]
 fn actions_answer_why_they_could_not_happen() {
     let session = session(text::value("hello"));
     assert_eq!(

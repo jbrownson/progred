@@ -70,9 +70,9 @@ for no path.
 
 `tools/control` sends it one action at a time, named and shaped as in
 Anthropic's computer-use tool: `screenshot`, `mouse_move`, `left_click`,
-`double_click`, `left_click_drag`, `scroll`, `key` and `type`. Screenshots are
-saved as PNGs under `target/control/screenshots`. Each request is a GID
-document whose root calls the session's
+`double_click`, `triple_click`, `left_click_drag`, `scroll`, `key` and `type`.
+Screenshots are saved as PNGs under `target/control/screenshots`. Each request
+is a GID document whose root calls the session's
 [`computer` library](../progred/src/control/computer.rs), and each reply a
 document whose root is the result: `done`, `{png: …}`, or an absent that says
 why the action couldn't happen. The session writes the vocabulary's binders to

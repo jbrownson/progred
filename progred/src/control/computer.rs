@@ -24,6 +24,7 @@ pub mod vocabulary {
     pub const MOUSE_MOVE: CellId = CellId::from_u128(0x464371231311595fd8685c0e20408484);
     pub const LEFT_CLICK: CellId = CellId::from_u128(0xfa532a9b88dfe2b29a6d2353ae7336ad);
     pub const DOUBLE_CLICK: CellId = CellId::from_u128(0xed23bbbe455758d4de76b3ce46839528);
+    pub const TRIPLE_CLICK: CellId = CellId::from_u128(0x842c938a27f3c34466c291287afa41e7);
     pub const LEFT_CLICK_DRAG: CellId = CellId::from_u128(0x2a75313587a6e4d2c5041b5bae427648);
     pub const SCROLL: CellId = CellId::from_u128(0x36558b1a70542010e3af36b279d53c77);
     pub const KEY: CellId = CellId::from_u128(0xa2f4a6245d388cc27258cd1fe301eb6c);
@@ -50,13 +51,14 @@ pub mod vocabulary {
 
 /// The library's cells and their names. The tool's own spellings serve as
 /// the names, and as the binders requests use.
-const NAMES: [(CellId, &str); 23] = {
+const NAMES: [(CellId, &str); 24] = {
     use vocabulary::*;
     [
         (SCREENSHOT, "screenshot"),
         (MOUSE_MOVE, "mouse_move"),
         (LEFT_CLICK, "left_click"),
         (DOUBLE_CLICK, "double_click"),
+        (TRIPLE_CLICK, "triple_click"),
         (LEFT_CLICK_DRAG, "left_click_drag"),
         (SCROLL, "scroll"),
         (KEY, "key"),
@@ -145,6 +147,7 @@ fn functions(session: &Rc<RefCell<Session>>) -> ForeignFunctions {
         )
         .register(LEFT_CLICK, action(session, [COORDINATE], click(1)))
         .register(DOUBLE_CLICK, action(session, [COORDINATE], click(2)))
+        .register(TRIPLE_CLICK, action(session, [COORDINATE], click(3)))
         .register(
             LEFT_CLICK_DRAG,
             action(session, [START_COORDINATE, COORDINATE], |arguments| {
