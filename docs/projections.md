@@ -270,7 +270,10 @@ separated by spacing rather than binding or record-field punctuation. The shared
 name decorator descends to the real `name` field with an unquoted text editor;
 the number retains its own editor and scrub target. The numeric target includes
 the representation subscript: clicking it selects the number, and modified
-dragging scrubs just as over the digits. It does not include the name. This is
+dragging scrubs just as over the digits. It does not include the name. While
+the command modifier is held, a writable number's digits are dotted underneath
+and the pointer over it is a left-right arrow, which a drag keeps until
+release. This is
 opt-in library composition, not automatic merging of every matching facet's projection.
 Normal record order is named fields alphabetically by display name, with cell
 identity breaking ties, then unnamed fields by identity. Raw uses identity order.

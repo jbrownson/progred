@@ -15,6 +15,27 @@ fn dots(embed: &Embed) -> Vec<(Point, f64)> {
         .collect()
 }
 
+/// The dots painted under numbers that drag, on screen.
+fn dotted(embed: &Embed) -> Vec<kurbo::Rect> {
+    use puri::draw::{DrawCmd, Shape};
+    let ink = puri::Brush::from(
+        crate::styles::Theme::Light
+            .palette()
+            .literal
+            .with_alpha(0.7),
+    );
+    crate::display::test_support::painted(&embed.painted().0)
+        .filter_map(|command| match command {
+            DrawCmd::Fill {
+                shape: Shape::Rect(rect),
+                brush,
+                transform,
+            } if *brush == ink => Some(transform.transform_rect_bbox(*rect)),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn growing() {
     let mut forest = page("growing");
@@ -39,8 +60,23 @@ fn dot() {
     assert_eq!(dot.source_selection(), Some(dot.path(&["first", "follow"])));
 
     dot.task("scrub");
-    dot.hold(ModifiersState::CONTROL);
     let start = dot.text_at(&x);
+    dot.move_to(start);
+    assert_eq!(
+        dot.runner.cursor(),
+        CursorIcon::Default,
+        "a plain hover edits"
+    );
+    assert!(dotted(&dot).is_empty());
+    dot.hold(ModifiersState::CONTROL);
+    assert_eq!(dot.runner.cursor(), CursorIcon::EwResize, "held, it drags");
+    let number = dot.rect(&x);
+    assert!(
+        dotted(&dot)
+            .iter()
+            .any(|dot| number.contains(dot.center()) && dot.y0 > start.y),
+        "and the numbers that drag are dotted"
+    );
     dot.press_at(start);
     let mut farthest = 60.0;
     for step in 1..=6 {
@@ -53,8 +89,15 @@ fn dot() {
     dot.move_to(start + kurbo::Vec2::new(10.0, 0.0));
     assert!(dot.number(&x).unwrap() < farthest, "and left lowers it");
     assert_eq!(dots(&dot)[0].0.x, dot.number(&x).unwrap());
-    dot.release();
     dot.hold(ModifiersState::empty());
+    assert_eq!(
+        dot.runner.cursor(),
+        CursorIcon::EwResize,
+        "the drag keeps it"
+    );
+    dot.release();
+    assert_eq!(dot.runner.cursor(), CursorIcon::Default);
+    assert!(dotted(&dot).is_empty());
     assert_ne!(dot.number(&x), Some(60.0));
 }
 

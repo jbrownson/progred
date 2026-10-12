@@ -1,5 +1,6 @@
 //! One window's editor and its per-window execution state.
 
+use crate::UserEvent;
 use crate::clipboard::Clipboard;
 use crate::command::{Command, DocCommand};
 use crate::frame::FrameState;
@@ -9,9 +10,9 @@ use crate::macos_window;
 use crate::model::Model;
 #[cfg(test)]
 use crate::modifiers;
+use crate::placed::Cursor;
 #[cfg(target_arch = "wasm32")]
 use crate::web_worker;
-use crate::{UserEvent, cursor_icon};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog, text_store};
 use crate::{
@@ -194,7 +195,7 @@ impl EditorRunner {
     /// Mirror the installed frame into the window state the platform owns:
     /// the pointer cursor, and whether and where text composition happens.
     pub(crate) fn sync_window(&mut self, window: &Window) {
-        let next = cursor_icon(self.frame.hover.as_ref());
+        let next = self.cursor();
         if next != self.cursor_icon {
             window.set_cursor(next);
             self.cursor_icon = next;
@@ -211,6 +212,29 @@ impl EditorRunner {
                 );
             }
             self.input_area = area;
+        }
+    }
+
+    /// The running gesture's cursor, else the one the hovered target asked
+    /// for.
+    pub(crate) fn cursor(&self) -> CursorIcon {
+        let cursor = self
+            .editor
+            .gesture
+            .as_ref()
+            .and_then(|gesture| gesture.cursor())
+            .or_else(|| {
+                let hovered = self.frame.hover.as_ref()?;
+                let dispatch = &self.frame.dispatch;
+                dispatch
+                    .hover_geometry
+                    .cursor(dispatch.pointer_root.as_ref(), hovered)
+            });
+        match cursor {
+            None => CursorIcon::Default,
+            Some(Cursor::ColumnResize) => CursorIcon::ColResize,
+            Some(Cursor::RowResize) => CursorIcon::RowResize,
+            Some(Cursor::HorizontalDrag) => CursorIcon::EwResize,
         }
     }
 

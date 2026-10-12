@@ -26,7 +26,7 @@ pub type DispatchContext<C> = crate::display::widget::frame::DispatchContext<C, 
 pub type Attribution = crate::display::widget::frame::Attribution<Hovered>;
 pub use puri::frame::Render;
 pub type Probe = crate::display::widget::frame::Probe<Hovered>;
-pub use crate::display::widget::frame::ViewRegion;
+pub use crate::display::widget::frame::{Cursor, ViewRegion};
 
 impl DispatchContext<crate::Editor> {
     pub(crate) fn geometry(&self, scale: f64) -> crate::navigate::Geometry<'_> {
@@ -67,6 +67,11 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
         if !placement.clipped_out() {
             self.placed.claim(Probe::exact(placement, target));
         }
+    }
+
+    /// Show `cursor` while `target` is hovered.
+    pub fn cursor(&mut self, target: Hovered, cursor: Cursor) {
+        self.placed.cursor(target, cursor);
     }
 
     pub fn claim_dynamic(

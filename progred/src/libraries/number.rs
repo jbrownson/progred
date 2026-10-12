@@ -440,16 +440,18 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
     encode: fn(N) -> Value,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let original = input.value?;
-    let line = tagged(
-        input,
-        line_edit::layout(
-            number.to_string(),
-            line_edit::native(move |spelling, current| edit(spelling, current, encode)),
-            "",
-            "",
-        ),
-        representation,
+    let digits = line_edit::layout(
+        number.to_string(),
+        line_edit::native(move |spelling, current| edit(spelling, current, encode)),
+        "",
+        "",
     );
+    let digits = if number.scrubbable() {
+        scrub::dotted(digits)
+    } else {
+        digits
+    };
+    let line = tagged(input, digits, representation);
     let target = input.targets.current();
     let line = activatable(line, target.hover.clone(), target.select);
     let line = if number.scrubbable() {

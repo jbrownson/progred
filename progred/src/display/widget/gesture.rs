@@ -44,6 +44,11 @@ pub trait Gesture<World> {
     fn advance(&mut self, world: &mut World, samples: &[Point]) -> bool;
 
     fn finish(&mut self, _world: &mut World) {}
+
+    /// The pointer's look while this runs, wherever it goes.
+    fn cursor(&self) -> Option<super::frame::Cursor> {
+        None
+    }
 }
 
 pub fn targeted<World: 'static, Hover: 'static>(

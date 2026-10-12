@@ -257,6 +257,7 @@ fn compute_hover(
         Placement::root(Rect::from_origin_size(Point::ZERO, description.viewport)),
         &placed::HoverInput {
             command_modifier: description.command_modifier,
+            picking: pointer.link_sources,
             pointer: if pointer.pressed {
                 None
             } else {
@@ -712,6 +713,7 @@ fn project_workspace(
         let divider = placed_divider.divider;
         let vertical = matches!(divider, workspace::Divider::Columns(_));
         let hover_divider = divider.clone();
+        let cursor_divider = divider.clone();
         let down_divider = divider.clone();
         let move_divider = divider.clone();
         let up_divider = divider;
@@ -733,6 +735,14 @@ fn project_workspace(
                 p.claim_exact(
                     Placement::new(hit, placement.clip_rect),
                     Hovered::Divider(hover_divider),
+                );
+                p.cursor(
+                    Hovered::Divider(cursor_divider),
+                    if vertical {
+                        placed::Cursor::ColumnResize
+                    } else {
+                        placed::Cursor::RowResize
+                    },
                 );
                 p.handler().on_pointer_down(move |app: &mut Editor, event| {
                     is_primary_contact(event)
@@ -2416,6 +2426,41 @@ mod frame_tests {
                 .hover,
                 expected
             );
+        }
+    }
+
+    #[test]
+    fn a_hovered_target_shows_the_cursor_it_asked_for() {
+        let mut runner = EditorRunner::new(crate::test_editor(gid::Document {
+            root: None,
+            cells: gid::Cells::new(),
+        }));
+        let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
+        for (x, expected) in [
+            (5.0, winit::window::CursorIcon::ColResize),
+            (50.0, winit::window::CursorIcon::Default),
+        ] {
+            let claimed = target.clone();
+            let layout = crate::display::widget::leaf(
+                measured::Extent::default(),
+                move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
+                    output.claim(placed::Probe::exact(
+                        Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                        claimed.clone(),
+                    ));
+                    output.cursor(claimed, placed::Cursor::ColumnResize);
+                },
+            );
+            let frame = hover_frame(
+                &runner.editor,
+                layout,
+                Some(Point::new(x, 5.0)),
+                None,
+                false,
+            );
+            runner.frame.hover = frame.hover;
+            runner.frame.dispatch = frame.dispatch;
+            assert_eq!(runner.cursor(), expected);
         }
     }
 

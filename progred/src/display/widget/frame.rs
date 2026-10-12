@@ -18,6 +18,9 @@ use std::rc::Rc;
 
 pub struct HoverInput<'a, H> {
     pub command_modifier: puri::keyboard::CommandModifier,
+    /// The command modifier is held, so a press picks or drags rather than
+    /// edits.
+    pub picking: bool,
     pub pointer: Option<Point>,
     pub prior: Option<&'a H>,
     pub reach_px: f64,
@@ -34,6 +37,7 @@ impl<H> Default for HoverInput<'_, H> {
     fn default() -> Self {
         Self {
             command_modifier: crate::modifiers::native(),
+            picking: false,
             pointer: None,
             prior: None,
             reach_px: 0.0,
@@ -140,6 +144,14 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
     }
 }
 impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
+    /// Show `cursor` while `target`, in this view, is hovered.
+    pub fn cursor(&mut self, target: H, cursor: Cursor) {
+        self.output
+            .hover_geometry
+            .cursors
+            .push((self.root.clone(), target, cursor));
+    }
+
     pub fn claim(&mut self, probe: Probe<H>) {
         self.output.claim = claim_over(
             self.output.claim.take(),
@@ -170,6 +182,7 @@ impl<C: 'static, H: 'static> HasHandler<C> for HoverContext<'_, C, H> {
 /// only floating placements are deferred.
 pub struct HoverPass<C, H> {
     command_modifier: puri::keyboard::CommandModifier,
+    picking: bool,
     pointer: Option<Point>,
     prior: Option<H>,
     reach_px: f64,
@@ -187,6 +200,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
     {
         Self {
             command_modifier: input.command_modifier,
+            picking: input.picking,
             pointer: input.pointer,
             prior: input.prior.cloned(),
             reach_px: input.reach_px,
@@ -202,6 +216,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         let mut context = HoverContext::new(
             HoverInput {
                 command_modifier: self.command_modifier,
+                picking: self.picking,
                 pointer: self.pointer,
                 prior: self.prior.as_ref(),
                 reach_px: self.reach_px,
@@ -320,15 +335,32 @@ fn claim_over<H>(
     }
 }
 
-/// The installed frame's hit tests, in painting order, with their owning views.
+/// The installed frame's hit tests, in painting order, and the cursors their
+/// targets ask for, with their owning views.
 pub struct HoverGeometry<H> {
     probes: Vec<(Option<Root>, Probe<H>)>,
+    cursors: Vec<(Option<Root>, H, Cursor)>,
 }
 
 impl<H> Default for HoverGeometry<H> {
     fn default() -> Self {
-        Self { probes: Vec::new() }
+        Self {
+            probes: Vec::new(),
+            cursors: Vec::new(),
+        }
     }
+}
+
+/// How the pointer looks over a target that asks; the shell draws the
+/// platform's own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cursor {
+    /// Across a divider between columns.
+    ColumnResize,
+    /// Across a divider between stacked panes.
+    RowResize,
+    /// Over a value that drags left and right.
+    HorizontalDrag,
 }
 
 impl<H: Clone + PartialEq> HoverGeometry<H> {
@@ -348,6 +380,14 @@ impl<H: Clone + PartialEq> HoverGeometry<H> {
                 )
             })
         })
+    }
+
+    /// The cursor `hovered`, in the view `root`, asked for.
+    pub fn cursor(&self, root: Option<&Root>, hovered: &H) -> Option<Cursor> {
+        self.cursors
+            .iter()
+            .find(|(owner, target, _)| owner.as_ref() == root && target == hovered)
+            .map(|(_, _, cursor)| *cursor)
     }
 }
 
@@ -516,6 +556,10 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
         append(&mut self.scroll_probes, above.scroll_probes);
         self.claim = claim_over(self.claim, above.claim);
         append(&mut self.hover_geometry.probes, above.hover_geometry.probes);
+        append(
+            &mut self.hover_geometry.cursors,
+            above.hover_geometry.cursors,
+        );
         append(&mut self.debug_regions, above.debug_regions);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
@@ -538,6 +582,9 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             *owner = Some(root.clone());
         }
         for (owner, _) in &mut self.hover_geometry.probes {
+            *owner = Some(root.clone());
+        }
+        for (owner, _, _) in &mut self.hover_geometry.cursors {
             *owner = Some(root.clone());
         }
         for descend in &mut self.descends {

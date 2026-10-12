@@ -366,6 +366,12 @@ anchor they need as explicit caller-owned gesture state. While a press holds
 the prior hover, its owning view is retained too, both when probing installed
 geometry and when building a successor. Release resumes normal probing.
 
+A callback can also name the pointer's cursor for its own target, as a divider
+does for its resize arrows. The frame keeps those requests beside its probes,
+and the shell shows the hovered target's, or a running gesture's own while one
+runs. Callbacks also learn whether the command modifier is held, so a widget
+can show what holding it allows.
+
 ## Frame lifecycle
 
 The [application shell](../progred/src/app.rs) adapts Winit events, supplies

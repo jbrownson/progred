@@ -9,6 +9,7 @@ use kurbo::{Point, Size};
 use std::rc::Rc;
 use ui_events::keyboard::NamedKey;
 use winit::keyboard::ModifiersState;
+use winit::window::CursorIcon;
 
 mod peel;
 mod story;
