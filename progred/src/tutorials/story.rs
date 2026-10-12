@@ -156,6 +156,21 @@ fn ladder() {
     let selected = ladder.selection();
     assert_eq!(selected[0], ladder.key("fourth"));
     assert!(selected.contains(&ladder.key("x_param")));
+
+    // Clicking a folded recipe's dots opens it with the cell itself
+    // selected, so Space folds it straight back.
+    let recipe = ladder.element(
+        &ladder.path(&["fourth", "follow", "expressions"]),
+        0,
+        &[ladder.key("function")],
+    );
+    let inside = [recipe.clone(), vec![FOLLOW]].concat();
+    assert!(!ladder.drawn(&inside), "folded at first");
+    ladder.click(&recipe);
+    assert!(ladder.drawn(&inside), "the dots open it");
+    assert_eq!(ladder.selection(), recipe);
+    ladder.type_text(" ");
+    assert!(!ladder.drawn(&inside), "Space folds it again");
 }
 
 #[test]

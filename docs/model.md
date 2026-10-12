@@ -75,7 +75,9 @@ definition can itself still be replaced or removed from a writable document.
 payload, and optional Rust editor. Its stages distinguish an existing edge,
 a pending value, and a pending record label. Annotation records live in a
 path-keyed [`Annotations`](../progred/src/annotations.rs) trie owned by the view;
-folding is one convention in those records.
+folding is one convention in those records. Space folds and unfolds the selected
+occurrence. Clicking a fold's `…` selects the occurrence as it opens it, so Space
+closes it again.
 
 Selection also retains a native editing scope. Ordinary document projection
 uses its allocation-free identity case. A scope installs a **conject** at an

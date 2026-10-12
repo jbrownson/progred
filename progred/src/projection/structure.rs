@@ -100,13 +100,17 @@ fn selectable(cx: &Cx, child: View, path: &[Step], value: &grap::RuntimeValue) -
     on_hover(clicked, Hovered::Tree(Hover::Value(path)))
 }
 
+/// Opens the fold, selecting the occurrence first as a click on its
+/// brackets would, so Space closes it again.
 fn toggle(child: View, path: &[Step], cx: &Cx, default: bool) -> View {
     let target: Rc<[Step]> = Rc::from(path);
     let root = cx.view.clone();
+    let select = select_handler(target.clone(), cx);
     activatable(
         crate::display::hover_highlight(child, Hovered::Tree(Hover::Toggle(target.clone()))),
         Hovered::Tree(Hover::Toggle(target.clone())),
         Rc::new(move |world| {
+            select(world);
             world.set_collapsed(&root, &target, default, None);
             true
         }),
