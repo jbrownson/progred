@@ -53,6 +53,8 @@ const KEYS = {
   up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight",
   home: "Home", end: "End", page_up: "PageUp", pageup: "PageUp", prior: "PageUp",
   page_down: "PageDown", pagedown: "PageDown", next: "PageDown", plus: "+", minus: "-",
+  control_l: "ControlLeft", control_r: "ControlRight", shift_l: "ShiftLeft", shift_r: "ShiftRight",
+  alt_l: "AltLeft", alt_r: "AltRight", super_l: "MetaLeft", super_r: "MetaRight",
 };
 
 function modifiers(text) {
@@ -63,12 +65,13 @@ function modifiers(text) {
   });
 }
 
-// The last `+`-separated part is the key, so ctrl++ holds Control and types +.
+// The last `+`-separated part is the key, so ctrl++ holds Control and types +,
+// and a modifier alone, such as ctrl, is tapped.
 function chord(text) {
   const split = text.lastIndexOf("+", text.length - 2);
   const name = text.slice(split + 1);
-  const key = KEYS[name.toLowerCase()] ?? (/^f([1-9]|1[0-2])$/i.test(name) ? name.toUpperCase()
-    : [...name].length === 1 ? name : null);
+  const key = KEYS[name.toLowerCase()] ?? MODIFIERS[name.toLowerCase()]
+    ?? (/^f([1-9]|1[0-2])$/i.test(name) ? name.toUpperCase() : [...name].length === 1 ? name : null);
   if (!key) throw new Error(`unknown key: ${name}`);
   return { held: modifiers(split > 0 ? text.slice(0, split) : ""), key };
 }

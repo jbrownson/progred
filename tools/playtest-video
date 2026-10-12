@@ -8,9 +8,11 @@
 //   tools/playtest-video [SESSION] [OUT]
 //
 // SESSION defaults to target/web-control/session.jsonl, and OUT to
-// playtest.mp4 beside it. It needs ffmpeg, a speech synthesizer (pico2wave
-// from libttspico-utils, macOS's say, or espeak-ng), and the ffmpeg build
-// Playwright records with (npx playwright-core install ffmpeg).
+// playtest.mp4 beside it. It replays against the browser build as it stands,
+// so don't rebuild between recording and replaying. It needs ffmpeg, a speech
+// synthesizer (pico2wave from libttspico-utils, macOS's say, or espeak-ng),
+// and the ffmpeg build Playwright records with (npx playwright-core install
+// ffmpeg).
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
@@ -421,7 +423,7 @@ async function main(sessionPath, out) {
   const notes = entries.filter(({ action }) => Array.isArray(action) && action[0] === "say").map(({ action }) => action[1]);
   console.error(`playtest-video: speaking ${notes.length} notes`);
   const speech = speak(notes, path.join(work, "speech"));
-  const { server, url } = await control.preview();
+  const { server, url } = await control.preview(false);
   const browser = await control.launch();
   try {
     const context = await browser.newContext({
