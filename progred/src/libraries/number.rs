@@ -447,7 +447,7 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
         "",
     );
     let digits = if number.scrubbable() {
-        scrub::dotted(digits)
+        scrub::outlined(digits)
     } else {
         digits
     };

@@ -15,22 +15,23 @@ fn dots(embed: &Embed) -> Vec<(Point, f64)> {
         .collect()
 }
 
-/// The dots painted under numbers that drag, on screen.
-fn dotted(embed: &Embed) -> Vec<kurbo::Rect> {
+/// The outlines drawn around numbers that drag, on screen.
+fn outlined(embed: &Embed) -> Vec<kurbo::Rect> {
     use puri::draw::{DrawCmd, Shape};
     let ink = puri::Brush::from(
         crate::styles::Theme::Light
             .palette()
             .literal
-            .with_alpha(0.7),
+            .with_alpha(0.35),
     );
     crate::display::test_support::painted(&embed.painted().0)
         .filter_map(|command| match command {
-            DrawCmd::Fill {
-                shape: Shape::Rect(rect),
+            DrawCmd::Stroke {
+                shape: Shape::RoundedRect(outline),
                 brush,
                 transform,
-            } if *brush == ink => Some(transform.transform_rect_bbox(*rect)),
+                ..
+            } if *brush == ink => Some(transform.transform_rect_bbox(outline.rect())),
             _ => None,
         })
         .collect()
@@ -67,15 +68,15 @@ fn dot() {
         CursorIcon::Default,
         "a plain hover edits"
     );
-    assert!(dotted(&dot).is_empty());
+    assert!(outlined(&dot).is_empty());
     dot.hold(ModifiersState::CONTROL);
     assert_eq!(dot.runner.cursor(), CursorIcon::EwResize, "held, it drags");
     let number = dot.rect(&x);
     assert!(
-        dotted(&dot)
+        outlined(&dot)
             .iter()
-            .any(|dot| number.contains(dot.center()) && dot.y0 > start.y),
-        "and the numbers that drag are dotted"
+            .any(|outline| outline.contains(number.center())),
+        "and the numbers that drag are outlined"
     );
     dot.press_at(start);
     let mut farthest = 60.0;
@@ -97,7 +98,7 @@ fn dot() {
     );
     dot.release();
     assert_eq!(dot.runner.cursor(), CursorIcon::Default);
-    assert!(dotted(&dot).is_empty());
+    assert!(outlined(&dot).is_empty());
     assert_ne!(dot.number(&x), Some(60.0));
 }
 

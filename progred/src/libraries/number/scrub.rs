@@ -3,8 +3,7 @@ use crate::display::{Layout, widget};
 use crate::gesture::EditRun;
 use crate::placed::Cursor;
 use gid::Value;
-use puri::draw::Canvas;
-use puri::{Affine, Point, Rect, drag::Drag};
+use puri::{Point, drag::Drag};
 use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -80,9 +79,10 @@ pub(crate) fn on_scrub(
     )
 }
 
-/// Dots under a number's digits while the command modifier is held, when
-/// holding it lets the number be dragged.
-pub(crate) fn dotted(
+/// While the command modifier is held, a number that holding it lets be
+/// dragged is outlined as hovering outlines a value, in the number's own
+/// color: every place the pointer can drag shows at once.
+pub(crate) fn outlined(
     digits: Layout<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
     widget::around(
@@ -93,26 +93,16 @@ pub(crate) fn dotted(
                 .edits
                 .writable(&context.inputs.sources, context.path);
             let scale = context.inputs.styles.scale;
-            let color = context.inputs.styles.palette.literal.with_alpha(0.7);
+            let palette = context.inputs.styles.palette;
             Box::new(move |digits| {
                 if !writable {
                     return digits;
                 }
-                let baseline = digits.extent.ascent;
                 widget::before_place(digits, move |placement, output| {
                     if output.input.picking && !placement.clipped_out() {
-                        let rect = placement.rect;
-                        let y = rect.y0 + baseline + 2.0 * scale;
+                        let outline = widget::style::highlight_outline(scale, placement.rect);
                         output.render(move |canvas, _| {
-                            let mut x = rect.x0;
-                            while x + scale <= rect.x1 {
-                                canvas.fill(
-                                    Rect::new(x, y, x + scale, y + scale),
-                                    color,
-                                    Affine::IDENTITY,
-                                );
-                                x += 3.0 * scale;
-                            }
+                            widget::style::drag_highlight(palette, scale, canvas, outline);
                         });
                     }
                 })
