@@ -194,6 +194,32 @@ current computation's result. Skipping intermediate meshes during rapid geometry
 edits is another possible policy, with the tradeoff of an older mesh when the
 user next orbits.
 
+## Decoding PNGs once while visible
+
+The [png library](../progred/src/libraries/png.rs) decodes each visible image
+every frame. On the Linux container on 2026-10-12, editor screenshots rendered
+through Vello took about 4–5 ms to decode at 1280 × 800 (123 KiB) and 13–14 ms
+at 2560 × 1600 (286 KiB); reading only the header took about 2 µs. Each decode
+also makes a new image, which the compositor uploads again, since it reuses
+uploads by image blob identity. Adding the library didn't measurably change the
+perf canaries. PNGs are mostly for sending over the control socket for now, so
+this waits until they're shown on screen routinely, for example recorded
+sessions viewed as storyboards.
+
+When it's needed, follow the text-shaping cache (`puri::text::TextCache`), not
+`incremental`. Decoding is a pure function of the bytes, so a memo keyed by them
+can only be unused, never wrong. The editor would own it beside `text_cache`,
+sweep it at the same point in `prepare_frame`, and reach the png widget through
+the widget build context. A hit returns the same image, so its upload is reused
+too, and one picture shown in two places decodes once. Keying by content hashes
+the bytes each frame, which is small next to decoding; keying by the blob's
+shared allocation, while holding a reference to it, avoids even that but needs
+an accessor in `gid`. The projection would then decide from the header alone,
+so a valid header with a corrupt body draws a placeholder instead of declining
+to the record view. This would be a second exception to reusing work across
+frames only through `incremental`; when it lands, AGENTS.md should name the
+pattern it allows: caller-owned, swept memos of pure functions.
+
 ## Report Vello image-atlas flashing
 
 Prepare an upstream bug report for the reproducible Vello 0.9.0 image omissions
