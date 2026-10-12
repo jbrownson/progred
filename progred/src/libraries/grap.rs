@@ -365,7 +365,9 @@ pub(crate) fn call_with_function(
         },
         trailing,
     );
-    Some(group_hug(function, arguments, 0.0, 20.0))
+    Some(crate::display::structure::authoring(group_hug(
+        function, arguments, 0.0, 20.0,
+    )))
 }
 
 /// A stored lambda exposes its parameter declarations deeply and

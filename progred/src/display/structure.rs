@@ -33,7 +33,7 @@ pub(crate) fn list_column_with(
     ) -> Layout<crate::Editor, crate::frame::Hovered>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let items = list_items(input, child)?;
-    Some(group(if items.is_empty() {
+    Some(authoring(group(if items.is_empty() {
         selectable_bracket(Delim::Bracket, row(0.0, []))
     } else {
         col(
@@ -43,7 +43,7 @@ pub(crate) fn list_column_with(
                 list_gap(gap, before, after)
             }),
         )
-    }))
+    })))
 }
 
 /// Prepare element paths, including a pending insertion, and share their
@@ -175,10 +175,10 @@ pub fn list_layout_at(
         |_, item| item,
         |before, after| list_gap(4.0, before, after),
     );
-    selectable_bracket(
+    authoring(selectable_bracket(
         Delim::Bracket,
         group(alternatives([row(0.0, horizontal), col(1, 0.0, vertical)])),
-    )
+    ))
 }
 
 #[cfg(test)]
@@ -200,12 +200,12 @@ pub fn record_layout_at(
     keys: Vec<CellId>,
     child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    record_heads(
+    authoring(record_heads(
         ordered_keys(input, keys)
             .into_iter()
             .map(|key| record_field(input, key, child(key))),
         pending_field(input),
-    )
+    ))
 }
 
 pub(crate) fn record_keys(
@@ -285,41 +285,41 @@ pub(crate) fn extra_fields(
 }
 
 /// `content` followed by its [`extra_fields`], as a call's head is by its
-/// arguments. Drawn as one piece, the value doesn't read as a record here, so
-/// Enter or Cmd+Enter on it adds no field within it; a rawer view, where it
-/// does, can. A field beside one of its others still goes among them.
+/// arguments. Drawn as one piece, the value takes no new field from Enter:
+/// these views don't offer [`authoring`], which a rawer view of it does.
 pub(crate) fn with_extra_fields(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     drawn: impl Fn(CellId) -> bool,
     content: Layout<crate::Editor, crate::frame::Hovered>,
 ) -> Layout<crate::Editor, crate::frame::Hovered> {
-    let content = match extra_fields(input, drawn) {
+    match extra_fields(input, drawn) {
         Some(extras) => super::projection::group_hug(content, extras, 0.0, 20.0),
         None => content,
-    };
-    if input.selection.is_none() || !input.writable {
-        return content;
     }
-    super::widget::after(
-        content,
+}
+
+/// Enter's authoring for the container `child` draws: a field or element
+/// beside one of its children, or with the command chord one within it
+/// (see [`crate::Editor::enter_pending`]). The children's own handlers come
+/// first. A projection that doesn't offer this, such as a number's, takes
+/// nothing in from Enter.
+pub fn authoring(
+    child: Layout<crate::Editor, crate::frame::Hovered>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    super::widget::around(
+        child,
         Rc::new(|context| {
             let root = context.inputs.view.clone();
             let path = context.path.to_vec();
-            Box::new(move |output, _| {
-                output.handler().on_key(move |editor, event| {
-                    event.state.is_down()
-                        && event.key == Key::Named(NamedKey::Enter)
-                        && editor.model.selection.as_ref().is_some_and(|current| {
-                            current.root() == &root
-                                && current.path() == path.as_slice()
-                                && current.stage(&editor.sources()) == crate::selection::Stage::Edge
-                                && (current.value_edit().is_none()
-                                    || editor.command_modifier.pressed(&event.modifiers))
-                                && editor
-                                    .enter_pending(Some(current), event)
-                                    .is_some_and(|pending| pending.path() == path.as_slice())
-                        })
-                });
+            let scale = context.inputs.styles.scale;
+            Box::new(move |child| {
+                super::widget::before_place(child, move |_, output| {
+                    output.handler().on_key_with(move |editor, event, input| {
+                        event.state.is_down()
+                            && event.key == Key::Named(NamedKey::Enter)
+                            && editor.author_in(&root, &path, input.geometry(scale), event)
+                    });
+                })
             })
         }),
     )

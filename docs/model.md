@@ -127,10 +127,16 @@ record fields, and inserted list positions, without a special selection callback
 for each. Read-only locations do not enter a picker.
 
 Enter beside a selected value adds a peer: an element after it in a list, or a
-field on the record holding it. While typing in a value, Enter only ends the
-typing, since the value is already written; the text re-spells from it, so a
-half-typed `6e` goes back to `6`. A key a line editor doesn't take never starts
-its typing.
+field on the record holding it. Cmd+Enter adds something within it: a field on
+a record, an element appended to a list, or a bare cell's first value. Both
+belong to the view of the container they land in, which offers them through
+`structure::authoring`; its children's handlers run first. The structural
+record, list and cell views offer it, and so do Grap's calls; a view that draws
+a value as one piece, such as a number, text, a color, an infix expression or a
+tutorial's slots, doesn't, so Enter there adds nothing. While typing in a
+value, Enter only ends the typing, since the value is already written; the
+text re-spells from it, so a half-typed `6e` goes back to `6`. A key a line
+editor doesn't take never starts its typing.
 
 Deleting a selected value keeps its place selected as a hole, so the next
 keystrokes write its replacement; Backspace or Delete on the hole's empty query
@@ -144,9 +150,8 @@ right operand's picker; a sign or exponent the number is still becoming stays
 in its text. A picker opened from a key remembers where it was opened, and Escape, or an empty
 query's Backspace or Delete, steps back there. Views that draw a record as one
 value (numbers, text, colors) follow it with a record of its other fields, as a
-call follows its head with its arguments, and a field added beside one of those
-appears among them. Enter or Cmd+Enter on the value itself adds no field within
-it, since it doesn't read as a record there; a rawer view, where it does, can.
+call follows its head with its arguments. No key adds a field to them there; a
+rawer view, where the value reads as the record it is, can.
 
 The live `LineEditState` owns text, caret, IME, and text-drag state. A projection
 at the selected location receives a GID description derived from that state.

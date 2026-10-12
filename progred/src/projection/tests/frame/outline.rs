@@ -694,13 +694,11 @@ fn outline_preserves_pending_insertions_in_both_lists() {
     for target in [item, e] {
         let f = frame(&mut world);
         assert!((stop(&f, &target).select)(&mut world, None));
-        assert!(world.insert_key(
-            crate::navigate::Geometry {
-                descends: &f.descends,
-                ..Default::default()
-            },
-            &key(Key::Named(NamedKey::Enter))
-        ));
+        assert!(
+            frame(&mut world)
+                .resolve_for_dispatch()
+                .dispatch_key(&mut world, &key(Key::Named(NamedKey::Enter)))
+        );
         let path = world.model.selection.as_ref().unwrap().path().to_vec();
         let f = frame(&mut world);
         assert!(f.completion.is_some());

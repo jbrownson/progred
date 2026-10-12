@@ -413,8 +413,8 @@ This is the biggest weak spot.
   newcomer test reached for dragging when it couldn't find picking.
 - Enter and Cmd+Enter need rethinking together: while typing, which to press is
   hard to remember. Today Enter while typing ends the typing, Enter on a
-  selection adds a peer beside it, and Cmd+Enter adds a field within it, except
-  in a value drawn as one piece, such as a number.
+  selection adds a peer beside it, and Cmd+Enter adds something within it, each
+  offered by the view of the container it lands in.
 - A raw view of one value in place, as the document-wide Raw view shows
   everything. Structure a projection hides, such as a field on a number, would
   be authored there; today only a whole view can be raw.

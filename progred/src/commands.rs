@@ -284,17 +284,11 @@ impl Editor {
     }
 
     /// Completion handlers own committing their query, and Enter while
-    /// typing in a value only ends the typing. Otherwise
-    /// plain Enter is a new peer BESIDE the selection: a
-    /// sibling element in a list (Shift+Enter before), a new field on
-    /// the parent record otherwise; the root has nothing beside it
-    /// and takes the field on itself. The command chord authors
-    /// WITHIN the selection: a field on the selected cell, an
-    /// appended element on a list (with Shift, at the front). Labels
-    /// author first, then values; list elements are one-stage value
-    /// pendings, the projection minting the position.
-    /// On an empty document Enter begins the root value. Escape and an
-    /// empty query's Backspace or Delete step back out of a picker.
+    /// typing in a value only ends the typing. What Enter authors beside or
+    /// within a selected value belongs to the projection of the container
+    /// it lands in, through [`Self::author_in`]; on an empty document Enter
+    /// begins the root value. Escape and an empty query's Backspace or Delete
+    /// step back out of a picker.
     pub(crate) fn insert_key(
         &mut self,
         geometry: navigate::Geometry<'_>,
@@ -317,10 +311,14 @@ impl Editor {
                         self.model.selection = Some(current);
                         true
                     }
-                    selection => {
-                        let started = self.enter_pending(selection.as_ref(), event);
+                    Some(current) => {
+                        self.model.selection = Some(current);
+                        false
+                    }
+                    None => {
+                        let started = self.enter_pending(None, event);
                         let began = started.is_some();
-                        self.model.selection = started.or(selection);
+                        self.model.selection = started;
                         if began {
                             geometry.reveal_selection(self);
                         }
@@ -336,8 +334,13 @@ impl Editor {
     }
 
     /// What Enter would start from `selection`, leaving it as it is: a peer
-    /// beside it, with the command chord something within it, or with no
-    /// selection an empty document's root value.
+    /// beside it (a sibling element in a list, with Shift before it, or a new
+    /// field on the record holding it, the root taking one on itself), with
+    /// the command chord something within it (a field on a record or cell, an
+    /// element appended to a list, with Shift at the front), or with no
+    /// selection an empty document's root value. Labels author first, then
+    /// values; list elements are one-stage value pendings, the projection
+    /// minting the position.
     pub(crate) fn enter_pending(
         &self,
         selection: Option<&selection::Selection>,
@@ -364,6 +367,56 @@ impl Editor {
             pending.set_scope(scope);
             pending.with_origin(selection.map(|current| current.path().to_vec()))
         })
+    }
+
+    /// Starts what Enter would author from the selected value in the view
+    /// `root`, if it lands in the container drawn at `container`: a field on
+    /// that record, or an element of that list or cell. Containers offer this
+    /// through [`crate::display::structure::authoring`], children first, so a
+    /// projection without it, such as a number's, takes nothing in.
+    pub(crate) fn author_in(
+        &mut self,
+        root: &crate::workspace::Root,
+        container: &[gid::Step],
+        geometry: navigate::Geometry<'_>,
+        event: &KeyboardEvent,
+    ) -> bool {
+        // What lands in a container is on the way to the selection, or the
+        // value a cell there refers to: a cheap test before the full one.
+        let reached = container
+            .iter()
+            .rposition(|step| !matches!(step, gid::Step::Follow(_)))
+            .map_or(&[][..], |last| &container[..=last]);
+        let Some(current) = self
+            .model
+            .selection
+            .as_ref()
+            .filter(|current| current.root() == root && current.path().starts_with(reached))
+        else {
+            return false;
+        };
+        let sources = self.sources();
+        if current.stage(&sources) != selection::Stage::Edge
+            || current.value_edit().is_some() && !self.command_modifier.pressed(&event.modifiers)
+        {
+            return false;
+        }
+        let Some(pending) = self.enter_pending(Some(current), event) else {
+            return false;
+        };
+        let lands = match pending.stage(&sources) {
+            selection::Stage::Label => pending.path(),
+            _ => pending
+                .path()
+                .split_last()
+                .map_or(&[][..], |(_, parent)| parent),
+        };
+        if lands != container {
+            return false;
+        }
+        self.model.selection = Some(pending);
+        geometry.reveal_selection(self);
+        true
     }
 
     /// Escape steps back one level: a picker opened from a key returns to

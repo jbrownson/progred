@@ -1461,7 +1461,7 @@ fn tab_goes_from_empty_slot_to_empty_slot_keeping_what_was_typed() {
 }
 
 #[test]
-fn a_numbers_other_fields_follow_it_and_take_new_ones_beside_them() {
+fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
     let size = kurbo::Size::new(600.0, 400.0);
     let (x, note) = (new_cell_id(), new_cell_id());
     let number = f64::value(1.0)
@@ -1483,10 +1483,16 @@ fn a_numbers_other_fields_follow_it_and_take_new_ones_beside_them() {
     };
     assert!(drawn(&mut runner, note));
     assert!(!drawn(&mut runner, f64::vocabulary::F64));
-    let enter = |runner: &mut crate::EditorRunner, path: Vec<Step>, modifiers| {
-        runner.editor.model.selection = Some(make_selection(path));
+    // Drawn as one piece, the number takes no field from Enter, within it or
+    // beside one of the others it has; a rawer view of it can add one.
+    let before = runner.editor.model.doc.root.clone();
+    for (path, modifiers) in [
+        (vec![Step::Key(x)], crate::modifiers::command()),
+        (vec![Step::Key(x), Step::Key(note)], Modifiers::empty()),
+    ] {
+        runner.editor.model.selection = Some(make_selection(path.clone()));
         runner.refresh_frame(1.0, size);
-        assert!(runner.keyboard_event(
+        assert!(!runner.keyboard_event(
             &KeyboardEvent {
                 key: Key::Named(NamedKey::Enter),
                 modifiers,
@@ -1497,35 +1503,65 @@ fn a_numbers_other_fields_follow_it_and_take_new_ones_beside_them() {
             size,
         ));
         let selection = runner.editor.model.selection.as_ref().unwrap();
-        (
-            selection.path().to_vec(),
-            selection.stage(&runner.editor.sources()),
+        assert_eq!(
+            (
+                selection.path().to_vec(),
+                selection.stage(&runner.editor.sources())
+            ),
+            (path, Stage::Edge)
+        );
+    }
+    assert_eq!(runner.editor.model.doc.root, before);
+    assert!(drawn(&mut runner, note));
+}
+
+#[test]
+fn enter_beside_text_in_a_list_adds_an_element_but_nothing_within_the_text() {
+    let size = kurbo::Size::new(600.0, 400.0);
+    let doc = Document {
+        root: Some(Value::list([text::value("a"), text::value("b")])),
+        cells: Cells::new(),
+    };
+    let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
+    let first = runner
+        .editor
+        .sources()
+        .resolve_path(&[])
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let enter = |runner: &mut crate::EditorRunner, modifiers| {
+        runner.editor.model.selection = Some(make_selection(vec![Step::Element(first.clone())]));
+        runner.refresh_frame(1.0, size);
+        runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Enter),
+                modifiers,
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            size,
         )
     };
-    // Drawn as one piece, the number takes no field within it.
-    let before = runner.editor.model.doc.root.clone();
+    // The list takes a new element after the text.
+    assert!(enter(&mut runner, Modifiers::empty()));
+    let selection = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(selection.stage(&runner.editor.sources()), Stage::Pending);
+    assert!(matches!(
+        selection.path(),
+        [Step::Element(position)] if *position > first
+    ));
+    // The text, drawn as one piece, takes nothing within it.
+    assert!(!enter(&mut runner, crate::modifiers::command()));
     assert_eq!(
-        enter(&mut runner, vec![Step::Key(x)], crate::modifiers::command()),
-        (vec![Step::Key(x)], Stage::Edge)
+        runner.editor.model.selection.as_ref().unwrap().path(),
+        [Step::Element(first.clone())]
     );
-    assert_eq!(runner.editor.model.doc.root, before);
-    // Beside one of its other fields, a new one goes among them.
-    assert_eq!(
-        enter(
-            &mut runner,
-            vec![Step::Key(x), Step::Key(note)],
-            Modifiers::empty()
-        ),
-        (vec![Step::Key(x)], Stage::Label)
-    );
-    assert!(
-        editing_frame(&mut runner.editor, false)
-            .completion
-            .is_some(),
-        "the new field's picker is drawn"
-    );
-    assert!(drawn(&mut runner, note));
-    assert!(!drawn(&mut runner, f64::vocabulary::F64));
 }
 
 #[test]

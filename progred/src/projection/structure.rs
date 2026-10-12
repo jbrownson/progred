@@ -82,10 +82,10 @@ fn cell_layout(cx: &Cx, cell: CellId) -> View {
         .sources
         .resolve(cell)
         .map_or(Resolution::Document, |value| value.source);
-    crate::display::projection::group(selectable_bracket(
+    crate::display::structure::authoring(crate::display::projection::group(selectable_bracket(
         Delim::Paren,
         descend(Step::Follow(source), None, None),
-    ))
+    )))
 }
 
 fn selectable(cx: &Cx, child: View, path: &[Step], value: &grap::RuntimeValue) -> View {
