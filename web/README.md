@@ -139,11 +139,25 @@ Unsupported hosts show an error instead of silently doing heavy work inline.
 
 One-time build prerequisites:
 
+The browser build needs the pinned nightly in `tools/web-build-settings.sh`,
+`nightly-2026-08-27`, with the `rust-src` and `llvm-tools` components, so it
+can rebuild the standard library. rustup installs that nightly beside stable
+and keeps its files in the home directory (`~/.rustup` and `~/.cargo`). A
+distribution package can supply stable Rust as well; this install leaves that
+package's files in place, and `--no-modify-path` leaves the shell's `cargo` on
+the distribution compiler. The build wrappers find `~/.cargo/bin/rustup` and
+then use rustup for stable and for the nightly, so the installer selects a
+stable toolchain too:
+
 ```sh
-rustup toolchain install nightly-2026-08-27 --profile minimal
-rustup component add rust-src llvm-tools --toolchain nightly-2026-08-27
+curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --no-modify-path
+~/.cargo/bin/rustup toolchain install nightly-2026-08-27 --profile minimal --component rust-src,llvm-tools
 ./tools/sandbox-cargo web-threaded-fetch  # on Linux, ./tools/linux-cargo
 ```
+
+When `rustup` is already on `PATH`, skip the installer and run
+`rustup toolchain install nightly-2026-08-27 --profile minimal --component rust-src,llvm-tools`
+before the fetch.
 
 `make build-web` rebuilds the standard library with atomics and enables SIMD in
 the build sandbox, then generates `web/pkg` with `tools/wasm-bindgen`. That

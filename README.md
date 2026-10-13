@@ -161,7 +161,8 @@ high-quality implicit refinement can take time and still has rendering artifacts
 ### Browser and Linux
 
 To build the browser version, set up the pinned nightly toolchain described in
-[`web/README.md`](web/README.md). Then run:
+[`web/README.md`](web/README.md). On Linux that rustup lives in the home
+directory and can sit beside the distribution's Rust package. Then run:
 
 ```sh
 make run-web

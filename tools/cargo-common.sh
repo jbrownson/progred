@@ -30,7 +30,8 @@ use_toolchain() {
     elif [ "$1" = stable ] && command -v cargo >/dev/null 2>&1; then
         cargo_path=$(command -v cargo)
     else
-        echo "$wrapper: rustup was not found; install it or add it to PATH" >&2
+        echo "$wrapper: rustup was not found, so the $1 toolchain is unavailable." >&2
+        echo "$wrapper: install rustup in the home directory as web/README.md describes. A distribution compiler covers stable builds until then." >&2
         exit 1
     fi
     toolchain_root=$(dirname "$(dirname "$(readlink -f "$cargo_path")")")
