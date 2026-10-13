@@ -993,28 +993,42 @@ fn expression_completion_suggestions_are_focused_but_can_expand() {
             .any(|entry| entry.display == "clouds" && entry.detail.as_deref() == Some("call"))
     );
     assert!(entries.iter().any(|entry| entry.display == "new lambda"));
-    // Grap's own list and record open as they're made: an element pending
-    // in the list, a field's label on the record.
-    for (display, made, stage, depth) in [
+    // The editor's constructors are offered here too, and open as they're
+    // made: the cell's value pending, an element pending in the list, a
+    // field's label on the record.
+    let fresh_cell = |value: &Value| value.as_cell().is_some();
+    let list = |value: &Value| *value == Value::list([]);
+    let record = |value: &Value| *value == Value::record([]);
+    let made: [(&str, &dyn Fn(&Value) -> bool, _, _); 3] = [
+        (
+            "new cell",
+            &fresh_cell,
+            crate::selection::Stage::Pending,
+            path.len() + 1,
+        ),
         (
             "new list",
-            Value::list([]),
+            &list,
             crate::selection::Stage::Pending,
             path.len() + 1,
         ),
         (
             "new record",
-            Value::record([]),
+            &record,
             crate::selection::Stage::Label,
             path.len(),
         ),
-    ] {
+    ];
+    for (display, made, stage, depth) in made {
         let entry = entries
             .iter()
             .find(|entry| entry.display == display)
             .unwrap();
         let mut world = activate_projected(&document, &selected, entry);
-        assert_eq!(world.sources().resolve_path(&path), Some(&made));
+        assert!(
+            world.sources().resolve_path(&path).is_some_and(made),
+            "{display}"
+        );
         let opened = world.model.selection.as_ref().unwrap();
         assert_eq!(opened.stage(&world.sources()), stage, "{display}");
         assert!(opened.path().starts_with(&path), "{display}");
@@ -1031,6 +1045,25 @@ fn expression_completion_suggestions_are_focused_but_can_expand() {
     assert!(entries.iter().any(|entry| entry.source == Some(unrelated)));
     assert!(entries.iter().any(|entry| entry.source == Some(callable)));
     assert!(entries.iter().any(|entry| entry.display == "name"));
+    // The full list after the focused offers repeats none of them.
+    for display in ["new cell", "new list", "new record", "new lambda"] {
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.display == display)
+                .count(),
+            1,
+            "{display}"
+        );
+    }
+    assert_eq!(
+        entries
+            .iter()
+            .filter(|entry| entry.source == Some(parameter))
+            .count(),
+        1,
+        "the binding, not also its cell"
+    );
 
     for (query, expected) in [
         ("cloud", grap::call(callable.into(), [])),
