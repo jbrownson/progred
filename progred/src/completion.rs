@@ -90,22 +90,6 @@ pub(crate) fn spelling(request: &CompletionRequest<'_>, text: &CompletionText) -
     }
 }
 
-/// Labels can only be cells; any value completes a value.
-fn activation(
-    kind: CompletionKind,
-    value: Value,
-    on_commit: Option<Continuation>,
-) -> Option<Rc<dyn Fn(&mut crate::Editor)>> {
-    match value.as_cell() {
-        Some(cell) => Some(cell_activation(kind, cell, on_commit)),
-        None => (kind == CompletionKind::Value).then(|| {
-            Rc::new(move |world: &mut crate::Editor| {
-                crate::editing::commit_value(world, value.clone(), on_commit.clone())
-            }) as Rc<dyn Fn(&mut crate::Editor)>
-        }),
-    }
-}
-
 fn cell_activation(
     kind: CompletionKind,
     cell: CellId,
@@ -123,14 +107,7 @@ fn cell_activation(
 
 fn new_cell(kind: CompletionKind) -> Rc<dyn Fn(&mut crate::Editor)> {
     Rc::new(move |world| match kind {
-        CompletionKind::Value => crate::editing::commit_value(
-            world,
-            new_cell_id().into(),
-            Some(crate::libraries::selection::at(
-                &[],
-                crate::libraries::selection::edge(),
-            )),
-        ),
+        CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
         CompletionKind::Field => crate::editing::commit_label(
             world,
             new_cell_id(),
@@ -168,74 +145,38 @@ fn entry(sources: &Sources, offer: Completion) -> Entry<crate::Editor> {
     }
 }
 
-fn value_entry(
-    display: String,
-    detail: Option<String>,
-    value: Value,
-    on_commit: Continuation,
-    kind: CompletionKind,
-) -> Option<Entry<crate::Editor>> {
-    offered_entry(display, detail, value, Some(on_commit), kind)
-}
-
-fn offered_entry(
-    display: String,
-    detail: Option<String>,
-    value: Value,
-    on_commit: Option<Continuation>,
-    kind: CompletionKind,
-) -> Option<Entry<crate::Editor>> {
-    activation(kind, value.clone(), on_commit).map(|activate| Entry {
-        display,
-        detail,
-        matches: Vec::new(),
-        face: if text::read(&value).is_some() {
-            Face::String
-        } else if value.as_blob().is_some() {
-            Face::Id
-        } else {
-            Face::Label
-        },
-        source: value.as_cell(),
-        activate,
-    })
-}
-
+/// The delimiters' offers, by the key that makes each: a new cell, and as a
+/// value a new list or record. Each opens for what goes inside it.
 pub(crate) fn constructor_entries(
     kind: CompletionKind,
 ) -> Vec<(&'static str, Entry<crate::Editor>)> {
-    std::iter::once((
-        "(",
-        Entry {
-            display: "new cell".to_string(),
-            detail: None,
-            matches: Vec::new(),
-            face: Face::Dim,
-            source: None,
-            activate: new_cell(kind),
-        },
-    ))
-    .chain(
-        [
-            ("[", "new list", Value::list([])),
-            ("{", "new record", Value::record([])),
-        ]
-        .into_iter()
-        .filter_map(|(key, display, value)| {
-            value_entry(
-                display.to_string(),
-                None,
-                value,
-                crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
-                kind,
+    let containers = [
+        ("[", "new list", Value::list([])),
+        ("{", "new record", Value::record([])),
+    ]
+    .into_iter()
+    .filter(|_| kind == CompletionKind::Value)
+    .map(|(key, display, value)| {
+        let activate: Rc<dyn Fn(&mut crate::Editor)> =
+            Rc::new(move |world| crate::editing::commit_container(world, value.clone()));
+        (key, display, activate)
+    });
+    std::iter::once(("(", "new cell", new_cell(kind)))
+        .chain(containers)
+        .map(|(key, display, activate)| {
+            (
+                key,
+                Entry {
+                    display: display.to_string(),
+                    detail: None,
+                    matches: Vec::new(),
+                    face: Face::Dim,
+                    source: None,
+                    activate,
+                },
             )
-            .map(|mut entry| {
-                entry.face = Face::Dim;
-                (key, entry)
-            })
-        }),
-    )
-    .collect()
+        })
+        .collect()
 }
 
 pub(crate) struct Prepared {

@@ -993,8 +993,37 @@ fn expression_completion_suggestions_are_focused_but_can_expand() {
             .any(|entry| entry.display == "clouds" && entry.detail.as_deref() == Some("call"))
     );
     assert!(entries.iter().any(|entry| entry.display == "new lambda"));
-    assert!(entries.iter().any(|entry| entry.display == "new list"));
-    assert!(entries.iter().any(|entry| entry.display == "new record"));
+    // Grap's own list and record open as they're made: an element pending
+    // in the list, a field's label on the record.
+    for (display, made, stage, depth) in [
+        (
+            "new list",
+            Value::list([]),
+            crate::selection::Stage::Pending,
+            path.len() + 1,
+        ),
+        (
+            "new record",
+            Value::record([]),
+            crate::selection::Stage::Label,
+            path.len(),
+        ),
+    ] {
+        let entry = entries
+            .iter()
+            .find(|entry| entry.display == display)
+            .unwrap();
+        let mut world = activate_projected(&document, &selected, entry);
+        assert_eq!(world.sources().resolve_path(&path), Some(&made));
+        let opened = world.model.selection.as_ref().unwrap();
+        assert_eq!(opened.stage(&world.sources()), stage, "{display}");
+        assert!(opened.path().starts_with(&path), "{display}");
+        assert_eq!(opened.path().len(), depth, "{display}");
+        assert!(
+            editing_frame(&mut world, false).completion.is_some(),
+            "{display} shows its picker"
+        );
+    }
 
     let mut expanded = crate::selection::pending_value(&crate::test_root(), path.clone());
     expanded.set_completion_view(0.0, 0, true);

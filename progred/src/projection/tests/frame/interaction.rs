@@ -84,7 +84,8 @@ fn empty_slots_make_values_through_the_picker() {
             world.model.selection.as_ref().map(Selection::path)
         );
     };
-    for (slot, typed) in [("first", "42"), ("second", "\"hello\""), ("third", "[")] {
+    // `[` opens the list it makes, so 7 goes inside it.
+    for (slot, typed) in [("first", "42"), ("second", "\"hello\""), ("third", "[7")] {
         let frame = editing_frame(&mut world, false);
         let target = frame
             .descends
@@ -99,17 +100,8 @@ fn empty_slots_make_values_through_the_picker() {
                 Modifiers::empty(),
             );
         }
-        if slot != "third" {
-            key(&mut world, Key::Named(NamedKey::Enter), Modifiers::empty());
-        }
+        key(&mut world, Key::Named(NamedKey::Enter), Modifiers::empty());
     }
-    let command = match world.command_modifier {
-        puri::keyboard::CommandModifier::Meta => Modifiers::META,
-        puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
-    };
-    key(&mut world, Key::Named(NamedKey::Enter), command);
-    key(&mut world, Key::Character("7".into()), Modifiers::empty());
-    key(&mut world, Key::Named(NamedKey::Enter), Modifiers::empty());
     let values = world.model.doc.root.as_ref().unwrap().as_record().unwrap();
     assert_eq!(values.get(&names["first"]).and_then(f64::read), Some(42.0));
     assert_eq!(
@@ -1218,6 +1210,71 @@ fn escape_returns_a_picker_to_where_it_was_opened() {
     assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
     press_key(&mut runner, Key::Named(NamedKey::Escape));
     assert!(runner.editor.model.selection.is_none());
+}
+
+#[test]
+fn a_new_cell_list_or_record_opens_for_what_goes_inside_it() {
+    let made = |key: &str| {
+        let (mut runner, paths) = three_lists();
+        press_key(&mut runner, Key::Named(NamedKey::Backspace));
+        press_key(&mut runner, Key::Character(key.into()));
+        let place = paths[1].clone();
+        (runner, place)
+    };
+    let typed = |runner: &mut crate::EditorRunner, text: &str| {
+        for key in text.chars() {
+            press_key(runner, Key::Character(key.to_string().into()));
+        }
+        press_key(runner, Key::Named(NamedKey::Enter));
+    };
+    let value = |runner: &crate::EditorRunner, path: &[Step]| {
+        runner.editor.sources().resolve_path(path).cloned()
+    };
+    let cell = [Step::Follow(gid::Resolution::Document)];
+    for key in ["(", "[", "{"] {
+        let (mut runner, place) = made(key);
+        {
+            let sources = runner.editor.sources();
+            let inside = runner.editor.model.selection.as_ref().unwrap();
+            let (path, stage) = match key {
+                "(" => (&[&place[..], &cell].concat()[..], Stage::Pending),
+                "[" => (inside.path(), Stage::Pending),
+                _ => (&place[..], Stage::Label),
+            };
+            assert_eq!(inside.path(), path, "{key} selects inside what it made");
+            assert_eq!(inside.stage(&sources), stage, "{key}");
+            if key == "[" {
+                assert!(matches!(
+                    inside.path().split_last(),
+                    Some((Step::Element(_), list)) if list == place
+                ));
+            }
+        }
+        assert!(
+            editing_frame(&mut runner.editor, false)
+                .completion
+                .is_some(),
+            "{key} shows its picker"
+        );
+        press_key(&mut runner, Key::Named(NamedKey::Escape));
+        let back = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(back.path(), place, "Escape steps back out of {key}");
+        assert_eq!(back.stage(&runner.editor.sources()), Stage::Edge);
+    }
+
+    let (mut runner, place) = made("(");
+    typed(&mut runner, "5");
+    assert!(value(&runner, &[&place[..], &cell].concat()).is_some());
+    let (mut runner, place) = made("[");
+    typed(&mut runner, "5");
+    assert_eq!(value(&runner, &place).unwrap().as_list().unwrap().len(), 1);
+    let (mut runner, place) = made("{");
+    typed(&mut runner, "width");
+    typed(&mut runner, "5");
+    assert_eq!(
+        value(&runner, &place).unwrap().as_record().unwrap().len(),
+        1
+    );
 }
 
 #[test]

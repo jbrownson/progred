@@ -372,6 +372,9 @@ those keys activate the constructors directly, including in a provider's narrow
 list. A field label permits only the cell constructor. Nonempty queries and
 IME composition keep ordinary text input; quoted punctuation leads with literal
 text. Shortcuts use the same insertion callbacks as the constructor offers.
+A new cell, list or record opens as it's made, as Cmd+Enter would open it, so
+typing goes inside: the cell's value, an element of the list, or a field of the
+record. Escape steps back out to it. Grap's list and record offers do the same.
 
 A library completion consists of presentation metadata and an activation handler
 receiving `&mut Editor`. Clicking or pressing Enter runs it; highlighting or

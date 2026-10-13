@@ -300,6 +300,56 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
 }
 
 #[test]
+fn constructor_shortcuts_open_what_they_make_where_its_picker_shows() {
+    let root = crate::test_root();
+    let function = Document {
+        root: Some(Value::record([(
+            grap::vocabulary::PARAMS,
+            Value::list([new_cell_id().into()]),
+        )])),
+        cells: Cells::new(),
+    };
+    let empty = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    // A plain document's root, and a Grap function's body.
+    for (document, place) in [
+        (empty, vec![]),
+        (function, vec![Step::Key(grap::vocabulary::BODY)]),
+    ] {
+        for key in ["(", "[", "{"] {
+            let mut world = crate::test_editor(document.clone());
+            world.model.selection = Some(pending_value(&root, place.clone()));
+            assert!(
+                editing_frame(&mut world, false)
+                    .resolve_for_dispatch()
+                    .dispatch_key(
+                        &mut world,
+                        &KeyboardEvent {
+                            key: Key::Character(key.into()),
+                            state: KeyState::Down,
+                            ..Default::default()
+                        }
+                    )
+            );
+            let opened = world.model.selection.as_ref().unwrap();
+            assert!(
+                opened.path().len() >= place.len()
+                    && opened.path().starts_with(&place)
+                    && opened.stage(&world.sources()) != Stage::Edge,
+                "{key} at {place:?} opens what it made: {:?}",
+                opened.path()
+            );
+            assert!(
+                editing_frame(&mut world, false).completion.is_some(),
+                "{key} at {place:?} shows its picker"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_completion_without_an_edit_still_consumes_its_activation() {
     let entries = [Entry {
         display: "no edit".into(),

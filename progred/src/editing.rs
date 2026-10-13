@@ -61,6 +61,27 @@ pub(crate) fn commit_value(
     }
 }
 
+/// Commits an empty cell, list or record into the pending, then opens it,
+/// so what's typed next goes inside it.
+pub(crate) fn commit_container(app: &mut Editor, value: Value) {
+    if app
+        .model
+        .selection
+        .as_ref()
+        .is_some_and(|s| s.stage(&app.sources()) == selection::Stage::Pending)
+        && app.commit_completion(
+            value,
+            None,
+            Some(crate::libraries::selection::at(
+                &[],
+                crate::libraries::selection::edge(),
+            )),
+        )
+    {
+        app.open_within();
+    }
+}
+
 /// Commits a reference to a new cell, defined as given, into the pending.
 pub(crate) fn commit_new_cell(
     app: &mut Editor,

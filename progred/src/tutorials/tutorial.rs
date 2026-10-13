@@ -184,7 +184,7 @@ fn cells() {
         .as_cell()
         .unwrap();
     assert_ne!(fresh, shared);
-    cells.click(&[Step::Element(made.clone()), FOLLOW]);
+    // Typing goes straight inside the new cell.
     cells.type_text("11");
     cells.press(NamedKey::Enter);
     assert_eq!(

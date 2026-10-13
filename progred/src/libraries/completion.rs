@@ -15,6 +15,16 @@ pub fn select(display: impl Into<CompletionText>, value: Value) -> Completion {
     )
 }
 
+/// An empty list or record, opened for what goes inside it as it's made.
+pub fn container(display: impl Into<CompletionText>, value: Value) -> Completion {
+    let made = value.clone();
+    let mut offer = Completion::new(display, move |world| {
+        crate::editing::commit_container(world, made.clone())
+    });
+    offer.preview = Some(value);
+    offer
+}
+
 pub fn insert(
     display: impl Into<CompletionText>,
     value: Value,

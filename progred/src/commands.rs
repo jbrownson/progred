@@ -369,6 +369,24 @@ impl Editor {
         })
     }
 
+    /// Opens the selected value for what goes inside it, as the command
+    /// chord's Enter would: a field on a record, an element of a list, a
+    /// bare cell's value. Escape steps back out to it.
+    pub(crate) fn open_within(&mut self) {
+        let Some(current) = &self.model.selection else {
+            return;
+        };
+        let scope = current.scope().clone();
+        let origin = current.path().to_vec();
+        let Some(mut within) =
+            selection::pending_insert(current.root(), &scope.view(self.sources()), &origin, false)
+        else {
+            return;
+        };
+        within.set_scope(scope);
+        self.model.selection = Some(within.with_origin(Some(origin)));
+    }
+
     /// Starts what Enter would author from the selected value in the view
     /// `root`, if it lands in the container drawn at `container`: a field on
     /// that record, or an element of that list or cell. Containers offer this

@@ -1,6 +1,10 @@
 use super::*;
 use crate::display::{CompletionRequest, CompletionScope};
-use crate::libraries::{completion::select, control::vocabulary as control, text};
+use crate::libraries::{
+    completion::{container, select},
+    control::vocabulary as control,
+    text,
+};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -75,8 +79,8 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
             }
             offers.extend(library_offers);
             offers.extend([
-                select("new list", Value::list([])).with_aliases(["["]),
-                select("new record", Value::record([])).with_aliases(["{"]),
+                container("new list", Value::list([])).with_aliases(["["]),
+                container("new record", Value::record([])).with_aliases(["{"]),
             ]);
         }
         if !templated {
