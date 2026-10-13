@@ -114,7 +114,7 @@ test("editor and lesson labels use the browser host's command modifier", async (
 });
 
 test("wheel handling defaults to the editor, including embeds without an explicit choice", async () => {
-  for (const search of ["", "?wheel=editor", "?menu=hidden&document=../lessons/values.gid"]) {
+  for (const search of ["", "?wheel=editor", "?menu=hidden&document=../lessons/cells.gid"]) {
     const { canvas, canvasListeners, documentElement, body } = await start(search);
     assert.deepEqual(canvasListeners.filter(({ type }) => type === "wheel"),
       [{ type: "wheel", options: { capture: true, passive: true } }]);
@@ -182,9 +182,9 @@ test("auto wheel mode consults the installed WASM probe before allowing editor d
 });
 
 test("embed fetches its document and supplies ordinary startup options", async () => {
-  const { calls } = await start("?document=../lessons/values.gid&menu=hidden&threads=1");
+  const { calls } = await start("?document=../lessons/cells.gid&menu=hidden&threads=1");
   assert.deepEqual(calls, [
-    ["fetch", "http://localhost/lessons/values.gid"], ["init"],
+    ["fetch", "http://localhost/lessons/cells.gid"], ["init"],
     ["workers", 1], ["editor", "example source", false, undefined, undefined, undefined, false, "light"],
   ]);
 });
@@ -204,7 +204,7 @@ test("tutorial slot configuration reaches the host only when requested", async (
 
 test("missing or malformed documents report errors instead of starting empty", async () => {
   for (const options of [{ ok: false }, { parseError: true }]) {
-    const { calls, loading } = await start("?document=../lessons/values.gid", options);
+    const { calls, loading } = await start("?document=../lessons/cells.gid", options);
     assert.equal(calls.some(([name]) => name === "editor"), false);
     assert.equal(loading.style.display, "grid");
     assert.match(loading.textContent, /404|invalid document/);

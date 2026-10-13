@@ -28,13 +28,14 @@ window; the owner does the visual testing.
   use.
   [`display/test_support.rs`](../progred/src/display/test_support.rs) records
   projection calls and supplies small helpers such as `painted`, `Landmarks`,
-  and `mouse`.
+  and `mouse`. Some load the small documents in
+  [`progred/fixtures`](../progred/fixtures).
 - **Interactions.** [`crate::driver::Driver`](../progred/src/driver.rs) drives
   the editor as a person would: pointer and modifier input arrives as Winit
   window events through the shell's own translation, keys as the platform
   delivers them, and the queries in
   [`driver/inspect.rs`](../progred/src/driver/inspect.rs) read back what is
-  drawn where by document path. The tutorial tests follow each tutorial page's
+  drawn where by document path. The tutorial tests follow the tutorial page's
   steps with it, and the menu interaction tests use it too. Its input also
   serves the [session an agent drives](#a-session-an-agent-drives).
 - **Browser.** The website's server and scripts have their own tests, and

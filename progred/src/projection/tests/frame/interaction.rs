@@ -283,10 +283,10 @@ fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
 }
 
 #[test]
-fn website_grap_results_take_no_typing() {
+fn grap_results_take_no_typing() {
     use crate::libraries::{absent, blob, grap as grap_library, number};
     let (mut world, names) = lesson_world(
-        include_str!("../../../../../website/public/lessons/grap.gid"),
+        include_str!("../../../../fixtures/grap.gid"),
         &[
             name::ID,
             text::ID,
@@ -1048,10 +1048,8 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
 #[test]
 fn swapping_libraries_keeps_the_document_and_selection() {
     use crate::libraries::{blob, number};
-    let (doc, names) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/model.gid"
-    ))
-    .unwrap();
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../../../fixtures/model.gid")).unwrap();
     let slots = format!("{}", names["first"]);
     let stack_of = |libraries: &[CellId]| {
         let mut stack = crate::stack::load_selected(libraries).unwrap();
@@ -1097,10 +1095,8 @@ fn swapping_libraries_keeps_the_document_and_selection() {
 fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
     use crate::libraries::{blob, number};
     use grap::vocabulary::FUNCTION;
-    let (doc, names) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/functions.gid"
-    ))
-    .unwrap();
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../../../fixtures/functions.gid")).unwrap();
     let mut stack =
         crate::stack::load_selected(&[name::ID, text::ID, blob::ID, number::ID, f64::ID]).unwrap();
     stack.projection = crate::web_embed::tutorial_slots(

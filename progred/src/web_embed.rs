@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn reports_initial_state_edits_and_undo_but_not_hover_or_paint() {
         let mut editor = crate::test_editor(
-            crate::gid_text::parse(include_str!("../../website/public/lessons/values.gid"))
+            crate::gid_text::parse(include_str!("../fixtures/values.gid"))
                 .unwrap()
                 .0,
         );

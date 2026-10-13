@@ -1604,7 +1604,7 @@ mod frame_tests {
     #[test]
     fn omitted_menu_keeps_history_but_not_menu_commands() {
         use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
-        let doc = crate::gid_text::parse(include_str!("../../website/public/lessons/values.gid"))
+        let doc = crate::gid_text::parse(include_str!("../fixtures/values.gid"))
             .unwrap()
             .0;
         let mut runner = crate::EditorRunner::new(crate::test_editor(doc.clone()));

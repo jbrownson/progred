@@ -746,8 +746,28 @@ mod checked_in_files {
             let reached = root_reachable_cells(&doc);
             assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
         }
-        let (doc, binders) =
-            parse(include_str!("../../website/public/lessons/values.gid")).unwrap();
+        let (doc, binders) = parse(include_str!("../../website/public/lessons/cells.gid")).unwrap();
+        assert_eq!(
+            doc.root,
+            Some(Value::list([
+                binders["shared"].into(),
+                binders["shared"].into()
+            ]))
+        );
+        assert_eq!(
+            doc.cells
+                .value(binders["shared"])
+                .and_then(crate::libraries::f64::read),
+            Some(7.0)
+        );
+        let reached = root_reachable_cells(&doc);
+        assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
+    }
+
+    /// The planet record the editor's own tests edit.
+    #[test]
+    fn values_fixture_is_a_planet_record() {
+        let (doc, binders) = parse(include_str!("../fixtures/values.gid")).unwrap();
         let root = doc.root.as_ref().unwrap().as_record().unwrap();
         assert_eq!(
             crate::libraries::text::read(root.get(&binders["planet"]).unwrap()),
@@ -768,27 +788,11 @@ mod checked_in_files {
         );
         let reached = root_reachable_cells(&doc);
         assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
-        let (doc, binders) = parse(include_str!("../../website/public/lessons/cells.gid")).unwrap();
-        assert_eq!(
-            doc.root,
-            Some(Value::list([
-                binders["shared"].into(),
-                binders["shared"].into()
-            ]))
-        );
-        assert_eq!(
-            doc.cells
-                .value(binders["shared"])
-                .and_then(crate::libraries::f64::read),
-            Some(7.0)
-        );
-        let reached = root_reachable_cells(&doc);
-        assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
     }
 
     #[test]
-    fn website_grap_lesson_shares_an_unnamed_numeric_cell() {
-        let (doc, binders) = parse(include_str!("../../website/public/lessons/grap.gid")).unwrap();
+    fn grap_fixture_shares_an_unnamed_numeric_cell() {
+        let (doc, binders) = parse(include_str!("../fixtures/grap.gid")).unwrap();
         assert_eq!(doc.cells.cells().count(), 1);
         let input = doc.cells.value(binders["input"]).unwrap();
         assert_eq!(crate::libraries::f64::read(input), Some(3.0));
@@ -818,12 +822,11 @@ mod checked_in_files {
     }
 
     #[test]
-    fn website_functions_lesson_has_a_parameter_not_a_shared_numeric_input() {
+    fn functions_fixture_has_a_parameter_not_a_shared_numeric_input() {
         use crate::libraries::{f64, name};
         use grap::vocabulary::{BODY, EVALUATE, FUNCTION, PARAMS};
 
-        let (doc, names) =
-            parse(include_str!("../../website/public/lessons/functions.gid")).unwrap();
+        let (doc, names) = parse(include_str!("../fixtures/functions.gid")).unwrap();
         assert_eq!(doc.cells.cells().count(), 2);
         assert_eq!(doc.cells.value(names["x"]), Some(&name::record("x", [])));
         let definition = doc
