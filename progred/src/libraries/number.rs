@@ -446,18 +446,14 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
         "",
         "",
     );
-    let digits = if number.scrubbable() {
-        scrub::outlined(digits)
-    } else {
-        digits
-    };
     let line = tagged(input, digits, representation);
     let target = input.targets.current();
     let line = activatable(line, target.hover.clone(), target.select);
     let line = if number.scrubbable() {
         let original = original.clone();
+        // Outlined where it drags: the whole number, its tag too.
         on_scrub(
-            line,
+            scrub::outlined(line),
             target.hover,
             Rc::new(move || {
                 let original = original.to_value();

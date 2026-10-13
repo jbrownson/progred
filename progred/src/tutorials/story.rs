@@ -71,12 +71,15 @@ fn dot() {
     assert!(outlined(&dot).is_empty());
     dot.hold(ModifiersState::CONTROL);
     assert_eq!(dot.runner.cursor(), CursorIcon::EwResize, "held, it drags");
+    // All of the number that drags, its f64 tag too.
     let number = dot.rect(&x);
     assert!(
+        outlined(&dot).iter().any(|outline| outline.x0 <= number.x0
+            && outline.y0 <= number.y0
+            && number.x1 <= outline.x1
+            && number.y1 <= outline.y1),
+        "and the numbers that drag are outlined: {number:?} in {:?}",
         outlined(&dot)
-            .iter()
-            .any(|outline| outline.contains(number.center())),
-        "and the numbers that drag are outlined"
     );
     dot.press_at(start);
     let mut farthest = 60.0;
