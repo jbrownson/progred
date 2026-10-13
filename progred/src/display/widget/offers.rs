@@ -8,6 +8,8 @@ pub struct Entry<C> {
     pub matches: Vec<Range<usize>>,
     pub face: Face,
     pub source: Option<CellId>,
+    /// Makes this entry at once when typed into an empty query.
+    pub key: Option<String>,
     pub activate: Rc<dyn Fn(&mut C)>,
 }
 
@@ -19,6 +21,7 @@ impl<C> Clone for Entry<C> {
             matches: self.matches.clone(),
             face: self.face,
             source: self.source,
+            key: self.key.clone(),
             activate: self.activate.clone(),
         }
     }

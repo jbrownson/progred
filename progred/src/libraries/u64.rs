@@ -28,10 +28,6 @@ pub fn value(value: u64) -> Value {
     Value::record([(vocabulary::U64, Value::from(value.to_le_bytes().to_vec()))])
 }
 
-pub fn completions(query: &str) -> Vec<crate::display::Completion> {
-    convention().completions(query)
-}
-
 pub fn read(value: &Value) -> Option<u64> {
     value
         .as_record()?

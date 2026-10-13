@@ -20,6 +20,7 @@ pub(super) fn test_entry(
         matches: entry.matches,
         face: entry.face,
         source: entry.source,
+        key: entry.key,
         activate: Rc::new(move |result| {
             let mut world = crate::test_editor(Document {
                 root: (kind == CompletionKind::Field).then(|| Value::record([])),
@@ -67,7 +68,6 @@ fn completion_entries(
         query,
         Some(&crate::stack::load().completions),
         None,
-        true,
     )
 }
 
@@ -88,20 +88,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
         root: None,
         cells: Cells::new(),
     };
-    let offer = (stack.completions)(&CompletionRequest {
-        raw: false,
-        query: "",
-        kind: CompletionKind::Value,
-        scope: CompletionScope::Suggested,
-        path: &path,
-        value_at: &|_| None,
-        resolve: &|cell| src(&document, &stack.libraries).definition(cell),
-        cells: &|| src(&document, &stack.libraries).cells().collect(),
-    })
-    .unwrap()
-    .into_iter()
-    .find(|offer| offer.display == SPHERE.into())
-    .unwrap();
+    let offer = crate::libraries::completion::select(SPHERE, SPHERE.into()).with_detail(fidget::ID);
     let expected_value = offer.test_value();
     let expected_selection = crate::libraries::test_widgets::activate_completion(&offer)
         .model
@@ -127,13 +114,13 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
         }
         let sources = src(&document, &stack.libraries);
         for query in ["", display.as_str(), "unrelated query", "sphere"] {
-            let (entries, _) = crate::completion::completion_entries_with(
+            let entries = crate::completion::completion_entries_with(
                 &sources,
                 &CompletionRequest {
                     raw: false,
                     query,
                     kind: CompletionKind::Value,
-                    scope: CompletionScope::Suggested,
+                    scope: CompletionScope::Everything,
                     path: &path,
                     value_at: &|_| None,
                     resolve: &|cell| sources.definition(cell),
@@ -795,7 +782,6 @@ fn completion_interpretation_order_is_independent_of_the_value_type() {
             "custom",
             Some(provider),
             None,
-            true,
         )
         .iter()
         .map(|entry| activated(entry).value.unwrap())
@@ -931,7 +917,10 @@ fn without_the_text_library_nothing_offers_a_string() {
         )])),
         cells,
     };
-    let path = vec![Step::Key(grap::vocabulary::BODY)];
+    let empty = Document {
+        root: None,
+        cells: Cells::new(),
+    };
     let ids = crate::stack::load()
         .libraries
         .iter()
@@ -939,25 +928,28 @@ fn without_the_text_library_nothing_offers_a_string() {
         .filter(|id| *id != text::ID)
         .collect::<Vec<_>>();
     let stack = crate::stack::load_selected(&ids).unwrap();
-    for (query, expanded) in [("\"hello", false), ("\"hello", true), ("hello", true)] {
-        let mut selected =
-            crate::selection::pending_with_query(&crate::test_root(), path.clone(), query);
-        if expanded {
-            selected.set_completion_view(0.0, 0, true);
+    // Grap's own offers, and everything in a hole no projection supplies.
+    for (document, path) in [
+        (&document, vec![Step::Key(grap::vocabulary::BODY)]),
+        (&empty, vec![]),
+    ] {
+        for query in ["\"hello", "hello"] {
+            let selected =
+                crate::selection::pending_with_query(&crate::test_root(), path.clone(), query);
+            let entries = projected_completion_entries_in(&stack, document, &selected, None, None);
+            assert!(
+                entries
+                    .iter()
+                    .all(|entry| inserted_value(document, &selected, entry)
+                        .is_none_or(|value| text::read(&value).is_none())),
+                "{query:?} at {path:?}"
+            );
         }
-        let entries = projected_completion_entries_in(&stack, &document, &selected, None, None);
-        assert!(
-            entries
-                .iter()
-                .all(|entry| inserted_value(&document, &selected, entry)
-                    .is_none_or(|value| text::read(&value).is_none())),
-            "{query:?}, expanded: {expanded}"
-        );
     }
 }
 
 #[test]
-fn expression_completion_suggestions_are_focused_but_can_expand() {
+fn expression_completion_offers_grap_s_own_vocabulary() {
     let parameter = new_cell_id();
     let unrelated = new_cell_id();
     let callable = new_cell_id();
@@ -985,6 +977,7 @@ fn expression_completion_suggestions_are_focused_but_can_expand() {
     let selected = crate::selection::pending_value(&crate::test_root(), path.clone());
     let entries = projected_completion_entries(&document, &selected);
     assert!(entries.iter().any(|entry| entry.source == Some(parameter)));
+    // Grap's slot offers only what grap does: other cells aren't among them.
     assert!(!entries.iter().any(|entry| entry.source == Some(unrelated)));
     assert!(!entries.iter().any(|entry| entry.display == "name"));
     assert!(
@@ -993,28 +986,46 @@ fn expression_completion_suggestions_are_focused_but_can_expand() {
             .any(|entry| entry.display == "clouds" && entry.detail.as_deref() == Some("call"))
     );
     assert!(entries.iter().any(|entry| entry.display == "new lambda"));
-    // Grap's own list and record open as they're made: an element pending
-    // in the list, a field's label on the record.
-    for (display, made, stage, depth) in [
+    // The editor's constructors, keyed by their delimiters, open as they're
+    // made: the cell's value pending, an element pending in the list, a
+    // field's label on the record.
+    let fresh_cell = |value: &Value| value.as_cell().is_some();
+    let list = |value: &Value| *value == Value::list([]);
+    let record = |value: &Value| *value == Value::record([]);
+    let made: [(&str, &str, &dyn Fn(&Value) -> bool, _, _); 3] = [
+        (
+            "new cell",
+            "(",
+            &fresh_cell,
+            crate::selection::Stage::Pending,
+            path.len() + 1,
+        ),
         (
             "new list",
-            Value::list([]),
+            "[",
+            &list,
             crate::selection::Stage::Pending,
             path.len() + 1,
         ),
         (
             "new record",
-            Value::record([]),
+            "{",
+            &record,
             crate::selection::Stage::Label,
             path.len(),
         ),
-    ] {
+    ];
+    for (display, key, made, stage, depth) in made {
         let entry = entries
             .iter()
             .find(|entry| entry.display == display)
             .unwrap();
+        assert_eq!(entry.key.as_deref(), Some(key), "{display}");
         let mut world = activate_projected(&document, &selected, entry);
-        assert_eq!(world.sources().resolve_path(&path), Some(&made));
+        assert!(
+            world.sources().resolve_path(&path).is_some_and(made),
+            "{display}"
+        );
         let opened = world.model.selection.as_ref().unwrap();
         assert_eq!(opened.stage(&world.sources()), stage, "{display}");
         assert!(opened.path().starts_with(&path), "{display}");
@@ -1024,13 +1035,6 @@ fn expression_completion_suggestions_are_focused_but_can_expand() {
             "{display} shows its picker"
         );
     }
-
-    let mut expanded = crate::selection::pending_value(&crate::test_root(), path.clone());
-    expanded.set_completion_view(0.0, 0, true);
-    let entries = projected_completion_entries(&document, &expanded);
-    assert!(entries.iter().any(|entry| entry.source == Some(unrelated)));
-    assert!(entries.iter().any(|entry| entry.source == Some(callable)));
-    assert!(entries.iter().any(|entry| entry.display == "name"));
 
     for (query, expected) in [
         ("cloud", grap::call(callable.into(), [])),
@@ -1268,7 +1272,11 @@ fn label_offer_explicitly_opens_its_missing_value() {
     };
     let pending = pending_edge(&root, &src(&doc, &libraries), vec![]).unwrap();
     let field = new_cell_id();
-    let offer = crate::libraries::completion::label(field);
+    let offer = crate::libraries::completion::insert(
+        field,
+        field.into(),
+        Some(crate::libraries::selection::pending_at(&[])),
+    );
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(pending);
     (offer.activate)(&mut world);
@@ -1299,7 +1307,7 @@ fn raw_completions_explicitly_select_structure_without_mounting_hidden_editors()
 }
 
 #[test]
-fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
+fn library_offers_are_lazy_and_only_fill_holes_no_projection_supplies() {
     let doc = Document {
         root: None,
         cells: Cells::new(),
@@ -1320,15 +1328,15 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
                 )]
             })
     });
-    let narrow: crate::display::CompletionProvider = Rc::new(|_| Some(vec![]));
+    // A projection's offers are the hole's whole vocabulary.
+    let projection: crate::display::CompletionProvider = Rc::new(|_| Some(vec![]));
     let entries = completion_entries_with(
         &sources,
         false,
         &CompletionKind::Value,
         "custom",
         Some(&provider),
-        Some(&narrow),
-        false,
+        Some(&projection),
     );
     assert!(entries.is_empty());
     assert_eq!(calls.get(), 0);
@@ -1338,8 +1346,7 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
         &CompletionKind::Value,
         "custom",
         Some(&provider),
-        Some(&narrow),
-        true,
+        None,
     );
     assert_eq!(activated(&entries[0]).value, Some(Value::record([])));
     assert_eq!(calls.get(), 1);
@@ -1350,7 +1357,6 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
         "custom",
         Some(&provider),
         None,
-        true,
     );
     completion_entries_with(
         &sources,
@@ -1359,13 +1365,12 @@ fn general_value_providers_are_lazy_and_respect_narrow_and_label_pickers() {
         "\"custom\"",
         Some(&provider),
         None,
-        true,
     );
     assert_eq!(calls.get(), 1);
 }
 
 #[test]
-fn contextual_completion_starts_narrow_and_everything_widens_it() {
+fn an_empty_document_offers_library_templates_among_everything() {
     let stack = crate::stack::load();
     let doc = Document {
         root: None,
@@ -1378,12 +1383,14 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
         &CompletionKind::Value,
         "sdf",
         Some(&stack.completions),
-        Some(&stack.completions),
-        false,
+        None,
     );
-    assert_eq!(entries[0].display, "fidget");
+    let template = entries
+        .iter()
+        .find(|entry| entry.display == "fidget")
+        .unwrap();
     assert!(
-        activated(&entries[0])
+        activated(template)
             .value
             .unwrap()
             .as_record()
@@ -1392,20 +1399,8 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
             .and_then(Value::as_cell)
             .is_some()
     );
-    assert!(!activated(&entries[0]).selected.unwrap().0.is_empty());
-    assert_eq!(entries.len(), 1);
-
-    let widened = completion_entries_with(
-        &sources,
-        false,
-        &CompletionKind::Value,
-        "sdf",
-        Some(&stack.completions),
-        Some(&stack.completions),
-        true,
-    );
-    assert!(widened.len() > entries.len());
-    assert!(widened.iter().any(|entry| {
+    assert!(!activated(template).selected.unwrap().0.is_empty());
+    assert!(entries.iter().any(|entry| {
         activated(entry)
             .value
             .as_ref()
@@ -1422,16 +1417,20 @@ fn contextual_completion_starts_narrow_and_everything_widens_it() {
 #[test]
 fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition() {
     let stack = crate::stack::load();
-    let offers = root_completions(&stack);
+    let templates = [
+        fidget::vocabulary::FIDGET.into(),
+        crate::libraries::grap::vocabulary::GRAP.into(),
+    ];
+    let offers: Vec<_> = root_completions(&stack)
+        .into_iter()
+        .filter(|offer| templates.contains(&offer.display))
+        .collect();
     assert_eq!(
         offers
             .iter()
             .map(|offer| offer.display.clone())
             .collect::<Vec<_>>(),
-        [
-            fidget::vocabulary::FIDGET.into(),
-            crate::libraries::grap::vocabulary::GRAP.into()
-        ]
+        templates
     );
     for (offer, field) in offers.iter().zip([
         fidget::vocabulary::FIDGET,
@@ -1476,19 +1475,12 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
             Stage::Pending
         );
         let choices = projected_completion_entries(document, selected);
-        if field == fidget::vocabulary::FIDGET {
+        for value in [Value::record([]), Value::list([])] {
             assert!(
                 choices
                     .iter()
-                    .any(|choice| inserted_value(document, selected, choice)
-                        == Some(grap::call(fidget::vocabulary::SPHERE.into(), [])))
+                    .any(|choice| inserted_value(document, selected, choice) == Some(value.clone()))
             );
-        } else {
-            for value in [Value::record([]), Value::list([])] {
-                assert!(choices.iter().any(
-                    |choice| inserted_value(document, selected, choice) == Some(value.clone())
-                ));
-            }
         }
         let filled = crate::completion::prepare(
             &src(document, &stack.libraries),
@@ -1688,12 +1680,19 @@ fn only_the_active_empty_requests_completion_offers() {
             )])
         })
     };
+    // Each of the record's empty fields is a hole the projection supplies.
+    let hole = crate::display::partial(move |input| {
+        input
+            .value
+            .is_none()
+            .then(|| crate::display::completion(CompletionKind::Value, Some(provider.clone())))
+    });
     let projection = Projection::new([crate::display::partial(move |input| {
         input.value?.as_record()?;
         Some(crate::display::col(
             0,
             0.0,
-            fields.map(|field| descend(Step::Key(field), None, None)),
+            fields.map(|field| descend(Step::Key(field), Some(hole.clone()), None)),
         ))
     })]);
     let document = Document {
@@ -1701,12 +1700,7 @@ fn only_the_active_empty_requests_completion_offers() {
         cells: Cells::new(),
     };
     let selection = pending_value(&crate::test_root(), vec![Step::Key(fields[12])]);
-    let entries = projected_completion_entries_with(
-        &document,
-        &selection,
-        Some(&projection),
-        Some(&provider),
-    );
+    let entries = projected_completion_entries_with(&document, &selection, Some(&projection), None);
     assert_eq!(requests.get(), 1);
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].display, "offered");
@@ -1714,18 +1708,26 @@ fn only_the_active_empty_requests_completion_offers() {
 
 #[test]
 fn root_completions_do_not_leak_into_nested_pending_values() {
+    let template = |value: Option<Value>| {
+        value
+            .as_ref()
+            .and_then(Value::as_record)
+            .is_some_and(|fields| {
+                fields.contains_key(&crate::libraries::grap::vocabulary::GRAP)
+                    || fields.contains_key(&fidget::vocabulary::FIDGET)
+            })
+    };
     let empty = Document {
         root: None,
         cells: Cells::new(),
     };
     let root_selection = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
     let root_entries = projected_completion_entries(&empty, &root_selection);
-    assert!(!root_entries.is_empty());
-    assert!(
-        root_entries
-            .iter()
-            .all(|entry| inserted_value(&empty, &root_selection, entry) != Some(Value::list([])))
-    );
+    assert!(root_entries.iter().any(|entry| template(inserted_value(
+        &empty,
+        &root_selection,
+        entry
+    ))));
 
     let position = gid::position::between(None, None).unwrap();
     let nested = Document {
@@ -1738,43 +1740,16 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
         "",
     );
     let nested_entries = projected_completion_entries(&nested, &nested_selection);
-    assert!(nested_entries.iter().any(|entry| inserted_value(&nested, &nested_selection, entry) == Some(Value::list([]))));
-}
-
-#[test]
-fn root_field_completion_offers_only_root_vocabulary_until_widened() {
-    let document = Document {
-        root: Some(Value::record([])),
-        cells: Cells::new(),
-    };
-    let stack = crate::stack::load();
-    let selection = pending_edge(
-        &crate::test_root(),
-        &src(&document, &stack.libraries),
-        Vec::new(),
-    )
-    .unwrap();
-    let entries = projected_completion_entries(&document, &selection);
-    let cells = entries
-        .iter()
-        .filter_map(|entry| entry.source)
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        cells,
-        [
-            fidget::vocabulary::FIDGET,
-            crate::libraries::grap::vocabulary::GRAP,
-            crate::workspace::vocabulary::PANES,
-            crate::workspace::vocabulary::LIBRARIES,
-        ]
+    assert!(!nested_entries.iter().any(|entry| template(inserted_value(
+        &nested,
+        &nested_selection,
+        entry
+    ))));
+    assert!(
+        nested_entries
+            .iter()
+            .any(|entry| inserted_value(&nested, &nested_selection, entry) == Some(Value::list([])))
     );
-    for entry in &entries {
-        let world = activate_projected(&document, &selection, entry);
-        let selected = world.model.selection.as_ref().unwrap();
-        assert_eq!(selected.path(), &[Step::Key(entry.source.unwrap())]);
-        assert_eq!(selected.stage(&world.sources()), Stage::Pending);
-    }
 }
 
 #[test]
@@ -1849,112 +1824,18 @@ fn existing_root_fields_are_not_offered_again() {
     )
     .unwrap();
     let entries = projected_completion_entries(&document, &selection);
-    assert_eq!(
-        entries
-            .iter()
-            .filter_map(|entry| entry.source)
-            .collect::<Vec<_>>(),
-        [
-            crate::libraries::grap::vocabulary::GRAP,
-            crate::workspace::vocabulary::PANES,
-            crate::workspace::vocabulary::LIBRARIES,
-        ]
-    );
-}
-
-#[test]
-fn fidget_shape_completion_opens_a_real_missing_radius_and_offers_f32() {
-    use fidget::vocabulary::{FIDGET, RADIUS, SPHERE};
-    let stack = crate::stack::load();
-    let root = crate::test_root();
-    let cell = new_cell_id();
-    let document = Document {
-        root: Some(Value::record([(FIDGET, cell.into())])),
-        cells: Cells::new(),
-    };
-    let path = vec![Step::Key(FIDGET), Step::Follow(Resolution::Document)];
-    let selection = pending_value(&root, path.clone());
-    let entries = projected_completion_entries(&document, &selection);
-    assert_eq!(
-        entries.first().map(|entry| entry.display.as_str()),
-        Some("sphere")
-    );
-    assert!(entries.iter().any(|entry| {
-        inserted_value(&document, &selection, entry)
-            .as_ref()
-            .and_then(crate::libraries::f32::read)
-            == Some(0.0)
-    }));
-    let entry = entries
+    let cells = entries
         .iter()
-        .find(|entry| entry.display == "sphere")
-        .unwrap();
-    let world = activate_projected(&document, &selection, entry);
-    let selected = world.model.selection.as_ref().unwrap();
-    assert_eq!(
-        world.model.doc.cells.value(cell),
-        Some(&grap::call(SPHERE.into(), []))
-    );
-    let radius = [path.as_slice(), &[Step::Key(RADIUS)]].concat();
-    assert_eq!(selected.path(), radius);
-    assert_eq!(
-        selected.stage(&src(&world.model.doc, &stack.libraries)),
-        Stage::Pending
-    );
-    assert!(
-        src(&world.model.doc, &stack.libraries)
-            .resolve_path(&radius)
-            .is_none()
-    );
-
-    for (query, number) in [("", 0.0), ("1.25", 1.25)] {
-        let selected = Selection::from_payload(
-            &root,
-            &src(&world.model.doc, &stack.libraries),
-            radius.clone(),
-            selection_payload::pending(query, 0),
-        );
-        let entries = projected_completion_entries(&world.model.doc, &selected);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(
-            inserted_value(&world.model.doc, &selected, &entries[0])
-                .as_ref()
-                .and_then(crate::libraries::f32::read),
-            Some(number)
-        );
+        .filter_map(|entry| entry.source)
+        .collect::<Vec<_>>();
+    assert!(!cells.contains(&fidget::vocabulary::FIDGET));
+    for field in [
+        crate::libraries::grap::vocabulary::GRAP,
+        crate::workspace::vocabulary::PANES,
+        crate::workspace::vocabulary::LIBRARIES,
+    ] {
+        assert!(cells.contains(&field));
     }
-}
-
-#[test]
-fn fidget_call_completions_follow_the_current_lambda_parameters() {
-    use fidget::vocabulary::{FIDGET, RADIUS, SPHERE};
-    let root = crate::test_root();
-    let cell = new_cell_id();
-    let extra = new_cell_id();
-    let path = vec![Step::Key(FIDGET), Step::Follow(Resolution::Document)];
-    let mut cells = Cells::new();
-    cells.set_value(SPHERE, grap::lambda([extra, RADIUS], Value::record([])));
-    let document = Document {
-        root: Some(Value::record([(FIDGET, cell.into())])),
-        cells,
-    };
-    let selection = pending_value(&root, path.clone());
-    let entries = projected_completion_entries(&document, &selection);
-    let entry = entries
-        .iter()
-        .find(|entry| {
-            inserted_value(&document, &selection, entry) == Some(grap::call(SPHERE.into(), []))
-        })
-        .unwrap();
-    let world = activate_projected(&document, &selection, entry);
-    assert_eq!(
-        world.sources().resolve_path(&path),
-        Some(&grap::call(SPHERE.into(), []))
-    );
-    assert_eq!(
-        world.model.selection.as_ref().unwrap().path(),
-        [path.as_slice(), &[Step::Key(extra)]].concat()
-    );
 }
 
 #[test]
@@ -2012,84 +1893,31 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
         raw: false,
         query: "offered",
         kind: CompletionKind::Field,
-        scope: CompletionScope::Suggested,
+        scope: CompletionScope::Everything,
         path: &path,
         value_at: &value_at,
         resolve: &|cell| sources.definition(cell),
         cells: &|| sources.cells().collect(),
     };
-    let (entries, everything) =
+    let entries =
         crate::completion::completion_entries_with(&sources, &request, None, Some(&provider));
-    assert!(!everything);
     assert_eq!(entries.len(), 1);
     assert_eq!(
         activated(&test_entry(entries[0].clone(), CompletionKind::Field)).label,
         Some((missing, None))
     );
 
+    // A projection that answers nothing offers nothing; only a hole without
+    // a projection's offers gets everything.
     let unspecified: CompletionProvider = Rc::new(|_| None);
     let empty: CompletionProvider = Rc::new(|_| Some(vec![]));
-    assert!(
-        crate::completion::completion_entries_with(&sources, &request, None, Some(&unspecified)).1
-    );
-    let (entries, everything) =
-        crate::completion::completion_entries_with(&sources, &request, None, Some(&empty));
-    assert!(!everything);
-    assert!(entries.is_empty());
-    let (entries, everything) = crate::completion::completion_entries_with(
-        &sources,
-        &CompletionRequest {
-            raw: true,
-            ..request
-        },
-        None,
-        Some(&empty),
-    );
-    assert!(everything);
-    assert!(!entries.is_empty());
-}
-
-#[test]
-fn fidget_suggestions_cover_source_list_items_and_grap_calls() {
-    use fidget::vocabulary::{FIDGET, RADIUS, SPHERE};
-    let cell = new_cell_id();
-    let mut cells = Cells::new();
-    cells.set_value(cell, grap::call(SPHERE.into(), []));
-    let list = Value::list([cell.into()]);
-    let position = list.as_list().unwrap().keys().next().unwrap().clone();
-    let document = Document {
-        root: Some(Value::record([(FIDGET, list)])),
-        cells,
-    };
-    let stack = crate::stack::load();
-    let root = crate::test_root();
-    let sources = src(&document, &stack.libraries);
-    let selected = pending_into(&root, &sources, &[Step::Key(FIDGET)]).unwrap();
-    assert!(
-        projected_completion_entries(&document, &selected)
-            .iter()
-            .any(|entry| entry.display == "sphere")
-    );
-
-    let path = vec![
-        Step::Key(FIDGET),
-        Step::Element(position),
-        Step::Follow(Resolution::Document),
-    ];
-    let selected = Selection::from_payload(
-        &root,
-        &sources,
-        [path.as_slice(), &[Step::Key(RADIUS)]].concat(),
-        selection_payload::pending("32", 0),
-    );
-    let entries = projected_completion_entries(&document, &selected);
-    assert_eq!(entries.len(), 1);
-    assert_eq!(
-        inserted_value(&document, &selected, &entries[0])
-            .as_ref()
-            .and_then(crate::libraries::f32::read),
-        Some(32.0)
-    );
+    for provider in [&unspecified, &empty] {
+        assert!(
+            crate::completion::completion_entries_with(&sources, &request, None, Some(provider))
+                .is_empty()
+        );
+    }
+    assert!(!crate::completion::completion_entries_with(&sources, &request, None, None).is_empty());
 }
 
 #[test]
@@ -2143,7 +1971,6 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
         "",
         None,
         Some(&provider),
-        false,
     );
     assert_eq!(labels.len(), 1);
     assert_eq!(activated(&labels[0]).label, Some((existing, None)));
@@ -2180,7 +2007,6 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
         "generated",
         None,
         Some(&provider),
-        false,
     );
     let labels = completion_entries_with(
         &sources,
@@ -2189,7 +2015,6 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
         "generated",
         None,
         Some(&provider),
-        false,
     );
     assert_eq!(calls.get(), 0);
     assert!(labels.is_empty());
@@ -2207,7 +2032,6 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
             "",
             Some(&stack.completions),
             Some(&stack.completions),
-            false,
         )
         .into_iter()
         .find(|entry| entry.display == display)
@@ -2270,6 +2094,7 @@ fn entry_hover_marks_follow_the_visible_offers() {
             matches: vec![],
             face: crate::display::Face::Label,
             source: value.as_cell(),
+            key: None,
             activate: Rc::new(|_: &mut crate::Editor| {}),
         }],
     };
@@ -2287,80 +2112,4 @@ fn entry_hover_marks_follow_the_visible_offers() {
         None
     );
     assert_eq!(hover_secondary::<()>(None, None, &Hover::Entry(0)), None);
-}
-
-#[test]
-fn an_operations_own_type_replaces_others_in_its_operands_and_operator() {
-    use crate::libraries::grap::vocabulary::GRAP;
-    use crate::libraries::{f32, fidget, number::vocabulary as number, u64};
-    use grap::vocabulary::FUNCTION;
-    let offered = |program: Value, field: CellId, query: &str| {
-        let cell = new_cell_id();
-        let mut cells = Cells::new();
-        cells.set_value(cell, program);
-        let document = Document {
-            root: Some(Value::record([(GRAP, cell.into())])),
-            cells,
-        };
-        let path = vec![
-            Step::Key(GRAP),
-            Step::Follow(Resolution::Document),
-            Step::Key(field),
-        ];
-        let selection = crate::selection::pending_with_query(&crate::test_root(), path, query);
-        projected_completion_entries(&document, &selection)
-    };
-    let types = [
-        (f64::vocabulary::SUM, f64::vocabulary::MULTIPLY, "f64"),
-        (f32::vocabulary::SUM, f32::vocabulary::MULTIPLY, "f32"),
-        (u64::vocabulary::SUM, u64::vocabulary::MULTIPLY, "u64"),
-    ];
-    let multiplies = [
-        f64::vocabulary::MULTIPLY,
-        f32::vocabulary::MULTIPLY,
-        u64::vocabulary::MULTIPLY,
-        fidget::vocabulary::MULTIPLY,
-    ];
-    for (sum, multiply, tag) in types {
-        let call = grap::call(sum.into(), []);
-        let numbers: Vec<_> = offered(call.clone(), number::LEFT, "1")
-            .into_iter()
-            .filter_map(|entry| entry.detail)
-            .filter(|detail| ["f64", "f32", "u64"].contains(&detail.as_str()))
-            .collect();
-        assert_eq!(numbers, [tag]);
-        let calls: Vec<_> = offered(call, number::RIGHT, "*")
-            .into_iter()
-            .filter(|entry| entry.display == "*")
-            .filter_map(|entry| entry.detail)
-            .collect();
-        assert_eq!(calls, [format!("call · {tag}")]);
-        let whole = grap::call(
-            sum.into(),
-            [
-                (number::LEFT, Value::record([])),
-                (number::RIGHT, Value::record([])),
-            ],
-        );
-        let operators: Vec<_> = offered(whole, FUNCTION, "*")
-            .into_iter()
-            .filter_map(|entry| entry.source)
-            .filter(|source| multiplies.contains(source))
-            .collect();
-        assert_eq!(operators, [multiply]);
-    }
-    // A unary operation's operand takes its type; a conversion's, from a
-    // library of neither type, keeps every one.
-    let numbers = |function: CellId| -> Vec<String> {
-        offered(grap::call(function.into(), []), number::OPERAND, "1")
-            .into_iter()
-            .filter_map(|entry| entry.detail)
-            .filter(|detail| ["f64", "f32", "u64"].contains(&detail.as_str()))
-            .collect()
-    };
-    assert_eq!(numbers(f64::vocabulary::SIN), ["f64"]);
-    assert_eq!(
-        numbers(crate::libraries::conversion::vocabulary::F32_FROM_F64),
-        ["f32", "f64", "u64"]
-    );
 }

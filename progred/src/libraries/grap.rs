@@ -124,7 +124,7 @@ fn declaration_name(
     name::read(input.value?)?;
     Some(descend_local(
         Step::Key(name::vocabulary::NAME),
-        crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
+        name::projection(),
         &input.default_projection,
     ))
 }
@@ -134,10 +134,11 @@ fn lambda_name(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     Some(match input.value {
         Some(value) => crate::display::line_edit(name::editor(value)?),
+        // Naming an anonymous lambda is clickable, not an arrow-navigation
+        // stop; selected, it's an empty name to type into.
+        None if input.selection.is_some() => name::hole(),
         None => {
-            input.selection.is_none().then_some(())?;
             let target = input.targets.current();
-            // Naming an anonymous lambda is clickable, not an arrow-navigation stop.
             activatable(faced("λ", Face::Name), target.hover, target.select)
         }
     })
@@ -566,59 +567,62 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 
 fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Completion>> {
     use crate::display::CompletionScope;
-    match (request.scope, request.kind, request.path) {
-        (CompletionScope::Suggested, CompletionKind::Value, []) => Some(vec![
-            crate::libraries::completion::generated(
-                vocabulary::GRAP,
-                || {
-                    let cell = gid::new_cell_id();
-                    Value::record([
-                        (vocabulary::GRAP, cell.into()),
-                        (
-                            crate::libraries::workspace::vocabulary::PANES,
-                            Value::record([(
-                                crate::libraries::workspace::vocabulary::LEFT,
-                                Value::list([Value::record([(
-                                    crate::libraries::presentation::vocabulary::RENDER,
-                                    cell.into(),
-                                )])]),
-                            )]),
-                        ),
-                    ])
-                },
-                Some(crate::libraries::selection::pending_at(&[
-                    gid::Step::Key(vocabulary::GRAP),
-                    gid::Step::Follow(gid::Resolution::Document),
-                ])),
-            )
-            .with_detail(ID),
-        ]),
-        (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
-            crate::libraries::completion::label(vocabulary::GRAP).with_detail(ID),
-        ]),
-        (CompletionScope::Everything, CompletionKind::Value, _) => Some(
-            std::iter::once(
-                crate::libraries::completion::insert(
-                    "new lambda",
-                    Value::record([(PARAMS, Value::list([]))]),
-                    Some(crate::libraries::selection::at(
-                        &[Step::Key(BODY)],
-                        crate::libraries::selection::edge(),
-                    )),
+    (request.scope == CompletionScope::Everything && request.kind == CompletionKind::Value).then(
+        || {
+            // An empty document can start as a program in a pane.
+            request
+                .path
+                .is_empty()
+                .then(new_program)
+                .into_iter()
+                .chain(std::iter::once(
+                    crate::libraries::completion::insert(
+                        "new lambda",
+                        Value::record([(PARAMS, Value::list([]))]),
+                        Some(crate::libraries::selection::at(
+                            &[Step::Key(BODY)],
+                            crate::libraries::selection::edge(),
+                        )),
+                    )
+                    .with_aliases(["lambda", "λ"])
+                    .with_detail(ID),
+                ))
+                .chain(
+                    (!request.query.trim().is_empty())
+                        .then(|| call_completions(request))
+                        .into_iter()
+                        .flatten(),
                 )
-                .with_aliases(["lambda", "λ"])
-                .with_detail(ID),
-            )
-            .chain(
-                (!request.query.trim().is_empty())
-                    .then(|| call_completions(request))
-                    .into_iter()
-                    .flatten(),
-            )
-            .collect(),
-        ),
-        _ => None,
-    }
+                .collect()
+        },
+    )
+}
+
+fn new_program() -> Completion {
+    crate::libraries::completion::generated(
+        vocabulary::GRAP,
+        || {
+            let cell = gid::new_cell_id();
+            Value::record([
+                (vocabulary::GRAP, cell.into()),
+                (
+                    crate::libraries::workspace::vocabulary::PANES,
+                    Value::record([(
+                        crate::libraries::workspace::vocabulary::LEFT,
+                        Value::list([Value::record([(
+                            crate::libraries::presentation::vocabulary::RENDER,
+                            cell.into(),
+                        )])]),
+                    )]),
+                ),
+            ])
+        },
+        Some(crate::libraries::selection::pending_at(&[
+            gid::Step::Key(vocabulary::GRAP),
+            gid::Step::Follow(gid::Resolution::Document),
+        ])),
+    )
+    .with_detail(ID)
 }
 
 /// Where a call offer's function comes from: the document, or a library by name.
@@ -742,7 +746,7 @@ mod tests {
                 raw: false,
                 query: "",
                 kind: CompletionKind::Value,
-                scope: CompletionScope::Suggested,
+                scope: CompletionScope::Everything,
                 path: &[],
                 value_at: &|_| None,
                 resolve: &resolve,
@@ -1587,16 +1591,17 @@ mod tests {
     }
 
     #[test]
-    fn the_lambda_name_partial_handles_only_unselected_missing_names_or_text() {
+    fn the_lambda_name_partial_handles_missing_names_or_text() {
         let env = env();
         let value = Value::record([]);
         let mut input = input(&env, &value);
         input.value = None;
         assert!(lambda_name(&input).is_some());
 
+        // Selected, a missing name is a hole to type it into.
         let selected = crate::libraries::selection::pending();
         input.selection = Some(&selected);
-        assert!(lambda_name(&input).is_none());
+        assert!(lambda_name(&input).is_some());
         input.selection = None;
         input.value = Some(&value);
         assert!(lambda_name(&input).is_none());

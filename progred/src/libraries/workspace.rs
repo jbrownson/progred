@@ -34,15 +34,4 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         "workspace",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
     )
-    .with_completions(|request| {
-        use crate::display::{CompletionKind, CompletionScope};
-        match (request.scope, request.kind, request.path) {
-            (CompletionScope::Suggested, CompletionKind::Field, []) => Some(
-                [vocabulary::PANES, vocabulary::LIBRARIES]
-                    .map(|field| crate::libraries::completion::label(field).with_detail(ID))
-                    .to_vec(),
-            ),
-            _ => None,
-        }
-    })
 }

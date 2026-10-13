@@ -122,19 +122,67 @@ belongs with other constructors. Design that distinction through the completion
 interface rather than special-casing lambda or particular numeric libraries.
 This is deferred UX design, not a priority for the current cleanup.
 
-## Duplicate offers in the expanded picker
+## Completion after the strip-back
 
-A slot's picker opens on its narrow vocabulary when its projection or a library
-supplies one; expanding with `…` adds the full list after it. The full list asks
-the libraries again, so an offer in both shows twice: in a Grap slot, `new
-color` and `new lambda` appear at the top and again further down. The narrow
-list also leaves out the universal `new cell`, `new list` and `new record`
-rows, so Grap's slots offer their own `new list` and `new record`, and the
-expanded list shows both sets.
+Completion was stripped back to a deliberately simple rule: the projection
+drawing a hole supplies its offers, and a hole without a projection's offers
+gets everything. The point is to confront what completion really needs and build
+back up from there. What was removed, so it isn't lost:
 
-One fix: put the universal rows at the end of every narrow list, drop Grap's
-copies, and leave out of the expanded list any offer already shown above it.
-Not yet decided.
+- **The `…` expansion.** A picker opened on a narrow list, from its projection or
+  from a library, and `…` (or Down past the last row) added everything after it.
+  That repeated offers, and made Grap copy the editor's constructors to have
+  them in its list. Some way past a projection's list will probably be needed
+  again, designed without copying offers.
+- **Libraries' focused answers.** A library could answer "what belongs here?"
+  for a hole it recognized from the path, and that answer replaced everything
+  until expanded:
+  - Fidget offered per-slot lists. A scene's entries and a shape operation's
+    operands (left, right, operand, field) got sphere and circle calls, the
+    shape operations (union, difference, intersection, translate, sum, subtract,
+    multiply, divide, min, max, negate, abs, sqrt, square, sin, cos) and the X,
+    Y and Z axes, then f32 numbers. A radius, delta or bound got only f32
+    numbers; a width or height f64; a mesh depth u64; an axis X, Y or Z. Naming a
+    field on a shape offered its missing parameters, and an inert operation's
+    record offered the shape markers and axis as labels. Grap calls to shapes
+    got the same through their arguments, and a new scene's first hole offered
+    a sphere call.
+  - The name library offered the query as text for any value under a `name`
+    key. Now the name library's partial draws that hole where a projection
+    passes it.
+  - Libraries offered at the root: the new-scene and new-program templates (now
+    among everything there) and root field labels: `grap`, `fidget` (also found
+    by "sdf"), `panes` and `libraries` (now among all cells).
+  - Grap's slots deferred to any library's focused answer before their own list.
+- **The arithmetic rule.** In an operation's `left`, `right` or `operand`, and in
+  its operator, the offers of the library defining the operation came first and
+  hid other libraries' offers of the same spelling, so 3 in an f64 sum offered
+  only f64's 3. The picker found the operation by looking one step up the path.
+  A better form may be the operation's projection telling its operands' holes
+  what to offer.
+- **Bracket keys everywhere.** `(`, `[` and `{` made a new cell, list or record
+  in every picker. They are now keys on the editor's constructor offers, so a
+  hole has them only where its offers include the constructors.
+- **Reaching any cell from a Grap slot.** Grap's list has bindings and functions
+  but not other cells, such as a named constant.
+
+Directions this surfaced:
+
+- A record combinator taking a spec: expected fields in order, how each field's
+  value is drawn and what its hole offers, missing expected fields shown as
+  holes, then any other fields. Its "add a field" picker offers the missing
+  expected fields. Lists already take a child projection, which can draw an
+  element's hole with its own offers.
+- Telling a partial which field it is drawn under, so a `name` field could reach
+  the name library without each parent passing its partial. Handlers could
+  later register for such patterns centrally, for efficiency.
+- A type system. Knowing what fits an argument, such as a number expression for
+  sphere's radius, needs types, since any expression can go there; how pressing
+  that is is part of what this should show.
+- Metadata on field definitions, such as types or projections, later.
+- A projection's own offers and everything else, shown together without copies:
+  perhaps in sections the reader can tell apart, or with the editor's built-in
+  offers marked as wanted or not by the projection's offers.
 
 ## Reporting completion failures
 

@@ -83,6 +83,10 @@ pub struct Completion {
     /// Optional advertised value, for source attribution and contextual filtering.
     /// Activation never derives its behavior from this metadata.
     pub preview: Option<Value>,
+    /// A key that makes this offer at once when typed into an empty query,
+    /// such as `[` for a new list. Its spelling is still ordinary text after
+    /// anything else has been typed.
+    pub key: Option<String>,
 }
 
 /// Names are resolved from the current sources when the picker is built,
@@ -123,7 +127,13 @@ impl Completion {
             activate: Rc::new(activate),
             face: Face::Label,
             preview: None,
+            key: None,
         }
+    }
+
+    pub fn with_key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+        self
     }
 
     pub fn with_aliases(mut self, aliases: impl IntoIterator<Item = impl Into<String>>) -> Self {
@@ -137,9 +147,11 @@ impl Completion {
     }
 }
 
+/// What a library is asked, for a hole no projection supplies offers for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CompletionScope {
-    Suggested,
+    /// The values and calls it offers anywhere, such as numbers parsed from
+    /// the query or a new color.
     Everything,
     /// What was typed, read as one of a library's values, like a string from
     /// any query. Asked on every request, so a provider answers it cheaply;
@@ -175,8 +187,9 @@ impl CompletionRequest<'_> {
     }
 }
 
-/// Invoked only for an active picker. None leaves vocabulary unspecified;
-/// Some(empty) deliberately offers nothing except the Everything escape.
+/// Invoked only for an active picker. A projection's provider is the whole
+/// vocabulary of the holes it draws; a library's answers None where it has
+/// nothing to add.
 pub type CompletionProvider = Rc<dyn Fn(&CompletionRequest<'_>) -> Option<Vec<Completion>>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

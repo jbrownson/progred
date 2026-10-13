@@ -54,7 +54,7 @@ fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<crate::dis
         raw: false,
         query: "",
         kind: crate::display::CompletionKind::Value,
-        scope: crate::display::CompletionScope::Suggested,
+        scope: crate::display::CompletionScope::Everything,
         path: &[],
         value_at: &|_| None,
         resolve: &|cell| sources.definition(cell),
@@ -70,7 +70,6 @@ fn completion_entries_with(
     query: &str,
     providers: Option<&crate::display::CompletionProvider>,
     contextual: Option<&crate::display::CompletionProvider>,
-    everything: bool,
 ) -> Vec<Entry<completion::CompletionResult>> {
     use crate::display::{CompletionRequest, CompletionScope};
     let value_at = |path: &[Step]| sources.resolve_path(path);
@@ -80,11 +79,7 @@ fn completion_entries_with(
             raw,
             query,
             kind: *kind,
-            scope: if everything {
-                CompletionScope::Everything
-            } else {
-                CompletionScope::Suggested
-            },
+            scope: CompletionScope::Everything,
             path: &[],
             value_at: &value_at,
             resolve: &|cell| sources.definition(cell),
@@ -93,7 +88,6 @@ fn completion_entries_with(
         providers,
         contextual,
     )
-    .0
     .into_iter()
     .map(|entry| completion::test_entry(entry, *kind))
     .collect()

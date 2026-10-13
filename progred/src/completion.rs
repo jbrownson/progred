@@ -14,82 +14,6 @@ use std::rc::Rc;
 
 pub use crate::display::widget::offers::{Entry, Offers};
 
-/// The library whose operation a slot belongs to, as an operand or as the
-/// operator itself. There its offers stand in for a type: see
-/// [`within_operation`]. Conversions belong to neither type's library.
-pub(crate) fn operation_library(request: &CompletionRequest<'_>) -> Option<Resolution> {
-    use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
-    use ::grap::vocabulary::FUNCTION;
-    let (gid::Step::Key(field), parent) = request.path.split_last()? else {
-        return None;
-    };
-    [FUNCTION, LEFT, RIGHT, OPERAND]
-        .contains(field)
-        .then_some(())?;
-    let function = (request.value_at)(parent)?
-        .as_record()?
-        .get(&FUNCTION)?
-        .as_cell()?;
-    library_of(request, function)
-}
-
-/// The library an offer comes from: the function it calls, the cell it
-/// refers to, or the first of its fields a library defines, such as a
-/// number's tag.
-pub(crate) fn offer_library(
-    request: &CompletionRequest<'_>,
-    preview: &Value,
-) -> Option<Resolution> {
-    if let Some(cell) = preview.as_cell() {
-        return library_of(request, cell);
-    }
-    let fields = preview.as_record()?;
-    match fields
-        .get(&::grap::vocabulary::FUNCTION)
-        .and_then(Value::as_cell)
-    {
-        Some(function) => library_of(request, function),
-        None => fields.keys().find_map(|key| library_of(request, *key)),
-    }
-}
-
-fn library_of(request: &CompletionRequest<'_>, cell: CellId) -> Option<Resolution> {
-    Some((request.resolve)(cell)?.source).filter(|source| matches!(source, Resolution::Library(_)))
-}
-
-/// The operation's library's offers first, and hiding other libraries'
-/// offers of the same spelling: a number type's literals and operations
-/// replace other types' in its arithmetic.
-pub(crate) fn within_operation<T>(
-    items: Vec<T>,
-    context: Resolution,
-    library: impl Fn(&T) -> Option<Resolution>,
-    spelling: impl Fn(&T) -> String,
-) -> Vec<T> {
-    let (own, others): (Vec<_>, Vec<_>) = items
-        .into_iter()
-        .partition(|item| library(item) == Some(context));
-    let shadowed: std::collections::HashSet<_> = own.iter().map(&spelling).collect();
-    own.into_iter()
-        .chain(
-            others
-                .into_iter()
-                .filter(|item| library(item).is_none() || !shadowed.contains(&spelling(item))),
-        )
-        .collect()
-}
-
-/// An offer's display as the picker spells it.
-pub(crate) fn spelling(request: &CompletionRequest<'_>, text: &CompletionText) -> String {
-    match text {
-        CompletionText::Literal(text) => text.clone(),
-        CompletionText::Name(cell) => (request.resolve)(*cell)
-            .and_then(|definition| name::read(definition.value))
-            .map(str::to_owned)
-            .unwrap_or_else(|| short_id(*cell)),
-    }
-}
-
 fn cell_activation(
     kind: CompletionKind,
     cell: CellId,
@@ -103,18 +27,6 @@ fn cell_activation(
             Rc::new(move |world| crate::editing::commit_label(world, cell, None, on_commit.clone()))
         }
     }
-}
-
-fn new_cell(kind: CompletionKind) -> Rc<dyn Fn(&mut crate::Editor)> {
-    Rc::new(move |world| match kind {
-        CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
-        CompletionKind::Field => crate::editing::commit_label(
-            world,
-            new_cell_id(),
-            None,
-            Some(crate::libraries::selection::pending_at(&[])),
-        ),
-    })
 }
 
 /// Labels can only be cells; an offer advertising another value is not one.
@@ -141,15 +53,25 @@ fn entry(sources: &Sources, offer: Completion) -> Entry<crate::Editor> {
         matches: Vec::new(),
         face: offer.face,
         source: offer.preview.as_ref().and_then(Value::as_cell),
+        key: offer.key,
         activate: offer.activate,
     }
 }
 
-/// The delimiters' offers, by the key that makes each: a new cell, and as a
-/// value a new list or record. Each opens for what goes inside it.
-pub(crate) fn constructor_entries(
-    kind: CompletionKind,
-) -> Vec<(&'static str, Entry<crate::Editor>)> {
+/// The editor's constructors: a new cell, and as a value a new list or
+/// record. Each opens for what goes inside it, and its delimiter's key makes
+/// it at once. A hole's offers include them where its projection wants them.
+pub(crate) fn constructors(kind: CompletionKind) -> Vec<Completion> {
+    let cell = Completion::new("new cell", move |world| match kind {
+        CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
+        CompletionKind::Field => crate::editing::commit_label(
+            world,
+            new_cell_id(),
+            None,
+            Some(crate::libraries::selection::pending_at(&[])),
+        ),
+    })
+    .with_key("(");
     let containers = [
         ("[", "new list", Value::list([])),
         ("{", "new record", Value::record([])),
@@ -157,24 +79,19 @@ pub(crate) fn constructor_entries(
     .into_iter()
     .filter(|_| kind == CompletionKind::Value)
     .map(|(key, display, value)| {
-        let activate: Rc<dyn Fn(&mut crate::Editor)> =
-            Rc::new(move |world| crate::editing::commit_container(world, value.clone()));
-        (key, display, activate)
+        Completion::new(display, move |world| {
+            crate::editing::commit_container(world, value.clone())
+        })
+        .with_key(key)
     });
-    std::iter::once(("(", "new cell", new_cell(kind)))
+    std::iter::once(cell)
         .chain(containers)
-        .map(|(key, display, activate)| {
-            (
-                key,
-                Entry {
-                    display: display.to_string(),
-                    detail: None,
-                    matches: Vec::new(),
-                    face: Face::Dim,
-                    source: None,
-                    activate,
-                },
-            )
+        .map(|offer| {
+            let key = offer.key.clone();
+            Completion {
+                face: Face::Dim,
+                ..offer.with_aliases(key)
+            }
         })
         .collect()
 }
@@ -262,30 +179,20 @@ pub(crate) fn prepare(
     })
 }
 
+/// A hole's offers: exactly what the projection drawing it supplies, or,
+/// where none does, everything: every cell, the editor's constructors, and
+/// what the libraries offer anywhere or read from the query.
 pub(crate) fn completion_entries_with(
     sources: &Sources,
     request: &CompletionRequest<'_>,
     providers: Option<&CompletionProvider>,
-    contextual: Option<&CompletionProvider>,
-) -> (Vec<Entry<crate::Editor>>, bool) {
+    projection: Option<&CompletionProvider>,
+) -> Vec<Entry<crate::Editor>> {
+    if let Some(projection) = projection {
+        return contextual_entries(sources, projection(request).unwrap_or_default(), request);
+    }
     let raw = request.raw;
     let kind = request.kind;
-    let narrow = CompletionRequest {
-        scope: CompletionScope::Suggested,
-        ..*request
-    };
-    let suggested = (!raw)
-        .then(|| {
-            contextual
-                .and_then(|provider| provider(&narrow))
-                .or_else(|| providers.and_then(|provider| provider(&narrow)))
-        })
-        .flatten();
-    if request.scope == CompletionScope::Suggested
-        && let Some(offers) = suggested
-    {
-        return (contextual_entries(sources, offers, request), false);
-    }
     let query = request.query;
     let labels = kind == CompletionKind::Field;
     let trimmed = query.trim();
@@ -322,6 +229,7 @@ pub(crate) fn completion_entries_with(
                 matches: Vec::new(),
                 face: Face::Dim,
                 source: None,
+                key: None,
                 activate: Rc::new(move |world| {
                     crate::editing::commit_label(
                         world,
@@ -370,6 +278,7 @@ pub(crate) fn completion_entries_with(
                     Face::Id
                 },
                 source: Some(cell),
+                key: None,
                 activate: cell_activation(kind, cell, Some(reference_selection.clone())),
             };
             (entry, name.is_some(), sources.external(cell))
@@ -377,38 +286,23 @@ pub(crate) fn completion_entries_with(
         .partition(|(_, _, external)| !*external);
     local.sort_by(|a, b| a.0.display.cmp(&b.0.display));
     external.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-    if let Some(context) = operation_library(request) {
-        external = within_operation(
-            external,
-            context,
-            |(entry, _, _)| {
-                entry
-                    .source
-                    .and_then(|cell| sources.resolve(cell))
-                    .map(|definition| definition.source)
-                    .filter(|source| matches!(source, Resolution::Library(_)))
-            },
-            |(entry, _, _)| entry.display.clone(),
-        );
-    }
     let mut references_pool: Vec<_> = local
         .into_iter()
-        .map(|(entry, named, _)| (entry, named, None))
+        .map(|(entry, named, _)| (entry, named, Vec::new()))
         .collect();
-    references_pool.extend(
-        constructor_entries(kind)
-            .into_iter()
-            .map(|(key, entry)| (entry, true, Some(key))),
-    );
+    references_pool.extend(constructors(kind).into_iter().map(|offer| {
+        let aliases = offer.aliases.clone();
+        (entry(sources, offer), true, aliases)
+    }));
     references_pool.extend(
         external
             .into_iter()
-            .map(|(entry, named, _)| (entry, named, None)),
+            .map(|(entry, named, _)| (entry, named, Vec::new())),
     );
     let references: Vec<_> = filter::rank_with_aliases(
         references_pool,
         |(entry, _, _)| &entry.display,
-        |(_, _, alias)| alias.as_slice(),
+        |(_, _, aliases)| aliases.as_slice(),
         query,
     )
     .into_iter()
@@ -423,9 +317,7 @@ pub(crate) fn completion_entries_with(
         )
     })
     .collect();
-    let mut entries = suggested
-        .map(|offers| contextual_entries(sources, offers, request))
-        .unwrap_or_default();
+    let mut entries = Vec::new();
     if atom_leads {
         entries.extend(atoms);
         entries.extend(value_entries);
@@ -442,7 +334,7 @@ pub(crate) fn completion_entries_with(
         entries.extend(atoms);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }
-    (entries, true)
+    entries
 }
 
 fn contextual_entries(

@@ -47,7 +47,7 @@ pub(crate) fn with_name(
     >,
     content: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
 ) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
-    use crate::display::{Pending, descend_local, line_edit, partial};
+    use crate::display::{Pending, descend_local};
     let step = gid::Step::Key(vocabulary::NAME);
     let has_name = input
         .value
@@ -58,11 +58,7 @@ pub(crate) fn with_name(
     crate::display::row(
         6.0,
         [
-            descend_local(
-                step,
-                partial(|input| editor(input.value?).map(line_edit)),
-                &input.default_projection,
-            ),
+            descend_local(step, projection(), &input.default_projection),
             content,
         ],
     )
@@ -76,91 +72,31 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         "name",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
     )
-    .with_completions(completions)
 }
 
-fn completions(
-    request: &crate::display::CompletionRequest<'_>,
-) -> Option<Vec<crate::display::Completion>> {
-    use crate::display::{CompletionKind, CompletionScope};
-    match (request.scope, request.kind, request.path.last()) {
-        (
-            CompletionScope::Suggested,
-            CompletionKind::Value,
-            Some(gid::Step::Key(vocabulary::NAME)),
-        ) => Some(vec![text::completion(text::query_spelling(request.query))]),
-        _ => None,
-    }
+/// A name as its line editor or, missing, a hole for one. A projection
+/// passes this where it descends into a name.
+pub(crate) fn projection() -> crate::display::Partial<crate::Editor, crate::frame::Hovered> {
+    crate::display::partial(|input| match input.value {
+        Some(value) => editor(value).map(crate::display::line_edit),
+        None => Some(hole()),
+    })
+}
+
+/// An empty name, which takes whatever is typed as its text.
+pub(crate) fn hole() -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+    crate::display::completion(
+        crate::display::CompletionKind::Value,
+        Some(std::rc::Rc::new(|request| {
+            Some(vec![text::completion(text::query_spelling(request.query))])
+        })),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use gid::new_cell_id;
-
-    #[test]
-    fn name_values_offer_text_but_leave_other_completion_contexts_alone() {
-        use crate::display::{CompletionKind, CompletionRequest, CompletionScope};
-        let path = [
-            gid::Step::Follow(gid::Resolution::Document),
-            gid::Step::Key(vocabulary::NAME),
-        ];
-        let request = CompletionRequest {
-            raw: false,
-            query: "",
-            kind: CompletionKind::Value,
-            scope: CompletionScope::Suggested,
-            path: &path,
-            value_at: &|_| None,
-            resolve: &|_| None,
-            cells: &Vec::new,
-        };
-        for (query, expected) in [
-            ("", ""),
-            ("tree", "tree"),
-            ("123", "123"),
-            ("\"tree", "tree"),
-            ("\"tree\"", "tree"),
-        ] {
-            let offers = completions(&CompletionRequest { query, ..request }).unwrap();
-            assert_eq!(offers.len(), 1);
-            assert_eq!(offers[0].test_value(), text::value(expected));
-            assert!(
-                crate::libraries::test_widgets::activate_completion(&offers[0])
-                    .model
-                    .selection
-                    .is_some()
-            );
-        }
-        assert!(
-            completions(&CompletionRequest {
-                kind: CompletionKind::Field,
-                ..request
-            })
-            .is_none()
-        );
-        assert!(
-            completions(&CompletionRequest {
-                scope: CompletionScope::Everything,
-                ..request
-            })
-            .is_none()
-        );
-        assert!(
-            completions(&CompletionRequest {
-                path: &[],
-                ..request
-            })
-            .is_none()
-        );
-        assert!(
-            completions(&CompletionRequest {
-                path: &[gid::Step::Key(new_cell_id())],
-                ..request
-            })
-            .is_none()
-        );
-    }
 
     #[test]
     fn names_are_extensible_ordinary_record_data() {

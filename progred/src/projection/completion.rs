@@ -4,7 +4,7 @@ use super::{
     Cx, SharedPath, atom_content, edit_presentation, face_style, hover_block, hover_claim,
     hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke, tree_hovered,
 };
-use crate::completion::{Entry, Offers, completion_entries_with, constructor_entries};
+use crate::completion::{Entry, Offers, completion_entries_with};
 use crate::display::widget::completion::border as completion_border;
 use crate::frame::Hovered;
 use crate::hover::Hover;
@@ -136,7 +136,6 @@ fn query_content(
     completions: Option<&crate::display::CompletionProvider>,
 ) -> Measured<HoverPass<crate::Editor>> {
     // The card and keyboard commit must answer from one list.
-    let everything = cx.selection.is_some_and(Selection::completion_everything);
     let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
     let resolve = |cell| cx.sources.definition(cell);
     // This is only reached for an active writable picker. Keep the boundary
@@ -152,18 +151,13 @@ fn query_content(
         } else {
             crate::display::CompletionKind::Value
         },
-        scope: if everything {
-            crate::display::CompletionScope::Everything
-        } else {
-            crate::display::CompletionScope::Suggested
-        },
+        scope: crate::display::CompletionScope::Everything,
         path: &source_path,
         value_at: &value_at,
         resolve: &resolve,
         cells: &|| cx.sources.cells().collect(),
     };
-    let (entries, everything) =
-        completion_entries_with(&cx.sources, &request, cx.completions, completions);
+    let entries = completion_entries_with(&cx.sources, &request, cx.completions, completions);
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
     let content = atom_content(
@@ -228,7 +222,6 @@ fn query_content(
         &entries,
         choice,
         scroll,
-        everything,
         move |world: &crate::Editor| {
             world
                 .model
@@ -241,19 +234,23 @@ fn query_content(
                 })
                 .map(Selection::completion_scroll)
         },
-        move |world, scroll, choice, everything| {
-            crate::editing::completion_view(world, &root, scroll, choice, everything)
-        },
+        move |world, scroll, choice| crate::editing::completion_view(world, &root, scroll, choice),
     );
+    // An offer's key, typed into an empty query, makes it at once.
     let card = if query.text().is_empty() && !query.is_composing() {
-        let constructors = constructor_entries(request.kind);
+        let keyed: Vec<_> = entries
+            .iter()
+            .filter_map(|entry| Some((entry.key.clone()?, entry.activate.clone())))
+            .collect();
         on_key(card, move |world, event| {
             if event.state.is_down()
                 && !(event.modifiers.ctrl() || event.modifiers.meta())
                 && let Key::Character(key) = &event.key
-                && let Some((_, entry)) = constructors.iter().find(|(shortcut, _)| *shortcut == key)
+                && let Some((_, activate)) = keyed
+                    .iter()
+                    .find(|(shortcut, _)| shortcut.as_str() == key.as_str())
             {
-                (entry.activate)(world);
+                activate(world);
                 true
             } else {
                 false
@@ -335,9 +332,8 @@ pub(super) fn completion_card<C: 'static>(
     entries: &[Entry<C>],
     choice: usize,
     scroll: f64,
-    everything: bool,
     current_scroll: impl Fn(&C) -> Option<f64> + 'static,
-    set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
+    set_view: impl Fn(&mut C, f64, usize) + 'static,
 ) -> Measured<HoverPass<C>> {
     let entries = entries
         .iter()
@@ -355,14 +351,9 @@ pub(super) fn completion_card<C: 'static>(
         tcx,
         styles,
         &entries,
-        Hovered::Tree(Hover::MoreCompletions),
-        crate::display::widget::completion::State {
-            choice,
-            scroll,
-            everything,
-        },
+        crate::display::widget::completion::State { choice, scroll },
         current_scroll,
-        move |world, state| set_view(world, state.scroll, state.choice, state.everything),
+        move |world, state| set_view(world, state.scroll, state.choice),
         command_modifier.predicate(),
     )
 }

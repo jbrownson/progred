@@ -660,7 +660,6 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
         "clouds",
         Some(&editor.stack.completions),
         None,
-        true,
     );
     assert!(
         offers

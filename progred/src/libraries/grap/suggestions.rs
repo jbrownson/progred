@@ -1,24 +1,12 @@
 use super::*;
 use crate::display::{CompletionRequest, CompletionScope};
-use crate::libraries::{
-    completion::{container, select},
-    control::vocabulary as control,
-    text,
-};
+use crate::libraries::{completion::select, control::vocabulary as control, text};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvider {
     Rc::new(move |request| {
-        if let Some(offers) = libraries.as_ref().and_then(|provider| {
-            provider(&CompletionRequest {
-                scope: CompletionScope::Suggested,
-                ..*request
-            })
-        }) {
-            return Some(offers);
-        }
         let quoted = request.query.trim().starts_with('"');
         let templated = templated(request);
         let bindings = bindings(request);
@@ -40,7 +28,7 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                 scope: CompletionScope::Everything,
                 ..*request
             };
-            let mut library_offers: Vec<_> = libraries
+            let library_offers: Vec<_> = libraries
                 .as_ref()
                 .and_then(|provider| provider(&library_request))
                 .unwrap_or_default()
@@ -64,24 +52,8 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                         .is_some_and(|cell| cell == control::QUOTE || bindings.contains_key(&cell))
                 })
                 .collect();
-            if let Some(context) = crate::completion::operation_library(request) {
-                library_offers = crate::completion::within_operation(
-                    library_offers,
-                    context,
-                    |offer| {
-                        offer
-                            .preview
-                            .as_ref()
-                            .and_then(|preview| crate::completion::offer_library(request, preview))
-                    },
-                    |offer| crate::completion::spelling(request, &offer.display),
-                );
-            }
             offers.extend(library_offers);
-            offers.extend([
-                container("new list", Value::list([])).with_aliases(["["]),
-                container("new record", Value::record([])).with_aliases(["{"]),
-            ]);
+            offers.extend(crate::completion::constructors(request.kind));
         }
         if !templated {
             offers.extend(quote(request));
@@ -256,7 +228,7 @@ mod tests {
             raw: false,
             query: "",
             kind: CompletionKind::Value,
-            scope: CompletionScope::Suggested,
+            scope: CompletionScope::Everything,
             path,
             value_at: &|path| sources.resolve_path(path),
             resolve: &|cell| sources.definition(cell),
@@ -295,7 +267,7 @@ mod tests {
                 raw: false,
                 query: "",
                 kind: CompletionKind::Value,
-                scope: CompletionScope::Suggested,
+                scope: CompletionScope::Everything,
                 path: &[Step::Key(BODY), Step::Key(BODY)],
                 value_at: &|path| sources.resolve_path(path),
                 resolve: &|cell| sources.definition(cell),
@@ -305,6 +277,7 @@ mod tests {
             assert_eq!(
                 offers
                     .iter()
+                    .filter(|offer| offer.detail == Some("binding".into()))
                     .filter_map(|offer| offer.test_value().as_cell())
                     .collect::<Vec<_>>(),
                 expected,
@@ -320,7 +293,7 @@ mod tests {
             raw: false,
             query: "",
             kind: CompletionKind::Value,
-            scope: CompletionScope::Suggested,
+            scope: CompletionScope::Everything,
             path: &[Step::Key(BODY), Step::Key(BODY)],
             value_at: &|path| sources.resolve_path(path),
             resolve: &|cell| sources.definition(cell),

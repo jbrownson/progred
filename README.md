@@ -139,8 +139,9 @@ are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5.
 - In the tree drawing, Command-hover highlights linked source and can reveal
   it; Command-click selects it. Hovering the drawing calls in the source
   highlights their output without the modifier.
-- Click an empty location to choose a completion. `…` expands the suggestions
-  to the full vocabulary. The **Raw** view exposes the underlying structure.
+- Click an empty location to choose a completion: what's drawing it decides
+  what fits there. The **Raw** view exposes the underlying structure, and offers
+  everything.
 - The **Projections** menu switches one library's projection off or back on
   in the selected pane or the document, the way the home page peels its
   forest; its last entry does the same for the libraries the document

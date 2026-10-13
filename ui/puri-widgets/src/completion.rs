@@ -15,7 +15,6 @@ pub struct Entry<'a> {
 
 pub struct Style<'a> {
     pub detail: &'a TextStyle,
-    pub more: &'a TextStyle,
     pub scale: f64,
     pub chosen: Color,
 }
@@ -122,7 +121,6 @@ impl Row {
 
 pub struct Completion {
     pub rows: Vec<Row>,
-    pub more: Option<Row>,
 }
 
 fn highlighted(tcx: &mut TextCtx, text: &str, matches: &[Range<usize>], style: &TextStyle) -> Line {
@@ -152,7 +150,6 @@ impl Completion {
     pub fn new<'a>(
         tcx: &mut TextCtx,
         entries: impl IntoIterator<Item = Entry<'a>>,
-        show_more: bool,
         style: Style<'_>,
     ) -> Self {
         let mut rows = entries
@@ -165,22 +162,10 @@ impl Completion {
                 Row::new(display, detail, 2.0 * style.scale, &style)
             })
             .collect::<Vec<_>>();
-        let mut more = show_more.then(|| {
-            Row::new(
-                Line::one(puri::text(tcx, "…", style.more)),
-                None,
-                3.0 * style.scale,
-                &style,
-            )
-        });
-        let width = rows
-            .iter()
-            .chain(more.iter())
-            .map(|row| row.metrics.width)
-            .fold(0.0, f64::max);
-        for row in rows.iter_mut().chain(more.iter_mut()) {
+        let width = rows.iter().map(|row| row.metrics.width).fold(0.0, f64::max);
+        for row in &mut rows {
             row.metrics.width = width;
         }
-        Self { rows, more }
+        Self { rows }
     }
 }

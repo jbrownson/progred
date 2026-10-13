@@ -114,13 +114,7 @@ pub(crate) fn commit_label(
     }
 }
 
-pub(crate) fn completion_view(
-    app: &mut Editor,
-    root: &Root,
-    scroll: f64,
-    choice: usize,
-    everything: bool,
-) {
+pub(crate) fn completion_view(app: &mut Editor, root: &Root, scroll: f64, choice: usize) {
     let sources = Sources {
         doc: &app.model.doc,
         libraries: &app.stack.libraries,
@@ -129,7 +123,7 @@ pub(crate) fn completion_view(
         && selection.root() == root
         && selection.stage(&sources) != selection::Stage::Edge
     {
-        selection.set_completion_view(scroll, choice, everything);
+        selection.set_completion_view(scroll, choice);
     }
 }
 

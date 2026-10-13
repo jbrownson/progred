@@ -26,7 +26,6 @@ pub struct Entry<'a, World, Hover> {
 pub struct State {
     pub choice: usize,
     pub scroll: f64,
-    pub everything: bool,
 }
 
 pub fn border(scale: f64) -> Stroke {
@@ -37,27 +36,13 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
     entries: &[Entry<'_, C, H>],
-    more: H,
     state: State,
     current_scroll: impl Fn(&C) -> Option<f64> + 'static,
     set_view: impl Fn(&mut C, State) + 'static,
     command: fn(&Modifiers) -> bool,
 ) -> Measured<HoverPass<C, H>> {
-    let State {
-        choice,
-        scroll,
-        everything,
-    } = state;
-    let set_view = move |world: &mut C, scroll, choice, everything| {
-        set_view(
-            world,
-            State {
-                scroll,
-                choice,
-                everything,
-            },
-        )
-    };
+    let State { choice, scroll } = state;
+    let set_view = move |world: &mut C, scroll, choice| set_view(world, State { scroll, choice });
     let scale = styles.scale;
     let widget_entries = entries.iter().map(|entry| puri_widgets::completion::Entry {
         display: entry.display,
@@ -68,27 +53,18 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     let widget = puri_widgets::completion::Completion::new(
         tcx,
         widget_entries,
-        !everything,
         puri_widgets::completion::Style {
             detail: &styles.detail,
-            more: &styles.dim,
             scale,
             chosen: styles.palette.accent.with_alpha(0.14),
         },
     );
     let set_view = Rc::new(set_view);
-    let expand: Rc<dyn Fn(&mut C)> = {
-        let set_view = set_view.clone();
-        Rc::new(move |world| {
-            set_view(world, scroll, choice, true);
-        })
-    };
     let items = widget
         .rows
         .into_iter()
         .zip(entries)
         .map(|(row, entry)| (row, entry.target.clone(), entry.activate.clone()))
-        .chain(widget.more.map(|row| (row, more, expand.clone())))
         .collect::<Vec<_>>();
     let count = items.len();
     let choice = choice.min(count.saturating_sub(1));
@@ -102,7 +78,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
                 row,
                 hover,
                 index == choice,
-                move |world| set_view(world, scroll, index, everything),
+                move |world| set_view(world, scroll, index),
                 move |world| activate(world),
             )
         })
@@ -145,7 +121,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
                         Vec2::new(0.0, maximum),
                     );
                     if next.y != scroll {
-                        scroll_view(world, next.y, choice, everything);
+                        scroll_view(world, next.y, choice);
                     }
                     outcome
                 } else {
@@ -170,14 +146,6 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
                                     true
                                 })
                             }
-                            Key::Named(NamedKey::ArrowDown)
-                                if !everything
-                                    && !command(&event.modifiers)
-                                    && choice == count.saturating_sub(1) =>
-                            {
-                                expand(world);
-                                true
-                            }
                             Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
                                 if !command(&event.modifiers) =>
                             {
@@ -190,7 +158,6 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
                                     reveal(scroll, next, &row_spans, viewport_height)
                                         .clamp(0.0, maximum),
                                     next,
-                                    everything,
                                 );
                                 true
                             }

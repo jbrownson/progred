@@ -630,17 +630,18 @@ mod tests {
     fn numeric_completions_offer_zero_for_empty_queries_but_not_invalid_numbers() {
         for (complete, zero, representation) in [
             (
-                crate::libraries::f32::completions as fn(&str) -> Vec<crate::display::Completion>,
+                (|query| crate::libraries::f32::convention().completions(query))
+                    as fn(&str) -> Vec<crate::display::Completion>,
                 crate::libraries::f32::value(0.0),
                 crate::libraries::f32::vocabulary::F32,
             ),
             (
-                crate::libraries::f64::completions,
+                |query| crate::libraries::f64::convention().completions(query),
                 crate::libraries::f64::value(0.0),
                 crate::libraries::f64::vocabulary::F64,
             ),
             (
-                crate::libraries::u64::completions,
+                |query| crate::libraries::u64::convention().completions(query),
                 crate::libraries::u64::value(0),
                 crate::libraries::u64::vocabulary::U64,
             ),

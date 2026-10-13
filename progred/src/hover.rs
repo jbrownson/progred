@@ -30,8 +30,6 @@ pub enum Hover {
     /// typing under a parked pointer re-answers instead of marking a
     /// snapshot.
     Entry(usize),
-    /// The completion card's one-way widening affordance.
-    MoreCompletions,
 }
 
 pub use crate::display::widget::source::{Secondary, SourceTrace};
@@ -142,7 +140,7 @@ pub(crate) fn hover_secondary<C>(
         Hover::Source(source) => Some(Secondary::from_trace(source)),
         Hover::Calls(_) => None, // Needs the available projection; resolved by frame attribution.
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
-        Hover::Toggle(_) | Hover::MoreCompletions => None,
+        Hover::Toggle(_) => None,
     }
 }
 
