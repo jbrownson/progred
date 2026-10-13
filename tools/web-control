@@ -23,14 +23,16 @@
 //
 // Coordinates are pixels from the window's top left; modifiers are
 // `+`-joined names such as ctrl or ctrl+shift. It drives the installed
-// Chrome, or the browser at $CHROMIUM.
+// Chrome, or the browser at $CHROMIUM. With $WEB_CONTROL_DIR set, the socket,
+// log and screenshots go there instead of target/web-control, so two
+// sessions can run at once.
 const fs = require("node:fs");
 const net = require("node:net");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 const ROOT = path.resolve(__dirname, "..");
-const STATE = path.join(ROOT, "target", "web-control");
+const STATE = path.resolve(process.env.WEB_CONTROL_DIR || path.join(ROOT, "target", "web-control"));
 const SOCKET = path.join(STATE, "browser.sock");
 const SESSION = path.join(STATE, "session.jsonl");
 const SCREENSHOTS = path.join(STATE, "screenshots");
