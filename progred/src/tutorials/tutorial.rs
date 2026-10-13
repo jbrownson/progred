@@ -416,21 +416,32 @@ fn forest() {
         "every tree changes: {painted:?}"
     );
 
+    // Next in the row, where a playtester planted it.
     forest.task("plant");
     forest.click_between(&calls, 0);
     forest.type_text("tree");
     forest.press(NamedKey::Enter);
-    forest.type_text("180");
+    forest.type_text("300");
     forest.press(NamedKey::Enter);
     let planted = (0..4)
         .find(|index| {
-            forest.number(&forest.element(&calls, *index, &[forest.key("x")])) == Some(180.0)
+            forest.number(&forest.element(&calls, *index, &[forest.key("x")])) == Some(300.0)
         })
-        .expect("a tree at 180");
+        .expect("a tree at 300");
     let height = forest.element(&calls, planted, &[forest.key("height")]);
     forest.click(&height);
     forest.type_text("50");
     forest.press(NamedKey::Enter);
     assert_eq!(forest.number(&height), Some(50.0));
-    assert_eq!(forest.circles().len(), 4);
+    let width = forest
+        .number(&forest.path(&["third", "drawing", "width"]))
+        .unwrap();
+    let canopies = forest.circles();
+    assert_eq!(canopies.len(), 4);
+    assert!(
+        canopies
+            .iter()
+            .all(|(_, canopy, _)| canopy.center.x + canopy.radius <= width),
+        "every tree fits in the drawing, {width} wide: {canopies:?}"
+    );
 }

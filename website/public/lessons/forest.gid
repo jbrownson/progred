@@ -78,7 +78,7 @@
     first: forest,
     second: tree,
     third: {drawing: {
-      width: {f64: 0x0000000000007240},
+      width: {f64: 0x0000000000408540},
       ascent: {f64: 0x0000000000000000},
       descent: {f64: 0x0000000000006540},
       fuel: {f64: 0x000000000070a740},
