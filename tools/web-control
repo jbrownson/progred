@@ -8,7 +8,7 @@
 // target/web-control/session.jsonl, which tools/playtest-video replays as a
 // narrated video; `say` adds a tester's thinking aloud to it.
 //
-//   tools/web-control serve [PAGE]       (for example story.html)
+//   tools/web-control serve [PAGE]       (for example tutorial.html)
 //   tools/web-control screenshot [FILE]
 //   tools/web-control mouse_move X Y
 //   tools/web-control left_click X Y [MODIFIERS]

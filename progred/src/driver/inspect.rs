@@ -43,29 +43,12 @@ impl<P> Driver<P> {
         crate::libraries::f64::read(&self.value(path))
     }
 
-    pub(crate) fn text(&self, path: &[Step]) -> Option<String> {
-        crate::libraries::text::read(&self.value(path)).map(str::to_owned)
-    }
-
     pub(crate) fn positions(&self, list: &[Step]) -> Vec<Position> {
         self.value(list)
             .as_list()
             .unwrap_or_else(|| panic!("no list at {list:?}"))
             .keys()
             .cloned()
-            .collect()
-    }
-
-    pub(crate) fn texts(&self, list: &[Step]) -> Vec<String> {
-        self.value(list)
-            .as_list()
-            .unwrap_or_else(|| panic!("no list at {list:?}"))
-            .values()
-            .map(|value| {
-                crate::libraries::text::read(value)
-                    .unwrap_or("?")
-                    .to_owned()
-            })
             .collect()
     }
 
@@ -174,20 +157,6 @@ impl<P> Driver<P> {
             .iter()
             .filter(|landmark| landmark.path.starts_with(prefix))
             .map(|landmark| (landmark.path.clone(), landmark.rect))
-            .collect()
-    }
-
-    /// Every drawn occurrence that shares the selection's identity.
-    pub(crate) fn lit(&self) -> Vec<Rc<[Step]>> {
-        let descends = &self.runner.frame.dispatch.descends;
-        let Some(selected) = crate::display::widget::navigation::selected_secondary(descends)
-        else {
-            return Vec::new();
-        };
-        descends
-            .iter()
-            .filter(|landmark| landmark.secondary.as_ref() == Some(&selected))
-            .map(|landmark| landmark.path.clone())
             .collect()
     }
 
@@ -353,11 +322,6 @@ impl<P> Driver<P> {
                 .as_ref()
                 .map(|s| s.path().to_vec())
         );
-    }
-
-    /// Ctrl and a letter.
-    pub(crate) fn command(&mut self, letter: &str) {
-        assert!(self.keystroke(Key::Character(letter.into()), Modifiers::CONTROL));
     }
 
     pub(crate) fn type_text(&mut self, text: &str) {

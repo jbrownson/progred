@@ -728,9 +728,19 @@ mod checked_in_files {
     fn website_lessons_are_editable_data_without_orphan_definitions() {
         for source in [
             include_str!("../../website/public/lessons/shape.gid"),
-            include_str!("../../website/public/lessons/forest.gid"),
             include_str!("../../website/public/lessons/growing-forest.gid"),
-            include_str!("../../website/public/lessons/drawing.gid"),
+            include_str!("../../website/public/lessons/dot.gid"),
+            include_str!("../../website/public/lessons/copies.gid"),
+            include_str!("../../website/public/lessons/recipe.gid"),
+            include_str!("../../website/public/lessons/trunks.gid"),
+            include_str!("../../website/public/lessons/heights.gid"),
+            include_str!("../../website/public/lessons/growth.gid"),
+            include_str!("../../website/public/lessons/counted.gid"),
+            include_str!("../../website/public/lessons/names.gid"),
+            include_str!("../../website/public/lessons/bytes.gid"),
+            include_str!("../../website/public/lessons/numbers.gid"),
+            include_str!("../../website/public/lessons/unfinished.gid"),
+            include_str!("../../website/public/lessons/views.gid"),
         ] {
             let (doc, _) = parse(source).unwrap();
             let reached = root_reachable_cells(&doc);

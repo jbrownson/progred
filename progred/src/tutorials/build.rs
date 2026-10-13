@@ -1,9 +1,9 @@
-//! story.html
+//! tutorial.html's first half, which builds the forest.
 
 use super::*;
 
 fn page(id: &str) -> Embed {
-    Embed::open("story.html", id)
+    Embed::open("tutorial.html", id)
 }
 
 /// The painted circles' centers and radii, in their drawing's coordinates.
@@ -174,50 +174,6 @@ fn trunks() {
         Some("tree")
     );
     assert_eq!(trunks.editor().model.doc.root, root);
-}
-
-#[test]
-fn ladder() {
-    let mut ladder = page("ladder");
-    let sixty = |ladder: &Embed, slot| {
-        ladder.element(
-            &ladder.path(&[slot, "follow", "expressions"]),
-            0,
-            &[ladder.key("x_param")],
-        )
-    };
-    let under = |paths: &[Rc<[Step]>], slot: Step| paths.iter().any(|path| path[0] == slot);
-
-    ladder.task("top");
-    ladder.click(&sixty(&ladder, "first"));
-    let selected = ladder.selection();
-    assert_eq!(selected[0], ladder.key("first"));
-    assert!(selected.contains(&ladder.key("x_param")));
-    let lit = ladder.lit();
-    for slot in ["first", "second", "fourth"] {
-        assert!(under(&lit, ladder.key(slot)), "{slot} lights up: {lit:?}");
-    }
-
-    ladder.task("bottom");
-    ladder.click(&sixty(&ladder, "fourth"));
-    let selected = ladder.selection();
-    assert_eq!(selected[0], ladder.key("fourth"));
-    assert!(selected.contains(&ladder.key("x_param")));
-
-    // Clicking a folded recipe's dots opens it with the cell itself
-    // selected, so Space folds it straight back.
-    let recipe = ladder.element(
-        &ladder.path(&["fourth", "follow", "expressions"]),
-        0,
-        &[ladder.key("function")],
-    );
-    let inside = [recipe.clone(), vec![FOLLOW]].concat();
-    assert!(!ladder.drawn(&inside), "folded at first");
-    ladder.click(&recipe);
-    assert!(ladder.drawn(&inside), "the dots open it");
-    assert_eq!(ladder.selection(), recipe);
-    ladder.type_text(" ");
-    assert!(!ladder.drawn(&inside), "Space folds it again");
 }
 
 #[test]

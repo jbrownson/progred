@@ -59,15 +59,15 @@ for a free port when running an additional preview alongside this one.
 ## Work on it
 
 - `public/index.html` is the home page: the pitch, a live forest whose projections
-  and names you can switch off (`public/peel.js`), the key ideas, what works today, the three
-  tutorials, and the Zulip links. Phones load the live forest too.
+  and names you can switch off (`public/peel.js`), the key ideas, what works today, the
+  tutorial, and the Zulip links. Phones load the live forest too.
   `make images` regenerates the forest still the link preview uses, the
   document-libraries still beside "Projections are programs", and the
   copies of the [README screenshots](../docs/images/README.md), after editor changes.
-- `public/story.html` is the tutorial the home page recommends; `public/tutorial.html`
-  (the exercise tutorial described below) and `public/lab/peel.html` are the
-  alternatives it lists after it.
-- `public/style.css`, `public/lessons.js`, and `public/appearance.js` are shared. Edit and refresh.
+- `public/tutorial.html` is the tutorial, described below. `_redirects` sends the
+  retired `story.html` and `lab/peel.html` to it.
+- `public/style.css`, `public/lessons.js`, `public/peel.js`, and `public/appearance.js`
+  are shared. Edit and refresh.
 - `public/lessons/*.gid` are the small, ordinary documents used by the exercises.
   They are fetched at startup, not compiled into the editor.
 - `/editor/` serves the existing `web/` host and generated `web/pkg/` build.
@@ -79,30 +79,27 @@ for a free port when running an additional preview alongside this one.
 - Edits live in memory until saved: the editor's File → Save downloads the
   document as a `.gid` file, and File → Open loads one.
 
-The exercise tutorial opens with a growing forest. A slider scrubs growth forward or backward;
+The tutorial opens with a growing forest. A slider scrubs growth forward or backward;
 the visible `drawing with controls` call connects it to a forest function with editable
 tree count, growth rate, leaf color, and trunk color. Drawing and controls use existing
 libraries; all forest geometry is ordinary Grap in the same document.
-Eight exercises then build up the ideas in one reading column (a paragraph,
-the editor, its steps, then an aside), each ending on the step that demonstrates
-its idea: values edited directly (a planet record with a list), projections
-(one calculation drawn three ways), what everything is made of (the planet in
-the base projection), one value shared through cells, live calculations with two
-puzzles, functions (including a call nested in a call), pictures as views of
-code (including adding a call), and a three-tree finale combining them.
+Sections follow in one reading column (a paragraph, the editor, its steps, then
+an aside). The first half rebuilds that forest from a single dot, one idea a
+step: two dots, a recipe they share, trees, heights, a growth they share, and a
+counted forest. The second half takes it apart: the forest again with
+`public/peel.js` switching its libraries off a layer at a time, names as labels,
+cells, the same bytes read four ways, what the f64 tag means, unfinished
+programs that still run, and projections written as programs. It ends with the
+whole forest to change freely.
 All use the real editor without its application menu, and explicitly select
 `wheel=auto` so scrolling over an exercise scrolls its overflowing document or
 completion popup when possible, and otherwise scrolls the website. The full-page
 editor keeps its ordinary wheel scrolling and zooming.
-Each iframe explicitly selects its libraries: name/text/blob plus number/f64
-for the values, model, and cells exercises.
-The calculations and functions exercises add Grap and absent to the numeric set.
-The drawing lesson and the tree finale add control, color, and layout; the
-drawing lesson credits Bret Victor's Inventing on Principle. The opening forest
-adds controls, presentation, logic, list, and sequence to the drawing set,
-without loading Fidget or toolpath libraries.
-Calculations, functions, drawing, and the finale use `tutorial-slots`, listing three record-field
-identities in display order. An entry-only projection stacks those fields without labels or insertion
+Each iframe explicitly selects the libraries its section needs, in their
+intended order; only the f64 section loads Fidget, and none loads the toolpath
+libraries.
+Most sections use `tutorial-slots`, listing record-field identities in display
+order. An entry-only projection stacks those fields without labels or insertion
 gaps. An identity may carry a level: `:plain` draws that slot with only names,
 text, and numbers read as themselves (calls stay records), and `:raw` draws it as
 Raw does, without names. Several slots can show one shared cell at different levels. Deleting a value leaves its slot visible as the ordinary empty picker;
@@ -160,73 +157,33 @@ the step. Achievements stay checked through later edits and undo; Reset clears
 only that exercise's checklist. Progress isn't saved or reported. The
 predicates live in `public/lesson-progress.mjs`, not in the editor.
 
-The values lesson edits a planet record: its name, its number of moons, and a
-list of colors. Adding a color through a comma counts once the list grows.
-Removing a color checks for a decrease from the previous observed list length;
-erasing an item's text alone does not count. Restoring it is a separate step
-that checks the list grows back to a previously observed state after a removal,
-including undoing the whole text-erasing run. Inserting a different color does
-not count. These checks observe results rather than keystrokes, and the small
-list snapshots are discarded on restoration or Reset.
+The first half's documents (`dot`, `copies`, `recipe`, `trunks`, `heights`,
+`growth`, `counted`) are versions of one forest that share its cell identities,
+so the checks follow those cells: the dot's x after a drag, both radii, the
+recipe's name, the leaves' offset, the shared growth, a planted fourth tree with
+both arguments, and the forest's count. Picking checks the source path of the
+selection. A hint under the growth section asks for a planted tree's missing
+height.
 
-The projections lesson, right after values, answers "if a program isn't text,
-what do you see?" Three slots reference one shared calculation cell, drawn fully
-(`3 + 2 → 5`), plainly (`{evaluate: {function: +, left: 3, right: 2}}`), and
-raw (identities and bytes). An edit counts in the view whose selection made it:
-changing the number on top, then in the middle; the last step selects that
-number in the raw view. Every slot view that isn't fully drawn carries a
-caption naming what drew it, so the views explain themselves.
-
-The model lesson (`model`) shows the planet again, fully drawn above and in the
-base projection below, both referencing one cell. Its prose names the four
-building blocks: records, lists, blobs, and cells. Renaming the planet and
-adding a color count from the document; the last step counts a selection in the
-base view inside the planet key's entry, which the editor also highlights in
-the top view.
-
-The cells lesson starts with two references to one numeric cell. It checks for
-editing that shared definition, creating a different cell containing 11,
-inserting another reference to the new cell, then editing its shared contents.
-Checks use cell identities and the document's cell table, not matching displayed
-numbers. Repeated independent numbers don't count as sharing. The instructions
-use the ordinary `(` constructor and Cmd/Ctrl-click picking; creating a cell selects
-the reference, so the user then clicks its empty contents to fill it.
-
-The calculations lesson (`grap`) uses one unnamed numeric cell in two
-calculations: addition and multiplication. The same cell also appears on its
-own. Users edit a literal argument, changing only one result, then the shared
-cell, changing both. Two puzzles follow: make the sum and product equal, then
-make the product exactly 100. The checks compute those from the stored numbers;
-the editor performs the actual evaluations and projects their read-only results.
-
-The functions lesson starts with a named `scale` function, one parameter `x`,
-and two evaluated calls. Its checks cover changing the first call's argument,
-changing the function's multiplier, renaming the parameter, and nesting a call to
-`scale` in the second call's argument. Emptying that argument leaves the declared
-parameter as an ordinary empty picker, where typing `scale` offers the call.
-Parameter uses and argument labels share the same cell identity; names don't
-implement binding. Native interaction tests exercise the actual editing and
-evaluation, including unchanged results after renaming and the nested result.
-
-The drawing lesson uses an ordinary `dot(x)` function that calls `fill`, a `do`
-program calling it twice, and a drawing of that same program. Users move one
-circle by editing its call, enlarge both by editing the shared radius, add a third
-call through the comma between the calls, then Cmd/Ctrl-click any circle to select
-the `fill` call that produced it. Existing source tracing also links hover in
-both directions. The drawing slot appears above the two source slots.
-
-The finale reuses `forest.gid`: a `tree(x, height)` function called three times.
-Its checks cover changing an original tree's height (matched by that tree's `x`,
-so planting between trees doesn't count), recoloring the shared canopy paint, and
-planting a fourth tree with both arguments. A new call opens its first argument;
-its height is then its own empty picker. Headless interaction tests perform each
-authoring step: the nested call, the third dot, and the fourth tree.
+The peel has no checklist: what changes there is which libraries draw, which
+the page's slider sets, not the document. The names section checks the x
+parameter's name (the forest's own x cell). The cells section starts with two
+references to one numeric cell and checks editing that shared definition,
+creating a different cell containing 11, inserting another reference to it,
+then editing its shared contents; checks use cell identities and the
+document's cell table, not displayed numbers. The `(` constructor opens the new
+cell, so its number is typed straight into it, and Cmd/Ctrl-click links it.
+The bytes section checks that the shared blob changed, then that it holds three
+bytes. The f64 section has no checklist. The unfinished section checks that the
+empty call's x became a number, and the projections section checks the planet's
+moons and the color of the sphere its drawing paints. The closing forest has no
+checklist.
 
 An embed is an ordinary editor URL:
 
 ```html
-<iframe src="./editor/?document=../lessons/values.gid&menu=hidden&wheel=auto&threads=1&observe=values-0"
-        title="An editable planet record" loading="lazy"></iframe>
+<iframe src="./editor/?document=../lessons/cells.gid&menu=hidden&wheel=auto&threads=1&observe=cells-0"
+        title="Two references to one editable cell" loading="lazy"></iframe>
 ```
 
 The actual lesson URLs also include `libraries`, a comma-separated list of

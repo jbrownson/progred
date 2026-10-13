@@ -107,7 +107,7 @@ distinct while answering those questions.
 List elements have fractional positions, minted when a document loads and
 dropped when it saves, so a position means nothing outside its session. A page
 or a script can't name the second call in a list by path across a reload, which
-is why the story tutorial's checks compare selected values instead. Saving the
+is why the tutorial's checks compare selected values instead. Saving the
 positions fixes that, and a CRDT would need them anyway. Reading could still
 accept a plain `[1, 2, 3]` and mint positions for it, while saving always writes
 them, even if the text gets noisier.
@@ -336,10 +336,10 @@ up only when text entry becomes a focus:
 
 ## Tutorial hints
 
-The story tutorial shows a hint when someone strays from a step in a way we can
-predict, read from the same state as its checks: selecting the 60's raw bytes,
-or planting a tree without a height. Review these, and more candidates from the
-newcomer runs, once the tutorial settles:
+The tutorial shows a hint when someone strays from a step in a way we can
+predict, read from the same state as its checks: planting a tree without a
+height. Review it, and more candidates from the newcomer runs, once the tutorial
+settles:
 
 - repeated plain clicks on a picture, which could point out holding Ctrl;
 - dragging a number without Ctrl, which selects its text instead.

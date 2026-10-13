@@ -6,14 +6,12 @@
 use crate::driver::Driver;
 use gid::{CellId, Step, Value};
 use kurbo::{Point, Size};
-use std::rc::Rc;
 use ui_events::keyboard::NamedKey;
 use winit::keyboard::ModifiersState;
 use winit::window::CursorIcon;
 
-mod peel;
-mod story;
-mod tutorial;
+mod apart;
+mod build;
 
 /// The tutorial column's frame less its border, tall enough that no lesson
 /// scrolls.

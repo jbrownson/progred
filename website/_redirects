@@ -6,3 +6,7 @@
 /cad/ /editor/?example=fidget-shapes 302
 /cam /editor/?example=toolpaths 302
 /cam/ /editor/?example=toolpaths 302
+/story.html /tutorial.html 302
+/story /tutorial.html 302
+/lab/peel.html /tutorial.html 302
+/lab/peel /tutorial.html 302
