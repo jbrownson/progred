@@ -1,8 +1,9 @@
 //! Stretched delimiters as filled outlines, the way math fonts draw
-//! them: curvature follows the FULL span — the paren one elliptical
-//! bow, the brace two mirrored S-waves meeting at its mid point, the
-//! bracket square — and the stroke is MODULATED, thick at the bellies
-//! and thin at terminals and the brace's point, with blunt-cut ends.
+//! them: the paren one elliptical bow over the FULL span, the brace
+//! hooked at its tips and pointed at its middle with straight arms
+//! between, the bracket square — and the stroke is MODULATED, thick
+//! at the bellies and arms, thin at the paren's blunt-cut terminals
+//! and the brace's point.
 //! A tall delimiter grows wider and gains contrast (TeX's \big
 //! through \Bigg grow in both dimensions); the one-line form is the
 //! same shape at glyph height, near-monoline at the base weight. Ink
@@ -30,12 +31,13 @@ pub enum Delim {
 pub const MAX_GROWTH: f64 = 2.0;
 pub const MAX_CONTRAST: f64 = 1.6;
 
-/// The three families share a 0.30 em base width, wide enough to keep
+/// Parens and brackets share a 0.30 em base width, wide enough to keep
 /// their curvature and arms legible and deliberately more regular
-/// than the system font's differently proportioned glyphs. They span
-/// -0.704..+0.171 em around the baseline with 0.05 em side bearings;
-/// `line` is the one-line reference height the growth and contrast
-/// ramps measure against.
+/// than the system font's differently proportioned glyphs. Braces take
+/// half as much again, LaTeX's proportion to its parens, so their hooks
+/// read at text size. All span -0.704..+0.171 em around the baseline
+/// with 0.05 em side bearings; `line` is the one-line reference height
+/// the growth and contrast ramps measure against.
 #[derive(Debug, Clone, Copy)]
 pub struct DelimStyle {
     pub stem: f64,
@@ -49,7 +51,7 @@ impl DelimStyle {
         Self {
             stem: size * 0.075,
             bow: size * 0.30,
-            brace_bow: size * 0.30,
+            brace_bow: size * 0.45,
             line: size * 1.18,
         }
     }
@@ -164,58 +166,71 @@ fn bracket(bow: f64, top: f64, bottom: f64, belly: f64, _tip: f64) -> BezPath {
     path
 }
 
-/// Two mirrored S-wave bands meeting at a blunt point face: each half
-/// runs terminal cap to point face between an outer and an inner
-/// composite curve — quarter-ellipses joined at the vertical-tangent
-/// waists, where the band is `belly` thick; ends and the point stay
-/// `tip` thin. The halves overlap at the face and fill as one, so the
-/// mirrored half is reversed to wind the same way: opposite windings
-/// would cancel there and leave a gap at the point.
+/// The brace as math fonts draw it: each half a band that curls in a tight
+/// hook at its tip, ends there in a round cap, runs straight down its arm,
+/// and thins as it curves into the point, where the halves meet at a short
+/// face. The band is `belly` thick along the hook and arm and `tip` thick at
+/// the point. The hooks and the point keep to the brace's width, so they
+/// grow with it. The lower half is the upper one mirrored and reversed, so
+/// both wind the same way and fill as one where they overlap.
 fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
+    let weight = belly.min(bow / 2.0);
+    let half_weight = weight / 2.0;
     let mid = (top + bottom) / 2.0;
-    let half = (bottom - top) / 2.0;
-    let hook = half * 2.0 / 3.0;
-    let point = half / 3.0;
-    let xw = bow / 2.0;
-    let spread = (belly / 2.0).min(xw);
+    // The tip's centerline, inset so its round cap stays in the box.
+    let (end, cap) = (bow - half_weight, top + half_weight);
+    let arm = bow / 2.0;
+    let reach = (mid - cap).max(0.0);
+    let hook = (HOOK * bow).min(reach * 0.45).max(half_weight);
+    let point = (POINT * bow).min(reach * 0.55).max(tip);
     let mut path = BezPath::new();
-    for (cap, sign) in [(top, 1.0), (bottom, -1.0)] {
-        let flip = |y: f64| cap + sign * (y - top);
-        let hook_center = flip(top + hook);
-        let point_center = flip(mid - point);
+    for sign in [1.0, -1.0] {
+        let y = |y: f64| mid + sign * (y - mid);
+        let hook_center = (end, y(cap + hook));
+        let point_center = (0.0, y(mid - point));
         let mut half = BezPath::new();
-        half.move_to((bow, cap));
+        half.move_to((end, y(top)));
         arc_dir(
             &mut half,
-            (bow, hook_center),
-            Vec2::new(bow - xw + spread, hook),
+            hook_center,
+            Vec2::new(end - arm + half_weight, hook + half_weight),
             -FRAC_PI_2,
             -FRAC_PI_2,
             sign,
         );
+        half.line_to((arm - half_weight, y(mid - point)));
         arc_dir(
             &mut half,
-            (0.0, point_center),
-            Vec2::new(xw - spread, (point - tip / 2.0).max(0.0)),
+            point_center,
+            Vec2::new(arm - half_weight, point - tip / 2.0),
             0.0,
             FRAC_PI_2,
             sign,
         );
-        half.line_to((0.0, flip(mid + tip / 2.0)));
+        half.line_to((0.0, y(mid + tip / 2.0)));
         arc_dir(
             &mut half,
-            (0.0, point_center),
-            Vec2::new(xw + spread, (point + tip / 2.0).max(0.0)),
+            point_center,
+            Vec2::new(arm + half_weight, point + tip / 2.0),
             FRAC_PI_2,
             -FRAC_PI_2,
             sign,
         );
+        half.line_to((arm + half_weight, y(cap + hook)));
         arc_dir(
             &mut half,
-            (bow, hook_center),
-            Vec2::new((bow - xw - spread).max(0.0), (hook - tip).max(0.0)),
+            hook_center,
+            Vec2::new(end - arm - half_weight, hook - half_weight),
             PI,
             FRAC_PI_2,
+            sign,
+        );
+        arc_dir(
+            &mut half,
+            (end, y(cap)),
+            Vec2::new(half_weight, half_weight),
+            FRAC_PI_2,
+            -PI,
             sign,
         );
         half.close_path();
@@ -227,6 +242,11 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
     }
     path
 }
+
+/// How tall the brace's hook and point curves are, as fractions of its
+/// width.
+const HOOK: f64 = 0.32;
+const POINT: f64 = 0.38;
 
 fn arc(path: &mut BezPath, center: (f64, f64), radii: Vec2, start: f64, sweep: f64) {
     path.extend(
@@ -325,12 +345,16 @@ mod tests {
     }
 
     #[test]
-    fn stock_delimiter_families_have_the_same_width() {
+    fn stock_braces_are_wider_than_parens_and_brackets() {
         let style = DelimStyle::for_text_size(14.0);
         for height in [style.line, style.line * 2.0, style.line * 4.0] {
-            let widths = [Delim::Paren, Delim::Bracket, Delim::Brace]
+            let [paren, bracket, brace] = [Delim::Paren, Delim::Bracket, Delim::Brace]
                 .map(|delim| style.bow_for(delim, height));
-            assert_eq!(widths, [widths[0]; 3]);
+            assert_eq!(paren, bracket);
+            assert!(
+                brace > paren,
+                "a brace {height} tall is no wider than a paren"
+            );
         }
     }
 
