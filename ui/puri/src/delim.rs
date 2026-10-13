@@ -168,7 +168,9 @@ fn bracket(bow: f64, top: f64, bottom: f64, belly: f64, _tip: f64) -> BezPath {
 /// runs terminal cap to point face between an outer and an inner
 /// composite curve — quarter-ellipses joined at the vertical-tangent
 /// waists, where the band is `belly` thick; ends and the point stay
-/// `tip` thin. The halves overlap at the face and fill as one.
+/// `tip` thin. The halves overlap at the face and fill as one, so the
+/// mirrored half is reversed to wind the same way: opposite windings
+/// would cancel there and leave a gap at the point.
 fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
     let mid = (top + bottom) / 2.0;
     let half = (bottom - top) / 2.0;
@@ -181,9 +183,10 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
         let flip = |y: f64| cap + sign * (y - top);
         let hook_center = flip(top + hook);
         let point_center = flip(mid - point);
-        path.move_to((bow, cap));
+        let mut half = BezPath::new();
+        half.move_to((bow, cap));
         arc_dir(
-            &mut path,
+            &mut half,
             (bow, hook_center),
             Vec2::new(bow - xw + spread, hook),
             -FRAC_PI_2,
@@ -191,16 +194,16 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
             sign,
         );
         arc_dir(
-            &mut path,
+            &mut half,
             (0.0, point_center),
             Vec2::new(xw - spread, (point - tip / 2.0).max(0.0)),
             0.0,
             FRAC_PI_2,
             sign,
         );
-        path.line_to((0.0, flip(mid + tip / 2.0)));
+        half.line_to((0.0, flip(mid + tip / 2.0)));
         arc_dir(
-            &mut path,
+            &mut half,
             (0.0, point_center),
             Vec2::new(xw + spread, (point + tip / 2.0).max(0.0)),
             FRAC_PI_2,
@@ -208,14 +211,19 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
             sign,
         );
         arc_dir(
-            &mut path,
+            &mut half,
             (bow, hook_center),
             Vec2::new((bow - xw - spread).max(0.0), (hook - tip).max(0.0)),
             PI,
             FRAC_PI_2,
             sign,
         );
-        path.close_path();
+        half.close_path();
+        path.extend(if sign < 0.0 {
+            half.reverse_subpaths()
+        } else {
+            half
+        });
     }
     path
 }
@@ -246,6 +254,26 @@ mod tests {
         brace_bow: 4.0,
         line: 40.0,
     };
+
+    #[test]
+    fn a_braces_halves_fill_as_one_where_they_meet() {
+        for height in [14.0, 40.0, 120.0] {
+            let (_, tip) = STYLE.weights(height);
+            let width = STYLE.bow_for(Delim::Brace, height);
+            // Just inside each point, where both halves' bands overlap.
+            for (path, x) in [
+                (open(Delim::Brace, &STYLE, 0.0, height), tip / 4.0),
+                (close(Delim::Brace, &STYLE, 0.0, height), width - tip / 4.0),
+            ] {
+                let point = Point::new(x, height / 2.0);
+                assert_ne!(
+                    path.winding(point),
+                    0,
+                    "a brace {height} tall has a gap at its point"
+                );
+            }
+        }
+    }
 
     fn ink(path: &BezPath) -> Rect {
         path.bounding_box()
