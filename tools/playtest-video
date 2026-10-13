@@ -8,11 +8,13 @@
 //   tools/playtest-video [SESSION] [OUT]
 //
 // SESSION defaults to target/web-control/session.jsonl, and OUT to
-// playtest.mp4 beside it. It replays against the browser build as it stands,
-// so don't rebuild between recording and replaying. It needs ffmpeg, the
-// ffmpeg build Playwright records with (npx playwright-core install ffmpeg),
-// and a voice: Kokoro once tools/playtest-voice setup has fetched it, else
-// pico2wave from libttspico-utils, macOS's say, or espeak-ng.
+// playtest.mp4 beside it, where a video folder holds the working files, so
+// two sessions can render at once. It replays against the browser build as
+// it stands, so don't rebuild between recording and replaying. It needs
+// ffmpeg, the ffmpeg build Playwright records with (npx playwright-core
+// install ffmpeg), and a voice: Kokoro once tools/playtest-voice setup has
+// fetched it, else pico2wave from libttspico-utils, macOS's say, or
+// espeak-ng.
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
@@ -448,7 +450,7 @@ function narration({ notes }, seconds) {
 
 async function main(sessionPath, out) {
   const [header, ...entries] = fs.readFileSync(sessionPath, "utf8").trim().split("\n").map((line) => JSON.parse(line));
-  const work = path.join(control.STATE, "video");
+  const work = path.join(path.dirname(sessionPath), "video");
   fs.rmSync(path.join(work, "recording"), { recursive: true, force: true });
   const notes = entries.filter(({ action }) => Array.isArray(action) && action[0] === "say").map(({ action }) => action[1]);
   const speech = speak(notes, path.join(work, "speech"));
