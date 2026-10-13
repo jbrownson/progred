@@ -105,6 +105,18 @@ fn cell_activation(
     }
 }
 
+fn new_cell(kind: CompletionKind) -> Rc<dyn Fn(&mut crate::Editor)> {
+    Rc::new(move |world| match kind {
+        CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
+        CompletionKind::Field => crate::editing::commit_label(
+            world,
+            new_cell_id(),
+            None,
+            Some(crate::libraries::selection::pending_at(&[])),
+        ),
+    })
+}
+
 /// Labels can only be cells; an offer advertising another value is not one.
 fn completion_entry(
     sources: &Sources,
@@ -133,21 +145,11 @@ fn entry(sources: &Sources, offer: Completion) -> Entry<crate::Editor> {
     }
 }
 
-/// The editor's constructors: a new cell, and as a value a new list or
-/// record. Each opens for what goes inside it, and its alias is the delimiter
-/// key that also makes it. Every full list has them; a focused vocabulary
-/// that wants them offers these.
-pub(crate) fn constructors(kind: CompletionKind) -> Vec<Completion> {
-    let cell = Completion::new("new cell", move |world| match kind {
-        CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
-        CompletionKind::Field => crate::editing::commit_label(
-            world,
-            new_cell_id(),
-            None,
-            Some(crate::libraries::selection::pending_at(&[])),
-        ),
-    })
-    .with_aliases(["("]);
+/// The delimiters' offers, by the key that makes each: a new cell, and as a
+/// value a new list or record. Each opens for what goes inside it.
+pub(crate) fn constructor_entries(
+    kind: CompletionKind,
+) -> Vec<(&'static str, Entry<crate::Editor>)> {
     let containers = [
         ("[", "new list", Value::list([])),
         ("{", "new record", Value::record([])),
@@ -155,24 +157,26 @@ pub(crate) fn constructors(kind: CompletionKind) -> Vec<Completion> {
     .into_iter()
     .filter(|_| kind == CompletionKind::Value)
     .map(|(key, display, value)| {
-        Completion::new(display, move |world| {
-            crate::editing::commit_container(world, value.clone())
-        })
-        .with_aliases([key])
+        let activate: Rc<dyn Fn(&mut crate::Editor)> =
+            Rc::new(move |world| crate::editing::commit_container(world, value.clone()));
+        (key, display, activate)
     });
-    std::iter::once(cell)
+    std::iter::once(("(", "new cell", new_cell(kind)))
         .chain(containers)
-        .map(|offer| Completion {
-            face: Face::Dim,
-            ..offer
+        .map(|(key, display, activate)| {
+            (
+                key,
+                Entry {
+                    display: display.to_string(),
+                    detail: None,
+                    matches: Vec::new(),
+                    face: Face::Dim,
+                    source: None,
+                    activate,
+                },
+            )
         })
         .collect()
-}
-
-/// Two offers of the same thing: the same text and detail, advertising the
-/// same value.
-fn same_offer(a: &Completion, b: &Completion) -> bool {
-    a.display == b.display && a.detail == b.detail && a.preview == b.preview
 }
 
 pub(crate) struct Prepared {
@@ -282,14 +286,6 @@ pub(crate) fn completion_entries_with(
     {
         return (contextual_entries(sources, offers, request), false);
     }
-    // The focused offers lead the full list, which skips what they show: the
-    // same offer again, or a reference to a cell one of them advertises.
-    let shown = suggested.as_deref().unwrap_or_default();
-    let fresh = |offer: &Completion| !shown.iter().any(|above| same_offer(above, offer));
-    let shown_cells: Vec<_> = shown
-        .iter()
-        .filter_map(|offer| offer.preview.as_ref()?.as_cell())
-        .collect();
     let query = request.query;
     let labels = kind == CompletionKind::Field;
     let trimmed = query.trim();
@@ -301,10 +297,7 @@ pub(crate) fn completion_entries_with(
     let value_entries = providers
         .filter(|_| !quoted)
         .and_then(|provider| provider(&universal))
-        .map(|offers| {
-            let offers = offers.into_iter().filter(|offer| fresh(offer)).collect();
-            contextual_entries(sources, offers, request)
-        })
+        .map(|offers| contextual_entries(sources, offers, request))
         .unwrap_or_default();
     let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
     let spelling = text::query_spelling(query);
@@ -314,14 +307,12 @@ pub(crate) fn completion_entries_with(
         scope: CompletionScope::Literal,
         ..*request
     };
-    let literals: Vec<_> = providers
+    let literals = providers
         .filter(|_| !labels)
         .and_then(|provider| provider(&literal))
         .unwrap_or_default()
         .into_iter()
-        .filter(|offer| fresh(offer))
-        .filter_map(|offer| completion_entry(sources, offer, kind))
-        .collect();
+        .filter_map(|offer| completion_entry(sources, offer, kind));
     let atoms: Vec<_> = match kind {
         CompletionKind::Field => {
             let spelling = spelling.to_string();
@@ -354,7 +345,6 @@ pub(crate) fn completion_entries_with(
     };
     let (mut local, mut external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
-        .filter(|cell| !shown_cells.contains(cell))
         .filter(|cell| {
             !labels
                 || !request
@@ -403,26 +393,22 @@ pub(crate) fn completion_entries_with(
     }
     let mut references_pool: Vec<_> = local
         .into_iter()
-        .map(|(entry, named, _)| (entry, named, Vec::new()))
+        .map(|(entry, named, _)| (entry, named, None))
         .collect();
     references_pool.extend(
-        constructors(kind)
+        constructor_entries(kind)
             .into_iter()
-            .filter(|offer| fresh(offer))
-            .map(|offer| {
-                let aliases = offer.aliases.clone();
-                (entry(sources, offer), true, aliases)
-            }),
+            .map(|(key, entry)| (entry, true, Some(key))),
     );
     references_pool.extend(
         external
             .into_iter()
-            .map(|(entry, named, _)| (entry, named, Vec::new())),
+            .map(|(entry, named, _)| (entry, named, None)),
     );
     let references: Vec<_> = filter::rank_with_aliases(
         references_pool,
         |(entry, _, _)| &entry.display,
-        |(_, _, aliases)| aliases.as_slice(),
+        |(_, _, alias)| alias.as_slice(),
         query,
     )
     .into_iter()

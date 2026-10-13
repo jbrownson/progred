@@ -122,6 +122,20 @@ belongs with other constructors. Design that distinction through the completion
 interface rather than special-casing lambda or particular numeric libraries.
 This is deferred UX design, not a priority for the current cleanup.
 
+## Duplicate offers in the expanded picker
+
+A slot's picker opens on its narrow vocabulary when its projection or a library
+supplies one; expanding with `…` adds the full list after it. The full list asks
+the libraries again, so an offer in both shows twice: in a Grap slot, `new
+color` and `new lambda` appear at the top and again further down. The narrow
+list also leaves out the universal `new cell`, `new list` and `new record`
+rows, so Grap's slots offer their own `new list` and `new record`, and the
+expanded list shows both sets.
+
+One fix: put the universal rows at the end of every narrow list, drop Grap's
+copies, and leave out of the expanded list any offer already shown above it.
+Not yet decided.
+
 ## Reporting completion failures
 
 Offer construction decides applicability; activating an offered completion

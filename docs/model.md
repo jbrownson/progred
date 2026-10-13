@@ -312,9 +312,8 @@ pickers do not receive these call offers.
 
 Grap expression slots supply a focused provider: statically visible lambda
 parameters, preceding `let`/`where` bindings and the current match case's pattern
-bindings, plus named function calls, library literal/constructor offers, the
-editor's cell, list, and record constructors, and text. This is an explicit
-local projection, including the items of
+bindings, plus named function calls, library literal/constructor offers, text,
+lists, and records. This is an explicit local projection, including the items of
 `do`, not a global change to data completion. Existing domain-specific suggestions
 are tried first. Binding suggestions put the nearest enclosing lexical scope
 first, then outer scopes, sorting names alphabetically within each scope.
@@ -375,8 +374,7 @@ IME composition keep ordinary text input; quoted punctuation leads with literal
 text. Shortcuts use the same insertion callbacks as the constructor offers.
 A new cell, list or record opens as it's made, as Cmd+Enter would open it, so
 typing goes inside: the cell's value, an element of the list, or a field of the
-record. Escape steps back out to it. A narrow list can offer these same
-constructors, as Grap's expression slots do.
+record. Escape steps back out to it. Grap's list and record offers do the same.
 
 A library completion consists of presentation metadata and an activation handler
 receiving `&mut Editor`. Clicking or pressing Enter runs it; highlighting or
@@ -443,9 +441,7 @@ A provider starts with its narrow vocabulary. The trailing `…` participates in
 row navigation but activates expansion rather than committing a value. Expansion
 also happens when pressing Down on the selected `…` row. The expanded list keeps
 the provider's offers first and adds universal atoms, constructors, and cell
-search, leaving out what the provider's offers already show: the same offer
-again, or a reference to a cell one of them advertises. The `…` row disappears.
-Expansion keeps the
+search; the `…` row disappears. Expansion keeps the
 selected index, clamped to the available rows. Changing the query filters the
 expanded list and resets selection and scroll; expansion lasts for that picker.
 Returning to an older query does not restore an old choice. A new picker starts

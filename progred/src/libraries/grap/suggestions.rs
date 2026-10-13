@@ -1,6 +1,10 @@
 use super::*;
 use crate::display::{CompletionRequest, CompletionScope};
-use crate::libraries::{completion::select, control::vocabulary as control, text};
+use crate::libraries::{
+    completion::{container, select},
+    control::vocabulary as control,
+    text,
+};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -74,7 +78,10 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
                 );
             }
             offers.extend(library_offers);
-            offers.extend(crate::completion::constructors(request.kind));
+            offers.extend([
+                container("new list", Value::list([])).with_aliases(["["]),
+                container("new record", Value::record([])).with_aliases(["{"]),
+            ]);
         }
         if !templated {
             offers.extend(quote(request));
@@ -298,7 +305,6 @@ mod tests {
             assert_eq!(
                 offers
                     .iter()
-                    .filter(|offer| offer.detail == Some("binding".into()))
                     .filter_map(|offer| offer.test_value().as_cell())
                     .collect::<Vec<_>>(),
                 expected,

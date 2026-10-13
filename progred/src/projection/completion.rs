@@ -4,7 +4,7 @@ use super::{
     Cx, SharedPath, atom_content, edit_presentation, face_style, hover_block, hover_claim,
     hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke, tree_hovered,
 };
-use crate::completion::{Entry, Offers, completion_entries_with, constructors};
+use crate::completion::{Entry, Offers, completion_entries_with, constructor_entries};
 use crate::display::widget::completion::border as completion_border;
 use crate::frame::Hovered;
 use crate::hover::Hover;
@@ -246,19 +246,14 @@ fn query_content(
         },
     );
     let card = if query.text().is_empty() && !query.is_composing() {
-        let constructors = constructors(request.kind);
+        let constructors = constructor_entries(request.kind);
         on_key(card, move |world, event| {
             if event.state.is_down()
                 && !(event.modifiers.ctrl() || event.modifiers.meta())
                 && let Key::Character(key) = &event.key
-                && let Some(offer) = constructors.iter().find(|offer| {
-                    offer
-                        .aliases
-                        .iter()
-                        .any(|alias| alias.as_str() == key.as_str())
-                })
+                && let Some((_, entry)) = constructors.iter().find(|(shortcut, _)| *shortcut == key)
             {
-                (offer.activate)(world);
+                (entry.activate)(world);
                 true
             } else {
                 false
