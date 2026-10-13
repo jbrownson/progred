@@ -1,20 +1,20 @@
 //! Stretched delimiters as filled outlines, the way math fonts draw
-//! them: the paren one elliptical bow over the FULL span, the brace
-//! hooked at its tips and pointed at its middle with straight arms
-//! between, the bracket square — and the curved strokes are MODULATED
-//! as Latin Modern's are, thick at the paren's belly and the brace's
-//! arms and thinning to `TIP` of that at the paren's blunt-cut ends,
-//! the brace's hook tips and its point. A tall delimiter grows wider
-//! and gains weight (TeX's \big through \Bigg grow in both
-//! dimensions); the one-line form is the same shape at glyph height
-//! and the base weight. Ink spans exactly x in [0, bow-for-height]
-//! and y in [top, bottom].
+//! them, after Knuth's Computer Modern: the paren one arc over the FULL
+//! span, its ends leaving at a slant and cut flat; the brace hooked at
+//! its tips and pointed at its middle with straight arms between; the
+//! bracket square. The curved strokes are MODULATED as Latin Modern's
+//! are, thick at the paren's belly and the brace's arms and thinning to
+//! `TIP` of that at the paren's ends, the brace's hook tips and its
+//! point. A tall delimiter grows wider and gains weight (TeX's \big
+//! through \Bigg grow in both dimensions); the one-line form is drawn
+//! the same way at glyph height and the base weight. Ink spans exactly
+//! x in [0, bow-for-height] and y in [top, bottom].
 
 mod widget;
 pub use widget::{Side, advance, draw_stretched, minimum_span};
 
 use kurbo::{Affine, Arc, BezPath, Point, Rect, Shape, Vec2};
-use std::f64::consts::{FRAC_PI_2, PI};
+use std::f64::consts::{FRAC_PI_2, PI, SQRT_2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Delim {
@@ -36,6 +36,13 @@ pub const MAX_CONTRAST: f64 = 1.6;
 /// Latin Modern's parens and brace hooks keep about this contrast at
 /// every size.
 const TIP: f64 = 0.4;
+
+/// The steepest a paren's outer edge leaves its ends, below the
+/// horizontal. Latin Modern's leave at 38° to 49° at every size, because
+/// its tall parens widen; ours keep their width, so Knuth's rule alone
+/// would leave a tall paren's ends nearly vertical and the paren nearly
+/// straight.
+const END: f64 = 45.0 * PI / 180.0;
 
 /// Parens and brackets share a 0.30 em base width, wide enough to keep
 /// their curvature and arms legible and deliberately more regular
@@ -142,20 +149,74 @@ pub fn close_with_width(
     path
 }
 
-/// One crescent: a half-ellipse outside and a [`tapered`] inner edge,
-/// so the band is `belly` thick at the waist and thins to `tip` at the
-/// ends, which are cut square.
+/// One crescent as Knuth draws it: each edge a Metafont curve from one
+/// end through the waist to the other, and the ends cut flat. Knuth
+/// leaves each end along its edge's chord to the waist with the run
+/// tripled; a tall paren stretches the run further, so that its outer
+/// edge leaves no steeper than [`END`]. The inner edge, with its shorter
+/// run, leaves steeper, so the band is `belly` wide at the waist and
+/// thins to `tip` wide at the ends.
 fn paren(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
     let mid = (top + bottom) / 2.0;
-    let outer = Vec2::new(bow, (bottom - top) / 2.0);
+    let half = (bottom - top) / 2.0;
+    let stretch = (half / ((bow - tip).max(f64::EPSILON) * END.tan())).max(3.0);
+    let flip = |point: Point| Point::new(point.x, 2.0 * mid - point.y);
+    let down = Vec2::new(0.0, 1.0);
+    let (outer, outer_waist) = (Point::new(bow - tip, top), Point::new(0.0, mid));
+    let (inner, inner_waist) = (Point::new(bow, top), Point::new(belly, mid));
+    let (o1, o2) = hobby(
+        outer,
+        Vec2::new(-stretch * (bow - tip), half),
+        outer_waist,
+        down,
+    );
+    let (i1, i2) = hobby(
+        inner,
+        Vec2::new(stretch * (belly - bow), half),
+        inner_waist,
+        down,
+    );
     let mut path = BezPath::new();
-    path.move_to((bow, top));
-    arc(&mut path, (bow, mid), outer, -FRAC_PI_2, -FRAC_PI_2);
-    arc(&mut path, (bow, mid), outer, PI, -FRAC_PI_2);
-    path.line_to((bow, bottom - tip));
-    tapered(&mut path, (bow, mid), outer, (belly, tip), FRAC_PI_2, PI);
+    path.move_to(outer);
+    path.curve_to(o1, o2, outer_waist);
+    path.curve_to(flip(o2), flip(o1), flip(outer));
+    path.line_to(flip(inner));
+    path.curve_to(flip(i1), flip(i2), inner_waist);
+    path.curve_to(i2, i1, inner);
     path.close_path();
     path
+}
+
+/// The control points Metafont gives `from{leave}...{arrive}to`: John
+/// Hobby's curve at tension one, kept within the triangle its tangents
+/// make so that it never inflects.
+fn hobby(from: Point, leave: Vec2, to: Point, arrive: Vec2) -> (Point, Point) {
+    let chord = to - from;
+    let turn = |angle: f64| (angle + PI).rem_euclid(2.0 * PI) - PI;
+    let theta = turn(leave.atan2() - chord.atan2());
+    let phi = turn(chord.atan2() - arrive.atan2());
+    let (st, ct, sf, cf) = (theta.sin(), theta.cos(), phi.sin(), phi.cos());
+    let root5 = 5f64.sqrt();
+    let velocity = |st: f64, ct: f64, sf: f64, cf: f64| {
+        let num = 2.0 + SQRT_2 * (st - sf / 16.0) * (sf - st / 16.0) * (ct - cf);
+        let den = 3.0 * (1.0 + 0.5 * (root5 - 1.0) * ct + 0.5 * (3.0 - root5) * cf);
+        (num / den).min(4.0)
+    };
+    let mut leaving = velocity(st, ct, sf, cf);
+    let mut arriving = velocity(sf, cf, st, ct);
+    let sine = st.abs() * cf + sf.abs() * ct;
+    if st * sf >= 0.0 && sine > 0.0 {
+        leaving = leaving.min(sf.abs() / sine);
+        arriving = arriving.min(st.abs() / sine);
+    }
+    let rotate = |v: Vec2, angle: f64| {
+        let (sin, cos) = angle.sin_cos();
+        Vec2::new(v.x * cos - v.y * sin, v.x * sin + v.y * cos)
+    };
+    (
+        from + rotate(chord, theta) * leaving,
+        to - rotate(chord, -phi) * arriving,
+    )
 }
 
 /// A square bracket is monoline: its horizontal arms track the
@@ -185,8 +246,16 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
     let end = bow - tip / 2.0;
     let arm = bow / 2.0;
     let reach = (mid - top - half_weight).max(0.0);
-    let hook = (HOOK * bow).min(reach * 0.45).max(half_weight);
-    let point = (POINT * bow).min(reach * 0.55).max(tip);
+    // A quarter of the way from tip to point each, as in Knuth's big
+    // braces, up to the brace's width.
+    let hook = (reach / 4.0)
+        .clamp(HOOK * bow, bow)
+        .min(reach * 0.45)
+        .max(half_weight);
+    let point = (reach / 4.0)
+        .clamp(POINT * bow, bow)
+        .min(reach * 0.55)
+        .max(tip);
     let hook_y = top + half_weight + hook;
     let hook_radii = Vec2::new(end - arm + half_weight, hook + half_weight);
     let mut path = BezPath::new();
@@ -249,8 +318,8 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
     path
 }
 
-/// How tall the brace's hook and point curves are, as fractions of its
-/// width.
+/// The least height of the brace's hook and point curves, as fractions
+/// of its width; a short brace keeps these.
 const HOOK: f64 = 0.32;
 const POINT: f64 = 0.38;
 
@@ -348,18 +417,33 @@ mod tests {
         let (belly, tip) = STYLE.weights(height);
         assert!(tip < belly / 2.0);
         let inside = |path: &BezPath, x: f64, y: f64| path.winding(Point::new(x, y)) != 0;
-        // A paren is `belly` thick across its waist and `tip` thick at its ends.
+        // A paren is `belly` wide across its waist and `tip` wide where its
+        // ends are cut.
         let paren = open(Delim::Paren, &STYLE, 0.0, height);
         assert!(inside(&paren, belly * 0.9, height / 2.0));
         assert!(!inside(&paren, belly * 1.1, height / 2.0));
-        let end = STYLE.bow_for(Delim::Paren, height) - 0.01;
-        assert!(inside(&paren, end, tip * 0.9));
-        assert!(!inside(&paren, end, tip * 1.1));
+        let bow = STYLE.bow_for(Delim::Paren, height);
+        assert!(inside(&paren, bow - tip * 0.5, 0.001));
+        assert!(!inside(&paren, bow - tip * 1.5, 0.001));
         // A brace's hooks thin to `tip` where they end.
         let brace = open(Delim::Brace, &STYLE, 0.0, height);
         let end = STYLE.bow_for(Delim::Brace, height) - tip / 2.0;
         assert!(inside(&brace, end, tip * 0.9));
         assert!(!inside(&brace, end, tip * 1.1));
+    }
+
+    #[test]
+    fn hobby_curves_turn_a_quarter_circle_like_metafont() {
+        // The best cubic quarter circle: control points 4/3 tan(π/8) out.
+        let (leave, arrive) = hobby(
+            Point::new(1.0, 0.0),
+            Vec2::new(0.0, 1.0),
+            Point::new(0.0, 1.0),
+            Vec2::new(-1.0, 0.0),
+        );
+        let out = 4.0 / 3.0 * (PI / 8.0).tan();
+        assert!((leave - Point::new(1.0, out)).hypot() < 1e-9);
+        assert!((arrive - Point::new(out, 1.0)).hypot() < 1e-9);
     }
 
     fn ink(path: &BezPath) -> Rect {
