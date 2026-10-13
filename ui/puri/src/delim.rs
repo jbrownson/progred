@@ -1,13 +1,14 @@
 //! Stretched delimiters as filled outlines, the way math fonts draw
 //! them: the paren one elliptical bow over the FULL span, the brace
 //! hooked at its tips and pointed at its middle with straight arms
-//! between, the bracket square — and the stroke is MODULATED, thick
-//! at the bellies and arms, thin at the paren's blunt-cut terminals
-//! and the brace's point.
-//! A tall delimiter grows wider and gains contrast (TeX's \big
-//! through \Bigg grow in both dimensions); the one-line form is the
-//! same shape at glyph height, near-monoline at the base weight. Ink
-//! spans exactly x in [0, bow-for-height] and y in [top, bottom].
+//! between, the bracket square — and the curved strokes are MODULATED
+//! as Latin Modern's are, thick at the paren's belly and the brace's
+//! arms and thinning to `TIP` of that at the paren's blunt-cut ends,
+//! the brace's hook tips and its point. A tall delimiter grows wider
+//! and gains weight (TeX's \big through \Bigg grow in both
+//! dimensions); the one-line form is the same shape at glyph height
+//! and the base weight. Ink spans exactly x in [0, bow-for-height]
+//! and y in [top, bottom].
 
 mod widget;
 pub use widget::{Side, advance, draw_stretched, minimum_span};
@@ -30,6 +31,11 @@ pub enum Delim {
 /// absolute weight — a display-grade 2.5x read heavy against it.
 pub const MAX_GROWTH: f64 = 2.0;
 pub const MAX_CONTRAST: f64 = 1.6;
+
+/// How thin a curved stroke's ends are, as a fraction of its belly:
+/// Latin Modern's parens and brace hooks keep about this contrast at
+/// every size.
+const TIP: f64 = 0.4;
 
 /// Parens and brackets share a 0.30 em base width, wide enough to keep
 /// their curvature and arms legible and deliberately more regular
@@ -70,10 +76,10 @@ impl DelimStyle {
     }
 
     /// The modulated weights at `height`: the belly thickens with the
-    /// contrast ramp, the ends stay thin.
+    /// contrast ramp, and the ends thin to [`TIP`] of it.
     fn weights(&self, height: f64) -> (f64, f64) {
         let belly = self.stem * (height / self.line).sqrt().clamp(1.0, MAX_CONTRAST);
-        (belly, self.stem * 0.65)
+        (belly, belly * TIP)
     }
 }
 
@@ -136,21 +142,18 @@ pub fn close_with_width(
     path
 }
 
-/// One crescent: outer and inner half-ellipses sharing blunt vertical
-/// caps at the tips, so the band is `belly` thick at the waist and
-/// `tip` thick at the ends.
+/// One crescent: a half-ellipse outside and a [`tapered`] inner edge,
+/// so the band is `belly` thick at the waist and thins to `tip` at the
+/// ends, which are cut square.
 fn paren(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
     let mid = (top + bottom) / 2.0;
-    let half = (bottom - top) / 2.0;
-    let outer = Vec2::new(bow, half);
-    let inner = Vec2::new((bow - belly).max(0.0), (half - tip).max(0.0));
+    let outer = Vec2::new(bow, (bottom - top) / 2.0);
     let mut path = BezPath::new();
     path.move_to((bow, top));
     arc(&mut path, (bow, mid), outer, -FRAC_PI_2, -FRAC_PI_2);
     arc(&mut path, (bow, mid), outer, PI, -FRAC_PI_2);
     path.line_to((bow, bottom - tip));
-    arc(&mut path, (bow, mid), inner, FRAC_PI_2, FRAC_PI_2);
-    arc(&mut path, (bow, mid), inner, PI, FRAC_PI_2);
+    tapered(&mut path, (bow, mid), outer, (belly, tip), FRAC_PI_2, PI);
     path.close_path();
     path
 }
@@ -166,34 +169,37 @@ fn bracket(bow: f64, top: f64, bottom: f64, belly: f64, _tip: f64) -> BezPath {
     path
 }
 
-/// The brace as math fonts draw it: each half a band that curls in a tight
-/// hook at its tip, ends there in a round cap, runs straight down its arm,
-/// and thins as it curves into the point, where the halves meet at a short
-/// face. The band is `belly` thick along the hook and arm and `tip` thick at
-/// the point. The hooks and the point keep to the brace's width, so they
-/// grow with it. The lower half is the upper one mirrored and reversed, so
-/// both wind the same way and fill as one where they overlap.
+/// The brace as math fonts draw it: each half a band that runs straight
+/// down its arm, curls in a tight hook at its tip, thinning as it goes, and
+/// ends there in a small round cap; toward the middle it thins again as it
+/// curves into the point, where the halves meet at a short face. The band
+/// is `belly` thick along the arm and `tip` thick at the hook's end and the
+/// point. The hooks and the point keep to the brace's width, so they grow
+/// with it. The lower half is the upper one mirrored and reversed, so both
+/// wind the same way and fill as one where they overlap.
 fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
     let weight = belly.min(bow / 2.0);
     let half_weight = weight / 2.0;
     let mid = (top + bottom) / 2.0;
-    // The tip's centerline, inset so its round cap stays in the box.
-    let (end, cap) = (bow - half_weight, top + half_weight);
+    // Where the hook ends, inset so its round cap stays in the box.
+    let end = bow - tip / 2.0;
     let arm = bow / 2.0;
-    let reach = (mid - cap).max(0.0);
+    let reach = (mid - top - half_weight).max(0.0);
     let hook = (HOOK * bow).min(reach * 0.45).max(half_weight);
     let point = (POINT * bow).min(reach * 0.55).max(tip);
+    let hook_y = top + half_weight + hook;
+    let hook_radii = Vec2::new(end - arm + half_weight, hook + half_weight);
     let mut path = BezPath::new();
     for sign in [1.0, -1.0] {
         let y = |y: f64| mid + sign * (y - mid);
-        let hook_center = (end, y(cap + hook));
+        let hook_center = (end, y(hook_y));
         let point_center = (0.0, y(mid - point));
         let mut half = BezPath::new();
         half.move_to((end, y(top)));
         arc_dir(
             &mut half,
             hook_center,
-            Vec2::new(end - arm + half_weight, hook + half_weight),
+            hook_radii,
             -FRAC_PI_2,
             -FRAC_PI_2,
             sign,
@@ -216,19 +222,19 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
             -FRAC_PI_2,
             sign,
         );
-        half.line_to((arm + half_weight, y(cap + hook)));
-        arc_dir(
+        half.line_to((arm + half_weight, y(hook_y)));
+        tapered(
             &mut half,
             hook_center,
-            Vec2::new(end - arm - half_weight, hook - half_weight),
-            PI,
-            FRAC_PI_2,
-            sign,
+            hook_radii,
+            (weight, tip),
+            sign * PI,
+            sign * FRAC_PI_2,
         );
         arc_dir(
             &mut half,
-            (end, y(cap)),
-            Vec2::new(half_weight, half_weight),
+            (end, y(top + tip / 2.0)),
+            Vec2::new(tip / 2.0, tip / 2.0),
             FRAC_PI_2,
             -PI,
             sign,
@@ -252,6 +258,47 @@ fn arc(path: &mut BezPath, center: (f64, f64), radii: Vec2, start: f64, sweep: f
     path.extend(
         Arc::new(Point::new(center.0, center.1), radii, start, sweep, 0.0).append_iter(0.05),
     );
+}
+
+/// The inner edge of a band whose outer edge is the ellipse at `center`
+/// with `radii`, from angle `start` through `sweep`. It is drawn in by
+/// `thick` where the ellipse runs vertically and by `thin` where it runs
+/// horizontally, the horizontal inset falling off with the square of the
+/// angle's cosine, so the band thins toward its ends the way a math font's
+/// strokes do. Cubic Hermite segments, four to a quarter turn, follow it to
+/// well within a thousandth of an em.
+fn tapered(
+    path: &mut BezPath,
+    center: (f64, f64),
+    radii: Vec2,
+    (thick, thin): (f64, f64),
+    start: f64,
+    sweep: f64,
+) {
+    let reach = Vec2::new((radii.x - thin).max(0.0), (radii.y - thin).max(0.0));
+    let taper = thick - thin;
+    let at = |angle: f64| {
+        let (sin, cos) = angle.sin_cos();
+        (
+            Point::new(
+                center.0 + reach.x * cos - taper * cos.powi(3),
+                center.1 + reach.y * sin,
+            ),
+            Vec2::new(-sin * (reach.x - 3.0 * taper * cos * cos), reach.y * cos),
+        )
+    };
+    let segments = (sweep.abs() / FRAC_PI_2 * 4.0).ceil().max(1.0);
+    let step = sweep / segments;
+    let (mut from, mut from_slope) = at(start);
+    for index in 1..=segments as usize {
+        let (to, to_slope) = at(start + step * index as f64);
+        path.curve_to(
+            from + from_slope * (step / 3.0),
+            to - to_slope * (step / 3.0),
+            to,
+        );
+        (from, from_slope) = (to, to_slope);
+    }
 }
 
 /// An arc mirrored vertically about its center when `sign` is
@@ -293,6 +340,26 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn curved_strokes_thin_to_their_tips() {
+        let height = 40.0;
+        let (belly, tip) = STYLE.weights(height);
+        assert!(tip < belly / 2.0);
+        let inside = |path: &BezPath, x: f64, y: f64| path.winding(Point::new(x, y)) != 0;
+        // A paren is `belly` thick across its waist and `tip` thick at its ends.
+        let paren = open(Delim::Paren, &STYLE, 0.0, height);
+        assert!(inside(&paren, belly * 0.9, height / 2.0));
+        assert!(!inside(&paren, belly * 1.1, height / 2.0));
+        let end = STYLE.bow_for(Delim::Paren, height) - 0.01;
+        assert!(inside(&paren, end, tip * 0.9));
+        assert!(!inside(&paren, end, tip * 1.1));
+        // A brace's hooks thin to `tip` where they end.
+        let brace = open(Delim::Brace, &STYLE, 0.0, height);
+        let end = STYLE.bow_for(Delim::Brace, height) - tip / 2.0;
+        assert!(inside(&brace, end, tip * 0.9));
+        assert!(!inside(&brace, end, tip * 1.1));
     }
 
     fn ink(path: &BezPath) -> Rect {
