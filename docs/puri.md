@@ -190,9 +190,7 @@ Progred's `attribute` function reads the hovered and selected occurrences'
 secondary identities off their landmarks, which recorded them during layout,
 and derives the hovered source trace once. `Attribution` shares those results
 within the frame, so each painted occurrence only compares. It is constructed
-for each frame, not retained as a memo. Debug geometry is editor configuration
-captured while constructing the frame, not hover data; debug hover footprints
-are collected only when requested and don't change the claim.
+for each frame, not retained as a memo.
 
 Document-aware widgets live inside Progred. During preparation they borrow
 the current sources, selection, view, and path, requesting document-site state

@@ -164,7 +164,6 @@ mod tests {
                     pointer: Some(Point::new(22.0, 5.0)),
                     prior: Some(&7),
                     reach_px: 4.0,
-                    debug_geometry: false,
                     ..Default::default()
                 }
             )

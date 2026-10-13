@@ -223,7 +223,6 @@ pub fn leaf<World: 'static, Hover: 'static>(
             pass.visit(move |output| {
                 let start = output.output.after_hover.len();
                 hover(output, placement);
-                debug_geometry(placement, output);
                 if placement.clipped_out() {
                     let after = output.output.after_hover.split_off(start);
                     output.after_hover(move |hover, effects| {
@@ -245,22 +244,6 @@ pub fn paint<World: 'static, Hover: 'static>(
     leaf(extent, move |output, placement| {
         output.render(move |canvas, _| paint(canvas, placement));
     })
-}
-
-fn debug_geometry<W: 'static, H: 'static>(
-    placement: Placement,
-    output: &mut HoverContext<'_, W, H>,
-) {
-    if output.input.debug_geometry && !placement.clipped_out() {
-        output.render(move |canvas, _| {
-            canvas.stroke_shape(
-                placement.rect.into(),
-                puri::Stroke::new(0.75),
-                puri::Color::new([0.0, 0.65, 1.0, 0.36]).into(),
-                puri::Affine::IDENTITY,
-            );
-        });
-    }
 }
 
 pub fn before_place<W: 'static, H: 'static>(

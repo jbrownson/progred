@@ -439,7 +439,6 @@ impl Editor {
         );
         command::Toggles {
             raw: area.projection == workspace::Projection::Raw,
-            debug_geometry: self.model.view.debug_geometry,
             hidden: area.hidden.clone(),
         }
     }
@@ -609,9 +608,6 @@ impl Editor {
                 self.model
                     .workspace
                     .toggle_library_projection(selected.as_ref(), library);
-            }
-            DocCommand::DebugGeometry => {
-                self.model.view.debug_geometry = !self.model.view.debug_geometry
             }
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.zoom = 1.0,

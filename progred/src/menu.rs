@@ -106,7 +106,6 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
                 Entry::Command(C::Doc(D::MovePaneRight)),
                 Entry::Separator,
                 Entry::Command(C::Doc(D::Raw)),
-                Entry::Command(C::Doc(D::DebugGeometry)),
             ]
             .into_iter()
             .chain(zoom_entries)
@@ -961,7 +960,7 @@ mod tests {
     fn the_drawn_tree_lists_every_command_once() {
         let definition = definition([]);
         let commands = commands(&definition).collect::<Vec<_>>();
-        assert_eq!(commands.len(), 20 + Example::ALL.len());
+        assert_eq!(commands.len(), 19 + Example::ALL.len());
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));
         }

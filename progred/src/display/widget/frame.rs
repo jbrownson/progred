@@ -24,7 +24,6 @@ pub struct HoverInput<'a, H> {
     pub pointer: Option<Point>,
     pub prior: Option<&'a H>,
     pub reach_px: f64,
-    pub debug_geometry: bool,
 }
 
 impl<H> Copy for HoverInput<'_, H> {}
@@ -41,7 +40,6 @@ impl<H> Default for HoverInput<'_, H> {
             pointer: None,
             prior: None,
             reach_px: 0.0,
-            debug_geometry: false,
         }
     }
 }
@@ -160,11 +158,6 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
                 .and_then(|point| probe.answer(point, self.input.prior, self.input.reach_px))
                 .map(|claim| (self.root.clone(), claim)),
         );
-        if self.input.debug_geometry
-            && let Some(region) = probe.retention_region(self.input.reach_px)
-        {
-            self.output.debug_regions.push(region);
-        }
         self.output
             .hover_geometry
             .probes
@@ -186,7 +179,6 @@ pub struct HoverPass<C, H> {
     pointer: Option<Point>,
     prior: Option<H>,
     reach_px: f64,
-    debug_geometry: bool,
     root: Option<Root>,
     output: HoverOutput<C, H>,
     floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
@@ -204,7 +196,6 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             pointer: input.pointer,
             prior: input.prior.cloned(),
             reach_px: input.reach_px,
-            debug_geometry: input.debug_geometry,
             root: None,
             output: HoverOutput::empty(),
             floaters: Vec::new(),
@@ -220,7 +211,6 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
                 pointer: self.pointer,
                 prior: self.prior.as_ref(),
                 reach_px: self.reach_px,
-                debug_geometry: self.debug_geometry,
             },
             &mut self.output,
             &mut self.navigation,
@@ -505,7 +495,6 @@ pub struct HoverOutput<C, Hover> {
     pub scroll_probes: Vec<super::scroll::Probe>,
     pub claim: Option<(Option<Root>, Claim<Hover>)>,
     pub hover_geometry: HoverGeometry<Hover>,
-    pub debug_regions: Vec<(Hover, Rect)>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C, DispatchContext<C, Hover>>>,
@@ -541,7 +530,6 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
             scroll_probes: Vec::new(),
             claim: None,
             hover_geometry: HoverGeometry::default(),
-            debug_regions: Vec::new(),
             handler: None,
             descends: Vec::new(),
             view_regions: Vec::new(),
@@ -560,7 +548,6 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
             &mut self.hover_geometry.cursors,
             above.hover_geometry.cursors,
         );
-        append(&mut self.debug_regions, above.debug_regions);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
@@ -858,28 +845,6 @@ mod tests {
             .unwrap()
             .dispatch_key(&mut log, &Default::default());
         assert_eq!(log, [3, 2, 1, 0]);
-    }
-
-    #[test]
-    fn debug_retention_geometry_does_not_change_the_hover_answer() {
-        let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
-        for debug_geometry in [false, true] {
-            let mut pass = HoverPass::<(), u8>::new(&HoverInput {
-                pointer: Some(placement.rect.center()),
-                debug_geometry,
-                reach_px: 4.0,
-                ..Default::default()
-            });
-            for id in [1, 2] {
-                pass.visit(|output| output.claim(Probe::retaining(placement, id)));
-            }
-            let frame = pass.finish();
-            assert_eq!(frame.claim, Some((None, Claim::Direct(2))));
-            assert_eq!(
-                frame.debug_regions.len(),
-                if debug_geometry { 2 } else { 0 }
-            );
-        }
     }
 
     #[test]

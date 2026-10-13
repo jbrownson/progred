@@ -13,9 +13,9 @@ use crate::sources;
 use crate::stack;
 use crate::workspace::{self, Root};
 use crate::{Editor, EditorRunner, content_viewport};
-use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
+use kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 use parley::{FontContext, LayoutContext};
-use peniko::{Brush, Color};
+use peniko::Brush;
 use puri::draw::Canvas;
 use puri::geometry::Placement;
 use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
@@ -265,7 +265,6 @@ fn compute_hover(
             },
             prior: pointer.previous.map(|(_, hover)| hover),
             reach_px: HOVER_REACH_POINTS * description.scale,
-            debug_geometry: description.model.view.debug_geometry,
         },
     );
     let (hover, pointer_root) = if pointer.pressed {
@@ -286,21 +285,6 @@ fn compute_hover(
         hover.clone(),
         pointer.link_sources,
     );
-    if description.model.view.debug_geometry {
-        let extended_rects: Vec<_> = output
-            .debug_regions
-            .iter()
-            .filter_map(|(target, rect)| (Some(target) == hover.as_ref()).then_some(*rect))
-            .collect();
-        output.after_hover.push(move |_, effects| {
-            effects.renders.push(Box::new(move |canvas| {
-                let guide = Color::new([0.92, 0.12, 0.58, 0.80]);
-                for rect in extended_rects {
-                    canvas.stroke(rect, Stroke::new(1.0), guide, Affine::IDENTITY);
-                }
-            }));
-        });
-    }
     debug_assert!(
         output.landmark_select.is_none(),
         "selection handler escaped its landmark"
