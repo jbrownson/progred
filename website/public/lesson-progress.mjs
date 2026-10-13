@@ -62,9 +62,16 @@ export function lessonProgress(lesson) {
   const completed = new Set();
   const seenLists = new Set();
   let previous;
+  let removing = false;
   return (state) => {
     for (const step of completedSteps(lesson, state, previous)) completed.add(step);
     const list = colors(state);
+    if (lesson === "values" && Array.isArray(list)) {
+      // Backspace takes a color out of the list but leaves an empty slot for
+      // typing another in; the color is gone once that slot is too.
+      if (list.length < colors(previous)?.length) removing = true;
+      if (removing && state?.selection?.stage !== "pending") completed.add("remove");
+    }
     if (lesson === "values" && Array.isArray(list) && !completed.has("restore")) {
       const snapshot = JSON.stringify(list);
       // Undo may restore the whole text-editing run, not just the last empty item.
@@ -204,12 +211,11 @@ export function completedSteps(lesson, state, previous) {
     const planet = text(field(root, fields.planet));
     const moons = number(field(root, fields.moons));
     const list = colors(state);
-    const before = colors(previous);
+    // Removal and restoration follow the list over time: see lessonProgress.
     return [
       ...(planet !== undefined && planet !== "Mars" ? ["rename"] : []),
       ...(Number.isFinite(moons) && moons !== 2 ? ["moons"] : []),
       ...(Array.isArray(list) && list.length > 2 ? ["add"] : []),
-      ...(Array.isArray(list) && Array.isArray(before) && list.length < before.length ? ["remove"] : []),
     ];
   }
   if (lesson === "cells" && Array.isArray(root?.list)) {
@@ -275,7 +281,12 @@ export function completedSteps(lesson, state, previous) {
       ...(Number.isFinite(first) && first !== 3 ? ["argument"] : []),
       ...(factor !== 2 ? ["body"] : []),
       ...(name && name !== "x" ? ["rename"] : []),
-      ...(calls.some((call) => field(field(call, parameter), fields.function)?.cell === fn) ? ["nest"] : []),
+      // A call nested in a call, once the inner one has its number.
+      ...(calls.some((call) => {
+        const inner = field(call, parameter);
+        return field(inner, fields.function)?.cell === fn
+          && Number.isFinite(number(field(inner, parameter)));
+      }) ? ["nest"] : []),
     ];
   }
   if (lesson === "drawing") {

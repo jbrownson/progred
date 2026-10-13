@@ -401,15 +401,20 @@ test("achievements latch through undo, stay independent, and ignore stale or unr
   assert.equal(page.tasks[0].classes.has("completed"), true);
 });
 
-test("removal observes a shrinking color list, not empty text or a missing root", async () => {
-  const { completedSteps } = await import("./public/lesson-progress.mjs");
+test("removal waits for a shrinking color list's empty slot to go, not empty text or a missing root", async () => {
+  const { lessonProgress } = await import("./public/lesson-progress.mjs");
   const original = palette("red", "blue", "orange");
-  assert.deepEqual(completedSteps("values", original), ["add"]);
-  assert.deepEqual(completedSteps("values", palette("red", "", "orange"), original), ["add"]);
-  assert.deepEqual(completedSteps("values", palette("red", "orange"), original), ["remove"]);
-  assert.deepEqual(completedSteps("values", { document: { root: null } }, original), []);
-  assert.deepEqual(completedSteps("values", original, { document: { root: null } }), ["add"]);
-  assert.deepEqual(completedSteps("values", original, palette("red", "orange")), ["add"]);
+  // Backspace on an emptied color leaves a slot to type another into.
+  const slot = { ...palette("red", "orange"), selection: { view: "document", stage: "pending" } };
+  const removal = (...states) => {
+    const observe = lessonProgress("values");
+    return states.map((state) => observe(state).has("remove"));
+  };
+  assert.deepEqual(removal(original, palette("red", "", "orange")), [false, false]);
+  assert.deepEqual(removal(original, slot, palette("red", "orange")), [false, false, true]);
+  assert.deepEqual(removal(original, palette("red", "orange")), [false, true]);
+  assert.deepEqual(removal(original, { document: { root: null } }, original), [false, false, false]);
+  assert.deepEqual(removal(palette("red", "orange"), original), [false, false]);
 });
 
 test("removal and restoration have separate checkmarks and both reset", async () => {
@@ -607,8 +612,8 @@ const scaleCall = (argument) => record(
   ["751fca4373debdd0b7e6eb73e08d684b", cell(scaleFunction)],
   [scaleParameter, argument],
 );
-const functionsState = ({ argument = 3, factor = 2, name = "x", nested = false } = {}) => stacked(
-  [cell(scaleFunction), ...[number(argument), nested ? scaleCall(number(5)) : number(5)].map((value) =>
+const functionsState = ({ argument = 3, factor = 2, name = "x", nested = false, inner = number(5) } = {}) => stacked(
+  [cell(scaleFunction), ...[number(argument), nested ? scaleCall(inner) : number(5)].map((value) =>
     record(["acfc5e50881292518dab3cec77cf43ee", scaleCall(value)]))],
   {
     [scaleFunction]: record(
@@ -631,6 +636,9 @@ test("function quests distinguish arguments, the body, a parameter rename, and n
   assert.deepEqual(completedSteps("functions", functionsState({ factor: 3 })), ["body"]);
   assert.deepEqual(completedSteps("functions", functionsState({ name: "amount" })), ["rename"]);
   assert.deepEqual(completedSteps("functions", functionsState({ nested: true })), ["nest"]);
+  for (const inner of [null, record(), text("5")]) {
+    assert.deepEqual(completedSteps("functions", functionsState({ nested: true, inner })), []);
+  }
   assert.deepEqual(completedSteps("functions", functionsState({ argument: 4, factor: 3, name: "amount", nested: true })),
     ["argument", "body", "rename", "nest"]);
   for (const invalid of [NaN, Infinity]) {
