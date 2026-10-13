@@ -56,7 +56,7 @@
     first: dot,
     second: two_dots,
     third: {drawing: {
-      width: {f64: 0x0000000000806b40},
+      width: {f64: 0x0000000000408540},
       ascent: {f64: 0x0000000000000000},
       descent: {f64: 0x0000000000005940},
       fuel: {f64: 0x0000000000408f40},

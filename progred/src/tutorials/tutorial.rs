@@ -364,11 +364,18 @@ fn drawing() {
     drawing.click_between(&calls, 0);
     drawing.type_text("dot");
     drawing.press(NamedKey::Enter);
-    drawing.type_text("200");
+    drawing.type_text("260");
     drawing.press(NamedKey::Enter);
     let mut placed = dots(&drawing);
     placed.sort_by(|a, b| a.0.total_cmp(&b.0));
-    assert_eq!(placed, [(80.0, 36.0), (160.0, 36.0), (200.0, 36.0)]);
+    assert_eq!(placed, [(80.0, 36.0), (160.0, 36.0), (260.0, 36.0)]);
+    let width = drawing
+        .number(&drawing.path(&["third", "drawing", "width"]))
+        .unwrap();
+    assert!(
+        placed.iter().all(|(x, radius)| x + radius <= width),
+        "every dot fits in the drawing, {width} wide: {placed:?}"
+    );
 
     drawing.task("source");
     let (dot, _, _) = drawing.circles()[0].clone();
