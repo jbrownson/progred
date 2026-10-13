@@ -897,12 +897,9 @@ enum GpuState {
 impl GpuState {
     fn render(&mut self, objects: &[SceneObject], view: &VolumeView) -> Option<Vec<u8>> {
         if matches!(self, Self::Uninitialized) {
-            *self = match pollster::block_on(Gpu::init()) {
-                Ok(gpu) => Self::Available(GpuRenderer::new(gpu)),
-                Err(error) => {
-                    eprintln!("Fidget GPU initialization failed: {error:?}; using CPU fallback");
-                    Self::Unavailable
-                }
+            *self = match shared_gpu() {
+                Some(gpu) => Self::Available(GpuRenderer::new(gpu)),
+                None => Self::Unavailable,
             };
         }
         match self {
@@ -910,6 +907,23 @@ impl GpuState {
             Self::Uninitialized | Self::Unavailable => None,
         }
     }
+}
+
+/// The process's one GPU device, or `None` after a failed attempt, which isn't
+/// retried. Initializing once matters for correctness, not just speed: the
+/// Vulkan loader crashes when threads probe drivers concurrently, as parallel
+/// tests did in the build sandbox, where NVIDIA's driver fails to initialize.
+#[cfg(not(target_arch = "wasm32"))]
+fn shared_gpu() -> Option<Gpu> {
+    static GPU: std::sync::OnceLock<Option<Gpu>> = std::sync::OnceLock::new();
+    GPU.get_or_init(|| match pollster::block_on(Gpu::init()) {
+        Ok(gpu) => Some(gpu),
+        Err(error) => {
+            eprintln!("Fidget GPU initialization failed: {error:?}; using CPU fallback");
+            None
+        }
+    })
+    .clone()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
