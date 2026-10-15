@@ -83,10 +83,6 @@ pub struct Completion {
     /// Optional advertised value, for source attribution and contextual filtering.
     /// Activation never derives its behavior from this metadata.
     pub preview: Option<Value>,
-    /// A key that makes this offer at once when typed into an empty query,
-    /// such as `[` for a new list. Its spelling is still ordinary text after
-    /// anything else has been typed.
-    pub key: Option<String>,
 }
 
 /// Names are resolved from the current sources when the picker is built,
@@ -127,13 +123,7 @@ impl Completion {
             activate: Rc::new(activate),
             face: Face::Label,
             preview: None,
-            key: None,
         }
-    }
-
-    pub fn with_key(mut self, key: impl Into<String>) -> Self {
-        self.key = Some(key.into());
-        self
     }
 
     pub fn with_aliases(mut self, aliases: impl IntoIterator<Item = impl Into<String>>) -> Self {

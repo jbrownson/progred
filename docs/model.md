@@ -359,13 +359,13 @@ interpretations therefore follow named cells and constructors, just before the
 empty string. Explicit quoted text and blob syntax lead instead. Numeric
 providers decline label requests.
 
-An offer can carry a key, which makes it at once when typed into an empty query.
-The editor's constructors carry their delimiters: `(` for `new cell`, `[` for
-`new list`, and `{` for `new record`; a field label permits only the cell
-constructor. A hole's keys are its offers': where a projection's list has no
-constructor, its delimiter is typed as text. Nonempty queries and IME
-composition keep ordinary text input; quoted punctuation leads with literal
-text. A new cell, list or record opens as it's made, as Cmd+Enter would open it,
+Raw's holes make the editor's constructors from their delimiters: typed into an
+empty query, `(` makes a new cell, `[` a new list, and `{` a new record; a field
+label permits only the cell. These are keys of Raw's holes, not of the offers.
+A projection's hole takes a delimiter as text, which finds its constructor where
+the projection offers one, as Grap's do. Nonempty queries and IME composition
+keep ordinary text input; quoted punctuation leads with literal text.
+A new cell, list or record opens as it's made, as Cmd+Enter would open it,
 so typing goes inside: the cell's value, an element of the list, or a field of
 the record. Escape steps back out to it.
 

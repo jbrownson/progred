@@ -20,7 +20,6 @@ pub(super) fn test_entry(
         matches: entry.matches,
         face: entry.face,
         source: entry.source,
-        key: entry.key,
         activate: Rc::new(move |result| {
             let mut world = crate::test_editor(Document {
                 root: (kind == CompletionKind::Field).then(|| Value::record([])),
@@ -986,9 +985,10 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
             .any(|entry| entry.display == "clouds" && entry.detail.as_deref() == Some("call"))
     );
     assert!(entries.iter().any(|entry| entry.display == "new lambda"));
-    // The editor's constructors, keyed by their delimiters, open as they're
-    // made: the cell's value pending, an element pending in the list, a
-    // field's label on the record.
+    // The editor's constructors open as they're made: the cell's value
+    // pending, an element pending in the list, a field's label on the record.
+    // Grap's slot has no keys of its own, so a delimiter is typed as text,
+    // which finds its constructor.
     let fresh_cell = |value: &Value| value.as_cell().is_some();
     let list = |value: &Value| *value == Value::list([]);
     let record = |value: &Value| *value == Value::record([]);
@@ -1015,12 +1015,20 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
             path.len(),
         ),
     ];
-    for (display, key, made, stage, depth) in made {
+    for (display, delimiter, made, stage, depth) in made {
+        let typed =
+            crate::selection::pending_with_query(&crate::test_root(), path.clone(), delimiter);
+        assert_eq!(
+            projected_completion_entries(&document, &typed)
+                .first()
+                .map(|entry| entry.display.as_str()),
+            Some(display),
+            "{delimiter}"
+        );
         let entry = entries
             .iter()
             .find(|entry| entry.display == display)
             .unwrap();
-        assert_eq!(entry.key.as_deref(), Some(key), "{display}");
         let mut world = activate_projected(&document, &selected, entry);
         assert!(
             world.sources().resolve_path(&path).is_some_and(made),
@@ -2094,7 +2102,6 @@ fn entry_hover_marks_follow_the_visible_offers() {
             matches: vec![],
             face: crate::display::Face::Label,
             source: value.as_cell(),
-            key: None,
             activate: Rc::new(|_: &mut crate::Editor| {}),
         }],
     };

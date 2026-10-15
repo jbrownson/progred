@@ -236,21 +236,20 @@ fn query_content(
         },
         move |world, scroll, choice| crate::editing::completion_view(world, &root, scroll, choice),
     );
-    // An offer's key, typed into an empty query, makes it at once.
-    let card = if query.text().is_empty() && !query.is_composing() {
-        let keyed: Vec<_> = entries
-            .iter()
-            .filter_map(|entry| Some((entry.key.clone()?, entry.activate.clone())))
-            .collect();
+    // Raw's holes, which no projection supplies offers for, make a
+    // constructor at once when its delimiter is typed into an empty query.
+    // Other holes take the delimiter as text.
+    let card = if completions.is_none() && query.text().is_empty() && !query.is_composing() {
+        let constructors = crate::completion::delimited_constructors(request.kind);
         on_key(card, move |world, event| {
             if event.state.is_down()
                 && !(event.modifiers.ctrl() || event.modifiers.meta())
                 && let Key::Character(key) = &event.key
-                && let Some((_, activate)) = keyed
+                && let Some((_, constructor)) = constructors
                     .iter()
-                    .find(|(shortcut, _)| shortcut.as_str() == key.as_str())
+                    .find(|(delimiter, _)| *delimiter == key.as_str())
             {
-                activate(world);
+                (constructor.activate)(world);
                 true
             } else {
                 false

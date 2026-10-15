@@ -275,7 +275,7 @@ fn constructor_keys_make_their_offer_from_an_empty_query() {
 }
 
 #[test]
-fn constructor_shortcuts_open_what_they_make_where_its_picker_shows() {
+fn delimiters_make_constructors_in_raw_s_holes_and_are_text_in_grap_s() {
     let root = crate::test_root();
     let function = Document {
         root: Some(Value::record([(
@@ -288,39 +288,44 @@ fn constructor_shortcuts_open_what_they_make_where_its_picker_shows() {
         root: None,
         cells: Cells::new(),
     };
-    // A plain document's root, and a Grap function's body.
-    for (document, place) in [
-        (empty, vec![]),
-        (function, vec![Step::Key(grap::vocabulary::BODY)]),
-    ] {
-        for key in ["(", "[", "{"] {
-            let mut world = crate::test_editor(document.clone());
-            world.model.selection = Some(pending_value(&root, place.clone()));
-            assert!(
-                editing_frame(&mut world, false)
-                    .resolve_for_dispatch()
-                    .dispatch_key(
-                        &mut world,
-                        &KeyboardEvent {
-                            key: Key::Character(key.into()),
-                            state: KeyState::Down,
-                            ..Default::default()
-                        }
-                    )
-            );
-            let opened = world.model.selection.as_ref().unwrap();
-            assert!(
-                opened.path().len() >= place.len()
-                    && opened.path().starts_with(&place)
-                    && opened.stage(&world.sources()) != Stage::Edge,
-                "{key} at {place:?} opens what it made: {:?}",
-                opened.path()
-            );
-            assert!(
-                editing_frame(&mut world, false).completion.is_some(),
-                "{key} at {place:?} shows its picker"
-            );
-        }
+    let body = vec![Step::Key(grap::vocabulary::BODY)];
+    let press = |world: &mut crate::Editor, key: &str| {
+        editing_frame(world, false)
+            .resolve_for_dispatch()
+            .dispatch_key(
+                world,
+                &KeyboardEvent {
+                    key: Key::Character(key.into()),
+                    state: KeyState::Down,
+                    ..Default::default()
+                },
+            )
+    };
+    for key in ["(", "[", "{"] {
+        // Raw draws a plain document's root: the key makes what it does and
+        // opens it, its picker showing.
+        let mut world = crate::test_editor(empty.clone());
+        world.model.selection = Some(pending_value(&root, vec![]));
+        assert!(press(&mut world, key));
+        assert!(world.model.doc.root.is_some(), "{key} makes a value");
+        let opened = world.model.selection.as_ref().unwrap();
+        assert!(
+            opened.stage(&world.sources()) != Stage::Edge,
+            "{key} opens what it made: {:?}",
+            opened.path()
+        );
+        assert!(
+            editing_frame(&mut world, false).completion.is_some(),
+            "{key} shows its picker"
+        );
+        // Grap draws a function's body, and its hole takes the key as text.
+        let mut world = crate::test_editor(function.clone());
+        world.model.selection = Some(pending_value(&root, body.clone()));
+        assert!(press(&mut world, key));
+        assert_eq!(world.model.doc.root, function.root, "{key} makes nothing");
+        let typing = world.model.selection.as_ref().unwrap();
+        assert_eq!(typing.path(), body);
+        assert_eq!(typing.edit().unwrap().text(), key);
     }
 }
 
@@ -332,7 +337,6 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
         matches: vec![],
         face: crate::display::Face::Label,
         source: None,
-        key: None,
         activate: Rc::new(|attempts: &mut usize| {
             *attempts += 1;
         }),
@@ -389,7 +393,6 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
             matches: Vec::new(),
             face: crate::display::Face::Name,
             source: None,
-            key: None,
             activate: Rc::new(|_: &mut crate::Editor| {}),
         }];
         let bounds = Rect::new(0.0, 0.0, 640.0 * scale, 480.0 * scale);
@@ -473,7 +476,6 @@ fn completion_details_share_the_cards_right_edge() {
             matches: Vec::new(),
             face: crate::display::Face::Name,
             source: None,
-            key: None,
             activate: Rc::new(|_: &mut crate::Editor| {}),
         });
         let detail_widths = entries.each_ref().map(|entry| {
@@ -523,7 +525,6 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             matches: Vec::new(),
             face: crate::display::Face::String,
             source: None,
-            key: None,
             activate: Rc::new(|_| {}),
         },
         Entry {
@@ -532,7 +533,6 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             matches: Vec::new(),
             face: crate::display::Face::Dim,
             source: None,
-            key: None,
             activate: Rc::new(|_| {}),
         },
     ];
@@ -601,7 +601,6 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             matches: Vec::new(),
             face: crate::display::Face::Dim,
             source: None,
-            key: None,
             activate: Rc::new(|_| {}),
         })
         .collect();
@@ -755,7 +754,6 @@ fn a_card_placed_shorter_scrolls_what_it_cannot_show() {
             matches: Vec::new(),
             face: crate::display::Face::Dim,
             source: None,
-            key: None,
             activate: Rc::new(|_| {}),
         })
         .collect();
@@ -837,7 +835,6 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             matches: Vec::new(),
             face: crate::display::Face::Name,
             source: None,
-            key: None,
             activate: Rc::new(move |state: &mut State| state.committed = Some(index)),
         })
         .collect::<Vec<_>>();
@@ -1002,7 +999,6 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         matches: Vec::new(),
         face: crate::display::Face::Dim,
         source: None,
-        key: None,
         activate: Rc::new(|state: &mut State| {
             state.committed = Some(Value::list([]));
         }),
@@ -1192,7 +1188,6 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             matches: Vec::new(),
             face: crate::display::Face::String,
             source: None,
-            key: None,
             activate: Rc::new(move |_| clicked.set(true)),
         }],
         0,

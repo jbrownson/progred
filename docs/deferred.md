@@ -161,8 +161,9 @@ back up from there. What was removed, so it isn't lost:
   A better form may be the operation's projection telling its operands' holes
   what to offer.
 - **Bracket keys everywhere.** `(`, `[` and `{` made a new cell, list or record
-  in every picker. They are now keys on the editor's constructor offers, so a
-  hole has them only where its offers include the constructors.
+  in every picker. They are now keys of Raw's holes alone. Elsewhere a delimiter
+  is typed as text, which finds its constructor where the hole offers one, as
+  Grap's slots do; a projection can't yet give its holes keys of their own.
 - **Reaching any cell from a Grap slot.** Grap's list has bindings and functions
   but not other cells, such as a named constant.
 

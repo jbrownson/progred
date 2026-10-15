@@ -53,15 +53,24 @@ fn entry(sources: &Sources, offer: Completion) -> Entry<crate::Editor> {
         matches: Vec::new(),
         face: offer.face,
         source: offer.preview.as_ref().and_then(Value::as_cell),
-        key: offer.key,
         activate: offer.activate,
     }
 }
 
 /// The editor's constructors: a new cell, and as a value a new list or
-/// record. Each opens for what goes inside it, and its delimiter's key makes
-/// it at once. A hole's offers include them where its projection wants them.
+/// record. Each opens for what goes inside it. A hole's offers include them
+/// where its projection wants them, found by their delimiters too.
 pub(crate) fn constructors(kind: CompletionKind) -> Vec<Completion> {
+    delimited_constructors(kind)
+        .into_iter()
+        .map(|(_, offer)| offer)
+        .collect()
+}
+
+/// The [`constructors`] beside their delimiters: `(` for the cell, `[` for
+/// the list and `{` for the record. Raw's holes make one at once when its
+/// delimiter is typed into an empty query.
+pub(crate) fn delimited_constructors(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
     let cell = Completion::new("new cell", move |world| match kind {
         CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
         CompletionKind::Field => crate::editing::commit_label(
@@ -70,28 +79,27 @@ pub(crate) fn constructors(kind: CompletionKind) -> Vec<Completion> {
             None,
             Some(crate::libraries::selection::pending_at(&[])),
         ),
-    })
-    .with_key("(");
+    });
     let containers = [
         ("[", "new list", Value::list([])),
         ("{", "new record", Value::record([])),
     ]
     .into_iter()
     .filter(|_| kind == CompletionKind::Value)
-    .map(|(key, display, value)| {
-        Completion::new(display, move |world| {
+    .map(|(delimiter, display, value)| {
+        let offer = Completion::new(display, move |world| {
             crate::editing::commit_container(world, value.clone())
-        })
-        .with_key(key)
+        });
+        (delimiter, offer)
     });
-    std::iter::once(cell)
+    std::iter::once(("(", cell))
         .chain(containers)
-        .map(|offer| {
-            let key = offer.key.clone();
-            Completion {
+        .map(|(delimiter, offer)| {
+            let offer = Completion {
                 face: Face::Dim,
-                ..offer.with_aliases(key)
-            }
+                ..offer.with_aliases([delimiter])
+            };
+            (delimiter, offer)
         })
         .collect()
 }
@@ -229,7 +237,6 @@ pub(crate) fn completion_entries_with(
                 matches: Vec::new(),
                 face: Face::Dim,
                 source: None,
-                key: None,
                 activate: Rc::new(move |world| {
                     crate::editing::commit_label(
                         world,
@@ -278,7 +285,6 @@ pub(crate) fn completion_entries_with(
                     Face::Id
                 },
                 source: Some(cell),
-                key: None,
                 activate: cell_activation(kind, cell, Some(reference_selection.clone())),
             };
             (entry, name.is_some(), sources.external(cell))
