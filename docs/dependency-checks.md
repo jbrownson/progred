@@ -45,3 +45,8 @@ to suggest one.
     0.48 waits on Vello and parley, which require 0.44.
   - **Also today:** Linux builds now run in a namespace sandbox like the macOS
     one.
+- 2026-10-15 (`553ecf64`), the Wrangler update due from the first check.
+  - **Applied:** the website's Wrangler from 4.136.1 to 4.149.0, through
+    `tools/npm-update`, which clears the `undici` and `sharp` advisories it
+    brought through miniflare. `make audit` now reports only RUSTSEC-2026-0192.
+    `npm ci` with install scripts off and a dry-run deploy both work.
