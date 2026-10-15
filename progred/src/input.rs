@@ -194,6 +194,8 @@ impl EditorRunner {
     }
 
     pub(crate) fn focus_changed(&mut self, focused: bool, scale: f64, viewport: Size) -> bool {
+        // Alt+Tab away and back is no tap of Alt.
+        self.editor.menu.interrupt();
         if self.editor.focused == focused {
             false
         } else {
@@ -230,6 +232,9 @@ impl EditorRunner {
     }
 
     pub(crate) fn window_moved(&mut self, scale: f64, viewport: Size) -> bool {
+        // Window managers that move windows by Alt+drag take the drag, but
+        // its Alt still arrives.
+        self.editor.menu.interrupt();
         let changed = self.editor.pointer.take().is_some() || self.frame.hover.is_some();
         if changed {
             self.refresh_frame(scale, viewport);

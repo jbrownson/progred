@@ -122,7 +122,8 @@ for another Ctrl+C. Restarting this development loop discards unsaved changes.
 ### A first tour
 
 Use the **Examples** menu to open a fresh example. On native macOS its shortcuts
-are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5.
+are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5, and a tap of Alt
+or F10 opens it from the keyboard.
 
 | Start with | Shortcut | What to try |
 | --- | --- | --- |

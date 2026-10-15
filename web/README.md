@@ -35,7 +35,7 @@ consults scroll-container probes emitted by the shared frame; native dispatch
 does not consult them. `auto` covers scrolling containers, not arbitrary custom
 wheel actions such as viewport zoom; the full editor retains those normally.
 Hidden-menu embeds retain document shortcuts (including Undo/Redo), but not
-application shortcuts or F10 menu navigation. The website owns the exercise
+application shortcuts or F10/Alt menu navigation. The website owns the exercise
 documents and reset buttons. An optional `tutorial-slots` parameter lists distinct
 record-field CellIds in display order. The tutorial entry projection shows just
 those contents in a fixed column, without labels or insertion gaps. Missing
@@ -113,13 +113,14 @@ boundary, not a tutorial feature in the editor.
 
 Click a menu heading to open it; while a menu is open, moving over another
 heading switches to it. Mouse and keyboard share one highlighted item.
-F10 opens/closes the menu bar, arrows navigate, Home/End select the first/last
-enabled item, and Enter/Space activates it. Escape, Tab, an outside click, or
-losing focus dismisses the menu. The displayed Cmd/Ctrl shortcuts work with menus
-open or closed. The native macOS menu remains separate. File's Open… takes a
-`.gid` file the browser uploads, asking first when the document has unsaved
-changes. Save downloads the document under the name it was opened or last
-saved as; an untitled document, or Save As…, asks for the name first.
+F10, or tapping Alt on its own, opens/closes the menu bar, arrows navigate,
+Home/End select the first/last enabled item, and Enter/Space activates it.
+Escape, Tab, an outside click, or losing focus dismisses the menu. The displayed
+Cmd/Ctrl shortcuts work with menus open or closed. The native macOS menu remains
+separate. File's Open… takes a `.gid` file the browser uploads, asking first
+when the document has unsaved changes. Save downloads the document under the
+name it was opened or last saved as; an untitled document, or Save As…, asks for
+the name first.
 
 The menu bar's far end shows Progred's stage and the commit the build came
 from, as native window titles do, so a screenshot says which version it shows.

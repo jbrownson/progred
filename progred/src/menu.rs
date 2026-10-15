@@ -137,6 +137,9 @@ pub struct State {
     /// Highlighted command, shared by pointer and keyboard navigation.
     /// Separators do not count toward this position.
     cursor: Option<usize>,
+    /// Alt is down on its own, with nothing pressed or clicked since, so
+    /// releasing it is a tap.
+    alt_alone: bool,
 }
 
 impl State {
@@ -161,6 +164,25 @@ impl State {
     pub fn captures_key(&self, event: &KeyboardEvent) -> bool {
         self.open.is_some() && event.state.is_down()
     }
+
+    /// Whether `event` releases Alt pressed on its own, with no other key
+    /// between. Its repeats while held are still the one press.
+    fn alt_tapped(&mut self, event: &KeyboardEvent) -> bool {
+        use ui_events::keyboard::NamedKey;
+        let alt = event.key == Key::Named(NamedKey::Alt);
+        if !event.state.is_down() {
+            return alt && std::mem::take(&mut self.alt_alone);
+        }
+        let alone = !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.shift());
+        self.alt_alone = alt && if event.repeat { self.alt_alone } else { alone };
+        false
+    }
+
+    /// Something other than a key, such as a click, came between Alt's press
+    /// and release, so releasing it isn't a tap.
+    pub fn interrupt(&mut self) {
+        self.alt_alone = false;
+    }
 }
 
 pub enum Navigation {
@@ -171,8 +193,9 @@ pub enum Navigation {
 
 /// Keyboard navigation inside an open drawn menu: vertical arrows walk
 /// the enabled items, horizontal arrows switch menus, Enter or Space
-/// activates the cursored item. F10 enters/leaves the bar; Escape and
-/// Tab dismiss it without sending the key to the document underneath.
+/// activates the cursored item. F10, or a tap of Alt on its own, enters or
+/// leaves the bar; Escape and Tab dismiss it without sending the key to the
+/// document underneath.
 pub fn navigate(
     state: &mut State,
     menus: &[Menu],
@@ -180,6 +203,22 @@ pub fn navigate(
     event: &KeyboardEvent,
 ) -> Navigation {
     use ui_events::keyboard::NamedKey;
+    let first_enabled = |menu: usize| {
+        menus.get(menu).and_then(|menu| {
+            commands(std::slice::from_ref(menu)).position(|command| availability.enabled(command))
+        })
+    };
+    let tapped = state.alt_tapped(event);
+    let f10 = event.state.is_down()
+        && event.key == Key::Named(NamedKey::F10)
+        && crate::modifiers::plain(&event.modifiers);
+    if (tapped || f10) && !menus.is_empty() {
+        if !state.close() {
+            state.open = Some(0);
+            state.cursor = first_enabled(0);
+        }
+        return Navigation::Handled;
+    }
     if !event.state.is_down() {
         return Navigation::Pass;
     }
@@ -194,18 +233,6 @@ pub fn navigate(
     }
     if !crate::modifiers::plain(&event.modifiers) {
         return Navigation::Pass;
-    }
-    let first_enabled = |menu: usize| {
-        menus.get(menu).and_then(|menu| {
-            commands(std::slice::from_ref(menu)).position(|command| availability.enabled(command))
-        })
-    };
-    if event.key == Key::Named(NamedKey::F10) && !menus.is_empty() {
-        if !state.close() {
-            state.open = Some(0);
-            state.cursor = first_enabled(0);
-        }
-        return Navigation::Handled;
     }
     let Some(open) = state.open else {
         return Navigation::Pass;
@@ -701,6 +728,10 @@ mod view {
             move |editor: &mut Editor, event, input: &mut placed::DispatchContext<Editor>| {
                 let handled = match &event {
                     Event::Key(key) => editor.menu_key(key, input.geometry(scale)),
+                    Event::PointerDown(_) | Event::Scroll(_) | Event::Gesture(_) => {
+                        editor.menu.interrupt();
+                        false
+                    }
                     _ => false,
                 };
                 EventOutcome::from_handled(event, handled)
@@ -931,6 +962,60 @@ mod tests {
             assert_eq!(state.cursor(), None);
             navigate(&mut state, &menus, all_enabled(), &named(NamedKey::F10));
         }
+    }
+
+    #[test]
+    fn a_tap_of_alt_on_its_own_enters_and_leaves_the_bar() {
+        let menus = definition([]);
+        let mut state = State::default();
+        let alt = |state: &mut State, key: NamedKey, down: bool, modifiers: Modifiers| {
+            let event = KeyboardEvent {
+                key: Key::Named(key),
+                state: if down { KeyState::Down } else { KeyState::Up },
+                modifiers,
+                ..Default::default()
+            };
+            matches!(
+                navigate(state, &menus, all_enabled(), &event),
+                Navigation::Handled
+            )
+        };
+        // Its repeats while held are still the one press.
+        assert!(!alt(&mut state, NamedKey::Alt, true, Modifiers::ALT));
+        let mut repeat = named(NamedKey::Alt);
+        repeat.modifiers = Modifiers::ALT;
+        repeat.repeat = true;
+        navigate(&mut state, &menus, all_enabled(), &repeat);
+        assert_eq!(state.open(), None, "pressing it opens nothing yet");
+        assert!(alt(&mut state, NamedKey::Alt, false, Modifiers::empty()));
+        assert_eq!(state.open(), Some(0));
+        assert_eq!(state.cursor(), Some(0));
+        alt(&mut state, NamedKey::Alt, true, Modifiers::ALT);
+        assert!(alt(&mut state, NamedKey::Alt, false, Modifiers::empty()));
+        assert_eq!(state.open(), None, "a second tap leaves");
+
+        // Chords aren't taps: another key between, Alt pressed with Shift (a
+        // layout switch on many desktops) or Ctrl, AltGr, or a click.
+        alt(&mut state, NamedKey::Alt, true, Modifiers::ALT);
+        navigate(&mut state, &menus, all_enabled(), &key("x", Modifiers::ALT));
+        assert!(!alt(&mut state, NamedKey::Alt, false, Modifiers::empty()));
+        for held in [Modifiers::SHIFT, Modifiers::CONTROL] {
+            alt(&mut state, NamedKey::Alt, true, held | Modifiers::ALT);
+            assert!(!alt(&mut state, NamedKey::Alt, false, held));
+        }
+        alt(&mut state, NamedKey::AltGraph, true, Modifiers::ALT_GRAPH);
+        assert!(!alt(
+            &mut state,
+            NamedKey::AltGraph,
+            false,
+            Modifiers::empty()
+        ));
+        alt(&mut state, NamedKey::Alt, true, Modifiers::ALT);
+        state.interrupt();
+        assert!(!alt(&mut state, NamedKey::Alt, false, Modifiers::empty()));
+        // Nor is a release whose press went elsewhere.
+        assert!(!alt(&mut state, NamedKey::Alt, false, Modifiers::empty()));
+        assert_eq!(state.open(), None);
     }
 
     #[test]
