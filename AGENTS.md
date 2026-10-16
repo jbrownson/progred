@@ -30,6 +30,8 @@ superseded notes to `docs/history/`.
 ## Working
 
 - Push back if something seems wrong.
+- While the owner is discussing a design or checking their understanding,
+  answer; start implementing on an explicit go.
 - Don't fight the system: avoid hacks and workarounds that go against how a
   framework or platform is designed, and push back early when something doesn't
   seem meant to work that way.
@@ -43,13 +45,26 @@ superseded notes to `docs/history/`.
   don't bundle housekeeping with feature work. Before pushing, run
   `cargo fmt --all -- --check` and `make test`. When pushing to a session
   branch, add commits as work proceeds and rewrite its history only when asked.
+- While iterating, build and run only the tests that cover the change, such as
+  `test -p progred --lib <filter>` through the wrapper; a test build checks the
+  code too, so don't run a separate `check` first. Leave `make test` for before
+  pushing.
+- Use subagents freely; token use isn't a concern, the main session's context
+  is. Survey the code with one before a change that spans many files, run
+  independent investigations in parallel, and keep the main session for
+  decisions, so it needs summarizing less often.
+- Sessions are short-lived. Write decisions and open design threads into the
+  repo, working rules here and proposals in `docs/deferred.md`, rather than
+  relying on a session to remember them.
 - Don't run the app for the user to test; they run and test it themselves.
   Running it for your own checks is fine, preferably headlessly.
 - Watch performance over time; it can slip gradually or change somewhere
-  unexpected. Run `make perf` before and after changes that could affect it,
-  such as evaluation, layout, rendering, Fidget, CAM, or dependency upgrades.
-  Investigate the changes it flags, and record a run with a note when such a
-  change lands. See `docs/performance.md`.
+  unexpected. A session-start hook says when the weekly `make perf` check is
+  due; then suggest it to the owner, and investigate what it flags. Otherwise
+  run `make perf` only for a change that plainly affects performance, such as
+  one to evaluation, layout, rendering, Fidget, CAM, or a dependency: compare
+  the canaries it drives before and after (`--editor` for an editor change),
+  without recording them. See `docs/performance.md`.
 - When a user-visible feature lands or goes away, update the README's "What
   works today" and "What isn't there yet".
 - When a pattern or lesson emerges, propose an addition to this file. Don't add

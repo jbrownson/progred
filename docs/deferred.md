@@ -202,6 +202,36 @@ Directions this surfaced:
   perhaps in sections the reader can tell apart, or with the editor's built-in
   offers marked as wanted or not by the projection's offers.
 
+## Starting points
+
+A document's empty root offers the libraries' starting points, then Raw's
+offers. There should be one for every direction a person might want to go, each
+landing on something that works. Today's two, Grap's new program and Fidget's
+new scene, each lead somewhere awkward; Grap's opens with a missing-cell error
+in its pane until the program is written (that error's hole does take the
+program now). Grap's might better start a journal, a notebook in the style of a
+REPL; see [Notebook and REPL](#notebook-and-repl).
+
+## Workspace documents
+
+A document whose root has a `panes` field is a workspace, and the editor
+should swallow it: show its panes, and draw only the main value in the
+document view rather than the whole record. Discussed in October 2026, not yet
+decided or started:
+
+- **The root's shape.** `{<main>: value, panes: {left, right}, libraries}`.
+  "primary" was rejected as the main field's name; `center` and `main` are the
+  candidates. The `panes` structure could go either way; keep `libraries` as it
+  is for now. Other roots stay valid documents.
+- **Editing it by hand.** The Plain view shows the record with names. A "show
+  panes" command could open the panes declaration in a pane.
+- **Panes that show a document path,** not only a computed value.
+- **Recursion.** A workspace in a pane of a workspace, which suggests making the
+  pane layout a projection.
+
+A suggested order: the root shape with the editor hiding the panes, converting
+the examples; then path panes; then recursion.
+
 ## Reporting completion failures
 
 Offer construction decides applicability; activating an offered completion
