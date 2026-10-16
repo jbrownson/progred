@@ -121,6 +121,31 @@ pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     )
 }
 
+/// A wash of the palette's `color` under the child, its corners rounded.
+pub fn ground<World: 'static, Hover: 'static>(
+    child: Layout<World, Hover>,
+    color: fn(&crate::styles::Palette) -> peniko::Color,
+) -> Layout<World, Hover> {
+    before(
+        child,
+        Rc::new(move |context| {
+            let scale = context.inputs.styles.scale;
+            let color = color(&context.inputs.styles.palette);
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    output.render(move |canvas, _| {
+                        canvas.fill_shape(
+                            puri::RoundedRect::from_rect(placement.rect, 4.0 * scale).into(),
+                            color.into(),
+                            puri::Affine::IDENTITY,
+                        );
+                    });
+                }
+            })
+        }),
+    )
+}
+
 pub fn selectable(
     context: &Context<'_, '_, crate::Editor, crate::frame::Hovered>,
 ) -> impl FnOnce(

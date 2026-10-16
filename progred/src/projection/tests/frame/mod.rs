@@ -84,6 +84,46 @@ struct Bench {
 
 /// A primary click at `point`, acting on whatever the settled hover there
 /// names, as the window does. `None` when nothing claims the point.
+#[test]
+fn an_absent_value_reads_as_its_reason_then_its_fields_all_on_red() {
+    use crate::libraries::{absent, f64};
+    let washes = |root: Value| {
+        let doc = Document {
+            root: Some(root),
+            cells: Cells::new(),
+        };
+        let error = peniko::Brush::from(crate::styles::Theme::Light.palette().error);
+        place(&doc, None, 600.0)
+            .0
+            .list
+            .0
+            .into_iter()
+            .filter_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: Shape::RoundedRect(wash),
+                    brush,
+                    ..
+                } if brush == error => Some(wash.rect()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    // Each cause of a failed alternative is washed too, inside its failure's.
+    let failure = washes(absent::from_causes([
+        absent::with_reason(absent::vocabulary::DECLINED),
+        ::grap::absent::with_detail(
+            ::grap::absent::MISSING_ARGUMENT,
+            absent::vocabulary::VALUE,
+            f64::value(3.0),
+        ),
+    ]));
+    assert_eq!(failure.len(), 3, "{failure:?}");
+    for cause in &failure[1..] {
+        assert_eq!(failure[0].union(*cause), failure[0], "{failure:?}");
+    }
+    assert!(washes(Value::record([(new_cell_id(), f64::value(3.0))])).is_empty());
+}
+
 fn click_at(world: &mut crate::Editor, point: Point) -> Option<Hovered> {
     let frame = editing_frame(world, false);
     let Some((_, Claim::Direct(target))) = frame.hover_geometry.probe(Some(point), None, 0.0)

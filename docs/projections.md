@@ -732,6 +732,10 @@ returns a non-absent unchanged. Only an absent result evaluates `default`, in th
 same calling environment. It does not validate the value's type or undo effects;
 actual evaluator halts still halt rather than invoking the fallback.
 
+The absent library draws an absent as its reason's name followed by any other
+fields, such as a failed alternative's `causes`, all on a red wash; each cause
+is washed in turn inside it. An unnamed reason shows its short cell identity.
+
 `do` evaluates its expressions in order, returning the first absent unchanged
 or the last successful value. It short-circuits that sequence, not the evaluator:
 an enclosing `match` can handle its result. Earlier effects are not rolled back.

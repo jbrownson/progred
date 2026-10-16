@@ -740,7 +740,7 @@ pub fn pad<World: 'static, Hover: 'static>(
     padding((left, 0.0, 0.0, 0.0).into(), child)
 }
 
-pub use widget::border;
+pub use widget::{border, ground};
 
 /// Project record-shaped fields in a caller-supplied order. The
 /// caller owns each field's meaning — label behavior, child

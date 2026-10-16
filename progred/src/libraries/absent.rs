@@ -45,6 +45,41 @@ pub fn named_reason(value: impl Into<String>) -> Value {
     name::record(value, [])
 }
 
+/// An absent value reads as its reason, then any other fields, such as a
+/// failed alternative's causes, all on red.
+fn display(
+    input: &crate::display::ProjectionInput<
+        '_,
+        crate::Editor,
+        crate::frame::Hovered,
+        ::grap::RuntimeValue,
+    >,
+) -> Option<crate::display::Layout<crate::Editor, crate::frame::Hovered>> {
+    let reason = input.value?.field(vocabulary::ABSENT)?.as_cell()?;
+    let name = input
+        .env
+        .name(reason)
+        .map(str::to_owned)
+        .unwrap_or_else(|| crate::identity::short_id(reason));
+    let target = input.targets.current();
+    let head = crate::display::projection::target(crate::display::activatable(
+        crate::display::faced(name, crate::display::Face::Ink),
+        target.hover,
+        target.select,
+    ));
+    Some(crate::display::ground(
+        crate::display::padding(
+            (4.0, 1.0, 4.0, 1.0).into(),
+            crate::display::structure::with_extra_fields(
+                input,
+                |key| key == vocabulary::ABSENT,
+                head,
+            ),
+        ),
+        |palette| palette.error,
+    ))
+}
+
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::OR_DEFAULT,
@@ -86,6 +121,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
         "absent",
         crate::libraries::Definitions::from_parts(cells, functions()),
     )
+    .with_projection(crate::display::runtime_partial(display))
 }
 
 #[cfg(test)]
