@@ -203,10 +203,6 @@ fn lerp(
     })
 }
 
-pub fn completions(query: &str) -> Vec<crate::display::Completion> {
-    convention().completions(query)
-}
-
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     convention().library(ID, parts(), std::iter::empty())
 }

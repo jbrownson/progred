@@ -1,4 +1,6 @@
 use super::*;
+use crate::clipboard::Clipboard;
+use puri::edit::TextClipboard;
 
 #[test]
 fn runtime_render_preserves_native_closures_through_evaluation() {
@@ -148,7 +150,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                                     event.state.position.x,
                                     event.state.position.y,
                                 )) && {
-                                    world.text_clipboard.text = Some(id.to_string());
+                                    world.text_clipboard.set_text(&id.to_string());
                                     true
                                 }
                             });
@@ -212,7 +214,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             (margin, if card { None } else { Some("2") }),
             (content.center(), Some("1")),
         ] {
-            world.text_clipboard.text = None;
+            world.text_clipboard = Clipboard::default();
             assert!(handler.dispatch_pointer_down(
                 &mut world,
                 &PointerButtonEvent {
@@ -228,7 +230,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                     },
                 }
             ));
-            assert_eq!(world.text_clipboard.text.as_deref(), expected);
+            assert_eq!(world.text_clipboard.get_text().as_deref(), expected);
         }
     }
 }

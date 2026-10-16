@@ -130,13 +130,16 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
     .with_completions(completions)
 }
 
-/// Whatever was typed reads as text.
+/// Whatever was typed reads as text, once anything has been: the empty string
+/// takes at least a `"`.
 fn completions(
     request: &crate::display::CompletionRequest<'_>,
 ) -> Option<Vec<crate::display::Completion>> {
     use crate::display::{CompletionKind, CompletionScope};
-    (request.scope == CompletionScope::Literal && request.kind == CompletionKind::Value)
-        .then(|| vec![completion(query_spelling(request.query))])
+    (request.scope == CompletionScope::Literal
+        && request.kind == CompletionKind::Value
+        && !request.query.trim().is_empty())
+    .then(|| vec![completion(query_spelling(request.query))])
 }
 
 #[cfg(test)]

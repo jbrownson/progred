@@ -1,9 +1,7 @@
-use gid::{CellId, Resolution, Step, Value};
+use crate::location::{Location, Start};
+use crate::sources::Sources;
+use gid::{CellId, Resolution, Step};
 use std::rc::Rc;
-
-pub trait PathLookup {
-    fn value_at(&self, path: &[Step]) -> Option<&Value>;
-}
 
 /// A structural source location used by execution-linked display.
 /// Definition-relative routes survive multiple projections of the same definition;
@@ -18,34 +16,17 @@ pub enum SourceTrace {
     },
 }
 
-fn enclosing_definition(
-    sources: &impl PathLookup,
-    path: &[Step],
-) -> Option<(CellId, Resolution, usize)> {
-    path.iter()
-        .enumerate()
-        .rev()
-        .find_map(|(index, step)| match step {
-            Step::Follow(source) => Some((index, *source)),
-            _ => None,
-        })
-        .and_then(|(index, source)| {
-            sources
-                .value_at(&path[..index])
-                .and_then(Value::as_cell)
-                .map(|cell| (cell, source, index + 1))
-        })
-}
-
 impl SourceTrace {
-    pub fn from_path(sources: &impl PathLookup, path: Rc<[Step]>) -> Self {
-        enclosing_definition(sources, &path)
-            .map(|(cell, source, relative_from)| Self::InCell {
-                cell,
-                source,
-                path: Rc::from(&path[relative_from..]),
-            })
-            .unwrap_or(Self::Stored(path))
+    /// Where a location is stored, however it was named. One whose route no
+    /// longer reaches a cell keeps its own spelling.
+    pub fn from_location(sources: &Sources, location: &Location) -> Self {
+        let stored = location.stored(sources);
+        let location = stored.as_ref().unwrap_or(location);
+        let path = Rc::from(location.path.as_ref());
+        match location.start {
+            Start::Root => Self::Stored(path),
+            Start::Cell { cell, source } => Self::InCell { cell, source, path },
+        }
     }
 
     pub fn descendant(&self, steps: &[Step]) -> Self {
@@ -115,9 +96,9 @@ impl Secondary {
         }
     }
 
-    pub fn from_path(sources: &impl PathLookup, path: Rc<[Step]>, cell: Option<CellId>) -> Self {
-        let enclosing = enclosing_definition(sources, &path);
-        Self::from_context(path, cell, enclosing)
+    /// What a value other than a reference shares: where it's stored.
+    pub fn from_location(sources: &Sources, location: &Location) -> Self {
+        Self::from_trace(&SourceTrace::from_location(sources, location))
     }
 }
 

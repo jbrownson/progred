@@ -586,29 +586,17 @@ fn partials_receive_selection_and_annotations_positionally() {
 
 #[test]
 fn the_pending_payload_is_derived_from_the_live_editor() {
-    for everything in [false, true] {
-        let mut pending = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
-        pending.set_completion_view(24.0, 2, everything);
-        pending
-            .edit_query(|line| line.handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string())));
-        assert_eq!(pending.choice(), 0);
-        assert_eq!(pending.completion_scroll(), 0.0);
-        assert_eq!(pending.completion_everything(), everything);
-        assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
-        assert_eq!(
-            selection_payload::completion_everything(&pending.payload()),
-            everything
-        );
-        assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
-        assert_eq!(pending.choice(), 0);
-        assert_eq!(pending.completion_everything(), everything);
-        pending.edit_query(|line| {
-            line.set_text("");
-            true
-        });
-        assert_eq!(pending.choice(), 0);
-        assert_eq!(pending.completion_everything(), everything);
-    }
+    let mut pending = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
+    pending.set_completion_view(24.0, 2);
+    pending.edit_query(|line| line.handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string())));
+    assert_eq!(pending.choice(), 0);
+    assert_eq!(pending.completion_scroll(), 0.0);
+    assert_eq!(selection_payload::query(&pending.payload()), Some("ab"));
+    pending.edit_query(|line| {
+        line.set_text("");
+        true
+    });
+    assert_eq!(pending.choice(), 0);
 }
 
 #[test]

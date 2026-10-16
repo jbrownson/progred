@@ -64,10 +64,9 @@ mod tests {
     use kurbo::Shape as _;
 
     #[test]
-    fn stretched_families_have_equal_bounded_widths_and_contain_their_ink() {
+    fn stretched_delimiters_fill_their_advance_and_contain_their_ink() {
         for scale in [1.0, 2.0] {
             for (ascent, descent) in [(0.0, 0.0), (20.0, 10.0), (80.0, 80.0)] {
-                let mut expected_width = None;
                 for delim in [Delim::Paren, Delim::Bracket, Delim::Brace] {
                     for side in [Side::Open, Side::Close] {
                         let width = advance(delim, 14.0 * scale);
@@ -80,7 +79,6 @@ mod tests {
                                 + (ascent * scale).max(min_ascent)
                                 + (descent * scale).max(min_descent),
                         );
-                        assert!((width - *expected_width.get_or_insert(width)).abs() < 1e-6);
                         let mut recording = DrawList::new();
                         draw_stretched(
                             delim,

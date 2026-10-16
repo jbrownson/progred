@@ -35,6 +35,10 @@ superseded notes to `docs/history/`.
   seem meant to work that way.
 - Fix the source of a mismatch instead of compensating for it downstream, for
   example with a hand-tuned offset.
+- Mint every new cell ID from the OS's random number generator: run
+  `openssl rand -hex 16` for an ID written in source, and use `new_cell_id` at
+  run time. Never make one up, edit one, or derive one from a name; see
+  `docs/gid.md`.
 - Commit when it makes sense, and keep unrelated changes in separate commits;
   don't bundle housekeeping with feature work. Before pushing, run
   `cargo fmt --all -- --check` and `make test`. When pushing to a session
@@ -66,12 +70,12 @@ make run
 ```
 
 They build sandboxed, under Seatbelt through `./tools/sandbox-cargo` on macOS
-and in namespaces through `./tools/linux-cargo` on Linux; use the wrapper for
+and under bubblewrap through `./tools/linux-cargo` on Linux; use the wrapper for
 any other Cargo command. See `docs/build-security.md`.
 
-The browser build is supported on macOS. Supporting it elsewhere isn't worth its
-complexity yet, but don't block other platforms on purpose;
-`website/build-ci.sh` builds it on Linux for publishing.
+The browser build is supported on macOS and Linux. Supporting it elsewhere isn't
+worth its complexity yet, but don't block other platforms on purpose;
+`website/build-ci.sh` builds it on a Linux CI runner for publishing.
 
 Update dependencies through the wrapper's `update` command
 (`./tools/sandbox-cargo update` or `./tools/linux-cargo update`), and npm

@@ -16,6 +16,9 @@ const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Projection {
     Standard,
+    /// Raw's structure with names, text, bytes and numbers reading as
+    /// themselves.
+    Plain,
     Raw,
 }
 
@@ -381,13 +384,16 @@ impl Workspace {
             .unwrap_or(&self.document)
     }
 
-    pub fn toggle_projection(&mut self, selected: Option<&Root>) {
-        fn toggle(view: &mut View) {
-            view.projection = match view.projection {
-                Projection::Standard => Projection::Raw,
-                Projection::Raw => Projection::Standard,
+    /// Switch the selected area to `projection`, or back to the standard
+    /// one if it's already showing it.
+    pub fn toggle_projection(&mut self, selected: Option<&Root>, projection: Projection) {
+        let toggle = |view: &mut View| {
+            view.projection = if view.projection == projection {
+                Projection::Standard
+            } else {
+                projection
             };
-        }
+        };
         match selected.and_then(|root| self.view_mut(root)) {
             Some(view) => toggle(view),
             None => toggle(&mut self.document),
@@ -835,6 +841,21 @@ mod tests {
     }
 
     #[test]
+    fn plain_and_raw_each_toggle_back_to_the_standard_projection() {
+        let mut workspace = Workspace::default();
+        let mut toggle = |projection| {
+            workspace.toggle_projection(None, projection);
+            workspace.document.projection
+        };
+        assert_eq!(toggle(Projection::Plain), Projection::Plain);
+        assert_eq!(toggle(Projection::Raw), Projection::Raw);
+        assert_eq!(toggle(Projection::Plain), Projection::Plain);
+        assert_eq!(toggle(Projection::Plain), Projection::Standard);
+        assert_eq!(toggle(Projection::Raw), Projection::Raw);
+        assert_eq!(toggle(Projection::Raw), Projection::Standard);
+    }
+
+    #[test]
     fn roots_are_view_identity_not_cell_identity() {
         let left = Root::pane(Vec::new());
         let other = Root::pane(Vec::new());
@@ -910,7 +931,7 @@ mod tests {
         assert!(crate::selection::delete_edge(
             &mut doc,
             &Default::default(),
-            &path
+            &crate::location::Location::root(&path)
         ));
         assert_eq!(declarations(doc.root.as_ref()).len(), 3);
         assert_eq!(doc.cells.value(cell), before.cells.value(cell));

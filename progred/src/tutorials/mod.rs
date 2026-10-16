@@ -6,13 +6,12 @@
 use crate::driver::Driver;
 use gid::{CellId, Step, Value};
 use kurbo::{Point, Size};
-use std::rc::Rc;
 use ui_events::keyboard::NamedKey;
 use winit::keyboard::ModifiersState;
+use winit::window::CursorIcon;
 
-mod peel;
-mod story;
-mod tutorial;
+mod apart;
+mod build;
 
 /// The tutorial column's frame less its border, tall enough that no lesson
 /// scrolls.
@@ -139,6 +138,14 @@ impl Driver<Page> {
                 name => self.key(name),
             })
             .collect()
+    }
+
+    /// Where the data `path` names is stored, as [`Self::path`] spells it.
+    pub(super) fn location(&self, steps: &[&str]) -> crate::location::Location<'static> {
+        crate::location::Location::root(self.path(steps))
+            .stored(&self.editor().sources())
+            .map(crate::location::Location::into_owned)
+            .unwrap_or_else(|| panic!("{steps:?} reaches no cell"))
     }
 
     pub(super) fn cell(&self, name: &str) -> Value {

@@ -72,7 +72,7 @@
       <section class="exercise showcase" id="peel" aria-label="The forest, a program you can take apart">
         <p>The forest and the code under it are two drawings of the same thing, and each knows about the other. Drag the slider and the forest grows; hold <kbd data-command-key>Ctrl</kbd> and click a tree to select the code that drew it. Then peel off what each library draws, a layer at a time, down to what’s stored.</p>
         <div class="live">
-          <div class="editor-example" id="peel-editor"><iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,0ad8124ba821acd5fbf2c868371e1492,666ba40b81028e32c78bdc1665d6c3a9" title="The growing forest, drawn by libraries you can switch off" loading="lazy"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset the forest">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
+          <div class="editor-example" id="peel-editor"><iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,0ad8124ba821acd5fbf2c868371e1492,666ba40b81028e32c78bdc1665d6c3a9" title="The growing forest, drawn by libraries you can switch off" loading="lazy"></iframe><div class="editor-actions"><button type="button" class="reset" aria-label="Reset the forest">Reset <span aria-hidden="true">↺</span></button></div><span class="reset-status visually-hidden" role="status"></span></div>
           <div class="peel-controls"><label class="peel-slider">Peel <input type="range" id="peel-depth" min="0" value="0" step="1"></label><div id="peel-layers" class="peel-layers"></div></div>
           <p id="peel-caption" class="peel-caption" aria-live="polite"></p>
         </div>
@@ -81,13 +81,13 @@
       <section class="pitch" id="what" aria-labelledby="what-title">
         <h2 id="what-title">What it is</h2>
         <p>Progred is a pre-alpha programming environment. Your program is a document, and everything you see, including the code, is a projection of it drawn by some library. Working in it feels more like a spreadsheet than a text file: change a value, and whatever depends on it updates. It’s a minimal prototype that demonstrates the ideas below, not a finished product.</p>
-        <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also be a cell, which has its own identity, and the same cell can sit in any number of places; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that Grap, Progred’s language, knows how to run.</p>
+        <p>Like a JSON object, a record maps keys to values. But a key isn’t a string: it’s an identity with a name attached as a label, so renaming a key never breaks anything that uses it. A value can also be a cell, which has its own identity, and the same cell can sit in any number of places; that’s what makes a document a graph. There are no built-in strings or numbers either, just records, lists, blobs of raw bytes, and cells. Whoever owns a key decides what it means and how it’s drawn: a 60<sub class="tag">f64</sub> is an eight-byte blob under the f64 library’s key, and a function is a record that a language such as Grap knows how to run.</p>
         <p><strong>Progred is public early to get feedback.</strong> Share on Zulip what clicks, what doesn’t, and where you get lost.</p>
         <p class="actions">
           <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Chat about it on Zulip</a>
           <a class="button" href="try">Try the editor</a>
-          <a class="button" href="story.html">Start the tutorial</a>
-          <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">Source on GitHub</a>
+          <a class="button" href="tutorial.html">Start the tutorial</a>
+          <a class="button" href="https://github.com/jbrownson/progred" target="_blank" rel="noopener">GitHub</a>
         </p>
       </section>
 
@@ -97,33 +97,33 @@
         <article class="idea" id="structure">
           <h4>Structure, not text</h4>
           <p>A Progred document is built from four things: records, lists, blobs, and cells. Records map keys to values and lists keep them in order; blobs, runs of raw bytes, are the leaves; a cell is a value with its own identity, and the same cell can sit in any number of places, which makes a document a graph rather than a tree. Nothing is parsed, and there’s no source text to keep in sync. The <code>.gid</code> files in the repository are a temporary text bridge for Git and tools.</p>
-          <p class="idea-links"><a href="lab/peel.html#cells">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/gid.md">GID</a></p>
+          <p class="idea-links"><a href="tutorial.html#cells">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/gid.md">GID</a></p>
         </article>
         <article class="idea" id="identity">
           <h4>Identity, not names</h4>
           <p>Every key and every reference is a random 128-bit identity. A name is a fact stored about a cell, <code>{name: "x"}</code>, which projections draw as a label. So renaming never breaks a reference, two different things can wear the same name, and a call files its arguments under its parameters’ identities.</p>
-          <p class="idea-links"><a href="lab/peel.html#names">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/model.md">Data and editor model</a></p>
+          <p class="idea-links"><a href="tutorial.html#names">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/model.md">Data and editor model</a></p>
         </article>
         <article class="idea" id="meaning">
           <h4>Libraries give data its meaning</h4>
           <p>Text is a blob under the text library’s <code>utf8</code> key, and a 64-bit float is an eight-byte blob under the f64 library’s key; the little <sub class="tag">f64</sub> beside a number names that library. Other libraries read numbers their own way (f32, u64, and Fidget, whose arithmetic builds 3D shapes), and each has its own <code>+</code>. The tag on an operator records whose arithmetic you chose.</p>
-          <p class="idea-links"><a href="lab/peel.html#bytes">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#packages-and-libraries">Libraries</a></p>
+          <p class="idea-links"><a href="tutorial.html#bytes">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#packages-and-libraries">Libraries</a></p>
         </article>
         <h3 class="idea-group">Projections and language</h3>
         <article class="idea" id="projections">
           <h4>Everything you see is a projection</h4>
           <p>Libraries contribute projections: functions from a value to a drawing, each free to decline a value it doesn’t recognize. They’re tried in order, and the first that recognizes a value draws it; data no library understands falls back to the base projection, which shows what’s stored, instead of disappearing. You can edit through any projection: code, a number you scrub, a color picker, or a slider.</p>
-          <p class="idea-links"><a href="tutorial.html#projections">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#projection-composition">Projection composition</a></p>
+          <p class="idea-links"><a href="tutorial.html#peel">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#projection-composition">Projection composition</a></p>
         </article>
         <article class="idea" id="grap">
           <h4>Grap, a language made of the same data</h4>
           <p>As Lisp is list processing and its programs are lists, Grap is graph processing and its programs are part of the graph. Functions and calls are ordinary records. Functions that libraries implement receive their arguments unevaluated, so <code>do</code>, <code>all</code>, <code>for each</code>, and <code>match</code> are library functions, not built-in keywords. <code>quote</code> is one too: it returns its argument as data, filling each <code>`</code> hole, which is how a program builds a shape. Unfinished programs still run: a missing argument or a mismatched value becomes an <strong>absent</strong>, a value that says what’s wrong, which the rest of the program can pass along or recover from. Fuel bounds every evaluation.</p>
-          <p class="idea-links"><a href="lab/peel.html#unfinished">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#evaluation">Evaluation</a></p>
+          <p class="idea-links"><a href="tutorial.html#unfinished">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/projections.md#evaluation">Evaluation</a></p>
         </article>
         <article class="idea" id="linked">
           <h4>Output linked to source</h4>
           <p>A drawing remembers the call that drew each shape. Hold <kbd data-command-key>Ctrl</kbd> and click a tree to select the code that drew it; hover a call and its shapes light up. Controls like the forest’s slider are requested by ordinary Grap code, and their values feed the drawing.</p>
-          <p class="idea-links"><a href="tutorial.html#drawing">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/controls.md">Controls</a></p>
+          <p class="idea-links"><a href="tutorial.html#dot">See it</a> · <a href="https://github.com/jbrownson/progred/blob/master/docs/controls.md">Controls</a></p>
         </article>
         <article class="idea" id="views">
           <h4>Projections are programs</h4>
@@ -194,13 +194,9 @@
 
       <section class="ways-in" id="ways-in" aria-labelledby="ways-in-title">
         <h2 id="ways-in-title">Where to start</h2>
-        <p>Start with the story: one program grows from a dot into the forest above, and each step adds one idea. Two more tutorials take other routes through the same editor; try one after, then share on Zulip which made it click and where you got lost. They’re best on a laptop.</p>
-        <ol class="tutorials">
-          <li><a href="story.html"><strong>How the forest was made</strong><span>Start here. One program grows from a single dot into a forest, and each step adds one idea.</span></a></li>
-          <li><a href="lab/peel.html"><strong>Peel the forest</strong><span>Start from the finished forest and switch off what its libraries draw until only structure is left, then open six doors into what you saw.</span></a></li>
-          <li><a href="tutorial.html"><strong>Change a program, see what happens</strong><span>A guided tour in short exercises: values, views, cells, calculations, functions, and drawings, with tasks that check themselves.</span></a></li>
-        </ol>
-        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Share which worked</a></p>
+        <p>Start with the tutorial. It’s best on a laptop, and when you’re done, share on Zulip what made it click and where you got lost.</p>
+        <a class="tutorial" href="tutorial.html"><strong>How the forest was made</strong><span>Grow the forest above from a single dot, one idea at a time, take it apart down to what’s stored, and end with a forest of your own.</span></a>
+        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Share how it went</a></p>
       </section>
 
       <section class="about" id="about" aria-labelledby="about-title">
@@ -210,7 +206,7 @@
 
       <section class="closing" aria-labelledby="closing-title">
         <h2 id="closing-title">Come talk about it</h2>
-        <p>Early feedback matters most at this stage, and the conversation happens on Zulip. Questions, ideas, criticism, where you got stuck, and which tutorial worked for you are all welcome.</p>
+        <p>Early feedback matters most at this stage, and the conversation happens on Zulip. Questions, ideas, criticism, and where you got stuck in the tutorial are all welcome.</p>
         <p class="actions">
           <a class="button primary" href="https://progred.zulipchat.com" target="_blank" rel="noopener">Join the Progred Zulip</a>
           <a class="button" href="try">Try the editor</a>

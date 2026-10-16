@@ -84,7 +84,8 @@ fn empty_slots_make_values_through_the_picker() {
             world.model.selection.as_ref().map(Selection::path)
         );
     };
-    for (slot, typed) in [("first", "42"), ("second", "\"hello\""), ("third", "[")] {
+    // `[` opens the list it makes, so 7 goes inside it.
+    for (slot, typed) in [("first", "42"), ("second", "\"hello\""), ("third", "[7")] {
         let frame = editing_frame(&mut world, false);
         let target = frame
             .descends
@@ -99,17 +100,8 @@ fn empty_slots_make_values_through_the_picker() {
                 Modifiers::empty(),
             );
         }
-        if slot != "third" {
-            key(&mut world, Key::Named(NamedKey::Enter), Modifiers::empty());
-        }
+        key(&mut world, Key::Named(NamedKey::Enter), Modifiers::empty());
     }
-    let command = match world.command_modifier {
-        puri::keyboard::CommandModifier::Meta => Modifiers::META,
-        puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
-    };
-    key(&mut world, Key::Named(NamedKey::Enter), command);
-    key(&mut world, Key::Character("7".into()), Modifiers::empty());
-    key(&mut world, Key::Named(NamedKey::Enter), Modifiers::empty());
     let values = world.model.doc.root.as_ref().unwrap().as_record().unwrap();
     assert_eq!(values.get(&names["first"]).and_then(f64::read), Some(42.0));
     assert_eq!(
@@ -119,6 +111,106 @@ fn empty_slots_make_values_through_the_picker() {
     assert_eq!(
         values.get(&names["third"]),
         Some(&Value::list([f64::value(7.0)]))
+    );
+}
+
+/// A document whose left pane renders `render`, beside `program`.
+fn rendered_in_a_pane(program: CellId, render: Value, cells: Cells) -> crate::driver::Driver {
+    use crate::libraries::{presentation, workspace};
+    crate::driver::Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::record([
+                (crate::libraries::grap::vocabulary::GRAP, program.into()),
+                (
+                    workspace::vocabulary::PANES,
+                    Value::record([(
+                        workspace::vocabulary::LEFT,
+                        Value::list([Value::record([(presentation::vocabulary::RENDER, render)])]),
+                    )]),
+                ),
+            ])),
+            cells,
+        }),
+        kurbo::Size::new(900.0, 600.0),
+    )
+}
+
+/// The pane's result, and `rest` within it.
+fn pane_result(driver: &crate::driver::Driver, rest: &[Step]) -> Vec<Step> {
+    use crate::libraries::{presentation, workspace};
+    driver.element(
+        &[
+            Step::Key(workspace::vocabulary::PANES),
+            Step::Key(workspace::vocabulary::LEFT),
+        ],
+        0,
+        &[
+            [Step::Key(presentation::vocabulary::RESULT)].as_slice(),
+            rest,
+        ]
+        .concat(),
+    )
+}
+
+#[test]
+fn a_missing_cell_named_in_an_error_is_defined_from_the_error() {
+    let program = new_cell_id();
+    let mut driver = rendered_in_a_pane(program, program.into(), Cells::new());
+    let hole = pane_result(
+        &driver,
+        &[
+            Step::Key(crate::libraries::absent::vocabulary::CELL),
+            Step::Follow(gid::Resolution::Document),
+        ],
+    );
+    driver.click(&hole);
+    {
+        let selection = driver.editor().model.selection.as_ref().unwrap();
+        assert_eq!(selection.path(), hole);
+        assert_eq!(selection.stage(&driver.editor().sources()), Stage::Pending);
+        assert_eq!(
+            selection.location(),
+            Some(Location::in_cell(
+                program,
+                gid::Resolution::Document,
+                Vec::new()
+            ))
+        );
+    }
+    driver.type_text("\"drawn");
+    driver.press(NamedKey::Enter);
+    assert_eq!(
+        driver.editor().model.doc.cells.value(program),
+        Some(&text::value("drawn"))
+    );
+    assert!(driver.drawn(&pane_result(&driver, &[])));
+    assert!(
+        !driver.drawn(&hole),
+        "the error gave way to the program's result"
+    );
+}
+
+#[test]
+fn a_quoted_reference_in_a_result_edits_its_cell() {
+    let (program, quoted) = (new_cell_id(), new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(quoted, text::value("before"));
+    let render = grap::call(
+        crate::libraries::control::vocabulary::QUOTE.into(),
+        [(grap::vocabulary::EXPRESSION, quoted.into())],
+    );
+    let mut driver = rendered_in_a_pane(program, render, cells);
+    let definition = pane_result(&driver, &[Step::Follow(gid::Resolution::Document)]);
+    driver.double_click(&definition);
+    driver.type_text("after");
+    assert_eq!(
+        driver.editor().model.doc.cells.value(quoted),
+        Some(&text::value("after"))
+    );
+    assert_eq!(
+        driver.editor().model.doc.cells.value(program),
+        None,
+        "nothing else was written"
     );
 }
 
@@ -291,10 +383,10 @@ fn replace_text(world: &mut crate::Editor, path: &[Step], value: &str) {
 }
 
 #[test]
-fn website_grap_results_take_no_typing() {
+fn grap_results_take_no_typing() {
     use crate::libraries::{absent, blob, grap as grap_library, number};
     let (mut world, names) = lesson_world(
-        include_str!("../../../../../website/public/lessons/grap.gid"),
+        include_str!("../../../../fixtures/grap.gid"),
         &[
             name::ID,
             text::ID,
@@ -313,15 +405,7 @@ fn website_grap_results_take_no_typing() {
             Step::Key(crate::libraries::presentation::vocabulary::RESULT),
         ],
     );
-    assert!(
-        world
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .source_path()
-            .is_none()
-    );
+    assert!(world.model.selection.as_ref().unwrap().location().is_none());
     let before = world.model.doc.clone();
     assert!(
         !editing_frame(&mut world, false)
@@ -1056,10 +1140,8 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
 #[test]
 fn swapping_libraries_keeps_the_document_and_selection() {
     use crate::libraries::{blob, number};
-    let (doc, names) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/model.gid"
-    ))
-    .unwrap();
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../../../fixtures/model.gid")).unwrap();
     let slots = format!("{}", names["first"]);
     let stack_of = |libraries: &[CellId]| {
         let mut stack = crate::stack::load_selected(libraries).unwrap();
@@ -1105,10 +1187,8 @@ fn swapping_libraries_keeps_the_document_and_selection() {
 fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
     use crate::libraries::{blob, number};
     use grap::vocabulary::FUNCTION;
-    let (doc, names) = crate::gid_text::parse(include_str!(
-        "../../../../../website/public/lessons/functions.gid"
-    ))
-    .unwrap();
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../../../fixtures/functions.gid")).unwrap();
     let mut stack =
         crate::stack::load_selected(&[name::ID, text::ID, blob::ID, number::ID, f64::ID]).unwrap();
     stack.projection = crate::web_embed::tutorial_slots(
@@ -1221,6 +1301,71 @@ fn escape_returns_a_picker_to_where_it_was_opened() {
 }
 
 #[test]
+fn a_new_cell_list_or_record_opens_for_what_goes_inside_it() {
+    let made = |key: &str| {
+        let (mut runner, paths) = three_lists();
+        press_key(&mut runner, Key::Named(NamedKey::Backspace));
+        press_key(&mut runner, Key::Character(key.into()));
+        let place = paths[1].clone();
+        (runner, place)
+    };
+    let typed = |runner: &mut crate::EditorRunner, text: &str| {
+        for key in text.chars() {
+            press_key(runner, Key::Character(key.to_string().into()));
+        }
+        press_key(runner, Key::Named(NamedKey::Enter));
+    };
+    let value = |runner: &crate::EditorRunner, path: &[Step]| {
+        runner.editor.sources().resolve_path(path).cloned()
+    };
+    let cell = [Step::Follow(gid::Resolution::Document)];
+    for key in ["(", "[", "{"] {
+        let (mut runner, place) = made(key);
+        {
+            let sources = runner.editor.sources();
+            let inside = runner.editor.model.selection.as_ref().unwrap();
+            let (path, stage) = match key {
+                "(" => (&[&place[..], &cell].concat()[..], Stage::Pending),
+                "[" => (inside.path(), Stage::Pending),
+                _ => (&place[..], Stage::Label),
+            };
+            assert_eq!(inside.path(), path, "{key} selects inside what it made");
+            assert_eq!(inside.stage(&sources), stage, "{key}");
+            if key == "[" {
+                assert!(matches!(
+                    inside.path().split_last(),
+                    Some((Step::Element(_), list)) if list == place
+                ));
+            }
+        }
+        assert!(
+            editing_frame(&mut runner.editor, false)
+                .completion
+                .is_some(),
+            "{key} shows its picker"
+        );
+        press_key(&mut runner, Key::Named(NamedKey::Escape));
+        let back = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(back.path(), place, "Escape steps back out of {key}");
+        assert_eq!(back.stage(&runner.editor.sources()), Stage::Edge);
+    }
+
+    let (mut runner, place) = made("(");
+    typed(&mut runner, "5");
+    assert!(value(&runner, &[&place[..], &cell].concat()).is_some());
+    let (mut runner, place) = made("[");
+    typed(&mut runner, "5");
+    assert_eq!(value(&runner, &place).unwrap().as_list().unwrap().len(), 1);
+    let (mut runner, place) = made("{");
+    typed(&mut runner, "width");
+    typed(&mut runner, "5");
+    assert_eq!(
+        value(&runner, &place).unwrap().as_record().unwrap().len(),
+        1
+    );
+}
+
+#[test]
 fn typing_over_a_value_replaces_it_and_escape_brings_it_back() {
     let (mut runner, paths) = three_lists();
     let document = runner.editor.model.doc.clone();
@@ -1328,7 +1473,141 @@ fn typing_an_operator_after_a_number_makes_it_the_left_operand() {
 }
 
 #[test]
-fn a_numbers_other_fields_follow_it_including_one_being_added() {
+fn enter_ends_typing_in_a_value_before_it_adds_anything_beside() {
+    let size = kurbo::Size::new(600.0, 400.0);
+    let x = new_cell_id();
+    let mut runner = crate::EditorRunner::new(crate::test_editor(Document {
+        root: Some(Value::record([(x, f64::value(2.0))])),
+        cells: Cells::new(),
+    }));
+    runner.editor.model.selection = Some(make_selection(vec![Step::Key(x)]));
+    runner.refresh_frame(1.0, size);
+    let press = |runner: &mut crate::EditorRunner, key: Key| {
+        runner.keyboard_event(
+            &KeyboardEvent {
+                key,
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        );
+    };
+    // "25e" is still becoming a number, so 25 is what was written.
+    for typed in ["5", "e"] {
+        press(&mut runner, Key::Character(typed.into()));
+    }
+    let selection = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(selection.edit().unwrap().text(), "25e");
+    press(&mut runner, Key::Named(NamedKey::Enter));
+    let selection = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(selection.path(), [Step::Key(x)]);
+    assert_eq!(selection.stage(&runner.editor.sources()), Stage::Edge);
+    assert!(selection.edit().is_none(), "the typing ended");
+    assert_eq!(
+        runner.editor.model.doc.root,
+        Some(Value::record([(x, f64::value(25.0))])),
+        "and nothing was added beside it"
+    );
+    // Enter on the value itself continues beside it, as before.
+    press(&mut runner, Key::Named(NamedKey::Enter));
+    let selection = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(selection.stage(&runner.editor.sources()), Stage::Label);
+}
+
+#[test]
+fn tab_goes_from_empty_slot_to_empty_slot_keeping_what_was_typed() {
+    let size = kurbo::Size::new(600.0, 400.0);
+    use crate::libraries::name;
+    let function = new_cell_id();
+    let [x, height] = [new_cell_id(), new_cell_id()];
+    let mut cells = Cells::new();
+    let tree = grap::lambda([x, height], Value::record([]));
+    let tree = tree
+        .as_record()
+        .unwrap()
+        .clone()
+        .update(name::vocabulary::NAME, text::value("tree"));
+    cells.set_value(function, Value::record(tree));
+    cells.set_value(x, name::record("x", []));
+    cells.set_value(height, name::record("height", []));
+    let mut runner = crate::EditorRunner::new(crate::test_editor(Document {
+        root: Some(grap::call(function.into(), [])),
+        cells,
+    }));
+    runner.refresh_frame(1.0, size);
+    let press = |runner: &mut crate::EditorRunner, key: Key, modifiers: Modifiers| {
+        runner.keyboard_event(
+            &KeyboardEvent {
+                key,
+                state: KeyState::Down,
+                modifiers,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        )
+    };
+    let tab = |runner: &mut crate::EditorRunner, modifiers| {
+        press(runner, Key::Named(NamedKey::Tab), modifiers)
+    };
+    let selected = |runner: &crate::EditorRunner| {
+        let selection = runner.editor.model.selection.as_ref().unwrap();
+        (
+            selection.path().to_vec(),
+            selection.stage(&runner.editor.sources()),
+        )
+    };
+    let typing = |runner: &mut crate::EditorRunner, text: &str| {
+        for typed in text.chars() {
+            press(
+                runner,
+                Key::Character(typed.to_string().into()),
+                Modifiers::empty(),
+            );
+        }
+    };
+    let cleared = |runner: &crate::EditorRunner| runner.editor.model.selection.is_none();
+    // From nothing, Tab starts at the first empty slot. There's none before
+    // it, so Shift+Tab clears the selection, and the next starts at the end.
+    assert!(tab(&mut runner, Modifiers::empty()));
+    assert_eq!(selected(&runner), (vec![Step::Key(x)], Stage::Pending));
+    assert!(tab(&mut runner, Modifiers::SHIFT));
+    assert!(cleared(&runner));
+    assert!(tab(&mut runner, Modifiers::SHIFT));
+    assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Pending));
+    assert!(tab(&mut runner, Modifiers::SHIFT));
+    assert_eq!(selected(&runner), (vec![Step::Key(x)], Stage::Pending));
+    // What was typed goes in, and Tab moves on to the next slot.
+    typing(&mut runner, "172");
+    assert!(tab(&mut runner, Modifiers::empty()));
+    let root = runner.editor.model.doc.root.clone().unwrap();
+    assert!(root.as_record().unwrap().get(&x).is_some(), "x keeps 172");
+    assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Pending));
+    // Past the last slot, a window's Tab clears the selection, and the next
+    // starts over; a browser moves focus on to its page instead.
+    assert!(tab(&mut runner, Modifiers::empty()));
+    assert!(cleared(&runner));
+    assert!(tab(&mut runner, Modifiers::empty()));
+    assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Pending));
+    // What's typed in the last slot still goes in, and stays selected.
+    typing(&mut runner, "80");
+    assert!(tab(&mut runner, Modifiers::empty()));
+    let root = runner.editor.model.doc.root.clone().unwrap();
+    assert!(
+        root.as_record().unwrap().get(&height).is_some(),
+        "height keeps 80"
+    );
+    assert_eq!(selected(&runner), (vec![Step::Key(height)], Stage::Edge));
+    // With every slot filled, Tab clears the selection, then has nowhere to go.
+    assert!(tab(&mut runner, Modifiers::empty()));
+    assert!(cleared(&runner));
+    assert!(!tab(&mut runner, Modifiers::empty()));
+}
+
+#[test]
+fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
+    let size = kurbo::Size::new(600.0, 400.0);
     let (x, note) = (new_cell_id(), new_cell_id());
     let number = f64::value(1.0)
         .as_record()
@@ -1349,40 +1628,131 @@ fn a_numbers_other_fields_follow_it_including_one_being_added() {
     };
     assert!(drawn(&mut runner, note));
     assert!(!drawn(&mut runner, f64::vocabulary::F64));
-    runner.editor.model.selection = Some(make_selection(vec![Step::Key(x)]));
-    runner.refresh_frame(1.0, kurbo::Size::new(600.0, 400.0));
-    let command = match runner.editor.command_modifier {
-        puri::keyboard::CommandModifier::Meta => Modifiers::META,
-        puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
+    // Drawn as one piece, the number takes no field from Enter, within it or
+    // beside one of the others it has; a rawer view of it can add one.
+    let before = runner.editor.model.doc.root.clone();
+    for (path, modifiers) in [
+        (vec![Step::Key(x)], crate::modifiers::command()),
+        (vec![Step::Key(x), Step::Key(note)], Modifiers::empty()),
+    ] {
+        runner.editor.model.selection = Some(make_selection(path.clone()));
+        runner.refresh_frame(1.0, size);
+        assert!(!runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Enter),
+                modifiers,
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        ));
+        let selection = runner.editor.model.selection.as_ref().unwrap();
+        assert_eq!(
+            (
+                selection.path().to_vec(),
+                selection.stage(&runner.editor.sources())
+            ),
+            (path, Stage::Edge)
+        );
+    }
+    assert_eq!(runner.editor.model.doc.root, before);
+    assert!(drawn(&mut runner, note));
+}
+
+#[test]
+fn enter_beside_text_in_a_list_adds_an_element_but_nothing_within_the_text() {
+    let size = kurbo::Size::new(600.0, 400.0);
+    let doc = Document {
+        root: Some(Value::list([text::value("a"), text::value("b")])),
+        cells: Cells::new(),
     };
-    assert!(runner.keyboard_event(
-        &KeyboardEvent {
-            key: Key::Named(NamedKey::Enter),
-            modifiers: command,
-            state: KeyState::Down,
-            ..Default::default()
-        },
-        1.0,
-        kurbo::Size::new(600.0, 400.0),
+    let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
+    let first = runner
+        .editor
+        .sources()
+        .resolve_path(&[])
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap()
+        .clone();
+    let enter = |runner: &mut crate::EditorRunner, modifiers| {
+        runner.editor.model.selection = Some(make_selection(vec![Step::Element(first.clone())]));
+        runner.refresh_frame(1.0, size);
+        runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Enter),
+                modifiers,
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        )
+    };
+    // The list takes a new element after the text.
+    assert!(enter(&mut runner, Modifiers::empty()));
+    let selection = runner.editor.model.selection.as_ref().unwrap();
+    assert_eq!(selection.stage(&runner.editor.sources()), Stage::Pending);
+    assert!(matches!(
+        selection.path(),
+        [Step::Element(position)] if *position > first
     ));
+    // The text, drawn as one piece, takes nothing within it.
+    assert!(!enter(&mut runner, crate::modifiers::command()));
     assert_eq!(
+        runner.editor.model.selection.as_ref().unwrap().path(),
+        [Step::Element(first.clone())]
+    );
+}
+
+#[test]
+fn enter_adds_no_field_within_a_number_unless_its_view_shows_a_record() {
+    let size = kurbo::Size::new(600.0, 400.0);
+    let doc = Document {
+        root: Some(f64::value(5.0)),
+        cells: Cells::new(),
+    };
+    let enter = |editor: crate::Editor, command: bool| {
+        let mut runner = crate::EditorRunner::new(editor);
+        runner.editor.model.selection = Some(make_selection(Vec::new()));
+        runner.refresh_frame(1.0, size);
+        let modifiers = if command {
+            crate::modifiers::command()
+        } else {
+            Modifiers::empty()
+        };
+        runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Enter),
+                modifiers,
+                state: KeyState::Down,
+                ..Default::default()
+            },
+            1.0,
+            size,
+        );
         runner
             .editor
             .model
             .selection
             .as_ref()
             .unwrap()
-            .stage(&runner.editor.sources()),
-        Stage::Label
-    );
-    assert!(
-        editing_frame(&mut runner.editor, false)
-            .completion
-            .is_some(),
-        "the new field's picker is drawn"
-    );
-    assert!(drawn(&mut runner, note));
-    assert!(!drawn(&mut runner, f64::vocabulary::F64));
+            .stage(&runner.editor.sources())
+    };
+    // A number at the root has nothing beside it, and nothing within.
+    for command in [false, true] {
+        assert_eq!(enter(crate::test_editor(doc.clone()), command), Stage::Edge);
+    }
+    // Without the number library it reads as the record it is, which takes one.
+    let raw =
+        || crate::test_editor_with_stack(doc.clone(), crate::stack::load_selected(&[]).unwrap());
+    for command in [false, true] {
+        assert_eq!(enter(raw(), command), Stage::Label);
+    }
 }
 
 #[test]

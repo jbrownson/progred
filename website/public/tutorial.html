@@ -3,11 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Try Progred, a pre-alpha programming environment. Start with small, editable values and build up from there." />
-    <title>Progred — change a program, see what happens</title>
+    <meta name="description" content="Build a forest in Progred, an editor where programs are structure you see through projections, then take it apart down to what’s stored." />
+    <title>Progred — how the forest was made</title>
     <link rel="icon" href="./editor/icon.svg" />
     <link rel="stylesheet" href="./style.css" />
     <script type="module" src="./lessons.js"></script>
+    <script type="module" src="./peel.js"></script>
     <script type="module" src="./appearance.js"></script>
     <script type="module" src="./github.js"></script>
     <script type="module" src="./analytics.js"></script>
@@ -56,78 +57,170 @@
       </nav>
     </header>
 
-    <main>
-      <p class="variant-note">Progred is pre-alpha, and this is one of <a href="./#ways-in">three tutorials</a>; the story is the one to start with. Share on <a href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Zulip</a> what clicked, and what confused you or broke.</p>
-      <section class="exercise showcase" id="growing-forest" aria-label="Try progred">
-        <p class="lede">A program draws this forest. Drag the slider to grow it, or change a number and watch the trees follow. Progred programs aren’t text: they’re structure, and everything you see is drawn from it. The rest of this page builds up to the forest one idea at a time.</p>
+    <main class="story">
+      <p class="variant-note">Progred is pre-alpha. Share on <a href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Zulip</a> what clicked, and what confused you or broke.</p>
+      <section class="exercise showcase" id="growing" aria-label="A growing forest">
+        <p class="lede"><strong>A program draws this forest.</strong> Drag the slider and it grows.</p>
+        <p class="lede">Progred is an editor where a program is structure, not text. What you see are drawings of that structure, and you can edit through any of them. This forest started as a single dot. Below, you’ll rebuild it step by step, take it apart down to what’s stored, and end with a forest of your own.</p>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,666ba40b81028e32c78bdc1665d6c3a9,d22b834154d60b1df228f9bb4d3c13de,f76a2ef341541a5c955fc23094e2df52,7b0fa421250c1b5c8a78a3a95b172cb6,0ad8124ba821acd5fbf2c868371e1492&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71" title="A growing forest: scrub the slider and edit the program" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,666ba40b81028e32c78bdc1665d6c3a9,d22b834154d60b1df228f9bb4d3c13de,f76a2ef341541a5c955fc23094e2df52,7b0fa421250c1b5c8a78a3a95b172cb6,0ad8124ba821acd5fbf2c868371e1492&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417" title="A growing forest: drag the slider" loading="lazy"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the forest example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset the forest">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
       </section>
 
-      <section class="exercise" id="values" aria-labelledby="values-title">
-        <h2 id="values-title">Values, not text</h2>
-        <p>Start small. This planet is a record: named fields holding text, a number, and a list. You edit the values themselves, so there are no brackets to balance or indentation to keep straight.</p>
+      <section class="exercise" id="dot" aria-labelledby="dot-title">
+        <h2 id="dot-title">A dot</h2>
+        <p>This is the entire program, in Grap, a small programming language: fill a circle with a color. The small <strong>f64</strong> after each number says what kind of number it is: a 64-bit floating-point number, what many languages call a double. The picture and the code are two drawings of the same thing, and each knows about the other.</p>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/values.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=values-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="An editable planet record" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/dot.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=dot-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="One circle and the program that draws it" loading="lazy"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the planet example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
         <ol class="quests">
-          <li data-task="rename"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Rename the <strong>planet</strong>: click inside <strong>Mars</strong> and type a new name.</span></li>
-          <li data-task="moons"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Give it a different number of <strong>moons</strong>.</span></li>
-          <li data-task="add"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Add a color: click the comma between two colors, type <code>"blue"</code> including the quotes, and press <kbd>Enter</kbd>.</span></li>
-          <li data-task="remove"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Remove a color: double-click it to select the word, then press <kbd>Backspace</kbd> until it’s gone.</span></li>
-          <li data-task="restore"><span class="task-marker" aria-hidden="true">5</span><span><span class="task-status visually-hidden">Not yet completed: </span>Bring it back with <kbd data-command-key>Ctrl</kbd> + <kbd>Z</kbd>.</span></li>
+          <li data-task="pick"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click the dot. Its code is selected.</span></li>
+          <li data-task="scrub"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and drag the <strong>60</strong> left and right. The dot slides as you drag, because 60 is a number you’re holding, not two characters.</span></li>
         </ol>
-        <p class="aside">Quotes make text and digits make a number: each value knows what kind it is.</p>
+
       </section>
 
-      <section class="exercise" id="projections" aria-labelledby="projections-title">
-        <h2 id="projections-title">What does it look like?</h2>
-        <p>If a program isn’t text, what do you see? A projection: a drawing of the structure, made by libraries that each know how to draw certain things. Here is one calculation, drawn three ways. Each view says what drew it, and all three are editable.</p>
+      <section class="exercise" id="copies" aria-labelledby="copies-title">
+        <h2 id="copies-title">Two dots</h2>
+        <p>One dot isn’t a forest. Here are two, written out in full. The square brackets hold a list, and <code>all</code> draws everything in it.</p>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/projections.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:plain,5e716c07490849f072b4e9017dd6230d:raw&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=projections-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="One calculation drawn three ways" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/copies.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=copies-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two circles drawn by two copies of the same code" loading="lazy"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the projections example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
         <ol class="quests">
-          <li data-task="full"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the top view, change the <strong>2</strong>. The other two views change with it.</span></li>
-          <li data-task="plain"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the middle view, change <strong>right</strong>. The result on top updates.</span></li>
-          <li data-task="raw"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the same number in the bottom view. It’s still there, stored as eight bytes.</span></li>
+          <li data-task="bigger"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make both dots bigger.</span></li>
         </ol>
-        <p class="aside">There’s only one calculation underneath, so an edit in any view is an edit to all of them.</p>
+        <p class="aside">That took two edits for one idea, and a forest would take fifty.</p>
       </section>
 
-      <section class="exercise" id="model" aria-labelledby="model-title">
-        <h2 id="model-title">What it’s made of</h2>
-        <p>The bottom view above is the base projection, what’s left with no libraries at all. It shows that everything is built from four things. A <strong>record</strong> pairs keys with values, like the planet. A <strong>list</strong> keeps values in order, like its colors. <strong>Blobs</strong>, runs of raw bytes, are the leaves: “Mars” is a blob of the four bytes <code>4d 61 72 73</code> under a key that marks it as text, and 2 is an eight-byte blob marked as a number. A <strong>cell</strong> holds a value so it can be used in more than one place; the parentheses around both views are two uses of one planet.</p>
+      <section class="exercise" id="recipe" aria-labelledby="recipe-title">
+        <h2 id="recipe-title">One recipe</h2>
+        <p>So the dot becomes a recipe, a <strong>function</strong>. <code>dot</code> takes an <strong>x</strong> and fills in the rest, and each <code>dot{x: …}</code> below it is a call that supplies one. The → reads as “gives”. The circle inside changed too. The <code>"</code> makes it a <strong>template</strong>: it’s kept as written, except where <code>`</code> marks a hole. Where the 60 was, <code>`x</code> is a hole each call fills with its own x.</p>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/model.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:raw&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=model-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="The planet drawn with the name, text, blob, number, and f64 libraries, and by the base projection" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/recipe.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=recipe-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two circles drawn by one recipe" loading="lazy"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the base projection example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
         <ol class="quests">
-          <li data-task="rename"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the top view, rename the <strong>planet</strong>. Its bytes change below.</span></li>
-          <li data-task="add"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Add a color in the top view. A new record appears in the list below.</span></li>
-          <li data-task="key"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the bottom view, click <strong>…f94f0</strong>. The top view selects the same value, because that key is <strong>planet</strong>.</span></li>
+          <li data-task="bigger"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make both dots bigger again. It’s one edit now.</span></li>
+          <li data-task="pick"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click a dot. This time you land inside <code>dot</code>, on the <code>fill</code> that painted it. A click finds the deepest code on screen that drew what you clicked.</span></li>
         </ol>
-        <p class="aside">Names like <strong>planet</strong> are labels the top view draws for identities, so renaming one never breaks what uses it.</p>
+      </section>
+
+      <section class="exercise" id="trunks" aria-labelledby="trunks-title">
+        <h2 id="trunks-title">Dots become trees</h2>
+        <p>The recipe got a trunk and green leaves, and every dot became a tree at once. But now the name is wrong.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/trunks.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=trunks-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two trees drawn by a recipe still called dot" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="rename"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the recipe, click <strong>dot</strong> and rename it to <strong>tree</strong>.</span></li>
+        </ol>
+        <p class="aside">Every call now says <strong>tree</strong>. Nothing was searched and replaced. So what is a call, if it doesn’t contain the name? Taking the forest apart, below, shows you.</p>
+      </section>
+
+      <section class="exercise" id="heights" aria-labelledby="heights-title">
+        <h2 id="heights-title">Taller and shorter</h2>
+        <p>A forest where every tree is the same height looks like a fence. So the recipe got a <strong>height</strong>. The trunks follow it, but the leaves still sit at <code>160 - 60</code>, where a 60-tall tree’s leaves go. (y counts down from the top, and the ground is at 160.)</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/heights.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=heights-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees whose leaves ignore their height" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="fit"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and drag the <strong>60</strong> in the leaves’ <code>160 - 60</code> until the middle tree’s leaves sit on its trunk.</span></li>
+        </ol>
+        <p class="aside">Now the other two are wrong. No single number fits trees of different heights: each tree’s leaves need what its trunk uses, its own <strong>height</strong>. In the next step, they have it.</p>
+      </section>
+
+      <section class="exercise" id="growth" aria-labelledby="growth-title">
+        <h2 id="growth-title">Growing together</h2>
+        <p>The leaves now sit at <code>160 - height</code>, like the trunks, so each tree computes its own, the way a spreadsheet formula does. To make the forest grow, every tree’s height has to follow one shared number. The parentheses around each <strong>1</strong> mark a <strong>cell</strong>, a value with its own identity. All three calls hold the same one, the way three formulas can use one spreadsheet cell.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/growth.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=growth-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees whose heights share one growth value" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="shrink"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change any of the <strong>1</strong>s to <strong>0.5</strong>, or hold <kbd data-command-key>Ctrl</kbd> and drag it. Every tree shrinks at once.</span></li>
+          <li data-task="plant"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Plant a fourth tree by hand: click between the last two <code>tree</code> lines, type <code>tree</code>, press <kbd>Enter</kbd>, and give it an x between those two trees’, like 172, and a height.</span></li>
+        </ol>
+        <p class="hint" role="status" hidden></p>
+        <p class="aside">Parameters have identities too: each call files its arguments under those same <code>(x)</code> and <code>(height)</code> cells, which is how the rename worked.</p>
+      </section>
+
+      <section class="exercise" id="counted" aria-labelledby="counted-title">
+        <h2 id="counted-title">A forest</h2>
+        <p>Now imagine planting fifty. So the forest counts them out instead. <code>forest</code> takes a <strong>tree count</strong> and a <strong>growth</strong>, and <code>for each</code> runs a small recipe once per tree. <code>λ</code> marks a recipe without a name, written right where it’s used; <strong>item</strong> is which tree it is, and <code>sin</code> gives each one its own height.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/counted.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=counted-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,f76a2ef341541a5c955fc23094e2df52,7b0fa421250c1b5c8a78a3a95b172cb6,0ad8124ba821acd5fbf2c868371e1492" title="A counted forest and the program that plants it" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="count"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Set the tree count to 12.</span></li>
+          <li data-task="pick"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click any tree. You land in code you can read now.</span></li>
+        </ol>
+        <p class="aside">The forest at the top of the page is the same idea, with a sky, a sun, and a slider driving its growth.</p>
+      </section>
+
+      <section class="exercise" id="peel" aria-labelledby="peel-title">
+        <h2 id="peel-title">Take it apart</h2>
+        <p>Here’s the forest from the top of the page again, and you can read its code now. Every mark on the screen, from the trees to the little <strong>f64</strong> tags, is drawn by one of the editor’s <strong>libraries</strong>, plug-ins that each know how to draw one kind of thing. Each drawing is a <strong>projection</strong> of the same program, and you can edit through any of them. Switch off what the libraries draw, a layer at a time, then the names, and watch what’s underneath.</p>
+        <div class="editor-example" id="peel-editor">
+          <iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,0ad8124ba821acd5fbf2c868371e1492,666ba40b81028e32c78bdc1665d6c3a9" title="The growing forest, drawn by libraries you can switch off" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <div class="peel-controls"><label class="peel-slider">Peel <input type="range" id="peel-depth" min="0" value="0" step="1"></label><div id="peel-layers" class="peel-layers"></div></div>
+        <p id="peel-caption" class="peel-caption" aria-live="polite"></p>
+        <p class="aside"><strong>Try:</strong> before you peel, click the <strong>7</strong><sub class="tag">f64</sub> after <em>tree count</em>. Then peel all the way down. It stays selected the whole time, while its drawing changes from 7<sub class="tag">f64</sub> to eight bytes.</p>
+      </section>
+
+      <section class="exercise" id="names" aria-labelledby="names-title">
+        <h2 id="names-title">Names are labels</h2>
+        <p>A cell’s name is only a fact stored about it: <code>{name: "x"}</code>. Calls don’t contain the word; they hold the cell itself. Below are the tree recipe, two calls to it, and the same calls again in the base projection, what’s left when no library draws. There, each call’s key is the cell’s identity, <code>…10115</code>: a random 128-bit id minted when the cell was created. Identities aren’t content hashes, so two cells with the same contents, or the same name, stay two different things.</p>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/names.gid&amp;menu=hidden&amp;observe=names-0&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d:raw&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="A recipe, its calls, and the same calls in the base projection" loading="lazy" style="height:22rem"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
+        <ol class="quests">
+          <li data-task="rename"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the recipe, click <strong>x</strong> and rename it. Every call’s label follows, and the bottom view doesn’t change at all.</span></li>
+        </ol>
+        <p class="aside">That’s how renaming <strong>dot</strong> to <strong>tree</strong> worked: every call holds the recipe’s cell, not its name.</p>
       </section>
 
       <section class="exercise" id="cells" aria-labelledby="cells-title">
         <h2 id="cells-title">One value, many places</h2>
-        <p>You’ve seen parentheses twice now. Each pair is a reference to a cell, and every reference to a cell is the same value.</p>
+        <p>Parentheses mark a <strong>cell</strong>: a value with its own identity, stored once, that can sit in any number of places. The parentheses only show where it sits; they add nothing to what’s inside. Records, lists, blobs, and cells are the only things Progred builds in. The growth your trees shared was a cell, and so are functions, their parameters, and anything else you share.</p>
         <div class="editor-example">
           <iframe src="./editor/?document=../lessons/cells.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=cells-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc" title="Two references to one editable cell" loading="lazy"></iframe>
           <div class="editor-actions">
@@ -137,92 +230,96 @@
         </div>
         <ol class="quests">
           <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>7</strong>. Both change, because they’re one cell.</span></li>
-          <li data-task="create"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make your own cell: click a comma and type <code>(</code>. Click the empty box inside it, type <strong>11</strong>, and press <kbd>Enter</kbd>.</span></li>
+          <li data-task="create"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make your own cell: click a comma and type <code>(</code>, then <strong>11</strong>, and press <kbd>Enter</kbd>.</span></li>
           <li data-task="link"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Reference it again: click another comma, then hold <kbd data-command-key>Ctrl</kbd> and click a parenthesis around your new cell.</span></li>
-          <li data-task="linked-edit"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>11</strong>. Its partner follows; the 7s don’t.</span></li>
+          <li data-task="linked-edit"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change either <strong>11</strong>. Its partner follows; the other pair doesn’t.</span></li>
         </ol>
         <p class="aside">Parentheses select the reference; the inside edits the shared value.</p>
       </section>
 
-      <section class="exercise" id="grap" aria-labelledby="grap-title">
-        <h2 id="grap-title">Calculations</h2>
-        <p>The calculation from before is a record too: a function with a left and a right. Grap, Progred’s calculation library, draws it as <strong>3 + 2</strong> and shows the result after the arrow. Both calculations here use the parenthesized <strong>3</strong>, a shared cell.</p>
+      <section class="exercise" id="bytes" aria-labelledby="bytes-title">
+        <h2 id="bytes-title">The same bytes, read four ways</h2>
+        <p>Text, numbers, and colors aren’t built in either. Each is a library that recognizes a blob filed under a key it owns. Below, one cell holds four bytes, and four views file a copy under different keys: one no library knows, the text library’s, the color library’s, and the f32 library’s.</p>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/grap.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=grap-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Two Grap calculations sharing one editable cell" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/bytes.gid&amp;menu=hidden&amp;observe=bytes-0&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d,8ec6740fa565a2b3b0348132d030d03b,24f6d8a4161e69ebc99c0aa4591beb43&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f8daecede6e48de724408cfb0e3090f8,f7735b90f6826b25c350a8fd83af8c47,d22b834154d60b1df228f9bb4d3c13de" title="Four bytes read as raw data, text, a color, and a number" loading="lazy" style="height:13rem"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the Grap example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
         <ol class="quests">
-          <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the <strong>2</strong> after <strong>+</strong>. Only the sum changes.</span></li>
-          <li data-task="shared-edit"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the shared <strong>3</strong>. Every calculation using it updates.</span></li>
-          <li data-task="equal"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Puzzle: make the sum and the product equal.</span></li>
-          <li data-task="hundred"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Puzzle: make the product exactly <strong>100</strong>.</span></li>
+          <li data-task="hex"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the bytes at the top and type new hex digits. Every reading follows.</span></li>
+          <li data-task="three"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Give it only three bytes. The text still reads, but the color and the f32 decline and show you the record instead, because three bytes isn’t their convention.</span></li>
         </ol>
-        <p class="aside">There’s no run button. Every result is always current.</p>
       </section>
 
-      <section class="exercise" id="functions" aria-labelledby="functions-title">
-        <h2 id="functions-title">Functions</h2>
-        <p>A function is a calculation with a hole in it. <strong>scale</strong> multiplies its <strong>x</strong> by 2, and each call fills in its own <strong>x</strong>.</p>
+      <section class="exercise" id="f64" aria-labelledby="f64-title">
+        <h2 id="f64-title">What the little f64 means</h2>
+        <p>The subscript on a number is the name of the key it sits under: <strong>f64</strong> means a 64-bit float, one of several number libraries. The subscript on an operator names whose arithmetic it is. There’s an f64 <code>+</code>, an f32 <code>+</code>, a u64 <code>+</code>, and a Fidget <code>+</code> that builds shapes instead of numbers. When you write a call, you pick one, and the tag is that choice, remembered.</p>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/functions.gid&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=functions-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47" title="Editable function definition and two evaluated calls" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/numbers.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d,8ec6740fa565a2b3b0348132d030d03b,24f6d8a4161e69ebc99c0aa4591beb43&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f8daecede6e48de724408cfb0e3090f8,b7212cd0aed055a7a2fbe4036b7f3e51,f7735b90f6826b25c350a8fd83af8c47,5ccd78c1d555d14f55996f549d69f58a,d22b834154d60b1df228f9bb4d3c13de,ec17915df2d42377574dc90f22500fe2" title="One sum in f64 and f32, a u64 overflow, a mismatch, and a Fidget shape" loading="lazy" style="height:34rem"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the functions example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
-        <ol class="quests">
-          <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the first call’s <strong>3</strong>. Only its result changes.</span></li>
-          <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the definition, change the multiplier <strong>2</strong>. Both results follow.</span></li>
-          <li data-task="rename"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click <strong>x</strong> in the definition’s parameter list and give it a new name. Its uses and the call labels change too; the results don’t.</span></li>
-          <li data-task="nest"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Put a call inside a call: in the second call, erase the <strong>5</strong> and press <kbd>Backspace</kbd> once more. Click the empty box, type <code>scale</code>, press <kbd>Enter</kbd>, and give the inner call a number.</span></li>
-        </ol>
-        <p class="aside">References use identity, not spelling, so renaming keeps them connected.</p>
+        <p class="aside"><strong>Try:</strong> compare 0.1 + 0.2 in f64 and f32. A float doesn’t stand for one exact number but for a small range of them, and the editor writes the shortest decimal inside that range. In f64 the sum lands on the float just above the one for 0.3, and the shortest decimal in its range takes seventeen digits. In f32 the sum lands on the same float as 0.3, so it prints as 0.3. Drag the shape to turn it, and change a radius.</p>
       </section>
 
-      <section class="exercise" id="drawing" aria-labelledby="drawing-title">
-        <h2 id="drawing-title">Pictures are code</h2>
-        <p>A picture is another view of code. <strong>dot</strong> draws a circle at <strong>x</strong>, and <strong>all</strong> draws each call in its list. The <code>"</code> before the circle makes it a <strong>template</strong>: it’s kept as written, except where <code>`</code> marks a hole. <code>`x</code> is filled with each call’s x; without the backtick, the circle would hold the parameter itself instead of a number.</p>
+      <section class="exercise" id="unfinished" aria-labelledby="unfinished-title">
+        <h2 id="unfinished-title">Programs run before they’re finished</h2>
+        <p>A call with a missing argument, or the wrong kind of value, doesn’t stop the program. It returns an <strong>absent</strong>: a value that says what’s missing and why, which the rest of the program can pass along or handle. <code>or default</code> is an ordinary function that recovers from one. The forest’s slider relies on it: before you touch the slider there’s no control state, and <code>or default</code> supplies 0.65<sub class="tag">f64</sub>.</p>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/drawing.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=drawing-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Two live circles and their editable drawing program" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/unfinished.gid&amp;menu=hidden&amp;observe=unfinished-0&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d,8ec6740fa565a2b3b0348132d030d03b,24f6d8a4161e69ebc99c0aa4591beb43&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="A function, its calls, and the values they return when unfinished" loading="lazy" style="height:16rem"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the drawing example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
         <ol class="quests">
-          <li data-task="argument"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Move the first dot: change its <strong>60</strong>. Only that dot moves.</span></li>
-          <li data-task="body"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>In the <strong>dot</strong> definition, change the <strong>radius</strong>. Both dots change.</span></li>
-          <li data-task="add"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Add a dot: click the comma between the two <strong>dot</strong> calls, type <code>dot</code>, press <kbd>Enter</kbd>, and give it an x like <strong>200</strong>.</span></li>
-          <li data-task="source"><span class="task-marker" aria-hidden="true">4</span><span><span class="task-status visually-hidden">Not yet completed: </span>Hold <kbd data-command-key>Ctrl</kbd> and click any circle. The code that drew it is selected.</span></li>
+          <li data-task="fill"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Fill the empty <code>x</code>. Its absent becomes a number.</span></li>
         </ol>
-        <p class="aside">Inspired by Bret Victor’s <a href="https://worrydream.com/#!/InventingOnPrinciple">Inventing on Principle</a>.</p>
+        <p class="aside">The call given <code>"three"</code> returns an absent too, and its reason, <code>left is not f64</code>, comes from the <code>x *<sub class="tag">f64</sub> 2<sub class="tag">f64</sub></code> inside <code>scale</code>. Nothing ever refuses your edit while you’re in the middle of it.</p>
       </section>
 
-      <section class="exercise" id="forest" aria-labelledby="forest-title">
-        <h2 id="forest-title">Put it together</h2>
-        <p>Three trees from one shared recipe: <strong>tree</strong> draws a trunk and a canopy at <strong>x</strong> with a <strong>height</strong>.</p>
+      <section class="exercise" id="views" aria-labelledby="views-title">
+        <h2 id="views-title">Projections are programs</h2>
+        <p>Every drawing you peeled off was a library’s projection: a function from a value to a drawing. You can write one in Grap and keep it in the same document as your data. This one draws planets.</p>
         <div class="editor-example">
-          <iframe src="./editor/?document=../lessons/forest.gid&amp;tutorial-slots=5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;observe=forest-0&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80" title="Three trees drawn from one shared recipe" loading="lazy"></iframe>
+          <iframe src="./editor/?document=../lessons/views.gid&amp;menu=hidden&amp;observe=views-0&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,eaaf309c36a65d2811083944da29aec9,4ab5da466a7c5f1202f5ef862f5ff915,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,c46d010325d3a1ec0f2a84dd3a9570ae,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,7b0fa421250c1b5c8a78a3a95b172cb6,f76a2ef341541a5c955fc23094e2df52,0ad8124ba821acd5fbf2c868371e1492" title="A planet, its drawing, and the view written in Grap" loading="lazy" style="height:30rem"></iframe>
           <div class="editor-actions">
-            <button type="button" class="reset" aria-label="Reset the forest example">Reset <span aria-hidden="true">↺</span></button>
+            <button type="button" class="reset" aria-label="Reset this step">Reset <span aria-hidden="true">↺</span></button>
           </div>
           <span class="reset-status visually-hidden" role="status"></span>
         </div>
         <ol class="quests">
-          <li data-task="height"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Make one tree taller: change the <strong>height</strong> in one <strong>tree</strong> call. Only that tree grows.</span></li>
-          <li data-task="color"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Click the green swatch in the <strong>tree</strong> definition and pick a new color. Every tree changes.</span></li>
-          <li data-task="plant"><span class="task-marker" aria-hidden="true">3</span><span><span class="task-status visually-hidden">Not yet completed: </span>Plant a tree: click a comma between two <strong>tree</strong> calls, type <code>tree</code>, press <kbd>Enter</kbd>, and give it an x. Then click its empty height and give it one too.</span></li>
+          <li data-task="moons"><span class="task-marker" aria-hidden="true">1</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change <strong>moons</strong> to 5.</span></li>
+          <li data-task="color"><span class="task-marker" aria-hidden="true">2</span><span><span class="task-status visually-hidden">Not yet completed: </span>Change the planet’s color inside <code>planet drawing</code>.</span></li>
         </ol>
-        <p class="aside">That’s every idea in the forest at the top of the page. Scroll up and see how much you can read now.</p>
+        <p class="aside">Here the projection draws a picture beside the data. A document can also declare a projection as part of a library: then it draws the document’s matching records in place, and the parts it shows stay editable, as in the <a href="./editor/?example=libraries">Document Libraries example</a>.</p>
+      </section>
+
+      <section class="exercise" id="yours" aria-labelledby="yours-title">
+        <h2 id="yours-title">A forest of your own</h2>
+        <p>Here’s the forest from the top of the page once more, with all of its code. It’s yours now. Some places to start:</p>
+        <ul class="starts">
+          <li>Change the colors of the sky, the sun, or the leaves.</li>
+          <li>Plant more trees, or make them grow taller.</li>
+          <li>Hold <kbd data-command-key>Ctrl</kbd> and click anything in the picture to find the code that drew it, then change that.</li>
+        </ul>
+        <div class="editor-example">
+          <iframe src="./editor/?document=../lessons/growing-forest.gid&amp;menu=hidden&amp;wheel=auto&amp;threads=1&amp;tutorial-slots=f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71&amp;libraries=3209ad5d23a0c8513f6bd76324a5cf60,873c68ac371dbbb98a4f198546d60241,25d0e2034b4bd65bebb4811d65eab89c,ec17915df2d42377574dc90f22500fe2,1fdb573a2c56a7063546c195318214bc,f7735b90f6826b25c350a8fd83af8c47,fb2a4dac87512d69448650bc0e29dc80,d22b834154d60b1df228f9bb4d3c13de,0ad8124ba821acd5fbf2c868371e1492,666ba40b81028e32c78bdc1665d6c3a9" title="The growing forest and all of its code, to change as you like" loading="lazy"></iframe>
+          <div class="editor-actions">
+            <button type="button" class="reset" aria-label="Reset this editor">Reset <span aria-hidden="true">↺</span></button>
+          </div>
+          <span class="reset-status visually-hidden" role="status"></span>
+        </div>
       </section>
 
       <section class="next feedback" aria-labelledby="feedback-title">
-        <h2 id="feedback-title">Did this one work for you?</h2>
-        <p>Share on Zulip whether this made Progred click and where you got lost; the answers shape what gets built out. The story is the tutorial to start with.</p>
-        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Share on Zulip</a> <a class="button" href="./#ways-in">Try another way in</a></p>
+        <h2 id="feedback-title">Did it work for you?</h2>
+        <p>Share on Zulip whether this made Progred click and where you got lost; the answers shape what gets built out.</p>
+        <p class="actions"><a class="button primary" href="https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback" target="_blank" rel="noopener">Share on Zulip</a></p>
         <p class="session-note">Edits aren’t saved when you reload. <a href="try" target="_blank" rel="noopener">Explore the full editor <span aria-hidden="true">↗</span></a></p>
       </section>
     </main>

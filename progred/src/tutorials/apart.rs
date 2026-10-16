@@ -1,10 +1,10 @@
-//! The peel, on the home page and lab/peel.html, and the rest of
-//! lab/peel.html.
+//! tutorial.html's second half, which takes the forest apart, and the
+//! peel on the home page.
 
 use super::*;
 
 fn page(id: &str) -> Embed {
-    Embed::open("lab/peel.html", id)
+    Embed::open("tutorial.html", id)
 }
 
 fn peel_forest(page: &str) {
@@ -28,7 +28,7 @@ fn peel_forest(page: &str) {
         .expect("a tree");
     peel.pick_at(tree);
     let source = peel.source_selection().expect("the code that drew it");
-    assert_eq!(source[..2], [peel.key("first"), FOLLOW]);
+    assert_eq!(source.start, peel.location(&["first", "follow"]).start);
 
     // Click the 7 after tree count, then peel all the way down: it stays
     // selected while its drawing changes to eight bytes.
@@ -46,43 +46,100 @@ fn peel_forest(page: &str) {
     assert!(peel.drawn(&bytes));
 }
 
-#[test]
-fn home_page() {
-    peel_forest("index.html");
+/// Clicking an anonymous lambda's λ names it with what's typed, even a word
+/// that also names a function.
+fn name_a_lambda(page: &str) {
+    let mut peel = Embed::open(page, "peel");
+    let name = peel.path(&["first", "follow", "controls", "name"]);
+    peel.click(&name);
+    peel.type_text("slider");
+    peel.press(NamedKey::Enter);
+    assert_eq!(peel.value(&name), crate::libraries::text::value("slider"));
 }
 
 #[test]
-fn forest() {
-    peel_forest("lab/peel.html");
+fn home_page() {
+    peel_forest("index.html");
+    name_a_lambda("index.html");
+}
+
+#[test]
+fn peel() {
+    peel_forest("tutorial.html");
+    name_a_lambda("tutorial.html");
 }
 
 #[test]
 fn cells() {
     let mut cells = page("cells");
-    let calls = cells.path(&["second", "follow", "expressions"]);
-    let one = |cells: &Embed, index| {
-        cells.element(&calls, index, &cells.path(&["height_param", "right"]))
+    let original = cells.positions(&[]);
+    let shared = cells.id("shared");
+    let references = |cells: &Embed, cell: CellId| {
+        cells
+            .value(&[])
+            .as_list()
+            .unwrap()
+            .values()
+            .filter(|value| value.as_cell() == Some(cell))
+            .count()
     };
 
-    // Click one (1); the other two light up, because it's one value.
-    let mut first = one(&cells, 0);
-    first.push(FOLLOW);
-    cells.click(&first);
-    let lit = cells.lit();
-    for index in 1..3 {
-        let other = one(&cells, index);
-        assert!(
-            lit.iter().any(|path| path.starts_with(&other)),
-            "{other:?} lights up: {lit:?}"
-        );
-    }
-
-    // Change it to 0.5.
-    cells.double_click(&first);
-    cells.type_text("0.5");
+    cells.task("shared-edit");
+    cells.double_click(&cells.element(&[], 0, &[FOLLOW]));
+    cells.type_text("8");
     assert_eq!(
-        crate::libraries::f64::read(&cells.cell("growth")),
-        Some(0.5)
+        crate::libraries::f64::read(&cells.cell("shared")),
+        Some(8.0)
+    );
+    assert_eq!(references(&cells, shared), 2);
+
+    cells.task("create");
+    cells.click_between(&[], 0);
+    cells.type_text("(");
+    let made = cells
+        .positions(&[])
+        .into_iter()
+        .find(|position| !original.contains(position))
+        .expect("a new item");
+    let fresh = cells
+        .value(&[Step::Element(made.clone())])
+        .as_cell()
+        .unwrap();
+    assert_ne!(fresh, shared);
+    // Typing goes straight inside the new cell.
+    cells.type_text("11");
+    cells.press(NamedKey::Enter);
+    assert_eq!(
+        cells.number(&[Step::Element(made.clone()), FOLLOW]),
+        Some(11.0)
+    );
+
+    cells.task("link");
+    cells.click_between(&[], 1);
+    // A parenthesis: inside the cell's box, before its value.
+    let parenthesized = cells.rect(&[Step::Element(made.clone())]);
+    let inside = cells.rect(&[Step::Element(made.clone()), FOLLOW]);
+    cells.pick_at(Point::new(
+        (parenthesized.x0 + inside.x0) / 2.0,
+        parenthesized.center().y,
+    ));
+    assert_eq!(references(&cells, fresh), 2);
+
+    cells.task("linked-edit");
+    let partner = cells
+        .positions(&[])
+        .into_iter()
+        .find(|position| {
+            *position != made
+                && cells.value(&[Step::Element(position.clone())]).as_cell() == Some(fresh)
+        })
+        .unwrap();
+    cells.double_click(&[Step::Element(partner), FOLLOW]);
+    cells.type_text("12");
+    assert_eq!(cells.number(&[Step::Element(made), FOLLOW]), Some(12.0));
+    assert_eq!(
+        crate::libraries::f64::read(&cells.cell("shared")),
+        Some(8.0)
     );
 }
 
@@ -93,6 +150,7 @@ fn names() {
     let calls = names.cell("calls");
 
     // In the recipe, click x and rename it.
+    names.task("rename");
     let parameters = names.path(&["first", "follow", "params"]);
     names.double_click(&names.element(&parameters, 0, &[]));
     names.type_text("position");
@@ -114,6 +172,7 @@ fn bytes() {
 
     // Click the bytes at the top and type new hex digits: every reading
     // follows.
+    bytes.task("hex");
     bytes.double_click(&raw);
     bytes.type_text("4d617273");
     assert_eq!(bytes.cell("raw"), Value::from(b"Mars".to_vec()));
@@ -135,6 +194,7 @@ fn bytes() {
 
     // Give it only three bytes, and the text still reads, but the color and
     // the f32 decline and show the record instead.
+    bytes.task("three");
     bytes.press(NamedKey::Backspace);
     bytes.press(NamedKey::Backspace);
     assert_eq!(bytes.cell("raw"), Value::from(b"Mar".to_vec()));
@@ -188,6 +248,7 @@ fn unfinished() {
     assert!(::grap::absent::is_absent(&result(&unfinished, "third")));
 
     // Fill the empty x, and its absent becomes a number.
+    unfinished.task("fill");
     unfinished.click(&argument(&unfinished, "third"));
     unfinished.type_text("4");
     unfinished.press(NamedKey::Enter);
@@ -222,11 +283,13 @@ fn draw_planets(page: &str, id: &str) {
     assert_eq!(moons(&views), 2);
 
     // Change moons to 5.
+    views.task("moons");
     views.double_click(&views.path(&["first", "follow", "moons"]));
     views.type_text("5");
     assert_eq!(moons(&views), 5);
 
     // Then change the planet's color inside planet drawing.
+    views.task("color");
     let planet = |views: &Embed| {
         views
             .circles()
@@ -247,5 +310,12 @@ fn draw_planets(page: &str, id: &str) {
 
 #[test]
 fn views() {
-    draw_planets("lab/peel.html", "views");
+    draw_planets("tutorial.html", "views");
+}
+
+#[test]
+fn yours() {
+    let yours = page("yours");
+    assert!(!yours.circles().is_empty(), "the forest is drawn");
+    assert!(yours.drawn(&[yours.key("first")]), "with all of its code");
 }

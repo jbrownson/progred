@@ -3,28 +3,16 @@ use super::*;
 #[test]
 fn new_color_completion_opens_without_editing_and_commits_at_the_missing_location() {
     use crate::libraries::color;
-    let list = Value::list([text::value("before"), text::value("after")]);
-    let positions: Vec<_> = list
-        .as_list()
-        .unwrap()
-        .iter()
-        .map(|(p, _)| p.clone())
-        .collect();
-    let between = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
-    let field = new_cell_id();
     let function = new_cell_id();
     let argument = new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(function, grap::lambda([argument], argument.into()));
-    for (value, path) in [
-        (None, vec![]),
-        (Some(Value::record([])), vec![Step::Key(field)]),
-        (Some(list), vec![Step::Element(between)]),
-        (
-            Some(grap::call(function.into(), [])),
-            vec![Step::Key(argument)],
-        ),
-    ] {
+    // A Grap argument's hole offers the libraries' values, a new color among
+    // them; Raw's holes don't.
+    for (value, path) in [(
+        Some(grap::call(function.into(), [])),
+        vec![Step::Key(argument)],
+    )] {
         let mut world = crate::test_editor(Document {
             root: value.clone(),
             cells: cells.clone(),
@@ -34,12 +22,6 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
             path.clone(),
             "new color",
         ));
-        world
-            .model
-            .selection
-            .as_mut()
-            .unwrap()
-            .set_completion_view(0.0, 0, true);
         let frame = editing_frame(&mut world, false);
         let entry = frame
             .completion
@@ -122,17 +104,6 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
             Stage::Edge
         );
         assert!(editing_frame(&mut world, false).completion.is_none());
-        if let Some(elements) = world.model.doc.root.as_ref().and_then(Value::as_list) {
-            assert_eq!(elements.len(), 3);
-            assert_eq!(
-                text::read(elements.get(&positions[0]).unwrap()),
-                Some("before")
-            );
-            assert_eq!(
-                text::read(elements.get(&positions[1]).unwrap()),
-                Some("after")
-            );
-        }
         assert!(
             world.model.step_history(true),
             "one undo for the whole drag"
@@ -143,7 +114,7 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
 }
 
 #[test]
-fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker() {
+fn constructor_keys_make_their_offer_from_an_empty_query() {
     let root = crate::test_root();
     let press = |key: &str, modifiers| KeyboardEvent {
         key: Key::Character(key.into()),
@@ -152,68 +123,49 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
         ..Default::default()
     };
     for labels in [false, true] {
-        for everything in [false, true] {
-            for key in ["[", "(", "{"] {
-                let mut world = crate::test_editor(Document {
-                    root: labels.then(|| Value::record([])),
-                    cells: Cells::new(),
-                });
-                world.model.selection = Some(if labels {
-                    pending_edge(&root, &world.sources(), vec![]).unwrap()
-                } else {
-                    pending_value(&root, vec![])
-                });
-                world
-                    .model
-                    .selection
-                    .as_mut()
-                    .unwrap()
-                    .set_completion_view(0.0, 0, everything);
-                let frame = editing_frame(&mut world, false);
-                if !everything {
-                    assert!(
-                        frame
-                            .completion
-                            .as_ref()
-                            .unwrap()
-                            .entries
-                            .iter()
-                            .all(|entry| !entry.display.starts_with("new "))
-                    );
-                }
-                assert!(
-                    frame
-                        .resolve_for_dispatch()
-                        .dispatch_key(&mut world, &press(key, Modifiers::SHIFT))
+        for key in ["[", "(", "{"] {
+            let mut world = crate::test_editor(Document {
+                root: labels.then(|| Value::record([])),
+                cells: Cells::new(),
+            });
+            world.model.selection = Some(if labels {
+                pending_edge(&root, &world.sources(), vec![]).unwrap()
+            } else {
+                pending_value(&root, vec![])
+            });
+            let frame = editing_frame(&mut world, false);
+            assert!(
+                frame
+                    .resolve_for_dispatch()
+                    .dispatch_key(&mut world, &press(key, Modifiers::SHIFT))
+            );
+            if labels && key != "(" {
+                assert_eq!(world.model.doc.root, Some(Value::record([])));
+                assert_eq!(
+                    world
+                        .model
+                        .selection
+                        .as_ref()
+                        .unwrap()
+                        .edit()
+                        .unwrap()
+                        .text(),
+                    key
                 );
-                if labels && key != "(" {
-                    assert_eq!(world.model.doc.root, Some(Value::record([])));
-                    assert_eq!(
-                        world
-                            .model
-                            .selection
-                            .as_ref()
-                            .unwrap()
-                            .edit()
-                            .unwrap()
-                            .text(),
-                        key
-                    );
+            } else {
+                let value = world.model.doc.root.as_ref().unwrap();
+                if labels {
+                    assert_eq!(value.as_record().unwrap().len(), 0);
+                    assert!(matches!(
+                        world.model.selection.as_ref().unwrap().path(),
+                        [Step::Key(_)]
+                    ));
                 } else {
-                    let value = world.model.doc.root.as_ref().unwrap();
-                    if labels {
-                        assert_eq!(value.as_record().unwrap().len(), 0);
-                        assert!(matches!(
-                            world.model.selection.as_ref().unwrap().path(),
-                            [Step::Key(_)]
-                        ));
-                    } else {
-                        match key {
-                            "[" => assert_eq!(value, &Value::list([])),
-                            "{" => assert_eq!(value, &Value::record([])),
-                            _ => assert!(value.as_cell().is_some()),
-                        };
-                    }
+                    match key {
+                        "[" => assert_eq!(value, &Value::list([])),
+                        "{" => assert_eq!(value, &Value::record([])),
+                        _ => assert!(value.as_cell().is_some()),
+                    };
                 }
             }
         }
@@ -300,6 +252,61 @@ fn completion_constructor_shortcuts_precede_query_input_even_in_a_narrow_picker(
 }
 
 #[test]
+fn delimiters_make_constructors_in_raw_s_holes_and_are_text_in_grap_s() {
+    let root = crate::test_root();
+    let function = Document {
+        root: Some(Value::record([(
+            grap::vocabulary::PARAMS,
+            Value::list([new_cell_id().into()]),
+        )])),
+        cells: Cells::new(),
+    };
+    let empty = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let body = vec![Step::Key(grap::vocabulary::BODY)];
+    let press = |world: &mut crate::Editor, key: &str| {
+        editing_frame(world, false)
+            .resolve_for_dispatch()
+            .dispatch_key(
+                world,
+                &KeyboardEvent {
+                    key: Key::Character(key.into()),
+                    state: KeyState::Down,
+                    ..Default::default()
+                },
+            )
+    };
+    for key in ["(", "[", "{"] {
+        // Raw draws a plain document's root: the key makes what it does and
+        // opens it, its picker showing.
+        let mut world = crate::test_editor(empty.clone());
+        world.model.selection = Some(pending_value(&root, vec![]));
+        assert!(press(&mut world, key));
+        assert!(world.model.doc.root.is_some(), "{key} makes a value");
+        let opened = world.model.selection.as_ref().unwrap();
+        assert!(
+            opened.stage(&world.sources()) != Stage::Edge,
+            "{key} opens what it made: {:?}",
+            opened.path()
+        );
+        assert!(
+            editing_frame(&mut world, false).completion.is_some(),
+            "{key} shows its picker"
+        );
+        // Grap draws a function's body, and its hole takes the key as text.
+        let mut world = crate::test_editor(function.clone());
+        world.model.selection = Some(pending_value(&root, body.clone()));
+        assert!(press(&mut world, key));
+        assert_eq!(world.model.doc.root, function.root, "{key} makes nothing");
+        let typing = world.model.selection.as_ref().unwrap();
+        assert_eq!(typing.path(), body);
+        assert_eq!(typing.edit().unwrap().text(), key);
+    }
+}
+
+#[test]
 fn a_completion_without_an_edit_still_consumes_its_activation() {
     let entries = [Entry {
         display: "no edit".into(),
@@ -328,9 +335,8 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
             &entries,
             0,
             0.0,
-            true,
             |_| Some(0.0),
-            |_, _, _, _| {},
+            |_, _, _| {},
         );
         let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
         crate::display::widget::frame::place(layout, placement, &Default::default())
@@ -377,9 +383,8 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
                 &entries,
                 0,
                 0.0,
-                true,
                 |_| Some(0.0),
-                |_, _, _, _| {},
+                |_, _, _| {},
             );
             let placement =
                 completion_placement(Placement::new(field, bounds), card.extent, scale).unwrap();
@@ -462,9 +467,8 @@ fn completion_details_share_the_cards_right_edge() {
             &entries,
             0,
             0.0,
-            true,
             |_| Some(0.0),
-            |_, _, _, _| {},
+            |_, _, _| {},
         );
         let origin = Point::new(37.0, 59.0);
         let right = origin.x + card.extent.width - (4.0 + 8.0) * scale;
@@ -526,9 +530,8 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
             &entries,
             0,
             0.0,
-            false,
             |_| Some(0.0),
-            |_, _, _, _| {},
+            |_, _, _| {},
         );
         let extent = card.extent;
         let placed = {
@@ -562,7 +565,6 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         .collect();
     assert!(winners.contains(&Hover::Entry(0)));
     assert!(winners.contains(&Hover::Entry(1)));
-    assert!(winners.contains(&Hover::MoreCompletions));
 }
 
 #[test]
@@ -589,17 +591,16 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
         scale: 1.0,
         cache: &mut cache,
     };
-    let mut frame = |(scroll, choice, everything), pointer| {
-        let layout = completion_card::<(f64, usize, bool)>(
+    let mut frame = |(scroll, choice), pointer| {
+        let layout = completion_card::<(f64, usize)>(
             &mut tcx,
             crate::modifiers::native(),
             &styles,
             &entries,
             choice,
             scroll,
-            everything,
             |state| Some(state.0),
-            |state, scroll, choice, everything| *state = (scroll, choice, everything),
+            |state, scroll, choice| *state = (scroll, choice),
         );
         let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
         crate::display::widget::frame::place(
@@ -611,7 +612,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             },
         )
     };
-    let mut state = (0.0, 0, false);
+    let mut state = (0.0, 0);
     assert_eq!(
         frame(state, Some(Point::new(10.0, 10.0)))
             .claim
@@ -652,8 +653,8 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             .dispatch_scroll(&mut state, &scroll)
             .handled()
     );
-    assert_eq!(state, (200.0, 0, false));
-    let mut batched = (0.0, 0, false);
+    assert_eq!(state, (200.0, 0));
+    let mut batched = (0.0, 0);
     let events = [scroll.clone(), scroll.clone()].map(|mut event| {
         event.delta = ScrollDelta::LineDelta(0.0, -2.5);
         event
@@ -668,7 +669,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             )
             .handled()
     );
-    assert_eq!(batched, (200.0, 0, false));
+    assert_eq!(batched, (200.0, 0));
     assert!((4..160).any(|y| matches!(
         frame(state, Some(Point::new(10.0,y as f64))).claim.map(|(_, claim)| claim),
         Some(Claim::Direct(Hovered::Tree(Hover::Entry(index)))) if index > 0
@@ -691,7 +692,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
                 .dispatch_key(&mut state, &press(key))
         );
     }
-    assert_eq!(state, (0.0, 0, false));
+    assert_eq!(state, (0.0, 0));
     for _ in 0..12 {
         frame(state, None)
             .resolve_for_dispatch()
@@ -702,41 +703,17 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     frame(state, None)
         .resolve_for_dispatch()
         .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
-    assert_eq!(state, (offset, 11, false));
+    assert_eq!(state, (offset, 11));
     for _ in 11..entries.len() {
         frame(state, None)
             .resolve_for_dispatch()
             .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
     }
-    assert_eq!(state.1, entries.len());
-    assert!((0..200).any(|y| {
-        frame(state, Some(Point::new(10.0, y as f64)))
-            .claim
-            .map(|(_, claim)| claim)
-            == Some(Claim::Direct(Hovered::Tree(Hover::MoreCompletions)))
-    }));
-    frame(state, None)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
+    // Down stops at the last row.
     assert_eq!(state.1, entries.len() - 1);
-    frame(state, None)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
-    let before_expansion = state;
-    frame(state, None)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::Enter));
-    assert_eq!(state, (before_expansion.0, before_expansion.1, true));
-    frame(state, None)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
-    assert_eq!(state.1, entries.len() - 1);
+    // Tab is the editor's, for moving on to the next empty slot: the card
+    // leaves it alone.
     let before_tab = state;
-    state.2 = false;
-    frame(state, None)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::Tab));
-    assert_eq!(state, before_tab);
     assert!(
         !frame(state, None)
             .resolve_for_dispatch()
@@ -746,10 +723,86 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
 }
 
 #[test]
+fn a_card_placed_shorter_scrolls_what_it_cannot_show() {
+    let entries: Vec<_> = (0..20)
+        .map(|index| Entry {
+            display: format!("entry {index}"),
+            detail: None,
+            matches: Vec::new(),
+            face: crate::display::Face::Dim,
+            source: None,
+            activate: Rc::new(|_| {}),
+        })
+        .collect();
+    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
+    let mut fonts = crate::fonts::bundled_font_context();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let height = 60.0;
+    let mut hovered = |(scroll, choice), pointer: Option<Point>| {
+        let layout = completion_card::<(f64, usize)>(
+            &mut tcx,
+            crate::modifiers::native(),
+            &styles,
+            &entries,
+            choice,
+            scroll,
+            |state| Some(state.0),
+            |state, scroll, choice| *state = (scroll, choice),
+        );
+        let natural = layout.extent.rect_at(Point::ZERO);
+        assert!(natural.height() > 2.0 * height);
+        let shortened = Rect::from_origin_size(Point::ZERO, (natural.width(), height));
+        crate::display::widget::frame::place(
+            layout,
+            puri::Placement::root(shortened),
+            &placed::HoverInput {
+                pointer,
+                ..Default::default()
+            },
+        )
+    };
+    let entry = |output: placed::HoverOutput<(f64, usize)>| match output.claim {
+        Some((_, Claim::Direct(Hovered::Tree(Hover::Entry(index))))) => Some(index),
+        _ => None,
+    };
+    let mut state = (0.0, 0);
+    assert_eq!(entry(hovered(state, Some(Point::new(10.0, 10.0)))), Some(0));
+    // The card ends where it was placed, though it measured taller.
+    assert!(
+        hovered(state, Some(Point::new(10.0, height + 20.0)))
+            .claim
+            .is_none()
+    );
+    let down = KeyboardEvent {
+        key: Key::Named(NamedKey::ArrowDown),
+        state: KeyState::Down,
+        ..Default::default()
+    };
+    for _ in 0..3 {
+        hovered(state, None)
+            .resolve_for_dispatch()
+            .dispatch_key(&mut state, &down);
+    }
+    // A fourth row is past what a 60-point card shows, so choosing it
+    // scrolls, which eight rows wouldn't, and it can be pointed at.
+    assert_eq!(state.1, 3);
+    assert!(state.0 > 0.0);
+    let mut shown = |y| entry(hovered(state, Some(Point::new(10.0, y as f64))));
+    assert!((0..height as usize).any(|y| shown(y) == Some(3)));
+}
+
+#[test]
 fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
     #[derive(Default)]
     struct State {
-        view: (f64, usize, bool),
+        view: (f64, usize),
         committed: Option<usize>,
     }
     let entries = (0..3)
@@ -777,9 +830,8 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             &entries,
             state.view.1,
             state.view.0,
-            state.view.2,
             |state| Some(state.view.0),
-            |state, scroll, choice, everything| state.view = (scroll, choice, everything),
+            |state, scroll, choice| state.view = (scroll, choice),
         );
         let rect = card.extent.rect_at(Point::ZERO);
         crate::display::widget::frame::place(
@@ -858,7 +910,6 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
     };
     let mut state = State::default();
     let points = std::array::from_fn::<_, 3, _>(|index| row_point(&state, Hover::Entry(index)));
-    let more = row_point(&state, Hover::MoreCompletions);
     highlight(frame(&state, None, None), Hover::Entry(2), points[0]);
 
     assert!(
@@ -909,22 +960,13 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
             .dispatch_pointer_move(&mut state, &move_to(points[2], PointerType::Mouse))
     );
     assert_eq!(state.view.1, 0);
-
-    frame(&state, None, None)
-        .resolve_for_dispatch()
-        .dispatch_pointer_move(&mut state, &move_to(more, PointerType::Mouse));
-    assert_eq!(state.view.1, entries.len());
-    frame(&state, None, None)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::Enter));
-    assert!(state.view.2);
 }
 
 #[test]
 fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     #[derive(Default)]
     struct State {
-        view: (f64, usize, bool),
+        view: (f64, usize),
         committed: Option<Value>,
     }
 
@@ -956,9 +998,8 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             entries,
             state.view.1,
             state.view.0,
-            state.view.2,
             |state| Some(state.view.0),
-            |state, scroll, choice, everything| state.view = (scroll, choice, everything),
+            |state, scroll, choice| state.view = (scroll, choice),
         );
         let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
         crate::display::widget::frame::place(
@@ -982,22 +1023,12 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
     assert_eq!(state.committed.take(), Some(Value::list([])));
-    assert!(!state.view.2);
+    // Down stays on the only row.
     frame(&state, &entries, None)
         .resolve_for_dispatch()
         .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
-    assert_eq!(state.view, (0.0, 1, false));
-    for key in [NamedKey::Enter, NamedKey::ArrowDown] {
-        state.view.2 = false;
-        assert!(
-            frame(&state, &entries, None)
-                .resolve_for_dispatch()
-                .dispatch_key(&mut state, &press(key))
-        );
-        assert_eq!(state.view, (0.0, 1, true));
-        assert!(state.committed.is_none());
-    }
-    let expanded = [
+    assert_eq!(state.view, (0.0, 0));
+    let two = [
         entries[0].clone(),
         Entry {
             display: "new record".into(),
@@ -1007,35 +1038,37 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             ..entries[0].clone()
         },
     ];
+    frame(&state, &two, None)
+        .resolve_for_dispatch()
+        .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+    assert_eq!(state.view, (0.0, 1));
     assert!(
-        frame(&state, &expanded, None)
+        frame(&state, &two, None)
             .resolve_for_dispatch()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
     assert_eq!(state.committed.take(), Some(Value::record([])));
+    // A shorter list clamps the choice to its last row.
     assert!(
         frame(&state, &entries, None)
             .resolve_for_dispatch()
             .dispatch_key(&mut state, &press(NamedKey::Enter))
     );
     assert_eq!(state.committed.take(), Some(Value::list([])));
-    frame(&state, &entries, None)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
-    assert_eq!(state.view.1, 0);
 
-    state.view = (0.0, 1, false);
-    let placed = frame(&state, &entries, None);
-    let target = Hovered::Tree(Hover::MoreCompletions);
+    // A click makes the row under the pointer, whichever is chosen.
+    state.view = (0.0, 0);
+    let placed = frame(&state, &two, None);
+    let target = Hovered::Tree(Hover::Entry(1));
     let point = (0..100)
         .map(|y| Point::new(10.0, y as f64))
         .find(|point| {
-            frame(&state, &entries, Some(*point))
+            frame(&state, &two, Some(*point))
                 .claim
                 .map(|(_, claim)| claim)
                 == Some(Claim::Direct(target.clone()))
         })
-        .expect("expansion row is visible");
+        .expect("the second row is visible");
     let mut pointer_state = ui_events::pointer::PointerState::default();
     pointer_state.position.x = point.x;
     pointer_state.position.y = point.y;
@@ -1053,17 +1086,10 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         &event,
         &mut placed::DispatchContext::new(None, Some(target)),
     ));
-    assert_eq!(state.view, (0.0, 1, true));
-    assert!(state.committed.is_none());
+    assert_eq!(state.committed.take(), Some(Value::record([])));
 
-    state.view = (0.0, 0, false);
-    assert!(
-        frame(&state, &[], None)
-            .resolve_for_dispatch()
-            .dispatch_key(&mut state, &press(NamedKey::Enter))
-    );
-    assert_eq!(state.view, (0.0, 0, true));
-    assert!(state.committed.is_none());
+    // With nothing offered, Enter has nothing to make.
+    state.view = (0.0, 0);
     assert!(
         !frame(&state, &[], None)
             .resolve_for_dispatch()
@@ -1143,9 +1169,8 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
         }],
         0,
         0.0,
-        true,
         |_| Some(0.0),
-        |_, _, _, _| {},
+        |_, _, _| {},
     );
     let card_rect = card
         .extent

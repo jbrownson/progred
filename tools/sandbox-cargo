@@ -13,7 +13,6 @@ if [ "$(uname -s)" != Darwin ]; then
     exit 1
 fi
 
-wrapper_commands=" web-threaded-fetch | web-threaded <cargo command> |"
 . "$tool_dir/cargo-common.sh"
 
 # In a linked worktree Cargo's ancestor-directory config search also reads
@@ -57,23 +56,5 @@ run_sandboxed() {
             -f "$tool_dir/cargo-sandbox.sb" \
             "$@"
 }
-
-# Browser workers rebuild std with atomics; native builds stay stable.
-if [ "${1-}" = web-threaded ] || [ "${1-}" = web-threaded-fetch ]; then
-    web_command=$1
-    shift
-    . "$tool_dir/web-build-settings.sh"
-    use_toolchain "$web_toolchain"
-    target_dir="$build_root/build-web"
-    if [ "$web_command" = web-threaded-fetch ]; then
-        run_sandboxed 1 0 "$cargo_path" fetch --locked \
-            --manifest-path "$toolchain_root/lib/rustlib/src/rust/library/sysroot/Cargo.toml" \
-            --target "$web_target"
-    else
-        run_sandboxed 0 0 "$cargo_path" --frozen "$@" \
-            -Z "build-std=$web_build_std" --target "$web_target"
-    fi
-    exit
-fi
 
 cargo_command "$@"

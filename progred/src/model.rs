@@ -9,19 +9,11 @@ use crate::workspace;
 use gid::{Document, Path, Step};
 use std::rc::Rc;
 
-/// The View menu's frame inputs.
-#[derive(Clone, Copy, Default)]
-pub(crate) struct ViewFlags {
-    /// Overlay leaf rectangles and the pointer hysteresis geometry.
-    pub debug_geometry: bool,
-}
-
 pub(crate) struct Model {
     pub doc: Rc<Document>,
     saved: Rc<Document>,
     pub selection: Option<selection::Selection>,
     pub history: history::History<Snapshot>,
-    pub view: ViewFlags,
     /// Session-owned views over the document. Their layout, roots,
     /// projections, and scroll positions are not GID.
     pub workspace: workspace::Workspace,
@@ -41,7 +33,6 @@ impl Model {
             doc,
             selection: None,
             history: history::History::default(),
-            view: ViewFlags::default(),
             workspace: workspace::Workspace::default(),
         }
     }
@@ -51,10 +42,7 @@ impl Model {
     }
 
     pub fn replace_document(&mut self, doc: Document) {
-        *self = Self {
-            view: self.view,
-            ..Self::new(doc)
-        };
+        *self = Self::new(doc);
     }
 
     pub fn mark_saved(&mut self) {
@@ -146,7 +134,7 @@ mod tests {
         assert!(selection::set_value(
             &mut model.doc,
             &Libraries::default(),
-            &[],
+            &crate::location::Location::root(&[]),
             Value::list([Value::from(vec![value])])
         ));
         model.history.record(before);
@@ -200,7 +188,6 @@ mod tests {
             view.annotations
                 .set(&[], Some(Value::record([(old_cell, Value::from(vec![1]))])));
         }
-        model.view.debug_geometry = true;
         let replacement = Document {
             root: Some(Value::record([])),
             cells: Cells::new(),
@@ -223,7 +210,6 @@ mod tests {
         let fresh = workspace::Workspace::default();
         assert_eq!(model.workspace.left_width, fresh.left_width);
         assert_eq!(model.workspace.right_width, fresh.right_width);
-        assert!(model.view.debug_geometry);
     }
 
     fn select(model: &mut Model, root: &workspace::Root, path: Path) {
@@ -346,7 +332,7 @@ mod tests {
         assert!(selection::delete_edge(
             &mut model.doc,
             &Libraries::default(),
-            &first.1
+            &crate::location::Location::root(&first.1)
         ));
         model.history.record(before);
         model
@@ -419,13 +405,13 @@ mod tests {
         assert!(!selection::set_value(
             &mut model.doc,
             &Libraries::default(),
-            &bad_path,
+            &crate::location::Location::root(&bad_path),
             Value::record([])
         ));
         assert!(!selection::delete_edge(
             &mut model.doc,
             &Libraries::default(),
-            &bad_path
+            &crate::location::Location::root(&bad_path)
         ));
         assert!(!model.dirty());
         let mut empty = Model::new(Document {
@@ -435,7 +421,7 @@ mod tests {
         assert!(!selection::delete_edge(
             &mut empty.doc,
             &Libraries::default(),
-            &[]
+            &crate::location::Location::root(&[])
         ));
         assert!(!empty.dirty());
     }
@@ -453,7 +439,7 @@ mod tests {
         assert!(selection::set_value(
             &mut model.doc,
             &Libraries::default(),
-            &[Step::Follow(gid::Resolution::Document)],
+            &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)]),
             Value::from(vec![2])
         ));
         assert!(model.dirty());

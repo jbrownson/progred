@@ -54,13 +54,24 @@ fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<crate::dis
         raw: false,
         query: "",
         kind: crate::display::CompletionKind::Value,
-        scope: crate::display::CompletionScope::Suggested,
+        scope: crate::display::CompletionScope::Start,
         path: &[],
         value_at: &|_| None,
         resolve: &|cell| sources.definition(cell),
         cells: &|| sources.cells().collect(),
     })
     .unwrap_or_default()
+}
+
+/// The libraries' answers to `scope`, as a projection that asks for them,
+/// such as Grap's slots, offers them.
+fn library_offers(
+    completions: crate::display::CompletionProvider,
+    scope: crate::display::CompletionScope,
+) -> crate::display::CompletionProvider {
+    std::rc::Rc::new(move |request| {
+        completions(&crate::display::CompletionRequest { scope, ..*request })
+    })
 }
 
 fn completion_entries_with(
@@ -70,7 +81,6 @@ fn completion_entries_with(
     query: &str,
     providers: Option<&crate::display::CompletionProvider>,
     contextual: Option<&crate::display::CompletionProvider>,
-    everything: bool,
 ) -> Vec<Entry<completion::CompletionResult>> {
     use crate::display::{CompletionRequest, CompletionScope};
     let value_at = |path: &[Step]| sources.resolve_path(path);
@@ -80,20 +90,18 @@ fn completion_entries_with(
             raw,
             query,
             kind: *kind,
-            scope: if everything {
-                CompletionScope::Everything
-            } else {
-                CompletionScope::Suggested
-            },
+            scope: CompletionScope::Everything,
             path: &[],
             value_at: &value_at,
             resolve: &|cell| sources.definition(cell),
             cells: &|| sources.cells().collect(),
         },
         providers,
-        contextual,
+        contextual.map_or(
+            crate::completion::HoleOffers::Raw,
+            crate::completion::HoleOffers::Projection,
+        ),
     )
-    .0
     .into_iter()
     .map(|entry| completion::test_entry(entry, *kind))
     .collect()

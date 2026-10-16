@@ -2,7 +2,9 @@ use super::*;
 use crate::libraries::{
     control, line_edit, path as path_data, selection as selection_data, site, text,
 };
+use crate::location::Location;
 use gid::{Cells, Document, new_cell_id};
+use std::borrow::Cow;
 
 fn path() -> Path {
     vec![Step::Key(new_cell_id())]
@@ -10,7 +12,11 @@ fn path() -> Path {
 
 impl Scope {
     fn jump(&self, occurrence: Path, document: Path) -> Self {
-        self.with_conject(occurrence, document, crate::display::Conject::descend())
+        self.with_conject(
+            occurrence,
+            Location::root(document),
+            crate::display::Conject::descend(),
+        )
     }
 }
 
@@ -46,30 +52,40 @@ fn conjects_compose_and_the_identity_scope_borrows_its_path() {
     let child = Step::Key(new_cell_id());
     let inner_source = [first.clone(), vec![child.clone()]].concat();
     let scope = Scope::default().jump(first.clone(), source.clone());
-    let inner = scope.jump(
+    let inner = scope.with_conject(
         second.clone(),
         scope.source(&inner_source).unwrap().into_owned(),
+        crate::display::Conject::descend(),
     );
     let expected = [source.clone(), vec![child]].concat();
-    assert_eq!(inner.source(&second).unwrap().as_ref(), expected);
-    assert_eq!(inner.source(&first).unwrap().as_ref(), source);
-    assert_eq!(inner.source(&sibling).unwrap().as_ref(), sibling);
+    assert_eq!(inner.source(&second), Some(Location::root(expected)));
+    assert_eq!(inner.source(&first), Some(Location::root(source.clone())));
+    assert_eq!(
+        inner.source(&sibling),
+        Some(Location::root(sibling.clone()))
+    );
     assert!(matches!(
         Scope::default().source(&source),
-        Some(Cow::Borrowed(_))
+        Some(Location {
+            path: Cow::Borrowed(_),
+            ..
+        })
     ));
 }
 
 #[test]
-fn resolver_encapsulates_mapping_and_detached_boundaries_do_not_fall_back() {
+fn detached_boundaries_do_not_fall_back() {
     let (prefix, document, outside) = (path(), path(), path());
-    let source = document.clone();
-    let custom = Scope::new(move |_| Some(Cow::Owned(source.clone())));
-    let detached = custom.detached(prefix.clone());
+    let detached = Scope::default()
+        .jump(Vec::new(), document.clone())
+        .detached(prefix.clone());
     assert!(detached.source(&prefix).is_none());
-    assert_eq!(detached.source(&outside).unwrap().as_ref(), document);
+    assert_eq!(
+        detached.source(&outside),
+        Some(Location::root([document, outside.clone()].concat()))
+    );
     let restored = detached.jump(prefix.clone(), outside.clone());
-    assert_eq!(restored.source(&prefix).unwrap().as_ref(), outside);
+    assert_eq!(restored.source(&prefix), Some(Location::root(outside)));
 }
 
 #[test]
@@ -107,7 +123,11 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
         Some(&text::value("before"))
     );
     let selected = editor.model.selection.as_ref().unwrap();
-    assert!(selected.scope().same_location(&b, selected.path()));
+    assert!(
+        selected
+            .scope()
+            .same_location(&b, &editor.sources(), selected.path())
+    );
     assert!(
         b.open(Access::new(&mut editor))
             .edit_line(&root, &second, &line("before"), &|edit| {
@@ -138,7 +158,11 @@ fn structural_paste_delete_and_undo_use_the_same_scope() {
     assert!(editor.model.step_history(true));
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), occurrence);
-    assert!(selected.scope().same_location(&scope, selected.path()));
+    assert!(
+        selected
+            .scope()
+            .same_location(&scope, &editor.sources(), selected.path())
+    );
     assert_eq!(
         selected.value(&editor.sources()),
         Some(&text::value("pasted"))
@@ -183,7 +207,11 @@ fn a_missing_scoped_child_uses_the_ordinary_completion_and_continuation() {
     );
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), occurrence);
-    assert!(selected.scope().same_location(&scope, selected.path()));
+    assert!(
+        selected
+            .scope()
+            .same_location(&scope, &editor.sources(), selected.path())
+    );
     assert_eq!(selected.stage(&editor.sources()), selection::Stage::Edge);
 }
 
@@ -224,8 +252,12 @@ fn grap_handler_uses_the_scope_without_an_opaque_value() {
     ));
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), occurrence);
-    assert_eq!(selected.source_path().unwrap().as_ref(), source);
-    assert!(selected.scope().same_location(&scope, selected.path()));
+    assert_eq!(selected.location(), Some(Location::root(source.as_slice())));
+    assert!(
+        selected
+            .scope()
+            .same_location(&scope, &editor.sources(), selected.path())
+    );
     assert_eq!(
         editor
             .model
@@ -275,7 +307,11 @@ fn gesture_writes_share_the_scope_and_one_undo_step() {
         Some(&text::value("before"))
     );
     let selected = editor.model.selection.as_ref().unwrap();
-    assert!(selected.scope().same_location(&scope, selected.path()));
+    assert!(
+        selected
+            .scope()
+            .same_location(&scope, &editor.sources(), selected.path())
+    );
     assert!(!editor.model.history.can_undo());
 }
 
@@ -319,7 +355,11 @@ fn inserting_a_scoped_list_sibling_preserves_the_occurrence() {
     scope.open(Access::new(&mut editor)).select(&root, &item);
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(&selected.path()[..1], occurrence);
-    assert!(selected.scope().same_location(&scope, selected.path()));
+    assert!(
+        selected
+            .scope()
+            .same_location(&scope, &editor.sources(), selected.path())
+    );
     assert!(editor.commit_completion(
         text::value("second"),
         None,
@@ -335,4 +375,60 @@ fn inserting_a_scoped_list_sibling_preserves_the_occurrence() {
         .cloned()
         .collect();
     assert_eq!(values, [text::value("first"), text::value("second")]);
+}
+
+#[test]
+fn following_a_cell_starts_a_location_at_its_definition() {
+    let (occurrence, field) = (path(), Step::Key(new_cell_id()));
+    let (cell, source) = (new_cell_id(), gid::Resolution::Document);
+    let reference = [occurrence.clone(), vec![field.clone()]].concat();
+    let definition = [reference.clone(), vec![Step::Follow(source)]].concat();
+    let computed = Scope::default().detached(occurrence.clone());
+    let followed = computed.in_cell(definition.clone(), cell, source);
+    assert!(followed.descends());
+    assert!(!computed.descends());
+    assert!(
+        followed.source(&reference).is_none(),
+        "the reference is computed"
+    );
+    assert_eq!(
+        followed.source(&definition),
+        Some(Location::in_cell(cell, source, Vec::new()))
+    );
+    let inside = [definition, vec![field.clone()]].concat();
+    assert_eq!(
+        followed.source(&inside),
+        Some(Location::in_cell(cell, source, vec![field]))
+    );
+    let elsewhere = path();
+    assert_eq!(
+        followed.source(&elsewhere),
+        Some(Location::root(elsewhere.clone()))
+    );
+}
+
+#[test]
+fn a_route_through_a_cell_and_its_definitions_location_are_the_same_location() {
+    let (field, inner, cell) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(cell, Value::record([(inner, text::value("inside"))]));
+    let editor = crate::test_editor(Document {
+        root: Some(Value::record([(field, cell.into())])),
+        cells,
+    });
+    let follow = Step::Follow(gid::Resolution::Document);
+    let definition = vec![Step::Key(field), follow.clone()];
+    let within = [definition.clone(), vec![Step::Key(inner)]].concat();
+    let restarted = Scope::default().in_cell(definition, cell, gid::Resolution::Document);
+    assert_ne!(Scope::default().source(&within), restarted.source(&within));
+    assert!(Scope::default().same_location(&restarted, &editor.sources(), &within));
+    assert!(!restarted.same_location(
+        &Scope::default().detached(within.clone()),
+        &editor.sources(),
+        &within
+    ));
+    assert_eq!(
+        restarted.read(&editor.sources(), &within),
+        Some(&text::value("inside"))
+    );
 }

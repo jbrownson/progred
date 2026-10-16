@@ -5,7 +5,7 @@ use crate::driver::Driver;
 use crate::frame::Hovered;
 use gid::{Cells, Document};
 use kurbo::{Point, Size};
-use ui_events::keyboard::{Modifiers, NamedKey};
+use ui_events::keyboard::{KeyState, KeyboardEvent, Modifiers, NamedKey};
 use ui_events::pointer::PointerEvent;
 
 const VIEWPORT: Size = Size::new(640.0, 480.0);
@@ -67,6 +67,53 @@ fn pointer_switches_open_menus_but_does_not_open_closed_ones() {
     assert_eq!(driver.runner.editor.menu.cursor(), Some(1));
     driver.click_at(examples);
     assert_eq!(driver.runner.editor.menu.open(), None);
+}
+
+#[test]
+fn tapping_alt_enters_and_leaves_the_bar_unless_something_comes_between() {
+    let mut driver = empty();
+    let alt = |driver: &mut Driver, state| {
+        let scale = driver.runner.editor.zoom;
+        driver.runner.keyboard_event(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Alt),
+                state,
+                modifiers: Modifiers::ALT,
+                ..Default::default()
+            },
+            scale,
+            VIEWPORT,
+        )
+    };
+    alt(&mut driver, KeyState::Down);
+    assert!(alt(&mut driver, KeyState::Up));
+    assert_eq!(driver.runner.editor.menu.open(), Some(0));
+    key(
+        &mut driver,
+        Key::Named(NamedKey::ArrowRight),
+        Modifiers::empty(),
+    );
+    assert_eq!(driver.runner.editor.menu.open(), Some(1));
+    alt(&mut driver, KeyState::Down);
+    assert!(alt(&mut driver, KeyState::Up));
+    assert_eq!(driver.runner.editor.menu.open(), None);
+    // A click, a window moved by Alt+drag, or a trip to another window.
+    for between in ["click", "move", "focus"] {
+        alt(&mut driver, KeyState::Down);
+        let scale = driver.runner.editor.zoom;
+        match between {
+            "click" => driver.click_at(Point::new(320.0, 300.0)),
+            "move" => {
+                driver.runner.window_moved(scale, VIEWPORT);
+            }
+            _ => {
+                driver.runner.focus_changed(false, scale, VIEWPORT);
+                driver.runner.focus_changed(true, scale, VIEWPORT);
+            }
+        }
+        assert!(!alt(&mut driver, KeyState::Up), "{between}");
+        assert_eq!(driver.runner.editor.menu.open(), None, "{between}");
+    }
 }
 
 #[test]

@@ -1,7 +1,7 @@
 //! Small combinators for a projection's completion vocabulary.
 
 use crate::display::{Completion, CompletionProvider, CompletionText, Face};
-use gid::{CellId, Value};
+use gid::Value;
 use std::rc::Rc;
 
 pub fn select(display: impl Into<CompletionText>, value: Value) -> Completion {
@@ -73,18 +73,6 @@ fn insertion(
     offer
 }
 
-pub fn label(cell: CellId) -> Completion {
-    insert(
-        cell,
-        cell.into(),
-        Some(crate::libraries::selection::pending_at(&[])),
-    )
-}
-
-pub fn labels(cells: impl IntoIterator<Item = CellId>) -> Vec<Completion> {
-    cells.into_iter().map(label).collect()
-}
-
 /// Combine applicable providers in order. An explicit empty vocabulary stays
 /// specified; only an entirely unspecified composition returns None.
 pub fn combine(providers: impl IntoIterator<Item = CompletionProvider>) -> CompletionProvider {
@@ -112,7 +100,7 @@ mod tests {
             raw: false,
             query: "",
             kind: CompletionKind::Field,
-            scope: CompletionScope::Suggested,
+            scope: CompletionScope::Everything,
             path: &[],
             value_at: &|_| None,
             resolve: &|_| None,
@@ -129,9 +117,9 @@ mod tests {
         let second = gid::new_cell_id();
         let combined = combine([
             unspecified.clone(),
-            Rc::new(move |_| Some(labels([first]))),
+            Rc::new(move |_| Some(vec![select(first, first.into())])),
             empty.clone(),
-            Rc::new(move |_| Some(labels([second]))),
+            Rc::new(move |_| Some(vec![select(second, second.into())])),
         ]);
         assert_eq!(calls.get(), 0);
         let offers = combined(&request).unwrap();

@@ -7,10 +7,10 @@ not make compilation of those dependencies safe.
 On macOS, the Make targets (`fetch`, `check`, `build`, `test`, `run`, `dev`,
 `sandbox-app`, and `build-web`) compile under the repository's Seatbelt sandbox,
 and `make run` launches the result as an App Sandbox bundle. On Linux, the
-native targets compile in a namespace sandbox with the same boundaries; the app
-itself runs outside it. Use `./tools/sandbox-cargo` or `./tools/linux-cargo`
-`<cargo command> [arguments...]` for other Cargo commands. How each platform
-builds and runs is in [platforms](platforms.md).
+native targets and `build-web` compile under bubblewrap with the same
+boundaries; the app itself runs outside it. Use `./tools/sandbox-cargo` or
+`./tools/linux-cargo` `<cargo command> [arguments...]` for other Cargo commands.
+How each platform builds and runs is in [platforms](platforms.md).
 
 ## Sandbox boundaries
 
@@ -27,21 +27,21 @@ commands run Cargo under `sandbox-exec` with:
   configuration, and a root `.env` file; and
 - write access only beneath `target/sandbox`.
 
-On Linux, `tools/linux-cargo` draws the same boundaries with unprivileged user,
-mount, PID and network namespaces, and `tools/linux-sandbox` builds the view
-inside them. It's an allowlist, like the Seatbelt profile: a new root in which
-every host directory is mounted read-only; the home directory and `/run` empty
-and read-only; `/tmp`, `/var/tmp` and `/dev/shm` empty scratch space that
-vanishes with the sandbox; and a `/dev` with only the basic devices. The source
-tree is read-only with `.git`, local agent configuration and a root `.env`
-hidden, and only `target/sandbox` is writable. The command runs with no
-capabilities, so it can't remount or escape any of this, without other processes
-in view, and in a session of its own, so it can't reach the terminal. Builds are
-offline. When the locked graph isn't all in the sandbox's Cargo home,
-`linux-cargo` first fetches it with network access, which runs no dependency
-code; steps with network access also get a proxy's settings, its certificate
-bundle and the resolver configuration. The sandbox needs unprivileged user
-namespaces, which some distributions restrict: Ubuntu does through AppArmor
+On Linux, `tools/linux-cargo` draws the same boundaries with bubblewrap
+(`bwrap`), the sandbox Flatpak uses, in unprivileged user, mount, PID and
+network namespaces. It's an allowlist, like the Seatbelt profile: the host's
+directories mounted read-only; the home directory and `/run` empty and
+read-only; `/tmp`, `/var/tmp` and `/dev/shm` empty scratch space that vanishes
+with the sandbox; and a `/dev` with only the basic devices. The source tree is
+read-only with `.git`, local agent configuration and a root `.env` hidden, and
+only `target/sandbox` is writable. The command runs with no capabilities, so it
+can't remount or escape any of this, without other processes in view, and in a
+session of its own, so it can't reach the terminal. Builds are offline. When the
+locked graph isn't all in the sandbox's Cargo home, `linux-cargo` first fetches
+it with network access, which runs no dependency code; steps with network access
+also get a proxy's settings, its certificate bundle and the resolver
+configuration. The sandbox needs bubblewrap and unprivileged user namespaces,
+which some distributions restrict: Ubuntu does through AppArmor
 (`kernel.apparmor_restrict_unprivileged_userns`).
 
 The isolated target directory is deliberate. A compromised native artifact must
@@ -123,7 +123,7 @@ Cargo, where `registry.global-min-publish-age` no longer needs
 `-Z min-publish-age`; the browser build keeps the nightly for `-Z build-std`.
 The browser build is an explicit exception: `web-threaded`, which
 `make build-web` uses, builds with the same pinned nightly to rebuild the
-standard library with atomics, under the same Seatbelt restrictions, in a
+standard library with atomics, under the same sandbox, in a
 separate `target/sandbox/build-web` directory. `web-threaded-fetch` only fetches
 that toolchain's locked sysroot dependencies; it does not update the workspace
 lockfile.

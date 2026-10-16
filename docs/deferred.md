@@ -102,15 +102,105 @@ context; neither a path nor a cell-relative trace is a global address.
 Keep occurrence identity, cell identity, definition source, and view identity
 distinct while answering those questions.
 
+## Saving list positions
+
+List elements have fractional positions, minted when a document loads and
+dropped when it saves, so a position means nothing outside its session. A page
+or a script can't name the second call in a list by path across a reload, which
+is why the tutorial's checks compare selected values instead. Saving the
+positions fixes that, and a CRDT would need them anyway. Reading could still
+accept a plain `[1, 2, 3]` and mint positions for it, while saving always writes
+them, even if the text gets noisier.
+
 ## Completion ranking
 
-Revisit how library-provided offers rank alongside built-in constructors,
-cell references, and interpretations of the query. The universal list currently
-groups library offers together; with an empty query, `new lambda` appears among
-number literals because of library order. Providers cannot express that it
-belongs with other constructors. Design that distinction through the completion
-interface rather than special-casing lambda or particular numeric libraries.
-This is deferred UX design, not a priority for the current cleanup.
+Revisit how library-provided offers rank alongside built-in constructors and
+interpretations of the query. Grap's slots list the libraries' offers together,
+so `new lambda` sits among them in library order rather than with the editor's
+constructors. Providers cannot express that it belongs with other constructors.
+Design that distinction through the completion interface rather than
+special-casing lambda or particular libraries. This is deferred UX design, not a
+priority for the current cleanup.
+
+## Completion after the strip-back
+
+Completion was stripped back to a deliberately simple rule: the projection
+drawing a hole supplies its offers, and a hole without a projection's offers is
+Raw's, which offers the editor's constructors and what's typed, read as a value.
+A document's root leads with the libraries' starting points. The point is to
+confront what completion really needs and build back up from there. What was
+removed, so it isn't lost:
+
+- **The `…` expansion.** A picker opened on a narrow list, from its projection or
+  from a library, and `…` (or Down past the last row) added everything after it.
+  That repeated offers, and made Grap copy the editor's constructors to have
+  them in its list. Some way past a projection's list will probably be needed
+  again, designed without copying offers.
+- **Libraries' focused answers.** A library could answer "what belongs here?"
+  for a hole it recognized from the path, and that answer replaced everything
+  until expanded:
+  - Fidget offered per-slot lists. A scene's entries and a shape operation's
+    operands (left, right, operand, field) got sphere and circle calls, the
+    shape operations (union, difference, intersection, translate, sum, subtract,
+    multiply, divide, min, max, negate, abs, sqrt, square, sin, cos) and the X,
+    Y and Z axes, then f32 numbers. A radius, delta or bound got only f32
+    numbers; a width or height f64; a mesh depth u64; an axis X, Y or Z. Naming a
+    field on a shape offered its missing parameters, and an inert operation's
+    record offered the shape markers and axis as labels. Grap calls to shapes
+    got the same through their arguments, and a new scene's first hole offered
+    a sphere call.
+  - The name library offered the query as text for any value under a `name`
+    key. Now the name library's partial draws that hole where a projection
+    passes it.
+  - Libraries offered at the root: the new-scene and new-program templates (now
+    their starting points, leading the root's hole) and root field labels:
+    `grap`, `fidget` (also found by "sdf"), `panes` and `libraries`.
+  - Grap's slots deferred to any library's focused answer before their own list.
+- **The arithmetic rule.** In an operation's `left`, `right` or `operand`, and in
+  its operator, the offers of the library defining the operation came first and
+  hid other libraries' offers of the same spelling, so 3 in an f64 sum offered
+  only f64's 3. The picker found the operation by looking one step up the path.
+  A better form may be the operation's projection telling its operands' holes
+  what to offer.
+- **Bracket keys everywhere.** `(`, `[` and `{` made a new cell, list or record
+  in every picker. They are now keys of Raw's holes alone. Elsewhere a delimiter
+  is typed as text, which finds its constructor where the hole offers one, as
+  Grap's slots do; a projection can't yet give its holes keys of their own.
+- **Reaching any cell from a Grap slot.** Grap's list has bindings and functions
+  but not other cells, such as a named constant.
+- **Existing cells in Raw's holes.** Raw offered every cell by name, the
+  document's and every library's (about 650 with the built-in libraries), with
+  its source beside it, and a field's label picker offered existing cells as
+  labels. It now offers none: an existing cell is reused by pointing at it
+  (Cmd+click) or pasting it, and typing makes something new. Rebuilding that
+  list every frame was also what made scrolling the picker hitch. A separate
+  search by name could come back if pointing and pasting aren't enough.
+- **The libraries' other offers in Raw's holes.** A new color, a new lambda, and
+  calls to functions by name were offered in any Raw hole. Now only projections
+  that ask the libraries for them offer them, as Grap's slots do.
+- **Typed values for an empty query.** An empty query offered zero in each
+  numeric representation, the empty string, and a new label with no name. Now
+  it offers none of them; the empty string takes a `"`. A hole that expects a
+  number or text, drawn by its own projection, could offer one for an empty
+  query again.
+
+Directions this surfaced:
+
+- A record combinator taking a spec: expected fields in order, how each field's
+  value is drawn and what its hole offers, missing expected fields shown as
+  holes, then any other fields. Its "add a field" picker offers the missing
+  expected fields. Lists already take a child projection, which can draw an
+  element's hole with its own offers.
+- Telling a partial which field it is drawn under, so a `name` field could reach
+  the name library without each parent passing its partial. Handlers could
+  later register for such patterns centrally, for efficiency.
+- A type system. Knowing what fits an argument, such as a number expression for
+  sphere's radius, needs types, since any expression can go there; how pressing
+  that is is part of what this should show.
+- Metadata on field definitions, such as types or projections, later.
+- A projection's own offers and everything else, shown together without copies:
+  perhaps in sections the reader can tell apart, or with the editor's built-in
+  offers marked as wanted or not by the projection's offers.
 
 ## Reporting completion failures
 
@@ -194,6 +284,32 @@ current computation's result. Skipping intermediate meshes during rapid geometry
 edits is another possible policy, with the tradeoff of an older mesh when the
 user next orbits.
 
+## Decoding PNGs once while visible
+
+The [png library](../progred/src/libraries/png.rs) decodes each visible image
+every frame. On the Linux container on 2026-10-12, editor screenshots rendered
+through Vello took about 4–5 ms to decode at 1280 × 800 (123 KiB) and 13–14 ms
+at 2560 × 1600 (286 KiB); reading only the header took about 2 µs. Each decode
+also makes a new image, which the compositor uploads again, since it reuses
+uploads by image blob identity. Adding the library didn't measurably change the
+perf canaries. PNGs are mostly for sending over the control socket for now, so
+this waits until they're shown on screen routinely, for example recorded
+sessions viewed as storyboards.
+
+When it's needed, follow the text-shaping cache (`puri::text::TextCache`), not
+`incremental`. Decoding is a pure function of the bytes, so a memo keyed by them
+can only be unused, never wrong. The editor would own it beside `text_cache`,
+sweep it at the same point in `prepare_frame`, and reach the png widget through
+the widget build context. A hit returns the same image, so its upload is reused
+too, and one picture shown in two places decodes once. Keying by content hashes
+the bytes each frame, which is small next to decoding; keying by the blob's
+shared allocation, while holding a reference to it, avoids even that but needs
+an accessor in `gid`. The projection would then decide from the header alone,
+so a valid header with a corrupt body draws a placeholder instead of declining
+to the record view. This would be a second exception to reusing work across
+frames only through `incremental`; when it lands, AGENTS.md should name the
+pattern it allows: caller-owned, swept memos of pure functions.
+
 ## Report Vello image-atlas flashing
 
 Prepare an upstream bug report for the reproducible Vello 0.9.0 image omissions
@@ -261,6 +377,13 @@ Do not flatten trajectories or alter geometry in the postprocessor without an
 explicit accuracy policy. Setup-up and pull/climb ordering are already explicit
 in the Grap example; machine rotary solutions and fixture clearance are not.
 
+## Peeking into folds
+
+Clicking a fold's `…` opens it with the whole cell selected, so Space closes it
+again. A look inside needn't change the layout at all: hovering the `…` could
+show the contents in a popover, with Space or a click to open it for good, or
+pressing and holding the `…` could open it until release.
+
 ## Hover traversal order
 
 Revisit when the document/widget mix includes more expensive overlapping hover
@@ -291,6 +414,18 @@ up only when text entry becomes a focus:
 - CJK composition and candidate placement, Linux IME, and AltGr characters in
   Windows browsers are implemented but unverified.
 
+## Tutorial hints
+
+The tutorial shows a hint when someone strays from a step in a way we can
+predict, read from the same state as its checks: planting a tree without a
+height. Review it, and more candidates from the newcomer runs, once the tutorial
+settles:
+
+- repeated plain clicks on a picture, which could point out holding Ctrl;
+- dragging a number without Ctrl, which selects its text instead.
+
+Both need the editor to tell the page about gestures, not just the selection.
+
 ## Platform work
 
 ### Opening documents from the macOS shell
@@ -303,6 +438,17 @@ owns the application delegate and panics if it is replaced
 [#4458](https://github.com/rust-windowing/winit/issues/4458)). Winit 0.31
 removes its custom macOS delegate. Revisit when 0.31 is stable or an upgrade is
 otherwise useful; don't patch the Objective-C runtime around 0.30 for this.
+
+### One sandbox for both platforms
+
+The build sandboxes are two descriptions of one boundary: a Seatbelt profile on
+macOS (`tools/cargo-sandbox.sb`) and bubblewrap's options on Linux
+(`tools/linux-cargo`). Anthropic's
+[sandbox runtime](https://github.com/anthropic-experimental/sandbox-runtime)
+(`srt`), which Claude Code uses, drives both from one configuration, and its
+proxy could narrow fetches from the whole network to the registry's domains. It
+calls itself a beta research preview whose configuration may change, and it
+would put Node on every build's path. Revisit when it's stable.
 
 ### Additional ports
 
@@ -343,6 +489,30 @@ This is the biggest weak spot.
 - A result records one stack frame today. Capturing a full environment on
   demand, by re-evaluating with tracing, would explain a result without
   recording everything.
+- Dragging a value onto a slot could link it, as Cmd-clicking does. The first
+  newcomer test reached for dragging when it couldn't find picking.
+- Enter and Cmd+Enter need rethinking together: while typing, which to press is
+  hard to remember. Today Enter while typing ends the typing, Enter on a
+  selection adds a peer beside it, and Cmd+Enter adds something within it, each
+  offered by the view of the container it lands in. A selected value being typed
+  in always keeps its caret, unlike a spreadsheet's cell, and that stays; Enter
+  there only re-spells it and returns the caret to its default, where it could
+  move on to the next thing, or in a list select an insertion after.
+- A raw view of one value in place, as the document-wide Raw view shows
+  everything. Structure a projection hides, such as a field on a number, would
+  be authored there; today only a whole view can be raw.
+- Wrap insertions: besides completions at a placeholder, libraries offer ways to
+  wrap the selection. With `42` selected, asking for a wrap lists each operator
+  with the 42 on its left or its right, and typing an operator such as `-` picks
+  its left form. Typing an operator at the end of a number already does this
+  for that one case.
+
+### A second language
+
+Grap is the language the examples are written in, not Progred's own, yet
+newcomers take Progred for a Grap editor. A second language whose programs live
+in the same documents, with its own projections and evaluator, would show the
+difference, and would show where the editor still assumes Grap.
 
 ### Notebook and REPL
 
@@ -369,31 +539,43 @@ and progress and cancellation for long computations.
 
 ### External control and a newcomer test
 
-Lift `crate::driver::Driver` out of the tests into a dev binary that holds one
-editor and listens on a Unix socket. Agents drive it with `nc -U`, and Claude
-Code can use the same bridge as an MCP stdio server. Messages are JSON values,
-one per line; `serde_json` is already a dependency. It needs a sanctioned Make
-target.
+The [session an agent drives](testing.md#a-session-an-agent-drives) exists, and
+a first newcomer test went in blind: a subagent with no knowledge of the code
+got a short description of Progred, how to drive the session, and a small change
+to the Grap demo. It added an input but couldn't make the sum refer to it,
+because Cmd-clicking a value into an open slot can't be found by looking; it
+tried completion, dragging, and copy and paste. Progred needs some explaining,
+so the next newcomer follows a guided tutorial as a reader on prog.red does,
+which tests the tutorial too. Each report keeps friction in the tutorial, in
+Progred, and in operating it as an agent apart. Add help only where a report
+shows a need: the visible text and its boxes, captured as text leaves draw
+(which accessibility needs too), `zoom`, or the computer-use actions left out so
+far. Sessions could replay as scripts, so a fixed stuck point becomes a
+regression test.
 
-Start with the commands a person has: a screenshot, a list of what's drawn,
-click, double-click, drag, typing, keys and shortcuts. Targets are named by
-document path, or by visible label for menu items, completion entries and
-toggles; positions inside a target are fractions of its rect. Only drawn targets
-are listed. A path resolves to a point and a real click, so hit-testing and
-occlusion still apply, and the reply says what was actually hit.
+Later the live app could accept the same socket behind an opt-in flag, so a
+person can watch, and an MCP bridge could serve Claude Code. An editor made for
+an LLM is a separate goal: the same editor state and actions presented as text
+and named actions instead of pictures and gestures, as in Phil Freeman's
+comonadic UIs, where a component keeps its space of states and the actions
+that move through it while its presentation changes. It needs actions as values
+apart from the gestures that trigger them. Puri gets one opaque external event,
+and a Progred combinator pairs a named action with its key binding and handler,
+so projections opt in as they do for keys and can list what they accept. The
+editor's structural fallbacks (paste, delete, insert, replace, navigation) move
+into the handler chain as lowest-priority handlers. Completion offers already
+work this way: an offer is data, and choosing one is a commit.
 
-The first use is a friction test. A subagent with no knowledge of the code gets
-a short description of Progred, the command sheet and a task, such as a small
-CAM job, and reports where it got stuck. Sessions replay as scripts, so a fixed
-stuck point can become a regression test.
+### Accessibility
 
-Later come semantic actions. Puri gets one opaque external event, and a Progred
-combinator pairs a named action with its key binding and handler, so projections
-opt in as they do for keys and can list what they accept. The editor's
-structural fallbacks (paste, delete, insert, replace, navigation) move into the
-handler chain as lowest-priority handlers. Grap scripts in GID can follow as a
-second client, with a prelude of library names so scripts never copy cell IDs.
-The live app accepts the same socket behind an opt-in flag.
+The editor draws to a canvas with no accessibility tree, so screen readers
+can't read it. A tree needs, for each element a person can reach, its role, a
+name, its value, its bounds and the actions it accepts. AccessKit can hand such
+a tree to each platform's accessibility API. Much of it exists in another form:
+the frame's hit tests already identify every reachable element and its region,
+but drawn text keeps only glyph IDs, so names and values would come from the
+projections that draw them. External control needs the same description of
+what's on screen, so the two can share it.
 
 ### Demo moments
 
@@ -537,6 +719,18 @@ a merge driver for `.gid` files, keyed by cell ID, would work in ordinary
 repositories. Undo history is the starting point for history inside the
 document, with named versions, branches and merges built on it. Large blobs such
 as scans need content-addressed storage rather than inline text.
+
+Provenance, such as when, where and by whom a value was made, could live in
+fields on the value itself. Views that draw a value as one piece show its other
+fields after it, so they'd need a way to tell such metadata from the value's own
+fields and leave it out.
+
+### Multiplayer editing
+
+Several people editing one document at once, perhaps with CRDTs. Cells are
+already keyed by identity, and list elements already have fractional positions,
+the kind of identifiers sequence CRDTs use. Those positions are session-only
+today, minted at load and dropped at save; see saving list positions above.
 
 ### A common thread
 

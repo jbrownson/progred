@@ -129,11 +129,11 @@ pub enum DocCommand {
     MovePaneDown,
     MovePaneLeft,
     MovePaneRight,
+    Plain,
     Raw,
     /// One library's projection in the selected area. Menus label it with
     /// the library's name.
     Projection(gid::CellId),
-    DebugGeometry,
     // On the web, the browser's page zoom does this.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     ActualSize,
@@ -185,7 +185,6 @@ pub enum ShortcutKey {
     Digit3,
     Digit4,
     Digit5,
-    D,
     N,
     #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
     O,
@@ -214,7 +213,6 @@ impl ShortcutKey {
             Self::Digit3 => "3",
             Self::Digit4 => "4",
             Self::Digit5 => "5",
-            Self::D => "D",
             Self::N => "N",
             #[cfg(any(target_os = "macos", target_os = "linux", target_arch = "wasm32"))]
             Self::O => "O",
@@ -316,11 +314,9 @@ pub fn spec(command: Command) -> Spec {
         Command::Doc(DocCommand::MovePaneDown) => item("Move Pane Down", None),
         Command::Doc(DocCommand::MovePaneLeft) => item("Move Pane Left", None),
         Command::Doc(DocCommand::MovePaneRight) => item("Move Pane Right", None),
+        Command::Doc(DocCommand::Plain) => toggle("Plain", None),
         Command::Doc(DocCommand::Raw) => toggle("Raw", Some(Shortcut::plain(ShortcutKey::R))),
         Command::Doc(DocCommand::Projection(_)) => toggle("Projection", None),
-        Command::Doc(DocCommand::DebugGeometry) => {
-            toggle("Debug Geometry", Some(Shortcut::plain(ShortcutKey::D)))
-        }
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::ActualSize) => {
             item("Actual Size", Some(Shortcut::plain(ShortcutKey::Digit0)))
@@ -371,7 +367,7 @@ impl Availability {
             DocCommand::MovePaneDown => self.move_down,
             DocCommand::MovePaneLeft => self.move_left,
             DocCommand::MovePaneRight => self.move_right,
-            DocCommand::Raw | DocCommand::Projection(_) | DocCommand::DebugGeometry => true,
+            DocCommand::Plain | DocCommand::Raw | DocCommand::Projection(_) => true,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.actual_size,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -393,8 +389,8 @@ impl Availability {
 /// display this answer.
 #[derive(Clone, Default)]
 pub struct Toggles {
+    pub plain: bool,
     pub raw: bool,
-    pub debug_geometry: bool,
     /// Libraries whose projections the selected area leaves off.
     pub hidden: Vec<gid::CellId>,
 }
@@ -402,9 +398,9 @@ pub struct Toggles {
 impl Toggles {
     pub fn checked(&self, command: Command) -> bool {
         match command {
+            Command::Doc(DocCommand::Plain) => self.plain,
             Command::Doc(DocCommand::Raw) => self.raw,
             Command::Doc(DocCommand::Projection(library)) => !self.hidden.contains(&library),
-            Command::Doc(DocCommand::DebugGeometry) => self.debug_geometry,
             _ => false,
         }
     }

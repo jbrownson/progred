@@ -15,6 +15,8 @@ pub struct Palette {
     pub readonly_ground: Color,
     pub accent: Color,
     pub disabled: Color,
+    /// The red wash under an absent value.
+    pub error: Color,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -54,6 +56,7 @@ impl Theme {
                 readonly_ground: Color::from_rgba8(20, 91, 219, 9),
                 accent: rgb(0, 122, 255),
                 disabled: rgb(135, 144, 163),
+                error: Color::from_rgba8(224, 49, 49, 30),
             },
             Self::Dark => Palette {
                 paper: rgb(21, 27, 44),
@@ -69,6 +72,7 @@ impl Theme {
                 readonly_ground: Color::from_rgba8(140, 180, 255, 13),
                 accent: rgb(120, 176, 255),
                 disabled: rgb(117, 133, 162),
+                error: Color::from_rgba8(255, 99, 99, 46),
             },
         }
     }

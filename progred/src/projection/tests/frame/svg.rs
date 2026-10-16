@@ -388,14 +388,14 @@ fn website_forest_hover_finds_the_available_call() {
         .descends
         .iter()
         .find_map(|descend| {
-            let path = descend.scope.source(&descend.path)?;
-            let value = sources.resolve_path(&path)?;
+            let location = descend.scope.source(&descend.path)?;
+            let value = sources.read(&location)?;
             (value
                 .as_record()?
                 .get(&grap::vocabulary::FUNCTION)?
                 .as_cell()?
                 == names["forest_view"])
-                .then(|| SourceTrace::from_path(&sources, Rc::from(path.as_ref())))
+                .then(|| SourceTrace::from_location(&sources, &location))
         })
         .expect("the forest call is projected");
     let hovered = (20..300).step_by(10).find_map(|y| {
@@ -658,14 +658,16 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
         false,
         &crate::display::CompletionKind::Value,
         "clouds",
-        Some(&editor.stack.completions),
         None,
-        true,
+        Some(&library_offers(
+            editor.stack.completions.clone(),
+            crate::display::CompletionScope::Everything,
+        )),
     );
     assert!(
         offers
             .iter()
-            .any(|offer| offer.source == Some(names["clouds"]))
+            .any(|offer| offer.display == "clouds" && offer.detail.as_deref() == Some("call"))
     );
     let mut runner = crate::EditorRunner::new(editor);
     let render = |runner: &mut crate::EditorRunner, time: f64| {

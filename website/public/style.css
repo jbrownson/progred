@@ -126,17 +126,15 @@ strong { font-weight: 600; }
 .reset { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0.5rem 0.1rem; }
 .reset span { margin-left: 0.2rem; font-size: 1.1rem; }
 iframe { display: block; width: 100%; height: 19rem; border: 1px solid var(--border); border-radius: 4px; background: var(--editor); }
-#drawing iframe { height: 24rem; }
-#model iframe { height: 16rem; }
 .story .showcase iframe { height: 21rem; }
 #dot iframe { height: 10rem; }
 #copies iframe, #recipe iframe { height: 11.5rem; }
 #trunks iframe { height: 20rem; }
-#ladder iframe { height: 17rem; }
 #heights iframe { height: 22rem; }
 #growth iframe { height: 25rem; }
 #counted iframe { height: 26rem; }
-.showcase iframe { height: 42.75rem; }
+/* The whole forest program, as it first projects. */
+.showcase iframe, #peel-editor iframe, #yours iframe { height: 42.75rem; }
 kbd { font: inherit; font-size: 0.9em; border: 1px solid var(--border); border-bottom-width: 2px; padding: 0.05em 0.3em; border-radius: 3px; white-space: nowrap; }
 code { font-size: 0.95em; }
 .peel-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.5rem; margin-block: 0.75rem; font-size: 0.9rem; }
@@ -146,6 +144,8 @@ code { font-size: 0.95em; }
 .peel-layer { display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer; }
 .peel-names { color: var(--muted); font-size: 0.8em; }
 .peel-caption { min-height: 4.5em; padding: 0.75rem 1rem; border-left: 3px solid var(--accent); background: var(--switch-track); border-radius: 4px; }
+.hint { margin-block: 0 0.75rem; padding: 0.5rem 0.9rem; border-left: 3px solid var(--accent); background: var(--switch-track); border-radius: 4px; font-size: 0.875rem; }
+.hint[hidden] { display: none; }
 sub.tag { font-size: 0.65em; color: var(--muted); vertical-align: -0.3em; margin-inline-start: 0.1em; }
 .next { border-top: 1px solid var(--border); padding-block: 3rem 3.5rem; }
 .next > a { color: var(--accent); }
@@ -178,13 +178,11 @@ figure { margin: 1.5rem 0; }
 .idea-figure { margin: 0.9rem 0 0; }
 figure img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--editor); }
 figcaption { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted); }
-.today ul, .missing ul { padding-left: 1.35rem; }
-.tutorials { list-style: none; padding: 0; margin: 1.5rem 0 0; display: grid; gap: 0.75rem; }
-.tutorials li { margin: 0; padding: 0; }
-.tutorials a { display: block; padding: 1rem 1.1rem; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; }
-.tutorials a:hover { border-color: var(--accent); color: inherit; }
-.tutorials strong { display: block; color: var(--accent); }
-.tutorials span { display: block; margin-top: 0.2rem; font-size: 0.925rem; color: var(--muted); }
+.today ul, .missing ul, .starts { padding-left: 1.35rem; }
+.tutorial { display: block; margin: 1.5rem 0 0; padding: 1rem 1.1rem; border: 1px solid var(--border); border-radius: 8px; text-decoration: none; }
+.tutorial:hover { border-color: var(--accent); color: inherit; }
+.tutorial strong { display: block; color: var(--accent); }
+.tutorial span { display: block; margin-top: 0.2rem; font-size: 0.925rem; color: var(--muted); }
 .closing { padding-bottom: 4rem; }
 
 @media (max-width: 800px) {
@@ -194,7 +192,6 @@ figcaption { margin-top: 0.5rem; font-size: 0.875rem; color: var(--muted); }
   #dot iframe { height: 12rem; }
   #copies iframe, #recipe iframe { height: 15rem; }
   #trunks iframe { height: 28rem; }
-  #ladder iframe { height: 22rem; }
   #heights iframe { height: 30rem; }
   #growth iframe { height: 34rem; }
   #counted iframe { height: 34rem; }

@@ -49,20 +49,36 @@ stable identities, so changing load order cannot silently retarget a `Follow`.
 List positions preserve an occurrence across edits that retain that position;
 they are not content identities or globally meaningful addresses.
 
+A [`Location`](../progred/src/location.rs) names stored data: it starts at the
+document's root or at a cell's definition from a particular source, then follows
+a path from there. Following a cell starts a new location at its definition,
+however the cell was reached, so what can be edited depends on where the data is
+stored, not on the route to it. Writes land in that stored value: a location's
+last `Follow` names the definition it is in, or else its own start does. The
+root and the document's own definitions are writable, including a cell with no
+definition yet; a library's definitions are read-only. A route through a cell
+and a location starting at that cell are the same location.
+
 Selection also names its owning workspace view. Two panes can show the same
 stored path while keeping separate focus, scroll, and folds. A workspace
 `Root` supplies this session identity; it is not a GID cell.
 
 [`SourceTrace`](../progred/src/hover.rs) serves source-linked widgets, drawing, and
-highlighting. It is either a stored path or a cell, definition source, and path
-relative to that definition. Normalizing to the nearest followed definition
-lets different occurrences highlight the same source without conflating two
-libraries' definitions of one cell. Both forms still need the caller's
-resolution context. Neither is an execution stack or global address.
+highlighting. It is a location in the form it is stored in: a path from the root,
+or a cell, definition source, and path relative to that definition. Normalizing
+to the nearest followed definition lets different occurrences highlight the same
+source without conflating two libraries' definitions of one cell. Both forms
+still need the caller's resolution context. Neither is an execution stack or
+global address.
 
 Computed values use `at` at their own displayed occurrences. They and their
 children can be selected, copied, and folded, but have no document destination
-for edits. Selecting a result does not select its producing expression.
+for edits. Selecting a result does not select its producing expression. A cell
+inside a result is still a cell, though, as in a missing-cell error or a quote's
+template: following it starts a location at its definition, which edits on the
+usual terms. So the missing-cell error a pane shows for a Grap starting point's
+unwritten program is a place to write it. Values copied out of cells stay
+read-only; reaching the code that made one is source-linked hover's job.
 Computed output uses the same read-only ground as external definitions. Nested
 read-only occurrences do not stack washes; an explicit jump to writable source
 restores the paper ground. This decoration does not change edit permissions:
@@ -75,33 +91,37 @@ definition can itself still be replaced or removed from a writable document.
 payload, and optional Rust editor. Its stages distinguish an existing edge,
 a pending value, and a pending record label. Annotation records live in a
 path-keyed [`Annotations`](../progred/src/annotations.rs) trie owned by the view;
-folding is one convention in those records.
+folding is one convention in those records. Space folds and unfolds the selected
+occurrence. Clicking a fold's `…` selects the occurrence as it opens it, so Space
+closes it again.
 
-Selection also retains a native editing scope. Ordinary document projection
-uses its allocation-free identity case. A scope installs a **conject** at an
-occurrence: an ordinary function of the remaining projection path and a document
-path, returning `Option<DocumentPath>`. Reads and writes use the same function;
-there is no independently configurable read/write pair or inverse mapping.
-Several occurrences may conject to one source. Selection, navigation, and
-annotations stay occurrence-local, while source-linked hover uses the conject.
-Line editing, gestures, completion insertion, structural paste/deletion, and
-history retain that interpretation. Undo restores the scope with the selected
-path; scopes contain no document snapshot or borrow of the editor.
-The scope stores a resolver function from occurrence path to optional document
-path. The standard boundary constructor captures the occurrence prefix,
-document starting path, conject, and enclosing fallback in that function;
-there is no separately interpreted route record. Identity scopes borrow their
-input path without allocating.
+Selection also retains a native editing scope, which maps an occurrence to its
+location, if any. Ordinary document projection uses its allocation-free identity
+case. A scope installs a **conject** at an occurrence: an ordinary function of
+the remaining projection path and a location's path, returning an optional path
+from that location's start. Reads and writes use the same function; there is no
+independently configurable read/write pair or inverse mapping. Several
+occurrences may conject to one source. Selection, navigation, and annotations
+stay occurrence-local, while source-linked hover uses the conject. Line editing,
+gestures, completion insertion, structural paste/deletion, and history retain
+that interpretation. Undo restores the scope with the selected path; scopes
+contain no document snapshot or borrow of the editor.
+A scope is a chain of layers, each reading the occurrences at and beneath one
+occurrence: a conject's, or a followed cell's definition. Projection adds a
+cell's layer wherever it follows a cell, which is how a location starts there.
+Identity scopes borrow their input path without allocating. Comparing two
+scopes at an occurrence compares where each says the data is stored.
 If a projection changes what a selected occurrence means, its caller is
 responsible for clearing the selection when necessary; the editor does not
 try to repair arbitrary changes of interpretation.
 
 `descend` extends the current occurrence, `jump` gives a new occurrence an actual
 document source, and `at` projects a supplied value without a source. `None`
-means no document location, not a missing value: `Some(path)` can name an absent
-field and still offer editing. A library source is present but read-only.
-Ordinary descendants of `at` stay detached, including cell follows; an explicit
-`jump` can establish a source again. Outline list entries project their referenced
+means no document location, not a missing value: `Some(location)` can name an
+absent field and still offer editing. A library source is present but read-only.
+Ordinary descendants of `at` stay detached until they follow a cell, which starts
+a location at its definition; an explicit `jump` can also establish a source
+again. Outline list entries project their referenced
 fields through jumps: the heading is the real list element, and its body has an
 occurrence beneath that element. Repeating a field yields independent folds and
 selection locations while both bodies edit the same source field.
@@ -124,6 +144,19 @@ state are optional. This applies to empty roots, bare-cell definitions, missing
 record fields, and inserted list positions, without a special selection callback
 for each. Read-only locations do not enter a picker.
 
+Enter beside a selected value adds a peer: an element after it in a list, or a
+field on the record holding it. Cmd+Enter adds something within it: a field on
+a record, an element appended to a list, or a bare cell's first value. Both
+belong to the view of the container they land in, which offers them through
+`structure::authoring`; its children's handlers run first. The structural
+record, list and cell views offer it. Grap's calls don't, since their arguments
+are their parameters, shown as slots when missing; nor does a view that draws a
+value as one piece, such as a number, text, a color, an infix expression or a
+tutorial's slots, so Enter there adds nothing. While typing in a
+value, Enter only ends the typing, since the value is already written; the
+text re-spells from it, so a half-typed `6e` goes back to `6`. A key a line
+editor doesn't take never starts its typing.
+
 Deleting a selected value keeps its place selected as a hole, so the next
 keystrokes write its replacement; Backspace or Delete on the hole's empty query
 removes it, landing on the stop before it (after it, for Delete). Typing over a
@@ -136,7 +169,8 @@ right operand's picker; a sign or exponent the number is still becoming stays
 in its text. A picker opened from a key remembers where it was opened, and Escape, or an empty
 query's Backspace or Delete, steps back there. Views that draw a record as one
 value (numbers, text, colors) follow it with a record of its other fields, as a
-call follows its head with its arguments; a field being added appears there.
+call follows its head with its arguments. No key adds a field to them there; a
+rawer view, where the value reads as the record it is, can.
 
 The live `LineEditState` owns text, caret, IME, and text-drag state. A projection
 at the selected location receives a GID description derived from that state.
@@ -246,22 +280,42 @@ handle the shortcut first and select their own text.
 
 ## Completion
 
-The projection rendering a pending value or label explicitly requests
-completion and may supply a lazy vocabulary. Completion is an ordinary native
-widget function; its explicit kind and provider arguments go to a scoped app
-adapter returning the same measured widget output as other projections. No
-provider is hidden in traversal context. Only the active picker asks the
-provider for offers. Each request includes the query, field/value kind,
-suggestion/Everything scope, Raw mode (so providers can omit interactions whose
-presentation needs a library projection), source-qualified path, and read-only
-path and cell lookups, plus lazy enumeration of defined cells. Cell lookup
-exposes the selected definition's value, source, and whether it has a native
-implementation, without evaluating it.
-The path names a missing value or the record receiving a new label. A local
-projection provider takes precedence; otherwise library providers contribute
-in library order. `None` leaves the vocabulary unspecified, while `Some([])`
-means an empty narrow list with the `…` escape. If no provider specifies a
-vocabulary, the editor uses its universal offers directly.
+The projection drawing a hole decides what it offers. A hole is a pending value
+or label; its projection requests completion explicitly and may hand it a
+provider, which is then the hole's whole vocabulary: the picker shows those
+offers and nothing else. A hole no projection supplies offers for is Raw's: one
+the generic structure projection draws, or one the editor draws itself. Raw
+offers the editor's constructors and what's typed, read as a value: what the
+libraries read the query as, such as a number, then text or bytes, or for a
+field a new label named as typed. It offers no existing cells. An existing cell
+is reused by pointing at it (Cmd+click) or pasting it; typing makes something
+new. Outside Raw, the hole at a document's root starts the document: it leads
+with what the libraries start one as, such as a Grap program or a Fidget scene,
+then offers Raw's. Completion is an ordinary native widget function; its explicit kind and provider
+arguments go to a scoped app adapter returning the same measured widget output as
+other projections. No provider is hidden in traversal context. Only the active
+picker asks for offers.
+
+This is a deliberately simple starting point, reached by removing more
+elaborate behavior. What was removed, and what may come back in another form,
+is recorded in [deferred work](deferred.md#completion-after-the-strip-back).
+
+Each request includes the query, field/value kind, the question asked of a
+library (what it offers anywhere, what it reads the query as, or what a document
+can start as), Raw mode
+(so providers can omit interactions whose presentation needs a library
+projection), the hole's path, and read-only path and cell lookups, plus lazy
+enumeration of defined cells. Cell lookup exposes the selected definition's
+value, source, and whether it has a native implementation, without evaluating
+it. The path names a missing value or the record receiving a new label, from
+where the hole's location starts, and path lookups read from there too. A hole
+in a cell's definition reads that definition as its own context, however the
+cell was reached, so Grap offers only the bindings visible within it. A
+projection's provider that answers `None` offers nothing, as `Some([])` does.
+Raw asks the libraries for their readings of the query, a document's root for
+their starting points, and a projection's provider for whatever it wants, as
+Grap's slots ask for their offers anywhere. They answer in library order; `None`
+means a library has nothing to add.
 
 Completion display text and detail can be literal text or a named cell reference.
 Library, constructor, parameter, and numeric-type labels use references; the
@@ -269,93 +323,76 @@ picker resolves their current names before filtering each frame. Renaming a
 definition therefore updates even retained offers without changing their
 activation handler. An explicit empty name stays empty; a missing
 name uses the usual short cell identity. Typed values remain literal text.
-Cell search entries show their source name as a right-aligned note, without
-appending the cell identity. Identities are low-level inspection information,
-not routine disambiguation labels; Raw still shows them as the primary spelling.
 
-The completion library's `labels` helper turns cell identities into label offers;
-`combine` concatenates applicable lazy providers in order, preserving an explicitly
-empty vocabulary. Grap's `parameter_labels` reads an inline or stored lambda's
-declared parameters when asked. The same metadata reader supplies call field order
-and `call_completion`'s initial pending parameter. It follows cell aliases and declines
-cycles and computed callables. A native function's description lists the arguments
-its implementation requires under `params`; the reader takes that list as is and
-never interprets a native description as a lambda.
-Filtering names and excluding existing record labels remain picker responsibilities.
+The completion library's `combine` concatenates applicable lazy providers in
+order, preserving an explicitly empty vocabulary. Grap's parameter reader takes
+an inline or stored lambda's declared parameters when asked, for a call's field
+order, its slots for missing arguments, and `call_completion`'s initial pending
+parameter. It follows cell aliases and declines cycles and computed callables. A
+native function's description lists the arguments its implementation requires
+under `params`; the reader takes that list as is and never interprets a native
+description as a lambda. Filtering names and excluding existing record labels
+remain picker responsibilities.
 
-For nonempty value searches, Grap also offers calls to named stored lambdas,
+Asked for its offers anywhere with a nonempty query, Grap offers calls to named
+stored lambdas,
 closures, and native functions discovered through those definitions. These are
 ordinary `call_completion` offers, distinguished by a `call` detail; choosing one
 inserts `{function: cell}` and opens its first declared argument when known.
 Call suggestions put document-defined functions before library functions, sorting
 each group alphabetically by display name, ignoring case. Typed-query matching
 still takes precedence; this order breaks equally ranked matches.
-The bare reference remains a separate choice. Discovery does not evaluate code
-or guess the result of computed callables. Function/FFI reference slots and label
-pickers do not receive these call offers.
+Discovery does not evaluate code or guess the result of computed callables.
+Label pickers do not receive these call offers.
 
-Grap expression slots supply a focused provider: statically visible lambda
+Grap expression slots supply their own provider: statically visible lambda
 parameters, preceding `let`/`where` bindings and the current match case's pattern
-bindings, plus named function calls, library literal/constructor offers, text,
-lists, and records. This is an explicit local projection, including the items of
-`do`, not a global change to data completion. Existing domain-specific suggestions
-are tried first. Binding suggestions put the nearest enclosing lexical scope
-first, then outer scopes, sorting names alphabetically within each scope.
-Rebinding a cell gives it the nearer scope's rank; scrolling and layout have no
-effect on this order. Typed-query match quality still ranks ahead of proximity.
-In an operation's `left`, `right`, or `operand`, and in its operator, the library
-defining the operation stands in for a type until there are some: its offers
-come first and hide other libraries' offers of the same spelling, so a number
-type's literals and operations replace other types' in its arithmetic.
-Conversions between number types live in a conversion library of their own, so
-their operands keep every type's offers. The projection environment exposes
-the loaded library provider for composition; Grap reuses those offers rather than
-duplicating numeric conventions. Scope discovery reads source structure only;
-quoted template declarations do not introduce bindings into unquotes. Computed
-binding lists and runtime callable types are not inferred. `…` restores all cell
-references, including function values, named constants, and library vocabulary.
+bindings, plus named function calls, every library's offers anywhere, the editor's cell,
+list, and record constructors, quote, and what's typed, read as a value. This is an explicit local
+projection, including the items of `do`, not a global change to data completion.
+Binding suggestions put the nearest enclosing lexical scope first, then outer
+scopes, sorting names alphabetically within each scope. Rebinding a cell gives it
+the nearer scope's rank; scrolling and layout have no effect on this order.
+Typed-query match quality still ranks ahead of proximity. The projection
+environment exposes the loaded library provider for composition; Grap reuses
+those offers rather than duplicating numeric conventions. Scope discovery reads
+source structure only; quoted template declarations do not introduce bindings
+into unquotes. Computed binding lists and runtime callable types are not
+inferred. Cells that are neither bindings nor functions, such as a named
+constant, are not offered there.
 
-Root templates and root field suggestions are ordinary library providers
-checking the path, not separate editor hooks. The name library offers the query
-as text at a name field, including an empty string and optional surrounding
-quotes. A missing-name marker, such as an anonymous lambda's, only selects that
-name location; the name library's offer supplies its text. Expanding the picker
-still allows other values. Fidget uses the same interface
-for shape expressions, parameter labels, and f32 parameter values, including
-through cell references, source-list items, and existing Grap constructor calls.
-Shape templates open their first missing parameter
-without inventing a value. Label offers omit fields already in the record.
-Fidget field-expression suggestions put shapes before scalar constants; numeric
-parameter slots still lead with their f32 offer, including zero for an empty query.
-Circle and sphere are ordinary named Grap lambdas that use quote/unquote to
-return Fidget arithmetic; the Fidget parser has no circle or sphere forms.
-Their parameter suggestions and initial focus come from their current definitions;
-the native Fidget forms retain explicit domain schemas.
-Their completions insert calls only in evaluated positions (the domain's source
-entries and Fidget constructor arguments), not inside inert Fidget records.
+A projection that descends into a name passes the name library's partial, which
+draws an existing name as its line editor and a missing one as a hole taking
+whatever is typed as its text, including an empty string and optional
+surrounding quotes. A missing-name marker, such as an anonymous lambda's,
+selects that name location and then draws the same hole. A `name` field drawn by
+the generic structure projection offers Raw's instead. Circle and sphere are
+ordinary named Grap lambdas that use quote/unquote to return Fidget arithmetic;
+the Fidget parser has no circle or sphere forms.
 
-Libraries can also contribute query-dependent value offers to the universal
-vocabulary. The numeric libraries offer `f32`, `f64`, and `u64` interpretations
-when the query parses, showing the representation and the actual stored
-number. An empty or whitespace-only query offers zero in each available
-representation; it remains a suggestion until committed. Other invalid numeric
-queries offer no number. Universal offers use a general ordering: exact nonempty
-display-name matches from library interpretations, strong named cell and constructor
-matches, remaining library-provided interpretations in library order,
-plain text (or a new label), then weak fuzzy and unnamed references. Outside an
-operation's slots, the editor does not distinguish particular numeric
-representations for ranking. With an
-empty query, the zero interpretations therefore follow named cells and
-constructors, just before the empty string. Explicit quoted text and blob syntax
-lead instead. Numeric providers decline label requests. A projection's narrow
-vocabulary still takes precedence until the user expands it.
+The numeric libraries read the query as `f32`, `f64`, and `u64` numbers when it
+parses, showing the representation and the actual stored number; a query that
+doesn't parse, an empty one included, reads as no number. Any nonempty query
+reads as text, after the readings particular to it; the empty string takes at
+least a `"`. A new label likewise needs something typed. An empty query
+therefore offers no typed values, and Raw shows just its constructors, after a
+document root's starting points. A projection whose hole expects a number or
+text can still offer one for an empty query, as a name's hole does for text.
+Raw orders its offers: a reading that spells the query exactly, the
+constructors the query names, the other readings in library order, text (or a
+new label), then constructors the query matches only loosely. The editor does
+not distinguish particular numeric representations for ranking. Explicit quoted
+text and blob syntax lead instead. Numeric providers decline label requests.
 
-Universal constructor offers accept delimiter aliases: `[` for `new list`,
-`(` for `new cell`, and `{` for `new record`. In an empty completion query,
-those keys activate the constructors directly, including in a provider's narrow
-list. A field label permits only the cell constructor. Nonempty queries and
-IME composition keep ordinary text input; quoted punctuation leads with literal
-text. Shortcuts use the same insertion callbacks as the constructor offers.
+Raw's holes, and a document's root, make the editor's constructors from their
+delimiters: typed into an empty query, `(` makes a new cell, `[` a new list, and `{` a new record; a field
+label permits only the cell. These are keys of Raw's holes, not of the offers.
+A projection's hole takes a delimiter as text, which finds its constructor where
+the projection offers one, as Grap's do. Nonempty queries and IME composition
+keep ordinary text input; quoted punctuation leads with literal text.
+A new cell, list or record opens as it's made, as Cmd+Enter would open it,
+so typing goes inside: the cell's value, an element of the list, or a field of
+the record. Escape steps back out to it.
 
 A library completion consists of presentation metadata and an activation handler
 receiving `&mut Editor`. Clicking or pressing Enter runs it; highlighting or
@@ -374,8 +411,8 @@ effectful calls, not a special return-value format. Insertion itself does not ch
 continuation receives the existing selection, and only its explicit effects
 replace or clear it. A low-level offer with no continuation leaves that selection
 unchanged, including an active pending query. Stock offer combinators supply the
-policy: `completion::select` selects the inserted value, and `completion::label`
-opens the label's missing value. Text, numbers, and blobs simply select their
+policy: `completion::select` selects the inserted value, and an insertion
+continuing with `pending_at` opens a label's missing value. Text, numbers, and blobs simply select their
 location; their line controls supply default editing when projected. Completions
 do not copy editor text, caret, or write-back rules into the selection. Query
 caret positions are not translated across parsing. These same offers work in
@@ -397,8 +434,8 @@ cell shared by their domain field and a left pane. Fidget's pane applies
 `preview 3d`; Grap's pane renders the evaluated result. The continuation opens
 the cell's pending document definition through the domain field, without
 inventing a placeholder value. Offers that mint identities construct their
-value on activation, so reusing an offer creates independent cells.
-`panes` remains an independent root field suggestion.
+value on activation, so reusing an offer creates independent cells. Both are
+their libraries' starting points, which lead the hole of a document's root.
 
 The placed frame retains the exact visible offers, so hover and commit never
 reconstruct a different list. Each offer has an activation
@@ -414,17 +451,13 @@ The editor owns document operations, query state, and popup placement. See
 The card meets the query's painted frame, accounting for the frame outline and
 both border widths. Placement uses those same drawing parameters above or below
 the query, and includes the card's stroke when keeping it within the viewport.
+The card shows up to eight rows and scrolls the rest. It opens below the query
+when it fits there, otherwise above; when it fits neither, it takes the roomier
+side, showing only the rows that fit, rather than covering the query.
 
-A provider starts with its narrow vocabulary. The trailing `…` participates in
-row navigation but activates expansion rather than committing a value. Expansion
-also happens when pressing Down on the selected `…` row. The expanded list keeps
-the provider's offers first and adds universal atoms, constructors, and cell
-search; the `…` row disappears. Expansion keeps the
-selected index, clamped to the available rows. Changing the query filters the
-expanded list and resets selection and scroll; expansion lasts for that picker.
-Returning to an older query does not restore an old choice. A new picker starts
-with its provider's narrow vocabulary. Pointer and keyboard activation use the
-same callbacks.
+Changing the query filters the offers and resets selection and scroll.
+Returning to an older query does not restore an old choice. Down stops at the
+last row. Pointer and keyboard activation use the same callbacks.
 Keyboard navigation and unpressed mouse motion over a visible row update the
 same chosen-row state. Only that row is highlighted, and Enter activates it.
 Hover remains available for pointer activation but does not paint a second

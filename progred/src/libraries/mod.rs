@@ -27,6 +27,7 @@ pub mod logic;
 pub mod name;
 pub mod number;
 pub mod path;
+pub mod png;
 pub mod presentation;
 pub mod random;
 pub mod representation;
@@ -649,7 +650,7 @@ mod tests {
                     raw: false,
                     query: "query",
                     kind,
-                    scope: crate::display::CompletionScope::Suggested,
+                    scope: crate::display::CompletionScope::Everything,
                     path: &[],
                     value_at: &|_| None,
                     resolve: &|_| None,

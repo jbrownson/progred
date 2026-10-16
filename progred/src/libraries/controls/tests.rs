@@ -71,7 +71,7 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: &mut puri::text::TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
         _: Vec<gid::Step>,
-        _: Vec<gid::Step>,
+        _: crate::location::Location<'static>,
         _: display::Conject,
         _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
         _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,

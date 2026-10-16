@@ -137,14 +137,20 @@ impl Completion {
     }
 }
 
+/// What a library is asked.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CompletionScope {
-    Suggested,
+    /// The values and calls it offers anywhere, such as a new color, for a
+    /// projection that wants them among its own, as Grap's slots do.
     Everything,
-    /// What was typed, read as one of a library's values, like a string from
-    /// any query. Asked on every request, so a provider answers it cheaply;
-    /// the picker lists it where a typed value goes instead of ranking it.
+    /// What was typed, read as one of a library's values, like a number or a
+    /// string. Raw asks on every request for a value, so a provider answers it
+    /// cheaply; the picker lists it where a typed value goes instead of ranking
+    /// it.
     Literal,
+    /// What a new document can start as, such as a Grap program, for the
+    /// hole of a document's empty root.
+    Start,
 }
 
 /// Read-only definition metadata; native implementations are never exposed here.
@@ -155,8 +161,10 @@ pub struct ResolvedCell<'a> {
     pub native: bool,
 }
 
-/// The path names the missing value, or the record receiving a new label.
-/// Reads use that same source context, including source-qualified Follow steps.
+/// The path names the missing value, or the record receiving a new label,
+/// from where its location starts: the document's root, or the definition of
+/// the cell it's in. Reads use that same context, so a cell's definition is
+/// read as its own, however it was reached.
 pub struct CompletionRequest<'a> {
     /// Raw projection has no library-specific interaction presentations.
     pub raw: bool,
@@ -175,8 +183,9 @@ impl CompletionRequest<'_> {
     }
 }
 
-/// Invoked only for an active picker. None leaves vocabulary unspecified;
-/// Some(empty) deliberately offers nothing except the Everything escape.
+/// Invoked only for an active picker. A projection's provider is the whole
+/// vocabulary of the holes it draws; a library's answers None where it has
+/// nothing to add.
 pub type CompletionProvider = Rc<dyn Fn(&CompletionRequest<'_>) -> Option<Vec<Completion>>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -656,6 +665,43 @@ pub fn center<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     )
 }
 
+/// A right arrow drawn to the size of the dim text beside it, rather than
+/// the font's `→`, which many faces draw tiny. It has the delimiters' stem
+/// and glyph box.
+pub fn arrow<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
+    Layout::widget(Rc::new(|context| {
+        let em = f64::from(context.inputs.styles.dim.size) * context.inputs.styles.scale;
+        let ink = context.inputs.styles.dim.brush.clone();
+        let (ascent, descent) = puri::delim::minimum_span(em);
+        widget::paint(
+            widget::Extent {
+                width: em,
+                ascent,
+                descent,
+            },
+            move |canvas, placement| {
+                let axis = placement.rect.y0 + ascent - 0.27 * em;
+                let (tail, tip) = (placement.rect.x0 + 0.12 * em, placement.rect.x1 - 0.12 * em);
+                let head = 0.24 * em;
+                let mut path = kurbo::BezPath::new();
+                path.move_to((tail, axis));
+                path.line_to((tip, axis));
+                path.move_to((tip - head, axis - 0.85 * head));
+                path.line_to((tip, axis));
+                path.line_to((tip - head, axis + 0.85 * head));
+                canvas.stroke_shape(
+                    puri::draw::Shape::Path(path),
+                    puri::Stroke::new(0.075 * em)
+                        .with_caps(kurbo::Cap::Round)
+                        .with_join(kurbo::Join::Round),
+                    ink,
+                    puri::Affine::IDENTITY,
+                );
+            },
+        )
+    }))
+}
+
 const RULE_SPACE: f64 = 3.0;
 const RULE_THICKNESS: f64 = 1.0;
 
@@ -696,7 +742,7 @@ pub fn pad<World: 'static, Hover: 'static>(
     padding((left, 0.0, 0.0, 0.0).into(), child)
 }
 
-pub use widget::border;
+pub use widget::{border, ground};
 
 /// Project record-shaped fields in a caller-supplied order. The
 /// caller owns each field's meaning — label behavior, child
@@ -894,26 +940,32 @@ pub fn at<World: 'static, Hover: 'static>(
     at_with_projection(steps, value, None, None)
 }
 
-/// Start projecting at an absolute document location while extending only the
+/// Start projecting at a document path from its root while extending only the
 /// occurrence path by `steps`. Descendants conject back to that location.
 pub fn jump<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     document: impl Into<Vec<Step>>,
 ) -> Layout<World, Hover> {
-    jump_with_conject(steps, document, Conject::descend(), None, None)
+    jump_with_conject(
+        steps,
+        crate::location::Location::root(document.into()),
+        Conject::descend(),
+        None,
+        None,
+    )
 }
 
 /// Low-level jump: the conject interprets the suffix below the new occurrence
-/// relative to `document`. It is also used to locate the value being projected.
+/// relative to the path of `document`, which keeps its start. It is also used
+/// to locate the value being projected.
 pub fn jump_with_conject<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
-    document: impl Into<Vec<Step>>,
+    document: crate::location::Location<'static>,
     conject: Conject,
     projection: Option<Partial<World, Hover>>,
     default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
     let steps = steps.into();
-    let document = document.into();
     Layout::program(Rc::new(move |context, build| {
         context.project.jump(
             context.text,
@@ -1069,9 +1121,9 @@ mod tests {
                 default_projection,
             } => {
                 assert_eq!(actual, steps);
-                assert_eq!(document, source);
+                assert_eq!(document, crate::location::Location::root(source.clone()));
                 assert_eq!(
-                    conject.apply(&steps, &document),
+                    conject.apply(&steps, &document.path),
                     Some([source, steps].concat())
                 );
                 assert!(projection.is_none());

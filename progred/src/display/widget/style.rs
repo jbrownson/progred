@@ -29,6 +29,23 @@ pub fn hover_highlight<P: Canvas + ?Sized>(
     );
 }
 
+/// Hover's outline in a literal's own color, for what the pointer could drag
+/// while the command modifier is held.
+pub fn drag_highlight<P: Canvas + ?Sized>(
+    palette: Palette,
+    scale: f64,
+    canvas: &mut P,
+    outline: RoundedRect,
+) {
+    canvas.fill(outline, palette.literal.with_alpha(0.08), Affine::IDENTITY);
+    canvas.stroke(
+        outline,
+        Stroke::new(1.5 * scale),
+        palette.literal.with_alpha(0.55),
+        Affine::IDENTITY,
+    );
+}
+
 #[derive(Clone)]
 pub struct Styles {
     pub palette: Palette,

@@ -89,7 +89,8 @@ a line field placing its caret at the edge the arrow came from. A stop without a
 landmark declines rather than selecting something that cannot be revealed.
 Offscreen stops remain available; folded or unplaced contents do not contribute.
 Stops reached through `jump` keep their editing context; computed results,
-including those reached through `at`, keep their read-only selection behavior.
+including those reached through `at`, keep their read-only selection behavior,
+apart from a cell's definition followed from one.
 
 Every handler in the frame sees an arrow first, modifiers included, so text and
 picker handlers can claim it. Only an arrow nothing claims reaches the editor's
@@ -98,6 +99,17 @@ structural keys, the frame's lowest-priority handler. That handler lowers it to
 reveals the selection it lands on. With no selection, a root navigation handler
 selects the document's root occurrence. Landmarks also serve pointer and source
 selection and the explicit Select All command.
+
+Tab moves to the next empty slot, a writable landmark with no value yet, and
+Shift+Tab to the one before, in reading order within the selection's view:
+line by line, where a line is what overlaps vertically, then left to right.
+With nothing selected, Tab starts at the first. In a picker, Tab first commits
+what was typed, as Enter would. It stays there when that opened a slot of its
+own, such as a new call's first argument, or when no slot is left, so the
+commit shows before focus moves on. A Tab with nothing to commit and nowhere
+to go declines, so a browser moves focus on to the rest of its page, which
+clears the selection. A window has nowhere else to go, so there that Tab clears
+the selection itself, and the next starts over from the first slot.
 
 The anonymous lambda's `λ` marker is clickable to name the function but is not
 an arrow stop; the whole lambda, parameter list, and body remain navigable.

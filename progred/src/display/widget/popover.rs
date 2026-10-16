@@ -56,10 +56,35 @@ pub fn rect(anchor: Rect, size: Size, bounds: Rect, gap: f64) -> Rect {
     } else {
         above
     };
-    let x = anchor
+    Rect::from_origin_size(Point::new(left(anchor, size, bounds), y), size)
+}
+
+/// Like [`rect`], for a card that can show less of itself: one that fits
+/// neither below nor above its anchor takes the roomier side, shortened to
+/// what fits there, rather than covering the anchor. It keeps at least
+/// `minimum` of its height, overlapping the anchor if it must.
+pub fn shortened(anchor: Rect, size: Size, bounds: Rect, gap: f64, minimum: f64) -> Rect {
+    let below = bounds.y1 - anchor.y1 - gap;
+    let above = anchor.y0 - gap - bounds.y0;
+    let downward = size.height <= below || (size.height > above && below >= above);
+    let room = if downward { below } else { above };
+    let height = room.max(minimum).min(size.height);
+    let y = if downward {
+        (anchor.y1 + gap).min((bounds.y1 - height).max(bounds.y0))
+    } else {
+        (anchor.y0 - gap - height).max(bounds.y0)
+    };
+    Rect::from_origin_size(
+        Point::new(left(anchor, size, bounds), y),
+        Size::new(size.width, height),
+    )
+}
+
+/// Aligned with the anchor's left edge, as far as the bounds allow.
+fn left(anchor: Rect, size: Size, bounds: Rect) -> f64 {
+    anchor
         .x0
-        .clamp(bounds.x0, (bounds.x1 - size.width).max(bounds.x0));
-    Rect::from_origin_size(Point::new(x, y), size)
+        .clamp(bounds.x0, (bounds.x1 - size.width).max(bounds.x0))
 }
 
 #[cfg(test)]
@@ -84,5 +109,24 @@ mod tests {
             Some(Placement::new(Rect::new(70.0, 41.0, 100.0, 81.0), bounds))
         );
         assert_eq!(place(Rect::new(110.0, 0.0, 120.0, 10.0)), None);
+    }
+
+    #[test]
+    fn a_card_that_fits_neither_side_shortens_on_the_roomier_one() {
+        let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
+        let size = Size::new(30.0, 60.0);
+        let place = |y0, y1| shortened(Rect::new(10.0, y0, 40.0, y1), size, bounds, 0.0, 10.0);
+        // Whole below when it fits there, else whole above.
+        assert_eq!(place(10.0, 20.0), Rect::new(10.0, 20.0, 40.0, 80.0));
+        assert_eq!(place(70.0, 80.0), Rect::new(10.0, 10.0, 40.0, 70.0));
+        // Neither: as much as fits on the roomier side, clear of the anchor.
+        assert_eq!(place(40.0, 50.0), Rect::new(10.0, 50.0, 40.0, 100.0));
+        assert_eq!(place(55.0, 65.0), Rect::new(10.0, 0.0, 40.0, 55.0));
+        // Never shorter than the minimum, even if it then covers the anchor.
+        let cramped = Rect::new(0.0, 0.0, 100.0, 30.0);
+        assert_eq!(
+            shortened(Rect::new(10.0, 10.0, 40.0, 20.0), size, cramped, 0.0, 15.0),
+            Rect::new(10.0, 15.0, 40.0, 30.0)
+        );
     }
 }

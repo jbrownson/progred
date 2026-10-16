@@ -26,7 +26,7 @@ pub type DispatchContext<C> = crate::display::widget::frame::DispatchContext<C, 
 pub type Attribution = crate::display::widget::frame::Attribution<Hovered>;
 pub use puri::frame::Render;
 pub type Probe = crate::display::widget::frame::Probe<Hovered>;
-pub use crate::display::widget::frame::ViewRegion;
+pub use crate::display::widget::frame::{Cursor, ViewRegion};
 
 impl DispatchContext<crate::Editor> {
     pub(crate) fn geometry(&self, scale: f64) -> crate::navigate::Geometry<'_> {
@@ -67,6 +67,11 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
         if !placement.clipped_out() {
             self.placed.claim(Probe::exact(placement, target));
         }
+    }
+
+    /// Show `cursor` while `target` is hovered.
+    pub fn cursor(&mut self, target: Hovered, cursor: Cursor) {
+        self.placed.cursor(target, cursor);
     }
 
     pub fn claim_dynamic(
@@ -510,7 +515,6 @@ mod tests {
                 pointer: Some(point),
                 prior: Some(&target),
                 reach_px: 3.0,
-                debug_geometry: false,
                 ..Default::default()
             },
         );
@@ -721,45 +725,6 @@ mod tests {
                 }
             ] if *trigger == Rect::new(5.0, 5.0, 15.0, 15.0)
                 && *content == Rect::new(5.0, 17.0, 25.0, 37.0)
-        ));
-    }
-
-    #[test]
-    fn debug_geometry_outlines_the_leafs_placement() {
-        let child = leaf(
-            Extent {
-                width: 12.0,
-                ascent: 4.0,
-                descent: 6.0,
-            },
-            |p: &mut Builder<'_, '_, ()>, placement| {
-                p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
-            },
-        );
-        let rect = Rect::new(3.0, 5.0, 15.0, 15.0);
-        let placed = crate::display::widget::frame::place(
-            child,
-            Placement::root(rect),
-            &HoverInput {
-                debug_geometry: true,
-                ..Default::default()
-            },
-        );
-        let mut canvas = TestCanvas(DrawList::new());
-        puri::frame::render(placed.bind(Default::default()).renders, &mut canvas);
-
-        assert!(matches!(
-            &canvas.0.0[..],
-            [
-                DrawCmd::Fill {
-                    shape: Shape::Rect(fill),
-                    ..
-                },
-                DrawCmd::Stroke {
-                    shape: Shape::Rect(outline),
-                    ..
-                }
-            ] if *fill == rect && *outline == rect
         ));
     }
 

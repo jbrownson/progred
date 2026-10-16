@@ -30,7 +30,7 @@
     planet: {name: "planet"}, moons: {name: "moons"}, n: {name: "n"},
     mars: {planet: "Mars", moons: {f64: 0x0000000000000040}},
     planet_view: {name: "planet view", params: [value], body: {function: quote, expression: {drawing: {
-      width: {f64: 0x0000000000806b40}, ascent: {f64: 0x0000000000000000},
+      width: {f64: 0x0000000000408540}, ascent: {f64: 0x0000000000000000},
       descent: {f64: 0x0000000000005940}, fuel: {f64: 0x000000000088c340},
       program: {function: planet_drawing, value: {unquote: value}},
     }}}},

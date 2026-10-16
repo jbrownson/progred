@@ -172,6 +172,106 @@ pub(crate) fn keyboard(
     false
 }
 
+/// Tab moves to the next empty slot in reading order, and Shift+Tab to the
+/// one before, within the selection's view; with nothing selected, Tab
+/// starts at the first. With no slot left, a browser moves focus on to the
+/// rest of its page, which clears the selection. A window has nowhere else
+/// to go, so there Tab clears the selection itself and the next starts over.
+pub(crate) fn tab(
+    editor: &mut crate::Editor,
+    geometry: Geometry<'_>,
+    event: &KeyboardEvent,
+) -> bool {
+    if !event.state.is_down()
+        || event.key != Key::Named(NamedKey::Tab)
+        || event.modifiers.ctrl()
+        || event.modifiers.meta()
+        || event.modifiers.alt()
+    {
+        return false;
+    }
+    if advance(editor, geometry, event.modifiers.shift()) {
+        return true;
+    }
+    !cfg!(target_arch = "wasm32") && editor.model.selection.take().is_some()
+}
+
+/// Selects the next empty slot after the selection, or with `back` the one
+/// before it, if there is one.
+pub(crate) fn advance(editor: &mut crate::Editor, geometry: Geometry<'_>, back: bool) -> bool {
+    let selection = editor.model.selection.as_ref();
+    let root = selection
+        .map(Selection::root)
+        .unwrap_or_else(|| editor.model.workspace.document_root())
+        .clone();
+    let anchor = selection.and_then(|selection| {
+        geometry
+            .descends
+            .iter()
+            .find(|descend| {
+                descend.root.as_ref() == Some(&root) && descend.path.as_ref() == selection.path()
+            })
+            .map(|descend| descend.rect)
+    });
+    let sources = editor.sources();
+    let slots = empty_slots(geometry.descends, &root, &sources);
+    let target = match (anchor, back) {
+        (None, false) => slots.first(),
+        (None, true) => slots.last(),
+        (Some(anchor), false) => slots.iter().find(|slot| follows(slot.rect, anchor)),
+        (Some(anchor), true) => slots.iter().rev().find(|slot| follows(anchor, slot.rect)),
+    }
+    .map(|slot| (*slot).clone());
+    target.is_some_and(|slot| geometry.arrive(editor, &slot, None))
+}
+
+/// The view's writable places with nothing in them yet, in reading order:
+/// line by line, where a line is what overlaps vertically, then left to
+/// right. A missing name isn't one: naming is optional.
+fn empty_slots<'a>(
+    descends: &'a [Descend<crate::Editor>],
+    root: &Root,
+    sources: &crate::sources::Sources<'_>,
+) -> Vec<&'a Descend<crate::Editor>> {
+    let mut slots: Vec<_> = descends
+        .iter()
+        .filter(|descend| {
+            descend.root.as_ref() == Some(root)
+                && descend.path.last() != Some(&Step::Key(crate::libraries::name::vocabulary::NAME))
+                && descend.scope.read(sources, &descend.path).is_none()
+                && descend.scope.writable(sources, &descend.path)
+        })
+        .collect();
+    slots.sort_by(|a, b| a.rect.y0.total_cmp(&b.rect.y0));
+    let mut lines: Vec<(f64, Vec<&Descend<crate::Editor>>)> = Vec::new();
+    for slot in slots {
+        match lines.last_mut() {
+            Some((bottom, line)) if slot.rect.y0 < *bottom => {
+                *bottom = bottom.max(slot.rect.y1);
+                line.push(slot);
+            }
+            _ => lines.push((slot.rect.y1, vec![slot])),
+        }
+    }
+    lines
+        .into_iter()
+        .flat_map(|(_, mut line)| {
+            line.sort_by(|a, b| a.rect.x0.total_cmp(&b.rect.x0));
+            line
+        })
+        .collect()
+}
+
+/// Whether `rect` comes after `anchor` in reading order: further along a
+/// line they share, or below it.
+fn follows(rect: Rect, anchor: Rect) -> bool {
+    if rect.y0 < anchor.y1 && anchor.y0 < rect.y1 {
+        rect.x0 > anchor.x0
+    } else {
+        rect.y0 >= anchor.y1
+    }
+}
+
 pub(crate) fn initial_navigation(
     root: &Root,
     descends: &[Descend<crate::Editor>],

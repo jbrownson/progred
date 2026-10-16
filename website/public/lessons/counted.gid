@@ -64,6 +64,6 @@
   "root": {
     first: forest,
     second: forest_call,
-    third: {drawing: {width: {f64: 0x0000000000807140}, ascent: {f64: 0x0000000000000000}, descent: {f64: 0x0000000000006440}, fuel: {f64: 0x000000000088d340}, program: forest_call}},
+    third: {drawing: {width: {f64: 0x0000000000c07240}, ascent: {f64: 0x0000000000000000}, descent: {f64: 0x0000000000006440}, fuel: {f64: 0x000000000088d340}, program: forest_call}},
   },
 }

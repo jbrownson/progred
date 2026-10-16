@@ -1,0 +1,500 @@
+#!/usr/bin/env node
+// A narrated video of a tools/web-control session. The logged actions replay
+// in a fresh browser at a pace a person can follow: a drawn pointer glides to
+// each one, the tester's `say` notes are spoken and captioned in a bar beneath
+// the page, and what each action did shows beside them. The pointer is only
+// drawn, so every action reaches the page exactly as it first did.
+//
+//   tools/playtest-video [SESSION] [OUT]
+//
+// SESSION defaults to target/web-control/session.jsonl, and OUT to
+// playtest.mp4 beside it, where a video folder holds the working files, so
+// two sessions can render at once. It replays against the browser build as
+// it stands, so don't rebuild between recording and replaying. It needs
+// ffmpeg, the ffmpeg build Playwright records with (npx playwright-core
+// install ffmpeg), and a voice: Kokoro once tools/playtest-voice setup has
+// fetched it, else pico2wave from libttspico-utils, macOS's say, or
+// espeak-ng.
+const fs = require("node:fs");
+const path = require("node:path");
+const { execFileSync, spawnSync } = require("node:child_process");
+const control = require("./web-control");
+
+const { WINDOW } = control;
+const BAR = 150;
+const RATE = 24000;
+// Kokoro's voice and pace, as fast as the other synthesizers sped up twice.
+const KOKORO_VOICE = process.env.PLAYTEST_VOICE ?? "af_heart";
+const KOKORO_SPEED = 1.75;
+const DRAG_STEPS = 10;
+const QUIET = 250;
+const WATCH = 350;
+// More pixels than a blinking caret differing from the tester's own
+// screenshot: the replay has probably gone its own way.
+const UNFAITHFUL = 300;
+
+function run(command, args) {
+  execFileSync(command, args, { stdio: ["ignore", "ignore", "inherit"] });
+}
+
+function installed(command) {
+  try {
+    execFileSync("sh", ["-c", `command -v ${command}`], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The voice: Kokoro once tools/playtest-voice has set it up, else the first
+// synthesizer installed. It writes a batch of {text, file} jobs as WAV files,
+// which `tempo` then speeds up with their pitch kept.
+function synthesizer() {
+  const home = path.join(control.ROOT, "target", "playtest-voice");
+  const python = path.join(home, "venv", "bin", "python");
+  if (fs.existsSync(python) && fs.existsSync(path.join(home, "kokoro-v1.0.int8.onnx"))) {
+    return {
+      name: `kokoro ${KOKORO_VOICE} ${KOKORO_SPEED}`,
+      tempo: 1,
+      synthesize: (jobs) => execFileSync(python, [
+        path.join(__dirname, "playtest-voice"), "speak", KOKORO_VOICE, String(KOKORO_SPEED),
+      ], { input: jobs.map((job) => `${JSON.stringify(job)}\n`).join(""), stdio: ["pipe", "ignore", "inherit"] }),
+    };
+  }
+  const engines = [
+    ["pico2wave", (text, file) => run("pico2wave", ["-l", "en-US", "-w", file, text])],
+    ["say", (text, file) => run("say", ["-o", file, "--file-format=WAVE", "--data-format=LEI16@16000", text])],
+    ["espeak-ng", (text, file) => run("espeak-ng", ["-w", file, text])],
+  ];
+  const found = engines.find(([command]) => installed(command));
+  if (!found) {
+    throw new Error("no voice: run tools/playtest-voice setup, or install pico2wave (libttspico-utils) or espeak-ng");
+  }
+  const [name, one] = found;
+  return { name, tempo: 2, synthesize: (jobs) => jobs.forEach(({ text, file }) => one(text, file)) };
+}
+
+// What a voice should read: words for the symbols and abbreviations a note
+// might use.
+function spoken(text) {
+  return text
+    .replace(/\bctrl\b/gi, "control")
+    .replace(/\bcmd\b/gi, "command")
+    .replace(/\bf64\b/gi, "f 64")
+    .replace(/λ/g, "lambda")
+    .replace(/→/g, " to ")
+    .replace(/×/g, " times ")
+    .replace(/[`*_#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Each note as mono samples at RATE, synthesized once per voice and kept by
+// its text.
+function speak(notes, directory) {
+  const voice = synthesizer();
+  console.error(`playtest-video: speaking ${notes.length} notes with ${voice.name}`);
+  fs.mkdirSync(directory, { recursive: true });
+  const file = (text, extension) => {
+    const key = require("node:crypto").createHash("sha256")
+      .update(`${voice.name} ${voice.tempo} ${text}`).digest("hex").slice(0, 16);
+    return path.join(directory, `${key}.${extension}`);
+  };
+  const missing = [...new Set(notes)].filter((text) => !fs.existsSync(file(text, "raw")));
+  if (missing.length) {
+    voice.synthesize(missing.map((text) => ({ text: spoken(text), file: file(text, "wav") })));
+    for (const text of missing) {
+      run("ffmpeg", [
+        "-y", "-v", "error", "-i", file(text, "wav"),
+        ...(voice.tempo === 1 ? [] : ["-filter:a", `atempo=${voice.tempo}`]),
+        "-ar", String(RATE), "-ac", "1", "-f", "s16le", file(text, "raw"),
+      ]);
+    }
+  }
+  const speech = new Map();
+  for (const text of new Set(notes)) {
+    const bytes = fs.readFileSync(file(text, "raw"));
+    speech.set(text, new Int16Array(bytes.buffer, bytes.byteOffset, bytes.length / 2));
+  }
+  return speech;
+}
+
+// Drawn in the page's top document, above the embedded editors: the pointer,
+// which only moves when told to, and a ring for each click.
+function overlay() {
+  if (window.top !== window) return;
+  const outline = 'stroke="#fff" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke"';
+  const shapes = {
+    arrow: `<svg width="22" height="30" style="position:absolute;left:-2px;top:-2px"><path d="M2 2 L2 24 L7.5 18.5 L11.5 27.5 L15 26 L11 17 L19 17 Z" fill="#111" ${outline}/></svg>`,
+    horizontal: `<svg width="32" height="18" style="position:absolute;left:-16px;top:-9px"><path d="M2 9 L8 3 L8 6.5 L24 6.5 L24 3 L30 9 L24 15 L24 11.5 L8 11.5 L8 15 Z" fill="#111" ${outline}/></svg>`,
+    vertical: `<svg width="18" height="32" style="position:absolute;left:-9px;top:-16px"><path d="M9 2 L15 8 L11.5 8 L11.5 24 L15 24 L9 30 L3 24 L6.5 24 L6.5 8 L3 8 Z" fill="#111" ${outline}/></svg>`,
+    text: `<svg width="14" height="26" style="position:absolute;left:-7px;top:-13px"><path d="M3 3 H11 M7 3 V23 M3 23 H11" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M3 3 H11 M7 3 V23 M3 23 H11" fill="none" stroke="#111" stroke-width="1.6"/></svg>`,
+  };
+  const install = () => {
+    const pointer = document.createElement("div");
+    Object.assign(pointer.style, {
+      position: "fixed", left: "0", top: "0", zIndex: "2147483647", pointerEvents: "none",
+      transform: "translate(640px, 400px)", transitionProperty: "transform",
+      transitionTimingFunction: "cubic-bezier(.35,.05,.25,1)",
+    });
+    pointer.innerHTML = shapes.arrow;
+    document.documentElement.append(pointer);
+    window.__playtest = {
+      glide(x, y, ms) {
+        pointer.style.transitionDuration = `${ms}ms`;
+        pointer.style.transform = `translate(${x}px, ${y}px)`;
+      },
+      shape(name) {
+        pointer.innerHTML = shapes[name] ?? shapes.arrow;
+      },
+      hide(hidden) {
+        pointer.style.visibility = hidden ? "hidden" : "visible";
+      },
+      ring(x, y) {
+        const ring = document.createElement("div");
+        Object.assign(ring.style, {
+          position: "fixed", left: `${x - 18}px`, top: `${y - 18}px`, width: "36px", height: "36px",
+          borderRadius: "50%", border: "3px solid rgba(0, 122, 255, 0.9)", boxSizing: "border-box",
+          zIndex: "2147483646", pointerEvents: "none",
+        });
+        document.documentElement.append(ring);
+        ring.animate([{ transform: "scale(0.3)", opacity: 1 }, { transform: "scale(1.2)", opacity: 0 }],
+          { duration: 500, easing: "ease-out" }).finished.then(() => ring.remove());
+      },
+    };
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);
+  else install();
+}
+
+// The CSS cursor wherever the real pointer is: the innermost frame's element
+// under it, as its page styles it.
+async function cursorAt(page, point) {
+  let frame = page.mainFrame();
+  let { x, y } = point;
+  for (;;) {
+    const handle = await frame.evaluateHandle(([x, y]) => document.elementFromPoint(x, y), [x, y]);
+    const element = handle.asElement();
+    if (!element) return "default";
+    const inner = await element.contentFrame();
+    if (!inner) return element.evaluate((node) => getComputedStyle(node).cursor);
+    const origin = await element.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      return {
+        x: box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft),
+        y: box.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop),
+      };
+    });
+    frame = inner;
+    x -= origin.x;
+    y -= origin.y;
+  }
+}
+
+function shapeOf(cursor) {
+  if (/ew-resize|col-resize|e-resize|w-resize/.test(cursor)) return "horizontal";
+  if (/ns-resize|row-resize|n-resize|s-resize/.test(cursor)) return "vertical";
+  if (/^text/.test(cursor)) return "text";
+  return "arrow";
+}
+
+// How many of two window-sized images' pixels differ visibly: the mean of
+// their thresholded difference, as ffmpeg measures it.
+function differing(first, second) {
+  const { stderr } = spawnSync("ffmpeg", [
+    "-v", "info", "-i", first, "-i", second, "-lavfi",
+    "[0:v]format=rgb24[a];[1:v]format=rgb24[b];[a][b]blend=all_mode=difference,format=gray," +
+      "lut=y='if(gt(val\\,40)\\,255\\,0)',signalstats,metadata=print:key=lavfi.signalstats.YAVG",
+    "-f", "null", "-",
+  ], { encoding: "utf8" });
+  const mean = Number(stderr.match(/YAVG=([\d.]+)/)?.[1] ?? 255);
+  return Math.round((mean / 255) * WINDOW.width * WINDOW.height);
+}
+
+// Until every embedded editor on screen has started.
+async function settled(page) {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    let waiting = false;
+    for (const frame of page.frames()) {
+      if (frame === page.mainFrame()) continue;
+      const element = await frame.frameElement().catch(() => null);
+      const box = element && await element.boundingBox().catch(() => null);
+      if (!box || box.y + box.height <= 0 || box.y >= WINDOW.height) continue;
+      const ready = !/^(about:blank)?$/.test(frame.url()) && await frame.evaluate(() => {
+        const loading = document.querySelector("#loading");
+        return !loading || getComputedStyle(loading).display === "none";
+      }).catch(() => false);
+      if (!ready) {
+        waiting = true;
+        break;
+      }
+    }
+    if (!waiting) return;
+    await page.waitForTimeout(150);
+  }
+}
+
+const KEY_NAMES = { Control: "Ctrl", Meta: "Cmd", Alt: "Alt", Shift: "Shift" };
+
+function pressed(held, what) {
+  const shown = held.length && what.length === 1 ? what.toUpperCase() : what;
+  return [...held.map((key) => KEY_NAMES[key] ?? key), shown].join(" + ");
+}
+
+// Replays the session, returning what the captions and narration need: when
+// each note and action happened, in milliseconds from the recording's start.
+async function replay(page, entries, speech, started, work) {
+  const now = () => Date.now() - started;
+  const notes = [];
+  const actions = [];
+  let at = { x: WINDOW.width / 2, y: WINDOW.height / 2 };
+  const glide = async (to) => {
+    const ms = Math.round(Math.min(900, Math.max(250, Math.hypot(to.x - at.x, to.y - at.y) * 0.9)));
+    await page.evaluate(([x, y, ms]) => window.__playtest.glide(x, y, ms), [to.x, to.y, ms]);
+    await page.waitForTimeout(ms + 60);
+    at = to;
+  };
+  const reshape = async () => {
+    const shape = shapeOf(await cursorAt(page, at).catch(() => "default"));
+    await page.evaluate((shape) => window.__playtest.shape(shape), shape);
+  };
+  const shown = async (label, act) => {
+    const start = now();
+    await act();
+    actions.push({ start, end: Math.max(now(), start) + 1200, label });
+  };
+  const check = path.join(work, "check.png");
+  for (const [index, { action, error, result }] of entries.entries()) {
+    if (error || !Array.isArray(action)) continue;
+    const [name, ...args] = action;
+    const point = (x, y) => ({ x: Number(x), y: Number(y) });
+    switch (name) {
+      case "say": {
+        const samples = speech.get(args[0]);
+        const start = now();
+        notes.push({ start, end: start + (samples.length / RATE) * 1000, text: args[0], samples });
+        await page.waitForTimeout((samples.length / RATE) * 1000 + QUIET);
+        continue;
+      }
+      case "screenshot": {
+        // Compare with what the tester saw here, without the drawn pointer.
+        if (!fs.existsSync(result)) continue;
+        await page.evaluate(() => window.__playtest.hide(true));
+        await page.screenshot({ path: check });
+        await page.evaluate(() => window.__playtest.hide(false));
+        const changed = differing(result, check);
+        if (changed > UNFAITHFUL) {
+          fs.copyFileSync(check, path.join(work, `unlike-${index + 1}.png`));
+          console.error(`playtest-video: at action ${index + 1}, ${changed} pixels differ from the tester's screenshot`);
+        }
+        continue;
+      }
+      case "wait":
+        await page.waitForTimeout(Math.min(Number(args[0]) || 1, 3) * 1000);
+        continue;
+      case "mouse_move": {
+        await glide(point(args[0], args[1]));
+        await page.mouse.move(at.x, at.y);
+        break;
+      }
+      case "left_click":
+      case "double_click":
+      case "triple_click": {
+        const clickCount = { left_click: 1, double_click: 2, triple_click: 3 }[name];
+        const held = control.modifiers(args[2]);
+        await glide(point(args[0], args[1]));
+        const label = pressed(held, ["click", "double-click", "triple-click"][clickCount - 1]);
+        await shown(label, () => control.holding(page, held, async () => {
+          await page.evaluate(([x, y]) => window.__playtest.ring(x, y), [at.x, at.y]);
+          await page.mouse.click(at.x, at.y, { clickCount });
+        }));
+        break;
+      }
+      case "left_click_drag": {
+        const from = point(args[0], args[1]);
+        const to = point(args[2], args[3]);
+        const held = control.modifiers(args[4]);
+        await glide(from);
+        await shown(pressed(held, "drag"), () => control.holding(page, held, async () => {
+          await page.mouse.move(from.x, from.y);
+          await page.waitForTimeout(150);
+          await reshape();
+          await page.mouse.down();
+          for (let step = 1; step <= DRAG_STEPS; step += 1) {
+            const x = from.x + (to.x - from.x) * (step / DRAG_STEPS);
+            const y = from.y + (to.y - from.y) * (step / DRAG_STEPS);
+            await page.evaluate(([x, y]) => window.__playtest.glide(x, y, 70), [x, y]);
+            await page.mouse.move(x, y);
+            await page.waitForTimeout(70);
+          }
+          await page.mouse.up();
+          at = to;
+        }));
+        break;
+      }
+      case "scroll": {
+        const clicks = Number(args[3]);
+        const delta = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[args[2]];
+        const held = control.modifiers(args[4]);
+        await glide(point(args[0], args[1]));
+        await shown(pressed(held, `scroll ${args[2]}`), async () => {
+          await page.mouse.move(at.x, at.y);
+          await control.holding(page, held, () => page.mouse.wheel(
+            delta[0] * clicks * control.WHEEL_CLICK, delta[1] * clicks * control.WHEEL_CLICK));
+        });
+        break;
+      }
+      case "key": {
+        const { held, key } = control.chord(args[0]);
+        await shown(pressed(held, key), () => control.holding(page, held, () => page.keyboard.press(key)));
+        break;
+      }
+      case "type":
+        await shown(`types “${args[0]}”`, () => page.keyboard.type(args[0], { delay: 60 }));
+        break;
+      default:
+        continue;
+    }
+    await page.waitForTimeout(control.SETTLE);
+    await settled(page);
+    await reshape();
+    await page.waitForTimeout(WATCH);
+  }
+  await page.waitForTimeout(1500);
+  return { notes, actions };
+}
+
+function timestamp(ms) {
+  const centiseconds = Math.max(0, Math.round(ms / 10));
+  const hours = Math.floor(centiseconds / 360000);
+  const minutes = Math.floor(centiseconds / 6000) % 60;
+  const seconds = Math.floor(centiseconds / 100) % 60;
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${hours}:${pad(minutes)}:${pad(seconds)}.${pad(centiseconds % 100)}`;
+}
+
+// A note shown a sentence or two at a time, each for its share of the speech.
+function chunks(note) {
+  const sentences = note.text.match(/[^.!?]+[.!?]*["”’)]*\s*/g) ?? [note.text];
+  const groups = [];
+  for (const sentence of sentences) {
+    const last = groups.at(-1);
+    if (last && last.length + sentence.length <= 160) groups[groups.length - 1] = last + sentence;
+    else groups.push(sentence);
+  }
+  const total = groups.reduce((sum, group) => sum + group.length, 0);
+  let start = note.start;
+  return groups.map((group) => {
+    const end = start + ((note.end - note.start) * group.length) / total;
+    const chunk = { start, end, text: group.trim() };
+    start = end;
+    return chunk;
+  });
+}
+
+function captions({ notes, actions }) {
+  const text = (value) => value.replace(/[{}\\]/g, "").replace(/\n/g, " ");
+  const dialogue = (style, { start, end, text: value }) =>
+    `Dialogue: 0,${timestamp(start)},${timestamp(end)},${style},,0,0,0,,${text(value)}`;
+  return [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${WINDOW.width}`,
+    `PlayResY: ${WINDOW.height + BAR}`,
+    "WrapStyle: 0",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    `Style: Note,Inter,27,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,36,340,${WINDOW.height + 22},1`,
+    `Style: Action,Inter,22,&H00D6C4B8,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,9,960,36,${WINDOW.height + 26},1`,
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ...notes.flatMap(chunks).map((chunk) => dialogue("Note", chunk)),
+    ...actions.map((action, index) => dialogue("Action", {
+      start: action.start,
+      end: Math.min(action.end, actions[index + 1]?.start ?? Infinity),
+      text: action.label,
+    })),
+    "",
+  ].join("\n");
+}
+
+// The notes laid along a recording `seconds` long, as one mono WAV.
+function narration({ notes }, seconds) {
+  const samples = new Int16Array(Math.round(seconds * RATE));
+  for (const note of notes) {
+    const offset = Math.round((note.start / 1000) * RATE);
+    if (offset < samples.length) {
+      samples.set(note.samples.subarray(0, samples.length - offset), offset);
+    }
+  }
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + samples.byteLength, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(RATE, 24);
+  header.writeUInt32LE(RATE * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(samples.byteLength, 40);
+  return Buffer.concat([header, Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength)]);
+}
+
+async function main(sessionPath, out) {
+  const [header, ...entries] = fs.readFileSync(sessionPath, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  const work = path.join(path.dirname(sessionPath), "video");
+  fs.rmSync(path.join(work, "recording"), { recursive: true, force: true });
+  const notes = entries.filter(({ action }) => Array.isArray(action) && action[0] === "say").map(({ action }) => action[1]);
+  const speech = speak(notes, path.join(work, "speech"));
+  const { server, url } = await control.preview(false);
+  const browser = await control.launch();
+  try {
+    const context = await browser.newContext({
+      viewport: WINDOW, recordVideo: { dir: path.join(work, "recording"), size: WINDOW },
+    });
+    await context.addInitScript(overlay);
+    const page = await context.newPage();
+    const started = Date.now();
+    await page.goto(new URL(header.page, url).href);
+    await page.waitForFunction(() => window.__playtest);
+    await settled(page);
+    console.error(`playtest-video: replaying ${entries.length} actions`);
+    const timeline = await replay(page, entries, speech, started, work);
+    const video = page.video();
+    await context.close();
+    const recorded = await video.path();
+    const seconds = Number(execFileSync("ffprobe", [
+      "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", recorded,
+    ]).toString());
+    fs.writeFileSync(path.join(work, "captions.ass"), captions(timeline));
+    fs.writeFileSync(path.join(work, "narration.wav"), narration(timeline, seconds));
+    console.error("playtest-video: encoding");
+    run("ffmpeg", [
+      "-y", "-v", "error", "-i", recorded, "-i", path.join(work, "narration.wav"),
+      "-filter_complex",
+      `[0:v]fps=25,pad=${WINDOW.width}:${WINDOW.height + BAR}:0:0:color=0x182030,ass=${path.join(work, "captions.ass")}[v]`,
+      "-map", "[v]", "-map", "1:a",
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", out,
+    ]);
+    console.log(out);
+  } finally {
+    await browser.close();
+    server.kill("SIGTERM");
+  }
+}
+
+const [sessionPath = control.SESSION, out] = process.argv.slice(2);
+main(path.resolve(sessionPath), path.resolve(out ?? path.join(path.dirname(sessionPath), "playtest.mp4")))
+  .catch((error) => {
+    console.error(`playtest-video: ${error.message}`);
+    process.exit(1);
+  });

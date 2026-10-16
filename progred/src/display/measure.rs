@@ -140,7 +140,7 @@ mod tests {
     use crate::display::widget::HoverContext;
     use measured::Extent;
     use measured::choices::resolve_choices;
-    use puri::{DrawCmd, DrawList, Placement, Rect};
+    use puri::{Placement, Rect};
     use std::{cell::Cell, rc::Rc};
 
     #[test]
@@ -177,43 +177,6 @@ mod tests {
                 &Default::default(),
             );
             assert_eq!(placements.get(), frame);
-        }
-    }
-
-    #[test]
-    fn native_leaf_debug_ink_uses_its_full_settled_rectangle() {
-        let rect = Rect::new(20.0, 30.0, 33.0, 47.0);
-        for debug in [false, true] {
-            let layout = Layout::widget(Rc::new(|_| {
-                widget::leaf(
-                    Extent {
-                        width: 13.0,
-                        ascent: 0.0,
-                        descent: 17.0,
-                    },
-                    |_: &mut HoverContext<'_, (), ()>, _| {},
-                )
-            }));
-            let mut build = ChoiceBuild::default();
-            let prepared = with_context(&NoProject, |context| layout.measure(context, &mut build));
-            let measured = resolve_choices(build.finish(prepared), 13.0, false);
-            let output = crate::display::widget::frame::place(
-                measured,
-                Placement::root(rect),
-                &widget::HoverInput {
-                    debug_geometry: debug,
-                    ..Default::default()
-                },
-            );
-            let mut canvas = DrawList::new();
-            puri::frame::render(output.bind(Default::default()).renders, &mut canvas);
-            if debug {
-                assert!(
-                    matches!(&canvas.0[..],[DrawCmd::Stroke {shape:puri::Shape::Rect(drawn),..}] if *drawn==rect)
-                );
-            } else {
-                assert!(canvas.0.is_empty());
-            }
         }
     }
 }

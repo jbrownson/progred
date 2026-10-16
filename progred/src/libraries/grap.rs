@@ -12,7 +12,6 @@ use crate::display::{
     Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
     RecordField, ResolvedCell, activatable, alternatives, at, col, completion, descend_local,
     descend_path_local, dim, faced, pad, record_fragment_with, row, selectable_bracket, shared,
-    slot,
 };
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -125,7 +124,7 @@ fn declaration_name(
     name::read(input.value?)?;
     Some(descend_local(
         Step::Key(name::vocabulary::NAME),
-        crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
+        name::projection(),
         &input.default_projection,
     ))
 }
@@ -135,10 +134,11 @@ fn lambda_name(
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     Some(match input.value {
         Some(value) => crate::display::line_edit(name::editor(value)?),
+        // Naming an anonymous lambda is clickable, not an arrow-navigation
+        // stop; selected, it's an empty name to type into.
+        None if input.selection.is_some() => name::hole(),
         None => {
-            input.selection.is_none().then_some(())?;
             let target = input.targets.current();
-            // Naming an anonymous lambda is clickable, not an arrow-navigation stop.
             activatable(faced("λ", Face::Name), target.hover, target.select)
         }
     })
@@ -247,18 +247,6 @@ pub fn function_parameters<'a>(
     function.callable_parameters()
 }
 
-pub fn parameter_labels(function: ::grap::RuntimeValue) -> CompletionProvider {
-    std::rc::Rc::new(move |request| {
-        matches!(request.kind, CompletionKind::Field).then_some(())?;
-        Some(
-            crate::libraries::completion::labels(function_parameters(&function, request.resolve)?)
-                .into_iter()
-                .map(|offer| offer.with_detail(PARAMS))
-                .collect(),
-        )
-    })
-}
-
 /// Construct a call and focus its first declared parameter, when known.
 pub fn call_completion<'a>(
     function: Value,
@@ -300,6 +288,10 @@ pub(crate) fn call_with_function(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
     function_projection: Option<crate::display::Partial<crate::Editor, crate::frame::Hovered>>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    // A call's arguments are its parameters, so it takes no new field from
+    // Enter; one being added some other way shows in the plain record view,
+    // as for the other compact forms.
+    (input.pending != Some(Pending::Field)).then_some(())?;
     let fields = input.value?;
     let function = fields.field(FUNCTION)?;
     let parameters = function_parameters(&function, &|cell| input.env.resolve(cell));
@@ -308,15 +300,6 @@ pub(crate) fn call_with_function(
         parameter_positions.entry(*parameter).or_insert(position);
     }
     let trailing = match &input.pending {
-        Some(Pending::Field) => {
-            vec![RecordField {
-                label: completion(
-                    CompletionKind::Field,
-                    Some(parameter_labels(function.clone())),
-                ),
-                value: slot(),
-            }]
-        }
         Some(Pending::Child(Step::Key(field)))
             if !fields.contains_field(*field) && !parameter_positions.contains_key(field) =>
         {
@@ -394,7 +377,11 @@ pub fn lambda_display(
         crate::display::partial(lambda_name),
         &input.default_projection,
     );
-    let arrow = activatable(dim("→"), body_target.hover, body_target.select);
+    let arrow = activatable(
+        crate::display::arrow(),
+        body_target.hover,
+        body_target.select,
+    );
     let head = row(3.0, [lambda, params, arrow]);
     Some(group_hug(
         head,
@@ -459,7 +446,7 @@ pub fn evaluate_display(
     ));
     let shaft_target = input.targets.current();
     let shaft = shared(activatable(
-        dim("→"),
+        crate::display::arrow(),
         shaft_target.hover,
         shaft_target.select,
     ));
@@ -580,37 +567,13 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 
 fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Completion>> {
     use crate::display::CompletionScope;
-    match (request.scope, request.kind, request.path) {
-        (CompletionScope::Suggested, CompletionKind::Value, []) => Some(vec![
-            crate::libraries::completion::generated(
-                vocabulary::GRAP,
-                || {
-                    let cell = gid::new_cell_id();
-                    Value::record([
-                        (vocabulary::GRAP, cell.into()),
-                        (
-                            crate::libraries::workspace::vocabulary::PANES,
-                            Value::record([(
-                                crate::libraries::workspace::vocabulary::LEFT,
-                                Value::list([Value::record([(
-                                    crate::libraries::presentation::vocabulary::RENDER,
-                                    cell.into(),
-                                )])]),
-                            )]),
-                        ),
-                    ])
-                },
-                Some(crate::libraries::selection::pending_at(&[
-                    gid::Step::Key(vocabulary::GRAP),
-                    gid::Step::Follow(gid::Resolution::Document),
-                ])),
-            )
-            .with_detail(ID),
-        ]),
-        (CompletionScope::Suggested, CompletionKind::Field, []) => Some(vec![
-            crate::libraries::completion::label(vocabulary::GRAP).with_detail(ID),
-        ]),
-        (CompletionScope::Everything, CompletionKind::Value, _) => Some(
+    if request.kind != CompletionKind::Value {
+        return None;
+    }
+    match request.scope {
+        // An empty document can start as a program in a pane.
+        CompletionScope::Start => Some(vec![new_program()]),
+        CompletionScope::Everything => Some(
             std::iter::once(
                 crate::libraries::completion::insert(
                     "new lambda",
@@ -631,8 +594,35 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
             )
             .collect(),
         ),
-        _ => None,
+        CompletionScope::Literal => None,
     }
+}
+
+fn new_program() -> Completion {
+    crate::libraries::completion::generated(
+        vocabulary::GRAP,
+        || {
+            let cell = gid::new_cell_id();
+            Value::record([
+                (vocabulary::GRAP, cell.into()),
+                (
+                    crate::libraries::workspace::vocabulary::PANES,
+                    Value::record([(
+                        crate::libraries::workspace::vocabulary::LEFT,
+                        Value::list([Value::record([(
+                            crate::libraries::presentation::vocabulary::RENDER,
+                            cell.into(),
+                        )])]),
+                    )]),
+                ),
+            ])
+        },
+        Some(crate::libraries::selection::pending_at(&[
+            gid::Step::Key(vocabulary::GRAP),
+            gid::Step::Follow(gid::Resolution::Document),
+        ])),
+    )
+    .with_detail(ID)
 }
 
 /// Where a call offer's function comes from: the document, or a library by name.
@@ -756,7 +746,7 @@ mod tests {
                 raw: false,
                 query: "",
                 kind: CompletionKind::Value,
-                scope: CompletionScope::Suggested,
+                scope: CompletionScope::Everything,
                 path: &[],
                 value_at: &|_| None,
                 resolve: &resolve,
@@ -1032,89 +1022,6 @@ mod tests {
     }
 
     #[test]
-    fn parameter_completions_resolve_lazily_and_follow_current_definitions() {
-        use crate::display::{CompletionRequest, CompletionScope};
-        let function = new_cell_id();
-        let first = new_cell_id();
-        let second = new_cell_id();
-        let provider = parameter_labels(Value::from(function).into());
-        let reads = std::cell::Cell::new(0);
-        for expected in [vec![first, second], vec![second, first], vec![]] {
-            let definition = ::grap::lambda(expected.iter().copied(), Value::record([]));
-            let resolve = |cell| {
-                reads.set(reads.get() + 1);
-                (cell == function).then_some(ResolvedCell {
-                    source: gid::Resolution::Document,
-                    value: &definition,
-                    native: false,
-                })
-            };
-            let request = CompletionRequest {
-                raw: false,
-                query: "",
-                kind: CompletionKind::Field,
-                scope: CompletionScope::Suggested,
-                path: &[],
-                value_at: &|_| None,
-                resolve: &resolve,
-                cells: &Vec::new,
-            };
-            let before = reads.get();
-            assert!(
-                provider(&CompletionRequest {
-                    kind: CompletionKind::Value,
-                    ..request
-                })
-                .is_none()
-            );
-            assert_eq!(reads.get(), before);
-            let offers = provider(&request).unwrap();
-            assert_eq!(reads.get(), before + 1);
-            assert_eq!(
-                offers
-                    .iter()
-                    .map(|offer| offer.test_value())
-                    .collect::<Vec<_>>(),
-                expected
-                    .iter()
-                    .copied()
-                    .map(Value::from)
-                    .collect::<Vec<_>>()
-            );
-            assert_eq!(
-                offers
-                    .iter()
-                    .map(|offer| offer.display.clone())
-                    .collect::<Vec<_>>(),
-                expected
-                    .iter()
-                    .copied()
-                    .map(crate::display::CompletionText::Name)
-                    .collect::<Vec<_>>()
-            );
-            let call = call_completion(function.into(), function, &resolve);
-            assert_eq!(call.test_value(), ::grap::call(function.into(), []));
-            let world = crate::libraries::test_widgets::activate_completion(&call);
-            let selected = world.model.selection.as_ref().unwrap();
-            assert_eq!(
-                selected.path(),
-                expected
-                    .first()
-                    .map(|first| vec![Step::Key(*first)])
-                    .unwrap_or_default()
-            );
-            assert_eq!(
-                selected.stage(&world.sources()),
-                if expected.is_empty() {
-                    crate::selection::Stage::Edge
-                } else {
-                    crate::selection::Stage::Pending
-                }
-            );
-        }
-    }
-
-    #[test]
     fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_callables() {
         let function = new_cell_id();
         let alias = new_cell_id();
@@ -1186,54 +1093,6 @@ mod tests {
                 None
             );
         }
-    }
-
-    #[test]
-    fn parameter_picker_does_not_lookup_names_beyond_visible_argument_labels() {
-        struct CountingEnv(std::cell::Cell<usize>);
-        impl Env for CountingEnv {
-            fn apply_scoped(
-                &self,
-                _: &gid::Value,
-                _: &[(gid::CellId, gid::Value)],
-                _scope: Option<&::grap::ForeignOverlay<'_>>,
-            ) -> ::grap::Evaluation<gid::Value> {
-                panic!("unexpected projection application")
-            }
-
-            fn evaluate(&self, _: &Value) -> Value {
-                panic!("completion does not evaluate the function")
-            }
-
-            fn name(&self, _: CellId) -> Option<&str> {
-                self.0.set(self.0.get() + 1);
-                Some("parameter")
-            }
-        }
-
-        let parameter = new_cell_id();
-        let value = Value::record([(
-            FUNCTION,
-            Value::record([
-                (PARAMS, Value::list([Value::from(parameter)])),
-                (BODY, Value::record([])),
-            ]),
-        )]);
-        let env = CountingEnv(std::cell::Cell::new(0));
-        assert!(project_runtime(call_display, &input(&env, &value)).is_some());
-        assert_eq!(env.0.get(), 1);
-        assert!(
-            project_runtime(
-                call_display,
-                &ProjectionInput {
-                    default_projection: crate::display::runtime_partial(|_| None),
-                    pending: Some(Pending::Field),
-                    ..input(&env, &value)
-                }
-            )
-            .is_some()
-        );
-        assert_eq!(env.0.get(), 2);
     }
 
     fn unshared(
@@ -1732,16 +1591,17 @@ mod tests {
     }
 
     #[test]
-    fn the_lambda_name_partial_handles_only_unselected_missing_names_or_text() {
+    fn the_lambda_name_partial_handles_missing_names_or_text() {
         let env = env();
         let value = Value::record([]);
         let mut input = input(&env, &value);
         input.value = None;
         assert!(lambda_name(&input).is_some());
 
+        // Selected, a missing name is a hole to type it into.
         let selected = crate::libraries::selection::pending();
         input.selection = Some(&selected);
-        assert!(lambda_name(&input).is_none());
+        assert!(lambda_name(&input).is_some());
         input.selection = None;
         input.value = Some(&value);
         assert!(lambda_name(&input).is_none());

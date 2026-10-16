@@ -8,8 +8,10 @@ mod command;
 mod commands;
 mod completion;
 mod computations;
+#[cfg(any(test, feature = "control"))]
+pub mod control;
 mod display;
-#[cfg(test)]
+#[cfg(any(test, feature = "control"))]
 mod driver;
 mod editing;
 mod editor;
@@ -25,6 +27,7 @@ mod hover;
 mod identity;
 mod input;
 mod libraries;
+mod location;
 #[cfg(target_os = "macos")]
 mod macos_surface;
 #[cfg(target_os = "macos")]
@@ -81,7 +84,6 @@ pub use libraries::fidget::mesh::performance::take_profile_mesh;
 pub use libraries::toolpath::performance::profile_cam;
 
 use crate::command::Command;
-use crate::frame::Hovered;
 use app::App;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use app::QuitState;
@@ -101,7 +103,6 @@ use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use vello::util::RenderContext;
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
-use winit::window::CursorIcon;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use winit::window::WindowId;
 
@@ -180,14 +181,6 @@ fn translate_window_event(
         )))
     } else {
         reducer.reduce(scale, event)
-    }
-}
-
-fn cursor_icon(hover: Option<&Hovered>) -> CursorIcon {
-    match hover {
-        Some(Hovered::Divider(workspace::Divider::Columns(_))) => CursorIcon::ColResize,
-        Some(Hovered::Divider(workspace::Divider::Panes { .. })) => CursorIcon::RowResize,
-        _ => CursorIcon::Default,
     }
 }
 

@@ -49,8 +49,10 @@ clearance, or a safe machining plan.**
 ## What works today
 
 - **Structural editing:** context-specific completions, editable names and
-  literals, color swatches and pickers, two-dimensional number scrubbing,
-  multiple panes and windows, and undo/redo.
+  literals, color swatches and pickers, PNG images shown as pictures,
+  two-dimensional number scrubbing, multiple panes and windows, and undo/redo.
+  A cell that shows up in a computed result, such as the one a missing-cell
+  error names, can be edited or defined right there.
 - **Live drawings:** an editable recreation of the tree scene from Bret Victor's
   *Inventing on Principle*, with links between source code and drawing output.
 - **Implicit CAD:** editable [Fidget](https://github.com/mkeeter/fidget) fields,
@@ -122,7 +124,8 @@ for another Ctrl+C. Restarting this development loop discards unsaved changes.
 ### A first tour
 
 Use the **Examples** menu to open a fresh example. On native macOS its shortcuts
-are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5.
+are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5, and a tap of Alt
+or F10 opens it from the keyboard.
 
 | Start with | Shortcut | What to try |
 | --- | --- | --- |
@@ -139,8 +142,10 @@ are Command+1…5; the drawn menu on other hosts uses Ctrl+1…5.
 - In the tree drawing, Command-hover highlights linked source and can reveal
   it; Command-click selects it. Hovering the drawing calls in the source
   highlights their output without the modifier.
-- Click an empty location to choose a completion. `…` expands the suggestions
-  to the full vocabulary. The **Raw** view exposes the underlying structure.
+- Click an empty location to choose a completion: what's drawing it decides
+  what fits there. The **Raw** view exposes the underlying structure; its holes
+  offer a new cell, list or record, and what you type. The **Plain** view shows
+  the same structure with names, text and numbers readable.
 - The **Projections** menu switches one library's projection off or back on
   in the selected pane or the document, the way the home page peels its
   forest; its last entry does the same for the libraries the document
@@ -160,8 +165,9 @@ high-quality implicit refinement can take time and still has rendering artifacts
 
 ### Browser and Linux
 
-To build the browser version **on macOS**, set up the pinned nightly toolchain
-described in [`web/README.md`](web/README.md). Then run:
+To build the browser version, set up the pinned nightly toolchain described in
+[`web/README.md`](web/README.md). On Linux that rustup lives in the home
+directory and can sit beside the distribution's Rust package. Then run:
 
 ```sh
 make run-web
@@ -170,7 +176,7 @@ make run-web
 It builds any editor changes, then serves `http://127.0.0.1:8081/editor/` on
 this machine only; the server does not listen on other network interfaces.
 
-On Linux, `make run` builds in a namespace sandbox like the macOS one, then
+On Linux, `make run` builds under bubblewrap, a sandbox like the macOS one, then
 runs the app outside it. `make install-linux` installs it as a desktop
 application.
 The [platform notes](docs/platforms.md) list the runtime libraries it needs and

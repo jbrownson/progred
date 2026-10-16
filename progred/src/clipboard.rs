@@ -1,58 +1,121 @@
-//! The system clipboard, and an in-memory stand-in for tests and browsers.
+//! Where copies go: the system clipboard, or one the editor keeps to itself.
 
+use gid::Value;
 use puri::edit::TextClipboard;
 
-/// The pasteboard type structural copies ride under, beside their
-/// plain text; its PRESENCE is the structure/text distinction, so
-/// text that merely spells Value JSON is never mistaken for a copy.
-#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-pub(crate) const CLIPBOARD_FORMAT: &str = "com.progred.value";
+pub(crate) enum Clipboard {
+    /// The platform's, shared with other apps.
+    #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
+    System,
+    /// The editor's own, for tests, browsers, and sessions with no display.
+    Own {
+        text: Option<String>,
+        /// The value a structural copy carries beside its text.
+        structure: Option<Value>,
+    },
+}
 
-#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-pub(crate) struct SystemTextClipboard;
+/// An empty clipboard of the editor's own.
+impl Default for Clipboard {
+    fn default() -> Self {
+        Self::Own {
+            text: None,
+            structure: None,
+        }
+    }
+}
 
-#[cfg(any(test, target_arch = "wasm32"))]
-#[derive(Default)]
-pub(crate) struct SystemTextClipboard {
-    pub(crate) text: Option<String>,
-    pub(crate) structure: Option<gid::Value>,
+impl Clipboard {
+    /// Holds `text`, and `structure` beside it when the copy is structural;
+    /// whether the copy took.
+    pub(crate) fn copy(&mut self, text: String, structure: Option<&Value>) -> bool {
+        match self {
+            #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
+            Self::System => system::copy(text, structure.is_some()),
+            Self::Own {
+                text: held,
+                structure: carried,
+            } => {
+                *held = Some(text);
+                *carried = structure.cloned();
+                true
+            }
+        }
+    }
+
+    /// The structure a structural copy left, when the clipboard carries one.
+    pub(crate) fn structure(&mut self) -> Option<Value> {
+        match self {
+            #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
+            Self::System => system::structure(),
+            Self::Own { structure, .. } => structure.clone(),
+        }
+    }
+}
+
+impl TextClipboard for Clipboard {
+    fn get_text(&mut self) -> Option<String> {
+        match self {
+            #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
+            Self::System => system::text(),
+            Self::Own { text, .. } => text.clone(),
+        }
+    }
+
+    fn set_text(&mut self, text: &str) {
+        self.copy(text.to_string(), None);
+    }
+
+    fn holds_structure(&mut self) -> bool {
+        match self {
+            #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
+            Self::System => system::holds_structure(),
+            Self::Own { structure, .. } => structure.is_some(),
+        }
+    }
 }
 
 #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-impl TextClipboard for SystemTextClipboard {
-    fn get_text(&mut self) -> Option<String> {
-        use clipboard_rs::{Clipboard, ClipboardContext};
+mod system {
+    use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext, ContentFormat};
+    use gid::Value;
+
+    /// The pasteboard type structural copies ride under, beside their
+    /// plain text; its PRESENCE is the structure/text distinction, so
+    /// text that merely spells Value JSON is never mistaken for a copy.
+    const FORMAT: &str = "com.progred.value";
+
+    pub(super) fn text() -> Option<String> {
         ClipboardContext::new()
             .ok()
             .and_then(|cb| cb.get_text().ok())
     }
 
-    fn set_text(&mut self, text: &str) {
-        use clipboard_rs::{Clipboard, ClipboardContext};
-        if let Ok(cb) = ClipboardContext::new() {
-            cb.set_text(text.to_string()).ok();
-        }
-    }
-
-    fn holds_structure(&mut self) -> bool {
-        use clipboard_rs::{Clipboard, ClipboardContext, ContentFormat};
+    pub(super) fn copy(text: String, structural: bool) -> bool {
         ClipboardContext::new()
-            .is_ok_and(|cb| cb.has(ContentFormat::Other(CLIPBOARD_FORMAT.to_string())))
+            .and_then(|cb| {
+                if structural {
+                    // Both representations: the private format says
+                    // "structure", the text reads anywhere.
+                    cb.set(vec![
+                        ClipboardContent::Other(FORMAT.to_string(), text.clone().into_bytes()),
+                        ClipboardContent::Text(text),
+                    ])
+                } else {
+                    cb.set_text(text)
+                }
+            })
+            .is_ok()
     }
-}
 
-#[cfg(any(test, target_arch = "wasm32"))]
-impl TextClipboard for SystemTextClipboard {
-    fn get_text(&mut self) -> Option<String> {
-        self.text.clone()
+    pub(super) fn holds_structure() -> bool {
+        ClipboardContext::new().is_ok_and(|cb| cb.has(ContentFormat::Other(FORMAT.to_string())))
     }
 
-    fn set_text(&mut self, text: &str) {
-        self.text = Some(text.to_string());
-        self.structure = None;
-    }
-
-    fn holds_structure(&mut self) -> bool {
-        self.structure.is_some()
+    pub(super) fn structure() -> Option<Value> {
+        ClipboardContext::new()
+            .ok()
+            .and_then(|cb| cb.get_buffer(FORMAT).ok())
+            .and_then(|bytes| crate::selection::from_structure(&bytes))
     }
 }

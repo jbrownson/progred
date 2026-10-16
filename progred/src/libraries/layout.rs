@@ -1170,7 +1170,7 @@ mod tests {
             ]),
         );
         assert!(matches!(decoded(&value).map(|layout| inspect(&layout)),
-            Some(ProjectionCall::Jump { steps: decoded, document: target, .. }) if decoded == steps && target == document
+            Some(ProjectionCall::Jump { steps: decoded, document: target, .. }) if decoded == steps && target == crate::location::Location::root(document.as_slice())
         ));
     }
 

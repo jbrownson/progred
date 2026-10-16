@@ -196,7 +196,7 @@ fn grap_recursion_calls_emit_the_same_native_location_operations() {
     );
     assert!(result.completed);
     assert!(
-        matches!(inspect(&layout.unwrap()), ProjectionCall::Jump { steps: actual, document: target, .. } if actual == steps && target == document)
+        matches!(inspect(&layout.unwrap()), ProjectionCall::Jump { steps: actual, document: target, .. } if actual == steps && target == crate::location::Location::root(document.as_slice()))
     );
     let supplied = crate::libraries::text::value("computed");
     let (result, layout) = evaluate(

@@ -190,9 +190,7 @@ Progred's `attribute` function reads the hovered and selected occurrences'
 secondary identities off their landmarks, which recorded them during layout,
 and derives the hovered source trace once. `Attribution` shares those results
 within the frame, so each painted occurrence only compares. It is constructed
-for each frame, not retained as a memo. Debug geometry is editor configuration
-captured while constructing the frame, not hover data; debug hover footprints
-are collected only when requested and don't change the claim.
+for each frame, not retained as a memo.
 
 Document-aware widgets live inside Progred. During preparation they borrow
 the current sources, selection, view, and path, requesting document-site state
@@ -365,6 +363,12 @@ input; deferred paint receives the answer after the hover continuation runs. Pre
 anchor they need as explicit caller-owned gesture state. While a press holds
 the prior hover, its owning view is retained too, both when probing installed
 geometry and when building a successor. Release resumes normal probing.
+
+A callback can also name the pointer's cursor for its own target, as a divider
+does for its resize arrows. The frame keeps those requests beside its probes,
+and the shell shows the hovered target's, or a running gesture's own while one
+runs. Callbacks also learn whether the command modifier is held, so a widget
+can show what holding it allows.
 
 ## Frame lifecycle
 

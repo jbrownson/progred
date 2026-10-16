@@ -2,6 +2,7 @@
 //! projected occurrences; their conject locates document data for mutations.
 
 use crate::libraries::{Libraries, blob, text};
+use crate::location::{Location, Start};
 use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
@@ -128,7 +129,7 @@ impl Selection {
         line: crate::display::LineEdit,
     ) -> Self {
         let mut selection = Self::edge(root, path);
-        if writable_at(sources, selection.path()) {
+        if selection.writable(sources) {
             selection.edit_line_mut(&line.text);
         }
         selection
@@ -155,7 +156,8 @@ impl Selection {
         self
     }
 
-    pub(crate) fn source_path(&self) -> Option<std::borrow::Cow<'_, [Step]>> {
+    /// Where the selected data is stored, as this selection's scope names it.
+    pub(crate) fn location(&self) -> Option<Location<'_>> {
         self.scope.source(&self.path)
     }
 
@@ -208,8 +210,7 @@ impl Selection {
         .then_some(&self.path)
     }
 
-    /// The chosen completion row, including the expansion affordance;
-    /// clamped against the current card at use.
+    /// The chosen completion row, clamped against the current card at use.
     pub fn choice(&self) -> usize {
         if self.query_changed() {
             0
@@ -226,13 +227,9 @@ impl Selection {
         }
     }
 
-    pub fn completion_everything(&self) -> bool {
-        payload::completion_everything(&self.payload)
-    }
-
-    pub fn set_completion_view(&mut self, scroll: f64, choice: usize, everything: bool) {
+    pub fn set_completion_view(&mut self, scroll: f64, choice: usize) {
         self.reset_completion_for_query();
-        self.payload = payload::with_completion_view(&self.payload, scroll, choice, everything);
+        self.payload = payload::with_completion_view(&self.payload, scroll, choice);
     }
 
     /// Whether the mounted editor's write-through run has recorded
@@ -356,99 +353,42 @@ pub(crate) fn line_edit(text: &str) -> LineEditState {
     LineEditState::new(text).with_cursor_at_end()
 }
 
-/// The index of the path's last Follow step: the identity crossing
-/// every write below it lands through. The link before it names the
-/// owning cell; everything after it is a value spine.
-pub(crate) fn last_follow(path: &[Step]) -> Option<usize> {
-    path.iter()
-        .rposition(|step| matches!(step, Step::Follow(_)))
+/// Deletes the value at `location`, where it's stored. Within a value it
+/// rebuilds the owner without it — unlinking; anything the dropped value
+/// linked stays in the table for the orphan pool. At a definition's own
+/// start it removes the cell's value: bare again, the symmetric partner of
+/// authoring a value into one. At the root's own start it empties the
+/// document; locations that no longer resolve decline.
+pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, location: &Location) -> bool {
+    let deletion = {
+        let sources = Sources {
+            doc: &*doc,
+            libraries,
+        };
+        location
+            .stored(&sources)
+            .filter(|stored| crate::location::owned(stored.start))
+            .and_then(|stored| {
+                let owner = sources.read_from(stored.start, &[])?;
+                if stored.path.is_empty() {
+                    Some((stored.start, None))
+                } else {
+                    spine::without(owner, &stored.path).map(|rebuilt| (stored.start, Some(rebuilt)))
+                }
+            })
+    };
+    deletion
+        .map(|(start, value)| store(doc, start, value))
+        .is_some()
 }
 
-/// Whether a write at `path` can land: the owning cell — the one the
-/// path's last Follow crosses into — must not be external. A path
-/// with no Follow is the document's own root spine and always
-/// writable.
-pub(crate) fn writable_at(sources: &Sources, path: &[Step]) -> bool {
-    match last_follow(path) {
-        Some(index) => match path[index] {
-            Step::Follow(resolution) => sources
-                .resolve_path(&path[..index])
-                .and_then(Value::as_cell)
-                .is_some_and(|_| crate::sources::writable(&resolution)),
-            Step::Key(_) | Step::Element(_) => false,
-        },
-        None => true,
-    }
-}
-
-/// Deletes the value at `path`. A field or element step rebuilds the
-/// owning value without it — unlinking; anything the dropped value
-/// linked stays in the table for the orphan pool. A trailing Follow
-/// removes the cell's own value: bare again, the symmetric partner
-/// of authoring a value into one. The empty path empties the
-/// document's root; paths that no longer resolve decline.
-pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, path: &[Step]) -> bool {
-    match path.split_last() {
-        None => doc.root.is_some() && Rc::make_mut(doc).root.take().is_some(),
-        Some((Step::Follow(resolution), parent)) => {
-            let cell = {
-                let sources = Sources {
-                    doc: &*doc,
-                    libraries,
-                };
-                sources
-                    .resolve_path(parent)
-                    .and_then(Value::as_cell)
-                    .filter(|_| crate::sources::writable(resolution))
-                    .filter(|cell| doc.cells.value(*cell).is_some())
-            };
-            match cell {
-                Some(cell) => {
-                    Rc::make_mut(doc).cells.clear_value(cell);
-                    true
-                }
-                None => false,
-            }
-        }
-        Some((Step::Key(_) | Step::Element(_), _)) => {
-            let write = {
-                let sources = Sources {
-                    doc: &*doc,
-                    libraries,
-                };
-                match last_follow(path) {
-                    Some(index) => match path[index] {
-                        Step::Follow(resolution) => sources
-                            .resolve_path(&path[..index])
-                            .and_then(Value::as_cell)
-                            .filter(|_| crate::sources::writable(&resolution))
-                            .and_then(|cell| {
-                                spine::without(
-                                    sources.value(cell, &resolution)?,
-                                    &path[index + 1..],
-                                )
-                                .map(|rebuilt| (Some(cell), rebuilt))
-                            }),
-                        Step::Key(_) | Step::Element(_) => None,
-                    },
-                    None => sources
-                        .root()
-                        .and_then(|root| spine::without(root, path))
-                        .map(|rebuilt| (None, rebuilt)),
-                }
-            };
-            match write {
-                Some((Some(cell), rebuilt)) => {
-                    Rc::make_mut(doc).cells.set_value(cell, rebuilt);
-                    true
-                }
-                Some((None, rebuilt)) => {
-                    Rc::make_mut(doc).root = Some(rebuilt);
-                    true
-                }
-                None => false,
-            }
-        }
+/// Replace, or with None remove, the value stored at `start`.
+fn store(doc: &mut Rc<Document>, start: Start, value: Option<Value>) {
+    let doc = Rc::make_mut(doc);
+    match (start, value) {
+        (Start::Root, value) => doc.root = value,
+        (Start::Cell { cell, .. }, Some(value)) => doc.cells.set_value(cell, value),
+        (Start::Cell { cell, .. }, None) => doc.cells.clear_value(cell),
     }
 }
 
@@ -511,7 +451,7 @@ impl LocationRead for Sources<'_> {
         Sources::resolve(self, cell)
     }
     fn writable(&self, path: &[Step]) -> bool {
-        writable_at(self, path)
+        crate::location::writable(self, &Location::root(path))
     }
 }
 
@@ -765,15 +705,15 @@ pub fn from_structure(bytes: &[u8]) -> Option<Value> {
     serde_json::from_slice(bytes).ok()
 }
 
-/// Writes `value` at `path` — the empty path writes the document
-/// root. The single write every edit reduces to: the path's last
-/// Follow names the owning, authority-gated cell; the steps below it
-/// are a value spine, rebuilt around the new leaf through the lens.
-/// A bare cell takes its first value through the empty spine.
+/// Writes `value` at `location`, where it's stored: the definition its last
+/// Follow enters, or else its start. The single write every edit reduces
+/// to: the steps from there are a value spine, rebuilt around the new leaf
+/// through the lens. A bare cell takes its first value through the empty
+/// spine.
 pub fn set_value(
     doc: &mut Rc<Document>,
     libraries: &Libraries,
-    path: &[Step],
+    location: &Location,
     value: Value,
 ) -> bool {
     let write = {
@@ -781,32 +721,17 @@ pub fn set_value(
             doc: &*doc,
             libraries,
         };
-        match last_follow(path) {
-            Some(index) => match path[index] {
-                Step::Follow(resolution) => sources
-                    .resolve_path(&path[..index])
-                    .and_then(Value::as_cell)
-                    .filter(|_| crate::sources::writable(&resolution))
-                    .and_then(|cell| {
-                        spine::set(sources.value(cell, &resolution), &path[index + 1..], value)
-                            .map(|rebuilt| (Some(cell), rebuilt))
-                    }),
-                Step::Key(_) | Step::Element(_) => None,
-            },
-            None => spine::set(sources.root(), path, value).map(|rebuilt| (None, rebuilt)),
-        }
+        location
+            .stored(&sources)
+            .filter(|stored| crate::location::owned(stored.start))
+            .and_then(|stored| {
+                spine::set(sources.read_from(stored.start, &[]), &stored.path, value)
+                    .map(|rebuilt| (stored.start, rebuilt))
+            })
     };
-    match write {
-        Some((Some(cell), rebuilt)) => {
-            Rc::make_mut(doc).cells.set_value(cell, rebuilt);
-            true
-        }
-        Some((None, rebuilt)) => {
-            Rc::make_mut(doc).root = Some(rebuilt);
-            true
-        }
-        None => false,
-    }
+    write
+        .map(|(start, rebuilt)| store(doc, start, Some(rebuilt)))
+        .is_some()
 }
 
 /// The collapse class of an already-resolved value. Projection has
@@ -850,7 +775,7 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 /// are encoded when requested and decoded when a capability supplies
 /// a replacement. They are never mirrored in the stored payload.
 pub mod payload {
-    use crate::libraries::{f64 as f64_convention, logic, text};
+    use crate::libraries::{f64 as f64_convention, text};
     use gid::{CellId, Value};
     use kurbo::Point;
     use puri::edit::LineEditState;
@@ -863,8 +788,6 @@ pub mod payload {
         pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
         pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
         pub const COMPLETION_SCROLL: CellId = CellId::from_u128(0x151767a413a8bc5f579465dd67f18263);
-        pub const COMPLETION_EVERYTHING: CellId =
-            CellId::from_u128(0xedfa139b72d468afe1d926e811477456);
 
         /// Selection byte offsets; FOCUS may precede ANCHOR.
         pub const ANCHOR: CellId = CellId::from_u128(0x5d38a1c7f24e9b60d15c7a02e83f46b9);
@@ -922,38 +845,24 @@ pub mod payload {
             .filter(|scroll| scroll.is_finite() && *scroll >= 0.0)
     }
 
-    pub fn completion_everything(payload: &Value) -> bool {
-        payload
-            .as_record()
-            .and_then(|fields| fields.get(&vocabulary::COMPLETION_EVERYTHING))
-            .and_then(logic::read)
-            == Some(true)
-    }
-
     pub fn with_completion_query(payload: &Value, query: &str) -> Value {
         if self::query(payload) == Some(query) {
             payload.clone()
         } else {
             with_field(
-                &with_completion_view(payload, 0.0, 0, completion_everything(payload)),
+                &with_completion_view(payload, 0.0, 0),
                 vocabulary::QUERY,
                 text::value(query),
             )
         }
     }
 
-    pub fn with_completion_view(
-        payload: &Value,
-        scroll: f64,
-        choice: usize,
-        everything: bool,
-    ) -> Value {
+    pub fn with_completion_view(payload: &Value, scroll: f64, choice: usize) -> Value {
         let fields = payload.as_record().cloned().unwrap_or_default();
         Value::Record(
             fields
                 .update(vocabulary::COMPLETION_SCROLL, f64_convention::value(scroll))
-                .update(vocabulary::CHOICE, f64_convention::value(choice as f64))
-                .update(vocabulary::COMPLETION_EVERYTHING, logic::value(everything)),
+                .update(vocabulary::CHOICE, f64_convention::value(choice as f64)),
         )
     }
 
@@ -1114,25 +1023,23 @@ pub mod payload {
         }
 
         #[test]
-        fn changing_an_owned_query_resets_position_but_preserves_expansion() {
+        fn changing_an_owned_query_resets_position() {
             let changed = with_editor(
-                &with_completion_view(&pending("old", 2), 24.0, 2, true),
+                &with_completion_view(&pending("old", 2), 24.0, 2),
                 &LineEditState::from_parts("new", 3, 3, None, None),
                 true,
             );
             assert_eq!(query(&changed), Some("new"));
             assert_eq!(choice(&changed), Some(0));
             assert_eq!(completion_scroll(&changed), Some(0.0));
-            assert!(completion_everything(&changed));
 
             let unchanged = with_editor(
-                &with_completion_view(&pending("same", 2), 24.0, 2, true),
+                &with_completion_view(&pending("same", 2), 24.0, 2),
                 &LineEditState::from_parts("same", 4, 4, None, None),
                 true,
             );
             assert_eq!(choice(&unchanged), Some(2));
             assert_eq!(completion_scroll(&unchanged), Some(24.0));
-            assert!(completion_everything(&unchanged));
         }
 
         #[test]

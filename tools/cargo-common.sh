@@ -30,7 +30,8 @@ use_toolchain() {
     elif [ "$1" = stable ] && command -v cargo >/dev/null 2>&1; then
         cargo_path=$(command -v cargo)
     else
-        echo "$wrapper: rustup was not found; install it or add it to PATH" >&2
+        echo "$wrapper: rustup was not found, so the $1 toolchain is unavailable." >&2
+        echo "$wrapper: install rustup in the home directory as web/README.md describes. A distribution compiler covers stable builds until then." >&2
         exit 1
     fi
     toolchain_root=$(dirname "$(dirname "$(readlink -f "$cargo_path")")")
@@ -95,8 +96,24 @@ cargo_command() {
             fi
             run_sandboxed 1 0 "$audit_path" audit --file "$project_root/Cargo.lock" "$@"
             ;;
+        # Browser workers rebuild std with atomics; native builds stay stable.
+        web-threaded-fetch | web-threaded)
+            web_command=$1
+            shift
+            . "$tool_dir/web-build-settings.sh"
+            use_toolchain "$web_toolchain"
+            target_dir="$build_root/build-web"
+            if [ "$web_command" = web-threaded-fetch ]; then
+                run_sandboxed 1 0 "$cargo_path" fetch --locked \
+                    --manifest-path "$toolchain_root/lib/rustlib/src/rust/library/sysroot/Cargo.toml" \
+                    --target "$web_target"
+            else
+                run_sandboxed 0 0 "$cargo_path" --frozen "$@" \
+                    -Z "build-std=$web_build_std" --target "$web_target"
+            fi
+            ;;
         "")
-            echo "usage: tools/$wrapper audit | fetch | update | resolve |${wrapper_commands-} <cargo command> [arguments...]" >&2
+            echo "usage: tools/$wrapper audit | fetch | update | resolve | web-threaded-fetch | web-threaded <cargo command> | <cargo command> [arguments...]" >&2
             exit 2
             ;;
         # Builds are offline; fetch the locked graph first if anything is

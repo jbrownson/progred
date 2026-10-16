@@ -51,8 +51,8 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
     assert!(step(&mut world, Direction::Right));
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(
-        selection.scope().source(selection.path()).unwrap().as_ref(),
-        field("d")
+        selection.scope().source(selection.path()),
+        Some(Location::root(field("d")))
     );
     assert!(
         editing_frame(&mut world, false)
@@ -333,8 +333,8 @@ fn logical_navigation_retains_jump_editing_targets() {
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(selection.path(), body);
     assert_eq!(
-        selection.scope().source(selection.path()).as_deref(),
-        Some([Step::Key(field)].as_slice())
+        selection.scope().source(selection.path()),
+        Some(Location::root(vec![Step::Key(field)]))
     );
 }
 

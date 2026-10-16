@@ -4,7 +4,7 @@ use super::{
     Cx, SharedPath, atom_content, edit_presentation, face_style, hover_block, hover_claim,
     hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke, tree_hovered,
 };
-use crate::completion::{Entry, Offers, completion_entries_with, constructor_entries};
+use crate::completion::{Entry, HoleOffers, Offers, completion_entries_with};
 use crate::display::widget::completion::border as completion_border;
 use crate::frame::Hovered;
 use crate::hover::Hover;
@@ -22,24 +22,22 @@ use puri::text::TextCtx;
 use puri::{Placement, Point};
 use puri_widgets::text_frame;
 use std::rc::Rc;
-use ui_events::keyboard::Key;
+use ui_events::keyboard::{Key, NamedKey};
 
 pub(crate) fn control(
     context: &mut crate::display::widget::Context<'_, '_, crate::Editor, Hovered>,
     kind: crate::display::CompletionKind,
     provider: Option<&crate::display::CompletionProvider>,
 ) -> Measured<HoverPass<crate::Editor>> {
+    let offers = provider.map_or(HoleOffers::Raw, HoleOffers::Projection);
     match kind {
-        crate::display::CompletionKind::Value => pending_view(
-            context.inputs,
-            context.text,
-            context.path.to_vec(),
-            provider,
-        ),
+        crate::display::CompletionKind::Value => {
+            pending_view(context.inputs, context.text, context.path.to_vec(), offers)
+        }
         crate::display::CompletionKind::Field => context
             .inputs
             .pending_edge_under(context.path)
-            .map(|query| label_query(context.inputs, context.text, context.path, query, provider))
+            .map(|query| label_query(context.inputs, context.text, context.path, query, offers))
             .unwrap_or_else(|| text(context.text, "…", &context.inputs.styles.dim)),
     }
 }
@@ -50,7 +48,7 @@ pub(super) fn pending_view(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: Path,
-    completions: Option<&crate::display::CompletionProvider>,
+    offers: HoleOffers<'_>,
 ) -> Measured<HoverPass<crate::Editor>> {
     let writable = cx.edits.writable(&cx.sources, &path);
     let selected = cx.selection.filter(|current| {
@@ -62,7 +60,7 @@ pub(super) fn pending_view(
         .filter(|current| current.edit().is_none())
         .map(Selection::initial_query);
     let engaged = selected.and_then(Selection::edit).or(default.as_ref());
-    let content = placeholder(cx, tcx, &path, engaged, false, completions);
+    let content = placeholder(cx, tcx, &path, engaged, false, offers);
     // Selection draws the same outline as the inactive frame.
     pending_target(cx, path, content)
 }
@@ -116,10 +114,10 @@ fn placeholder(
     path: &[gid::Step],
     engaged: Option<&LineEditState>,
     labels: bool,
-    completions: Option<&crate::display::CompletionProvider>,
+    offers: HoleOffers<'_>,
 ) -> Measured<HoverPass<crate::Editor>> {
     match engaged {
-        Some(query) => query_content(cx, tcx, path, query, labels, completions),
+        Some(query) => query_content(cx, tcx, path, query, labels, offers),
         None => placeholder_box(tcx, cx.styles),
     }
 }
@@ -133,17 +131,18 @@ fn query_content(
     path: &[gid::Step],
     query: &LineEditState,
     labels: bool,
-    completions: Option<&crate::display::CompletionProvider>,
+    offers: HoleOffers<'_>,
 ) -> Measured<HoverPass<crate::Editor>> {
-    // The card and keyboard commit must answer from one list.
-    let everything = cx.selection.is_some_and(Selection::completion_everything);
-    let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
-    let resolve = |cell| cx.sources.definition(cell);
     // This is only reached for an active writable picker. Keep the boundary
     // total if a caller supplies an unmapped occurrence anyway.
-    let Some(source_path) = cx.edits.source(path) else {
+    let Some(location) = cx.edits.source(path) else {
         return placeholder_box(tcx, cx.styles);
     };
+    // The card and keyboard commit must answer from one list, read from
+    // where the hole's location starts.
+    let start = location.start;
+    let value_at = move |path: &[gid::Step]| cx.sources.read_from(start, path);
+    let resolve = |cell| cx.sources.definition(cell);
     let request = crate::display::CompletionRequest {
         raw: cx.raw,
         query: query.text(),
@@ -152,18 +151,14 @@ fn query_content(
         } else {
             crate::display::CompletionKind::Value
         },
-        scope: if everything {
-            crate::display::CompletionScope::Everything
-        } else {
-            crate::display::CompletionScope::Suggested
-        },
-        path: &source_path,
+        scope: crate::display::CompletionScope::Everything,
+        path: &location.path,
         value_at: &value_at,
         resolve: &resolve,
         cells: &|| cx.sources.cells().collect(),
     };
-    let (entries, everything) =
-        completion_entries_with(&cx.sources, &request, cx.completions, completions);
+    let entries = completion_entries_with(&cx.sources, &request, cx.completions, offers);
+    let raw = !matches!(offers, HoleOffers::Projection(_));
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
     let content = atom_content(
@@ -228,7 +223,6 @@ fn query_content(
         &entries,
         choice,
         scroll,
-        everything,
         move |world: &crate::Editor| {
             world
                 .model
@@ -241,19 +235,21 @@ fn query_content(
                 })
                 .map(Selection::completion_scroll)
         },
-        move |world, scroll, choice, everything| {
-            crate::editing::completion_view(world, &root, scroll, choice, everything)
-        },
+        move |world, scroll, choice| crate::editing::completion_view(world, &root, scroll, choice),
     );
-    let card = if query.text().is_empty() && !query.is_composing() {
-        let constructors = constructor_entries(request.kind);
+    // Raw's holes make a constructor at once when its delimiter is typed into
+    // an empty query. A projection's holes take the delimiter as text.
+    let card = if raw && query.text().is_empty() && !query.is_composing() {
+        let constructors = crate::completion::delimited_constructors(request.kind);
         on_key(card, move |world, event| {
             if event.state.is_down()
                 && !(event.modifiers.ctrl() || event.modifiers.meta())
                 && let Key::Character(key) = &event.key
-                && let Some((_, entry)) = constructors.iter().find(|(shortcut, _)| *shortcut == key)
+                && let Some((_, constructor)) = constructors
+                    .iter()
+                    .find(|(delimiter, _)| *delimiter == key.as_str())
             {
-                (entry.activate)(world);
+                (constructor.activate)(world);
                 true
             } else {
                 false
@@ -262,6 +258,37 @@ fn query_content(
     } else {
         card
     };
+    // Tab commits what's been typed, as Enter would, then moves on to the
+    // next empty slot, unless the commit opened one of its own, such as a new
+    // call's first argument. With no slot left it stays on what it committed;
+    // the next Tab lets go. An empty query leaves Tab to the editor.
+    let typed = (!query.text().is_empty())
+        .then(|| entries.get(choice).map(|entry| entry.activate.clone()))
+        .flatten();
+    let card = before(card, move |p, _| {
+        p.handler()
+            .on_key_with(move |world: &mut crate::Editor, event, input| {
+                let Some(activate) = typed.as_ref().filter(|_| {
+                    event.state.is_down()
+                        && event.key == Key::Named(NamedKey::Tab)
+                        && !(event.modifiers.ctrl()
+                            || event.modifiers.meta()
+                            || event.modifiers.alt())
+                }) else {
+                    return false;
+                };
+                activate(world);
+                if world
+                    .model
+                    .selection
+                    .as_ref()
+                    .is_some_and(|selected| selected.stage(&world.sources()) == Stage::Edge)
+                {
+                    crate::navigate::advance(world, input.geometry(scale), event.modifiers.shift());
+                }
+                true
+            });
+    });
     placed::floating(trigger, card, move |placement, extent| {
         completion_placement(placement, extent, scale)
     })
@@ -278,7 +305,9 @@ pub(super) fn completion_placement(
             .rect()
             .inflate(ring_outset, ring_outset);
         let border_outset = completion_border(scale).width / 2.0;
-        let outer = crate::display::widget::popover::rect(
+        // Shortened, the card scrolls what it can't show; it keeps at least
+        // about a row, the field's own height.
+        let outer = crate::display::widget::popover::shortened(
             anchor,
             Size::new(
                 extent.width + 2.0 * border_outset,
@@ -286,6 +315,7 @@ pub(super) fn completion_placement(
             ),
             placement.clip_rect,
             0.0,
+            anchor.height(),
         );
         Placement::new(
             outer.inflate(-border_outset, -border_outset),
@@ -301,9 +331,8 @@ pub(super) fn completion_card<C: 'static>(
     entries: &[Entry<C>],
     choice: usize,
     scroll: f64,
-    everything: bool,
     current_scroll: impl Fn(&C) -> Option<f64> + 'static,
-    set_view: impl Fn(&mut C, f64, usize, bool) + 'static,
+    set_view: impl Fn(&mut C, f64, usize) + 'static,
 ) -> Measured<HoverPass<C>> {
     let entries = entries
         .iter()
@@ -321,14 +350,9 @@ pub(super) fn completion_card<C: 'static>(
         tcx,
         styles,
         &entries,
-        Hovered::Tree(Hover::MoreCompletions),
-        crate::display::widget::completion::State {
-            choice,
-            scroll,
-            everything,
-        },
+        crate::display::widget::completion::State { choice, scroll },
         current_scroll,
-        move |world, state| set_view(world, state.scroll, state.choice, state.everything),
+        move |world, state| set_view(world, state.scroll, state.choice),
         command_modifier.predicate(),
     )
 }
@@ -343,10 +367,10 @@ pub(super) fn label_query(
     tcx: &mut TextCtx,
     path: &[gid::Step],
     query: &LineEditState,
-    completions: Option<&crate::display::CompletionProvider>,
+    offers: HoleOffers<'_>,
 ) -> Measured<HoverPass<crate::Editor>> {
     let scale = cx.styles.scale;
-    let content = placeholder(cx, tcx, path, Some(query), true, completions);
+    let content = placeholder(cx, tcx, path, Some(query), true, offers);
     let palette = cx.styles.palette;
     let ringed = decorate(content, move |p, rect| {
         primary_highlight(palette, scale, p, text_frame::outline(scale, rect));

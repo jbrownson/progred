@@ -1,9 +1,9 @@
-//! story.html
+//! tutorial.html's first half, which builds the forest.
 
 use super::*;
 
 fn page(id: &str) -> Embed {
-    Embed::open("story.html", id)
+    Embed::open("tutorial.html", id)
 }
 
 /// The painted circles' centers and radii, in their drawing's coordinates.
@@ -12,6 +12,28 @@ fn dots(embed: &Embed) -> Vec<(Point, f64)> {
         .circles()
         .into_iter()
         .map(|(_, circle, _)| (circle.center, circle.radius))
+        .collect()
+}
+
+/// The outlines drawn around numbers that drag, on screen.
+fn outlined(embed: &Embed) -> Vec<kurbo::Rect> {
+    use puri::draw::{DrawCmd, Shape};
+    let ink = puri::Brush::from(
+        crate::styles::Theme::Light
+            .palette()
+            .literal
+            .with_alpha(0.55),
+    );
+    crate::display::test_support::painted(&embed.painted().0)
+        .filter_map(|command| match command {
+            DrawCmd::Stroke {
+                shape: Shape::RoundedRect(outline),
+                brush,
+                transform,
+                ..
+            } if *brush == ink => Some(transform.transform_rect_bbox(outline.rect())),
+            _ => None,
+        })
         .collect()
 }
 
@@ -36,11 +58,32 @@ fn dot() {
     dot.task("pick");
     let (center, _, _) = dot.circles()[0].clone();
     dot.pick_at(center);
-    assert_eq!(dot.source_selection(), Some(dot.path(&["first", "follow"])));
+    assert_eq!(
+        dot.source_selection(),
+        Some(dot.location(&["first", "follow"]))
+    );
 
     dot.task("scrub");
-    dot.hold(ModifiersState::CONTROL);
     let start = dot.text_at(&x);
+    dot.move_to(start);
+    assert_eq!(
+        dot.runner.cursor(),
+        CursorIcon::Default,
+        "a plain hover edits"
+    );
+    assert!(outlined(&dot).is_empty());
+    dot.hold(ModifiersState::CONTROL);
+    assert_eq!(dot.runner.cursor(), CursorIcon::EwResize, "held, it drags");
+    // All of the number that drags, its f64 tag too.
+    let number = dot.rect(&x);
+    assert!(
+        outlined(&dot).iter().any(|outline| outline.x0 <= number.x0
+            && outline.y0 <= number.y0
+            && number.x1 <= outline.x1
+            && number.y1 <= outline.y1),
+        "and the numbers that drag are outlined: {number:?} in {:?}",
+        outlined(&dot)
+    );
     dot.press_at(start);
     let mut farthest = 60.0;
     for step in 1..=6 {
@@ -53,8 +96,15 @@ fn dot() {
     dot.move_to(start + kurbo::Vec2::new(10.0, 0.0));
     assert!(dot.number(&x).unwrap() < farthest, "and left lowers it");
     assert_eq!(dots(&dot)[0].0.x, dot.number(&x).unwrap());
-    dot.release();
     dot.hold(ModifiersState::empty());
+    assert_eq!(
+        dot.runner.cursor(),
+        CursorIcon::EwResize,
+        "the drag keeps it"
+    );
+    dot.release();
+    assert_eq!(dot.runner.cursor(), CursorIcon::Default);
+    assert!(outlined(&dot).is_empty());
     assert_ne!(dot.number(&x), Some(60.0));
 }
 
@@ -109,7 +159,7 @@ fn recipe() {
     recipe.pick_at(center);
     assert_eq!(
         recipe.source_selection(),
-        Some(recipe.path(&["first", "follow", "body"])),
+        Some(recipe.location(&["first", "follow", "body"])),
         "inside dot, on the fill that painted it"
     );
 }
@@ -127,35 +177,6 @@ fn trunks() {
         Some("tree")
     );
     assert_eq!(trunks.editor().model.doc.root, root);
-}
-
-#[test]
-fn ladder() {
-    let mut ladder = page("ladder");
-    let sixty = |ladder: &Embed, slot| {
-        ladder.element(
-            &ladder.path(&[slot, "follow", "expressions"]),
-            0,
-            &[ladder.key("x_param")],
-        )
-    };
-    let under = |paths: &[Rc<[Step]>], slot: Step| paths.iter().any(|path| path[0] == slot);
-
-    ladder.task("top");
-    ladder.click(&sixty(&ladder, "first"));
-    let selected = ladder.selection();
-    assert_eq!(selected[0], ladder.key("first"));
-    assert!(selected.contains(&ladder.key("x_param")));
-    let lit = ladder.lit();
-    for slot in ["first", "second", "fourth"] {
-        assert!(under(&lit, ladder.key(slot)), "{slot} lights up: {lit:?}");
-    }
-
-    ladder.task("bottom");
-    ladder.click(&sixty(&ladder, "fourth"));
-    let selected = ladder.selection();
-    assert_eq!(selected[0], ladder.key("fourth"));
-    assert!(selected.contains(&ladder.key("x_param")));
 }
 
 #[test]
@@ -251,6 +272,6 @@ fn counted() {
     let (center, _, _) = counted.circles()[5].clone();
     counted.pick_at(center);
     let source = counted.source_selection().expect("the code that drew it");
-    assert_eq!(source[..2], counted.path(&["first", "follow"])[..]);
-    assert!(source.len() > 2, "{source:?}");
+    assert_eq!(source.start, counted.location(&["first", "follow"]).start);
+    assert!(!source.path.is_empty(), "{source:?}");
 }

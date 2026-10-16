@@ -48,19 +48,17 @@ pub(crate) fn completions<N: std::str::FromStr + Display>(
     representation: CellId,
     encode: impl FnOnce(N) -> Value,
 ) -> Vec<crate::display::Completion> {
-    match query.trim() {
-        "" => "0",
-        number => number,
-    }
-    .parse::<N>()
-    .ok()
-    .map(|number| {
-        crate::libraries::completion::select(number.to_string(), encode(number))
-            .with_aliases([query])
-            .with_detail(representation)
-    })
-    .into_iter()
-    .collect()
+    query
+        .trim()
+        .parse::<N>()
+        .ok()
+        .map(|number| {
+            crate::libraries::completion::select(number.to_string(), encode(number))
+                .with_aliases([query])
+                .with_detail(representation)
+        })
+        .into_iter()
+        .collect()
 }
 
 const PIXELS_PER_STEP: f64 = 4.0;
@@ -196,7 +194,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             ],
         )))
         .with_completions(move |request| {
-            (request.scope == crate::display::CompletionScope::Everything
+            (request.scope == crate::display::CompletionScope::Literal
                 && request.kind == crate::display::CompletionKind::Value)
                 .then(|| self.completions(request.query))
         })
@@ -440,22 +438,20 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
     encode: fn(N) -> Value,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
     let original = input.value?;
-    let line = tagged(
-        input,
-        line_edit::layout(
-            number.to_string(),
-            line_edit::native(move |spelling, current| edit(spelling, current, encode)),
-            "",
-            "",
-        ),
-        representation,
+    let digits = line_edit::layout(
+        number.to_string(),
+        line_edit::native(move |spelling, current| edit(spelling, current, encode)),
+        "",
+        "",
     );
+    let line = tagged(input, digits, representation);
     let target = input.targets.current();
     let line = activatable(line, target.hover.clone(), target.select);
     let line = if number.scrubbable() {
         let original = original.clone();
+        // Outlined where it drags: the whole number, its tag too.
         on_scrub(
-            line,
+            scrub::outlined(line),
             target.hover,
             Rc::new(move || {
                 let original = original.to_value();
@@ -629,25 +625,26 @@ mod tests {
     }
 
     #[test]
-    fn numeric_completions_offer_zero_for_empty_queries_but_not_invalid_numbers() {
+    fn numeric_completions_offer_only_what_reads_as_a_number() {
         for (complete, zero, representation) in [
             (
-                crate::libraries::f32::completions as fn(&str) -> Vec<crate::display::Completion>,
+                (|query| crate::libraries::f32::convention().completions(query))
+                    as fn(&str) -> Vec<crate::display::Completion>,
                 crate::libraries::f32::value(0.0),
                 crate::libraries::f32::vocabulary::F32,
             ),
             (
-                crate::libraries::f64::completions,
+                |query| crate::libraries::f64::convention().completions(query),
                 crate::libraries::f64::value(0.0),
                 crate::libraries::f64::vocabulary::F64,
             ),
             (
-                crate::libraries::u64::completions,
+                |query| crate::libraries::u64::convention().completions(query),
                 crate::libraries::u64::value(0),
                 crate::libraries::u64::vocabulary::U64,
             ),
         ] {
-            for query in ["", " \t\n", "0"] {
+            for query in ["0", " 0 "] {
                 let offers = complete(query);
                 let [offer] = offers.as_slice() else {
                     panic!("expected one {representation} zero offer for {query:?}");
@@ -656,7 +653,8 @@ mod tests {
                 assert_eq!(offer.detail, Some(representation.into()));
                 assert_eq!(offer.preview.as_ref(), Some(&zero));
             }
-            for query in ["not a number", "-", ".", "1e"] {
+            // An empty query reads as no number, nor does one that isn't.
+            for query in ["", " \t\n", "not a number", "-", ".", "1e"] {
                 assert!(complete(query).is_empty(), "{representation}: {query:?}");
             }
         }

@@ -1,6 +1,7 @@
 //! One window's editor and its per-window execution state.
 
-use crate::clipboard::SystemTextClipboard;
+use crate::UserEvent;
+use crate::clipboard::Clipboard;
 use crate::command::{Command, DocCommand};
 use crate::frame::FrameState;
 use crate::input::{PendingGesture, PendingPointer, PendingScroll, continuous_input};
@@ -9,9 +10,9 @@ use crate::macos_window;
 use crate::model::Model;
 #[cfg(test)]
 use crate::modifiers;
+use crate::placed::Cursor;
 #[cfg(target_arch = "wasm32")]
 use crate::web_worker;
-use crate::{UserEvent, cursor_icon};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog, text_store};
 use crate::{
@@ -95,6 +96,13 @@ pub(crate) struct Editor {
     pub(crate) focused: bool,
     /// This window draws its own menu bar (the drawn menu system).
     pub(crate) drawn_menu: bool,
+    /// File commands may ask for a path through the platform's dialogs; a
+    /// headless session has none, so its untitled saves do nothing.
+    #[cfg_attr(
+        target_arch = "wasm32",
+        expect(dead_code, reason = "the browser saves by download")
+    )]
+    pub(crate) file_dialogs: bool,
     pub(crate) state: RenderState,
     /// Multiplies the display's scale, like a browser's page zoom.
     pub(crate) zoom: f64,
@@ -102,7 +110,7 @@ pub(crate) struct Editor {
     pub(crate) paint_resources: Resources,
     pub(crate) font_cx: FontContext,
     pub(crate) layout_cx: LayoutContext<Brush>,
-    pub(crate) text_clipboard: SystemTextClipboard,
+    pub(crate) text_clipboard: Clipboard,
     pub(crate) text_cache: puri::text::TextCache,
     pub(crate) stack: stack::Stack<Editor>,
     pub(crate) model: Model,
@@ -187,7 +195,7 @@ impl EditorRunner {
     /// Mirror the installed frame into the window state the platform owns:
     /// the pointer cursor, and whether and where text composition happens.
     pub(crate) fn sync_window(&mut self, window: &Window) {
-        let next = cursor_icon(self.frame.hover.as_ref());
+        let next = self.cursor();
         if next != self.cursor_icon {
             window.set_cursor(next);
             self.cursor_icon = next;
@@ -204,6 +212,29 @@ impl EditorRunner {
                 );
             }
             self.input_area = area;
+        }
+    }
+
+    /// The running gesture's cursor, else the one the hovered target asked
+    /// for.
+    pub(crate) fn cursor(&self) -> CursorIcon {
+        let cursor = self
+            .editor
+            .gesture
+            .as_ref()
+            .and_then(|gesture| gesture.cursor())
+            .or_else(|| {
+                let hovered = self.frame.hover.as_ref()?;
+                let dispatch = &self.frame.dispatch;
+                dispatch
+                    .hover_geometry
+                    .cursor(dispatch.pointer_root.as_ref(), hovered)
+            });
+        match cursor {
+            None => CursorIcon::Default,
+            Some(Cursor::ColumnResize) => CursorIcon::ColResize,
+            Some(Cursor::RowResize) => CursorIcon::RowResize,
+            Some(Cursor::HorizontalDrag) => CursorIcon::EwResize,
         }
     }
 
@@ -274,6 +305,7 @@ pub(crate) fn new_editor(
         timers: timers::Timers::default(),
         focused: false,
         drawn_menu,
+        file_dialogs: true,
         state: RenderState::Suspended(None),
         zoom: 1.0,
         #[cfg(not(target_arch = "wasm32"))]
@@ -282,9 +314,9 @@ pub(crate) fn new_editor(
         layout_cx: LayoutContext::new(),
         text_cache: puri::text::TextCache::default(),
         #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-        text_clipboard: SystemTextClipboard,
+        text_clipboard: Clipboard::System,
         #[cfg(any(test, target_arch = "wasm32"))]
-        text_clipboard: SystemTextClipboard::default(),
+        text_clipboard: Clipboard::default(),
         stack,
         model: Model::new(doc),
         doc_path,
@@ -406,8 +438,8 @@ impl Editor {
                 .map(selection::Selection::root),
         );
         command::Toggles {
+            plain: area.projection == workspace::Projection::Plain,
             raw: area.projection == workspace::Projection::Raw,
-            debug_geometry: self.model.view.debug_geometry,
             hidden: area.hidden.clone(),
         }
     }
@@ -558,14 +590,20 @@ impl Editor {
                 };
                 self.move_selected_pane(direction);
             }
-            DocCommand::Raw => {
+            DocCommand::Plain | DocCommand::Raw => {
                 let selected = self
                     .model
                     .selection
                     .as_ref()
                     .map(selection::Selection::root)
                     .cloned();
-                self.model.workspace.toggle_projection(selected.as_ref());
+                let projection = match command {
+                    DocCommand::Plain => workspace::Projection::Plain,
+                    _ => workspace::Projection::Raw,
+                };
+                self.model
+                    .workspace
+                    .toggle_projection(selected.as_ref(), projection);
             }
             DocCommand::Projection(library) => {
                 let selected = self
@@ -577,9 +615,6 @@ impl Editor {
                 self.model
                     .workspace
                     .toggle_library_projection(selected.as_ref(), library);
-            }
-            DocCommand::DebugGeometry => {
-                self.model.view.debug_geometry = !self.model.view.debug_geometry
             }
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.zoom = 1.0,
@@ -640,15 +675,19 @@ impl Editor {
     pub(crate) fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
         let target = in_place.or_else(|| {
-            let file_name = self
-                .doc_path
-                .as_deref()
-                .and_then(|path| path.file_name())
-                .map_or_else(
-                    || "untitled.gid".to_owned(),
-                    |name| name.to_string_lossy().into_owned(),
-                );
-            text_dialog().set_file_name(file_name).save_file()
+            self.file_dialogs
+                .then(|| {
+                    let file_name = self
+                        .doc_path
+                        .as_deref()
+                        .and_then(|path| path.file_name())
+                        .map_or_else(
+                            || "untitled.gid".to_owned(),
+                            |name| name.to_string_lossy().into_owned(),
+                        );
+                    text_dialog().set_file_name(file_name).save_file()
+                })
+                .flatten()
         });
         if let Some(path) = target {
             match text_store::save(&path, &self.model.doc, &self.text_binders) {
@@ -722,6 +761,7 @@ impl Editor {
             timers,
             focused: _,
             drawn_menu: _,
+            file_dialogs: _,
             state: _,
             zoom: _,
             #[cfg(not(target_arch = "wasm32"))]

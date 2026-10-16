@@ -9,135 +9,21 @@ use crate::identity::short_id;
 use crate::libraries::{blob, name, text};
 use crate::site::Continuation;
 use crate::sources::Sources;
-use gid::{CellId, Resolution, Value, new_cell_id};
+use gid::{Value, new_cell_id};
 use std::rc::Rc;
 
 pub use crate::display::widget::offers::{Entry, Offers};
 
-/// The library whose operation a slot belongs to, as an operand or as the
-/// operator itself. There its offers stand in for a type: see
-/// [`within_operation`]. Conversions belong to neither type's library.
-pub(crate) fn operation_library(request: &CompletionRequest<'_>) -> Option<Resolution> {
-    use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
-    use ::grap::vocabulary::FUNCTION;
-    let (gid::Step::Key(field), parent) = request.path.split_last()? else {
-        return None;
-    };
-    [FUNCTION, LEFT, RIGHT, OPERAND]
-        .contains(field)
-        .then_some(())?;
-    let function = (request.value_at)(parent)?
-        .as_record()?
-        .get(&FUNCTION)?
-        .as_cell()?;
-    library_of(request, function)
-}
-
-/// The library an offer comes from: the function it calls, the cell it
-/// refers to, or the first of its fields a library defines, such as a
-/// number's tag.
-pub(crate) fn offer_library(
-    request: &CompletionRequest<'_>,
-    preview: &Value,
-) -> Option<Resolution> {
-    if let Some(cell) = preview.as_cell() {
-        return library_of(request, cell);
-    }
-    let fields = preview.as_record()?;
-    match fields
-        .get(&::grap::vocabulary::FUNCTION)
-        .and_then(Value::as_cell)
-    {
-        Some(function) => library_of(request, function),
-        None => fields.keys().find_map(|key| library_of(request, *key)),
-    }
-}
-
-fn library_of(request: &CompletionRequest<'_>, cell: CellId) -> Option<Resolution> {
-    Some((request.resolve)(cell)?.source).filter(|source| matches!(source, Resolution::Library(_)))
-}
-
-/// The operation's library's offers first, and hiding other libraries'
-/// offers of the same spelling: a number type's literals and operations
-/// replace other types' in its arithmetic.
-pub(crate) fn within_operation<T>(
-    items: Vec<T>,
-    context: Resolution,
-    library: impl Fn(&T) -> Option<Resolution>,
-    spelling: impl Fn(&T) -> String,
-) -> Vec<T> {
-    let (own, others): (Vec<_>, Vec<_>) = items
-        .into_iter()
-        .partition(|item| library(item) == Some(context));
-    let shadowed: std::collections::HashSet<_> = own.iter().map(&spelling).collect();
-    own.into_iter()
-        .chain(
-            others
-                .into_iter()
-                .filter(|item| library(item).is_none() || !shadowed.contains(&spelling(item))),
-        )
-        .collect()
-}
-
-/// An offer's display as the picker spells it.
-pub(crate) fn spelling(request: &CompletionRequest<'_>, text: &CompletionText) -> String {
-    match text {
-        CompletionText::Literal(text) => text.clone(),
-        CompletionText::Name(cell) => (request.resolve)(*cell)
-            .and_then(|definition| name::read(definition.value))
-            .map(str::to_owned)
-            .unwrap_or_else(|| short_id(*cell)),
-    }
-}
-
-/// Labels can only be cells; any value completes a value.
-fn activation(
-    kind: CompletionKind,
-    value: Value,
-    on_commit: Option<Continuation>,
-) -> Option<Rc<dyn Fn(&mut crate::Editor)>> {
-    match value.as_cell() {
-        Some(cell) => Some(cell_activation(kind, cell, on_commit)),
-        None => (kind == CompletionKind::Value).then(|| {
-            Rc::new(move |world: &mut crate::Editor| {
-                crate::editing::commit_value(world, value.clone(), on_commit.clone())
-            }) as Rc<dyn Fn(&mut crate::Editor)>
-        }),
-    }
-}
-
-fn cell_activation(
-    kind: CompletionKind,
-    cell: CellId,
-    on_commit: Option<Continuation>,
-) -> Rc<dyn Fn(&mut crate::Editor)> {
-    match kind {
-        CompletionKind::Value => Rc::new(move |world| {
-            crate::editing::commit_value(world, cell.into(), on_commit.clone())
-        }),
-        CompletionKind::Field => {
-            Rc::new(move |world| crate::editing::commit_label(world, cell, None, on_commit.clone()))
-        }
-    }
-}
-
-fn new_cell(kind: CompletionKind) -> Rc<dyn Fn(&mut crate::Editor)> {
-    Rc::new(move |world| match kind {
-        CompletionKind::Value => crate::editing::commit_value(
-            world,
-            new_cell_id().into(),
-            Some(crate::libraries::selection::at(
-                &[],
-                crate::libraries::selection::edge(),
-            )),
-        ),
-        CompletionKind::Field => crate::editing::commit_label(
-            world,
-            new_cell_id(),
-            None,
-            Some(crate::libraries::selection::pending_at(&[])),
-        ),
-    })
+/// Whose offers a hole shows.
+#[derive(Clone, Copy)]
+pub(crate) enum HoleOffers<'a> {
+    /// The drawing projection's own vocabulary, and nothing else.
+    Projection(&'a CompletionProvider),
+    /// Raw's: the editor's constructors, and what's typed read as a value.
+    Raw,
+    /// A document's empty root's: what the libraries start a document as,
+    /// then Raw's.
+    Start,
 }
 
 /// Labels can only be cells; an offer advertising another value is not one.
@@ -168,74 +54,51 @@ fn entry(sources: &Sources, offer: Completion) -> Entry<crate::Editor> {
     }
 }
 
-fn value_entry(
-    display: String,
-    detail: Option<String>,
-    value: Value,
-    on_commit: Continuation,
-    kind: CompletionKind,
-) -> Option<Entry<crate::Editor>> {
-    offered_entry(display, detail, value, Some(on_commit), kind)
-}
-
-fn offered_entry(
-    display: String,
-    detail: Option<String>,
-    value: Value,
-    on_commit: Option<Continuation>,
-    kind: CompletionKind,
-) -> Option<Entry<crate::Editor>> {
-    activation(kind, value.clone(), on_commit).map(|activate| Entry {
-        display,
-        detail,
-        matches: Vec::new(),
-        face: if text::read(&value).is_some() {
-            Face::String
-        } else if value.as_blob().is_some() {
-            Face::Id
-        } else {
-            Face::Label
-        },
-        source: value.as_cell(),
-        activate,
-    })
-}
-
-pub(crate) fn constructor_entries(
-    kind: CompletionKind,
-) -> Vec<(&'static str, Entry<crate::Editor>)> {
-    std::iter::once((
-        "(",
-        Entry {
-            display: "new cell".to_string(),
-            detail: None,
-            matches: Vec::new(),
-            face: Face::Dim,
-            source: None,
-            activate: new_cell(kind),
-        },
-    ))
-    .chain(
-        [
-            ("[", "new list", Value::list([])),
-            ("{", "new record", Value::record([])),
-        ]
+/// The editor's constructors: a new cell, and as a value a new list or
+/// record. Each opens for what goes inside it. A hole's offers include them
+/// where its projection wants them, found by their delimiters too.
+pub(crate) fn constructors(kind: CompletionKind) -> Vec<Completion> {
+    delimited_constructors(kind)
         .into_iter()
-        .filter_map(|(key, display, value)| {
-            value_entry(
-                display.to_string(),
-                None,
-                value,
-                crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
-                kind,
-            )
-            .map(|mut entry| {
-                entry.face = Face::Dim;
-                (key, entry)
-            })
-        }),
-    )
-    .collect()
+        .map(|(_, offer)| offer)
+        .collect()
+}
+
+/// The [`constructors`] beside their delimiters: `(` for the cell, `[` for
+/// the list and `{` for the record. Raw's holes make one at once when its
+/// delimiter is typed into an empty query.
+pub(crate) fn delimited_constructors(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
+    let cell = Completion::new("new cell", move |world| match kind {
+        CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
+        CompletionKind::Field => crate::editing::commit_label(
+            world,
+            new_cell_id(),
+            None,
+            Some(crate::libraries::selection::pending_at(&[])),
+        ),
+    });
+    let containers = [
+        ("[", "new list", Value::list([])),
+        ("{", "new record", Value::record([])),
+    ]
+    .into_iter()
+    .filter(|_| kind == CompletionKind::Value)
+    .map(|(delimiter, display, value)| {
+        let offer = Completion::new(display, move |world| {
+            crate::editing::commit_container(world, value.clone())
+        });
+        (delimiter, offer)
+    });
+    std::iter::once(("(", cell))
+        .chain(containers)
+        .map(|(delimiter, offer)| {
+            let offer = Completion {
+                face: Face::Dim,
+                ..offer.with_aliases([delimiter])
+            };
+            (delimiter, offer)
+        })
+        .collect()
 }
 
 pub(crate) struct Prepared {
@@ -265,7 +128,7 @@ pub(crate) fn prepare(
             selection::set_value(
                 &mut document,
                 sources.libraries,
-                &selection.source_path()?,
+                &selection.location()?,
                 value,
             )
             .then_some(())?;
@@ -321,61 +184,83 @@ pub(crate) fn prepare(
     })
 }
 
+/// A hole's offers: what the projection drawing it supplies and nothing else,
+/// or Raw's, led at a document's empty root by the libraries' starting points.
 pub(crate) fn completion_entries_with(
     sources: &Sources,
     request: &CompletionRequest<'_>,
-    providers: Option<&CompletionProvider>,
-    contextual: Option<&CompletionProvider>,
-) -> (Vec<Entry<crate::Editor>>, bool) {
-    let raw = request.raw;
-    let kind = request.kind;
-    let narrow = CompletionRequest {
-        scope: CompletionScope::Suggested,
-        ..*request
-    };
-    let suggested = (!raw)
-        .then(|| {
-            contextual
-                .and_then(|provider| provider(&narrow))
-                .or_else(|| providers.and_then(|provider| provider(&narrow)))
-        })
-        .flatten();
-    if request.scope == CompletionScope::Suggested
-        && let Some(offers) = suggested
-    {
-        return (contextual_entries(sources, offers, request), false);
+    libraries: Option<&CompletionProvider>,
+    hole: HoleOffers<'_>,
+) -> Vec<Entry<crate::Editor>> {
+    match hole {
+        HoleOffers::Projection(projection) => {
+            contextual_entries(sources, projection(request).unwrap_or_default(), request)
+        }
+        HoleOffers::Raw => raw_entries(sources, request, libraries),
+        HoleOffers::Start => {
+            let start = CompletionRequest {
+                scope: CompletionScope::Start,
+                ..*request
+            };
+            let mut entries = libraries
+                .and_then(|provider| provider(&start))
+                .map(|offers| contextual_entries(sources, offers, request))
+                .unwrap_or_default();
+            entries.extend(raw_entries(sources, request, libraries));
+            entries
+        }
     }
-    let query = request.query;
-    let labels = kind == CompletionKind::Field;
-    let trimmed = query.trim();
-    let quoted = trimmed.starts_with('"');
-    let universal = CompletionRequest {
-        scope: CompletionScope::Everything,
-        ..*request
-    };
-    let value_entries = providers
-        .filter(|_| !quoted)
-        .and_then(|provider| provider(&universal))
-        .map(|offers| contextual_entries(sources, offers, request))
-        .unwrap_or_default();
-    let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
-    let spelling = text::query_spelling(query);
-    let atom_leads = quoted || blob.is_some();
-    // Libraries read the query as their values, like text from any query.
+}
+
+/// What the libraries read the query as, such as a number. Text, which any
+/// nonempty query reads as, comes after the readings particular to it.
+pub(crate) fn typed(
+    libraries: Option<&CompletionProvider>,
+    request: &CompletionRequest<'_>,
+) -> Vec<Completion> {
+    let (readings, strings) = literals(libraries, request);
+    readings.into_iter().chain(strings).collect()
+}
+
+/// The readings particular to the query, and the query as text.
+fn literals(
+    libraries: Option<&CompletionProvider>,
+    request: &CompletionRequest<'_>,
+) -> (Vec<Completion>, Vec<Completion>) {
     let literal = CompletionRequest {
         scope: CompletionScope::Literal,
         ..*request
     };
-    let literals = providers
-        .filter(|_| !labels)
+    let (strings, readings) = libraries
         .and_then(|provider| provider(&literal))
         .unwrap_or_default()
         .into_iter()
-        .filter_map(|offer| completion_entry(sources, offer, kind));
-    let atoms: Vec<_> = match kind {
+        .partition(|offer| offer.preview.as_ref().and_then(text::read).is_some());
+    (readings, strings)
+}
+
+/// Raw's offers: the editor's constructors, and what's typed read as a value,
+/// or for a field's label a new cell named as typed. An empty query reads as
+/// nothing; a projection that expects a value can offer one for it. Quoted
+/// text and bytes
+/// lead; otherwise a reading that spells the query exactly comes first, then
+/// the constructors the query names, then the other readings and the text.
+fn raw_entries(
+    sources: &Sources,
+    request: &CompletionRequest<'_>,
+    libraries: Option<&CompletionProvider>,
+) -> Vec<Entry<crate::Editor>> {
+    let kind = request.kind;
+    let query = request.query;
+    let trimmed = query.trim();
+    let blob = (kind == CompletionKind::Value)
+        .then(|| blob::parse(trimmed))
+        .flatten();
+    let atom_leads = trimmed.starts_with('"') || blob.is_some();
+    let (readings, atoms): (Vec<_>, Vec<_>) = match kind {
         CompletionKind::Field => {
-            let spelling = spelling.to_string();
-            vec![Entry {
+            let spelling = text::query_spelling(query).to_string();
+            let label = Entry {
                 display: spelling.clone(),
                 detail: Some("new label".to_string()),
                 matches: Vec::new(),
@@ -389,119 +274,70 @@ pub(crate) fn completion_entries_with(
                         Some(crate::libraries::selection::pending_at(&[])),
                     )
                 }),
-            }]
-        }
-        CompletionKind::Value => blob
-            .map(|blob| entry(sources, blob::completion(blob)))
-            .into_iter()
-            .chain(literals)
-            .collect(),
-    };
-    let reference_selection = if labels {
-        crate::libraries::selection::pending_at(&[])
-    } else {
-        crate::libraries::selection::at(&[], crate::libraries::selection::edge())
-    };
-    let (mut local, mut external): (Vec<_>, Vec<_>) = document_cells(sources)
-        .into_iter()
-        .filter(|cell| {
-            !labels
-                || !request
-                    .value()
-                    .and_then(Value::as_record)
-                    .is_some_and(|fields| fields.contains_key(cell))
-        })
-        .map(|cell| {
-            let definition = sources.resolve(cell);
-            let name = (!raw)
-                .then(|| definition.and_then(|value| name::read(value.value)))
-                .flatten();
-            let source = definition
-                .map(|value| value.source)
-                .or_else(|| sources.contributors(cell).next());
-            let entry = Entry {
-                display: name.map(str::to_owned).unwrap_or_else(|| short_id(cell)),
-                detail: source.map(|source| source_name(sources, source)),
-                matches: Vec::new(),
-                face: if name.is_some() {
-                    Face::Label
-                } else {
-                    Face::Id
-                },
-                source: Some(cell),
-                activate: cell_activation(kind, cell, Some(reference_selection.clone())),
             };
-            (entry, name.is_some(), sources.external(cell))
-        })
-        .partition(|(_, _, external)| !*external);
-    local.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-    external.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-    if let Some(context) = operation_library(request) {
-        external = within_operation(
-            external,
-            context,
-            |(entry, _, _)| {
-                entry
-                    .source
-                    .and_then(|cell| sources.resolve(cell))
-                    .map(|definition| definition.source)
-                    .filter(|source| matches!(source, Resolution::Library(_)))
-            },
-            |(entry, _, _)| entry.display.clone(),
-        );
-    }
-    let mut references_pool: Vec<_> = local
-        .into_iter()
-        .map(|(entry, named, _)| (entry, named, None))
-        .collect();
-    references_pool.extend(
-        constructor_entries(kind)
+            (
+                Vec::new(),
+                (!trimmed.is_empty()).then_some(label).into_iter().collect(),
+            )
+        }
+        CompletionKind::Value => {
+            let (readings, strings) = literals(libraries, request);
+            let entries = |offers: Vec<Completion>| {
+                offers
+                    .into_iter()
+                    .map(|offer| entry(sources, offer))
+                    .collect::<Vec<_>>()
+            };
+            let atoms = blob
+                .map(|blob| entry(sources, blob::completion(blob)))
+                .into_iter()
+                .chain(entries(strings))
+                .collect();
+            (entries(readings), atoms)
+        }
+    };
+    let constructors: Vec<_> = filter::rank_with_aliases(
+        constructors(kind)
             .into_iter()
-            .map(|(key, entry)| (entry, true, Some(key))),
-    );
-    references_pool.extend(
-        external
-            .into_iter()
-            .map(|(entry, named, _)| (entry, named, None)),
-    );
-    let references: Vec<_> = filter::rank_with_aliases(
-        references_pool,
-        |(entry, _, _)| &entry.display,
-        |(_, _, alias)| alias.as_slice(),
+            .map(|offer| {
+                let aliases = offer.aliases.clone();
+                (entry(sources, offer), aliases)
+            })
+            .collect(),
+        |(entry, _)| &entry.display,
+        |(_, aliases)| aliases.as_slice(),
         query,
     )
     .into_iter()
     .map(|ranked| {
-        let demoted = ranked.fuzzy() || !ranked.item.1;
+        let fuzzy = ranked.fuzzy();
         (
             Entry {
                 matches: ranked.matches,
                 ..ranked.item.0
             },
-            demoted,
+            fuzzy,
         )
     })
     .collect();
-    let mut entries = suggested
-        .map(|offers| contextual_entries(sources, offers, request))
-        .unwrap_or_default();
     if atom_leads {
-        entries.extend(atoms);
-        entries.extend(value_entries);
-        entries.extend(references.into_iter().map(|(entry, _)| entry));
-    } else {
-        let (weak, strong): (Vec<_>, Vec<_>) =
-            references.into_iter().partition(|(_, demoted)| *demoted);
-        let (exact, other): (Vec<_>, Vec<_>) = value_entries
+        return atoms
             .into_iter()
-            .partition(|entry| !query.is_empty() && entry.display.eq_ignore_ascii_case(query));
-        entries.extend(exact);
-        entries.extend(strong.into_iter().map(|(entry, _)| entry));
-        entries.extend(other);
-        entries.extend(atoms);
-        entries.extend(weak.into_iter().map(|(entry, _)| entry));
+            .chain(readings)
+            .chain(constructors.into_iter().map(|(entry, _)| entry))
+            .collect();
     }
-    (entries, true)
+    let (weak, strong): (Vec<_>, Vec<_>) = constructors.into_iter().partition(|(_, fuzzy)| *fuzzy);
+    let (exact, other): (Vec<_>, Vec<_>) = readings
+        .into_iter()
+        .partition(|entry| !query.is_empty() && entry.display.eq_ignore_ascii_case(query));
+    exact
+        .into_iter()
+        .chain(strong.into_iter().map(|(entry, _)| entry))
+        .chain(other)
+        .chain(atoms)
+        .chain(weak.into_iter().map(|(entry, _)| entry))
+        .collect()
 }
 
 fn contextual_entries(
@@ -550,57 +386,4 @@ fn completion_text(sources: &Sources<'_>, text: &CompletionText) -> String {
             .map(str::to_owned)
             .unwrap_or_else(|| short_id(*cell)),
     }
-}
-
-fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
-    completion_text(
-        sources,
-        &CompletionText::Name(match source {
-            Resolution::Document => crate::libraries::path::vocabulary::DOCUMENT,
-            Resolution::Library(library) => library,
-        }),
-    )
-}
-
-/// The cells a value links, walked structurally — lists and records
-/// are values, so their contents are right here; record labels
-/// reference too.
-fn value_cells(value: &Value, cells: &mut Vec<CellId>) {
-    match value {
-        Value::Cell(cell) => cells.push(*cell),
-        Value::Blob(_) => {}
-        Value::List(elements) => {
-            for element in elements.values() {
-                value_cells(element, cells);
-            }
-        }
-        Value::Record(fields) => {
-            for (label, field) in fields {
-                cells.push(*label);
-                value_cells(field, cells);
-            }
-        }
-    }
-}
-
-/// Every cell the document or its library mentions — table entries,
-/// links inside values, cells used as labels, and the root's own
-/// links. Bare cells referenced anywhere are included: still
-/// referenceable. Library cells are offered so the conventions are
-/// typeable from keystroke one. Sorted for a deterministic offer
-/// order.
-fn document_cells(sources: &Sources) -> Vec<CellId> {
-    let mut cells = Vec::new();
-    for cell in sources.cells() {
-        cells.push(cell);
-        for value in sources.values(cell) {
-            value_cells(value.value, &mut cells);
-        }
-    }
-    if let Some(root) = sources.root() {
-        value_cells(root, &mut cells);
-    }
-    cells.sort();
-    cells.dedup();
-    cells
 }

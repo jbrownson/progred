@@ -4,11 +4,12 @@
 use crate::Editor;
 use crate::display::widget::gesture::Gesture;
 use crate::libraries::Libraries;
+use crate::location::Location;
 use crate::model::Model;
 use crate::selection::{self, Selection};
 use crate::sources::Sources;
 use crate::workspace::Root;
-use gid::{Path, Step, Value};
+use gid::{Path, Value};
 #[cfg(test)]
 use kurbo::Point;
 
@@ -102,7 +103,7 @@ impl EditRun {
 fn write_value(
     model: &mut Model,
     libraries: &Libraries,
-    path: &[Step],
+    location: &Location,
     replacement: Value,
     recorded: &mut bool,
 ) -> bool {
@@ -110,13 +111,13 @@ fn write_value(
         doc: &model.doc,
         libraries,
     })
-    .resolve_path(path)
+    .read(location)
         == Some(&replacement)
     {
         false
     } else {
         let before = (!*recorded).then(|| model.snapshot());
-        let wrote = selection::set_value(&mut model.doc, libraries, path, replacement);
+        let wrote = selection::set_value(&mut model.doc, libraries, location, replacement);
         if wrote && let Some(before) = before {
             model.history.record(before);
             *recorded = true;
@@ -129,6 +130,7 @@ fn write_value(
 mod tests {
     use super::*;
     use crate::libraries::f64;
+    use gid::Step;
     use std::rc::Rc;
 
     use crate::display::widget::gesture as native;

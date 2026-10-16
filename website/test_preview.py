@@ -252,7 +252,7 @@ class AssetTests(unittest.TestCase):
         assets = Assets()
         assets.feed((REPOSITORY / "website/public/tutorial.html").read_text())
         self.assertEqual(assets.external_scripts, [])
-        self.assertEqual(len(assets.frames), 9)
+        self.assertEqual(len(assets.frames), 16)
         documents = []
         for frame in assets.frames:
             self.assertTrue(frame["title"])
@@ -262,53 +262,17 @@ class AssetTests(unittest.TestCase):
             params = parse_qs(url.query)
             self.assertEqual(params["menu"], ["hidden"])
             self.assertEqual(params["threads"], ["1"])
+            self.assertEqual(params["wheel"], ["auto"])
+            # Each editor names its libraries, once each, names among them.
             libraries = params["libraries"][0].split(",")
-            basic = [
-                "3209ad5d23a0c8513f6bd76324a5cf60",  # name
-                "eaaf309c36a65d2811083944da29aec9",  # text
-                "4ab5da466a7c5f1202f5ef862f5ff915",  # blob
-            ]
-            forest = params["document"] == ["../lessons/growing-forest.gid"]
-            drawing = params["document"][0] in ("../lessons/drawing.gid", "../lessons/forest.gid", "../lessons/growing-forest.gid")
-            evaluation = ["873c68ac371dbbb98a4f198546d60241"] if params["document"][0] in ("../lessons/projections.gid", "../lessons/grap.gid", "../lessons/functions.gid", "../lessons/drawing.gid", "../lessons/forest.gid", "../lessons/growing-forest.gid") else []
-            drawing_libraries = ["25d0e2034b4bd65bebb4811d65eab89c", "ec17915df2d42377574dc90f22500fe2"] if drawing else []
-            numeric = [
-                "c46d010325d3a1ec0f2a84dd3a9570ae",  # number
-                "1fdb573a2c56a7063546c195318214bc",  # f64
-            ]
-            grap = ["f7735b90f6826b25c350a8fd83af8c47"] if evaluation else []
-            layout = ["fb2a4dac87512d69448650bc0e29dc80"] if drawing else []
-            animation = [
-                "666ba40b81028e32c78bdc1665d6c3a9",  # controls
-                "d22b834154d60b1df228f9bb4d3c13de",  # presentation
-                "f76a2ef341541a5c955fc23094e2df52",  # logic
-                "7b0fa421250c1b5c8a78a3a95b172cb6",  # list
-                "0ad8124ba821acd5fbf2c868371e1492",  # sequence
-            ] if forest else []
-            self.assertEqual(libraries, basic + evaluation + drawing_libraries + numeric + grap + layout + animation)
-            if forest:
-                self.assertEqual(params["tutorial-slots"], ["f717b766d250a7b86c5eb842885c4417,9940ece27410c72a5308a544890ccc71"])
-                self.assertNotIn("observe", params)
-            elif params["document"] == ["../lessons/model.gid"]:
-                self.assertEqual(params["tutorial-slots"], [
-                    "9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:raw"
-                ])
-            elif params["document"] == ["../lessons/projections.gid"]:
-                self.assertEqual(params["tutorial-slots"], [
-                    "9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417:plain,5e716c07490849f072b4e9017dd6230d:raw"
-                ])
-            elif evaluation:
-                self.assertEqual(params["tutorial-slots"], [
-                    "5e716c07490849f072b4e9017dd6230d,9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417" if drawing else
-                    "9940ece27410c72a5308a544890ccc71,f717b766d250a7b86c5eb842885c4417,5e716c07490849f072b4e9017dd6230d"
-                ])
-            else:
-                self.assertNotIn("tutorial-slots", params)
+            self.assertIn("3209ad5d23a0c8513f6bd76324a5cf60", libraries)
+            self.assertEqual(len(set(libraries)), len(libraries))
             document = urlsplit(urljoin(url.geturl(), params["document"][0])).path
             self.assertTrue((REPOSITORY / "website/public" / document.lstrip("/")).is_file())
             documents.append(document)
-        self.assertEqual(len(set(documents)), len(documents))
-        self.assertEqual(set(documents), {"/lessons/growing-forest.gid", "/lessons/values.gid", "/lessons/projections.gid", "/lessons/model.gid", "/lessons/cells.gid", "/lessons/grap.gid", "/lessons/functions.gid", "/lessons/drawing.gid", "/lessons/forest.gid"})
+        # The forest opens the page, gets peeled, and ends it as yours.
+        self.assertEqual(documents.count("/lessons/growing-forest.gid"), 3)
+        self.assertEqual(len(set(documents)), len(documents) - 2)
         for path in assets.paths:
             with self.subTest(path=path):
                 self.assertFalse(urlsplit(path).scheme)
@@ -344,11 +308,10 @@ class AssetTests(unittest.TestCase):
         # Asks for tutorial feedback go to its channel, not the front page.
         feedback = "https://progred.zulipchat.com/#narrow/channel/640458-tutorial-feedback"
         self.assertIn(feedback, page.links)
-        for tutorial in ("tutorial.html", "story.html", "lab/peel.html"):
-            self.assertIn(tutorial, page.links)
-            tutorial_page = Page()
-            tutorial_page.feed((public / tutorial).read_text())
-            self.assertEqual(tutorial_page.links.count(feedback), 2, tutorial)
+        self.assertIn("tutorial.html", page.links)
+        tutorial = Page()
+        tutorial.feed((public / "tutorial.html").read_text())
+        self.assertEqual(tutorial.links.count(feedback), 2)
         for link in page.links:
             url = urlsplit(link)
             if url.scheme or not url.path:

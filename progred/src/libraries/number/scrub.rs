@@ -1,6 +1,7 @@
 use crate::display::widget::gesture::Gesture;
 use crate::display::{Layout, widget};
 use crate::gesture::EditRun;
+use crate::placed::Cursor;
 use gid::Value;
 use puri::{Point, drag::Drag};
 use std::rc::Rc;
@@ -37,7 +38,8 @@ pub(crate) fn on_scrub(
                 let edits = context.inputs.edits.clone();
                 let handler = handler.clone();
                 let scale = context.inputs.styles.scale;
-                widget::gesture::targeted(
+                let target = target.clone();
+                let drag = widget::gesture::targeted(
                     target.clone(),
                     true,
                     crate::modifiers::picking(context.inputs.command_modifier),
@@ -63,10 +65,48 @@ pub(crate) fn on_scrub(
                             false
                         }
                     },
-                )
+                );
+                Box::new(move |output, placement| {
+                    if output.input.picking && !placement.clipped_out() {
+                        output.cursor(target, Cursor::HorizontalDrag);
+                    }
+                    drag(output, placement);
+                })
             } else {
                 Box::new(|_, _| {})
             }
+        }),
+    )
+}
+
+/// While the command modifier is held, a number that holding it lets be
+/// dragged is outlined as hovering outlines a value, in the number's own
+/// color: every place the pointer can drag shows at once.
+pub(crate) fn outlined(
+    digits: Layout<crate::Editor, crate::frame::Hovered>,
+) -> Layout<crate::Editor, crate::frame::Hovered> {
+    widget::around(
+        digits,
+        Rc::new(|context| {
+            let writable = context
+                .inputs
+                .edits
+                .writable(&context.inputs.sources, context.path);
+            let scale = context.inputs.styles.scale;
+            let palette = context.inputs.styles.palette;
+            Box::new(move |digits| {
+                if !writable {
+                    return digits;
+                }
+                widget::before_place(digits, move |placement, output| {
+                    if output.input.picking && !placement.clipped_out() {
+                        let outline = widget::style::highlight_outline(scale, placement.rect);
+                        output.render(move |canvas, _| {
+                            widget::style::drag_highlight(palette, scale, canvas, outline);
+                        });
+                    }
+                })
+            })
         }),
     )
 }
@@ -110,6 +150,10 @@ impl Gesture<crate::Editor> for Scrub {
                 wrote
             }) || changed
         })
+    }
+
+    fn cursor(&self) -> Option<Cursor> {
+        Some(Cursor::HorizontalDrag)
     }
 
     fn finish(&mut self, world: &mut crate::Editor) {

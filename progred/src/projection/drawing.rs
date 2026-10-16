@@ -348,7 +348,7 @@ pub(crate) fn program_leaf(
     let input = cx
         .edits
         .source(&program_path)
-        .map(|path| SourceTrace::from_path(&cx.sources, Rc::from(path.as_ref())));
+        .map(|location| SourceTrace::from_location(&cx.sources, &location));
     let document = cx.sources.doc.clone();
     let libraries = cx.sources.libraries.clone();
     let drawing = Rc::new(LazyCell::new(move || {
@@ -396,6 +396,7 @@ pub(crate) fn program_leaf(
 mod tests {
     use super::*;
     use crate::libraries::Libraries;
+    use crate::location::Location;
     use gid::{Cells, Resolution, new_cell_id};
 
     #[test]
@@ -523,9 +524,9 @@ mod tests {
                 100,
             );
             assert_eq!(drawing.hits.len(), 1);
-            let selected = SourceTrace::from_path(
+            let selected = SourceTrace::from_location(
                 &sources,
-                Rc::from([
+                &Location::root(vec![
                     Step::Follow(Resolution::Library(order[0])),
                     Step::Key(grap::vocabulary::BODY),
                 ]),
@@ -539,9 +540,9 @@ mod tests {
                 super::super::source_link::hover_source::<crate::Editor>(&sources, &[], &hover),
                 Some(selected)
             );
-            let other = SourceTrace::from_path(
+            let other = SourceTrace::from_location(
                 &sources,
-                Rc::from([
+                &Location::root(vec![
                     Step::Follow(Resolution::Library(order[1])),
                     Step::Key(grap::vocabulary::BODY),
                 ]),

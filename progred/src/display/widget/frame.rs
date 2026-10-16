@@ -18,10 +18,12 @@ use std::rc::Rc;
 
 pub struct HoverInput<'a, H> {
     pub command_modifier: puri::keyboard::CommandModifier,
+    /// The command modifier is held, so a press picks or drags rather than
+    /// edits.
+    pub picking: bool,
     pub pointer: Option<Point>,
     pub prior: Option<&'a H>,
     pub reach_px: f64,
-    pub debug_geometry: bool,
 }
 
 impl<H> Copy for HoverInput<'_, H> {}
@@ -34,10 +36,10 @@ impl<H> Default for HoverInput<'_, H> {
     fn default() -> Self {
         Self {
             command_modifier: crate::modifiers::native(),
+            picking: false,
             pointer: None,
             prior: None,
             reach_px: 0.0,
-            debug_geometry: false,
         }
     }
 }
@@ -140,6 +142,14 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
     }
 }
 impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
+    /// Show `cursor` while `target`, in this view, is hovered.
+    pub fn cursor(&mut self, target: H, cursor: Cursor) {
+        self.output
+            .hover_geometry
+            .cursors
+            .push((self.root.clone(), target, cursor));
+    }
+
     pub fn claim(&mut self, probe: Probe<H>) {
         self.output.claim = claim_over(
             self.output.claim.take(),
@@ -148,11 +158,6 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
                 .and_then(|point| probe.answer(point, self.input.prior, self.input.reach_px))
                 .map(|claim| (self.root.clone(), claim)),
         );
-        if self.input.debug_geometry
-            && let Some(region) = probe.retention_region(self.input.reach_px)
-        {
-            self.output.debug_regions.push(region);
-        }
         self.output
             .hover_geometry
             .probes
@@ -170,10 +175,10 @@ impl<C: 'static, H: 'static> HasHandler<C> for HoverContext<'_, C, H> {
 /// only floating placements are deferred.
 pub struct HoverPass<C, H> {
     command_modifier: puri::keyboard::CommandModifier,
+    picking: bool,
     pointer: Option<Point>,
     prior: Option<H>,
     reach_px: f64,
-    debug_geometry: bool,
     root: Option<Root>,
     output: HoverOutput<C, H>,
     floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
@@ -187,10 +192,10 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
     {
         Self {
             command_modifier: input.command_modifier,
+            picking: input.picking,
             pointer: input.pointer,
             prior: input.prior.cloned(),
             reach_px: input.reach_px,
-            debug_geometry: input.debug_geometry,
             root: None,
             output: HoverOutput::empty(),
             floaters: Vec::new(),
@@ -202,10 +207,10 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         let mut context = HoverContext::new(
             HoverInput {
                 command_modifier: self.command_modifier,
+                picking: self.picking,
                 pointer: self.pointer,
                 prior: self.prior.as_ref(),
                 reach_px: self.reach_px,
-                debug_geometry: self.debug_geometry,
             },
             &mut self.output,
             &mut self.navigation,
@@ -320,15 +325,32 @@ fn claim_over<H>(
     }
 }
 
-/// The installed frame's hit tests, in painting order, with their owning views.
+/// The installed frame's hit tests, in painting order, and the cursors their
+/// targets ask for, with their owning views.
 pub struct HoverGeometry<H> {
     probes: Vec<(Option<Root>, Probe<H>)>,
+    cursors: Vec<(Option<Root>, H, Cursor)>,
 }
 
 impl<H> Default for HoverGeometry<H> {
     fn default() -> Self {
-        Self { probes: Vec::new() }
+        Self {
+            probes: Vec::new(),
+            cursors: Vec::new(),
+        }
     }
+}
+
+/// How the pointer looks over a target that asks; the shell draws the
+/// platform's own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cursor {
+    /// Across a divider between columns.
+    ColumnResize,
+    /// Across a divider between stacked panes.
+    RowResize,
+    /// Over a value that drags left and right.
+    HorizontalDrag,
 }
 
 impl<H: Clone + PartialEq> HoverGeometry<H> {
@@ -348,6 +370,14 @@ impl<H: Clone + PartialEq> HoverGeometry<H> {
                 )
             })
         })
+    }
+
+    /// The cursor `hovered`, in the view `root`, asked for.
+    pub fn cursor(&self, root: Option<&Root>, hovered: &H) -> Option<Cursor> {
+        self.cursors
+            .iter()
+            .find(|(owner, target, _)| owner.as_ref() == root && target == hovered)
+            .map(|(_, _, cursor)| *cursor)
     }
 }
 
@@ -465,7 +495,6 @@ pub struct HoverOutput<C, Hover> {
     pub scroll_probes: Vec<super::scroll::Probe>,
     pub claim: Option<(Option<Root>, Claim<Hover>)>,
     pub hover_geometry: HoverGeometry<Hover>,
-    pub debug_regions: Vec<(Hover, Rect)>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C, DispatchContext<C, Hover>>>,
@@ -501,7 +530,6 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
             scroll_probes: Vec::new(),
             claim: None,
             hover_geometry: HoverGeometry::default(),
-            debug_regions: Vec::new(),
             handler: None,
             descends: Vec::new(),
             view_regions: Vec::new(),
@@ -516,7 +544,10 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
         append(&mut self.scroll_probes, above.scroll_probes);
         self.claim = claim_over(self.claim, above.claim);
         append(&mut self.hover_geometry.probes, above.hover_geometry.probes);
-        append(&mut self.debug_regions, above.debug_regions);
+        append(
+            &mut self.hover_geometry.cursors,
+            above.hover_geometry.cursors,
+        );
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
@@ -538,6 +569,9 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             *owner = Some(root.clone());
         }
         for (owner, _) in &mut self.hover_geometry.probes {
+            *owner = Some(root.clone());
+        }
+        for (owner, _, _) in &mut self.hover_geometry.cursors {
             *owner = Some(root.clone());
         }
         for descend in &mut self.descends {
@@ -811,28 +845,6 @@ mod tests {
             .unwrap()
             .dispatch_key(&mut log, &Default::default());
         assert_eq!(log, [3, 2, 1, 0]);
-    }
-
-    #[test]
-    fn debug_retention_geometry_does_not_change_the_hover_answer() {
-        let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
-        for debug_geometry in [false, true] {
-            let mut pass = HoverPass::<(), u8>::new(&HoverInput {
-                pointer: Some(placement.rect.center()),
-                debug_geometry,
-                reach_px: 4.0,
-                ..Default::default()
-            });
-            for id in [1, 2] {
-                pass.visit(|output| output.claim(Probe::retaining(placement, id)));
-            }
-            let frame = pass.finish();
-            assert_eq!(frame.claim, Some((None, Claim::Direct(2))));
-            assert_eq!(
-                frame.debug_regions.len(),
-                if debug_geometry { 2 } else { 0 }
-            );
-        }
     }
 
     #[test]

@@ -27,9 +27,10 @@ and terminal behavior with disposable subprocesses.
 ## Linux
 
 `make run`, `make dev`, `make images`, and the fetch, check, build, and test
-targets go through `tools/linux-cargo`, which builds in a namespace sandbox into
-`target/sandbox/build`; see [build security](build-security.md). The app itself
-runs outside the sandbox. `make install-linux` builds a release binary and
+targets go through `tools/linux-cargo`, which builds under bubblewrap into
+`target/sandbox/build`; see [build security](build-security.md). Most desktop
+distributions already have bubblewrap, since Flatpak uses it; otherwise install
+the `bubblewrap` package. The app itself runs outside the sandbox. `make install-linux` builds a release binary and
 installs it for the current user following the freedesktop conventions: the
 binary in `~/.local/bin`, a desktop entry, and hicolor icons.
 
@@ -39,10 +40,11 @@ OpenGL driver; Mesa's software Vulkan driver, lavapipe, works without a GPU.
 
 ## Browser
 
-The browser build is supported on macOS; `website/build-ci.sh` also builds it on
-a Linux CI runner for publishing. It needs a secure context (localhost or HTTPS)
-and cross-origin isolation for its shared-memory workers, so plain LAN HTTP or a
-`file://` URL won't run it. Setup and the host's options are in
+The browser build is supported on macOS and Linux, in the same build sandboxes
+as the native app; `website/build-ci.sh` also builds it on a Linux CI runner for
+publishing. It needs a secure context (localhost or HTTPS) and cross-origin
+isolation for its shared-memory workers, so plain LAN HTTP or a `file://` URL
+won't run it. Setup and the host's options are in
 [the browser host notes](../web/README.md); the website is described in
 [its README](../website/README.md).
 

@@ -26,7 +26,6 @@ pub struct Entry<'a, World, Hover> {
 pub struct State {
     pub choice: usize,
     pub scroll: f64,
-    pub everything: bool,
 }
 
 pub fn border(scale: f64) -> Stroke {
@@ -37,27 +36,13 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
     entries: &[Entry<'_, C, H>],
-    more: H,
     state: State,
     current_scroll: impl Fn(&C) -> Option<f64> + 'static,
     set_view: impl Fn(&mut C, State) + 'static,
     command: fn(&Modifiers) -> bool,
 ) -> Measured<HoverPass<C, H>> {
-    let State {
-        choice,
-        scroll,
-        everything,
-    } = state;
-    let set_view = move |world: &mut C, scroll, choice, everything| {
-        set_view(
-            world,
-            State {
-                scroll,
-                choice,
-                everything,
-            },
-        )
-    };
+    let State { choice, scroll } = state;
+    let set_view = move |world: &mut C, scroll, choice| set_view(world, State { scroll, choice });
     let scale = styles.scale;
     let widget_entries = entries.iter().map(|entry| puri_widgets::completion::Entry {
         display: entry.display,
@@ -68,27 +53,18 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     let widget = puri_widgets::completion::Completion::new(
         tcx,
         widget_entries,
-        !everything,
         puri_widgets::completion::Style {
             detail: &styles.detail,
-            more: &styles.dim,
             scale,
             chosen: styles.palette.accent.with_alpha(0.14),
         },
     );
     let set_view = Rc::new(set_view);
-    let expand: Rc<dyn Fn(&mut C)> = {
-        let set_view = set_view.clone();
-        Rc::new(move |world| {
-            set_view(world, scroll, choice, true);
-        })
-    };
     let items = widget
         .rows
         .into_iter()
         .zip(entries)
         .map(|(row, entry)| (row, entry.target.clone(), entry.activate.clone()))
-        .chain(widget.more.map(|row| (row, more, expand.clone())))
         .collect::<Vec<_>>();
     let count = items.len();
     let choice = choice.min(count.saturating_sub(1));
@@ -102,7 +78,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
                 row,
                 hover,
                 index == choice,
-                move |world| set_view(world, scroll, index, everything),
+                move |world| set_view(world, scroll, index),
                 move |world| activate(world),
             )
         })
@@ -110,98 +86,99 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     let gap = 2.0 * scale;
     let row_spans = row_spans(&rows, gap, scale);
     let content = col(0, gap, rows);
-    let viewport_height = viewport_height(&row_spans);
-    let maximum = (content.extent.height() / scale - viewport_height).max(0.0);
-    let scroll = scroll.clamp(0.0, maximum);
-    let viewport_extent = Extent {
-        width: content.extent.width,
-        ascent: content.extent.ascent.min(viewport_height * scale),
-        descent: (viewport_height * scale - content.extent.ascent).max(0.0),
+    let inset = 4.0 * scale;
+    // Measured at most eight rows tall. Placed shorter, the card shows the
+    // rows that fit and scrolls the rest.
+    let tallest = viewport_height(&row_spans);
+    let tallest_extent = viewport_extent(content.extent, tallest, scale);
+    let extent = Extent {
+        width: tallest_extent.width + 2.0 * inset,
+        ascent: tallest_extent.ascent + inset,
+        descent: tallest_extent.descent + inset,
     };
-    let scroll_view = set_view.clone();
-    let scrolled = container::scrolled(
-        content,
-        Vec2::new(0.0, scroll * scale),
-        scale,
-        move |world, event| {
-            if let Some(scroll) = current_scroll(world) {
-                let (next, outcome) = scroll::offset(
-                    Vec2::new(0.0, scroll),
-                    event,
-                    scale,
-                    Size::new(viewport_extent.width, viewport_extent.height()),
-                    Vec2::new(0.0, maximum),
-                );
-                if next.y != scroll {
-                    scroll_view(world, next.y, choice, everything);
-                }
-                outcome
-            } else {
-                puri::handler::ScrollOutcome::pass(event)
-            }
-        },
-    );
-    let viewport = measured::overlay_into(
-        leaf(viewport_extent, |_, _| {}),
-        scrolled,
-        move |placement, _| Some(placement),
-    );
-    let card = pad(Insets::uniform(4.0 * scale), viewport);
-    let card = crate::display::widget::before_place(
-        card,
-        move |_, output: &mut HoverContext<'_, C, H>| {
-            output.handler().on_key(move |world, event| {
-                if event.state.is_down() {
-                    match event.key {
-                        Key::Named(NamedKey::Enter) => activate.as_ref().is_some_and(|activate| {
-                            activate(world);
-                            true
-                        }),
-                        Key::Named(key @ (NamedKey::Tab | NamedKey::ArrowDown))
-                            if !everything
-                                && !command(&event.modifiers)
-                                && (key == NamedKey::Tab || choice == count.saturating_sub(1)) =>
-                        {
-                            expand(world);
-                            true
-                        }
-                        Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
-                            if !command(&event.modifiers) =>
-                        {
-                            let next = match direction {
-                                NamedKey::ArrowUp => choice.saturating_sub(1),
-                                _ => choice.saturating_add(1).min(count.saturating_sub(1)),
-                            };
-                            set_view(
-                                world,
-                                reveal(scroll, next, &row_spans, viewport_height)
-                                    .clamp(0.0, maximum),
-                                next,
-                                everything,
-                            );
-                            true
-                        }
-                        _ => false,
-                    }
-                } else {
-                    false
-                }
-            });
-        },
-    );
     let panel = Panel {
         fill: Some(styles.palette.panel.into()),
         border: Some((border(scale), styles.palette.border.into())),
         radius: 6.0 * scale,
     };
-    crate::display::widget::before_place(card, move |placement, output| {
-        if !placement.clipped_out() {
-            output.render(move |canvas, _| panel.place(canvas, placement));
-            output.claim(Probe::occludes(placement));
-            output.handler().on_pointer_down(move |_, event| {
-                placement.contains(Point::new(event.state.position.x, event.state.position.y))
+    measured::leaf_into(extent, move |placement, pass| {
+        let viewport_height = ((placement.rect.height() - 2.0 * inset) / scale).clamp(0.0, tallest);
+        let maximum = (content.extent.height() / scale - viewport_height).max(0.0);
+        let scroll = scroll.clamp(0.0, maximum);
+        let visible = viewport_extent(content.extent, viewport_height, scale);
+        let scroll_view = set_view.clone();
+        let scrolled = container::scrolled(
+            content,
+            Vec2::new(0.0, scroll * scale),
+            scale,
+            move |world, event| {
+                if let Some(scroll) = current_scroll(world) {
+                    let (next, outcome) = scroll::offset(
+                        Vec2::new(0.0, scroll),
+                        event,
+                        scale,
+                        Size::new(visible.width, visible.height()),
+                        Vec2::new(0.0, maximum),
+                    );
+                    if next.y != scroll {
+                        scroll_view(world, next.y, choice);
+                    }
+                    outcome
+                } else {
+                    puri::handler::ScrollOutcome::pass(event)
+                }
+            },
+        );
+        let viewport =
+            measured::overlay_into(leaf(visible, |_, _| {}), scrolled, move |placement, _| {
+                Some(placement)
             });
-        }
+        let card = pad(Insets::uniform(inset), viewport);
+        let card = crate::display::widget::before_place(
+            card,
+            move |_, output: &mut HoverContext<'_, C, H>| {
+                output.handler().on_key(move |world, event| {
+                    if event.state.is_down() {
+                        match event.key {
+                            Key::Named(NamedKey::Enter) => {
+                                activate.as_ref().is_some_and(|activate| {
+                                    activate(world);
+                                    true
+                                })
+                            }
+                            Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
+                                if !command(&event.modifiers) =>
+                            {
+                                let next = match direction {
+                                    NamedKey::ArrowUp => choice.saturating_sub(1),
+                                    _ => choice.saturating_add(1).min(count.saturating_sub(1)),
+                                };
+                                set_view(
+                                    world,
+                                    reveal(scroll, next, &row_spans, viewport_height)
+                                        .clamp(0.0, maximum),
+                                    next,
+                                );
+                                true
+                            }
+                            _ => false,
+                        }
+                    } else {
+                        false
+                    }
+                });
+            },
+        );
+        let card = crate::display::widget::before_place(card, move |placement, output| {
+            if !placement.clipped_out() {
+                output.render(move |canvas, _| panel.place(canvas, placement));
+                output.claim(Probe::occludes(placement));
+                output.handler().on_pointer_down(move |_, event| {
+                    placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                });
+            }
+        });
+        measured::place_into(card, placement, pass);
     })
 }
 
@@ -224,6 +201,16 @@ fn viewport_height(spans: &[(f64, f64)]) -> f64 {
                 .min(spans.len().saturating_sub(1)),
         )
         .map_or(0.0, |(_, bottom)| *bottom)
+}
+
+/// A viewport `height` tall onto `content`, keeping its first baseline when
+/// there's room for it.
+fn viewport_extent(content: Extent, height: f64, scale: f64) -> Extent {
+    Extent {
+        width: content.width,
+        ascent: content.ascent.min(height * scale),
+        descent: (height * scale - content.ascent).max(0.0),
+    }
 }
 
 fn reveal(scroll: f64, choice: usize, spans: &[(f64, f64)], viewport_height: f64) -> f64 {

@@ -22,6 +22,7 @@ pub mod drawing;
 pub mod frame;
 pub mod gesture;
 pub mod hover;
+pub mod image;
 pub mod interaction;
 pub mod line;
 pub mod list;
@@ -111,6 +112,31 @@ pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
                             placement.rect.inset(-stroke.width / 2.0).into(),
                             stroke,
                             brush,
+                            puri::Affine::IDENTITY,
+                        );
+                    });
+                }
+            })
+        }),
+    )
+}
+
+/// A wash of the palette's `color` under the child, its corners rounded.
+pub fn ground<World: 'static, Hover: 'static>(
+    child: Layout<World, Hover>,
+    color: fn(&crate::styles::Palette) -> peniko::Color,
+) -> Layout<World, Hover> {
+    before(
+        child,
+        Rc::new(move |context| {
+            let scale = context.inputs.styles.scale;
+            let color = color(&context.inputs.styles.palette);
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    output.render(move |canvas, _| {
+                        canvas.fill_shape(
+                            puri::RoundedRect::from_rect(placement.rect, 4.0 * scale).into(),
+                            color.into(),
                             puri::Affine::IDENTITY,
                         );
                     });
@@ -222,7 +248,6 @@ pub fn leaf<World: 'static, Hover: 'static>(
             pass.visit(move |output| {
                 let start = output.output.after_hover.len();
                 hover(output, placement);
-                debug_geometry(placement, output);
                 if placement.clipped_out() {
                     let after = output.output.after_hover.split_off(start);
                     output.after_hover(move |hover, effects| {
@@ -244,22 +269,6 @@ pub fn paint<World: 'static, Hover: 'static>(
     leaf(extent, move |output, placement| {
         output.render(move |canvas, _| paint(canvas, placement));
     })
-}
-
-fn debug_geometry<W: 'static, H: 'static>(
-    placement: Placement,
-    output: &mut HoverContext<'_, W, H>,
-) {
-    if output.input.debug_geometry && !placement.clipped_out() {
-        output.render(move |canvas, _| {
-            canvas.stroke_shape(
-                placement.rect.into(),
-                puri::Stroke::new(0.75),
-                puri::Color::new([0.0, 0.65, 1.0, 0.36]).into(),
-                puri::Affine::IDENTITY,
-            );
-        });
-    }
 }
 
 pub fn before_place<W: 'static, H: 'static>(

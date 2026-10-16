@@ -426,8 +426,8 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     assert!(stop(&f, &b_path).rect.y0 < stop(&f, &a_path).rect.y0);
     assert!(stop(&f, &a_path).rect.y1 < stop(&f, &[Step::Key(extra)]).rect.y0);
     assert_eq!(
-        stop(&f, &b_path).scope.source(&b_path).unwrap().as_ref(),
-        [Step::Key(b)]
+        stop(&f, &b_path).scope.source(&b_path),
+        Some(Location::root(vec![Step::Key(b)]))
     );
     assert!((stop(&f, &b_path).select)(&mut world, None));
     assert!(
@@ -518,15 +518,7 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
         "computed lists have no insertion target"
     );
     assert!((stop(&f, &result_body).select)(&mut world, None));
-    assert!(
-        world
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .source_path()
-            .is_none()
-    );
+    assert!(world.model.selection.as_ref().unwrap().location().is_none());
     assert!(!world.paste_value(Value::record([])));
     let mut copy = key(Key::Character("c".into()));
     copy.modifiers = crate::modifiers::command();
@@ -634,14 +626,11 @@ fn outline_body_column_gap_inserts_through_its_jump() {
         Modifiers::empty(),
     );
     assert_eq!(
-        world
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .source_path()
-            .as_deref(),
-        Some([Step::Key(a), Step::Element(inserted.clone())].as_slice())
+        world.model.selection.as_ref().unwrap().location(),
+        Some(Location::root(vec![
+            Step::Key(a),
+            Step::Element(inserted.clone())
+        ]))
     );
     let f = frame(&mut world);
     assert!(f.completion.is_some());
@@ -694,13 +683,11 @@ fn outline_preserves_pending_insertions_in_both_lists() {
     for target in [item, e] {
         let f = frame(&mut world);
         assert!((stop(&f, &target).select)(&mut world, None));
-        assert!(world.insert_key(
-            crate::navigate::Geometry {
-                descends: &f.descends,
-                ..Default::default()
-            },
-            &key(Key::Named(NamedKey::Enter))
-        ));
+        assert!(
+            frame(&mut world)
+                .resolve_for_dispatch()
+                .dispatch_key(&mut world, &key(Key::Named(NamedKey::Enter)))
+        );
         let path = world.model.selection.as_ref().unwrap().path().to_vec();
         let f = frame(&mut world);
         assert!(f.completion.is_some());

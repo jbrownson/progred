@@ -13,9 +13,9 @@ use crate::sources;
 use crate::stack;
 use crate::workspace::{self, Root};
 use crate::{Editor, EditorRunner, content_viewport};
-use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
+use kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 use parley::{FontContext, LayoutContext};
-use peniko::{Brush, Color};
+use peniko::Brush;
 use puri::draw::Canvas;
 use puri::geometry::Placement;
 use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
@@ -126,9 +126,6 @@ fn attribute(
             .find(|d| d.root.as_ref() == root && d.path == *path),
         _ => None,
     };
-    let source_path = landmark
-        .and_then(|d| d.scope.source(&d.path))
-        .map(|path| std::rc::Rc::<[gid::Step]>::from(path.as_ref()));
     let hovered_secondary = match &hovered {
         Some(Hovered::Tree(hover)) if visible => {
             hover::hover_secondary(landmark, completion, hover)
@@ -136,9 +133,9 @@ fn attribute(
         _ => None,
     };
     let hovered_trace = match &hovered {
-        Some(Hovered::Tree(hover::Hover::Value(_))) if visible => {
-            source_path.map(|path| hover::SourceTrace::from_path(sources, path))
-        }
+        Some(Hovered::Tree(hover::Hover::Value(_))) if visible => landmark
+            .and_then(|d| d.scope.source(&d.path))
+            .map(|location| hover::SourceTrace::from_location(sources, &location)),
         Some(Hovered::Tree(hover::Hover::Source(source))) if visible => Some(source.clone()),
         _ => None,
     };
@@ -257,6 +254,7 @@ fn compute_hover(
         Placement::root(Rect::from_origin_size(Point::ZERO, description.viewport)),
         &placed::HoverInput {
             command_modifier: description.command_modifier,
+            picking: pointer.link_sources,
             pointer: if pointer.pressed {
                 None
             } else {
@@ -264,7 +262,6 @@ fn compute_hover(
             },
             prior: pointer.previous.map(|(_, hover)| hover),
             reach_px: HOVER_REACH_POINTS * description.scale,
-            debug_geometry: description.model.view.debug_geometry,
         },
     );
     let (hover, pointer_root) = if pointer.pressed {
@@ -285,21 +282,6 @@ fn compute_hover(
         hover.clone(),
         pointer.link_sources,
     );
-    if description.model.view.debug_geometry {
-        let extended_rects: Vec<_> = output
-            .debug_regions
-            .iter()
-            .filter_map(|(target, rect)| (Some(target) == hover.as_ref()).then_some(*rect))
-            .collect();
-        output.after_hover.push(move |_, effects| {
-            effects.renders.push(Box::new(move |canvas| {
-                let guide = Color::new([0.92, 0.12, 0.58, 0.80]);
-                for rect in extended_rects {
-                    canvas.stroke(rect, Stroke::new(1.0), guide, Affine::IDENTITY);
-                }
-            }));
-        });
-    }
     debug_assert!(
         output.landmark_select.is_none(),
         "selection handler escaped its landmark"
@@ -557,10 +539,12 @@ fn project_workspace_view(
     scale: f64,
 ) -> measured::Measured<HoverPass<Editor>> {
     let raw = view.projection == workspace::Projection::Raw;
+    let standard = view.projection == workspace::Projection::Standard;
     let viewport = match view.root.target() {
-        workspace::Target::Pane { path } if !raw => projection::viewport::entry(sources, path),
+        workspace::Target::Pane { path } if standard => projection::viewport::entry(sources, path),
         _ => None,
     };
+    let plain = (view.projection == workspace::Projection::Plain).then(|| stack.plain());
     let peeled = (!view.hidden.is_empty()).then(|| stack.without(&view.hidden));
     let (document_projection, pane_projection) = match &peeled {
         Some((document, pane)) => (document, pane),
@@ -613,7 +597,10 @@ fn project_workspace_view(
             raw,
             styles,
             width: body_width,
-            projection: (!raw).then_some(projection),
+            projection: match &plain {
+                Some(plain) => Some(plain),
+                None => (!raw).then_some(projection),
+            },
         },
         tcx,
     );
@@ -712,6 +699,7 @@ fn project_workspace(
         let divider = placed_divider.divider;
         let vertical = matches!(divider, workspace::Divider::Columns(_));
         let hover_divider = divider.clone();
+        let cursor_divider = divider.clone();
         let down_divider = divider.clone();
         let move_divider = divider.clone();
         let up_divider = divider;
@@ -733,6 +721,14 @@ fn project_workspace(
                 p.claim_exact(
                     Placement::new(hit, placement.clip_rect),
                     Hovered::Divider(hover_divider),
+                );
+                p.cursor(
+                    Hovered::Divider(cursor_divider),
+                    if vertical {
+                        placed::Cursor::ColumnResize
+                    } else {
+                        placed::Cursor::RowResize
+                    },
                 );
                 p.handler().on_pointer_down(move |app: &mut Editor, event| {
                     is_primary_contact(event)
@@ -985,7 +981,7 @@ mod frame_tests {
         let source = vec![Step::Key(field)];
         let scope = crate::editing::Scope::default().with_conject(
             occurrence.to_vec(),
-            source.clone(),
+            crate::location::Location::root(source.clone()),
             crate::display::Conject::descend(),
         );
         // What the projection draws a conjected occurrence sharing.
@@ -1610,7 +1606,7 @@ mod frame_tests {
     #[test]
     fn omitted_menu_keeps_history_but_not_menu_commands() {
         use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
-        let doc = crate::gid_text::parse(include_str!("../../website/public/lessons/values.gid"))
+        let doc = crate::gid_text::parse(include_str!("../fixtures/values.gid"))
             .unwrap()
             .0;
         let mut runner = crate::EditorRunner::new(crate::test_editor(doc.clone()));
@@ -2416,6 +2412,41 @@ mod frame_tests {
                 .hover,
                 expected
             );
+        }
+    }
+
+    #[test]
+    fn a_hovered_target_shows_the_cursor_it_asked_for() {
+        let mut runner = EditorRunner::new(crate::test_editor(gid::Document {
+            root: None,
+            cells: gid::Cells::new(),
+        }));
+        let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
+        for (x, expected) in [
+            (5.0, winit::window::CursorIcon::ColResize),
+            (50.0, winit::window::CursorIcon::Default),
+        ] {
+            let claimed = target.clone();
+            let layout = crate::display::widget::leaf(
+                measured::Extent::default(),
+                move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
+                    output.claim(placed::Probe::exact(
+                        Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                        claimed.clone(),
+                    ));
+                    output.cursor(claimed, placed::Cursor::ColumnResize);
+                },
+            );
+            let frame = hover_frame(
+                &runner.editor,
+                layout,
+                Some(Point::new(x, 5.0)),
+                None,
+                false,
+            );
+            runner.frame.hover = frame.hover;
+            runner.frame.dispatch = frame.dispatch;
+            assert_eq!(runner.cursor(), expected);
         }
     }
 

@@ -28,10 +28,6 @@ pub fn value(number: f32) -> Value {
     Value::record([(vocabulary::F32, Value::from(number.to_le_bytes().to_vec()))])
 }
 
-pub fn completions(query: &str) -> Vec<crate::display::Completion> {
-    convention().completions(query)
-}
-
 pub fn read(value: &Value) -> Option<f32> {
     value
         .as_record()?

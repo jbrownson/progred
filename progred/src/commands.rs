@@ -1,8 +1,7 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
 use crate::Editor;
-#[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-use crate::clipboard::CLIPBOARD_FORMAT;
+use crate::location::Location;
 use crate::modifiers;
 use crate::navigate;
 use crate::selection;
@@ -125,7 +124,7 @@ impl Editor {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
                 let scope = current.scope().clone();
-                let Some(source_path) = current.source_path().map(|path| path.into_owned()) else {
+                let Some(location) = current.location().map(Location::into_owned) else {
                     return false;
                 };
                 // Backspacing through the value and once more to
@@ -134,18 +133,17 @@ impl Editor {
                 // intact) already covers the deletion.
                 let covered = current.recorded();
                 let before = self.model.snapshot();
-                selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &source_path)
-                    && {
-                        if !covered {
-                            self.model.history.record(before);
-                            self.refresh_title();
-                        }
-                        let mut hole = selection::pending_value(&root, path);
-                        hole.set_scope(scope);
-                        self.model.selection = Some(hole);
-                        geometry.reveal_selection(self);
-                        true
+                selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &location) && {
+                    if !covered {
+                        self.model.history.record(before);
+                        self.refresh_title();
                     }
+                    let mut hole = selection::pending_value(&root, path);
+                    hole.set_scope(scope);
+                    self.model.selection = Some(hole);
+                    geometry.reveal_selection(self);
+                    true
+                }
             }
             _ => false,
         }
@@ -197,45 +195,12 @@ impl Editor {
     /// structure.
     pub(crate) fn copy_value(&mut self, value: &Value) -> bool {
         let (text, structural) = selection::to_clipboard(value);
-        #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-        return clipboard_rs::ClipboardContext::new()
-            .and_then(|cb| {
-                use clipboard_rs::Clipboard;
-                if structural {
-                    // Both representations: the private format says
-                    // "structure", the text reads anywhere.
-                    cb.set(vec![
-                        clipboard_rs::ClipboardContent::Other(
-                            CLIPBOARD_FORMAT.to_string(),
-                            text.clone().into_bytes(),
-                        ),
-                        clipboard_rs::ClipboardContent::Text(text),
-                    ])
-                } else {
-                    cb.set_text(text)
-                }
-            })
-            .is_ok();
-        #[cfg(any(test, target_arch = "wasm32"))]
-        {
-            self.text_clipboard.text = Some(text);
-            self.text_clipboard.structure = structural.then(|| value.clone());
-            true
-        }
+        self.text_clipboard.copy(text, structural.then_some(value))
     }
 
-    /// The private format's payload, when the clipboard carries one.
+    /// The structure a structural copy left, when the clipboard carries one.
     pub(crate) fn clipboard_structure(&mut self) -> Option<Value> {
-        #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-        {
-            use clipboard_rs::Clipboard;
-            let bytes = clipboard_rs::ClipboardContext::new()
-                .ok()
-                .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
-            selection::from_structure(&bytes)
-        }
-        #[cfg(any(test, target_arch = "wasm32"))]
-        self.text_clipboard.structure.clone()
+        self.text_clipboard.structure()
     }
 
     /// Cmd+V while a pending is open and the clipboard CARRIES
@@ -318,17 +283,12 @@ impl Editor {
         }
     }
 
-    /// Completion handlers own committing their query. Otherwise
-    /// plain Enter is a new peer BESIDE the selection: a
-    /// sibling element in a list (Shift+Enter before), a new field on
-    /// the parent record otherwise; the root has nothing beside it
-    /// and takes the field on itself. The command chord authors
-    /// WITHIN the selection: a field on the selected cell, an
-    /// appended element on a list (with Shift, at the front). Labels
-    /// author first, then values; list elements are one-stage value
-    /// pendings, the projection minting the position.
-    /// On an empty document Enter begins the root value. Escape and an
-    /// empty query's Backspace or Delete step back out of a picker.
+    /// Completion handlers own committing their query, and Enter while
+    /// typing in a value only ends the typing. What Enter authors beside or
+    /// within a selected value belongs to the projection of the container
+    /// it lands in, through [`Self::author_in`]; on an empty document Enter
+    /// begins the root value. Escape and an empty query's Backspace or Delete
+    /// step back out of a picker.
     pub(crate) fn insert_key(
         &mut self,
         geometry: navigate::Geometry<'_>,
@@ -341,42 +301,24 @@ impl Editor {
                         self.model.selection = Some(current);
                         false
                     }
-                    selection => {
-                        let sources = self.sources();
-                        let shift = event.modifiers.shift();
-                        let root = selection
-                            .as_ref()
-                            .map(|current| current.root().clone())
-                            .unwrap_or_else(|| self.model.workspace.document_root().clone());
-                        let scope = selection
-                            .as_ref()
-                            .map(|s| s.scope().clone())
-                            .unwrap_or_default();
-                        let started = match selection.as_ref() {
-                            Some(current) if self.command_modifier.pressed(&event.modifiers) => {
-                                selection::pending_insert(
-                                    &root,
-                                    &scope.view(sources),
-                                    current.path(),
-                                    shift,
-                                )
-                            }
-                            Some(current) => selection::pending_enter(
-                                &root,
-                                &scope.view(sources),
-                                current.path(),
-                                shift,
-                            ),
-                            None => selection::pending_root(&root, &sources),
-                        }
-                        .map(|mut pending| {
-                            pending.set_scope(scope);
-                            pending.with_origin(
-                                selection.as_ref().map(|current| current.path().to_vec()),
-                            )
-                        });
+                    // Typing has already written the value, so Enter only ends
+                    // the typing, and the text re-spells from what was written.
+                    Some(mut current)
+                        if current.value_edit().is_some()
+                            && !self.command_modifier.pressed(&event.modifiers) =>
+                    {
+                        current.clear_editor();
+                        self.model.selection = Some(current);
+                        true
+                    }
+                    Some(current) => {
+                        self.model.selection = Some(current);
+                        false
+                    }
+                    None => {
+                        let started = self.enter_pending(None, event);
                         let began = started.is_some();
-                        self.model.selection = started.or(selection);
+                        self.model.selection = started;
                         if began {
                             geometry.reveal_selection(self);
                         }
@@ -389,6 +331,110 @@ impl Editor {
                 }
                 _ => false,
             }
+    }
+
+    /// What Enter would start from `selection`, leaving it as it is: a peer
+    /// beside it (a sibling element in a list, with Shift before it, or a new
+    /// field on the record holding it, the root taking one on itself), with
+    /// the command chord something within it (a field on a record or cell, an
+    /// element appended to a list, with Shift at the front), or with no
+    /// selection an empty document's root value. Labels author first, then
+    /// values; list elements are one-stage value pendings, the projection
+    /// minting the position.
+    pub(crate) fn enter_pending(
+        &self,
+        selection: Option<&selection::Selection>,
+        event: &KeyboardEvent,
+    ) -> Option<selection::Selection> {
+        let sources = self.sources();
+        let shift = event.modifiers.shift();
+        let root = selection
+            .map(|current| current.root().clone())
+            .unwrap_or_else(|| self.model.workspace.document_root().clone());
+        let scope = selection
+            .map(|current| current.scope().clone())
+            .unwrap_or_default();
+        match selection {
+            Some(current) if self.command_modifier.pressed(&event.modifiers) => {
+                selection::pending_insert(&root, &scope.view(sources), current.path(), shift)
+            }
+            Some(current) => {
+                selection::pending_enter(&root, &scope.view(sources), current.path(), shift)
+            }
+            None => selection::pending_root(&root, &sources),
+        }
+        .map(|mut pending| {
+            pending.set_scope(scope);
+            pending.with_origin(selection.map(|current| current.path().to_vec()))
+        })
+    }
+
+    /// Opens the selected value for what goes inside it, as the command
+    /// chord's Enter would: a field on a record, an element of a list, a
+    /// bare cell's value. Escape steps back out to it.
+    pub(crate) fn open_within(&mut self) {
+        let Some(current) = &self.model.selection else {
+            return;
+        };
+        let scope = current.scope().clone();
+        let origin = current.path().to_vec();
+        let Some(mut within) =
+            selection::pending_insert(current.root(), &scope.view(self.sources()), &origin, false)
+        else {
+            return;
+        };
+        within.set_scope(scope);
+        self.model.selection = Some(within.with_origin(Some(origin)));
+    }
+
+    /// Starts what Enter would author from the selected value in the view
+    /// `root`, if it lands in the container drawn at `container`: a field on
+    /// that record, or an element of that list or cell. Containers offer this
+    /// through [`crate::display::structure::authoring`], children first, so a
+    /// projection without it, such as a number's, takes nothing in.
+    pub(crate) fn author_in(
+        &mut self,
+        root: &crate::workspace::Root,
+        container: &[gid::Step],
+        geometry: navigate::Geometry<'_>,
+        event: &KeyboardEvent,
+    ) -> bool {
+        // What lands in a container is on the way to the selection, or the
+        // value a cell there refers to: a cheap test before the full one.
+        let reached = container
+            .iter()
+            .rposition(|step| !matches!(step, gid::Step::Follow(_)))
+            .map_or(&[][..], |last| &container[..=last]);
+        let Some(current) = self
+            .model
+            .selection
+            .as_ref()
+            .filter(|current| current.root() == root && current.path().starts_with(reached))
+        else {
+            return false;
+        };
+        let sources = self.sources();
+        if current.stage(&sources) != selection::Stage::Edge
+            || current.value_edit().is_some() && !self.command_modifier.pressed(&event.modifiers)
+        {
+            return false;
+        }
+        let Some(pending) = self.enter_pending(Some(current), event) else {
+            return false;
+        };
+        let lands = match pending.stage(&sources) {
+            selection::Stage::Label => pending.path(),
+            _ => pending
+                .path()
+                .split_last()
+                .map_or(&[][..], |(_, parent)| parent),
+        };
+        if lands != container {
+            return false;
+        }
+        self.model.selection = Some(pending);
+        geometry.reveal_selection(self);
+        true
     }
 
     /// Escape steps back one level: a picker opened from a key returns to

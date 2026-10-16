@@ -10,7 +10,7 @@ Open `http://127.0.0.1:8081/editor/` on this machine.
 The built-in documents are under the **Examples** menu.
 
 For a small embedded editor, supply a text-bridge document URL and optionally
-hide the menu: `/editor/?document=../lessons/values.gid&menu=hidden&threads=1`.
+hide the menu: `/editor/?document=../lessons/cells.gid&menu=hidden&threads=1`.
 The document URL is relative to the editor page. `example` opens one of the
 bundled examples instead, by its file name without `.gid`, with the full editor:
 `/editor/?example=fidget-shapes`. Without those parameters the editor still
@@ -35,7 +35,7 @@ consults scroll-container probes emitted by the shared frame; native dispatch
 does not consult them. `auto` covers scrolling containers, not arbitrary custom
 wheel actions such as viewport zoom; the full editor retains those normally.
 Hidden-menu embeds retain document shortcuts (including Undo/Redo), but not
-application shortcuts or F10 menu navigation. The website owns the exercise
+application shortcuts or F10/Alt menu navigation. The website owns the exercise
 documents and reset buttons. An optional `tutorial-slots` parameter lists distinct
 record-field CellIds in display order. The tutorial entry projection shows just
 those contents in a fixed column, without labels or insertion gaps. Missing
@@ -77,6 +77,12 @@ convention. The tutorial imports the same helper for its shortcut instructions.
 focus. This uses the normal modifier-event/reducer path, without focusing the
 editor or cancelling browser events. Unchanged pointer flags are not re-sent;
 focus transitions reset that observation because Winit may clear its own state.
+A canvas hears keys only while focused and sees pointer flags only while the
+pointer is over it, so it releases every modifier once it can do neither: when
+it loses focus, and when the pointer leaves it unfocused. On a page of several
+editors, Ctrl pressed in one and released in another, or held while Ctrl+Home
+scrolls editors past the pointer, would otherwise leave one picking until the
+pointer next crossed it.
 
 `libraries` is a comma-separated list of built-in library CellIds, in projection
 precedence order. These are the library identities, not their field tags or
@@ -94,9 +100,11 @@ and after document or selection changes. Hover, caret movement within the same
 value, and ordinary repainting do not serialize the document. With no callback,
 there is no observer or snapshot cost. Observations contain `document` using
 GID's existing Serde representation, and `selection` (or null): `view` is
-`"document"` or `{pane: path}`, `path` is the occurrence, `source_path` is the
-optional document destination, and `stage` is `"value"`, `"pending"`, or
-`"label"`. Paths use the existing path-library GID encoding; list positions
+`"document"` or `{pane: path}`, `path` is the occurrence, `source` is where the
+selected data is stored, if anywhere, and `stage` is `"value"`, `"pending"`, or
+`"label"`. A `source` is `{path}` from the document's root, or
+`{cell, library, path}` within a cell's definition, `library` naming the library
+defining it or null for the document's own. Paths use the existing path-library GID encoding; list positions
 have session lifetime. This reports structural selection, not text caret/ranges.
 
 `observe=<channel>` connects that callback to same-origin parent messages:
@@ -107,13 +115,14 @@ boundary, not a tutorial feature in the editor.
 
 Click a menu heading to open it; while a menu is open, moving over another
 heading switches to it. Mouse and keyboard share one highlighted item.
-F10 opens/closes the menu bar, arrows navigate, Home/End select the first/last
-enabled item, and Enter/Space activates it. Escape, Tab, an outside click, or
-losing focus dismisses the menu. The displayed Cmd/Ctrl shortcuts work with menus
-open or closed. The native macOS menu remains separate. File's Open… takes a
-`.gid` file the browser uploads, asking first when the document has unsaved
-changes. Save downloads the document under the name it was opened or last
-saved as; an untitled document, or Save As…, asks for the name first.
+F10, or tapping Alt on its own, opens/closes the menu bar, arrows navigate,
+Home/End select the first/last enabled item, and Enter/Space activates it.
+Escape, Tab, an outside click, or losing focus dismisses the menu. The displayed
+Cmd/Ctrl shortcuts work with menus open or closed. The native macOS menu remains
+separate. File's Open… takes a `.gid` file the browser uploads, asking first
+when the document has unsaved changes. Save downloads the document under the
+name it was opened or last saved as; an untitled document, or Save As…, asks for
+the name first.
 
 The menu bar's far end shows Progred's stage and the commit the build came
 from, as native window titles do, so a screenshot says which version it shows.
@@ -133,22 +142,36 @@ Unsupported hosts show an error instead of silently doing heavy work inline.
 
 One-time build prerequisites:
 
+The browser build needs the pinned nightly in `tools/web-build-settings.sh`,
+`nightly-2026-08-27`, with the `rust-src` and `llvm-tools` components, so it
+can rebuild the standard library. rustup installs that nightly beside stable
+and keeps its files in the home directory (`~/.rustup` and `~/.cargo`). A
+distribution package can supply stable Rust as well; this install leaves that
+package's files in place, and `--no-modify-path` leaves the shell's `cargo` on
+the distribution compiler. The build wrappers find `~/.cargo/bin/rustup` and
+then use rustup for stable and for the nightly, so the installer selects a
+stable toolchain too:
+
 ```sh
-rustup toolchain install nightly-2026-08-27 --profile minimal
-rustup component add rust-src llvm-tools --toolchain nightly-2026-08-27
-./tools/sandbox-cargo web-threaded-fetch
+curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --no-modify-path
+~/.cargo/bin/rustup toolchain install nightly-2026-08-27 --profile minimal --component rust-src,llvm-tools
+./tools/sandbox-cargo web-threaded-fetch  # on Linux, ./tools/linux-cargo
 ```
 
-`make build-web` rebuilds the standard library with atomics and enables SIMD
-under Seatbelt, then generates `web/pkg` with `tools/wasm-bindgen`. That script
-runs the wasm-bindgen CLI matching the lockfile, downloading the release once into
-`target/tools` and checking its published SHA-256, so a separately installed CLI
-can't fall out of step with the crate.
-Native builds continue using stable Rust. The worker instantiates exactly the
-same module with shared memory; ordinary Rust `Send` closures and results stay
-in Rust, while JS transfers job pointers and wake notifications. The page alone
-starts the editor and dispatches completion events. Fatal worker errors require
-a page reload; they are not treated as completed computations.
+When `rustup` is already on `PATH`, skip the installer and run
+`rustup toolchain install nightly-2026-08-27 --profile minimal --component rust-src,llvm-tools`
+before the fetch.
+
+`make build-web` rebuilds the standard library with atomics and enables SIMD in
+the build sandbox, then generates `web/pkg` with `tools/wasm-bindgen`. That
+script runs the wasm-bindgen CLI matching the lockfile, downloading the release
+once into `target/tools` and checking its published SHA-256, so a separately
+installed CLI can't fall out of step with the crate. Native builds continue
+using stable Rust. The worker instantiates exactly the same module with shared
+memory; ordinary Rust `Send` closures and results stay in Rust, while JS
+transfers job pointers and wake notifications. The page alone starts the editor
+and dispatches completion events. Fatal worker errors require a page reload;
+they are not treated as completed computations.
 
 The coordinator initializes a `wasm-bindgen-rayon` pool before accepting jobs.
 It uses up to eight rendering workers, leaving one reported hardware thread
@@ -163,8 +186,8 @@ images upload when replaced, with the same depth and clipping behavior. If no
 WebGPU adapter is available, the host retains the slower Canvas2D/CPU-mesh
 fallback. Startup logs the selected presentation backend and worker count.
 
-`website/Preview.command` builds and serves the whole website. See
-[the website README](../website/README.md).
+`make run-web`, or `website/Preview.command` on macOS, builds and serves the
+whole website. See [the website README](../website/README.md).
 
 ## Diagnostics
 

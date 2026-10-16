@@ -1,9 +1,7 @@
 use super::*;
-use crate::frame::Hovered;
 use crate::input::{
     PendingPointer, PendingScroll, continuous_input, pointer_position, window_pointer,
 };
-use crate::workspace;
 use kurbo::{Point, Size};
 use ui_events::ScrollDelta;
 use ui_events::keyboard::Modifiers;
@@ -14,7 +12,6 @@ use ui_events::pointer::{
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use winit::dpi::PhysicalPosition;
 use winit::event::{DeviceId, ElementState, MouseButton, WindowEvent};
-use winit::window::CursorIcon;
 
 fn translate_pointer(reducer: &mut WindowEventReducer, event: WindowEvent) -> PointerEvent {
     match translate_window_event(reducer, 1.0, &event) {
@@ -290,23 +287,4 @@ fn redraw_release_and_cancellation_flush_motion_before_dispatch() {
             continuous
         );
     }
-}
-
-#[test]
-fn divider_hover_uses_the_cursor_for_its_resize_axis() {
-    assert_eq!(cursor_icon(None), CursorIcon::Default);
-    assert_eq!(
-        cursor_icon(Some(&Hovered::Divider(workspace::Divider::Columns(
-            workspace::Side::Left,
-        )))),
-        CursorIcon::ColResize
-    );
-    assert_eq!(
-        cursor_icon(Some(&Hovered::Divider(workspace::Divider::Panes {
-            side: workspace::Side::Left,
-            before: workspace::Root::document(),
-            after: workspace::Root::document(),
-        }))),
-        CursorIcon::RowResize
-    );
 }

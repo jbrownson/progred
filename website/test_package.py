@@ -38,7 +38,7 @@ class PackageTests(unittest.TestCase):
         assemble(self.repository, self.destination)
         html = (self.destination / "tutorial.html").read_text()
         frames = re.findall(r'<iframe\s[^>]*src="([^"]+)"', html)
-        self.assertEqual(len(frames), 9)
+        self.assertEqual(len(frames), 16)
         for src in frames:
             url = urljoin("https://prog.red/", src.replace("&amp;", "&"))
             params = parse_qs(urlsplit(url).query)
@@ -114,7 +114,7 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(config["assets"]["not_found_handling"], "404-page")
         self.assertNotIn("main", config)
 
-    def test_short_paths_open_the_editor_on_bundled_examples(self):
+    def test_short_and_retired_paths_lead_to_examples_or_pages(self):
         assemble(self.repository, self.destination)
         sources = []
         for line in (self.destination / "_redirects").read_text().splitlines():
@@ -123,10 +123,13 @@ class PackageTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertEqual(status, "302")
                 url = urlsplit(destination)
-                self.assertEqual(url.path, "/editor/")
-                for example in parse_qs(url.query).get("example", []):
-                    self.assertTrue((REPOSITORY / "examples" / f"{example}.gid").is_file())
-        self.assertTrue({"/try", "/iop", "/cad", "/cam"} <= set(sources))
+                if url.path == "/editor/":
+                    for example in parse_qs(url.query).get("example", []):
+                        self.assertTrue((REPOSITORY / "examples" / f"{example}.gid").is_file())
+                else:
+                    # A retired page forwards to the one that replaced it.
+                    self.assertTrue((self.destination / url.path.lstrip("/")).is_file())
+        self.assertTrue({"/try", "/iop", "/cad", "/cam", "/story.html", "/lab/peel.html"} <= set(sources))
 
     def test_ci_entry_point_refuses_an_ordinary_local_invocation(self):
         result = subprocess.run(

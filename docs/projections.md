@@ -45,8 +45,9 @@ metadata side channel.
 
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections and contextual completion providers. A completion provider
-receives the query, field/value kind, suggestion/Everything scope, source-qualified
-path, Raw mode, read-only path and cell lookups, and lazy enumeration of defined cells.
+receives the query, field/value kind, suggestion/Everything scope, the hole's path
+from where its location starts, Raw mode, read-only path and cell lookups from that
+same start, and lazy enumeration of defined cells.
 Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
 There are no root-specific host hooks: root templates and root fields are ordinary
@@ -78,6 +79,11 @@ can't load them.
 Library labels are once-minted random `CellId`s. Their readable names are
 ordinary GID facts, not identifiers derived from names. Text is an open
 `{utf8: blob}` convention; f64 is an open `{f64: eight-byte-blob}` convention.
+A PNG image is an open `{png: blob}` convention holding the encoded file. Its
+projection decodes it each frame and draws the picture at one logical unit per
+pixel, shrunk to fit 480 units on its longer side. Bytes that don't decode, or
+whose RGBA pixels would exceed 64 MiB, decline to the ordinary record view.
+`png width` and `png height` read only the header.
 Additional fields do not invalidate a recognized facet, so a line projection
 still recognizes text or f64 and a more specific wrapper (for example a unit
 around f64) can defer to that facet.
@@ -93,8 +99,11 @@ Normal display uses one composition of ordered partial functions, followed
 by a total structural fallback. A partial checks its preconditions and fails
 closed by declining; malformed shapes must remain accessible through a later
 projection or Raw. Raw uses the structural fallback alone: the same `Layout`
-language, total rather than `Option`. Specific domain projections precede
-general ones. Libraries
+language, total rather than `Option`, with cells as their short identities.
+Plain is Raw with names, text, bytes and numbers reading as themselves through
+their libraries; calls, arithmetic included, stay the records they are. The View
+menu switches the selected area to either and back. Specific domain projections
+precede general ones. Libraries
 contribute these functions explicitly; composition does not depend on registering
 them under a shared cell identity. The current host partials are Rust callbacks,
 while presentation declarations can apply ordinary Grap callables.
@@ -134,15 +143,19 @@ These are ordinary preparation functions, not path-bearing layout opcodes.
 
 `descend` follows one step of the displayed structure; `descend_path` follows
 several without projecting intermediate containers. Both preserve the current
-location interpretation. `jump(steps, document_path)` extends the occurrence
-path by `steps` but reads from an absolute, source-qualified document path.
-Its descendants conject to that source. `jump_with_conject` supplies the lower
-level function, `(&projection_suffix, &document_path) -> Option<Path>`, used by
-both projection reads and later edits. No inverse is required.
+location interpretation, except that following a cell starts a location at its
+definition. `jump(steps, document_path)` extends the occurrence path by `steps`
+but reads from an absolute, source-qualified document path. Its descendants
+conject to that source. `jump_with_conject` takes any location instead, such as
+one within a cell's definition, and supplies the lower level function,
+`(&projection_suffix, &location_path) -> Option<Path>`, used by both projection
+reads and later edits; the result keeps the location's start. No inverse is
+required.
 
 `at(steps, value)` instead projects the supplied value with no document source.
-Its conject returns `None`, including for ordinary descendants and cell follows.
-An explicit nested jump can establish a source. Existing stored-child partials
+Its conject returns `None`, including for ordinary descendants. A cell followed
+inside it still starts a location at its definition, which is stored data, and
+an explicit nested jump can establish a source. Existing stored-child partials
 use `descend_path`, not `at` with a copy of the source value. Computed results
 use the same `at` combinator, with a `Key(presentation::RESULT)` occurrence
 step distinguishing the result from its producing expression. This is a
@@ -265,7 +278,11 @@ separated by spacing rather than binding or record-field punctuation. The shared
 name decorator descends to the real `name` field with an unquoted text editor;
 the number retains its own editor and scrub target. The numeric target includes
 the representation subscript: clicking it selects the number, and modified
-dragging scrubs just as over the digits. It does not include the name. This is
+dragging scrubs just as over the digits. It does not include the name. While
+the command modifier is held, a writable number's digits are outlined as a
+hovered value is, in the number's own color rather than the selection's, and
+the pointer over it is a left-right arrow, which a drag keeps until release.
+This is
 opt-in library composition, not automatic merging of every matching facet's projection.
 Normal record order is named fields alphabetically by display name, with cell
 identity breaking ties, then unnamed fields by identity. Raw uses identity order.
@@ -722,6 +739,10 @@ The absent library's `or default {value, default}` evaluates `value` once and
 returns a non-absent unchanged. Only an absent result evaluates `default`, in the
 same calling environment. It does not validate the value's type or undo effects;
 actual evaluator halts still halt rather than invoking the fallback.
+
+The absent library draws an absent as its reason's name followed by any other
+fields, such as a failed alternative's `causes`, all on a red wash; each cause
+is washed in turn inside it. An unnamed reason shows its short cell identity.
 
 `do` evaluates its expressions in order, returning the first absent unchanged
 or the last successful value. It short-circuits that sequence, not the evaluator:
