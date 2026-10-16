@@ -239,25 +239,38 @@ found almost no dead code: 60% of progred's 94k lines are tests, much of them
 inside source files, and 93% of its production code is one dependency cycle.
 Its first recommendation is done: inline test modules now live in their own
 files. projection/tests stays under projection/, since moving it out would make
-a dozen private projection functions crate-visible just for tests. The rest,
-most worthwhile first:
+a dozen private projection functions crate-visible just for tests. A follow-up
+[crate split analysis](history/crate-split-2026-10-16.md) maps the coupling
+that blocks a split and the steps that break it. The rest, most worthwhile
+first:
 
 1. Keep docs/history out of default searches, and point agents to the doc
    sections they need.
 2. Share one `display::Env` test double and the common evaluate, apply and
    projection-input test helpers, now copied 19 to 29 times.
-3. Alias `<crate::Editor, crate::frame::Hovered>`, written out 332 times, and
-   give the six things called "source" distinct names.
-4. Give the occurrence-to-location mapping one owning module, and pass an
+3. Take the crate split analysis's first four steps, each of which pays off on
+   its own:
+   - alias the concrete `<Editor, Hovered>` pair, written out 332 times;
+   - let the model own the vocabularies and codecs it interprets, as grap owns
+     f64's convention;
+   - back `editing::Access` with the model and the libraries rather than
+     `&mut Editor`, and let the shell set the window title after dispatch;
+   - move the hover types, `projection::Cx` and the completion helpers down,
+     and route calls into the projection runtime through `Project`.
+4. Give the six things called "source" distinct names.
+5. Give the occurrence-to-location mapping one owning module, and pass an
    opaque handle through display and the libraries instead of `Location` and
    `Conject`.
-5. Move model-level types out of display and vocabularies out of the libraries,
-   and make writes take the model rather than `&mut Editor`, breaking the
-   model layer's upward references.
 6. Split the CAM geometry into its own crate: small but easy.
-7. Split progred into model, display, libraries, shell and app crates, which
-   would also keep the layering honest: only after 3–5, and after
-   `cargo build --timings` shows what it would save.
+7. Split progred into three crates, which would also keep the layering honest:
+   - core: the model and display;
+   - the libraries;
+   - top: the projection runtime, the shell and the app.
+
+   Do this only after step 3, a `cargo build --timings` baseline, and a `Host`
+   trait that makes display and the libraries generic over the editor. The
+   saving is in lines, not measured time, and `make test` could get slower for
+   edits to core.
 
 ## Reporting completion failures
 

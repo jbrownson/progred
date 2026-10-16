@@ -78,6 +78,9 @@ at the time; code some of them describe has since been retired.
 - [Codebase audit](codebase-audit-2026-10-16.md): where progred's size is,
   duplicated test scaffolding, and the dependency cycle that blocks a crate
   split, with ranked recommendations.
+- [Crate split analysis](crate-split-2026-10-16.md): the three crates the audit's
+  split would become, the coupling across their boundaries, and the steps that
+  break it.
 
 ## Earlier notes
 
