@@ -146,6 +146,7 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
                 Entry::Command(C::Doc(D::MovePaneLeft)),
                 Entry::Command(C::Doc(D::MovePaneRight)),
                 Entry::Separator,
+                Entry::Command(C::Doc(D::Plain)),
                 Entry::Command(C::Doc(D::Raw)),
                 Entry::Separator,
                 Entry::Command(C::Doc(D::ActualSize)),
@@ -487,7 +488,7 @@ mod tests {
         let commands = commands(&definition);
         assert_eq!(
             commands.len(),
-            22 + Example::ALL.len() + stack.projections().count()
+            23 + Example::ALL.len() + stack.projections().count()
         );
         for (index, command) in commands.iter().enumerate() {
             assert!(commands[index + 1..].iter().all(|other| command != other));

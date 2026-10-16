@@ -44,6 +44,36 @@ impl<World> Stack<World> {
 }
 
 impl Stack<crate::Editor> {
+    /// Plain's projection: names, text and bytes read as themselves through
+    /// their libraries, and numbers as numbers, but nothing else a library
+    /// draws, so calls, arithmetic included, stay records.
+    pub fn plain(&self) -> Projection<crate::Editor> {
+        let loaded = |library| self.partials.iter().any(|(id, _)| *id == library);
+        let readings = self
+            .partials
+            .iter()
+            .filter(|(id, _)| [name::ID, text::ID, blob::ID].contains(id))
+            .map(|(_, partial)| partial.clone());
+        let numbers = [
+            (
+                f32::ID,
+                crate::display::runtime_partial(|input| f32::convention().display(input)),
+            ),
+            (
+                f64::ID,
+                crate::display::runtime_partial(|input| f64::convention().display(input)),
+            ),
+            (
+                u64::ID,
+                crate::display::runtime_partial(|input| u64::convention().display(input)),
+            ),
+        ]
+        .into_iter()
+        .filter(|(library, _)| loaded(*library))
+        .map(|(_, partial)| partial);
+        Projection::new(readings.chain(numbers))
+    }
+
     /// The document and pane projections with `hidden` libraries' own
     /// projections left off.
     pub fn without(

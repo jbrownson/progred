@@ -438,6 +438,7 @@ impl Editor {
                 .map(selection::Selection::root),
         );
         command::Toggles {
+            plain: area.projection == workspace::Projection::Plain,
             raw: area.projection == workspace::Projection::Raw,
             hidden: area.hidden.clone(),
         }
@@ -589,14 +590,20 @@ impl Editor {
                 };
                 self.move_selected_pane(direction);
             }
-            DocCommand::Raw => {
+            DocCommand::Plain | DocCommand::Raw => {
                 let selected = self
                     .model
                     .selection
                     .as_ref()
                     .map(selection::Selection::root)
                     .cloned();
-                self.model.workspace.toggle_projection(selected.as_ref());
+                let projection = match command {
+                    DocCommand::Plain => workspace::Projection::Plain,
+                    _ => workspace::Projection::Raw,
+                };
+                self.model
+                    .workspace
+                    .toggle_projection(selected.as_ref(), projection);
             }
             DocCommand::Projection(library) => {
                 let selected = self

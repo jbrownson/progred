@@ -542,10 +542,12 @@ fn project_workspace_view(
     scale: f64,
 ) -> measured::Measured<HoverPass<Editor>> {
     let raw = view.projection == workspace::Projection::Raw;
+    let standard = view.projection == workspace::Projection::Standard;
     let viewport = match view.root.target() {
-        workspace::Target::Pane { path } if !raw => projection::viewport::entry(sources, path),
+        workspace::Target::Pane { path } if standard => projection::viewport::entry(sources, path),
         _ => None,
     };
+    let plain = (view.projection == workspace::Projection::Plain).then(|| stack.plain());
     let peeled = (!view.hidden.is_empty()).then(|| stack.without(&view.hidden));
     let (document_projection, pane_projection) = match &peeled {
         Some((document, pane)) => (document, pane),
@@ -598,7 +600,10 @@ fn project_workspace_view(
             raw,
             styles,
             width: body_width,
-            projection: (!raw).then_some(projection),
+            projection: match &plain {
+                Some(plain) => Some(plain),
+                None => (!raw).then_some(projection),
+            },
         },
         tcx,
     );
