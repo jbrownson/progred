@@ -75,6 +75,9 @@ at the time; code some of them describe has since been retired.
 - [Dependency reviews](dependency-reviews-2026.md): the Fidget Git pin, vendoring
   and JIT, publication-age exceptions, and the constant-field upstream check,
   moved from build security and the release checklist on 2026-10-11.
+- [Codebase audit](codebase-audit-2026-10-16.md): where progred's size is,
+  duplicated test scaffolding, and the dependency cycle that blocks a crate
+  split, with ranked recommendations.
 
 ## Earlier notes
 
