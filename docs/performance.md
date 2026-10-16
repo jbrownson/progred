@@ -28,10 +28,7 @@ Two habits keep this cheap:
   [`tools/perf-check-due`](../tools/perf-check-due), says when the latest
   recorded run is more than a week old. Before investigating what a check flags,
   confirm it with interleaved runs of the flagged canaries at the last recorded
-  commit and at the current one on the same machine: cloud hosts of one machine
-  type differ. On 16 October 2026 most canaries, Fidget's voxel orbits
-  included, ran 20–55% slower than on 11 October on the same VM type, before and
-  after the change being measured.
+  commit and at the current one on the same machine.
 - **Per change, only when it plainly matters.** A change to evaluation, layout,
   rendering, Fidget, CAM, or a dependency compares the canaries it drives
   before and after, such as `--editor` for an editor change, without recording
@@ -42,21 +39,30 @@ made incremental, and runs each canary serially. After a function-body edit
 it rebuilds in about 16 s on a 4-core VM, where a release build took two to four
 minutes; the first build takes about six. Runs recorded before 17 October 2026
 used the release profile, so the first weekly check after it may differ from
-them by the profile alone. Each canary reports its headline timing on a `perf` line, through
+them by the profile alone.
+
+Each canary reports its headline timing on a `perf` line, through
 `crate::perf::record`; the tool names the workload after the test, adding a
 metric name when a test reports several. Over several rounds it keeps each
 workload's lowest median, with that round's p95, and reports the spread of the
 medians as a percentage of the lowest. A change from the last record is flagged
 when it exceeds 5% or twice either run's spread. Frame canaries measure 60
-frames; the four voxel orbits measure 12. Single-shot workloads, such as stock
-meshing and the software render of the CAM example's fully cut stock, report
-one sample per round.
+frames, and the four voxel orbits 12. The sub-millisecond canaries measure for
+about a third of a second on a fast machine instead: 600 forest and CAM
+controls frames, 1,500 pairs of layout FFI frames and 20,000 color picker
+frames. Sixty of their frames end a few milliseconds after the test starts,
+before the operating system has settled where it runs: on a laptop with
+performance and efficiency cores, a change that only shortened their setup made
+them read 20–30% slower, and within 3% once they ran longer. Single-shot
+workloads, such as stock meshing and the software render of the CAM example's
+fully cut stock, report one sample per round.
 
 [`performance-log.tsv`](performance-log.tsv) has one row per workload per
 recorded run:
 
 - **commit**: with `+` when tracked files had uncommitted changes;
-- **machine**: the hardware, which decides what is comparable;
+- **machine**: the hardware, which decides what is comparable, with the
+  processor's family, model and stepping on a virtual machine;
 - **gpu**: the adapter Fidget's implicit previews select;
 - **environment**: the OS version, power source on macOS, Rust version, and
   any Cargo features the build enabled;
@@ -69,9 +75,13 @@ mind: a different power state, OS, or compiler can account for a change. Even on
 one Mac, three default runs in October 2026, on battery, on AC power after two
 release builds, and on AC power idle, spread by up to 18% on the heavy
 workloads, so a smaller difference on a stock or Fidget workload is drift, not a
-change. A shared cloud VM is noisier: its rounds varied by 10–20%, and its host
-can change between sessions, so compare runs from one interleaved within a
-session, and prefer a dedicated machine for the weekly record when there is one.
+change. A shared cloud VM is noisier: its rounds varied by 10–20%, so use one
+for interleaved comparisons within a session, and prefer a dedicated machine for
+the weekly record when there is one. Its processor name can be masked as well:
+in October 2026, two VMs named `Intel(R) Xeon(R) Processor @ 2.80GHz` five days
+apart ran the projection canaries 25–70% apart, a gap that interleaved runs of
+their two commits on one machine didn't show. So on a VM, the machine also names
+the processor's family, model and stepping.
 
 The tool runs the test executables directly, outside the build sandbox, so on a
 Mac the voxel orbits use Metal, as the app does. A machine without a GPU may

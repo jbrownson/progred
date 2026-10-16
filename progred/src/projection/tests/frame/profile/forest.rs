@@ -12,17 +12,35 @@ fn paint(runner: &mut crate::EditorRunner) {
     runner.frame_presented();
 }
 
-fn measure(label: &str, mut frame: impl FnMut(usize)) {
+/// Times frames after five warm-up ones. Each frame names the metric its time
+/// counts toward, so interleaved kinds of frame get medians of their own: one
+/// median across two kinds would be the slowest frame of the faster kind.
+fn measure(label: &str, mut frame: impl FnMut(usize) -> &'static str) {
     let mut samples = Vec::new();
     for index in 0..iterations() + 5 {
         let start = Instant::now();
-        frame(index);
+        let metric = frame(index);
         if index >= 5 {
-            samples.push(start.elapsed());
+            samples.push((metric, start.elapsed()));
         }
     }
-    distribution(label, samples.iter().copied());
-    crate::perf::record("", samples);
+    let metrics: std::collections::BTreeSet<_> =
+        samples.iter().map(|(metric, _)| *metric).collect();
+    for metric in metrics {
+        let times = || {
+            samples
+                .iter()
+                .filter(|(kind, _)| *kind == metric)
+                .map(|(_, time)| *time)
+        };
+        let label = if metric.is_empty() {
+            label.to_owned()
+        } else {
+            format!("{label}, {metric}")
+        };
+        distribution(&label, times());
+        crate::perf::record(metric, times());
+    }
 }
 
 /// Complete successor frames for changing slider values, not slider hit testing
@@ -49,6 +67,7 @@ fn forest_slider_profile_loop() {
             );
         runner.refresh_frame(1.0, SIZE);
         paint(&mut runner);
+        ""
     });
 }
 
@@ -72,10 +91,10 @@ fn forest_source_hover_profile_loop() {
         })
     }).expect("a tree shape has a captured call chain");
     measure("forest source-hover event and frame", |index| {
-        let point = if index % 2 == 0 {
-            point
+        let (metric, point) = if index % 2 == 0 {
+            ("hover", point)
         } else {
-            Point::new(1.0, 1.0)
+            ("leave", Point::new(1.0, 1.0))
         };
         runner.pointer_event(
             &PointerEvent::Move(PointerUpdate {
@@ -92,5 +111,6 @@ fn forest_source_hover_profile_loop() {
             SIZE,
         );
         paint(&mut runner);
+        metric
     });
 }
