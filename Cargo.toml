@@ -58,3 +58,10 @@ debug = "line-tables-only"
 [profile.dev.package.progred]
 opt-level = 0
 debug = true
+
+# What `make perf` measures: the release build, but incremental, so a run after
+# an edit recompiles what changed instead of all of progred, which took two to
+# four minutes on a 4-core VM.
+[profile.perf]
+inherits = "release"
+incremental = true

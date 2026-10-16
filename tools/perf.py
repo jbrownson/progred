@@ -56,6 +56,9 @@ GPU_SUITE = [
     ("projection::tests::frame::compositor::mesh::cam_mesh_roundtrip_profile", None),
 ]
 ADAPTER = "libraries::fidget::tests::report_gpu_adapter"
+# The canaries an editor change drives: projecting a large source, hovering
+# drawn output for its source, and scrolling a long program.
+EDITOR = "iop_tree_source|forest_source_hover|cam_source_scroll"
 
 
 def command(args, **kwargs):
@@ -219,8 +222,11 @@ def history(rows, hardware, gpu, built, count, pattern):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--only", default="", metavar="REGEX",
-                        help="run only workloads whose test name matches")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--only", default="", metavar="REGEX",
+                           help="run only workloads whose test name matches")
+    selection.add_argument("--editor", action="store_const", const=EDITOR, dest="only",
+                           help="run only the canaries an editor change drives")
     parser.add_argument("--rounds", type=int, default=3,
                         help="run the suite this many times and keep each workload's best median")
     parser.add_argument("--gpu", action="store_true",
@@ -237,7 +243,7 @@ def main():
     if args.features:
         conditions += f", features {args.features}"
     [(executable, _)] = test_binaries.build(
-        ["--release", "-p", "progred", "--lib"]
+        ["--profile", "perf", "-p", "progred", "--lib"]
         + (["--features", args.features] if args.features else [])
     )
     gpu, hardware_gpu = adapter(executable)

@@ -14,14 +14,35 @@ latest recorded run on the same machine, built with the same Cargo features:
 
 ```sh
 make perf                                  # three rounds of every canary
+make perf ARGS='--editor'                  # the canaries an editor change drives
 make perf ARGS='--only fidget --rounds 1'  # a quick subset, by test name
 make perf ARGS='--record "what changed"'   # also append the results to the log
 make perf ARGS='--history'                 # recorded medians on this machine
 make perf ARGS='--features cam-profile'    # a build with progred features
 ```
 
-It builds the progred library tests in an optimized build and runs each canary
-serially. Each canary reports its headline timing on a `perf` line, through
+Two habits keep this cheap:
+
+- **A weekly check.** Run every canary and record it,
+  `make perf ARGS='--record "weekly check"'`. A Claude Code session-start hook,
+  [`tools/perf-check-due`](../tools/perf-check-due), says when the latest
+  recorded run is more than a week old. Before investigating what a check flags,
+  confirm it with interleaved runs of the flagged canaries at the last recorded
+  commit and at the current one on the same machine: cloud hosts of one machine
+  type differ. On 16 October 2026 most canaries, Fidget's voxel orbits
+  included, ran 20–55% slower than on 11 October on the same VM type, before and
+  after the change being measured.
+- **Per change, only when it plainly matters.** A change to evaluation, layout,
+  rendering, Fidget, CAM, or a dependency compares the canaries it drives
+  before and after, such as `--editor` for an editor change, without recording
+  them. Most changes need no run.
+
+It builds the progred library tests with the `perf` profile, the release build
+made incremental, and runs each canary serially. After a function-body edit
+it rebuilds in about 16 s on a 4-core VM, where a release build took two to four
+minutes; the first build takes about six. Runs recorded before 17 October 2026
+used the release profile, so the first weekly check after it may differ from
+them by the profile alone. Each canary reports its headline timing on a `perf` line, through
 `crate::perf::record`; the tool names the workload after the test, adding a
 metric name when a test reports several. Over several rounds it keeps each
 workload's lowest median, with that round's p95, and reports the spread of the
@@ -48,9 +69,9 @@ mind: a different power state, OS, or compiler can account for a change. Even on
 one Mac, three default runs in October 2026, on battery, on AC power after two
 release builds, and on AC power idle, spread by up to 18% on the heavy
 workloads, so a smaller difference on a stock or Fidget workload is drift, not a
-change. A shared cloud VM is noisier: its rounds varied by 10–20%, so use one
-for interleaved comparisons within a session and keep long-term records on a
-dedicated machine.
+change. A shared cloud VM is noisier: its rounds varied by 10–20%, and its host
+can change between sessions, so compare runs from one interleaved within a
+session, and prefer a dedicated machine for the weekly record when there is one.
 
 The tool runs the test executables directly, outside the build sandbox, so on a
 Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
