@@ -1,18 +1,20 @@
 # Testing
 
-`make test` runs the workspace's tests through the platform's Cargo wrapper (see
-[build security](build-security.md)), except the vendored Fidget packages'.
-Those are upstream's tests of code we rarely change; `make test-vendor` runs
-them, optimized, after a patch changes or Fidget is upgraded. Development builds
+`make test` runs the workspace's unit and integration tests through the
+platform's Cargo wrapper (see [build security](build-security.md)), except the
+vendored Fidget packages'. Those are upstream's tests of code we rarely change;
+`make test-vendor` runs them, optimized, after a patch changes or Fidget is
+upgraded. Only progred's library has tests, so it compiles once, as its test
+harness; `make check` compiles the binaries and examples. Development builds
 optimize every crate except progred, which stays quick to rebuild, so tests
-spend little time in Fidget, Vello, text shaping, Grap, or Puri; `make test`
-takes about 30 s on a 4-core Linux VM. Progred's tests lay out text with the
-bundled Noto fonts, so layout is the same on every machine; a few of Puri's
-still use system fonts. To run a subset, pass Cargo's usual
-arguments through `./tools/sandbox-cargo test` on macOS or
+spend little time in Fidget, Vello, text shaping, Grap, or Puri; once built,
+`make test` takes about 40 s on a 4-core Linux VM. Progred's tests lay out text
+with the bundled Noto fonts, so layout is the same on every machine; a few of
+Puri's still use system fonts. While iterating, run a subset by passing Cargo's
+usual arguments through `./tools/sandbox-cargo test` on macOS or
 `./tools/linux-cargo test` on Linux, for example
-`./tools/linux-cargo test -p progred --lib tutorials`. Nothing here needs a
-window; the owner does the visual testing.
+`./tools/linux-cargo test -p progred --lib tutorials`, and leave `make test` for
+before pushing. Nothing here needs a window; the owner does the visual testing.
 
 ## Layers
 

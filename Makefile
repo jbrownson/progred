@@ -91,8 +91,11 @@ build:
 
 VENDORED := fidget-core fidget-raster fidget-wgpu
 
+# Unit and integration tests. Cargo's default selection would also build the
+# examples, which `make check` compiles, and run doc tests, of which there are
+# none, both needing progred compiled a second time as a plain library.
 test:
-	$(NATIVE_CARGO) test --workspace $(VENDORED:%=--exclude %)
+	$(NATIVE_CARGO) test --workspace --tests $(VENDORED:%=--exclude %)
 
 # Upstream's tests of the vendored packages, optimized as vendor/README.md
 # advises. Run them after changing a patch or upgrading Fidget. The binaries

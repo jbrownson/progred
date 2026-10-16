@@ -10,10 +10,18 @@ cam-profile = []
 control = ["puri-vello/capture"]
 layout-profile = []
 
+# Only the library has tests. A binary's empty test harness would need the
+# library compiled a second time, as a plain dependency; see `make test`.
+[[bin]]
+name = "progred"
+path = "src/main.rs"
+test = false
+
 [[bin]]
 name = "progred-control"
 path = "src/bin/progred-control.rs"
 required-features = ["control"]
+test = false
 
 [[example]]
 name = "cam_profile"
