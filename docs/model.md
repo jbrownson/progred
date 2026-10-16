@@ -350,17 +350,18 @@ ordinary named Grap lambdas that use quote/unquote to return Fidget arithmetic;
 the Fidget parser has no circle or sphere forms.
 
 The numeric libraries read the query as `f32`, `f64`, and `u64` numbers when it
-parses, showing the representation and the actual stored number. An empty or
-whitespace-only query reads as zero in each available representation; it
-remains a suggestion until committed. Other invalid numeric queries read as no
-number. Text, which any query reads as, comes after the readings particular to
-the query. Raw orders its offers: a reading that spells the query exactly, the
+parses, showing the representation and the actual stored number; a query that
+doesn't parse, an empty one included, reads as no number. Any nonempty query
+reads as text, after the readings particular to it; the empty string takes at
+least a `"`. A new label likewise needs something typed. An empty query
+therefore offers no typed values, and Raw shows just its constructors, after a
+document root's starting points. A projection whose hole expects a number or
+text can still offer one for an empty query, as a name's hole does for text.
+Raw orders its offers: a reading that spells the query exactly, the
 constructors the query names, the other readings in library order, text (or a
 new label), then constructors the query matches only loosely. The editor does
-not distinguish particular numeric representations for ranking. With an empty
-query, the zeros therefore follow the constructors, just before the empty
-string. Explicit quoted text and blob syntax lead instead. Numeric providers
-decline label requests.
+not distinguish particular numeric representations for ranking. Explicit quoted
+text and blob syntax lead instead. Numeric providers decline label requests.
 
 Raw's holes, and a document's root, make the editor's constructors from their
 delimiters: typed into an empty query, `(` makes a new cell, `[` a new list, and `{` a new record; a field

@@ -213,7 +213,7 @@ pub(crate) fn completion_entries_with(
 }
 
 /// What the libraries read the query as, such as a number. Text, which any
-/// query reads as, comes after the readings particular to it.
+/// nonempty query reads as, comes after the readings particular to it.
 pub(crate) fn typed(
     libraries: Option<&CompletionProvider>,
     request: &CompletionRequest<'_>,
@@ -240,7 +240,9 @@ fn literals(
 }
 
 /// Raw's offers: the editor's constructors, and what's typed read as a value,
-/// or for a field's label a new cell named as typed. Quoted text and bytes
+/// or for a field's label a new cell named as typed. An empty query reads as
+/// nothing; a projection that expects a value can offer one for it. Quoted
+/// text and bytes
 /// lead; otherwise a reading that spells the query exactly comes first, then
 /// the constructors the query names, then the other readings and the text.
 fn raw_entries(
@@ -273,7 +275,10 @@ fn raw_entries(
                     )
                 }),
             };
-            (Vec::new(), vec![label])
+            (
+                Vec::new(),
+                (!trimmed.is_empty()).then_some(label).into_iter().collect(),
+            )
         }
         CompletionKind::Value => {
             let (readings, strings) = literals(libraries, request);

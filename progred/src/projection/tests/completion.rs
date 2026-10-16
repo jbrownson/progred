@@ -444,11 +444,9 @@ fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary()
             .map(|entry| entry.display)
             .collect::<Vec<_>>()
     };
-    assert_eq!(
-        displays(false, ""),
-        ["new cell", "new list", "new record", "0", "0", "0", "\"\""]
-    );
-    assert_eq!(displays(true, ""), ["new cell", ""]);
+    assert_eq!(displays(false, ""), ["new cell", "new list", "new record"]);
+    assert_eq!(displays(true, ""), ["new cell"]);
+    assert_eq!(displays(true, "roof"), ["roof"]);
     // An existing cell is pointed at or pasted, not named here, and the
     // libraries' other offers, such as a new lambda, are for projections that
     // ask for them.
@@ -569,51 +567,19 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
                     .all(|entry| entry.detail.is_some())
             );
         }
+        // An empty query reads as nothing; the empty string takes a `"`.
         for query in ["", " \t"] {
-            let entries = completion_entries(&sources, raw, false, query);
-            // Each activation builds an editor, so activate every entry once.
-            let values = entries
-                .iter()
-                .map(|entry| activated(entry).value)
+            let displays = completion_entries(&sources, raw, false, query)
+                .into_iter()
+                .map(|entry| entry.display)
                 .collect::<Vec<_>>();
-            let numbers = values
-                .iter()
-                .flatten()
-                .filter(|value| {
-                    f32::read(value).is_some()
-                        || f64::read(value).is_some()
-                        || u64::read(value).is_some()
-                })
-                .collect::<Vec<_>>();
-            assert_eq!(
-                numbers,
-                [&f32::value(0.0), &f64::value(0.0), &u64::value(0)]
+            assert!(
+                displays.iter().all(|display| display.starts_with("new ")),
+                "{query:?}: {displays:?}"
             );
-            if query.is_empty() {
-                let first_number = values
-                    .iter()
-                    .position(|value| value.as_ref().and_then(f32::read) == Some(0.0))
-                    .unwrap();
-                for constructor in ["new cell", "new list", "new record"] {
-                    assert!(
-                        entries
-                            .iter()
-                            .position(|entry| entry.display == constructor)
-                            .unwrap()
-                            < first_number
-                    );
-                }
-                let last_number = values
-                    .iter()
-                    .rposition(|value| value.as_ref().and_then(u64::read) == Some(0))
-                    .unwrap();
-                let empty_string = values
-                    .iter()
-                    .position(|value| *value == Some(text::value("")))
-                    .unwrap();
-                assert!(last_number < empty_string);
-            }
         }
+        let quote = completion_entries(&sources, raw, false, "\"");
+        assert_eq!(activated(&quote[0]).value, Some(text::value("")));
         for query in ["word", "1e", "\"12\"", "0xff"] {
             assert!(
                 completion_entries(&sources, raw, false, query)
@@ -1312,17 +1278,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     };
     assert_eq!(
         displays(""),
-        [
-            "fidget",
-            "grap",
-            "new cell",
-            "new list",
-            "new record",
-            "0",
-            "0",
-            "0",
-            "\"\""
-        ]
+        ["fidget", "grap", "new cell", "new list", "new record"]
     );
     let selection = crate::selection::pending_with_query(&crate::test_root(), vec![], "sdf");
     let entries = projected_completion_entries(&doc, &selection);

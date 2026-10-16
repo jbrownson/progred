@@ -114,13 +114,13 @@ them, even if the text gets noisier.
 
 ## Completion ranking
 
-Revisit how library-provided offers rank alongside built-in constructors,
-cell references, and interpretations of the query. The universal list currently
-groups library offers together; with an empty query, `new lambda` appears among
-number literals because of library order. Providers cannot express that it
-belongs with other constructors. Design that distinction through the completion
-interface rather than special-casing lambda or particular numeric libraries.
-This is deferred UX design, not a priority for the current cleanup.
+Revisit how library-provided offers rank alongside built-in constructors and
+interpretations of the query. Grap's slots list the libraries' offers together,
+so `new lambda` sits among them in library order rather than with the editor's
+constructors. Providers cannot express that it belongs with other constructors.
+Design that distinction through the completion interface rather than
+special-casing lambda or particular libraries. This is deferred UX design, not a
+priority for the current cleanup.
 
 ## Completion after the strip-back
 
@@ -178,6 +178,11 @@ removed, so it isn't lost:
 - **The libraries' other offers in Raw's holes.** A new color, a new lambda, and
   calls to functions by name were offered in any Raw hole. Now only projections
   that ask the libraries for them offer them, as Grap's slots do.
+- **Typed values for an empty query.** An empty query offered zero in each
+  numeric representation, the empty string, and a new label with no name. Now
+  it offers none of them; the empty string takes a `"`. A hole that expects a
+  number or text, drawn by its own projection, could offer one for an empty
+  query again.
 
 Directions this surfaced:
 

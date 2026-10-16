@@ -48,19 +48,17 @@ pub(crate) fn completions<N: std::str::FromStr + Display>(
     representation: CellId,
     encode: impl FnOnce(N) -> Value,
 ) -> Vec<crate::display::Completion> {
-    match query.trim() {
-        "" => "0",
-        number => number,
-    }
-    .parse::<N>()
-    .ok()
-    .map(|number| {
-        crate::libraries::completion::select(number.to_string(), encode(number))
-            .with_aliases([query])
-            .with_detail(representation)
-    })
-    .into_iter()
-    .collect()
+    query
+        .trim()
+        .parse::<N>()
+        .ok()
+        .map(|number| {
+            crate::libraries::completion::select(number.to_string(), encode(number))
+                .with_aliases([query])
+                .with_detail(representation)
+        })
+        .into_iter()
+        .collect()
 }
 
 const PIXELS_PER_STEP: f64 = 4.0;
@@ -627,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    fn numeric_completions_offer_zero_for_empty_queries_but_not_invalid_numbers() {
+    fn numeric_completions_offer_only_what_reads_as_a_number() {
         for (complete, zero, representation) in [
             (
                 (|query| crate::libraries::f32::convention().completions(query))
@@ -646,7 +644,7 @@ mod tests {
                 crate::libraries::u64::vocabulary::U64,
             ),
         ] {
-            for query in ["", " \t\n", "0"] {
+            for query in ["0", " 0 "] {
                 let offers = complete(query);
                 let [offer] = offers.as_slice() else {
                     panic!("expected one {representation} zero offer for {query:?}");
@@ -655,7 +653,8 @@ mod tests {
                 assert_eq!(offer.detail, Some(representation.into()));
                 assert_eq!(offer.preview.as_ref(), Some(&zero));
             }
-            for query in ["not a number", "-", ".", "1e"] {
+            // An empty query reads as no number, nor does one that isn't.
+            for query in ["", " \t\n", "not a number", "-", ".", "1e"] {
                 assert!(complete(query).is_empty(), "{representation}: {query:?}");
             }
         }
