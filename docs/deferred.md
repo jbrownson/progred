@@ -237,26 +237,26 @@ the examples; then path panes; then recursion.
 An audit on 16 October 2026 ([the evidence](history/codebase-audit-2026-10-16.md))
 found almost no dead code: 60% of progred's 94k lines are tests, much of them
 inside source files, and 93% of its production code is one dependency cycle.
-Its recommendations, most worthwhile first:
+Its first recommendation is done: inline test modules now live in their own
+files. projection/tests stays under projection/, since moving it out would make
+a dozen private projection functions crate-visible just for tests. The rest,
+most worthwhile first:
 
-1. Move inline test modules into sibling `tests.rs` files, and projection/tests'
-   editor-level suites out from under projection/, so reading code doesn't
-   mean reading its tests.
-2. Keep docs/history out of default searches, and point agents to the doc
+1. Keep docs/history out of default searches, and point agents to the doc
    sections they need.
-3. Share one `display::Env` test double and the common evaluate, apply and
+2. Share one `display::Env` test double and the common evaluate, apply and
    projection-input test helpers, now copied 19 to 29 times.
-4. Alias `<crate::Editor, crate::frame::Hovered>`, written out 332 times, and
+3. Alias `<crate::Editor, crate::frame::Hovered>`, written out 332 times, and
    give the six things called "source" distinct names.
-5. Give the occurrence-to-location mapping one owning module, and pass an
+4. Give the occurrence-to-location mapping one owning module, and pass an
    opaque handle through display and the libraries instead of `Location` and
    `Conject`.
-6. Move model-level types out of display and vocabularies out of the libraries,
+5. Move model-level types out of display and vocabularies out of the libraries,
    and make writes take the model rather than `&mut Editor`, breaking the
    model layer's upward references.
-7. Split the CAM geometry into its own crate: small but easy.
-8. Split progred into model, display, libraries, shell and app crates, which
-   would also keep the layering honest: only after 4–6, and after
+6. Split the CAM geometry into its own crate: small but easy.
+7. Split progred into model, display, libraries, shell and app crates, which
+   would also keep the layering honest: only after 3–5, and after
    `cargo build --timings` shows what it would save.
 
 ## Reporting completion failures

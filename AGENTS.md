@@ -137,6 +137,9 @@ upstream when it can be.
 - Drive interactions headlessly with `crate::driver::Driver`: it clicks, types,
   and reads by document path through the shell's own event translation.
 - Check visual changes without launching the app, through the SVG captures.
+- Keep a module's tests in their own file, `foo/tests.rs` declared by
+  `#[cfg(test)] mod tests;` in `foo.rs`, not inline, so reading code doesn't
+  mean reading its tests.
 - `docs/testing.md` covers the layers, captures, and opt-in GPU and performance
   tests.
 
