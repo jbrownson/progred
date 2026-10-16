@@ -238,8 +238,9 @@ An audit on 16 October 2026 ([the evidence](history/codebase-audit-2026-10-16.md
 found almost no dead code: 60% of progred's 94k lines are tests, much of them
 inside source files, and 93% of its production code is one dependency cycle.
 Its first recommendation is done: inline test modules now live in their own
-files. projection/tests stays under projection/, since moving it out would make
-a dozen private projection functions crate-visible just for tests. A follow-up
+files. projection/tests is still under projection/. It holds 20.8k lines that
+mostly test the frame and the whole editor. The six private items it reaches
+point at misplaced code, not at internals the tests should see. A follow-up
 [crate split analysis](history/crate-split-2026-10-16.md) maps the coupling
 that blocks a split and the steps that break it. The rest, most worthwhile
 first:
@@ -257,17 +258,30 @@ first:
      `&mut Editor`, and let the shell set the window title after dispatch;
    - move the hover types, `projection::Cx` and the completion helpers down,
      and route calls into the projection runtime through `Project`.
-4. Give the six things called "source" distinct names.
-5. Give the occurrence-to-location mapping one owning module, and pass an
+4. Fix what projection/tests reaches for: 14 calls to six private items. Then
+   move its frame- and editor-level suites out of projection/, leaving only the
+   runtime's own tests, with nothing made visible just for tests.
+   - The completion card, its placement and the selection-ring drawing
+     (`completion_card`, `completion_placement`, `primary_highlight`) are
+     display code filed in the projection runtime. The tests build the card
+     with stand-in worlds such as `usize`.
+   - `projection_target` builds display's `ProjectionTarget` from `Cx`, and
+     moves down with it.
+   - The frame harness calls `prepare_project` to time the projection's two
+     phases, building the choice graph and resolving it to a width.
+     `project()` fuses the two; expose both.
+   - `Projection::without_entry` serves one profiling test.
+5. Give the six things called "source" distinct names.
+6. Give the occurrence-to-location mapping one owning module, and pass an
    opaque handle through display and the libraries instead of `Location` and
    `Conject`.
-6. Split the CAM geometry into its own crate: small but easy.
-7. Split progred into three crates, which would also keep the layering honest:
+7. Split the CAM geometry into its own crate: small but easy.
+8. Split progred into three crates, which would also keep the layering honest:
    - core: the model and display;
    - the libraries;
    - top: the projection runtime, the shell and the app.
 
-   Do this only after step 3, a `cargo build --timings` baseline, and a `Host`
+   Do this only after item 3, a `cargo build --timings` baseline, and a `Host`
    trait that makes display and the libraries generic over the editor. The
    saving is in lines, not measured time, and `make test` could get slower for
    edits to core.
