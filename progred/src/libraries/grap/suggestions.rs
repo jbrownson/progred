@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::{CompletionRequest, CompletionScope};
-use crate::libraries::{completion::select, control::vocabulary as control, text};
+use crate::libraries::{completion::select, control::vocabulary as control};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -58,10 +58,8 @@ pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvi
         if !templated {
             offers.extend(quote(request));
         }
-        // A string, when the text library is loaded to make one.
-        if (request.resolve)(text::vocabulary::UTF8).is_some() {
-            offers.push(text::completion(text::query_spelling(request.query)));
-        }
+        // What's typed, read as a value: a number, say, then text.
+        offers.extend(crate::completion::typed(libraries.as_ref(), request));
         Some(offers)
     })
 }

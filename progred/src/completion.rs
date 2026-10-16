@@ -9,24 +9,21 @@ use crate::identity::short_id;
 use crate::libraries::{blob, name, text};
 use crate::site::Continuation;
 use crate::sources::Sources;
-use gid::{CellId, Resolution, Value, new_cell_id};
+use gid::{Value, new_cell_id};
 use std::rc::Rc;
 
 pub use crate::display::widget::offers::{Entry, Offers};
 
-fn cell_activation(
-    kind: CompletionKind,
-    cell: CellId,
-    on_commit: Option<Continuation>,
-) -> Rc<dyn Fn(&mut crate::Editor)> {
-    match kind {
-        CompletionKind::Value => Rc::new(move |world| {
-            crate::editing::commit_value(world, cell.into(), on_commit.clone())
-        }),
-        CompletionKind::Field => {
-            Rc::new(move |world| crate::editing::commit_label(world, cell, None, on_commit.clone()))
-        }
-    }
+/// Whose offers a hole shows.
+#[derive(Clone, Copy)]
+pub(crate) enum HoleOffers<'a> {
+    /// The drawing projection's own vocabulary, and nothing else.
+    Projection(&'a CompletionProvider),
+    /// Raw's: the editor's constructors, and what's typed read as a value.
+    Raw,
+    /// A document's empty root's: what the libraries start a document as,
+    /// then Raw's.
+    Start,
 }
 
 /// Labels can only be cells; an offer advertising another value is not one.
@@ -187,51 +184,81 @@ pub(crate) fn prepare(
     })
 }
 
-/// A hole's offers: exactly what the projection drawing it supplies, or,
-/// where none does, everything: every cell, the editor's constructors, and
-/// what the libraries offer anywhere or read from the query.
+/// A hole's offers: what the projection drawing it supplies and nothing else,
+/// or Raw's, led at a document's empty root by the libraries' starting points.
 pub(crate) fn completion_entries_with(
     sources: &Sources,
     request: &CompletionRequest<'_>,
-    providers: Option<&CompletionProvider>,
-    projection: Option<&CompletionProvider>,
+    libraries: Option<&CompletionProvider>,
+    hole: HoleOffers<'_>,
 ) -> Vec<Entry<crate::Editor>> {
-    if let Some(projection) = projection {
-        return contextual_entries(sources, projection(request).unwrap_or_default(), request);
+    match hole {
+        HoleOffers::Projection(projection) => {
+            contextual_entries(sources, projection(request).unwrap_or_default(), request)
+        }
+        HoleOffers::Raw => raw_entries(sources, request, libraries),
+        HoleOffers::Start => {
+            let start = CompletionRequest {
+                scope: CompletionScope::Start,
+                ..*request
+            };
+            let mut entries = libraries
+                .and_then(|provider| provider(&start))
+                .map(|offers| contextual_entries(sources, offers, request))
+                .unwrap_or_default();
+            entries.extend(raw_entries(sources, request, libraries));
+            entries
+        }
     }
-    let raw = request.raw;
-    let kind = request.kind;
-    let query = request.query;
-    let labels = kind == CompletionKind::Field;
-    let trimmed = query.trim();
-    let quoted = trimmed.starts_with('"');
-    let universal = CompletionRequest {
-        scope: CompletionScope::Everything,
-        ..*request
-    };
-    let value_entries = providers
-        .filter(|_| !quoted)
-        .and_then(|provider| provider(&universal))
-        .map(|offers| contextual_entries(sources, offers, request))
-        .unwrap_or_default();
-    let blob = (!labels).then(|| blob::parse(trimmed)).flatten();
-    let spelling = text::query_spelling(query);
-    let atom_leads = quoted || blob.is_some();
-    // Libraries read the query as their values, like text from any query.
+}
+
+/// What the libraries read the query as, such as a number. Text, which any
+/// query reads as, comes after the readings particular to it.
+pub(crate) fn typed(
+    libraries: Option<&CompletionProvider>,
+    request: &CompletionRequest<'_>,
+) -> Vec<Completion> {
+    let (readings, strings) = literals(libraries, request);
+    readings.into_iter().chain(strings).collect()
+}
+
+/// The readings particular to the query, and the query as text.
+fn literals(
+    libraries: Option<&CompletionProvider>,
+    request: &CompletionRequest<'_>,
+) -> (Vec<Completion>, Vec<Completion>) {
     let literal = CompletionRequest {
         scope: CompletionScope::Literal,
         ..*request
     };
-    let literals = providers
-        .filter(|_| !labels)
+    let (strings, readings) = libraries
         .and_then(|provider| provider(&literal))
         .unwrap_or_default()
         .into_iter()
-        .filter_map(|offer| completion_entry(sources, offer, kind));
-    let atoms: Vec<_> = match kind {
+        .partition(|offer| offer.preview.as_ref().and_then(text::read).is_some());
+    (readings, strings)
+}
+
+/// Raw's offers: the editor's constructors, and what's typed read as a value,
+/// or for a field's label a new cell named as typed. Quoted text and bytes
+/// lead; otherwise a reading that spells the query exactly comes first, then
+/// the constructors the query names, then the other readings and the text.
+fn raw_entries(
+    sources: &Sources,
+    request: &CompletionRequest<'_>,
+    libraries: Option<&CompletionProvider>,
+) -> Vec<Entry<crate::Editor>> {
+    let kind = request.kind;
+    let query = request.query;
+    let trimmed = query.trim();
+    let blob = (kind == CompletionKind::Value)
+        .then(|| blob::parse(trimmed))
+        .flatten();
+    let atom_leads = trimmed.starts_with('"') || blob.is_some();
+    let (readings, atoms): (Vec<_>, Vec<_>) = match kind {
         CompletionKind::Field => {
-            let spelling = spelling.to_string();
-            vec![Entry {
+            let spelling = text::query_spelling(query).to_string();
+            let label = Entry {
                 display: spelling.clone(),
                 detail: Some("new label".to_string()),
                 matches: Vec::new(),
@@ -245,102 +272,67 @@ pub(crate) fn completion_entries_with(
                         Some(crate::libraries::selection::pending_at(&[])),
                     )
                 }),
-            }]
-        }
-        CompletionKind::Value => blob
-            .map(|blob| entry(sources, blob::completion(blob)))
-            .into_iter()
-            .chain(literals)
-            .collect(),
-    };
-    let reference_selection = if labels {
-        crate::libraries::selection::pending_at(&[])
-    } else {
-        crate::libraries::selection::at(&[], crate::libraries::selection::edge())
-    };
-    let (mut local, mut external): (Vec<_>, Vec<_>) = document_cells(sources)
-        .into_iter()
-        .filter(|cell| {
-            !labels
-                || !request
-                    .value()
-                    .and_then(Value::as_record)
-                    .is_some_and(|fields| fields.contains_key(cell))
-        })
-        .map(|cell| {
-            let definition = sources.resolve(cell);
-            let name = (!raw)
-                .then(|| definition.and_then(|value| name::read(value.value)))
-                .flatten();
-            let source = definition
-                .map(|value| value.source)
-                .or_else(|| sources.contributors(cell).next());
-            let entry = Entry {
-                display: name.map(str::to_owned).unwrap_or_else(|| short_id(cell)),
-                detail: source.map(|source| source_name(sources, source)),
-                matches: Vec::new(),
-                face: if name.is_some() {
-                    Face::Label
-                } else {
-                    Face::Id
-                },
-                source: Some(cell),
-                activate: cell_activation(kind, cell, Some(reference_selection.clone())),
             };
-            (entry, name.is_some(), sources.external(cell))
-        })
-        .partition(|(_, _, external)| !*external);
-    local.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-    external.sort_by(|a, b| a.0.display.cmp(&b.0.display));
-    let mut references_pool: Vec<_> = local
-        .into_iter()
-        .map(|(entry, named, _)| (entry, named, Vec::new()))
-        .collect();
-    references_pool.extend(constructors(kind).into_iter().map(|offer| {
-        let aliases = offer.aliases.clone();
-        (entry(sources, offer), true, aliases)
-    }));
-    references_pool.extend(
-        external
+            (Vec::new(), vec![label])
+        }
+        CompletionKind::Value => {
+            let (readings, strings) = literals(libraries, request);
+            let entries = |offers: Vec<Completion>| {
+                offers
+                    .into_iter()
+                    .map(|offer| entry(sources, offer))
+                    .collect::<Vec<_>>()
+            };
+            let atoms = blob
+                .map(|blob| entry(sources, blob::completion(blob)))
+                .into_iter()
+                .chain(entries(strings))
+                .collect();
+            (entries(readings), atoms)
+        }
+    };
+    let constructors: Vec<_> = filter::rank_with_aliases(
+        constructors(kind)
             .into_iter()
-            .map(|(entry, named, _)| (entry, named, Vec::new())),
-    );
-    let references: Vec<_> = filter::rank_with_aliases(
-        references_pool,
-        |(entry, _, _)| &entry.display,
-        |(_, _, aliases)| aliases.as_slice(),
+            .map(|offer| {
+                let aliases = offer.aliases.clone();
+                (entry(sources, offer), aliases)
+            })
+            .collect(),
+        |(entry, _)| &entry.display,
+        |(_, aliases)| aliases.as_slice(),
         query,
     )
     .into_iter()
     .map(|ranked| {
-        let demoted = ranked.fuzzy() || !ranked.item.1;
+        let fuzzy = ranked.fuzzy();
         (
             Entry {
                 matches: ranked.matches,
                 ..ranked.item.0
             },
-            demoted,
+            fuzzy,
         )
     })
     .collect();
-    let mut entries = Vec::new();
     if atom_leads {
-        entries.extend(atoms);
-        entries.extend(value_entries);
-        entries.extend(references.into_iter().map(|(entry, _)| entry));
-    } else {
-        let (weak, strong): (Vec<_>, Vec<_>) =
-            references.into_iter().partition(|(_, demoted)| *demoted);
-        let (exact, other): (Vec<_>, Vec<_>) = value_entries
+        return atoms
             .into_iter()
-            .partition(|entry| !query.is_empty() && entry.display.eq_ignore_ascii_case(query));
-        entries.extend(exact);
-        entries.extend(strong.into_iter().map(|(entry, _)| entry));
-        entries.extend(other);
-        entries.extend(atoms);
-        entries.extend(weak.into_iter().map(|(entry, _)| entry));
+            .chain(readings)
+            .chain(constructors.into_iter().map(|(entry, _)| entry))
+            .collect();
     }
-    entries
+    let (weak, strong): (Vec<_>, Vec<_>) = constructors.into_iter().partition(|(_, fuzzy)| *fuzzy);
+    let (exact, other): (Vec<_>, Vec<_>) = readings
+        .into_iter()
+        .partition(|entry| !query.is_empty() && entry.display.eq_ignore_ascii_case(query));
+    exact
+        .into_iter()
+        .chain(strong.into_iter().map(|(entry, _)| entry))
+        .chain(other)
+        .chain(atoms)
+        .chain(weak.into_iter().map(|(entry, _)| entry))
+        .collect()
 }
 
 fn contextual_entries(
@@ -389,57 +381,4 @@ fn completion_text(sources: &Sources<'_>, text: &CompletionText) -> String {
             .map(str::to_owned)
             .unwrap_or_else(|| short_id(*cell)),
     }
-}
-
-fn source_name(sources: &Sources<'_>, source: Resolution) -> String {
-    completion_text(
-        sources,
-        &CompletionText::Name(match source {
-            Resolution::Document => crate::libraries::path::vocabulary::DOCUMENT,
-            Resolution::Library(library) => library,
-        }),
-    )
-}
-
-/// The cells a value links, walked structurally — lists and records
-/// are values, so their contents are right here; record labels
-/// reference too.
-fn value_cells(value: &Value, cells: &mut Vec<CellId>) {
-    match value {
-        Value::Cell(cell) => cells.push(*cell),
-        Value::Blob(_) => {}
-        Value::List(elements) => {
-            for element in elements.values() {
-                value_cells(element, cells);
-            }
-        }
-        Value::Record(fields) => {
-            for (label, field) in fields {
-                cells.push(*label);
-                value_cells(field, cells);
-            }
-        }
-    }
-}
-
-/// Every cell the document or its library mentions — table entries,
-/// links inside values, cells used as labels, and the root's own
-/// links. Bare cells referenced anywhere are included: still
-/// referenceable. Library cells are offered so the conventions are
-/// typeable from keystroke one. Sorted for a deterministic offer
-/// order.
-fn document_cells(sources: &Sources) -> Vec<CellId> {
-    let mut cells = Vec::new();
-    for cell in sources.cells() {
-        cells.push(cell);
-        for value in sources.values(cell) {
-            value_cells(value.value, &mut cells);
-        }
-    }
-    if let Some(root) = sources.root() {
-        value_cells(root, &mut cells);
-    }
-    cells.sort();
-    cells.dedup();
-    cells
 }

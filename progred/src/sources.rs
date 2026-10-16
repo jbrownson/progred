@@ -193,10 +193,6 @@ impl<'a> Sources<'a> {
         self.resolve(cell).and_then(|value| name::read(value.value))
     }
 
-    pub fn contributors(&self, cell: CellId) -> impl Iterator<Item = Resolution> + '_ {
-        self.definitions(cell).map(|(source, _)| source)
-    }
-
     pub fn values(&self, cell: CellId) -> impl Iterator<Item = LocatedValue<'a>> {
         self.definitions(cell)
             .map(|(source, contribution)| LocatedValue {

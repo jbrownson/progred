@@ -658,13 +658,16 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
         false,
         &crate::display::CompletionKind::Value,
         "clouds",
-        Some(&editor.stack.completions),
         None,
+        Some(&library_offers(
+            editor.stack.completions.clone(),
+            crate::display::CompletionScope::Everything,
+        )),
     );
     assert!(
         offers
             .iter()
-            .any(|offer| offer.source == Some(names["clouds"]))
+            .any(|offer| offer.display == "clouds" && offer.detail.as_deref() == Some("call"))
     );
     let mut runner = crate::EditorRunner::new(editor);
     let render = |runner: &mut crate::EditorRunner, time: f64| {

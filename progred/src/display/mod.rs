@@ -137,16 +137,20 @@ impl Completion {
     }
 }
 
-/// What a library is asked, for a hole no projection supplies offers for.
+/// What a library is asked.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CompletionScope {
-    /// The values and calls it offers anywhere, such as numbers parsed from
-    /// the query or a new color.
+    /// The values and calls it offers anywhere, such as a new color, for a
+    /// projection that wants them among its own, as Grap's slots do.
     Everything,
-    /// What was typed, read as one of a library's values, like a string from
-    /// any query. Asked on every request, so a provider answers it cheaply;
-    /// the picker lists it where a typed value goes instead of ranking it.
+    /// What was typed, read as one of a library's values, like a number or a
+    /// string. Raw asks on every request for a value, so a provider answers it
+    /// cheaply; the picker lists it where a typed value goes instead of ranking
+    /// it.
     Literal,
+    /// What a new document can start as, such as a Grap program, for the
+    /// hole of a document's empty root.
+    Start,
 }
 
 /// Read-only definition metadata; native implementations are never exposed here.

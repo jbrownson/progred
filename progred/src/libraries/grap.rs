@@ -567,35 +567,35 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 
 fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Completion>> {
     use crate::display::CompletionScope;
-    (request.scope == CompletionScope::Everything && request.kind == CompletionKind::Value).then(
-        || {
-            // An empty document can start as a program in a pane.
-            request
-                .path
-                .is_empty()
-                .then(new_program)
-                .into_iter()
-                .chain(std::iter::once(
-                    crate::libraries::completion::insert(
-                        "new lambda",
-                        Value::record([(PARAMS, Value::list([]))]),
-                        Some(crate::libraries::selection::at(
-                            &[Step::Key(BODY)],
-                            crate::libraries::selection::edge(),
-                        )),
-                    )
-                    .with_aliases(["lambda", "λ"])
-                    .with_detail(ID),
-                ))
-                .chain(
-                    (!request.query.trim().is_empty())
-                        .then(|| call_completions(request))
-                        .into_iter()
-                        .flatten(),
+    if request.kind != CompletionKind::Value {
+        return None;
+    }
+    match request.scope {
+        // An empty document can start as a program in a pane.
+        CompletionScope::Start => Some(vec![new_program()]),
+        CompletionScope::Everything => Some(
+            std::iter::once(
+                crate::libraries::completion::insert(
+                    "new lambda",
+                    Value::record([(PARAMS, Value::list([]))]),
+                    Some(crate::libraries::selection::at(
+                        &[Step::Key(BODY)],
+                        crate::libraries::selection::edge(),
+                    )),
                 )
-                .collect()
-        },
-    )
+                .with_aliases(["lambda", "λ"])
+                .with_detail(ID),
+            )
+            .chain(
+                (!request.query.trim().is_empty())
+                    .then(|| call_completions(request))
+                    .into_iter()
+                    .flatten(),
+            )
+            .collect(),
+        ),
+        CompletionScope::Literal => None,
+    }
 }
 
 fn new_program() -> Completion {

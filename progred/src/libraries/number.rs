@@ -196,7 +196,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             ],
         )))
         .with_completions(move |request| {
-            (request.scope == crate::display::CompletionScope::Everything
+            (request.scope == crate::display::CompletionScope::Literal
                 && request.kind == crate::display::CompletionKind::Value)
                 .then(|| self.completions(request.query))
         })

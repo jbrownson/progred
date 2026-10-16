@@ -975,7 +975,16 @@ fn prepare_value(
         fold_default,
     );
     let prepared = match layout {
-        None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), None)),
+        None => {
+            // A document's root is where the document starts: outside Raw,
+            // its hole leads with what the libraries start one as.
+            let offers = if path.is_empty() && !cx.raw {
+                crate::completion::HoleOffers::Start
+            } else {
+                crate::completion::HoleOffers::Raw
+            };
+            ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), offers))
+        }
         Some(layout) => {
             let inner = prepare(
                 cx,

@@ -3,28 +3,16 @@ use super::*;
 #[test]
 fn new_color_completion_opens_without_editing_and_commits_at_the_missing_location() {
     use crate::libraries::color;
-    let list = Value::list([text::value("before"), text::value("after")]);
-    let positions: Vec<_> = list
-        .as_list()
-        .unwrap()
-        .iter()
-        .map(|(p, _)| p.clone())
-        .collect();
-    let between = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
-    let field = new_cell_id();
     let function = new_cell_id();
     let argument = new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(function, grap::lambda([argument], argument.into()));
-    for (value, path) in [
-        (None, vec![]),
-        (Some(Value::record([])), vec![Step::Key(field)]),
-        (Some(list), vec![Step::Element(between)]),
-        (
-            Some(grap::call(function.into(), [])),
-            vec![Step::Key(argument)],
-        ),
-    ] {
+    // A Grap argument's hole offers the libraries' values, a new color among
+    // them; Raw's holes don't.
+    for (value, path) in [(
+        Some(grap::call(function.into(), [])),
+        vec![Step::Key(argument)],
+    )] {
         let mut world = crate::test_editor(Document {
             root: value.clone(),
             cells: cells.clone(),
@@ -116,17 +104,6 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
             Stage::Edge
         );
         assert!(editing_frame(&mut world, false).completion.is_none());
-        if let Some(elements) = world.model.doc.root.as_ref().and_then(Value::as_list) {
-            assert_eq!(elements.len(), 3);
-            assert_eq!(
-                text::read(elements.get(&positions[0]).unwrap()),
-                Some("before")
-            );
-            assert_eq!(
-                text::read(elements.get(&positions[1]).unwrap()),
-                Some("after")
-            );
-        }
         assert!(
             world.model.step_history(true),
             "one undo for the whole drag"

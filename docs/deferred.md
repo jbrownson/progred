@@ -125,9 +125,11 @@ This is deferred UX design, not a priority for the current cleanup.
 ## Completion after the strip-back
 
 Completion was stripped back to a deliberately simple rule: the projection
-drawing a hole supplies its offers, and a hole without a projection's offers
-gets everything. The point is to confront what completion really needs and build
-back up from there. What was removed, so it isn't lost:
+drawing a hole supplies its offers, and a hole without a projection's offers is
+Raw's, which offers the editor's constructors and what's typed, read as a value.
+A document's root leads with the libraries' starting points. The point is to
+confront what completion really needs and build back up from there. What was
+removed, so it isn't lost:
 
 - **The `…` expansion.** A picker opened on a narrow list, from its projection or
   from a library, and `…` (or Down past the last row) added everything after it.
@@ -151,8 +153,8 @@ back up from there. What was removed, so it isn't lost:
     key. Now the name library's partial draws that hole where a projection
     passes it.
   - Libraries offered at the root: the new-scene and new-program templates (now
-    among everything there) and root field labels: `grap`, `fidget` (also found
-    by "sdf"), `panes` and `libraries` (now among all cells).
+    their starting points, leading the root's hole) and root field labels:
+    `grap`, `fidget` (also found by "sdf"), `panes` and `libraries`.
   - Grap's slots deferred to any library's focused answer before their own list.
 - **The arithmetic rule.** In an operation's `left`, `right` or `operand`, and in
   its operator, the offers of the library defining the operation came first and
@@ -166,6 +168,16 @@ back up from there. What was removed, so it isn't lost:
   Grap's slots do; a projection can't yet give its holes keys of their own.
 - **Reaching any cell from a Grap slot.** Grap's list has bindings and functions
   but not other cells, such as a named constant.
+- **Existing cells in Raw's holes.** Raw offered every cell by name, the
+  document's and every library's (about 650 with the built-in libraries), with
+  its source beside it, and a field's label picker offered existing cells as
+  labels. It now offers none: an existing cell is reused by pointing at it
+  (Cmd+click) or pasting it, and typing makes something new. Rebuilding that
+  list every frame was also what made scrolling the picker hitch. A separate
+  search by name could come back if pointing and pasting aren't enough.
+- **The libraries' other offers in Raw's holes.** A new color, a new lambda, and
+  calls to functions by name were offered in any Raw hole. Now only projections
+  that ask the libraries for them offer them, as Grap's slots do.
 
 Directions this surfaced:
 
