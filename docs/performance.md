@@ -27,9 +27,15 @@ metric name when a test reports several. Over several rounds it keeps each
 workload's lowest median, with that round's p95, and reports the spread of the
 medians as a percentage of the lowest. A change from the last record is flagged
 when it exceeds 5% or twice either run's spread. Frame canaries measure 60
-frames; the four voxel orbits measure 12. Single-shot workloads, such as stock
-meshing and the software render of the CAM example's fully cut stock, report
-one sample per round.
+frames, and the four voxel orbits 12. The sub-millisecond canaries measure for
+about a third of a second on a fast machine instead: 600 forest and CAM
+controls frames, 1,500 pairs of layout FFI frames and 20,000 color picker
+frames. Sixty of their frames end a few milliseconds after the test starts,
+before the operating system has settled where it runs: on a laptop with
+performance and efficiency cores, a change that only shortened their setup made
+them read 20–30% slower, and within 3% once they ran longer. Single-shot
+workloads, such as stock meshing and the software render of the CAM example's
+fully cut stock, report one sample per round.
 
 [`performance-log.tsv`](performance-log.tsv) has one row per workload per
 recorded run:
