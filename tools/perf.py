@@ -101,6 +101,20 @@ def sysctl(name):
     return command(["sysctl", "-n", name])
 
 
+def cpuid(cpuinfo):
+    """The processor's family, model and stepping. A virtual machine's
+    processor name can be masked, so that one such as "Intel(R) Xeon(R)
+    Processor @ 2.80GHz" stands for different hosts; these tell them apart."""
+    fields = [
+        re.search(rf"^{name}\s*: (\d+)$", cpuinfo, re.M)
+        for name in ("cpu family", "model", "stepping")
+    ]
+    return (
+        f" (family {fields[0][1]}, model {fields[1][1]}, stepping {fields[2][1]})"
+        if all(fields) else ""
+    )
+
+
 def machine():
     """Hardware, which decides comparability, and the conditions that vary on it."""
     # The toolchain the wrappers build with, not whatever rustc is on PATH.
@@ -128,9 +142,11 @@ def machine():
         cpuinfo = Path("/proc/cpuinfo").read_text()
         model = re.search(r"model name\s*: (.*)", cpuinfo)[1]
         memory = int(re.search(r"MemTotal:\s+(\d+)", Path("/proc/meminfo").read_text())[1])
+        virtual = re.search(r"^flags.*\bhypervisor\b", cpuinfo, re.M)
         hardware = (
-            f"{model}, {len(os.sched_getaffinity(0))} CPUs, {memory / 2**20:.0f} GiB"
-            + (", virtual machine" if re.search(r"^flags.*\bhypervisor\b", cpuinfo, re.M) else "")
+            f"{model}{cpuid(cpuinfo) if virtual else ''}, "
+            f"{len(os.sched_getaffinity(0))} CPUs, {memory / 2**20:.0f} GiB"
+            + (", virtual machine" if virtual else "")
         )
         conditions = f"{platform.system()} {platform.release()}"
     return hardware, f"{conditions}, {rustc}"

@@ -35,7 +35,8 @@ one sample per round.
 recorded run:
 
 - **commit**: with `+` when tracked files had uncommitted changes;
-- **machine**: the hardware, which decides what is comparable;
+- **machine**: the hardware, which decides what is comparable, with the
+  processor's family, model and stepping on a virtual machine;
 - **gpu**: the adapter Fidget's implicit previews select;
 - **environment**: the OS version, power source on macOS, Rust version, and
   any Cargo features the build enabled;
@@ -50,7 +51,11 @@ release builds, and on AC power idle, spread by up to 18% on the heavy
 workloads, so a smaller difference on a stock or Fidget workload is drift, not a
 change. A shared cloud VM is noisier: its rounds varied by 10–20%, so use one
 for interleaved comparisons within a session and keep long-term records on a
-dedicated machine.
+dedicated machine. Its processor name can be masked as well: in October 2026,
+two VMs named `Intel(R) Xeon(R) Processor @ 2.80GHz` five days apart ran the
+projection canaries 25–70% apart, a gap that interleaved runs of their two
+commits on one machine didn't show. So on a VM, the machine also names the
+processor's family, model and stepping.
 
 The tool runs the test executables directly, outside the build sandbox, so on a
 Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
