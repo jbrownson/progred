@@ -28,7 +28,7 @@ fn peel_forest(page: &str) {
         .expect("a tree");
     peel.pick_at(tree);
     let source = peel.source_selection().expect("the code that drew it");
-    assert_eq!(source[..2], [peel.key("first"), FOLLOW]);
+    assert_eq!(source.start, peel.location(&["first", "follow"]).start);
 
     // Click the 7 after tree count, then peel all the way down: it stays
     // selected while its drawing changes to eight bytes.

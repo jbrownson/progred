@@ -388,14 +388,14 @@ fn website_forest_hover_finds_the_available_call() {
         .descends
         .iter()
         .find_map(|descend| {
-            let path = descend.scope.source(&descend.path)?;
-            let value = sources.resolve_path(&path)?;
+            let location = descend.scope.source(&descend.path)?;
+            let value = sources.read(&location)?;
             (value
                 .as_record()?
                 .get(&grap::vocabulary::FUNCTION)?
                 .as_cell()?
                 == names["forest_view"])
-                .then(|| SourceTrace::from_path(&sources, Rc::from(path.as_ref())))
+                .then(|| SourceTrace::from_location(&sources, &location))
         })
         .expect("the forest call is projected");
     let hovered = (20..300).step_by(10).find_map(|y| {

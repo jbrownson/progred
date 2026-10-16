@@ -527,18 +527,26 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
             Step::Follow(gid::Resolution::Document),
             Step::Key(name::vocabulary::NAME),
         ];
+        // The cell's definition starts its own location, however the
+        // outline jumps reached it.
+        let sources = world.sources();
+        let selected = world
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .scope()
+            .source(&name);
         assert_eq!(
-            world
-                .model
-                .selection
+            selected
                 .as_ref()
-                .unwrap()
-                .scope()
-                .source(&name)
-                .unwrap()
-                .as_ref(),
-            source
+                .and_then(|location| location.stored(&sources)),
+            Location::root(source.as_slice()).stored(&sources)
         );
+        assert!(matches!(
+            selected.map(|location| location.start),
+            Some(Start::Cell { .. })
+        ));
         assert!(Rc::ptr_eq(&world.model.doc, &before));
         let frame = editing_frame(&mut world, false);
         assert!(frame.resolve_for_dispatch().dispatch_key(

@@ -1,6 +1,7 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
 use crate::Editor;
+use crate::location::Location;
 use crate::modifiers;
 use crate::navigate;
 use crate::selection;
@@ -123,7 +124,7 @@ impl Editor {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
                 let scope = current.scope().clone();
-                let Some(source_path) = current.source_path().map(|path| path.into_owned()) else {
+                let Some(location) = current.location().map(Location::into_owned) else {
                     return false;
                 };
                 // Backspacing through the value and once more to
@@ -132,18 +133,17 @@ impl Editor {
                 // intact) already covers the deletion.
                 let covered = current.recorded();
                 let before = self.model.snapshot();
-                selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &source_path)
-                    && {
-                        if !covered {
-                            self.model.history.record(before);
-                            self.refresh_title();
-                        }
-                        let mut hole = selection::pending_value(&root, path);
-                        hole.set_scope(scope);
-                        self.model.selection = Some(hole);
-                        geometry.reveal_selection(self);
-                        true
+                selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &location) && {
+                    if !covered {
+                        self.model.history.record(before);
+                        self.refresh_title();
                     }
+                    let mut hole = selection::pending_value(&root, path);
+                    hole.set_scope(scope);
+                    self.model.selection = Some(hole);
+                    geometry.reveal_selection(self);
+                    true
+                }
             }
             _ => false,
         }

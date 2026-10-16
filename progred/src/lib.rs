@@ -27,6 +27,7 @@ mod hover;
 mod identity;
 mod input;
 mod libraries;
+mod location;
 #[cfg(target_os = "macos")]
 mod macos_surface;
 #[cfg(target_os = "macos")]

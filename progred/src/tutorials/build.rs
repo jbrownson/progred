@@ -58,7 +58,10 @@ fn dot() {
     dot.task("pick");
     let (center, _, _) = dot.circles()[0].clone();
     dot.pick_at(center);
-    assert_eq!(dot.source_selection(), Some(dot.path(&["first", "follow"])));
+    assert_eq!(
+        dot.source_selection(),
+        Some(dot.location(&["first", "follow"]))
+    );
 
     dot.task("scrub");
     let start = dot.text_at(&x);
@@ -156,7 +159,7 @@ fn recipe() {
     recipe.pick_at(center);
     assert_eq!(
         recipe.source_selection(),
-        Some(recipe.path(&["first", "follow", "body"])),
+        Some(recipe.location(&["first", "follow", "body"])),
         "inside dot, on the fill that painted it"
     );
 }
@@ -269,6 +272,6 @@ fn counted() {
     let (center, _, _) = counted.circles()[5].clone();
     counted.pick_at(center);
     let source = counted.source_selection().expect("the code that drew it");
-    assert_eq!(source[..2], counted.path(&["first", "follow"])[..]);
-    assert!(source.len() > 2, "{source:?}");
+    assert_eq!(source.start, counted.location(&["first", "follow"]).start);
+    assert!(!source.path.is_empty(), "{source:?}");
 }

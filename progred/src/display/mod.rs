@@ -161,8 +161,10 @@ pub struct ResolvedCell<'a> {
     pub native: bool,
 }
 
-/// The path names the missing value, or the record receiving a new label.
-/// Reads use that same source context, including source-qualified Follow steps.
+/// The path names the missing value, or the record receiving a new label,
+/// from where its location starts: the document's root, or the definition of
+/// the cell it's in. Reads use that same context, so a cell's definition is
+/// read as its own, however it was reached.
 pub struct CompletionRequest<'a> {
     /// Raw projection has no library-specific interaction presentations.
     pub raw: bool,
@@ -938,26 +940,32 @@ pub fn at<World: 'static, Hover: 'static>(
     at_with_projection(steps, value, None, None)
 }
 
-/// Start projecting at an absolute document location while extending only the
+/// Start projecting at a document path from its root while extending only the
 /// occurrence path by `steps`. Descendants conject back to that location.
 pub fn jump<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     document: impl Into<Vec<Step>>,
 ) -> Layout<World, Hover> {
-    jump_with_conject(steps, document, Conject::descend(), None, None)
+    jump_with_conject(
+        steps,
+        crate::location::Location::root(document.into()),
+        Conject::descend(),
+        None,
+        None,
+    )
 }
 
 /// Low-level jump: the conject interprets the suffix below the new occurrence
-/// relative to `document`. It is also used to locate the value being projected.
+/// relative to the path of `document`, which keeps its start. It is also used
+/// to locate the value being projected.
 pub fn jump_with_conject<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
-    document: impl Into<Vec<Step>>,
+    document: crate::location::Location<'static>,
     conject: Conject,
     projection: Option<Partial<World, Hover>>,
     default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
     let steps = steps.into();
-    let document = document.into();
     Layout::program(Rc::new(move |context, build| {
         context.project.jump(
             context.text,
@@ -1113,9 +1121,9 @@ mod tests {
                 default_projection,
             } => {
                 assert_eq!(actual, steps);
-                assert_eq!(document, source);
+                assert_eq!(document, crate::location::Location::root(source.clone()));
                 assert_eq!(
-                    conject.apply(&steps, &document),
+                    conject.apply(&steps, &document.path),
                     Some([source, steps].concat())
                 );
                 assert!(projection.is_none());

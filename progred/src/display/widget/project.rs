@@ -21,7 +21,7 @@ pub trait Project<World, Hover> {
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<World, Hover>>,
         steps: Vec<Step>,
-        document: Vec<Step>,
+        document: crate::location::Location<'static>,
         conject: crate::display::Conject,
         current: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,

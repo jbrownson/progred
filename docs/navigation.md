@@ -89,7 +89,8 @@ a line field placing its caret at the edge the arrow came from. A stop without a
 landmark declines rather than selecting something that cannot be revealed.
 Offscreen stops remain available; folded or unplaced contents do not contribute.
 Stops reached through `jump` keep their editing context; computed results,
-including those reached through `at`, keep their read-only selection behavior.
+including those reached through `at`, keep their read-only selection behavior,
+apart from a cell's definition followed from one.
 
 Every handler in the frame sees an arrow first, modifiers included, so text and
 picker handlers can claim it. Only an arrow nothing claims reaches the editor's

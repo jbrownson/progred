@@ -2,13 +2,34 @@
 //! Scopes own no editor state. Mutable access is lent only during dispatch.
 
 use super::*;
-use std::borrow::Cow;
+use crate::location::Location;
+use gid::{CellId, Resolution};
 use std::rc::Rc;
 
-type Resolver = dyn for<'a> Fn(&'a [Step]) -> Option<Cow<'a, [Step]>>;
-
+/// How a projection's occurrences name stored data. Each layer reads the
+/// occurrences at and beneath one occurrence; any other falls through to the
+/// scope the layer was added to. Past every layer, an occurrence's path is
+/// the document's own, from its root.
 #[derive(Clone, Default)]
-pub(crate) struct Scope(Option<Rc<Resolver>>);
+pub(crate) struct Scope(Option<Rc<Layer>>);
+
+struct Layer {
+    occurrence: Path,
+    reading: Reading,
+    within: Scope,
+}
+
+enum Reading {
+    /// A projection's own reading of a location through its conject, which
+    /// maps the steps beneath the occurrence onto that location's.
+    Conject {
+        location: Location<'static>,
+        conject: crate::display::Conject,
+    },
+    /// A cell's definition, followed at the occurrence: a location starts
+    /// there, however the cell was reached.
+    Cell { cell: CellId, source: Resolution },
+}
 
 impl std::fmt::Debug for Scope {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -21,14 +42,6 @@ impl std::fmt::Debug for Scope {
 }
 
 impl Scope {
-    pub(crate) fn new(
-        resolve: impl for<'a> Fn(&'a [Step]) -> Option<Cow<'a, [Step]>> + 'static,
-    ) -> Self {
-        Self(Some(Rc::new(resolve)))
-    }
-    pub(crate) fn is_identity(&self) -> bool {
-        self.0.is_none()
-    }
     pub(crate) fn view<'scope, 'data>(
         &'scope self,
         sources: Sources<'data>,
@@ -38,37 +51,82 @@ impl Scope {
             scope: self,
         }
     }
+
+    fn layer(&self, occurrence: Path, reading: Reading) -> Self {
+        Self(Some(Rc::new(Layer {
+            occurrence,
+            reading,
+            within: self.clone(),
+        })))
+    }
+
     /// Install a conject for this occurrence. Other occurrences keep their
     /// enclosing interpretation; the function sees the suffix below this one.
     pub(crate) fn with_conject(
         &self,
         occurrence: Path,
-        document: Path,
+        location: Location<'static>,
         conject: crate::display::Conject,
     ) -> Self {
-        let parent = self.clone();
-        Self::new(move |path| match path.strip_prefix(occurrence.as_slice()) {
-            Some(rest) => conject.apply(rest, &document).map(Cow::Owned),
-            None => parent.source(path),
-        })
+        self.layer(occurrence, Reading::Conject { location, conject })
     }
 
+    /// A computed value at this occurrence: nothing at or beneath it is
+    /// stored, until a cell inside it starts a location again.
     pub(crate) fn detached(&self, occurrence: Path) -> Self {
-        self.with_conject(occurrence, Vec::new(), crate::display::Conject::detached())
+        self.with_conject(
+            occurrence,
+            Location::root(Vec::new()),
+            crate::display::Conject::detached(),
+        )
     }
 
-    pub(crate) fn source<'p>(&self, path: &'p [Step]) -> Option<Cow<'p, [Step]>> {
+    /// The occurrence follows `cell` to its definition from `source`, where
+    /// it and everything beneath it start their locations.
+    pub(crate) fn in_cell(&self, occurrence: Path, cell: CellId, source: Resolution) -> Self {
+        self.layer(occurrence, Reading::Cell { cell, source })
+    }
+
+    pub(crate) fn source<'p>(&self, path: &'p [Step]) -> Option<Location<'p>> {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Conject);
         match &self.0 {
-            Some(resolve) => resolve(path),
-            None => Some(Cow::Borrowed(path)),
+            None => Some(Location::root(path)),
+            Some(layer) => match path.strip_prefix(layer.occurrence.as_slice()) {
+                None => layer.within.source(path),
+                Some(rest) => match &layer.reading {
+                    Reading::Conject { location, conject } => {
+                        conject.apply(rest, &location.path).map(|path| Location {
+                            start: location.start,
+                            path: path.into(),
+                        })
+                    }
+                    Reading::Cell { cell, source } => Some(Location::in_cell(*cell, *source, rest)),
+                },
+            },
         }
     }
 
-    /// Compare the meaning of this occurrence, not closure allocation identity.
-    pub(crate) fn same_location(&self, other: &Self, path: &[Step]) -> bool {
-        self.source(path) == other.source(path)
+    /// Whether, beneath the occurrence the newest layer reads, an
+    /// occurrence's children are its location's children, so a projection
+    /// can descend into values rather than read each one again.
+    pub(crate) fn descends(&self) -> bool {
+        self.0
+            .as_ref()
+            .is_none_or(|layer| matches!(layer.reading, Reading::Cell { .. }))
+    }
+
+    /// Compare what this occurrence names, not how each scope spells it: a
+    /// route through a cell and a location starting at that cell are the
+    /// same data.
+    pub(crate) fn same_location(&self, other: &Self, sources: &Sources, path: &[Step]) -> bool {
+        match (self.source(path), other.source(path)) {
+            (Some(left), Some(right)) => left
+                .stored(sources)
+                .zip(right.stored(sources))
+                .map_or_else(|| left == right, |(left, right)| left == right),
+            (left, right) => left.is_none() && right.is_none(),
+        }
     }
 
     pub(crate) fn read<'a>(&self, sources: &Sources<'a>, path: &[Step]) -> Option<&'a Value> {
@@ -77,7 +135,7 @@ impl Scope {
 
     pub(crate) fn writable(&self, sources: &Sources<'_>, path: &[Step]) -> bool {
         self.source(path)
-            .is_some_and(|path| selection::writable_at(sources, &path))
+            .is_some_and(|location| crate::location::writable(sources, &location))
     }
 
     pub(crate) fn open<'a>(&'a self, access: Access<'a>) -> Edit<'a> {
@@ -96,7 +154,7 @@ pub struct Read<'scope, 'data> {
 
 impl<'data> Read<'_, 'data> {
     pub fn resolve_path(&self, path: &[Step]) -> Option<&'data Value> {
-        self.sources.resolve_path(&self.scope.source(path)?)
+        self.sources.read(&self.scope.source(path)?)
     }
 
     pub(crate) fn writable(&self, path: &[Step]) -> bool {
@@ -159,7 +217,11 @@ impl Edit<'_> {
             .is_some_and(|selection| {
                 selection.root() == root
                     && selection.path() == path
-                    && !selection.scope().same_location(self.scope, path)
+                    && !selection.scope().same_location(
+                        self.scope,
+                        &self.access.editor.sources(),
+                        path,
+                    )
             })
         {
             self.access.editor.model.selection = None;
@@ -198,7 +260,11 @@ impl Edit<'_> {
             .model
             .selection
             .as_ref()
-            .is_none_or(|selection| !selection.scope().same_location(self.scope, path))
+            .is_none_or(|selection| {
+                !selection
+                    .scope()
+                    .same_location(self.scope, &self.access.editor.sources(), path)
+            })
         {
             return false;
         }

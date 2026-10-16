@@ -3,6 +3,7 @@
 //! library definition. A stored Follow step still names its source.
 
 use crate::libraries::{Libraries, name};
+use crate::location::{Location, Start};
 use gid::{CellId, Document, Resolution, Step, Value};
 
 pub type DefinitionSource = Resolution;
@@ -209,18 +210,32 @@ impl<'a> Sources<'a> {
         self.doc.root.as_ref()
     }
 
-    /// The value at `path`, following links and descending through
-    /// ordinary record and list structure. Writes gate separately on
-    /// the cell owning the path's last Follow.
+    /// The value at `path` from the document's root.
     pub fn resolve_path(&self, path: &[Step]) -> Option<&'a Value> {
+        self.read_from(Start::Root, path)
+    }
+
+    pub fn read(&self, location: &Location) -> Option<&'a Value> {
+        self.read_from(location.start, &location.path)
+    }
+
+    /// The value at `path` from `start`, following links and descending
+    /// through ordinary record and list structure. Writes gate separately
+    /// on where the location is stored.
+    pub fn read_from(&self, start: Start, path: &[Step]) -> Option<&'a Value> {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::SourceLookup);
-        path.iter()
-            .try_fold(self.root()?, |value, step| match step {
+        path.iter().try_fold(
+            match start {
+                Start::Root => self.root(),
+                Start::Cell { cell, source } => self.value(cell, &source),
+            }?,
+            |value, step| match step {
                 Step::Follow(resolution) => self.value(value.as_cell()?, resolution),
                 Step::Key(label) => value.as_record()?.get(label),
                 Step::Element(position) => value.as_list()?.get(position),
-            })
+            },
+        )
     }
 
     pub fn cells(&self) -> impl Iterator<Item = CellId> + '_ {
@@ -244,11 +259,6 @@ impl<'a> Sources<'a> {
             Some((Resolution::Library(_), _))
         )
     }
-}
-
-/// Only the document's own definitions are editable; libraries are read-only.
-pub fn writable(resolution: &Resolution) -> bool {
-    matches!(resolution, Resolution::Document)
 }
 
 impl grap::Host for Sources<'_> {
@@ -573,18 +583,18 @@ mod tests {
         let mut cells = Cells::new();
         cells.set_value(doc_cell, crate::test_values::text("doc"));
 
+        let owned = |cell, source| crate::location::owned(Start::Cell { cell, source });
+        let library = Resolution::Library(libraries.iter().next().unwrap().0);
         let doc = doc_of(cells.clone());
         let sources = Sources {
             doc: &doc,
             libraries: &libraries,
         };
         assert!(sources.external(lib_cell));
-        assert!(!writable(&Resolution::Library(
-            libraries.iter().next().unwrap().0
-        )));
+        assert!(!owned(lib_cell, library));
         assert!(!sources.external(doc_cell));
         assert!(!sources.external(bare));
-        assert!(writable(&Resolution::Document));
+        assert!(owned(bare, Resolution::Document));
 
         cells.set_value(lib_cell, crate::test_values::text("mine"));
         let doc = doc_of(cells);
@@ -593,10 +603,8 @@ mod tests {
             libraries: &libraries,
         };
         assert!(!sources.external(lib_cell));
-        assert!(writable(&Resolution::Document));
-        assert!(!writable(&Resolution::Library(
-            libraries.iter().next().unwrap().0
-        )));
+        assert!(owned(lib_cell, Resolution::Document));
+        assert!(!owned(lib_cell, library));
     }
 
     #[test]

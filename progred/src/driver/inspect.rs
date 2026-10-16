@@ -84,13 +84,13 @@ impl<P> Driver<P> {
             .to_vec()
     }
 
-    pub(crate) fn source_selection(&self) -> Option<Vec<Step>> {
-        self.editor()
-            .model
-            .selection
-            .as_ref()?
-            .source_path()
-            .map(|path| path.to_vec())
+    /// Where the selected data is stored.
+    pub(crate) fn source_selection(&self) -> Option<crate::location::Location<'static>> {
+        let sources = self.editor().sources();
+        let location = self.editor().model.selection.as_ref()?.location()?;
+        location
+            .stored(&sources)
+            .map(crate::location::Location::into_owned)
     }
 
     pub(crate) fn drawn(&self, path: &[Step]) -> bool {

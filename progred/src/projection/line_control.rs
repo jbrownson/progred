@@ -19,8 +19,8 @@ pub(crate) fn commit(
         });
     if next.is_some_and(|next| {
         selection
-            .source_path()
-            .is_some_and(|path| crate::selection::set_value(doc, libraries, &path, next))
+            .location()
+            .is_some_and(|location| crate::selection::set_value(doc, libraries, &location, next))
     }) {
         let first = !selection.recorded();
         selection.preserve_recorded(true);

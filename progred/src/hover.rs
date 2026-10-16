@@ -2,10 +2,7 @@
 //! to for secondary marks.
 
 use crate::completion::Offers;
-use crate::sources::Sources;
-#[cfg(test)]
-use gid::CellId;
-use gid::{Step, Value};
+use gid::Step;
 use std::rc::Rc;
 
 /// What the pointer rests on: the address a later editor action will
@@ -106,11 +103,6 @@ impl SourceCalls {
         })
     }
 }
-impl crate::display::widget::source::PathLookup for Sources<'_> {
-    fn value_at(&self, path: &[Step]) -> Option<&Value> {
-        self.resolve_path(path)
-    }
-}
 pub(crate) fn from_grap(
     origin: grap::SourceOrigin,
     input: Option<&SourceTrace>,
@@ -147,7 +139,9 @@ pub(crate) fn hover_secondary<C>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gid::{Cells, Document, new_cell_id};
+    use crate::location::Location;
+    use crate::sources::Sources;
+    use gid::{CellId, Cells, Document, Value, new_cell_id};
 
     #[test]
     fn detached_drawing_has_no_input_source_but_still_traces_called_cells() {
@@ -176,10 +170,12 @@ mod tests {
     }
 
     fn secondary(sources: &Sources, path: Vec<Step>) -> Option<Secondary> {
-        let path: Rc<[Step]> = Rc::from(path);
         sources
             .resolve_path(&path)
-            .map(|value| Secondary::from_path(sources, path.clone(), value.as_cell()))
+            .map(|value| match value.as_cell() {
+                Some(cell) => Secondary::Cell(cell),
+                None => Secondary::from_location(sources, &Location::root(path.as_slice())),
+            })
     }
 
     #[test]
@@ -236,8 +232,8 @@ mod tests {
             };
             for left in definitions {
                 let left_path = path(0, left);
-                let trace = SourceTrace::from_path(&sources, left_path.clone().into());
-                let input = SourceTrace::from_path(&sources, Rc::from(&left_path[..2]));
+                let trace = SourceTrace::from_location(&sources, &Location::root(&left_path[..]));
+                let input = SourceTrace::from_location(&sources, &Location::root(&left_path[..2]));
                 assert_eq!(
                     Some(trace.clone()),
                     crate::hover::from_grap(
@@ -251,7 +247,7 @@ mod tests {
                 );
                 assert_eq!(
                     trace,
-                    SourceTrace::from_path(&original, left_path.clone().into())
+                    SourceTrace::from_location(&original, &Location::root(&left_path[..]))
                 );
                 for right in definitions {
                     let right_path = path(1, right);
@@ -260,7 +256,11 @@ mod tests {
                         sources.resolve_path(&right_path)
                     );
                     assert_eq!(
-                        trace == SourceTrace::from_path(&sources, right_path.clone().into()),
+                        trace
+                            == SourceTrace::from_location(
+                                &sources,
+                                &Location::root(&right_path[..])
+                            ),
                         left == right,
                     );
                     assert_eq!(

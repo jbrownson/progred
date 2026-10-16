@@ -51,6 +51,8 @@ clearance, or a safe machining plan.**
 - **Structural editing:** context-specific completions, editable names and
   literals, color swatches and pickers, PNG images shown as pictures,
   two-dimensional number scrubbing, multiple panes and windows, and undo/redo.
+  A cell that shows up in a computed result, such as the one a missing-cell
+  error names, can be edited or defined right there.
 - **Live drawings:** an editable recreation of the tree scene from Bret Victor's
   *Inventing on Principle*, with links between source code and drawing output.
 - **Implicit CAD:** editable [Fidget](https://github.com/mkeeter/fidget) fields,

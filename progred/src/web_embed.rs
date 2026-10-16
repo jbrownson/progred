@@ -1,7 +1,8 @@
 //! Browser-host observation and opt-in fixed-slot tutorial presentation.
 
+use crate::location::{Location, Start};
 use crate::{Editor, libraries::path, selection::Stage, workspace};
-use gid::{Document, Path, Step, Value};
+use gid::{Document, Path, Resolution, Step, Value};
 use std::rc::Rc;
 
 pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack<Editor>, String> {
@@ -255,8 +256,26 @@ fn named_reference(
 struct Selection {
     root: workspace::Root,
     path: Path,
-    source_path: Option<Path>,
+    /// Where the selected data is stored.
+    source: Option<Location<'static>>,
     stage: Stage,
+}
+
+/// A stored location as JSON: the cell whose definition it starts in, and the
+/// library defining that cell when the document doesn't, then the path from
+/// there.
+fn source(location: &Location) -> serde_json::Value {
+    match location.start {
+        Start::Root => serde_json::json!({"path": path::value(&location.path)}),
+        Start::Cell { cell, source } => serde_json::json!({
+            "cell": cell,
+            "library": match source {
+                Resolution::Document => None,
+                Resolution::Library(library) => Some(library),
+            },
+            "path": path::value(&location.path),
+        }),
+    }
 }
 
 #[derive(Default)]
@@ -269,7 +288,9 @@ impl Changes {
         let selection = editor.model.selection.as_ref().map(|selected| Selection {
             root: selected.root().clone(),
             path: selected.path().to_vec(),
-            source_path: selected.source_path().map(|path| path.into_owned()),
+            source: selected
+                .location()
+                .and_then(|location| location.stored(&editor.sources()).map(Location::into_owned)),
             stage: selected.stage(&editor.sources()),
         });
         if self
@@ -293,7 +314,7 @@ impl Changes {
                         workspace::Target::Pane { path: root } => serde_json::json!({"pane": path::value(root)}),
                     },
                     "path": path::value(&selected.path),
-                    "source_path": selected.source_path.as_deref().map(path::value),
+                    "source": selected.source.as_ref().map(source),
                     "stage": match selected.stage {
                         Stage::Edge => "value",
                         Stage::Pending => "pending",

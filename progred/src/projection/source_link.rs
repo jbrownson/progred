@@ -126,8 +126,9 @@ pub(crate) fn source_descend<'a, World>(
 ) -> Option<&'a crate::navigate::Descend<World>> {
     descends.iter().find(|descend| {
         descend.root.is_some()
-            && descend.scope.source(&descend.path).is_some_and(|path| {
-                SourceTrace::from_path(sources, Rc::from(path.as_ref())) == *source
-            })
+            && descend
+                .scope
+                .source(&descend.path)
+                .is_some_and(|location| SourceTrace::from_location(sources, &location) == *source)
     })
 }

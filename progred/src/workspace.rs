@@ -931,7 +931,7 @@ mod tests {
         assert!(crate::selection::delete_edge(
             &mut doc,
             &Default::default(),
-            &path
+            &crate::location::Location::root(&path)
         ));
         assert_eq!(declarations(doc.root.as_ref()).len(), 3);
         assert_eq!(doc.cells.value(cell), before.cells.value(cell));

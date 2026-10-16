@@ -134,7 +134,7 @@ mod tests {
         assert!(selection::set_value(
             &mut model.doc,
             &Libraries::default(),
-            &[],
+            &crate::location::Location::root(&[]),
             Value::list([Value::from(vec![value])])
         ));
         model.history.record(before);
@@ -332,7 +332,7 @@ mod tests {
         assert!(selection::delete_edge(
             &mut model.doc,
             &Libraries::default(),
-            &first.1
+            &crate::location::Location::root(&first.1)
         ));
         model.history.record(before);
         model
@@ -405,13 +405,13 @@ mod tests {
         assert!(!selection::set_value(
             &mut model.doc,
             &Libraries::default(),
-            &bad_path,
+            &crate::location::Location::root(&bad_path),
             Value::record([])
         ));
         assert!(!selection::delete_edge(
             &mut model.doc,
             &Libraries::default(),
-            &bad_path
+            &crate::location::Location::root(&bad_path)
         ));
         assert!(!model.dirty());
         let mut empty = Model::new(Document {
@@ -421,7 +421,7 @@ mod tests {
         assert!(!selection::delete_edge(
             &mut empty.doc,
             &Libraries::default(),
-            &[]
+            &crate::location::Location::root(&[])
         ));
         assert!(!empty.dirty());
     }
@@ -439,7 +439,7 @@ mod tests {
         assert!(selection::set_value(
             &mut model.doc,
             &Libraries::default(),
-            &[Step::Follow(gid::Resolution::Document)],
+            &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)]),
             Value::from(vec![2])
         ));
         assert!(model.dirty());

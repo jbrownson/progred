@@ -45,8 +45,9 @@ metadata side channel.
 
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections and contextual completion providers. A completion provider
-receives the query, field/value kind, suggestion/Everything scope, source-qualified
-path, Raw mode, read-only path and cell lookups, and lazy enumeration of defined cells.
+receives the query, field/value kind, suggestion/Everything scope, the hole's path
+from where its location starts, Raw mode, read-only path and cell lookups from that
+same start, and lazy enumeration of defined cells.
 Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
 There are no root-specific host hooks: root templates and root fields are ordinary
@@ -142,15 +143,19 @@ These are ordinary preparation functions, not path-bearing layout opcodes.
 
 `descend` follows one step of the displayed structure; `descend_path` follows
 several without projecting intermediate containers. Both preserve the current
-location interpretation. `jump(steps, document_path)` extends the occurrence
-path by `steps` but reads from an absolute, source-qualified document path.
-Its descendants conject to that source. `jump_with_conject` supplies the lower
-level function, `(&projection_suffix, &document_path) -> Option<Path>`, used by
-both projection reads and later edits. No inverse is required.
+location interpretation, except that following a cell starts a location at its
+definition. `jump(steps, document_path)` extends the occurrence path by `steps`
+but reads from an absolute, source-qualified document path. Its descendants
+conject to that source. `jump_with_conject` takes any location instead, such as
+one within a cell's definition, and supplies the lower level function,
+`(&projection_suffix, &location_path) -> Option<Path>`, used by both projection
+reads and later edits; the result keeps the location's start. No inverse is
+required.
 
 `at(steps, value)` instead projects the supplied value with no document source.
-Its conject returns `None`, including for ordinary descendants and cell follows.
-An explicit nested jump can establish a source. Existing stored-child partials
+Its conject returns `None`, including for ordinary descendants. A cell followed
+inside it still starts a location at its definition, which is stored data, and
+an explicit nested jump can establish a source. Existing stored-child partials
 use `descend_path`, not `at` with a copy of the source value. Computed results
 use the same `at` combinator, with a `Key(presentation::RESULT)` occurrence
 step distinguishing the result from its producing expression. This is a

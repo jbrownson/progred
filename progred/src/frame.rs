@@ -126,9 +126,6 @@ fn attribute(
             .find(|d| d.root.as_ref() == root && d.path == *path),
         _ => None,
     };
-    let source_path = landmark
-        .and_then(|d| d.scope.source(&d.path))
-        .map(|path| std::rc::Rc::<[gid::Step]>::from(path.as_ref()));
     let hovered_secondary = match &hovered {
         Some(Hovered::Tree(hover)) if visible => {
             hover::hover_secondary(landmark, completion, hover)
@@ -136,9 +133,9 @@ fn attribute(
         _ => None,
     };
     let hovered_trace = match &hovered {
-        Some(Hovered::Tree(hover::Hover::Value(_))) if visible => {
-            source_path.map(|path| hover::SourceTrace::from_path(sources, path))
-        }
+        Some(Hovered::Tree(hover::Hover::Value(_))) if visible => landmark
+            .and_then(|d| d.scope.source(&d.path))
+            .map(|location| hover::SourceTrace::from_location(sources, &location)),
         Some(Hovered::Tree(hover::Hover::Source(source))) if visible => Some(source.clone()),
         _ => None,
     };
@@ -984,7 +981,7 @@ mod frame_tests {
         let source = vec![Step::Key(field)];
         let scope = crate::editing::Scope::default().with_conject(
             occurrence.to_vec(),
-            source.clone(),
+            crate::location::Location::root(source.clone()),
             crate::display::Conject::descend(),
         );
         // What the projection draws a conjected occurrence sharing.

@@ -128,7 +128,7 @@ pub(crate) fn prepare(
             selection::set_value(
                 &mut document,
                 sources.libraries,
-                &selection.source_path()?,
+                &selection.location()?,
                 value,
             )
             .then_some(())?;

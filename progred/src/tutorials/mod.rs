@@ -140,6 +140,14 @@ impl Driver<Page> {
             .collect()
     }
 
+    /// Where the data `path` names is stored, as [`Self::path`] spells it.
+    pub(super) fn location(&self, steps: &[&str]) -> crate::location::Location<'static> {
+        crate::location::Location::root(self.path(steps))
+            .stored(&self.editor().sources())
+            .map(crate::location::Location::into_owned)
+            .unwrap_or_else(|| panic!("{steps:?} reaches no cell"))
+    }
+
     pub(super) fn cell(&self, name: &str) -> Value {
         self.editor()
             .model

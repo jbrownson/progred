@@ -514,7 +514,11 @@ fn deletion_and_history_landings_need_no_line_initialization() {
     model.history.record(model.snapshot());
     let mut world = editing_world(&doc, &libraries);
     let frame = editing_frame(&mut world, false);
-    assert!(delete_edge(&mut model.doc, &libraries, &first));
+    assert!(delete_edge(
+        &mut model.doc,
+        &libraries,
+        &crate::location::Location::root(&first)
+    ));
     let next = crate::navigate::selection_after_removing(&frame.descends, None, &first, true);
     assert_eq!(next, second);
     model.selection = Some(Selection::edge(&root, next));
@@ -843,7 +847,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document), key("x")],
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document), key("x")]),
         crate::test_values::text("2")
     ));
     assert_eq!(
@@ -856,7 +860,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document), key("at")],
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document), key("at")]),
         Value::record([(
             crate::test_values::label("row"),
             crate::test_values::text("top")
@@ -865,11 +869,11 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &[
+        &crate::location::Location::root(&[
             Step::Follow(gid::Resolution::Document),
             key("at"),
             key("row")
-        ],
+        ]),
         crate::test_values::text("bottom")
     ));
     assert_eq!(
@@ -886,7 +890,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document)],
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)]),
         Value::list([crate::test_values::text("a")])
     ));
     assert_eq!(
@@ -901,13 +905,13 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(!set_value(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document), key("x")],
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document), key("x")]),
         crate::test_values::text("v")
     ));
     assert!(set_value(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document)],
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)]),
         Value::record([(
             crate::test_values::label("x"),
             crate::test_values::text("v")
@@ -927,7 +931,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &[key("title")],
+        &crate::location::Location::root(&[key("title")]),
         crate::test_values::text("scene")
     ));
     assert_eq!(
@@ -937,7 +941,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &[],
+        &crate::location::Location::root(&[]),
         crate::test_values::text("root")
     ));
     assert_eq!(doc.root, Some(crate::test_values::text("root")));
@@ -947,7 +951,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &[key("x")],
+        &crate::location::Location::root(&[key("x")]),
         crate::test_values::text("0")
     ));
     assert_eq!(
@@ -983,27 +987,27 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
     assert!(!set_value(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document), key("a")],
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document), key("a")]),
         crate::test_values::text("2")
     ));
     assert!(!set_value(
         &mut doc,
         &lib,
-        &[
+        &crate::location::Location::root(&[
             Step::Follow(gid::Resolution::Document),
             Step::Key(name::vocabulary::NAME),
-        ],
+        ]),
         crate::test_values::text("mine")
     ));
     assert!(!delete_edge(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document), key("a")]
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document), key("a")])
     ));
     assert!(!delete_edge(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document)]
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)])
     ));
     // Forking — the document taking the cell over — writes.
     Rc::make_mut(&mut doc).cells.set_value(
@@ -1016,7 +1020,7 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
     assert!(set_value(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document), key("a")],
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document), key("a")]),
         crate::test_values::text("2")
     ));
 }
@@ -1072,7 +1076,10 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     assert!(!delete_edge(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document), key("missing")]
+        &crate::location::Location::root(&[
+            Step::Follow(gid::Resolution::Document),
+            key("missing")
+        ])
     ));
 
     // Unlinking a field drops the link; the linked cell floats in
@@ -1080,7 +1087,7 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     assert!(delete_edge(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document), key("child")]
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document), key("child")])
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&[Step::Follow(gid::Resolution::Document), key("child")]),
@@ -1094,11 +1101,11 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     assert!(delete_edge(
         &mut doc,
         &lib,
-        &[
+        &crate::location::Location::root(&[
             Step::Follow(gid::Resolution::Document),
             key("dash"),
             Step::Element(ps[0].clone())
-        ]
+        ])
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&dash),
@@ -1110,20 +1117,28 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     assert!(delete_edge(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document)]
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)])
     ));
     assert!(doc.cells.value(cell).is_none());
     assert!(src(&doc, &lib).resolve_path(&[]).is_some());
     assert!(!delete_edge(
         &mut doc,
         &lib,
-        &[Step::Follow(gid::Resolution::Document)]
+        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)])
     ));
 
     // The empty path empties the document.
-    assert!(delete_edge(&mut doc, &lib, &[]));
+    assert!(delete_edge(
+        &mut doc,
+        &lib,
+        &crate::location::Location::root(&[])
+    ));
     assert!(doc.root.is_none());
-    assert!(!delete_edge(&mut doc, &lib, &[]));
+    assert!(!delete_edge(
+        &mut doc,
+        &lib,
+        &crate::location::Location::root(&[])
+    ));
 }
 
 #[test]
@@ -1461,7 +1476,11 @@ fn a_simple_name_is_an_ordinary_editable_field() {
 
     // Removing the field uses the same structural deletion as any
     // other record field; the rest of the value remains.
-    assert!(delete_edge(&mut doc, &lib, &path));
+    assert!(delete_edge(
+        &mut doc,
+        &lib,
+        &crate::location::Location::root(&path)
+    ));
     assert_eq!(doc.cells.value(cell).and_then(name::read), None);
     assert!(
         doc.cells

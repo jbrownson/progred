@@ -49,20 +49,36 @@ stable identities, so changing load order cannot silently retarget a `Follow`.
 List positions preserve an occurrence across edits that retain that position;
 they are not content identities or globally meaningful addresses.
 
+A [`Location`](../progred/src/location.rs) names stored data: it starts at the
+document's root or at a cell's definition from a particular source, then follows
+a path from there. Following a cell starts a new location at its definition,
+however the cell was reached, so what can be edited depends on where the data is
+stored, not on the route to it. Writes land in that stored value: a location's
+last `Follow` names the definition it is in, or else its own start does. The
+root and the document's own definitions are writable, including a cell with no
+definition yet; a library's definitions are read-only. A route through a cell
+and a location starting at that cell are the same location.
+
 Selection also names its owning workspace view. Two panes can show the same
 stored path while keeping separate focus, scroll, and folds. A workspace
 `Root` supplies this session identity; it is not a GID cell.
 
 [`SourceTrace`](../progred/src/hover.rs) serves source-linked widgets, drawing, and
-highlighting. It is either a stored path or a cell, definition source, and path
-relative to that definition. Normalizing to the nearest followed definition
-lets different occurrences highlight the same source without conflating two
-libraries' definitions of one cell. Both forms still need the caller's
-resolution context. Neither is an execution stack or global address.
+highlighting. It is a location in the form it is stored in: a path from the root,
+or a cell, definition source, and path relative to that definition. Normalizing
+to the nearest followed definition lets different occurrences highlight the same
+source without conflating two libraries' definitions of one cell. Both forms
+still need the caller's resolution context. Neither is an execution stack or
+global address.
 
 Computed values use `at` at their own displayed occurrences. They and their
 children can be selected, copied, and folded, but have no document destination
-for edits. Selecting a result does not select its producing expression.
+for edits. Selecting a result does not select its producing expression. A cell
+inside a result is still a cell, though, as in a missing-cell error or a quote's
+template: following it starts a location at its definition, which edits on the
+usual terms. So the missing-cell error a pane shows for a Grap starting point's
+unwritten program is a place to write it. Values copied out of cells stay
+read-only; reaching the code that made one is source-linked hover's job.
 Computed output uses the same read-only ground as external definitions. Nested
 read-only occurrences do not stack washes; an explicit jump to writable source
 restores the paper ground. This decoration does not change edit permissions:
@@ -79,31 +95,33 @@ folding is one convention in those records. Space folds and unfolds the selected
 occurrence. Clicking a fold's `…` selects the occurrence as it opens it, so Space
 closes it again.
 
-Selection also retains a native editing scope. Ordinary document projection
-uses its allocation-free identity case. A scope installs a **conject** at an
-occurrence: an ordinary function of the remaining projection path and a document
-path, returning `Option<DocumentPath>`. Reads and writes use the same function;
-there is no independently configurable read/write pair or inverse mapping.
-Several occurrences may conject to one source. Selection, navigation, and
-annotations stay occurrence-local, while source-linked hover uses the conject.
-Line editing, gestures, completion insertion, structural paste/deletion, and
-history retain that interpretation. Undo restores the scope with the selected
-path; scopes contain no document snapshot or borrow of the editor.
-The scope stores a resolver function from occurrence path to optional document
-path. The standard boundary constructor captures the occurrence prefix,
-document starting path, conject, and enclosing fallback in that function;
-there is no separately interpreted route record. Identity scopes borrow their
-input path without allocating.
+Selection also retains a native editing scope, which maps an occurrence to its
+location, if any. Ordinary document projection uses its allocation-free identity
+case. A scope installs a **conject** at an occurrence: an ordinary function of
+the remaining projection path and a location's path, returning an optional path
+from that location's start. Reads and writes use the same function; there is no
+independently configurable read/write pair or inverse mapping. Several
+occurrences may conject to one source. Selection, navigation, and annotations
+stay occurrence-local, while source-linked hover uses the conject. Line editing,
+gestures, completion insertion, structural paste/deletion, and history retain
+that interpretation. Undo restores the scope with the selected path; scopes
+contain no document snapshot or borrow of the editor.
+A scope is a chain of layers, each reading the occurrences at and beneath one
+occurrence: a conject's, or a followed cell's definition. Projection adds a
+cell's layer wherever it follows a cell, which is how a location starts there.
+Identity scopes borrow their input path without allocating. Comparing two
+scopes at an occurrence compares where each says the data is stored.
 If a projection changes what a selected occurrence means, its caller is
 responsible for clearing the selection when necessary; the editor does not
 try to repair arbitrary changes of interpretation.
 
 `descend` extends the current occurrence, `jump` gives a new occurrence an actual
 document source, and `at` projects a supplied value without a source. `None`
-means no document location, not a missing value: `Some(path)` can name an absent
-field and still offer editing. A library source is present but read-only.
-Ordinary descendants of `at` stay detached, including cell follows; an explicit
-`jump` can establish a source again. Outline list entries project their referenced
+means no document location, not a missing value: `Some(location)` can name an
+absent field and still offer editing. A library source is present but read-only.
+Ordinary descendants of `at` stay detached until they follow a cell, which starts
+a location at its definition; an explicit `jump` can also establish a source
+again. Outline list entries project their referenced
 fields through jumps: the heading is the real list element, and its body has an
 occurrence beneath that element. Repeating a field yields independent folds and
 selection locations while both bodies edit the same source field.
@@ -286,10 +304,13 @@ Each request includes the query, field/value kind, the question asked of a
 library (what it offers anywhere, what it reads the query as, or what a document
 can start as), Raw mode
 (so providers can omit interactions whose presentation needs a library
-projection), source-qualified path, and read-only path and cell lookups, plus
-lazy enumeration of defined cells. Cell lookup exposes the selected definition's
+projection), the hole's path, and read-only path and cell lookups, plus lazy
+enumeration of defined cells. Cell lookup exposes the selected definition's
 value, source, and whether it has a native implementation, without evaluating
-it. The path names a missing value or the record receiving a new label. A
+it. The path names a missing value or the record receiving a new label, from
+where the hole's location starts, and path lookups read from there too. A hole
+in a cell's definition reads that definition as its own context, however the
+cell was reached, so Grap offers only the bindings visible within it. A
 projection's provider that answers `None` offers nothing, as `Some([])` does.
 Raw asks the libraries for their readings of the query, a document's root for
 their starting points, and a projection's provider for whatever it wants, as

@@ -4,6 +4,7 @@ use super::vocabulary::OUTLINE;
 use crate::display::projection::group;
 use crate::display::{self as d, Layout, ProjectionInput, col};
 use crate::frame::Hovered;
+use crate::location::Location;
 use gid::{CellId, Path, Step, Value};
 use std::rc::Rc;
 
@@ -32,7 +33,7 @@ pub(super) fn display(
             .inputs
             .edits
             .source(context.path)
-            .map(|path| path.into_owned());
+            .map(Location::into_owned);
         let entries = d::runtime_partial({
             let fields = fields.clone();
             move |input| {
@@ -51,7 +52,7 @@ pub(super) fn display(
                         position,
                         key,
                         heading,
-                        source.as_deref(),
+                        source.as_ref(),
                         &fields,
                         &input.default_projection,
                     )
@@ -80,7 +81,7 @@ fn section(
     position: gid::Position,
     key: CellId,
     heading: Layout<crate::Editor, Hovered>,
-    source: Option<&[Step]>,
+    source: Option<&Location>,
     fields: &gid::Record,
     default_projection: &d::Partial<crate::Editor, Hovered>,
 ) -> Layout<crate::Editor, Hovered> {
@@ -93,11 +94,7 @@ fn section(
     let body = match source {
         Some(source) => d::jump_with_conject(
             steps.clone(),
-            source
-                .iter()
-                .cloned()
-                .chain([Step::Key(key)])
-                .collect::<Path>(),
+            source.descendant(&[Step::Key(key)]),
             d::Conject::descend(),
             body_projection,
             None,

@@ -120,9 +120,13 @@ function coordinate(circle, key) {
   return field(value, drawing.unquote) ?? value;
 }
 
-function sourceIn(state, slot, length) {
-  const path = state?.selection?.source_path?.list;
-  return path?.length === length && field(path[0], fields.key)?.cell === slot;
+// The selection is stored in the definition of the cell the root's `slot`
+// holds, `depth` steps in, or at any depth below its top when omitted.
+function sourceIn(state, slot, depth) {
+  const source = state?.selection?.source;
+  const length = source?.path?.list?.length;
+  return source?.cell !== undefined && source.cell === field(state?.document?.root, slot)?.cell
+    && (depth === undefined ? length > 0 : length === depth);
 }
 
 function storyCalls(state) {
@@ -133,7 +137,7 @@ const steps = {
   dot(state) {
     const x = number(coordinate(circle(state?.document?.cells?.[story.program]), drawing.x));
     return [
-      ...(sourceIn(state, slots[0], 2) ? ["pick"] : []),
+      ...(sourceIn(state, slots[0], 0) ? ["pick"] : []),
       ...(Number.isFinite(x) && x !== 60 ? ["scrub"] : []),
     ];
   },
@@ -146,7 +150,7 @@ const steps = {
     const body = field(state?.document?.cells?.[story.recipe], fields.body);
     return [
       ...(number(coordinate(circle(body), drawing.radius)) > 24 ? ["bigger"] : []),
-      ...(sourceIn(state, slots[0], 3) ? ["pick"] : []),
+      ...(sourceIn(state, slots[0], 1) ? ["pick"] : []),
     ];
   },
   trunks(state) {
@@ -175,8 +179,7 @@ const steps = {
     const count = number(field(state?.document?.cells?.[story.forestCall], story.count));
     return [
       ...(Number.isFinite(count) && count !== 7 ? ["count"] : []),
-      ...(state?.selection?.source_path?.list?.length > 2
-        && field(state.selection.source_path.list[0], fields.key)?.cell === slots[0] ? ["pick"] : []),
+      ...(sourceIn(state, slots[0]) ? ["pick"] : []),
     ];
   },
   names(state) {

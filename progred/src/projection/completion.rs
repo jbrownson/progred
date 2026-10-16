@@ -133,14 +133,16 @@ fn query_content(
     labels: bool,
     offers: HoleOffers<'_>,
 ) -> Measured<HoverPass<crate::Editor>> {
-    // The card and keyboard commit must answer from one list.
-    let value_at = |path: &[gid::Step]| cx.sources.resolve_path(path);
-    let resolve = |cell| cx.sources.definition(cell);
     // This is only reached for an active writable picker. Keep the boundary
     // total if a caller supplies an unmapped occurrence anyway.
-    let Some(source_path) = cx.edits.source(path) else {
+    let Some(location) = cx.edits.source(path) else {
         return placeholder_box(tcx, cx.styles);
     };
+    // The card and keyboard commit must answer from one list, read from
+    // where the hole's location starts.
+    let start = location.start;
+    let value_at = move |path: &[gid::Step]| cx.sources.read_from(start, path);
+    let resolve = |cell| cx.sources.definition(cell);
     let request = crate::display::CompletionRequest {
         raw: cx.raw,
         query: query.text(),
@@ -150,7 +152,7 @@ fn query_content(
             crate::display::CompletionKind::Value
         },
         scope: crate::display::CompletionScope::Everything,
-        path: &source_path,
+        path: &location.path,
         value_at: &value_at,
         resolve: &resolve,
         cells: &|| cx.sources.cells().collect(),

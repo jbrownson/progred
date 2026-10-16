@@ -472,6 +472,26 @@ test("story checks follow the forest's shared cells", async () => {
   assert.deepEqual(completedSteps("counted", counted(12)), ["count"]);
 });
 
+test("picking finds the code stored in the cell the first slot holds", async () => {
+  const { completedSteps } = await import("./public/lesson-progress.mjs");
+  const first = "9940ece27410c72a5308a544890ccc71";
+  const steps = (...keys) => ({ list: keys.map((key) => record([key, { cell: key }])) });
+  const picked = (cell, path) => ({
+    document: { root: record([first, { cell: "program" }]), cells: {} },
+    selection: { source: { cell, library: null, path } },
+  });
+  assert.deepEqual(completedSteps("dot", picked("program", steps())), ["pick"]);
+  assert.deepEqual(completedSteps("dot", picked("program", steps("body"))), []);
+  assert.deepEqual(completedSteps("dot", picked("elsewhere", steps())), []);
+  assert.deepEqual(completedSteps("recipe", picked("program", steps("body"))), ["pick"]);
+  assert.deepEqual(completedSteps("counted", picked("program", steps("body", "x"))), ["pick"]);
+  assert.deepEqual(completedSteps("counted", picked("program", steps())), []);
+  assert.deepEqual(completedSteps("counted", {
+    document: { root: record([first, { cell: "program" }]), cells: {} },
+    selection: { source: { path: steps(first) } },
+  }), []);
+});
+
 const story = {
   x: "2bd03b91a3ab695c54a71efafcb10115",
   height: "f747026de922fb0f01823df377de5cb6",

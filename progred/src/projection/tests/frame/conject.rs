@@ -430,8 +430,8 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
     let selected = world.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), paths[1]);
     assert_eq!(
-        selected.source_path().unwrap().as_ref(),
-        [Step::Key(source)]
+        selected.location(),
+        Some(Location::root(vec![Step::Key(source)]))
     );
     assert_eq!(
         selected.value(&world.sources()),
@@ -459,8 +459,8 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
             Some(&text::value("before!"))
         );
         assert_eq!(
-            target.scope.source(path).unwrap().as_ref(),
-            [Step::Key(source)]
+            target.scope.source(path),
+            Some(Location::root(vec![Step::Key(source)]))
         );
     }
     assert!(world.model.step_history(true));
@@ -501,8 +501,9 @@ fn missing_jump_target_is_a_real_editable_location() {
     );
 }
 
-#[test]
-fn at_and_its_descendants_have_no_source_even_when_their_paths_exist() {
+/// A computed record holding a reference, drawn by `at` where the same path
+/// also names stored data.
+fn computed_reference() -> (crate::Editor, Projection<crate::Editor>, [CellId; 3]) {
     let (marker, source, field, cell) =
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let mut world = world(Value::record([
@@ -520,7 +521,65 @@ fn at_and_its_descendants_have_no_source_even_when_their_paths_exist() {
             Some(d::at([Step::Key(source)], &value))
         }),
     );
+    (world, projection, [source, field, cell])
+}
+
+#[test]
+fn at_and_its_descendants_have_no_source_even_when_their_paths_exist() {
+    let (mut world, projection, [source, field, _]) = computed_reference();
     let before = world.model.doc.clone();
+    for path in [
+        vec![Step::Key(source)],
+        vec![Step::Key(source), Step::Key(field)],
+    ] {
+        let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+        assert!((stop(&frame, &path).select)(&mut world, None));
+        let selected = world.model.selection.as_ref().unwrap();
+        assert_eq!(selected.path(), path);
+        assert!(selected.location().is_none());
+        assert!(!selected.writable(&world.sources()));
+        assert!(!world.paste_value(text::value("must not write")));
+        assert!(!world.delete_selected_edge(Default::default()));
+    }
+    assert!(Rc::ptr_eq(&before, &world.model.doc));
+}
+
+#[test]
+fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
+    let (marker, source, field) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let mut world = world(Value::record([(marker, Value::record([]))]));
+    let value = Value::record([(field, text::ID.into())]);
+    let projection = projection(
+        &world,
+        d::partial(move |input| {
+            input.value?.as_record()?.get(&marker)?;
+            Some(d::at([Step::Key(source)], &value))
+        }),
+    );
+    let before = world.model.doc.clone();
+    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let definition = gid::Resolution::Library(text::ID);
+    let path = [
+        Step::Key(source),
+        Step::Key(field),
+        Step::Follow(definition),
+    ];
+    assert!((stop(&frame, &path).select)(&mut world, None));
+    let selected = world.model.selection.as_ref().unwrap();
+    assert_eq!(
+        selected.location(),
+        Some(Location::in_cell(text::ID, definition, Vec::new()))
+    );
+    assert!(selected.value(&world.sources()).is_some());
+    assert!(!selected.writable(&world.sources()));
+    assert!(!world.paste_value(text::value("must not write")));
+    assert!(!world.delete_selected_edge(Default::default()));
+    assert!(Rc::ptr_eq(&before, &world.model.doc));
+}
+
+#[test]
+fn a_cell_followed_from_a_computed_value_is_its_stored_definition() {
+    let (mut world, projection, [source, field, cell]) = computed_reference();
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     let path = [
         Step::Key(source),
@@ -530,13 +589,28 @@ fn at_and_its_descendants_have_no_source_even_when_their_paths_exist() {
     assert!((stop(&frame, &path).select)(&mut world, None));
     let selected = world.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), path);
-    assert!(selected.source_path().is_none());
-    assert!(!selected.writable(&world.sources()));
-    assert!(!world.paste_value(text::value("must not write")));
-    assert!(!world.delete_selected_edge(Default::default()));
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(frame.completion.is_none());
-    assert!(Rc::ptr_eq(&before, &world.model.doc));
+    assert_eq!(
+        selected.location(),
+        Some(Location::in_cell(
+            cell,
+            gid::Resolution::Document,
+            Vec::new()
+        ))
+    );
+    assert!(world.paste_value(text::value("pasted")));
+    assert_eq!(
+        world.model.doc.cells.value(cell),
+        Some(&text::value("pasted"))
+    );
+    assert_eq!(
+        world
+            .sources()
+            .resolve_path(&[Step::Key(source), Step::Key(field)]),
+        Some(&cell.into()),
+        "the stored path the occurrence spells is untouched"
+    );
+    assert!(world.delete_selected_edge(Default::default()));
+    assert_eq!(world.model.doc.cells.value(cell), None);
 }
 
 #[test]
@@ -609,7 +683,7 @@ fn custom_conject_is_used_for_both_descendant_reads_and_writes() {
             input.value?.as_record()?.get(&marker)?;
             Some(d::jump_with_conject(
                 [Step::Key(occurrence)],
-                [Step::Key(source)],
+                crate::location::Location::root(vec![Step::Key(source)]),
                 d::Conject::new(move |path, document| {
                     Some(
                         document
@@ -677,15 +751,8 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
     let path = [Step::Key(source), Step::Key(child)];
     assert!((stop(&frame, &path).select)(&mut world, None));
     assert_eq!(
-        world
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .source_path()
-            .unwrap()
-            .as_ref(),
-        path
+        world.model.selection.as_ref().unwrap().location(),
+        Some(Location::root(&path[..]))
     );
     assert!(world.paste_value(text::value("changed")));
     assert_eq!(
