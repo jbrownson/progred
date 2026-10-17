@@ -1051,7 +1051,6 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         crate::display::widget::frame::place(
             project_workspace(
                 model,
-                crate::modifiers::native(),
                 true,
                 &crate::computations::Computations::default(),
                 &stack,
@@ -1248,7 +1247,6 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
             crate::display::widget::frame::place(
                 project_workspace_view(
                     &model,
-                    crate::modifiers::native(),
                     true,
                     &crate::computations::Computations::default(),
                     &stack,
@@ -1360,7 +1358,6 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
     let placed = crate::display::widget::frame::place(
         project_workspace(
             &model,
-            crate::modifiers::native(),
             true,
             &crate::computations::Computations::default(),
             &stack,

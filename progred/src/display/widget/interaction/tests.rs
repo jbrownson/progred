@@ -1,7 +1,7 @@
 use super::*;
 use measured::Extent;
 use puri::Rect;
-use puri::handler::{PointerButton, PointerState};
+use puri::handler::{PointerButton, PointerButtonEvent, PointerState};
 
 fn press(x: f64) -> PointerButtonEvent {
     PointerButtonEvent {
@@ -28,7 +28,7 @@ fn raw_click_uses_the_live_world_and_both_placement_rectangles() {
             *world += 1;
             true
         }),
-        puri::interact::is_primary_contact,
+        |_| puri::interact::is_primary_contact,
     )(
         &mut output,
         Placement::new(
@@ -71,7 +71,6 @@ fn semantic_actions_use_settled_hover_not_a_second_hit_test() {
                     true
                 }),
                 pick,
-                if picking { |_| true } else { |_| false },
                 PartialEq::eq,
             )(
                 &mut output,
@@ -79,12 +78,17 @@ fn semantic_actions_use_settled_hover_not_a_second_hit_test() {
             );
             let handler = frame.handler.unwrap();
             let mut world = 0;
+            // Holding the frame's command key is what makes a press pick.
+            let mut event = press(25.0);
+            if picking {
+                event.state.modifiers = crate::modifiers::command();
+            }
             for (hovered, expected) in [(None, false), (Some(8), false), (Some(7), pick == picking)]
             {
                 assert_eq!(
                     handler.dispatch_pointer_down_with(
                         &mut world,
-                        &press(25.0),
+                        &event,
                         &mut crate::display::widget::frame::DispatchContext::new(None, hovered)
                     ),
                     expected
@@ -111,7 +115,6 @@ fn semantic_actions_use_settled_hover_not_a_second_hit_test() {
         7,
         Rc::new(|_| panic!("clipped action")),
         false,
-        |_| false,
         PartialEq::eq,
     )(
         &mut clipped,
@@ -131,7 +134,7 @@ fn leading_handlers_run_after_children_and_receive_declined_input() {
                 world.push("outer");
                 true
             }),
-            |_| true,
+            |_| |_| true,
         );
         let child = super::super::leaf::<Vec<&str>, ()>(
             Extent {

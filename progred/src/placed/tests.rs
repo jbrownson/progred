@@ -829,7 +829,12 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
         p.occlude(placement);
         let claimed = target.clone();
         p.claim_dynamic(placement, move |_| Some(claimed.clone()));
-        crate::projection::source_link::handlers(&mut p, placement, 1.0);
+        crate::projection::source_link::handlers(
+            &mut p,
+            placement,
+            1.0,
+            crate::modifiers::native(),
+        );
         if covered {
             p.occlude(placement);
         }

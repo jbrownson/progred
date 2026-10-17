@@ -113,7 +113,6 @@ impl<World: 'static> Projection<World> {
 /// Read-only projection context threaded through every view.
 #[derive(Clone)]
 pub(crate) struct Cx<'a> {
-    pub(crate) command_modifier: puri::keyboard::CommandModifier,
     pub(crate) computations: Option<&'a crate::computations::Computations>,
     pub(crate) focused: bool,
     pub(crate) view: &'a crate::workspace::Root,
@@ -611,7 +610,6 @@ fn primary_highlight_stroke(scale: f64) -> Stroke {
 /// `root_path` let an editor pane begin at a value occurrence
 /// while retaining ordinary document-relative interaction paths.
 pub struct ProjectDescription<'a> {
-    pub command_modifier: puri::keyboard::CommandModifier,
     pub computations: Option<&'a crate::computations::Computations>,
     pub focused: bool,
     pub view: &'a crate::workspace::Root,
@@ -648,7 +646,6 @@ fn prepare_project(
     tcx: &mut TextCtx,
 ) -> ChoiceGraph<HoverPass<crate::Editor>> {
     let ProjectDescription {
-        command_modifier,
         computations,
         focused,
         view,
@@ -676,7 +673,6 @@ fn prepare_project(
             Start::Root => None,
         });
     let cx = Cx {
-        command_modifier,
         computations,
         focused,
         view,
@@ -767,6 +763,7 @@ fn bind_selection(
     scale: f64,
 ) -> Measured<HoverPass<crate::Editor>> {
     before(child, move |p, _| {
+        let command = p.command_modifier();
         p.handler().on_key_with(move |ctx, event, input| {
             if !event.state.is_down()
                 || ctx.model.selection.as_ref().is_none_or(|selection| {
@@ -777,7 +774,7 @@ fn bind_selection(
             {
                 return false;
             }
-            if ctx.command_modifier.pressed(&event.modifiers)
+            if command.pressed(&event.modifiers)
                 && let Key::Character(key) = &event.key
                 && (key.eq_ignore_ascii_case("c") || key.eq_ignore_ascii_case("x"))
             {
@@ -792,14 +789,10 @@ fn bind_selection(
             if let Some(default) = fold_default {
                 let closed = match &event.key {
                     Key::Character(key) if key.as_str() == " " => Some(None),
-                    Key::Named(NamedKey::ArrowUp)
-                        if ctx.command_modifier.pressed(&event.modifiers) =>
-                    {
+                    Key::Named(NamedKey::ArrowUp) if command.pressed(&event.modifiers) => {
                         Some(Some(true))
                     }
-                    Key::Named(NamedKey::ArrowDown)
-                        if ctx.command_modifier.pressed(&event.modifiers) =>
-                    {
+                    Key::Named(NamedKey::ArrowDown) if command.pressed(&event.modifiers) => {
                         Some(Some(false))
                     }
                     _ => None,

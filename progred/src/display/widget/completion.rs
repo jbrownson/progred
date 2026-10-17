@@ -6,7 +6,7 @@ use super::frame::Probe;
 use super::{container, extent, leaf, scroll, style::Styles};
 use measured::{Extent, Measured, col, pad};
 use peniko::kurbo::Insets;
-use puri::handler::{HasHandler, Key, Modifiers, NamedKey, PointerType};
+use puri::handler::{HasHandler, Key, NamedKey, PointerType};
 use puri::text::{TextCtx, TextStyle};
 use puri::{Point, Size, Stroke, Vec2};
 use puri_widgets::panel::Panel;
@@ -39,7 +39,6 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
     state: State,
     current_scroll: impl Fn(&C) -> Option<f64> + 'static,
     set_view: impl Fn(&mut C, State) + 'static,
-    command: fn(&Modifiers) -> bool,
 ) -> Measured<HoverPass<C, H>> {
     let State { choice, scroll } = state;
     let set_view = move |world: &mut C, scroll, choice| set_view(world, State { scroll, choice });
@@ -137,6 +136,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
         let card = crate::display::widget::before_place(
             card,
             move |_, output: &mut HoverContext<'_, C, H>| {
+                let command = output.input.command_modifier;
                 output.handler().on_key(move |world, event| {
                     if event.state.is_down() {
                         match event.key {
@@ -147,7 +147,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
                                 })
                             }
                             Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
-                                if !command(&event.modifiers) =>
+                                if !command.pressed(&event.modifiers) =>
                             {
                                 let next = match direction {
                                     NamedKey::ArrowUp => choice.saturating_sub(1),

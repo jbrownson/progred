@@ -527,7 +527,6 @@ impl EditorRunner {
 #[allow(clippy::too_many_arguments)]
 fn project_workspace_view(
     model: &Model,
-    command_modifier: puri::keyboard::CommandModifier,
     focused: bool,
     computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
@@ -580,7 +579,6 @@ fn project_workspace_view(
     };
     let projected = projection::project(
         projection::ProjectDescription {
-            command_modifier,
             computations: Some(computations),
             focused,
             view: &view.root,
@@ -654,7 +652,6 @@ fn project_workspace_view(
 #[allow(clippy::too_many_arguments)]
 fn project_workspace(
     model: &Model,
-    command_modifier: puri::keyboard::CommandModifier,
     focused: bool,
     computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
@@ -678,7 +675,6 @@ fn project_workspace(
         let rect = placed_view.rect;
         let child = project_workspace_view(
             model,
-            command_modifier,
             focused,
             computations,
             stack,
@@ -841,7 +837,6 @@ fn project_frame(
     };
     let body = project_workspace(
         model,
-        command_modifier,
         focused,
         computations,
         stack,

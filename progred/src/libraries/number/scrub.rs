@@ -43,7 +43,6 @@ pub(crate) fn on_scrub(
                 let drag = widget::gesture::targeted(
                     target.clone(),
                     true,
-                    crate::modifiers::picking(context.inputs.command_modifier),
                     PartialEq::eq,
                     move |world, point| {
                         let edit = crate::gesture::scoped_value_edit(

@@ -2,32 +2,40 @@ use super::{HoverCallback, before};
 use crate::display::widget::HoverContext;
 use crate::display::{ActionHandler, Layout};
 use gid::Value;
-use puri::handler::{HasHandler, PointerButtonEvent};
+use puri::handler::HasHandler;
 use puri::{Placement, Point};
 use std::rc::Rc;
 
+/// Run `handler` on a press inside the placement that `primary` accepts,
+/// given the frame's command key.
 pub fn click<World: 'static, Hover: 'static>(
     handler: ActionHandler<World>,
-    primary: fn(&PointerButtonEvent) -> bool,
+    primary: crate::modifiers::PressRule,
 ) -> HoverCallback<World, Hover> {
-    Box::new(move |output, placement| {
-        output.handler().on_pointer_down(move |world, event| {
-            primary(event)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && handler(world)
-        });
-    })
+    Box::new(
+        move |output: &mut HoverContext<'_, World, Hover>, placement| {
+            let primary = primary(output.input.command_modifier);
+            output.handler().on_pointer_down(move |world, event| {
+                primary(event)
+                    && placement
+                        .contains(Point::new(event.state.position.x, event.state.position.y))
+                    && handler(world)
+            });
+        },
+    )
 }
 
+/// Run `handler` on a primary press over `target`, when the frame's command
+/// key is held exactly if `pick`.
 pub fn target_action<World: 'static, Hover: 'static>(
     target: Hover,
     handler: ActionHandler<World>,
     pick: bool,
-    picking: fn(&PointerButtonEvent) -> bool,
     same_target: fn(&Hover, &Hover) -> bool,
 ) -> HoverCallback<World, Hover> {
     Box::new(
         move |output: &mut HoverContext<'_, World, Hover>, placement: Placement| {
+            let picking = crate::modifiers::picking(output.input.command_modifier);
             if !placement.clipped_out() {
                 output
                     .handler()
@@ -50,12 +58,7 @@ pub fn on_click<World: 'static, Hover: 'static>(
 ) -> Layout<World, Hover> {
     before(
         child,
-        Rc::new(move |context| {
-            click(
-                handler.clone(),
-                crate::modifiers::primary_edit(context.inputs.command_modifier),
-            )
-        }),
+        Rc::new(move |_| click(handler.clone(), crate::modifiers::primary_edit)),
     )
 }
 
@@ -66,15 +69,7 @@ pub fn on_activate<World: 'static, Hover: Clone + PartialEq + 'static>(
 ) -> Layout<World, Hover> {
     before(
         child,
-        Rc::new(move |context| {
-            target_action(
-                target.clone(),
-                handler.clone(),
-                false,
-                crate::modifiers::picking(context.inputs.command_modifier),
-                PartialEq::eq,
-            )
-        }),
+        Rc::new(move |_| target_action(target.clone(), handler.clone(), false, PartialEq::eq)),
     )
 }
 
@@ -93,13 +88,12 @@ pub fn pickable_runtime(
 ) -> crate::view::Layout {
     before(
         child,
-        Rc::new(move |context| {
+        Rc::new(move |_| {
             let value = value.clone();
             target_action(
                 target.clone(),
                 Rc::new(move |world| world.pick_identity(value.to_value())),
                 true,
-                crate::modifiers::picking(context.inputs.command_modifier),
                 PartialEq::eq,
             )
         }),

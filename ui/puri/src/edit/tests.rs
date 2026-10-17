@@ -665,6 +665,7 @@ fn recorder_exposes_selection_and_caret_geometry() {
             20.0 + metrics.width,
             30.0 + metrics.ascent + metrics.descent,
         )),
+        crate::keyboard::CommandModifier::Meta,
         |_, _| false,
     );
     let fills: Vec<Rect> = frame

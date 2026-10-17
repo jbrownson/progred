@@ -118,7 +118,8 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         placement: Placement,
         with: impl Fn(&mut C, &puri::edit::EditOperation<'_>) -> bool + Clone + 'static,
     ) {
-        edit.install(self, placement, with);
+        let command_modifier = self.input.command_modifier;
+        edit.install(self, placement, command_modifier, with);
         if let Some(area) = edit.input_area(placement) {
             self.output.input_area = Some(area);
         }

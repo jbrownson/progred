@@ -74,7 +74,6 @@ fn editing_frame_with_annotations(
     };
     let measured = project(
         ProjectDescription {
-            command_modifier: world.command_modifier,
             focused: world.focused,
             computations: None,
             view: &crate::test_root(),

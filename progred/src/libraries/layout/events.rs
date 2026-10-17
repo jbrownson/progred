@@ -21,10 +21,10 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
             let root = context.inputs.view.clone();
             let path = context.path.to_vec();
             let edits = context.inputs.edits.clone();
-            let command = context.inputs.command_modifier.predicate();
             let scale = context.inputs.styles.scale;
             let function = function.clone();
             Box::new(move |output, placement| {
+                let command = output.input.command_modifier.predicate();
                 output.handler().on(move |world, event, _| {
                     if let Event::Scroll(events) = event {
                         return puri::scroll::filter(

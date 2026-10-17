@@ -373,7 +373,8 @@ pub(crate) fn program_leaf(
         builder.claim_dynamic(placement, move |point| {
             probe_drawing.target_at(point, outer)
         });
-        super::source_link::handlers(builder, placement, scale);
+        let command = builder.command_modifier();
+        super::source_link::handlers(builder, placement, scale, command);
         builder.render(move |canvas: &mut dyn puri::draw::CanvasSink, hover| {
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),

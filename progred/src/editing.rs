@@ -132,7 +132,6 @@ pub(crate) fn edit_query(app: &mut Editor, operation: &puri::edit::EditOperation
         font_cx,
         layout_cx,
         text_clipboard,
-        command_modifier,
         ..
     } = app;
     let sources = sources::Sources {
@@ -148,7 +147,6 @@ pub(crate) fn edit_query(app: &mut Editor, operation: &puri::edit::EditOperation
         .is_some_and(|selection| {
             selection.edit_query(|state| {
                 operation(EditCtx {
-                    command_modifier: *command_modifier,
                     state,
                     fonts: font_cx,
                     layouts: layout_cx,
@@ -172,7 +170,6 @@ pub(crate) fn edit_line(
         font_cx,
         layout_cx,
         text_clipboard,
-        command_modifier,
         ..
     } = app;
     let sources = sources::Sources {
@@ -193,7 +190,6 @@ pub(crate) fn edit_line(
             line,
             |state| {
                 operation(EditCtx {
-                    command_modifier: *command_modifier,
                     state,
                     fonts: font_cx,
                     layouts: layout_cx,

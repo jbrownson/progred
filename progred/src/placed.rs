@@ -53,6 +53,11 @@ impl<'builder, 'input, C: 'static> Builder<'builder, 'input, C> {
         }
     }
 
+    /// The platform's command key, for the handlers this builder installs.
+    pub fn command_modifier(&self) -> puri::keyboard::CommandModifier {
+        self.placed.input.command_modifier
+    }
+
     /// Contribute a named hover region.
     pub fn claim(&mut self, placement: Placement, target: Hovered) {
         if !placement.clipped_out() {

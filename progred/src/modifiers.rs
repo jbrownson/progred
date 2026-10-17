@@ -11,6 +11,9 @@ pub(crate) fn native() -> CommandModifier {
     }
 }
 
+/// Which pointer presses count, given the platform's command key.
+pub(crate) type PressRule = fn(CommandModifier) -> fn(&PointerButtonEvent) -> bool;
+
 /// Picking activates a nonlocal graph relationship while the command
 /// modifier is held.
 pub(crate) fn picking(command: CommandModifier) -> fn(&PointerButtonEvent) -> bool {

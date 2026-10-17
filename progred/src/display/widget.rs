@@ -162,13 +162,14 @@ pub fn selectable(
             move |placement,
                   output: &mut HoverContext<'_, crate::Editor, crate::frame::Hovered>| {
                 if !placement.clipped_out() {
+                    let command = output.input.command_modifier;
                     output.claim(Probe::retaining(placement, target.clone()));
                     output
                         .handler()
                         .on_pointer_down_with(move |world, event, hovered| {
                             puri::interact::is_primary_contact(event)
                                 && hovered.hovered().is_some_and(|hovered| hovered == &target)
-                                && if world.command_modifier.pressed(&event.state.modifiers) {
+                                && if command.pressed(&event.state.modifiers) {
                                     value
                                         .as_ref()
                                         .is_some_and(|value| world.pick_identity(value.to_value()))

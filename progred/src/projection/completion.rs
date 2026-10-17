@@ -218,7 +218,6 @@ fn query_content(
     let scroll_path = path.to_vec();
     let card = completion_card(
         tcx,
-        cx.command_modifier,
         cx.styles,
         &entries,
         choice,
@@ -326,7 +325,6 @@ pub(super) fn completion_placement(
 
 pub(super) fn completion_card<C: 'static>(
     tcx: &mut TextCtx,
-    command_modifier: puri::keyboard::CommandModifier,
     styles: &Styles,
     entries: &[Entry<C>],
     choice: usize,
@@ -353,7 +351,6 @@ pub(super) fn completion_card<C: 'static>(
         crate::display::widget::completion::State { choice, scroll },
         current_scroll,
         move |world, state| set_view(world, state.scroll, state.choice),
-        command_modifier.predicate(),
     )
 }
 

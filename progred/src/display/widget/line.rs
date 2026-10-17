@@ -140,8 +140,9 @@ pub fn view(
             if !placement.clipped_out() {
                 output.claim(super::frame::Probe::retaining(placement, target));
             }
+            let primary = crate::modifiers::primary_edit(output.input.command_modifier);
             output.handler().on_pointer_down(move |world, event| {
-                crate::modifiers::primary_edit(world.command_modifier)(event)
+                primary(event)
                     && placement
                         .contains(Point::new(event.state.position.x, event.state.position.y))
                     && {

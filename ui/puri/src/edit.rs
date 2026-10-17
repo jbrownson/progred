@@ -161,7 +161,6 @@ pub trait TextClipboard {
 /// What an editing dispatch needs from the caller's context: the state
 /// plus the measurement caches parley's driver requires.
 pub struct EditCtx<'a> {
-    pub command_modifier: crate::keyboard::CommandModifier,
     pub state: &'a mut LineEditState,
     pub fonts: &'a mut FontContext,
     pub layouts: &'a mut LayoutContext<Brush>,
@@ -675,10 +674,11 @@ impl LineEdit {
         self,
         p: &mut P,
         placement: Placement,
+        command_modifier: crate::keyboard::CommandModifier,
         with: impl Fn(&mut C, &EditOperation<'_>) -> bool + Clone + 'static,
     ) {
         self.draw(p, placement);
-        self.install(p, placement, with);
+        self.install(p, placement, command_modifier, with);
     }
 
     /// The paint half: selection, ghost, content, caret.
@@ -704,11 +704,13 @@ impl LineEdit {
     }
 
     /// The dispatch half: while focused, register key, drag, release,
-    /// and IME against the settled placement.
+    /// and IME against the settled placement. `command_modifier` is the
+    /// platform's command key, for the editing shortcuts.
     pub fn install<C: 'static, P: HasHandler<C>>(
         &self,
         p: &mut P,
         placement: Placement,
+        command_modifier: crate::keyboard::CommandModifier,
         with: impl Fn(&mut C, &EditOperation<'_>) -> bool + Clone + 'static,
     ) {
         let scale = self.scale;
@@ -725,7 +727,7 @@ impl LineEdit {
                         edit.fonts,
                         edit.layouts,
                         edit.clipboard,
-                        edit.command_modifier,
+                        command_modifier,
                         event,
                     )
                 })

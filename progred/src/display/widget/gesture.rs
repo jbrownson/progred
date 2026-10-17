@@ -2,7 +2,7 @@ use super::{Annotate, HoverCallback, before};
 use crate::display::ActionHandler;
 use gid::Value;
 use puri::drag::Drag;
-use puri::handler::{HasHandler, PointerButtonEvent};
+use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::{Point, Rect};
 use std::rc::Rc;
@@ -54,11 +54,11 @@ pub trait Gesture<World> {
 pub fn targeted<World: 'static, Hover: 'static>(
     target: Hover,
     pick: bool,
-    picking: fn(&PointerButtonEvent) -> bool,
     same_target: fn(&Hover, &Hover) -> bool,
     start: impl Fn(&mut World, Point) -> bool + 'static,
 ) -> HoverCallback<World, Hover> {
     Box::new(move |output, placement| {
+        let picking = crate::modifiers::picking(output.input.command_modifier);
         output
             .handler()
             .on_pointer_down_with(move |world, event, hovered| {
@@ -99,28 +99,22 @@ pub fn on_state_drag(
             let on_press = on_press.clone();
             let scale = context.inputs.styles.scale;
             let threshold = crate::gesture::DRAG_THRESHOLD;
-            targeted(
-                target.clone(),
-                false,
-                crate::modifiers::picking(context.inputs.command_modifier),
-                PartialEq::eq,
-                move |world, point| {
-                    if on_press(world) {
-                        crate::editing::start_gesture(
-                            world,
-                            state_drag(
-                                Drag::new(point, scale, threshold),
-                                handler(),
-                                annotate.clone(),
-                            ),
-                            &[],
-                        );
-                        true
-                    } else {
-                        false
-                    }
-                },
-            )
+            targeted(target.clone(), false, PartialEq::eq, move |world, point| {
+                if on_press(world) {
+                    crate::editing::start_gesture(
+                        world,
+                        state_drag(
+                            Drag::new(point, scale, threshold),
+                            handler(),
+                            annotate.clone(),
+                        ),
+                        &[],
+                    );
+                    true
+                } else {
+                    false
+                }
+            })
         }),
     )
 }
