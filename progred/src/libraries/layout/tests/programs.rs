@@ -1,6 +1,16 @@
-use super::*;
+//! Layouts a Grap program emits through the scoped layout functions, against
+//! the same layouts built as data.
+
+use crate::annotations::Annotations;
 use crate::libraries::{control::vocabulary as control, layout, presentation, text};
+use crate::perf::{distribution, iterations};
+use crate::projection::test_support::{BenchContext, ProfileView};
+use crate::sources::Sources;
+use crate::test_support::core_libraries;
+use gid::{CellId, Cells, Document, Value};
 use layout::vocabulary as l;
+use puri::draw::DrawCmd;
+use std::time::Instant;
 
 const ITEM: CellId = CellId::from_u128(9001);
 const LABEL: CellId = CellId::from_u128(9002);
@@ -102,7 +112,18 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
     }
 }
 
-fn setup() -> (ProfileView, BenchContext) {
+/// A window tall enough for every row.
+fn view() -> ProfileView {
+    ProfileView {
+        size: kurbo::Size::new(1400.0, 10000.0),
+        scale: 1.0,
+        root: None,
+    }
+}
+
+/// A bench whose root presents the document's value through its own
+/// projection field.
+fn presenting() -> BenchContext {
     let mut context = BenchContext::new();
     context.stack.projection =
         context
@@ -111,20 +132,13 @@ fn setup() -> (ProfileView, BenchContext) {
             .with_entry(crate::display::runtime_partial(
                 presentation::projected_display,
             ));
-    (
-        ProfileView {
-            size: kurbo::Size::new(1400.0, 10000.0),
-            scale: 1.0,
-            root: None,
-        },
-        context,
-    )
+    context
 }
 
 #[test]
 fn scoped_layout_program_matches_value_layout_through_the_real_frame_and_border_combinator() {
     for bordered in [false, true] {
-        let (view, mut context) = setup();
+        let (view, mut context) = (view(), presenting());
         let annotations = Annotations::default();
         let (data, data_extent) =
             context.frame(view.frame(&document(false, 6, bordered), &annotations));
@@ -139,10 +153,10 @@ fn scoped_layout_program_matches_value_layout_through_the_real_frame_and_border_
 #[test]
 fn returned_layout_program_uses_its_own_evaluation_allowance() {
     let doc = document(true, 100, false);
-    let (_, context) = setup();
+    let libraries = core_libraries();
     let sources = Sources {
         doc: &doc,
-        libraries: &context.stack.libraries,
+        libraries: &libraries,
     };
     let function = doc
         .root
@@ -211,8 +225,8 @@ fn grap_layout_ffi_profile_loop() {
         )]));
         doc
     });
-    let (view, mut context) = setup();
-    context.stack.projection = context.stack.projection.without_entry();
+    // The root is a render record, which the ordinary projection draws.
+    let (view, mut context) = (view(), BenchContext::new());
     let annotations = Annotations::default();
     let count = iterations();
     let mut samples = [Vec::new(), Vec::new()];
@@ -232,16 +246,12 @@ fn grap_layout_ffi_profile_loop() {
                 ROWS * 2,
                 "variant {variant}"
             );
-            let phases = bench.times;
+            let prepare = bench.times.prepare;
             let cleanup = Instant::now();
             drop(bench);
             let disposal = cleanup.elapsed();
             if index >= 5 {
-                samples[variant].push(Timing {
-                    total: build + disposal,
-                    phases,
-                    disposal,
-                });
+                samples[variant].push((build + disposal, prepare));
             }
         }
     }
@@ -253,8 +263,8 @@ fn grap_layout_ffi_profile_loop() {
     .zip(samples)
     {
         eprintln!("{label}; {ROWS} two-text rows, {count} interleaved warm frames");
-        distribution("frame + disposal", timings.iter().map(|t| t.total));
-        distribution("prepare", timings.iter().map(|t| t.phases.prepare));
-        crate::perf::record(metric, timings.iter().map(|t| t.total));
+        distribution("frame + disposal", timings.iter().map(|(total, _)| *total));
+        distribution("prepare", timings.iter().map(|(_, prepare)| *prepare));
+        crate::perf::record(metric, timings.iter().map(|(total, _)| *total));
     }
 }

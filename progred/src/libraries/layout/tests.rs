@@ -596,3 +596,5 @@ fn junk_falls_through_whole() {
     );
     assert!(decoded(&bad_face).is_none());
 }
+
+mod programs;

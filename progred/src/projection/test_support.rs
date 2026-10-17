@@ -1,6 +1,6 @@
 //! The frame harness tests share: editors framed headlessly, clicks into a
 //! frame, projected selections, line writes, and a bench that times a frame's
-//! phases.
+//! phases in a window of a given size.
 
 use super::*;
 use crate::annotations::Annotations;
@@ -13,7 +13,7 @@ use gid::Document;
 use kurbo::{Rect, Stroke};
 use measured::Extent;
 use peniko::{Brush, ImageData};
-use puri::draw::{DrawList, GlyphRun, Shape};
+use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::geometry::Placement;
 use puri::hover::Claim;
 use ui_events::keyboard::NamedKey;
@@ -488,6 +488,82 @@ impl BenchContext {
         };
         settled.frame_elapsed = start.elapsed();
         (settled, extent)
+    }
+}
+
+/// A window for a bench frame: its size, its zoom, and optionally the
+/// viewport declaration it shows alone, as a pane does.
+pub(crate) struct ProfileView {
+    /// Logical points; the projection and clip receive physical pixels.
+    pub(crate) size: kurbo::Size,
+    pub(crate) scale: f64,
+    pub(crate) root: Option<gid::Path>,
+}
+
+impl ProfileView {
+    /// A bench for this view, with a pane's projection when it shows a
+    /// viewport, and the viewport's path resolved through its cells.
+    pub(crate) fn prepare(mut self, doc: &Document) -> (Self, BenchContext) {
+        let mut context = BenchContext::new();
+        context.styles = crate::styles::editor(crate::styles::Theme::Light.palette(), self.scale);
+        if let Some(path) = &self.root {
+            let sources = Sources {
+                doc,
+                libraries: &context.stack.libraries,
+            };
+            self.root = Some(
+                viewport::entry(sources, path)
+                    .expect("profile target must be a viewport declaration")
+                    .path,
+            );
+            context.stack.projection = viewport::projection(&context.stack.projection, self.size);
+        }
+        (self, context)
+    }
+
+    pub(crate) fn frame<'a>(
+        &'a self,
+        doc: &'a Document,
+        annotations: &'a Annotations,
+    ) -> BenchFrame<'a> {
+        let size = self.size * self.scale;
+        let margin = if self.root.is_some() {
+            0.0
+        } else {
+            12.0 * self.scale
+        };
+        BenchFrame {
+            doc,
+            selection: None,
+            annotations,
+            width: size.width - 2.0 * margin,
+            origin: Point::new(margin, margin),
+            pointer: None,
+            viewport: Some(size.to_rect()),
+            root: self.root.as_deref().unwrap_or(&[]),
+        }
+    }
+}
+
+impl Bench {
+    /// The one image the frame draws, rasterizing a deferred mesh.
+    pub(crate) fn image(&self) -> ImageData {
+        let images: Vec<_> = self
+            .list
+            .0
+            .iter()
+            .filter_map(|command| match command {
+                DrawCmd::Image { image, .. } => Some(image.clone()),
+                DrawCmd::Mesh { scene, .. } => scene.rasterize(),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            images.len(),
+            1,
+            "the preview must render, not fall back to source text"
+        );
+        images.into_iter().next().unwrap()
     }
 }
 

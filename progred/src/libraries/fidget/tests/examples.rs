@@ -1,7 +1,8 @@
 use super::*;
+use crate::annotations::Annotations;
 use crate::display::test_support::Landmarks;
 use crate::gid_text::Binders;
-use crate::projection::test_support::{click_at, editing_frame, settle};
+use crate::projection::test_support::{ProfileView, click_at, editing_frame, settle};
 use crate::test_support::{core_libraries, src};
 use gid::{Document, Position, Record, Step};
 use kurbo::Point;
@@ -135,6 +136,44 @@ fn fidget_example_shows_each_preview_beside_its_code() {
         world.model.selection.as_ref().unwrap().path(),
         figure(first)
     );
+}
+
+#[test]
+fn complex_fidget_examples_render_visible_surfaces() {
+    let side = 64;
+    for (name, source) in crate::test_examples::FIDGET {
+        let (doc, _) = crate::gid_text::parse(source).unwrap();
+        let view = ProfileView {
+            size: kurbo::Size::new(side as f64, side as f64),
+            scale: 1.0,
+            root: Some(
+                crate::workspace::declarations(doc.root.as_ref())
+                    .remove(0)
+                    .path,
+            ),
+        };
+        let (view, mut context) = view.prepare(&doc);
+        let (bench, _) = context.frame(view.frame(&doc, &Annotations::default()));
+        let image = bench.image();
+        assert_eq!((image.width, image.height), (side, side));
+        let covered = image
+            .data
+            .as_ref()
+            .chunks_exact(4)
+            .filter(|pixel| pixel[3] > 0)
+            .count();
+        assert!(
+            covered > side as usize && covered < (side * side / 2) as usize,
+            "{name}: {covered} covered pixels"
+        );
+        let pixels = || image.data.as_ref().chunks_exact(4).filter(|p| p[3] > 0);
+        if name == "spheres" {
+            assert!(pixels().any(|p| p[2] > p[0]), "blue shell");
+            assert!(pixels().any(|p| p[0] > p[2]), "gold sphere");
+        } else if name == "cube" {
+            assert!(pixels().all(|p| p[2] > p[0]), "cyan cube");
+        }
+    }
 }
 
 /// A standalone shape's name rides along in its field tree; it isn't

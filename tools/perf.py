@@ -38,7 +38,7 @@ SUITE = [
     ("projection::tests::frame::profile::color_picker_profile_loop", 20000),
     ("projection::tests::frame::profile::forest::forest_slider_profile_loop", 600),
     ("projection::tests::frame::profile::forest::forest_source_hover_profile_loop", 600),
-    ("projection::tests::frame::profile::layout_ffi::grap_layout_ffi_profile_loop", 1500),
+    ("libraries::layout::tests::programs::grap_layout_ffi_profile_loop", 1500),
     ("projection::tests::frame::profile::cam_controls_profile_loop", 600),
     ("projection::tests::frame::profile::cam_source_profile_loop", None),
     ("projection::tests::frame::profile::cam_source_scroll_profile_loop", None),

@@ -2,88 +2,18 @@
 
 use super::*;
 use crate::command::Example;
+use crate::perf::{distribution, iterations};
 use std::time::{Duration, Instant};
 
 mod forest;
 #[cfg(feature = "layout-profile")]
 mod forms;
-mod layout_ffi;
-
-struct ProfileView {
-    /// Logical points; the projection and clip receive physical pixels.
-    size: kurbo::Size,
-    scale: f64,
-    root: Option<gid::Path>,
-}
-
-impl ProfileView {
-    fn prepare(mut self, doc: &Document) -> (Self, BenchContext) {
-        let mut context = BenchContext::new();
-        context.styles = crate::styles::editor(crate::styles::Theme::Light.palette(), self.scale);
-        if let Some(path) = &self.root {
-            let sources = Sources {
-                doc,
-                libraries: &context.stack.libraries,
-            };
-            self.root = Some(
-                crate::projection::viewport::entry(sources, path)
-                    .expect("profile target must be a viewport declaration")
-                    .path,
-            );
-            context.stack.projection =
-                crate::projection::viewport::projection(&context.stack.projection, self.size);
-        }
-        (self, context)
-    }
-
-    fn frame<'a>(&'a self, doc: &'a Document, annotations: &'a Annotations) -> BenchFrame<'a> {
-        let size = self.size * self.scale;
-        let margin = if self.root.is_some() {
-            0.0
-        } else {
-            12.0 * self.scale
-        };
-        BenchFrame {
-            doc,
-            selection: None,
-            annotations,
-            width: size.width - 2.0 * margin,
-            origin: Point::new(margin, margin),
-            pointer: None,
-            viewport: Some(size.to_rect()),
-            root: self.root.as_deref().unwrap_or(&[]),
-        }
-    }
-}
 
 #[derive(Clone, Copy)]
 struct Timing {
     total: Duration,
     phases: FrameTimes,
     disposal: Duration,
-}
-
-fn iterations() -> usize {
-    match std::env::var("FRAME_PROFILE_ITERATIONS") {
-        Ok(value) => value
-            .parse::<usize>()
-            .ok()
-            .filter(|n| *n > 0)
-            .expect("FRAME_PROFILE_ITERATIONS must be a positive integer"),
-        Err(_) => 60,
-    }
-}
-
-fn distribution(label: &str, samples: impl Iterator<Item = Duration>) {
-    let mut samples: Vec<_> = samples.collect();
-    samples.sort_unstable();
-    let percentile = |percent| crate::perf::percentile(&samples, percent);
-    eprintln!(
-        "  {label}: median {:.2?}, p95 {:.2?}, max {:.2?}",
-        percentile(50),
-        percentile(95),
-        samples.last().unwrap(),
-    );
 }
 
 /// The caller supplies ordinary document/selection/annotation inputs for each
@@ -361,25 +291,6 @@ fn camera_at(path: &[Step], frame: usize) -> Annotations {
     annotations
 }
 
-fn image(bench: &Bench) -> ImageData {
-    let images: Vec<_> = bench
-        .list
-        .0
-        .iter()
-        .filter_map(|cmd| match cmd {
-            DrawCmd::Image { image, .. } => Some(image.clone()),
-            DrawCmd::Mesh { scene, .. } => scene.rasterize(),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        images.len(),
-        1,
-        "the preview must render, not fall back to source text"
-    );
-    images.into_iter().next().unwrap()
-}
-
 fn fidget_orbit_profile(name: &str, source: &str) {
     // This canary records deferred mesh draws; GPU composition is measured by
     // compositor::mesh::cam_mesh_roundtrip_profile. CPU validation is untimed.
@@ -427,7 +338,7 @@ fn fidget_orbit_profile(name: &str, source: &str) {
             context.frame(view.frame(&doc, &annotations)).0
         },
         |bench| {
-            let image = image(bench);
+            let image = bench.image();
             assert_eq!(image.width, 800);
             assert!(image.height > 0 && image.height <= (view.size.height * view.scale) as u32);
             let mut first = first_image.borrow_mut();
@@ -515,40 +426,6 @@ fn cam_controls_profile_loop() {
 }
 
 #[test]
-fn complex_fidget_examples_render_visible_surfaces() {
-    let side = 64;
-    for (name, source) in crate::test_examples::FIDGET {
-        let doc = fixture(source);
-        let view = ProfileView {
-            size: kurbo::Size::new(side as f64, side as f64),
-            scale: 1.0,
-            root: Some(first_viewport(&doc)),
-        };
-        let (view, mut context) = view.prepare(&doc);
-        let (bench, _) = context.frame(view.frame(&doc, &Annotations::default()));
-        let image = image(&bench);
-        assert_eq!((image.width, image.height), (side, side));
-        let covered = image
-            .data
-            .as_ref()
-            .chunks_exact(4)
-            .filter(|pixel| pixel[3] > 0)
-            .count();
-        assert!(
-            covered > side as usize && covered < (side * side / 2) as usize,
-            "{name}: {covered} covered pixels"
-        );
-        let pixels = || image.data.as_ref().chunks_exact(4).filter(|p| p[3] > 0);
-        if name == "spheres" {
-            assert!(pixels().any(|p| p[2] > p[0]), "blue shell");
-            assert!(pixels().any(|p| p[0] > p[2]), "gold sphere");
-        } else if name == "cube" {
-            assert!(pixels().all(|p| p[2] > p[0]), "cyan cube");
-        }
-    }
-}
-
-#[test]
 fn profile_viewport_uses_size_scale_and_camera_state() {
     let mut doc = fidget_example();
     let path = first_viewport(&doc);
@@ -571,8 +448,8 @@ fn profile_viewport_uses_size_scale_and_camera_state() {
     );
     let (first, extent) = context.frame(view.frame(&doc, &orbit(resolved, 0)));
     let (second, _) = context.frame(view.frame(&doc, &orbit(resolved, 40)));
-    let first = image(&first);
-    let second = image(&second);
+    let first = first.image();
+    let second = second.image();
     assert_eq!((first.width, first.height), (48, 64));
     assert_eq!(extent.width, 48.0);
     assert_eq!(extent.ascent + extent.descent, 64.0);

@@ -343,7 +343,7 @@ first:
      and route calls into the projection runtime through `Project`.
 4. Move projection/tests' frame- and editor-level suites to where they belong,
    leaving only the runtime's own tests; nothing stays anywhere for historical
-   reasons. Some suites wait on what they reach for: three private items, down
+   reasons. Some suites wait on what they reach for: two private items, down
    from six, since nothing should become visible just for tests. The
    [survey](history/projection-tests-survey-2026-10-17.md) of its 324 tests
    orders the work:
@@ -356,7 +356,14 @@ first:
    3. ~~Move the completion card tests to display, with the card.~~ Done on 17
       October 2026. The one that places the card over a projected editor stays
       with the picker flows, for step 5.
-   4. Give the profiling tests both projection phases.
+   4. ~~Give the profiling tests both projection phases.~~ Done on 17 October
+      2026. The harness is the projection runtime's own test support, so it
+      times both phases without exposing them. The layout FFI tests moved to
+      the layout library and the Fidget render check to the Fidget library.
+      The frame canaries can follow into a perf module of their own once the
+      forest editor they share with the SVG captures moves to test support,
+      and once they add their partials before the view adds its entry,
+      instead of replacing the projection's private partial.
    5. Give the driver the verbs that end-to-end tests now reach around it
       for, and move the 67 of them onto it:
       - select a path;
@@ -381,10 +388,11 @@ first:
      October 2026.
    - `projection_target` builds display's `ProjectionTarget` from `Cx`, and
      moves down with it.
-   - The frame harness calls `prepare_project` to time the projection's two
-     phases, building the choice graph and resolving it to a width.
-     `project()` fuses the two; expose both.
-   - `Projection::without_entry` serves one profiling test.
+   - ~~The frame harness calls `prepare_project` to time the projection's two
+     phases.~~ It still does, as the runtime's own test support.
+   - ~~`Projection::without_entry` serves one profiling test.~~ The canary
+     builds its bench without the entry instead.
+   - The frame canaries replace the projection's private partial.
 5. Give the six things called "source" distinct names.
 6. Give the occurrence-to-location mapping one owning module, and pass an
    opaque handle through display and the libraries instead of `Location` and
