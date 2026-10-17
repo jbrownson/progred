@@ -7,6 +7,7 @@ use gid::{CellId, Record, Resolution, Value};
 use std::cell::{OnceCell, RefCell};
 use std::fmt;
 use std::rc::Rc;
+use unboxed::{Native, Unboxed};
 
 #[cfg(test)]
 mod effect_tests;
@@ -18,6 +19,7 @@ pub mod memo;
 pub mod path;
 mod reify;
 pub mod source;
+mod unboxed;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -386,19 +388,11 @@ impl ExactSizeIterator for RuntimeListValues<'_> {}
 #[derive(Clone)]
 enum RuntimeValueKind {
     Data(Value),
-    F64(RuntimeF64),
+    Unboxed(Unboxed),
     Record(Rc<[(CellId, RuntimeValue)]>),
     List(Rc<[RuntimeValue]>),
     Foreign(CellId),
     Closure(Closure),
-}
-
-#[derive(Clone)]
-struct RuntimeF64 {
-    number: f64,
-    /// The exact source record, kept so metadata beside the number
-    /// survives pass-through unchanged.
-    original: Option<Record>,
 }
 
 /// An evaluated callable retained in its compact runtime form. This
@@ -428,9 +422,7 @@ impl RuntimeValue {
     pub fn same_result(&self, other: &Self) -> bool {
         match (&self.0, &other.0) {
             (RuntimeValueKind::Data(a), RuntimeValueKind::Data(b)) => a == b,
-            (RuntimeValueKind::F64(a), RuntimeValueKind::F64(b)) => {
-                a.number.to_bits() == b.number.to_bits() && a.original == b.original
-            }
+            (RuntimeValueKind::Unboxed(a), RuntimeValueKind::Unboxed(b)) => a.same(b),
             (RuntimeValueKind::Foreign(a), RuntimeValueKind::Foreign(b)) => a == b,
             (RuntimeValueKind::Record(a), RuntimeValueKind::Record(b)) => {
                 Rc::ptr_eq(a, b)
@@ -473,10 +465,7 @@ impl RuntimeValue {
     }
 
     pub fn f64(number: f64) -> Self {
-        Self::new(RuntimeValueKind::F64(RuntimeF64 {
-            number,
-            original: None,
-        }))
+        Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::F64(number))))
     }
 
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
@@ -502,16 +491,11 @@ impl RuntimeValue {
         Self::new(RuntimeValueKind::List(elements.into_iter().collect()))
     }
 
-    fn original_f64(number: f64, original: Record) -> Self {
-        Self::new(RuntimeValueKind::F64(RuntimeF64 {
-            number,
-            original: Some(original),
-        }))
-    }
-
     pub fn as_f64(&self) -> Option<f64> {
         match &self.0 {
-            RuntimeValueKind::F64(value) => Some(value.number),
+            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
+                Native::F64(number) => Some(*number),
+            },
             RuntimeValueKind::Data(value) => crate::f64::read(value),
             RuntimeValueKind::Record(_) => {
                 let bytes = self.field(crate::f64::F64)?;
@@ -532,13 +516,7 @@ impl RuntimeValue {
                 .binary_search_by_key(&field, |(label, _)| *label)
                 .ok()
                 .map(|index| fields[index].1.clone()),
-            // An unboxed number answers like its record form would:
-            // the acceleration must not change what a value is.
-            RuntimeValueKind::F64(value) => match &value.original {
-                Some(original) => original.get(&field).cloned().map(Self::from),
-                None => (field == crate::f64::F64)
-                    .then(|| Self::from_value(Value::from(value.number.to_le_bytes().to_vec()))),
-            },
+            RuntimeValueKind::Unboxed(unboxed) => unboxed.field(field).map(Self::from_value),
             RuntimeValueKind::Foreign(foreign) => {
                 (field == vocabulary::FFI).then(|| Self::from(Value::from(*foreign)))
             }
@@ -556,7 +534,7 @@ impl RuntimeValue {
     pub fn as_cell(&self) -> Option<CellId> {
         match &self.0 {
             RuntimeValueKind::Data(value) => value.as_cell(),
-            RuntimeValueKind::F64(_)
+            RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
             | RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
@@ -588,10 +566,7 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Data(value) => Some(value.as_record()?.len()),
             RuntimeValueKind::Record(fields) => Some(fields.len()),
-            RuntimeValueKind::F64(value) => Some(match &value.original {
-                Some(original) => original.len(),
-                None => 1,
-            }),
+            RuntimeValueKind::Unboxed(unboxed) => Some(unboxed.len()),
             RuntimeValueKind::Foreign(_) | RuntimeValueKind::Closure(_) => Some(1),
             RuntimeValueKind::List(_) => None,
         }
@@ -623,7 +598,7 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Data(value) => Some(value.as_list()?.len()),
             RuntimeValueKind::List(elements) => Some(elements.len()),
-            RuntimeValueKind::F64(_)
+            RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
@@ -647,10 +622,7 @@ impl RuntimeValue {
             RuntimeValueKind::Record(fields) => fields
                 .binary_search_by_key(&field, |(label, _)| *label)
                 .is_ok(),
-            RuntimeValueKind::F64(value) => match &value.original {
-                Some(fields) => fields.contains_key(&field),
-                None => field == crate::f64::F64,
-            },
+            RuntimeValueKind::Unboxed(unboxed) => unboxed.contains_field(field),
             RuntimeValueKind::Foreign(_) => field == vocabulary::FFI,
             RuntimeValueKind::Closure(_) => field == vocabulary::CLOSURE,
             RuntimeValueKind::List(_) => false,
@@ -662,10 +634,7 @@ impl RuntimeValue {
         Some(match &self.0 {
             RuntimeValueKind::Data(value) => value.as_record()?.keys().copied().collect(),
             RuntimeValueKind::Record(fields) => fields.iter().map(|(key, _)| *key).collect(),
-            RuntimeValueKind::F64(value) => match &value.original {
-                Some(fields) => fields.keys().copied().collect(),
-                None => vec![crate::f64::F64],
-            },
+            RuntimeValueKind::Unboxed(unboxed) => unboxed.keys(),
             RuntimeValueKind::Foreign(_) => vec![vocabulary::FFI],
             RuntimeValueKind::Closure(_) => vec![vocabulary::CLOSURE],
             RuntimeValueKind::List(_) => return None,
@@ -689,10 +658,7 @@ impl RuntimeValue {
             RuntimeValueKind::Record(fields) => {
                 Shape::Record(fields.iter().map(|(key, _)| *key).collect())
             }
-            RuntimeValueKind::F64(value) => Shape::Record(match &value.original {
-                Some(fields) => fields.keys().copied().collect(),
-                None => vec![crate::f64::F64],
-            }),
+            RuntimeValueKind::Unboxed(unboxed) => Shape::Record(unboxed.keys()),
             RuntimeValueKind::Foreign(_) => Shape::Record(vec![vocabulary::FFI]),
             RuntimeValueKind::Closure(_) => Shape::Record(vec![vocabulary::CLOSURE]),
         }
@@ -717,7 +683,7 @@ impl RuntimeValue {
                 .cloned()
                 .map(Self::from),
             RuntimeValueKind::List(elements) => elements.get(index).cloned(),
-            RuntimeValueKind::F64(_)
+            RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
@@ -744,10 +710,7 @@ impl RuntimeValue {
     pub fn into_value(self) -> Value {
         match self.0 {
             RuntimeValueKind::Data(value) => value,
-            RuntimeValueKind::F64(value) => value
-                .original
-                .map(Value::Record)
-                .unwrap_or_else(|| crate::f64::value(value.number)),
+            RuntimeValueKind::Unboxed(unboxed) => unboxed.into_value(),
             _ => self.to_value(),
         }
     }
@@ -1383,10 +1346,10 @@ impl<'a> Context<'a> {
     ) -> Expression {
         match &value.0 {
             RuntimeValueKind::Data(value) => self.lower_with(value, true, origin),
-            RuntimeValueKind::F64(RuntimeF64 {
-                original: Some(fields),
-                ..
-            }) => self.lower_with(&Value::Record(fields.clone()), true, origin),
+            RuntimeValueKind::Unboxed(unboxed) => match unboxed.original() {
+                Some(fields) => self.lower_with(&Value::Record(fields.clone()), true, origin),
+                None => runtime_expression(value.clone()),
+            },
             RuntimeValueKind::Record(record) => {
                 let fields: Vec<_> = record
                     .iter()
@@ -1713,17 +1676,19 @@ impl<'a> Context<'a> {
         self.burn()?;
         match &expression.0.form {
             Form::Data => {
-                if let Some(RuntimeValue(RuntimeValueKind::F64(cached), _)) =
+                if let Some(RuntimeValue(RuntimeValueKind::Unboxed(cached), _)) =
                     self.data_runtime.get(&expression)
+                    && let Native::F64(number) = cached.native()
                 {
-                    return Ok(Some(cached.number));
+                    return Ok(Some(*number));
                 }
             }
             Form::Cell(cell) => {
-                if let Some(RuntimeValue(RuntimeValueKind::F64(value), _)) =
+                if let Some(RuntimeValue(RuntimeValueKind::Unboxed(value), _)) =
                     environment.get_runtime(*cell)
+                    && let Native::F64(number) = value.native()
                 {
-                    return Ok(Some(value.number));
+                    return Ok(Some(*number));
                 }
             }
             _ => {}
@@ -1992,12 +1957,10 @@ impl<'a> Context<'a> {
 
     fn lower_runtime(&self, value: RuntimeValue) -> RuntimeValue {
         match &value.0 {
-            RuntimeValueKind::Data(Value::Record(fields)) => {
-                match crate::f64::read_record(fields) {
-                    Some(number) => RuntimeValue::original_f64(number, fields.clone()),
-                    None => value,
-                }
-            }
+            RuntimeValueKind::Data(Value::Record(fields)) => match Unboxed::lowered(fields) {
+                Some(unboxed) => RuntimeValue::new(RuntimeValueKind::Unboxed(unboxed)),
+                None => value,
+            },
             _ => value,
         }
     }
@@ -2335,7 +2298,7 @@ impl<'a> Context<'a> {
                         }
                     }
                 }
-                RuntimeValueKind::F64(_) | RuntimeValueKind::List(_) => {
+                RuntimeValueKind::Unboxed(_) | RuntimeValueKind::List(_) => {
                     Ok(RuntimeValue::from_value(absent::with_detail(
                         absent::NOT_CALLABLE,
                         absent::VALUE,
@@ -2507,9 +2470,9 @@ impl<'a> Context<'a> {
                 }
                 cell.and_then(|cell| self.foreign_target_cell(cell))
             }
-            RuntimeValueKind::F64(_) | RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => {
-                None
-            }
+            RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::List(_)
+            | RuntimeValueKind::Closure(_) => None,
         };
         foreign.map(|foreign| {
             let call = self.lower_runtime_code(&RuntimeValue::record(
@@ -2597,9 +2560,9 @@ impl<'a> Context<'a> {
                     fields: fields.as_value().as_record()?.clone(),
                 })
             }
-            RuntimeValueKind::F64(_) | RuntimeValueKind::List(_) | RuntimeValueKind::Foreign(_) => {
-                None
-            }
+            RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::List(_)
+            | RuntimeValueKind::Foreign(_) => None,
         }
     }
 }

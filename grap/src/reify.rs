@@ -39,11 +39,7 @@ impl Reify {
     fn value(&mut self, value: &RuntimeValue) -> Value {
         match &value.0 {
             RuntimeValueKind::Data(value) => value.clone(),
-            RuntimeValueKind::F64(value) => value
-                .original
-                .clone()
-                .map(Value::Record)
-                .unwrap_or_else(|| crate::f64::value(value.number)),
+            RuntimeValueKind::Unboxed(unboxed) => unboxed.to_value(),
             RuntimeValueKind::Record(fields) => self
                 .share(Some(Shared::Record(Rc::as_ptr(fields))), |this| {
                     Value::record(fields.iter().map(|(key, value)| (*key, this.value(value))))

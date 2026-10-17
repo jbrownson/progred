@@ -1,6 +1,13 @@
 use super::*;
 use gid::new_cell_id;
 
+/// A record's lowered form, as the evaluator makes it on entry.
+fn lowered(fields: gid::Record) -> RuntimeValue {
+    RuntimeValue::new(RuntimeValueKind::Unboxed(
+        Unboxed::lowered(&fields).expect("the record follows a privileged convention"),
+    ))
+}
+
 #[test]
 fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
     let first = new_cell_id();
@@ -186,7 +193,7 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
         RuntimeValue::from(Value::record([(metadata, Value::record([]))])),
         RuntimeValue::record([(metadata, closure.clone())]),
         RuntimeValue::f64(3.0),
-        RuntimeValue::original_f64(3.0, decorated_number),
+        lowered(decorated_number),
         RuntimeValue::new(RuntimeValueKind::Foreign(metadata)),
         closure,
         RuntimeValue::list([]),
@@ -273,7 +280,7 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
         (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
         (vocabulary::VALUE, f64::value(9.0)),
     ]);
-    let value = RuntimeValue::original_f64(3.0, source);
+    let value = lowered(source);
     let receiver = host(vec![(
         interpret,
         Definition::foreign(
