@@ -6,6 +6,8 @@ mod location;
 pub(crate) mod source_link;
 mod structure;
 #[cfg(test)]
+pub(crate) mod test_support;
+#[cfg(test)]
 mod tests;
 pub(crate) mod viewport;
 
