@@ -332,14 +332,19 @@ first:
    carrying its view, path and scope. Landmark arrival still takes the
    world: the frame that runs it, keyboard navigation included, is generic
    over its world until display goes generic over `Host` (step 8). The
-   input's targets still hand out closures rather than sites, and the read
-   side (step 7) still reads the view and scope for memo keys and
-   writability. Also done:
-   the picker note's first three (the card, its
+   input's targets still hand out closures rather than sites. The seventh is
+   done too: computations are always supplied; a library's widget reads its
+   view through `Viewing` (the scale, writability, a Grap host, the
+   computations, and the state and selection below it), keeps memoized work
+   for its `Site`, and names a `Face` rather than reading the theme; and the
+   toolkit reads through `Toolkit`, so nothing below the runtime names its
+   per-view bag. The outline's sections jump to a site rather than a
+   `Location`. Also done: the picker note's first three (the card, its
    placement and the selection ring moved to display, then Raw's offers and
    the ranking of a projection's, then the picker itself as a toolkit widget),
-   and the drawing note's first two. The drawing note's last step waits on the
-   session note's `Host::Hover`.
+   the drawing note's first two, and half its last: the source-link handlers
+   are the toolkit's. The recorded leaf going generic waits on the session
+   note's `Host::Hover`.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:
@@ -350,13 +355,13 @@ first:
    - ~~back `editing::Access` with the model and the libraries rather than
      `&mut Editor`, and let the shell set the window title after dispatch;~~
      done on 17 October 2026;
-   - move the hover types, `projection::Cx` and the completion helpers down,
-     and route calls into the projection runtime through `Project`.
+   - move the hover types and the completion helpers down, and route calls
+     into the projection runtime through `Project`. The per-view bag stays
+     the runtime's: since 17 October 2026 display reads it through
+     `Toolkit`.
 4. Move projection/tests' frame- and editor-level suites to where they belong,
    leaving only the runtime's own tests; nothing stays anywhere for historical
-   reasons. Some suites wait on what they reach for: one private item,
-   `projection_target`, down from six, since nothing should become visible
-   just for tests. The
+   reasons, and nothing became visible just for tests. The
    [survey](history/projection-tests-survey-2026-10-17.md) of its 324 tests
    orders the work:
    1. ~~Move the 46 already-targeted tests to their own modules.~~ Done on 17
@@ -404,8 +409,9 @@ first:
      (`completion_card`, `completion_placement`, `primary_highlight`) are
      display code filed in the projection runtime.~~ Moved to display on 17
      October 2026.
-   - `projection_target` builds display's `ProjectionTarget` from `Cx`, and
-     moves down with it.
+   - ~~`projection_target` builds display's `ProjectionTarget` from `Cx`, and
+     moves down with it.~~ It stays in the runtime with the bag, and its test
+     with the runtime's.
    - ~~The frame harness calls `prepare_project` to time the projection's two
      phases.~~ It still does, as the runtime's own test support.
    - ~~`Projection::without_entry` serves one profiling test.~~ The canary
