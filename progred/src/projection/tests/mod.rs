@@ -25,7 +25,7 @@ use ui_events::keyboard::KeyboardEvent;
 use ui_events::keyboard::{KeyState, Modifiers};
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
-    PointerType, PointerUpdate,
+    PointerType,
 };
 
 /// Three unnamed record slots, empty until filled.

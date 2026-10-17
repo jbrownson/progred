@@ -372,4 +372,6 @@ fn ime_value(event: &ImeEvent) -> Value {
 }
 
 #[cfg(test)]
+mod encoding_tests;
+#[cfg(test)]
 mod motion_tests;
