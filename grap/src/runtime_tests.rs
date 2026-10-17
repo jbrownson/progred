@@ -328,6 +328,41 @@ fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
 }
 
 #[test]
+fn runtime_text_inspection_matches_gid_without_materializing_containers() {
+    let metadata = new_cell_id();
+    let closure = evaluate(&lambda([], f64::value(7.0)), &host(vec![]), 100).result;
+    for bytes in [b"hello".to_vec(), vec![], vec![0xff]] {
+        let blob = RuntimeValue::from(Value::from(bytes.clone()));
+        let text = RuntimeValue::record([(crate::text::UTF8, blob), (metadata, closure.clone())]);
+        assert_eq!(text.as_text(), crate::text::read(&text.to_value()));
+        assert!(
+            text.1.get().is_none(),
+            "inspection must not cache a GID view"
+        );
+        let data = RuntimeValue::from(Value::record([(
+            crate::text::UTF8,
+            Value::from(bytes.clone()),
+        )]));
+        assert_eq!(data.as_text(), std::str::from_utf8(&bytes).ok());
+    }
+    // A number whose record also carries text answers as both.
+    let both = lowered(gid::Record::from_iter([
+        (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
+        (crate::text::UTF8, Value::from(b"three".to_vec())),
+    ]));
+    assert_eq!(both.as_f64(), Some(3.0));
+    assert_eq!(both.as_text(), Some("three"));
+    for other in [
+        closure,
+        RuntimeValue::list([]),
+        RuntimeValue::from(Value::from(metadata)),
+        RuntimeValue::f64(1.0),
+    ] {
+        assert_eq!(other.as_text(), None);
+    }
+}
+
+#[test]
 fn generated_calls_retain_closures_and_their_original_inline_source() {
     let sink = new_cell_id();
     let first = new_cell_id();

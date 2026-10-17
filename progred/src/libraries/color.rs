@@ -412,7 +412,7 @@ pub fn display(
     let name = input
         .value?
         .field(name::vocabulary::NAME)
-        .and_then(|value| text::read(value.as_value()).map(|_| ()))
+        .filter(|value| value.as_text().is_some())
         .map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
     let named = name.is_some();
     let spelling = crate::display::line_edit(hex_editor(encoded));

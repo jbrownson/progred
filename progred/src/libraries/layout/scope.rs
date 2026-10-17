@@ -287,10 +287,7 @@ fn operation(
                 Some(_) => arg!(PAINT, |value| read_paint(value.as_value())),
                 None => Paint::Face(Face::Ink),
             };
-            let text = arg!(CONTENT, |value| {
-                let blob = value.field(text::vocabulary::UTF8)?;
-                std::str::from_utf8(blob.as_blob()?).ok().map(str::to_owned)
-            });
+            let text = arg!(CONTENT, |value| value.as_text().map(str::to_owned));
             leaf(Leaf::Text {
                 text,
                 paint,

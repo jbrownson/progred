@@ -639,7 +639,7 @@ fn decode_with(
             _ => return None,
         };
         return Some(leaf(Leaf::Text {
-            text: text::read(content.field(vocabulary::CONTENT)?.as_value())?.to_string(),
+            text: content.field(vocabulary::CONTENT)?.as_text()?.to_string(),
             paint: Paint::Face(face),
             script: puri::text::Script::Normal,
         }));

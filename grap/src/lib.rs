@@ -507,15 +507,27 @@ impl RuntimeValue {
         }
     }
 
+    /// The text this value holds under the text convention, borrowed
+    /// without materializing it.
+    pub fn as_text(&self) -> Option<&str> {
+        match &self.0 {
+            RuntimeValueKind::Unboxed(unboxed) => crate::text::read_record(unboxed.original()?),
+            RuntimeValueKind::Data(value) => crate::text::read(value),
+            RuntimeValueKind::Record(fields) => runtime_field(fields, crate::text::UTF8)?
+                .as_blob()
+                .and_then(|bytes| std::str::from_utf8(bytes).ok()),
+            RuntimeValueKind::List(_)
+            | RuntimeValueKind::Foreign(_)
+            | RuntimeValueKind::Closure(_) => None,
+        }
+    }
+
     pub fn field(&self, field: CellId) -> Option<RuntimeValue> {
         match &self.0 {
             RuntimeValueKind::Data(value) => {
                 value.as_record()?.get(&field).cloned().map(Self::from)
             }
-            RuntimeValueKind::Record(fields) => fields
-                .binary_search_by_key(&field, |(label, _)| *label)
-                .ok()
-                .map(|index| fields[index].1.clone()),
+            RuntimeValueKind::Record(fields) => runtime_field(fields, field).cloned(),
             RuntimeValueKind::Unboxed(unboxed) => unboxed.field(field).map(Self::from_value),
             RuntimeValueKind::Foreign(foreign) => {
                 (field == vocabulary::FFI).then(|| Self::from(Value::from(*foreign)))
@@ -619,9 +631,7 @@ impl RuntimeValue {
             RuntimeValueKind::Data(value) => value
                 .as_record()
                 .is_some_and(|fields| fields.contains_key(&field)),
-            RuntimeValueKind::Record(fields) => fields
-                .binary_search_by_key(&field, |(label, _)| *label)
-                .is_ok(),
+            RuntimeValueKind::Record(fields) => runtime_field(fields, field).is_some(),
             RuntimeValueKind::Unboxed(unboxed) => unboxed.contains_field(field),
             RuntimeValueKind::Foreign(_) => field == vocabulary::FFI,
             RuntimeValueKind::Closure(_) => field == vocabulary::CLOSURE,
@@ -826,6 +836,15 @@ type CellIndices = Rc<RefCell<CellIndexTable>>;
 
 fn cell_index(indices: &CellIndices, cell: CellId) -> CellIndex {
     indices.borrow_mut().intern(cell)
+}
+
+/// A runtime record's field, borrowed. Runtime records keep their fields
+/// sorted by label.
+fn runtime_field(fields: &[(CellId, RuntimeValue)], label: CellId) -> Option<&RuntimeValue> {
+    fields
+        .binary_search_by_key(&label, |(field, _)| *field)
+        .ok()
+        .map(|index| &fields[index].1)
 }
 
 fn lowered_field(fields: &[(CellId, Expression)], label: CellId) -> Option<Expression> {

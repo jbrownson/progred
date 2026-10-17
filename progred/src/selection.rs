@@ -743,12 +743,7 @@ pub(crate) fn collapse_default_for_value(
     value: &grap::RuntimeValue,
     folded: bool,
 ) -> Option<bool> {
-    let is_text = value.field(text::UTF8).is_some_and(|bytes| {
-        bytes
-            .as_blob()
-            .is_some_and(|bytes| std::str::from_utf8(bytes).is_ok())
-    });
-    if is_text || value.as_f64().is_some() {
+    if value.as_text().is_some() || value.as_f64().is_some() {
         return None;
     }
     let collapsible = match value.as_cell() {

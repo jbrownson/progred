@@ -82,8 +82,7 @@ pub fn functions() -> ForeignFunctions {
 pub fn display(
     input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
 ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
-    let bytes = input.value?.field(vocabulary::UTF8)?;
-    let text = std::str::from_utf8(bytes.as_blob()?).ok()?;
+    let text = input.value?.as_text()?;
     Some(crate::display::structure::with_extra_fields(
         input,
         |key| key == vocabulary::UTF8,
