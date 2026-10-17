@@ -196,7 +196,7 @@ fn a_missing_scoped_child_uses_the_ordinary_completion_and_continuation() {
         None,
         Some(Rc::new(|view, path, changes| {
             assert_eq!(view.resolve_path(path), Some(&text::value("inserted")));
-            changes.select(path.to_vec(), selection_data::edge());
+            changes.select(path.to_vec(), crate::selection::payload::edge());
             true
         }))
     ));
@@ -237,7 +237,7 @@ fn grap_handler_uses_the_scope_without_an_opaque_value() {
                                 selection_data::vocabulary::PATH,
                                 grap::call(site::vocabulary::PATH.into(), []),
                             ),
-                            (site::vocabulary::VALUE, selection_data::edge()),
+                            (site::vocabulary::VALUE, crate::selection::payload::edge()),
                         ],
                     ),
                 ]),
@@ -363,7 +363,7 @@ fn inserting_a_scoped_list_sibling_preserves_the_occurrence() {
     assert!(editor.commit_completion(
         text::value("second"),
         None,
-        Some(selection_data::at(&[], selection_data::edge()))
+        Some(crate::selection::at(&[], crate::selection::payload::edge()))
     ));
     let values: Vec<_> = editor
         .sources()

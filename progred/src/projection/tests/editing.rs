@@ -845,7 +845,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
             root: value,
             cells: Cells::new(),
         };
-        for payload in [Value::record([]), crate::libraries::selection::edge()] {
+        for payload in [Value::record([]), crate::selection::payload::edge()] {
             let mut world = editing_world(&doc, &libraries);
             world.model.selection = Some(Selection::from_payload(
                 &crate::test_root(),

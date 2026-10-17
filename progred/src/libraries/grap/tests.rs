@@ -919,7 +919,7 @@ fn the_lambda_name_partial_handles_missing_names_or_text() {
     assert!(lambda_name(&input).is_some());
 
     // Selected, a missing name is a hole to type it into.
-    let selected = crate::libraries::selection::pending();
+    let selected = crate::selection::payload::empty_pending();
     input.selection = Some(&selected);
     assert!(lambda_name(&input).is_some());
     input.selection = None;

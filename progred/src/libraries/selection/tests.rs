@@ -45,53 +45,6 @@ use super::*;
 use gid::Value;
 
 #[test]
-fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
-    let document = gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
-    let empty = crate::libraries::Libraries::default();
-    let stack = crate::stack::load();
-    let site = vec![gid::Step::Key(gid::new_cell_id())];
-    let child = vec![gid::Step::Element(
-        gid::position::between(None, None).unwrap(),
-    )];
-    let destination: Vec<_> = site.iter().chain(&child).cloned().collect();
-    for payload in [
-        edge(),
-        crate::libraries::absent::with_reason(vocabulary::NO_SELECTION),
-    ] {
-        for selected in [None, Some(destination.clone()), Some(site.clone())] {
-            let initial = || crate::site::PendingChanges {
-                annotation: Some(Value::from(vec![42])),
-                annotation_changed: true,
-                selection: selected.clone().map(|path| (path, pending())),
-                selection_changed: true,
-            };
-            let mut native = initial();
-            assert!(at(&child, payload.clone())(
-                &crate::editing::Scope::default().view(crate::sources::Sources {
-                    doc: &document,
-                    libraries: &empty
-                }),
-                &site,
-                &mut native,
-            ));
-            let mut interpreted = initial();
-            assert!(crate::site::grap(grap_at(&child, payload.clone()), [])(
-                &crate::editing::Scope::default().view(crate::sources::Sources {
-                    doc: &document,
-                    libraries: &stack.libraries
-                }),
-                &site,
-                &mut interpreted,
-            ));
-            assert_eq!(native, interpreted);
-        }
-    }
-}
-
-#[test]
 fn the_vocabulary_alone_grants_no_selection_access() {
     let library = library();
     assert_eq!(
@@ -145,7 +98,10 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
         &interpret,
     );
     let result = ::grap::apply_value_scoped(
-        &grap_at(std::slice::from_ref(&child), pending()),
+        &grap_at(
+            std::slice::from_ref(&child),
+            crate::selection::payload::empty_pending(),
+        ),
         [],
         &crate::libraries::TestHost(|cell| {
             functions

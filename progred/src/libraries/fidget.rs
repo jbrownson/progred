@@ -1254,7 +1254,7 @@ fn root_completion() -> crate::display::Completion {
                 ),
             ])
         },
-        Some(crate::libraries::selection::pending_at(&[
+        Some(crate::selection::pending_at(&[
             gid::Step::Key(vocabulary::FIDGET),
             gid::Step::Follow(gid::Resolution::Document),
         ])),

@@ -8,10 +8,7 @@ pub fn select(display: impl Into<CompletionText>, value: Value) -> Completion {
     insert(
         display,
         value,
-        Some(crate::libraries::selection::at(
-            &[],
-            crate::libraries::selection::edge(),
-        )),
+        Some(crate::selection::at(&[], crate::selection::payload::edge())),
     )
 }
 

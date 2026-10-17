@@ -505,7 +505,7 @@ fn completion_insertion_never_invents_or_overwrites_selection_policy() {
         custom.clone(),
         crate::libraries::absent::with_reason(gid::new_cell_id()),
     ] {
-        let continuation = crate::libraries::selection::at(&[], payload.clone());
+        let continuation = crate::selection::at(&[], payload.clone());
         let prepared = crate::completion::prepare(
             &src(&doc, &libraries),
             &pending,
@@ -536,7 +536,7 @@ fn label_offer_explicitly_opens_its_missing_value() {
     let offer = crate::libraries::completion::insert(
         field,
         field.into(),
-        Some(crate::libraries::selection::pending_at(&[])),
+        Some(crate::selection::pending_at(&[])),
     );
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(pending);
@@ -763,7 +763,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
                     grap::call(
                         crate::libraries::selection::tests::grap_at(
                             &[],
-                            crate::libraries::selection::edge(),
+                            crate::selection::payload::edge(),
                         ),
                         [],
                     ),
@@ -864,12 +864,12 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
             crate::libraries::completion::insert(
                 "offered present",
                 present.into(),
-                Some(crate::libraries::selection::pending_at(&[])),
+                Some(crate::selection::pending_at(&[])),
             ),
             crate::libraries::completion::insert(
                 "offered missing",
                 missing.into(),
-                Some(crate::libraries::selection::pending_at(&[])),
+                Some(crate::selection::pending_at(&[])),
             ),
         ])
     });
@@ -962,7 +962,7 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
             crate::libraries::completion::insert(
                 "existing",
                 Value::from(existing),
-                Some(crate::libraries::selection::pending_at(&[])),
+                Some(crate::selection::pending_at(&[])),
             ),
         ])
     });

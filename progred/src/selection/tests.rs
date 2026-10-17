@@ -689,3 +689,57 @@ fn the_pending_payload_is_derived_from_the_live_editor() {
     });
     assert_eq!(pending.choice(), 0);
 }
+
+#[test]
+fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
+    let document = gid::Document {
+        root: None,
+        cells: gid::Cells::new(),
+    };
+    let empty = crate::libraries::Libraries::default();
+    let stack = crate::stack::load();
+    let site = vec![gid::Step::Key(gid::new_cell_id())];
+    let child = vec![gid::Step::Element(
+        gid::position::between(None, None).unwrap(),
+    )];
+    let destination: Vec<_> = site.iter().chain(&child).cloned().collect();
+    for payload in [
+        payload::edge(),
+        crate::libraries::absent::with_reason(
+            crate::libraries::selection::vocabulary::NO_SELECTION,
+        ),
+    ] {
+        for selected in [None, Some(destination.clone()), Some(site.clone())] {
+            let initial = || crate::site::PendingChanges {
+                annotation: Some(Value::from(vec![42])),
+                annotation_changed: true,
+                selection: selected
+                    .clone()
+                    .map(|path| (path, payload::empty_pending())),
+                selection_changed: true,
+            };
+            let mut native = initial();
+            assert!(at(&child, payload.clone())(
+                &crate::editing::Scope::default().view(crate::sources::Sources {
+                    doc: &document,
+                    libraries: &empty
+                }),
+                &site,
+                &mut native,
+            ));
+            let mut interpreted = initial();
+            assert!(crate::site::grap(
+                crate::libraries::selection::tests::grap_at(&child, payload.clone()),
+                [],
+            )(
+                &crate::editing::Scope::default().view(crate::sources::Sources {
+                    doc: &document,
+                    libraries: &stack.libraries
+                }),
+                &site,
+                &mut interpreted,
+            ));
+            assert_eq!(native, interpreted);
+        }
+    }
+}

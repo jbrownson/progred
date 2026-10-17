@@ -756,6 +756,20 @@ pub(crate) fn collapse_default_for_value(
     collapsible.then_some(folded)
 }
 
+/// After a commit, select `path` below the committing site, with `payload`.
+pub fn at(path: &[Step], payload: Value) -> crate::site::Continuation {
+    let path = path.to_vec();
+    Rc::new(move |_, site, staged| {
+        staged.select(site.iter().chain(&path).cloned().collect(), payload.clone());
+        true
+    })
+}
+
+/// After a commit, open a pending at `path` below the committing site.
+pub fn pending_at(path: &[Step]) -> crate::site::Continuation {
+    at(path, payload::empty_pending())
+}
+
 /// Breaks the open edit run: the next write records a fresh undo
 /// step. Runs must not straddle a save or a view-history step.
 pub fn break_edit_run(selection: Option<&mut Selection>) {
@@ -778,10 +792,14 @@ pub mod payload {
     use puri::edit::LineEditState;
 
     pub mod vocabulary {
-        #[cfg(test)]
-        pub use crate::libraries::selection::vocabulary::EDGE;
-        pub use crate::libraries::selection::vocabulary::{LABEL, PENDING, STAGE};
         use gid::CellId;
+
+        /// A selection's stage: an edge, or a pending value or label being
+        /// typed. The selection library names these.
+        pub const STAGE: CellId = CellId::from_u128(0x6a1fd3082b9c47e5f60d21a8c45e9b37);
+        pub const EDGE: CellId = CellId::from_u128(0x2f74c8a1936e05bd4c17e2b98d60a5f4);
+        pub const PENDING: CellId = CellId::from_u128(0x91d5e60b3a8f27c4058b39f6d2c471ea);
+        pub const LABEL: CellId = CellId::from_u128(0x7be29f4680d1c5a3f2496e07b85d13c2);
         pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
         pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
         pub const COMPLETION_SCROLL: CellId = CellId::from_u128(0x151767a413a8bc5f579465dd67f18263);
@@ -805,7 +823,12 @@ pub mod payload {
     }
 
     pub fn edge() -> Value {
-        crate::libraries::selection::edge()
+        Value::record([(vocabulary::STAGE, Value::Cell(vocabulary::EDGE))])
+    }
+
+    /// A pending with nothing typed yet.
+    pub fn empty_pending() -> Value {
+        Value::record([(vocabulary::STAGE, Value::Cell(vocabulary::PENDING))])
     }
 
     pub fn pending(query: &str, choice: usize) -> Value {

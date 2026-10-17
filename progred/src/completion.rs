@@ -74,7 +74,7 @@ pub(crate) fn delimited_constructors(kind: CompletionKind) -> Vec<(&'static str,
             world,
             new_cell_id(),
             None,
-            Some(crate::libraries::selection::pending_at(&[])),
+            Some(crate::selection::pending_at(&[])),
         ),
     });
     let containers = [
@@ -277,7 +277,7 @@ fn raw_entries(
                         world,
                         new_cell_id(),
                         Some(name::record(&spelling, [])),
-                        Some(crate::libraries::selection::pending_at(&[])),
+                        Some(crate::selection::pending_at(&[])),
                     )
                 }),
             };

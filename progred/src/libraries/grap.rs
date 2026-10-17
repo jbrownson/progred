@@ -85,9 +85,9 @@ fn parameter(
                                     crate::editing::commit_new_cell(
                                         world,
                                         name::record(&spelling, []),
-                                        Some(crate::libraries::selection::at(
+                                        Some(crate::selection::at(
                                             &[],
-                                            crate::libraries::selection::edge(),
+                                            crate::selection::payload::edge(),
                                         )),
                                     )
                                 },
@@ -256,8 +256,8 @@ pub fn call_completion<'a>(
     let first = function_parameters(&(&function).into(), resolve)
         .and_then(|parameters| parameters.first().copied());
     let continuation = match first {
-        Some(parameter) => crate::libraries::selection::pending_at(&[Step::Key(parameter)]),
-        None => crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
+        Some(parameter) => crate::selection::pending_at(&[Step::Key(parameter)]),
+        None => crate::selection::at(&[], crate::selection::payload::edge()),
     };
     crate::libraries::completion::insert(display, ::grap::call(function, []), Some(continuation))
 }
@@ -578,9 +578,9 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
                 crate::libraries::completion::insert(
                     "new lambda",
                     Value::record([(PARAMS, Value::list([]))]),
-                    Some(crate::libraries::selection::at(
+                    Some(crate::selection::at(
                         &[Step::Key(BODY)],
-                        crate::libraries::selection::edge(),
+                        crate::selection::payload::edge(),
                     )),
                 )
                 .with_aliases(["lambda", "λ"])
@@ -617,7 +617,7 @@ fn new_program() -> Completion {
                 ),
             ])
         },
-        Some(crate::libraries::selection::pending_at(&[
+        Some(crate::selection::pending_at(&[
             gid::Step::Key(vocabulary::GRAP),
             gid::Step::Follow(gid::Resolution::Document),
         ])),

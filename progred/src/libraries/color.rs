@@ -197,7 +197,7 @@ fn missing_picker(
                                 ui_events::keyboard::NamedKey::Escape,
                             )
                     {
-                        close(world, crate::libraries::selection::pending());
+                        close(world, crate::selection::payload::empty_pending());
                         true
                     } else {
                         false

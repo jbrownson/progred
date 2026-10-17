@@ -72,10 +72,7 @@ pub(crate) fn commit_container(app: &mut Editor, value: Value) {
         && app.commit_completion(
             value,
             None,
-            Some(crate::libraries::selection::at(
-                &[],
-                crate::libraries::selection::edge(),
-            )),
+            Some(crate::selection::at(&[], crate::selection::payload::edge())),
         )
     {
         app.open_within();

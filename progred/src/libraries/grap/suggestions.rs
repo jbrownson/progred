@@ -79,9 +79,7 @@ fn unquote() -> Completion {
     crate::libraries::completion::insert(
         control::UNQUOTE,
         Value::record([]),
-        Some(crate::libraries::selection::pending_at(&[Step::Key(
-            control::UNQUOTE,
-        )])),
+        Some(crate::selection::pending_at(&[Step::Key(control::UNQUOTE)])),
     )
     .with_aliases(["`"])
 }

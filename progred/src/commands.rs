@@ -169,9 +169,9 @@ impl Editor {
                         current.scope().read(&self.sources(), &path).is_none()
                     }) =>
             {
-                crate::libraries::selection::pending_at(&[])
+                crate::selection::pending_at(&[])
             }
-            _ => crate::libraries::selection::at(&[], crate::libraries::selection::edge()),
+            _ => crate::selection::at(&[], crate::selection::payload::edge()),
         };
         self.commit_completion(id, None, Some(continuation))
     }
