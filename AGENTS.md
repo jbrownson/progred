@@ -20,6 +20,7 @@ the code; this file points to them rather than repeating them.
 - `docs/deferred.md`, `docs/release-checklist.md`, and `docs/macos-followups.md`:
   open work.
 - `docs/history/`: superseded notes and dated measurements. Not instructions.
+  Searches skip it, as `.ignore` says; name the directory to search it.
 
 The docs describe the current implementation, not verified statements of the
 owner's intent, and much of their prose is assistant-written. When a doc and
