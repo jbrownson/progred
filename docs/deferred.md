@@ -354,10 +354,12 @@ first:
          click rather than as a slot: 39 of them in the toolpaths example,
          which has no other stops. Arrow keys skip it because it registers
          no navigation stop, but only the arrow keys read those stops, keeping
-         just the selection's neighbours. The owner's direction: stops aren't
-         the arrow keys' alone. The frame keeps the stops widgets register,
-         arrows find neighbours among them, and Tab takes the empty, writable
-         ones in reading order, so navigation needn't know names;
+         just the selection's neighbours. The owner's direction: Tab gets its
+         own stops, annotated as arrow stops are. The picker, which draws
+         every hole, Raw's and the name's alike, adds one where it draws an
+         empty, writable hole, and a projection can add one to a place of
+         its own to fill in. Tab visits them in reading order, so navigation
+         needn't know names or check for empty places;
        - the cells that label Grap handlers' event records, which are the
          layout library's. Grap handlers need values, so the records stay;
          the cells are the editor's input vocabulary, so they move to the
