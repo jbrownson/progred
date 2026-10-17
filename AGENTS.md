@@ -12,7 +12,10 @@ the code; this file points to them rather than repeating them.
   bridge), `docs/model.md` (selection, completion, panes, history),
   `docs/projections.md` (Grap and projections), `docs/puri.md` (the UI runtime
   and editor frame), `docs/navigation.md`, and `docs/incremental.md`
-  (dependency-tracked computations).
+  (dependency-tracked computations). The largest, `projections.md`,
+  `deferred.md`, `puri.md`, `toolpaths.md` and `model.md` at 37–64 KB, are
+  references: search them for the section a change needs rather than reading
+  them whole.
 - `docs/build-security.md`: the build sandbox and dependency policy.
 - `docs/dependency-checks.md`: the weekly dependency and security check, and
   its log.

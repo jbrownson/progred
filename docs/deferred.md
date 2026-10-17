@@ -263,9 +263,10 @@ code, not at internals the tests should see. A follow-up
 that blocks a split and the steps that break it. The rest, most worthwhile
 first:
 
-1. ~~Keep docs/history out of default searches~~ (done on 17 October 2026:
-   ripgrep skips it unless the directory is named), and point agents to the
-   doc sections they need.
+1. ~~Keep docs/history out of default searches, and point agents to the doc
+   sections they need.~~ Done on 17 October 2026: ripgrep skips docs/history
+   unless the directory is named, and AGENTS.md says which docs are large
+   references to search rather than read whole.
 2. Share one `display::Env` test double and the common evaluate, apply and
    projection-input test helpers, now copied 19 to 29 times.
 3. Give projections and libraries a clear interface to the editor: a stated
