@@ -81,6 +81,9 @@ at the time; code some of them describe has since been retired.
 - [Crate split analysis](crate-split-2026-10-16.md): the three crates the audit's
   split would become, the coupling across their boundaries, and the steps that
   break it.
+- [Library vocabulary audit](library-vocabulary-audit-2026-10-17.md): where the
+  core names the built-in libraries, why, and which uses stay, move into the
+  core, or become library interface.
 
 ## Earlier notes
 

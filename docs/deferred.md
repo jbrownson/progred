@@ -281,9 +281,25 @@ first:
      edits where they are allowed, the selection, per-path state, drags, and
      the picker.
    - **Library vocabularies.** The core libraries' vocabularies, such as
-     text, names and numbers, can stay referenced by the editor. Audit where
-     the core uses library vocabularies, and add to the library interface
-     where that removes a reference.
+     text, names and numbers, can stay referenced by the editor, and the
+     library interface can grow where that removes a reference. The
+     [audit](history/library-vocabulary-audit-2026-10-17.md) found 257
+     references:
+     - 79 are the registry.
+     - 54 are core vocabulary to keep. 28 of these should call Grap's
+       conventions directly instead of library re-exports.
+     - 64 are vocabulary only the core interprets: selection stages, per-site
+       state, folds and panes. These move into the core, with the libraries
+       re-exporting the cells.
+     - 60 are the core doing a library's job. Most of these are the engine
+       interpreting the layout library's drawing programs, which would become
+       a recorded-drawing widget the layout library fills. The rest are:
+       - the hard-coded set of libraries in Plain, which the tutorials copy
+         with f64 only, as a per-library plain projection;
+       - presentation's pane special cases, as a pane entry and a wrapping
+         projection;
+       - Tab's skipping of name slots, as an optional-slot flag;
+       - handlers getting their event under layout's label.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:
