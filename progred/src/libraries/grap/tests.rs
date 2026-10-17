@@ -4,7 +4,11 @@ use crate::view::{Layout, ProjectionInput};
 
 use crate::display::Env;
 use crate::display::test_support::{ProjectionCall, inspect};
-use gid::new_cell_id;
+use crate::library::Libraries;
+use crate::test_support::{
+    activated, completion_entries_with, core_libraries, library_offers, src,
+};
+use gid::{Document, new_cell_id};
 
 #[test]
 fn every_built_in_declares_its_parameters() {
@@ -81,6 +85,8 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
             value_at: &|_| None,
             resolve: &resolve,
             cells: &enumerate,
+            name: &|_| None,
+            libraries: None,
         };
         assert_eq!(
             call_completions(&request)
@@ -997,4 +1003,133 @@ fn the_library_describes_grap_and_owns_evaluate() {
         40,
     );
     assert_eq!(evaluation.result, Value::from(b"evaluated".to_vec()));
+}
+
+#[test]
+fn document_function_completion_inserts_a_call_and_opens_its_first_argument() {
+    let (document, names) = crate::gid_text::parse(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../website/public/lessons/growing-forest.gid"
+    )))
+    .unwrap();
+    let clouds = names["clouds"];
+    let time = names["sun_time"];
+    let libraries = core_libraries();
+    let sources = src(&document, &libraries);
+    let everything = library_offers(
+        crate::stack::load().completions,
+        crate::display::CompletionScope::Everything,
+    );
+    let entries = completion_entries_with(
+        &sources,
+        false,
+        &CompletionKind::Value,
+        "clouds",
+        None,
+        Some(&everything),
+    );
+    let call = entries.first().unwrap();
+    assert_eq!(call.detail.as_deref(), Some("call"));
+    let result = activated(call);
+    assert_eq!(result.value, Some(::grap::call(clouds.into(), [])));
+    let (selected, payload) = result.selected.unwrap();
+    assert_eq!(selected, vec![Step::Key(time)]);
+    assert_eq!(
+        payload
+            .as_record()
+            .unwrap()
+            .get(&crate::libraries::selection::vocabulary::STAGE),
+        Some(&crate::libraries::selection::vocabulary::PENDING.into())
+    );
+}
+
+#[test]
+fn call_offers_follow_resolved_definitions_without_evaluating_them() {
+    let function = new_cell_id();
+    let mut cells = Cells::new();
+    let library = crate::library::Library::<crate::Editor, crate::frame::Hovered>::new(
+        crate::library::Definitions::from_parts(
+            {
+                let mut definitions = Cells::new();
+                definitions.set_value(function, name::record("probe", []));
+                definitions
+            },
+            ::grap::ForeignFunctions::default().register(
+                function,
+                ::grap::ForeignFunction::from_value(|_, _, _| {
+                    panic!("completion must not run code")
+                }),
+            ),
+        ),
+    );
+    let libraries = Libraries::from_contributions([(new_cell_id(), library)]).0;
+    let root = Some(Value::list([]));
+    let document = Document {
+        root: root.clone(),
+        cells: cells.clone(),
+    };
+    let everything = library_offers(
+        crate::stack::load().completions,
+        crate::display::CompletionScope::Everything,
+    );
+    let offers = |document: &Document| {
+        completion_entries_with(
+            &src(document, &libraries),
+            false,
+            &CompletionKind::Value,
+            "probe",
+            None,
+            Some(&everything),
+        )
+    };
+    let entries = offers(&document);
+    assert_eq!(
+        activated(entries.first().unwrap()).value,
+        Some(::grap::call(function.into(), []))
+    );
+
+    cells.set_value(function, name::record("probe", []));
+    let document = Document { root, cells };
+    assert!(
+        !offers(&document)
+            .iter()
+            .any(|entry| entry.detail.as_deref() == Some("call"))
+    );
+}
+
+#[test]
+fn built_in_call_completion_opens_its_first_argument() {
+    use crate::libraries::{f64::vocabulary::SUM, number::vocabulary::LEFT};
+    let document = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let libraries = core_libraries();
+    let everything = library_offers(
+        crate::stack::load().completions,
+        crate::display::CompletionScope::Everything,
+    );
+    let entries = completion_entries_with(
+        &src(&document, &libraries),
+        false,
+        &CompletionKind::Value,
+        "+",
+        None,
+        Some(&everything),
+    );
+    let call = entries
+        .iter()
+        .find(|entry| entry.detail.as_deref() == Some("call · f64"))
+        .expect("+ is offered as an f64 call");
+    let result = activated(call);
+    assert_eq!(result.value, Some(::grap::call(SUM.into(), [])));
+    let (selected, payload) = result.selected.unwrap();
+    assert_eq!(selected, vec![Step::Key(LEFT)]);
+    assert_eq!(
+        payload
+            .as_record()
+            .unwrap()
+            .get(&crate::libraries::selection::vocabulary::STAGE),
+        Some(&crate::libraries::selection::vocabulary::PENDING.into())
+    );
 }

@@ -18,6 +18,7 @@ mod measure;
 #[cfg(all(test, feature = "layout-profile"))]
 pub mod profile;
 pub mod projection;
+pub mod raw;
 #[cfg(test)]
 pub mod recording;
 pub mod structure;
@@ -175,6 +176,12 @@ pub struct CompletionRequest<'a> {
     pub value_at: &'a dyn Fn(&[Step]) -> Option<&'a Value>,
     pub resolve: &'a dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
     pub cells: &'a dyn Fn() -> Vec<CellId>,
+    /// A cell's name as the document names it, for offers named by their
+    /// cell. Raw's offers are named too, though Raw shows values' ids.
+    pub name: &'a dyn Fn(CellId) -> Option<&'a str>,
+    /// The loaded libraries' offers, for holes that list some of them, as
+    /// Raw's list their readings of what's typed.
+    pub libraries: Option<&'a CompletionProvider>,
 }
 
 impl CompletionRequest<'_> {
@@ -339,11 +346,6 @@ pub trait Env {
         fuel: usize,
     ) -> grap::RuntimeValue {
         self.apply_memo(function, arguments, fuel).into()
-    }
-
-    /// Loaded libraries' vocabulary, available for explicit provider composition.
-    fn completions(&self) -> Option<CompletionProvider> {
-        None
     }
 
     /// Legacy GID application boundary: Grap parameters receive values, while

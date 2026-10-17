@@ -1,7 +1,7 @@
 //! Pointer hover: the tree hover's identity and the value it refers
 //! to for secondary marks.
 
-use crate::completion::Offers;
+use crate::display::widget::offers::Offers;
 use gid::Step;
 use std::rc::Rc;
 

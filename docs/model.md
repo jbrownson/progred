@@ -304,8 +304,9 @@ Each request includes the query, field/value kind, the question asked of a
 library (what it offers anywhere, what it reads the query as, or what a document
 can start as), Raw mode
 (so providers can omit interactions whose presentation needs a library
-projection), the hole's path, and read-only path and cell lookups, plus lazy
-enumeration of defined cells. Cell lookup exposes the selected definition's
+projection), the hole's path, read-only path and cell lookups, lazy enumeration
+of defined cells, the document's names for cells, and the loaded libraries'
+provider. Cell lookup exposes the selected definition's
 value, source, and whether it has a native implementation, without evaluating
 it. The path names a missing value or the record receiving a new label, from
 where the hole's location starts, and path lookups read from there too. A hole
@@ -353,9 +354,9 @@ projection, including the items of `do`, not a global change to data completion.
 Binding suggestions put the nearest enclosing lexical scope first, then outer
 scopes, sorting names alphabetically within each scope. Rebinding a cell gives it
 the nearer scope's rank; scrolling and layout have no effect on this order.
-Typed-query match quality still ranks ahead of proximity. The projection
-environment exposes the loaded library provider for composition; Grap reuses
-those offers rather than duplicating numeric conventions. Scope discovery reads
+Typed-query match quality still ranks ahead of proximity. The request carries
+the loaded libraries' provider for composition; Grap reuses those offers rather
+than duplicating numeric conventions. Scope discovery reads
 source structure only; quoted template declarations do not introduce bindings
 into unquotes. Computed binding lists and runtime callable types are not
 inferred. Cells that are neither bindings nor functions, such as a named
@@ -442,11 +443,13 @@ reconstruct a different list. Each offer has an activation
 callback plus explicit text, styling, matching spans, and source attribution.
 The reusable `puri-widgets` completion widget shapes and draws rows. Progred's
 [native card widget](../progred/src/display/widget/completion.rs) composes navigation,
-interaction, and the shared column and scroll container; the row widget has no
-scroll viewport of its own. Its caller supplies state and
-activation callbacks; the widget knows nothing about paths, insertion, or Grap.
-The editor owns document operations, query state, and popup placement. See
-[offer construction](../progred/src/completion.rs) and
+interaction, and the shared column and scroll container, and places the card
+against its query; the row widget has no scroll viewport of its own. Its caller
+supplies state and activation callbacks; the widget knows nothing about paths,
+insertion, or Grap. The editor owns document operations and query state. See
+[ranking](../progred/src/display/widget/offers.rs),
+[Raw's offers](../progred/src/display/raw.rs),
+[committing a choice](../progred/src/completion.rs), and
 [document adaptation](../progred/src/projection/completion.rs).
 The card meets the query's painted frame, accounting for the frame outline and
 both border widths. Placement uses those same drawing parameters above or below

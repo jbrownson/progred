@@ -3,65 +3,64 @@ use crate::display::{CompletionRequest, CompletionScope};
 use crate::libraries::{completion::select, control::vocabulary as control};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
 
-pub(super) fn provider(libraries: Option<CompletionProvider>) -> CompletionProvider {
-    Rc::new(move |request| {
-        let quoted = request.query.trim().starts_with('"');
-        let templated = templated(request);
-        let bindings = bindings(request);
-        let mut ordered: Vec<_> = bindings.iter().filter(|_| !quoted).collect();
-        ordered.sort_by_cached_key(|(cell, depth)| {
-            let name = (request.resolve)(**cell)
-                .and_then(|definition| name::read(definition.value))
-                .unwrap_or("");
-            (Reverse(**depth), name.to_lowercase(), name)
-        });
-        let mut offers: Vec<_> = templated.then(unquote).into_iter().collect();
-        offers.extend(
-            ordered
-                .into_iter()
-                .map(|(cell, _)| select(*cell, (*cell).into()).with_detail("binding")),
-        );
-        if !quoted {
-            let library_request = CompletionRequest {
-                scope: CompletionScope::Everything,
-                ..*request
-            };
-            let library_offers: Vec<_> = libraries
-                .as_ref()
-                .and_then(|provider| provider(&library_request))
-                .unwrap_or_default()
-                .into_iter()
-                .chain(
-                    request
-                        .query
-                        .trim()
-                        .is_empty()
-                        .then(|| super::call_completions(request))
-                        .into_iter()
-                        .flatten(),
-                )
-                .filter(|offer| {
-                    !offer
-                        .preview
-                        .as_ref()
-                        .and_then(Value::as_record)
-                        .and_then(|fields| fields.get(&FUNCTION))
-                        .and_then(Value::as_cell)
-                        .is_some_and(|cell| cell == control::QUOTE || bindings.contains_key(&cell))
-                })
-                .collect();
-            offers.extend(library_offers);
-            offers.extend(crate::completion::constructors(request.kind));
-        }
-        if !templated {
-            offers.extend(quote(request));
-        }
-        // What's typed, read as a value: a number, say, then text.
-        offers.extend(crate::completion::typed(libraries.as_ref(), request));
-        Some(offers)
-    })
+/// A slot's offers: the bindings in scope, the libraries' offers, Raw's
+/// constructors, and what's typed read as a value.
+pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
+    let quoted = request.query.trim().starts_with('"');
+    let templated = templated(request);
+    let bindings = bindings(request);
+    let mut ordered: Vec<_> = bindings.iter().filter(|_| !quoted).collect();
+    ordered.sort_by_cached_key(|(cell, depth)| {
+        let name = (request.resolve)(**cell)
+            .and_then(|definition| name::read(definition.value))
+            .unwrap_or("");
+        (Reverse(**depth), name.to_lowercase(), name)
+    });
+    let mut offers: Vec<_> = templated.then(unquote).into_iter().collect();
+    offers.extend(
+        ordered
+            .into_iter()
+            .map(|(cell, _)| select(*cell, (*cell).into()).with_detail("binding")),
+    );
+    if !quoted {
+        let library_request = CompletionRequest {
+            scope: CompletionScope::Everything,
+            ..*request
+        };
+        let library_offers: Vec<_> = request
+            .libraries
+            .and_then(|provider| provider(&library_request))
+            .unwrap_or_default()
+            .into_iter()
+            .chain(
+                request
+                    .query
+                    .trim()
+                    .is_empty()
+                    .then(|| super::call_completions(request))
+                    .into_iter()
+                    .flatten(),
+            )
+            .filter(|offer| {
+                !offer
+                    .preview
+                    .as_ref()
+                    .and_then(Value::as_record)
+                    .and_then(|fields| fields.get(&FUNCTION))
+                    .and_then(Value::as_cell)
+                    .is_some_and(|cell| cell == control::QUOTE || bindings.contains_key(&cell))
+            })
+            .collect();
+        offers.extend(library_offers);
+        offers.extend(crate::display::raw::constructors(request.kind));
+    }
+    if !templated {
+        offers.extend(quote(request));
+    }
+    // What's typed, read as a value: a number, say, then text.
+    offers.extend(crate::display::raw::typed(request));
+    Some(offers)
 }
 
 /// Quote is drawn as `"`, so typing that mark offers it beside the string.

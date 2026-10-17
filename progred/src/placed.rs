@@ -2,8 +2,8 @@
 //! The shared after-hover boundary keeps paint optional and resolves targets
 //! before either painting or dispatch sees the frame.
 
-use crate::completion::Offers;
 use crate::display::widget::container::{self, Layers};
+use crate::display::widget::offers::Offers;
 use crate::frame::Hovered;
 use crate::workspace::Root;
 use kurbo::{Affine, Point, Rect, Stroke, Vec2};

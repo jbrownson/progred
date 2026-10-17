@@ -1,5 +1,8 @@
-use crate::display::Face;
-use gid::CellId;
+use crate::display::{
+    Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionText, Face,
+};
+use crate::identity::short_id;
+use gid::{CellId, Value};
 use std::{ops::Range, rc::Rc};
 
 pub struct Entry<C> {
@@ -28,3 +31,87 @@ impl<C> Clone for Entry<C> {
 pub struct Offers<C> {
     pub entries: Vec<Entry<C>>,
 }
+
+/// A hole's list for a query, in the order shown, with the spans that matched.
+pub type HoleOffers = Rc<dyn Fn(&CompletionRequest<'_>) -> Vec<Entry<crate::Editor>>>;
+
+/// A projection's own vocabulary for its holes, and nothing else, narrowed to
+/// the query and ranked by how well it matches.
+pub fn ranked(provider: CompletionProvider) -> HoleOffers {
+    Rc::new(move |request| rank(provider(request).unwrap_or_default(), request))
+}
+
+/// `offers` that match the query, best first, named as the document names
+/// them before matching. A new field's label is a cell the record doesn't
+/// have yet.
+pub(crate) fn rank(
+    offers: Vec<Completion>,
+    request: &CompletionRequest<'_>,
+) -> Vec<Entry<crate::Editor>> {
+    crate::filter::rank_with_aliases(
+        offers
+            .into_iter()
+            .filter(|offer| {
+                request.kind != CompletionKind::Field
+                    || !offer
+                        .preview
+                        .as_ref()
+                        .and_then(Value::as_cell)
+                        .is_some_and(|cell| {
+                            request
+                                .value()
+                                .and_then(Value::as_record)
+                                .is_some_and(|fields| fields.contains_key(&cell))
+                        })
+            })
+            .map(|offer| (text(request, &offer.display), offer))
+            .collect(),
+        |(display, _)| display,
+        |(_, completion)| &completion.aliases,
+        request.query,
+    )
+    .into_iter()
+    .filter_map(|ranked| {
+        let (_, completion) = ranked.item;
+        fitting(request, completion).map(|entry| Entry {
+            matches: ranked.matches,
+            ..entry
+        })
+    })
+    .collect()
+}
+
+/// `offer` as listed, if it fits the hole: labels can only be cells, so an
+/// offer advertising another value is not one.
+fn fitting(request: &CompletionRequest<'_>, offer: Completion) -> Option<Entry<crate::Editor>> {
+    (request.kind == CompletionKind::Value
+        || offer
+            .preview
+            .as_ref()
+            .is_none_or(|value| value.as_cell().is_some()))
+    .then(|| entry(request, offer))
+}
+
+/// `offer` as listed, unmatched.
+pub(crate) fn entry(request: &CompletionRequest<'_>, offer: Completion) -> Entry<crate::Editor> {
+    Entry {
+        display: text(request, &offer.display),
+        detail: offer.detail.as_ref().map(|detail| text(request, detail)),
+        matches: Vec::new(),
+        face: offer.face,
+        source: offer.preview.as_ref().and_then(Value::as_cell),
+        activate: offer.activate,
+    }
+}
+
+fn text(request: &CompletionRequest<'_>, text: &CompletionText) -> String {
+    match text {
+        CompletionText::Literal(text) => text.clone(),
+        CompletionText::Name(cell) => (request.name)(*cell)
+            .map(str::to_owned)
+            .unwrap_or_else(|| short_id(*cell)),
+    }
+}
+
+#[cfg(test)]
+mod tests;

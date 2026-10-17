@@ -1,5 +1,5 @@
 use super::*;
-use crate::completion::Entry;
+use crate::display::widget::offers::Entry;
 use crate::location::Location;
 use crate::sources::Sources;
 use gid::{CellId, Cells, Document, Value, new_cell_id};

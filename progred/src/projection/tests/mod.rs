@@ -1,7 +1,7 @@
 use super::*;
 use crate::annotations::Annotations;
-use crate::completion::Entry;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::widget::offers::Entry;
 use crate::hover::hover_secondary;
 use crate::identity::short_id;
 use crate::libraries::layout as layout_data;

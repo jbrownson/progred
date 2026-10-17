@@ -3,8 +3,8 @@
 //! directly or through a projection.
 
 use crate::annotations::Annotations;
-use crate::completion::Entry;
 use crate::display::CompletionKind;
+use crate::display::widget::offers::Entry;
 use crate::library::Libraries;
 use crate::projection::{ProjectDescription, Projection, project};
 use crate::selection::{Selection, pending_edge};
@@ -37,6 +37,8 @@ pub(crate) fn root_completions<World>(
         value_at: &|_| None,
         resolve: &|cell| sources.definition(cell),
         cells: &|| sources.cells().collect(),
+        name: &|cell| sources.name(cell),
+        libraries: None,
     })
     .unwrap_or_default()
 }
@@ -52,6 +54,8 @@ pub(crate) fn library_offers(
     })
 }
 
+/// What a hole lists for `query`: `contextual`'s offers ranked, or without
+/// them Raw's, reading what's typed through `providers`.
 pub(crate) fn completion_entries_with(
     sources: &Sources,
     raw: bool,
@@ -62,24 +66,21 @@ pub(crate) fn completion_entries_with(
 ) -> Vec<Entry<CompletionResult>> {
     use crate::display::{CompletionRequest, CompletionScope};
     let value_at = |path: &[Step]| sources.resolve_path(path);
-    crate::completion::completion_entries_with(
-        sources,
-        &CompletionRequest {
-            raw,
-            query,
-            kind: *kind,
-            scope: CompletionScope::Everything,
-            path: &[],
-            value_at: &value_at,
-            resolve: &|cell| sources.definition(cell),
-            cells: &|| sources.cells().collect(),
-        },
-        providers,
-        contextual.map_or(
-            crate::completion::HoleOffers::Raw,
-            crate::completion::HoleOffers::Projection,
-        ),
-    )
+    let offers = contextual.map_or_else(crate::display::raw::offers, |provider| {
+        crate::display::widget::offers::ranked(provider.clone())
+    });
+    offers(&CompletionRequest {
+        raw,
+        query,
+        kind: *kind,
+        scope: CompletionScope::Everything,
+        path: &[],
+        value_at: &value_at,
+        resolve: &|cell| sources.definition(cell),
+        cells: &|| sources.cells().collect(),
+        name: &|cell| sources.name(cell),
+        libraries: providers,
+    })
     .into_iter()
     .map(|entry| test_entry(entry, *kind))
     .collect()
@@ -126,6 +127,13 @@ pub(crate) struct CompletionResult {
     pub(crate) value: Option<Value>,
     pub(crate) label: Option<(CellId, Option<Value>)>,
     pub(crate) selected: Option<(Path, Value)>,
+}
+
+/// What choosing `entry` did, as [`test_entry`] records it.
+pub(crate) fn activated(entry: &Entry<CompletionResult>) -> CompletionResult {
+    let mut result = CompletionResult::default();
+    (entry.activate)(&mut result);
+    result
 }
 
 pub(crate) fn test_entry(

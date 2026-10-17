@@ -106,7 +106,7 @@ fn attribute(
     sources: &sources::Sources<'_>,
     descends: &[navigate::Descend<Editor>],
     root: Option<&workspace::Root>,
-    completion: Option<&crate::completion::Offers<Editor>>,
+    completion: Option<&crate::display::widget::offers::Offers<Editor>>,
     hovered: Option<Hovered>,
     link: bool,
 ) -> placed::Attribution {

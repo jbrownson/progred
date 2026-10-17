@@ -10,9 +10,9 @@ use gid::{CellId, Cells, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::projection::{group, group_hug};
 use crate::display::{
-    Completion, CompletionKind, CompletionProvider, Delim, Face, Pending, RecordField,
-    ResolvedCell, activatable, alternatives, at, col, completion, descend_local,
-    descend_path_local, dim, faced, pad, record_fragment_with, row, selectable_bracket, shared,
+    Completion, CompletionKind, Delim, Face, Pending, RecordField, ResolvedCell, activatable,
+    alternatives, at, col, completion, descend_local, descend_path_local, dim, faced, pad,
+    record_fragment_with, row, selectable_bracket, shared,
 };
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -26,7 +26,7 @@ pub(crate) fn expression(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> O
             .or_else(|| {
                 Some(completion(
                     CompletionKind::Value,
-                    Some(suggestions::provider(input.env.completions())),
+                    Some(std::rc::Rc::new(suggestions::offers)),
                 ))
             }),
     }

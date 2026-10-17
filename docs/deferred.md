@@ -196,8 +196,9 @@ Directions this surfaced:
     also supplies what a picker needs to read, such as names and libraries.
 
   Today, by contrast:
-  - Raw's offers are built inside the editor's picker code, and Grap's offers
-    borrow them from there.
+  - ~~Raw's offers are built inside the editor's picker code, and Grap's offers
+    borrow them from there.~~ Since 17 October 2026 they are display's, beside
+    the ranking of a projection's offers, and Grap's slots compose them.
   - The engine builds the picker around display's card: the hole, the query's
     line editor, Raw's bracket keys and Tab.
   - Choosing an offer receives the whole editor.
@@ -321,9 +322,9 @@ first:
    widget with Raw's offers as an ordinary projection's, and drawing programs
    recorded by the layout library into a toolkit widget. Done on 17 October
    2026: the session note's first two steps (the view aliases, and the command
-   key read from the frame's input), the picker note's first (the card, its
-   placement and the selection ring moved to display), and the drawing note's
-   first two. The drawing note's last step waits on the session note's `Host`.
+   key read from the frame's input), the picker note's first two (the card, its
+   placement and the selection ring moved to display, then Raw's offers and the
+   ranking of a projection's), and the drawing note's first two. The drawing note's last step waits on the session note's `Host`.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:

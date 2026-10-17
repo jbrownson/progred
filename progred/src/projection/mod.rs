@@ -243,10 +243,6 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
         }
     }
 
-    fn completions(&self) -> Option<crate::display::CompletionProvider> {
-        self.cx.completions.cloned()
-    }
-
     fn apply_scoped(
         &self,
         function: &Value,
@@ -946,12 +942,12 @@ fn prepare_value(
         None => {
             // A document's root is where the document starts: outside Raw,
             // its hole leads with what the libraries start one as.
-            let offers = if path.is_empty() && !cx.raw {
-                crate::completion::HoleOffers::Start
+            let hole = if path.is_empty() && !cx.raw {
+                completion::Hole::start()
             } else {
-                crate::completion::HoleOffers::Raw
+                completion::Hole::raw(crate::display::CompletionKind::Value)
             };
-            ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), offers))
+            ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), &hole))
         }
         Some(layout) => {
             let inner = prepare(
