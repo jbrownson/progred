@@ -35,7 +35,13 @@ visual testing.
   [`display/test_support.rs`](../progred/src/display/test_support.rs) records
   projection calls and supplies small helpers such as `painted`, `Landmarks`,
   and `mouse`. Some load the small documents in
-  [`progred/fixtures`](../progred/fixtures).
+  [`progred/fixtures`](../progred/fixtures). Helpers shared by tests in
+  several modules live in [`crate::test_support`](../progred/src/test_support.rs):
+  - the loaded core libraries and reading contexts;
+  - selections and arrow keys;
+  - completion entries, both directly and through a projection.
+
+  Each module's tests live beside it in its own `tests.rs`.
 - **Interactions.** [`crate::driver::Driver`](../progred/src/driver.rs) drives
   the editor as a person would: pointer and modifier input arrives as Winit
   window events through the shell's own translation, keys as the platform

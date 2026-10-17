@@ -320,7 +320,9 @@ first:
    items, since nothing should become visible just for tests. The
    [survey](history/projection-tests-survey-2026-10-17.md) of its 324 tests
    orders the work:
-   1. Move the 46 already-targeted tests to their own modules.
+   1. ~~Move the 46 already-targeted tests to their own modules.~~ Done on 17
+      October 2026. The tutorial-slot and event-encoding tests wait on the
+      harness moving in step 2.
    2. Move the 39 library projection tests next to their libraries, through
       the shared harness and the public `project()`.
    3. Move the completion card tests to display, with the card.
