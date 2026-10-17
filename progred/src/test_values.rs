@@ -1,5 +1,5 @@
 use crate::libraries::text;
-use gid::{CellId, Value, new_cell_id};
+use gid::{CellId, Step, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 
@@ -41,4 +41,8 @@ pub fn label(name: &str) -> CellId {
 
 pub fn text(text: impl Into<String>) -> Value {
     text::value(text)
+}
+
+pub fn key(s: &str) -> Step {
+    Step::Key(crate::test_values::label(s))
 }

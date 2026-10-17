@@ -1,4 +1,5 @@
 use super::*;
+use crate::sample::{PLANET_VIEW, planets};
 use gid::Cells;
 
 fn add_pane(workspace: &mut Workspace, side: Side) -> Root {
@@ -257,4 +258,21 @@ fn geometry_keeps_document_full_height_and_stacks_each_side() {
     assert_eq!(left.len(), 2);
     assert_eq!(left[0].rect.height(), left[1].rect.height());
     assert_eq!(geometry.dividers.len(), 3);
+}
+
+#[test]
+fn only_the_root_declares_libraries() {
+    let (world, names) = planets(PLANET_VIEW);
+    let sources = world.sources();
+    assert_eq!(crate::workspace::libraries(&sources).len(), 1);
+    let mut nested = (*world.model.doc).clone();
+    nested.root = Some(Value::record([(
+        names["mars"],
+        nested.root.clone().unwrap(),
+    )]));
+    let nested_sources = crate::sources::Sources {
+        doc: &nested,
+        libraries: &world.stack.libraries,
+    };
+    assert!(crate::workspace::libraries(&nested_sources).is_empty());
 }

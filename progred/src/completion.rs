@@ -387,3 +387,6 @@ fn completion_text(sources: &Sources<'_>, text: &CompletionText) -> String {
             .unwrap_or_else(|| short_id(*cell)),
     }
 }
+
+#[cfg(test)]
+mod tests;

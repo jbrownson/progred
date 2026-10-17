@@ -59,6 +59,8 @@ mod styles;
 #[cfg(test)]
 mod test_examples;
 #[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod test_values;
 mod text_store;
 mod timers;

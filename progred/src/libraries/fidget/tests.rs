@@ -3,6 +3,8 @@ use super::*;
 use crate::display::ProjectionTargets;
 use std::rc::Rc;
 
+mod cube;
+
 fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     ::grap::call(Value::from(function), arguments)
 }

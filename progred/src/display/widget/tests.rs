@@ -1,7 +1,10 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
+use crate::frame::Hovered;
+use gid::{Cells, Document};
 use puri::draw::Shape;
 use puri::{Affine, Color, DrawCmd, DrawList, Point, Rect, Stroke};
+use ui_events::keyboard::KeyboardEvent;
 
 #[test]
 fn fill_width_expands_ink_and_interaction_together_without_changing_measurement() {
@@ -349,4 +352,56 @@ fn discarded_layout_alternatives_do_not_place_widget_outputs() {
         output.claim.clone().map(|(_, claim)| claim),
         Some(puri::hover::Claim::Direct(2))
     );
+}
+
+#[test]
+fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
+    let log = Rc::new(std::cell::RefCell::new(vec![]));
+    let contribution = |name: &'static str| {
+        let log = log.clone();
+        Box::new(
+            move |output: &mut crate::display::widget::HoverContext<'_, crate::Editor, Hovered>,
+                  _: Placement| {
+                let during_paint = log.clone();
+                output.render(move |_, _| during_paint.borrow_mut().push(name));
+                output.handler().on_key(move |_, _| {
+                    log.borrow_mut().push(name);
+                    false
+                });
+            },
+        ) as crate::display::widget::HoverCallback<crate::Editor, Hovered>
+    };
+    let extent = Extent {
+        width: 40.0,
+        ascent: 10.0,
+        descent: 5.0,
+    };
+    let child = crate::display::widget::leaf(extent, contribution("child"));
+    let before = contribution("before");
+    let after = contribution("after");
+    let decorated = crate::display::widget::after_place(
+        crate::display::widget::before_place(child, move |placement, output| {
+            before(output, placement)
+        }),
+        move |placement, output| after(output, placement),
+    );
+    assert_eq!(decorated.extent, extent);
+    let output = {
+        let layout = decorated;
+        let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
+        crate::display::widget::frame::place(layout, placement, &Default::default())
+    };
+    let output = output.bind(Default::default());
+    assert!(log.borrow().is_empty());
+    assert!(!output.handler.unwrap().dispatch_key(
+        &mut crate::test_editor(Document {
+            root: None,
+            cells: Cells::new()
+        }),
+        &KeyboardEvent::default()
+    ));
+    assert_eq!(&*log.borrow(), &["after", "child", "before"]);
+    log.borrow_mut().clear();
+    puri::frame::render(output.renders, &mut DrawList::new());
+    assert_eq!(&*log.borrow(), &["before", "child", "after"]);
 }

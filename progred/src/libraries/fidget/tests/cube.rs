@@ -1,5 +1,7 @@
 use super::*;
-use crate::libraries::{control, f32};
+use crate::libraries::{control, f32, fidget};
+use crate::test_support::{core_libraries, src};
+use gid::Step;
 
 fn cube(size: f32, chamfer: f32, depth: f32) -> Value {
     let (mut doc, names) = crate::gid_text::parse(crate::test_examples::CUBE).unwrap();

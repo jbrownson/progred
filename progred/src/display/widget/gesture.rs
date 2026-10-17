@@ -235,3 +235,6 @@ impl Gesture<crate::Editor> for PointControl {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

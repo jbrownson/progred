@@ -1,21 +1,20 @@
 use super::completion::{completion_card, completion_placement};
 use super::*;
 use crate::annotations::Annotations;
-use crate::completion::{Entry, Offers};
+use crate::completion::Entry;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::hover::hover_secondary;
 use crate::identity::short_id;
 use crate::libraries::layout as layout_data;
 use crate::libraries::{Libraries, f64, fidget, name, text};
-use crate::navigate::select_all;
-use crate::placed::leaf;
 use crate::sample::{sample_document, sample_vocabulary};
 use crate::selection::payload as selection_payload;
-use crate::selection::{
-    break_edit_run, delete_edge, from_clipboard, from_structure, pending_edge, pending_follow,
-    pending_insert, pending_into, pending_value, resolve_query, set_value, to_clipboard,
+use crate::selection::{break_edit_run, delete_edge, pending_edge, pending_into, pending_value};
+use crate::test_support::{
+    arrow, completion_entries_with, core_libraries, doc_of, library_offers, make_selection,
+    positions, root_completions, src,
 };
-use gid::Position;
+use crate::test_values::key;
 use gid::{Cells, Document, new_cell_id};
 use kurbo::Rect;
 use measured::Extent;
@@ -27,93 +26,6 @@ use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
     PointerType, PointerUpdate,
 };
-
-fn libraries(cells: Cells) -> Libraries {
-    Libraries::from_contributions([(
-        CellId::from_u128(1),
-        crate::libraries::Library::<(), ()>::named(
-            CellId::from_u128(1),
-            "test",
-            crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
-        ),
-    )])
-    .0
-}
-
-fn core_libraries() -> Libraries {
-    crate::stack::load().libraries
-}
-
-fn root_completions<World>(stack: &crate::stack::Stack<World>) -> Vec<crate::display::Completion> {
-    let document = Document {
-        root: None,
-        cells: Cells::new(),
-    };
-    let sources = src(&document, &stack.libraries);
-    (stack.completions)(&crate::display::CompletionRequest {
-        raw: false,
-        query: "",
-        kind: crate::display::CompletionKind::Value,
-        scope: crate::display::CompletionScope::Start,
-        path: &[],
-        value_at: &|_| None,
-        resolve: &|cell| sources.definition(cell),
-        cells: &|| sources.cells().collect(),
-    })
-    .unwrap_or_default()
-}
-
-/// The libraries' answers to `scope`, as a projection that asks for them,
-/// such as Grap's slots, offers them.
-fn library_offers(
-    completions: crate::display::CompletionProvider,
-    scope: crate::display::CompletionScope,
-) -> crate::display::CompletionProvider {
-    std::rc::Rc::new(move |request| {
-        completions(&crate::display::CompletionRequest { scope, ..*request })
-    })
-}
-
-fn completion_entries_with(
-    sources: &Sources,
-    raw: bool,
-    kind: &crate::display::CompletionKind,
-    query: &str,
-    providers: Option<&crate::display::CompletionProvider>,
-    contextual: Option<&crate::display::CompletionProvider>,
-) -> Vec<Entry<completion::CompletionResult>> {
-    use crate::display::{CompletionRequest, CompletionScope};
-    let value_at = |path: &[Step]| sources.resolve_path(path);
-    crate::completion::completion_entries_with(
-        sources,
-        &CompletionRequest {
-            raw,
-            query,
-            kind: *kind,
-            scope: CompletionScope::Everything,
-            path: &[],
-            value_at: &value_at,
-            resolve: &|cell| sources.definition(cell),
-            cells: &|| sources.cells().collect(),
-        },
-        providers,
-        contextual.map_or(
-            crate::completion::HoleOffers::Raw,
-            crate::completion::HoleOffers::Projection,
-        ),
-    )
-    .into_iter()
-    .map(|entry| completion::test_entry(entry, *kind))
-    .collect()
-}
-
-fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
-    Sources { doc, libraries }
-}
-
-fn make_selection(path: Path) -> Selection {
-    Selection::edge(&crate::test_root(), path)
-}
 
 type EditingWorld = crate::Editor;
 
@@ -256,56 +168,11 @@ const EMPTY_SLOTS: &str = r#"{
 
 const FRUIT: &str = r#"{"root": ["apples", "pears", "plums"]}"#;
 
-fn key(s: &str) -> Step {
-    Step::Key(crate::test_values::label(s))
-}
-
-/// A one-cell document: the root links a cell holding `fields`.
-fn doc_of(fields: Vec<(CellId, Value)>) -> (Rc<Document>, CellId) {
-    let mut cells = Cells::new();
-    let cell = new_cell_id();
-    cells.set_value(cell, Value::record(fields));
-    (
-        Rc::new(Document {
-            root: Some(Value::from(cell)),
-            cells,
-        }),
-        cell,
-    )
-}
-
-/// The ordered positions of a list value's elements.
-fn positions(value: &Value) -> Vec<Position> {
-    value.as_list().unwrap().keys().cloned().collect()
-}
-
-fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
-    Descend {
-        scope: Default::default(),
-        root: None,
-        path: Rc::from(path),
-        rect: Rect::new(x0, y0, x1, y1),
-        select: Rc::new(|_, _| true),
-        secondary: None,
-        selected: false,
-    }
-}
-
-fn arrow(named: NamedKey) -> KeyboardEvent {
-    KeyboardEvent {
-        key: Key::Named(named),
-        state: KeyState::Down,
-        modifiers: Modifiers::empty(),
-        ..Default::default()
-    }
-}
-
 mod completion;
 mod display;
 mod editing;
 mod events;
 mod frame;
-mod navigation;
 
 fn measured_rect(width: f64) -> kurbo::Rect {
     kurbo::Rect::new(0.0, 0.0, width, 100.0)

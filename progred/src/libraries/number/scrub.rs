@@ -164,3 +164,6 @@ impl Gesture<crate::Editor> for Scrub {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,7 +1,15 @@
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
 use crate::display::widget;
+use crate::placed::{self, leaf};
 use crate::{Editor, frame::Hovered};
+use kurbo::Rect;
+use measured::Extent;
+use puri::Placement;
+use ui_events::keyboard::Modifiers;
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+};
 
 /// Exercise an offer's actual handler, including its selection effects.
 pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
@@ -234,4 +242,91 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
         },
     );
     world.model.workspace.document.annotations.at(&[]).cloned()
+}
+
+pub fn target() -> Hovered {
+    crate::libraries::test_widgets::hover(vec![])
+}
+
+pub fn press(x: f64, pick: bool) -> PointerButtonEvent {
+    PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: PointerInfo {
+            pointer_id: Some(PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        state: PointerState {
+            position: (x, 5.0).into(),
+            modifiers: if pick {
+                Modifiers::META | Modifiers::CONTROL
+            } else {
+                Modifiers::empty()
+            },
+            ..Default::default()
+        },
+    }
+}
+
+pub fn gesture_place(
+    layout: crate::display::Layout<crate::Editor, Hovered>,
+    readonly: bool,
+) -> crate::display::widget::HoverCallback<crate::Editor, Hovered> {
+    let crate::display::recording::Recorded::Before { before, .. } =
+        crate::display::recording::record(&layout)
+    else {
+        panic!("widget wrapper");
+    };
+    crate::display::test_support::with_context(
+        &crate::display::test_support::NoProject,
+        |context| {
+            let mut cx = context.inputs.clone();
+            if readonly {
+                cx.edits = cx.edits.detached(vec![]);
+            }
+            before(&mut crate::display::widget::Context {
+                inputs: &cx,
+                project: context.project,
+                path: context.path,
+                value: context.value,
+                text: &mut *context.text,
+            })
+        },
+    )
+}
+
+pub fn drag_frame(
+    place: crate::display::widget::HoverCallback<crate::Editor, Hovered>,
+    covered: bool,
+) -> crate::placed::HoverOutput<crate::Editor> {
+    let extent = Extent {
+        width: 20.0,
+        ascent: 0.0,
+        descent: 20.0,
+    };
+    let node =
+        crate::display::widget::before_place(leaf(extent, |_, _| {}), move |placement, output| {
+            place(output, placement)
+        });
+    let placement = Placement::new(
+        Rect::new(0.0, 0.0, 20.0, 20.0),
+        Rect::new(0.0, 0.0, 10.0, 20.0),
+    );
+    let placed = crate::display::widget::frame::place(
+        placed::in_view(node, crate::test_root()),
+        placement,
+        &Default::default(),
+    );
+    if covered {
+        measured::Output::over(
+            placed,
+            crate::display::widget::frame::place(
+                leaf(extent, |p, placement| p.occlude(placement)),
+                placement,
+                &Default::default(),
+            ),
+        )
+    } else {
+        placed
+    }
 }

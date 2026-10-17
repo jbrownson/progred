@@ -1,4 +1,5 @@
 use super::*;
+use crate::completion::Entry;
 use crate::location::Location;
 use crate::sources::Sources;
 use gid::{CellId, Cells, Document, Value, new_cell_id};
@@ -192,4 +193,33 @@ fn nested_values_match_by_cell_and_relative_path() {
         secondary(&sources, vec![Step::Element(positions[0].clone())]),
         secondary(&sources, vec![Step::Element(positions[1].clone())])
     );
+}
+
+#[test]
+fn entry_hover_marks_follow_the_visible_offers() {
+    let cell = new_cell_id();
+    let offers = |value: Value| Offers {
+        entries: vec![Entry {
+            display: "offer".to_string(),
+            detail: None,
+            matches: vec![],
+            face: crate::display::Face::Label,
+            source: value.as_cell(),
+            activate: Rc::new(|_: &mut crate::Editor| {}),
+        }],
+    };
+
+    assert_eq!(
+        hover_secondary(None, Some(&offers(Value::from(cell))), &Hover::Entry(0)),
+        Some(Secondary::Cell(cell))
+    );
+    assert_eq!(
+        hover_secondary(
+            None,
+            Some(&offers(crate::test_values::text("offer"))),
+            &Hover::Entry(0)
+        ),
+        None
+    );
+    assert_eq!(hover_secondary::<()>(None, None, &Hover::Entry(0)), None);
 }
