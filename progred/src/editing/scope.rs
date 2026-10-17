@@ -196,6 +196,15 @@ pub(crate) struct Edit<'a> {
 }
 
 impl Edit<'_> {
+    /// The value at `path`, read through this scope.
+    pub(crate) fn value(&self, path: &[Step]) -> Option<&Value> {
+        self.scope.read(&self.access.session.sources(), path)
+    }
+
+    pub(crate) fn selection(&self) -> Option<&selection::Selection> {
+        self.access.session.model.selection.as_ref()
+    }
+
     pub(crate) fn annotation(&self, root: &Root, path: &[Step]) -> Option<&Value> {
         self.access
             .session

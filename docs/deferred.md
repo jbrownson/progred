@@ -346,10 +346,12 @@ first:
    and the query and card edit, so none of them takes the editor), the drawing
    note's first two, and half its last: the source-link handlers are the
    toolkit's. The recorded leaf going generic waits on the session note's
-   `Host::Hover`. Two reads still reach past what a widget is lent: number's
-   operator keys read the line being typed at their site, which the session
-   note's `Edit::selected` would answer, and the picker's Tab moves on through
-   the editor's navigation once it has committed.
+   `Host::Hover`. A site's edit says whether it's selected and what's typed
+   there, as the session note's `Edit::selected` does, so number's operator
+   keys read the selection through it. One handler still reaches past what
+   a widget is lent: the picker's Tab moves on through the editor's
+   navigation once it has committed, since landmark arrival takes the world
+   until step 8.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:

@@ -11,7 +11,7 @@ mod site;
 pub use scope::Read;
 pub(crate) use scope::{Access, Edit, Scope};
 pub(crate) use session::Session;
-pub(crate) use site::Site;
+pub(crate) use site::{Selected, Site};
 
 pub(crate) fn select(session: &mut Session<'_>, root: &Root, path: &[Step]) {
     let fresh = session.model.selection.as_ref().is_none_or(|current| {

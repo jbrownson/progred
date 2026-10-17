@@ -6,6 +6,7 @@ use super::{Access, Edit, Scope, Session};
 use crate::hover::Hover;
 use crate::workspace::Root;
 use gid::{Step, Value};
+use puri::edit::LineEditState;
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -77,7 +78,35 @@ pub(crate) struct SiteEdit<'s> {
     edit: Edit<'s>,
 }
 
+/// Whether an occurrence is selected.
+pub(crate) enum Selected<'s> {
+    Elsewhere,
+    Here,
+    /// Selected, with its value's text being typed.
+    Typing(&'s LineEditState),
+}
+
 impl SiteEdit<'_> {
+    /// The value stored here.
+    pub(crate) fn value(&self) -> Option<&Value> {
+        self.edit.value(&self.site.path)
+    }
+
+    /// Whether this occurrence is selected, and the line being typed in its
+    /// value if one is.
+    pub(crate) fn selected(&self) -> Selected<'_> {
+        match self
+            .edit
+            .selection()
+            .filter(|selection| self.site.holds(selection))
+        {
+            None => Selected::Elsewhere,
+            Some(selection) => selection
+                .value_edit()
+                .map_or(Selected::Here, Selected::Typing),
+        }
+    }
+
     /// This occurrence's state, which its view keeps.
     pub(crate) fn state(&self) -> Option<&Value> {
         self.edit.annotation(&self.site.root, &self.site.path)

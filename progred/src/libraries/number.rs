@@ -382,26 +382,24 @@ fn wrap_typed<N: std::str::FromStr>(
     else {
         return false;
     };
-    let Some(current) = session
-        .model
-        .selection
-        .as_ref()
-        .filter(|current| site.holds(current))
-    else {
-        return false;
-    };
-    if let Some(line) = current.value_edit() {
-        let (anchor, focus) = line.selection_offsets();
-        if anchor != focus || focus != line.text().len() || line.text().trim().parse::<N>().is_err()
-        {
-            return false;
+    let mut edit = site.open(session);
+    match edit.selected() {
+        crate::editing::Selected::Elsewhere => return false,
+        crate::editing::Selected::Here => {}
+        crate::editing::Selected::Typing(line) => {
+            let (anchor, focus) = line.selection_offsets();
+            if anchor != focus
+                || focus != line.text().len()
+                || line.text().trim().parse::<N>().is_err()
+            {
+                return false;
+            }
         }
     }
-    let Some(left) = current.value(&session.sources()).cloned() else {
+    let Some(left) = edit.value().cloned() else {
         return false;
     };
     let wrapped = ::grap::call(Value::from(operator), [(vocabulary::LEFT, left)]);
-    let mut edit = site.open(session);
     if !edit.replace(wrapped) {
         return false;
     }
