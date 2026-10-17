@@ -294,8 +294,10 @@ first:
      - 54 are core vocabulary to keep. 28 of these called Grap's conventions
        through library re-exports; the core now calls Grap directly.
      - 64 are vocabulary only the core interprets: selection stages, per-site
-       state, folds and panes. These move into the core, with the libraries
-       re-exporting the cells.
+       state, folds and panes. On 17 October 2026 these moved into the core
+       beside the code that interprets them, with the libraries re-exporting
+       the cells, and the library interface itself (`Library`, `Libraries`,
+       `Definitions`) moved to `crate::library`.
      - 60 are the core doing a library's job. Most of these are the engine
        interpreting the layout library's drawing programs, which would become
        a recorded-drawing widget the layout library fills. The rest are:
@@ -320,8 +322,8 @@ first:
    The crate split analysis's first four steps start on this, and each pays
    off on its own:
    - alias the concrete `<Editor, Hovered>` pair, written out 332 times;
-   - let the model own the vocabularies and codecs it interprets, as grap owns
-     f64's convention;
+   - ~~let the model own the vocabularies and codecs it interprets, as grap
+     owns f64's convention;~~ done on 17 October 2026;
    - back `editing::Access` with the model and the libraries rather than
      `&mut Editor`, and let the shell set the window title after dispatch;
    - move the hover types, `projection::Cx` and the completion helpers down,
