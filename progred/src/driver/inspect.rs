@@ -111,6 +111,18 @@ impl<P> Driver<P> {
         Some(self.editor().model.selection.as_ref()?.edit()?.text())
     }
 
+    /// The edited line's anchor and focus, as byte offsets.
+    pub(crate) fn line_selection(&self) -> Option<(usize, usize)> {
+        Some(
+            self.editor()
+                .model
+                .selection
+                .as_ref()?
+                .edit()?
+                .selection_offsets(),
+        )
+    }
+
     /// What the open picker offers, in order; `None` when none is open.
     pub(crate) fn picker_entries(&mut self) -> Option<Vec<String>> {
         let frame = crate::projection::test_support::editing_frame(&mut self.runner.editor, false);

@@ -2,13 +2,14 @@
 
 use crate::display::test_support::ResolveForDispatch;
 use crate::display::widget::navigation::Direction;
+use crate::driver::Driver;
 use crate::libraries::{name, text};
 use crate::location::Location;
 use crate::projection::test_support::editing_frame;
 use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value};
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 
 type World = crate::Editor;
 
@@ -366,49 +367,13 @@ fn logical_computed_children_remain_readonly_and_text_handles_keys_first() {
     assert_eq!(selection.path(), result);
     assert!(selection.scope().location(selection.path()).is_none());
 
-    world.model.selection = Some(make_selection(vec![]));
     let document = world.model.doc.clone();
-    let mut runner = crate::EditorRunner::new(world);
-    let viewport = kurbo::Size::new(900.0, 600.0);
-    runner.refresh_frame(1.0, viewport);
-    let right = KeyboardEvent {
-        key: Key::Named(NamedKey::ArrowRight),
-        state: KeyState::Down,
-        ..Default::default()
-    };
-    assert!(runner.keyboard_event(&right, 1.0, viewport));
-    assert_eq!(
-        runner.editor.model.selection.as_ref().unwrap().path(),
-        source
-    );
-    assert_eq!(
-        runner
-            .editor
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .edit()
-            .unwrap()
-            .selection_offsets(),
-        (0, 0)
-    );
-    assert!(runner.keyboard_event(&right, 1.0, viewport));
-    assert_eq!(
-        runner.editor.model.selection.as_ref().unwrap().path(),
-        source
-    );
-    assert_eq!(
-        runner
-            .editor
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .edit()
-            .unwrap()
-            .selection_offsets(),
-        (1, 1)
-    );
-    assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+    let mut driver = Driver::new(world, kurbo::Size::new(900.0, 600.0));
+    driver.select(&[]);
+    for offset in [0, 1] {
+        assert!(driver.keystroke(Key::Named(NamedKey::ArrowRight), Modifiers::empty()));
+        assert_eq!(driver.selection(), source);
+        assert_eq!(driver.line_selection(), Some((offset, offset)));
+    }
+    assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
 }

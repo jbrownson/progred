@@ -2,6 +2,7 @@
 
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::display::{self as d, widget::navigation as nav};
+use crate::driver::Driver;
 use crate::libraries::{f64, name, text};
 use crate::location::{Location, Start};
 use crate::projection::Projection;
@@ -9,10 +10,12 @@ use crate::projection::test_support::{editing_frame, editing_frame_with_projecti
 use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value, new_cell_id};
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 
 type World = crate::Editor;
 use nav::Direction;
+
+const VIEWPORT: kurbo::Size = kurbo::Size::new(900.0, 600.0);
 
 fn sample_projection() -> Projection<World> {
     Projection::new([d::runtime_partial(|input| {
@@ -350,7 +353,7 @@ fn navigation_runner_installs_successor_handlers_before_the_next_key_without_pai
     world.stack.projection = sample_projection();
     let mut runner = crate::EditorRunner::new(world);
     runner.editor.model.selection = Some(make_selection(paths[2].clone()));
-    let viewport = kurbo::Size::new(900.0, 600.0);
+    let viewport = VIEWPORT;
     runner.refresh_frame(1.0, viewport);
     for expected in [3, 3, 3, 3, 3, 3, 3, 4] {
         assert!(runner.keyboard_event(
@@ -371,57 +374,26 @@ fn navigation_runner_installs_successor_handlers_before_the_next_key_without_pai
 
 #[test]
 fn navigation_named_number_hands_off_from_name_at_text_boundary() {
-    let mut world = crate::test_editor(Document {
+    let world = crate::test_editor(Document {
         root: Some(d::overlay_value(
             &f64::value(45.0),
             name::record("tilt", []),
         )),
         cells: Cells::new(),
     });
-    world.model.selection = Some(make_selection(vec![Step::Key(name::vocabulary::NAME)]));
-    let mut runner = crate::EditorRunner::new(world);
-    let viewport = kurbo::Size::new(900.0, 600.0);
-    runner.refresh_frame(1.0, viewport);
-    assert!(runner.keyboard_event(
-        &KeyboardEvent {
-            key: Key::Named(NamedKey::ArrowRight),
-            state: KeyState::Down,
-            ..Default::default()
-        },
-        1.0,
-        viewport
-    ));
-    assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), []);
-    assert_eq!(
-        runner
-            .editor
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .edit()
-            .unwrap()
-            .selection_offsets(),
-        (0, 0)
-    );
+    let mut driver = Driver::new(world, VIEWPORT);
+    driver.select(&[Step::Key(name::vocabulary::NAME)]);
+    assert!(driver.keystroke(Key::Named(NamedKey::ArrowRight), Modifiers::empty()));
+    assert_eq!(driver.selection(), []);
+    assert_eq!(driver.line_selection(), Some((0, 0)));
 }
 
 #[test]
 fn navigation_example_projects_and_navigates_without_an_app_window() {
     let (doc, _) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
-    let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
-    let viewport = kurbo::Size::new(900.0, 600.0);
-    runner.refresh_frame(1.0, viewport);
+    let mut driver = Driver::new(crate::test_editor(doc), VIEWPORT);
     for _ in 0..5 {
-        assert!(runner.keyboard_event(
-            &KeyboardEvent {
-                key: Key::Named(NamedKey::ArrowDown),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-            1.0,
-            viewport
-        ));
+        assert!(driver.keystroke(Key::Named(NamedKey::ArrowDown), Modifiers::empty()));
     }
 }
 
@@ -620,27 +592,17 @@ fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
         ])
         .collect();
     for width in [900.0, 240.0] {
-        let mut runner = crate::EditorRunner::new(crate::test_editor(doc.clone()));
-        let viewport = kurbo::Size::new(width, 600.0);
-        let document = runner.editor.model.doc.clone();
+        let mut driver = Driver::new(
+            crate::test_editor(doc.clone()),
+            kurbo::Size::new(width, 600.0),
+        );
+        let document = driver.editor().model.doc.clone();
         let mut walk = |start: &Path, moves: &[(NamedKey, &Path)]| {
-            runner.editor.model.selection = Some(make_selection(start.clone()));
-            runner.refresh_frame(1.0, viewport);
+            driver.select(start);
             for (key, expected) in moves {
-                assert!(runner.keyboard_event(
-                    &KeyboardEvent {
-                        key: Key::Named(*key),
-                        state: KeyState::Down,
-                        ..Default::default()
-                    },
-                    1.0,
-                    viewport
-                ));
-                assert_eq!(
-                    runner.editor.model.selection.as_ref().unwrap().path(),
-                    *expected
-                );
-                assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+                assert!(driver.keystroke(Key::Named(*key), Modifiers::empty()));
+                assert_eq!(driver.selection(), **expected);
+                assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
             }
         };
         // Include the repeated "Nested lists" section: occurrences remain distinct.
@@ -678,7 +640,7 @@ fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
 
 #[test]
 fn navigation_example_cells_leave_vertical_navigation_to_the_list() {
-    let (mut world, cells) = navigation_example_cells();
+    let (world, cells) = navigation_example_cells();
     let name: Path = cells[0]
         .iter()
         .cloned()
@@ -687,29 +649,16 @@ fn navigation_example_cells_leave_vertical_navigation_to_the_list() {
             Step::Key(name::vocabulary::NAME),
         ])
         .collect();
-    world.model.selection = Some(make_selection(cells[0].clone()));
-    let mut runner = crate::EditorRunner::new(world);
-    let viewport = kurbo::Size::new(900.0, 600.0);
-    runner.refresh_frame(1.0, viewport);
+    let mut driver = Driver::new(world, VIEWPORT);
+    driver.select(&cells[0]);
     for (key, expected) in [
         (NamedKey::ArrowDown, &cells[1]),
         (NamedKey::ArrowUp, &cells[0]),
         (NamedKey::ArrowRight, &name),
         (NamedKey::ArrowDown, &cells[1]),
     ] {
-        assert!(runner.keyboard_event(
-            &KeyboardEvent {
-                key: Key::Named(key),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-            1.0,
-            viewport
-        ));
-        assert_eq!(
-            runner.editor.model.selection.as_ref().unwrap().path(),
-            expected
-        );
+        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        assert_eq!(driver.selection(), *expected);
     }
 }
 
@@ -728,11 +677,9 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
         d::structure::list_column(8.0, None),
         world.stack.projection.partial().clone(),
     ]);
-    world.model.selection = Some(make_selection(paths[0].clone()));
     let document = world.model.doc.clone();
-    let mut runner = crate::EditorRunner::new(world);
-    let viewport = kurbo::Size::new(900.0, 600.0);
-    runner.refresh_frame(1.0, viewport);
+    let mut driver = Driver::new(world, VIEWPORT);
+    driver.select(&paths[0]);
     // The ordinary initial caret is at the end. Wrapping must preserve the
     // horizontal arrival, rather than turning Right into a Down event.
     for (key, row, offset) in [
@@ -741,28 +688,16 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
         // Down uses the widget's ordinary default, with no explicit caret.
         (NamedKey::ArrowDown, 1, None),
     ] {
-        assert!(runner.keyboard_event(
-            &KeyboardEvent {
-                key: Key::Named(key),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-            1.0,
-            viewport,
-        ));
-        let selection = runner.editor.model.selection.as_ref().unwrap();
-        assert_eq!(selection.path(), paths[row]);
-        assert_eq!(
-            selection.edit().map(|line| line.selection_offsets()),
-            offset.map(|n| (n, n))
-        );
-        assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        assert_eq!(driver.selection(), paths[row]);
+        assert_eq!(driver.line_selection(), offset.map(|n| (n, n)));
+        assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
     }
 }
 
 #[test]
 fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
-    let (mut world, cells) = navigation_example_cells();
+    let (world, cells) = navigation_example_cells();
     let number = |cell: &Path| -> Path {
         cell.iter()
             .cloned()
@@ -775,28 +710,14 @@ fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
             .chain([Step::Key(name::vocabulary::NAME)])
             .collect()
     };
-    world.model.selection = Some(make_selection(cells[0].clone()));
     let document = world.model.doc.clone();
-    let mut runner = crate::EditorRunner::new(world);
-    let viewport = kurbo::Size::new(900.0, 600.0);
-    runner.refresh_frame(1.0, viewport);
+    let mut driver = Driver::new(world, VIEWPORT);
+    driver.select(&cells[0]);
     let mut step = |key, path: Path, offset: Option<usize>| {
-        assert!(runner.keyboard_event(
-            &KeyboardEvent {
-                key: Key::Named(key),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-            1.0,
-            viewport
-        ));
-        let selection = runner.editor.model.selection.as_ref().unwrap();
-        assert_eq!(selection.path(), path);
-        assert_eq!(
-            selection.edit().map(|line| line.selection_offsets()),
-            offset.map(|n| (n, n))
-        );
-        assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        assert_eq!(driver.selection(), path);
+        assert_eq!(driver.line_selection(), offset.map(|n| (n, n)));
+        assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
     };
     step(NamedKey::ArrowRight, name(&cells[0]), Some(0));
     for offset in 1..=5 {
@@ -832,27 +753,17 @@ fn navigation_empty_cell_stops_before_entering_missing_contents() {
         .map(|p| vec![Step::Element(p)])
         .collect();
     for (start, direction) in [(0, NamedKey::ArrowRight), (2, NamedKey::ArrowLeft)] {
-        let mut world = crate::test_editor(Document {
+        let world = crate::test_editor(Document {
             root: Some(outer.clone()),
             cells: Cells::new(),
         });
-        world.model.selection = Some(make_selection(paths[start].clone()));
         let document = world.model.doc.clone();
-        let mut runner = crate::EditorRunner::new(world);
-        let viewport = kurbo::Size::new(900.0, 600.0);
-        runner.refresh_frame(1.0, viewport);
+        let mut driver = Driver::new(world, VIEWPORT);
+        driver.select(&paths[start]);
         // Left must first move through the text to its boundary.
         if start == 2 {
             for _ in 0..5 {
-                assert!(runner.keyboard_event(
-                    &KeyboardEvent {
-                        key: Key::Named(NamedKey::ArrowLeft),
-                        state: KeyState::Down,
-                        ..Default::default()
-                    },
-                    1.0,
-                    viewport
-                ));
+                assert!(driver.keystroke(Key::Named(NamedKey::ArrowLeft), Modifiers::empty()));
             }
         }
         let contents: Path = paths[1]
@@ -866,20 +777,9 @@ fn navigation_empty_cell_stops_before_entering_missing_contents() {
             [&contents, &paths[1]]
         };
         for expected in stops {
-            assert!(runner.keyboard_event(
-                &KeyboardEvent {
-                    key: Key::Named(direction),
-                    state: KeyState::Down,
-                    ..Default::default()
-                },
-                1.0,
-                viewport
-            ));
-            assert_eq!(
-                runner.editor.model.selection.as_ref().unwrap().path(),
-                expected
-            );
-            assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+            assert!(driver.keystroke(Key::Named(direction), Modifiers::empty()));
+            assert_eq!(driver.selection(), *expected);
+            assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
         }
     }
 }
@@ -959,11 +859,11 @@ fn navigation_example_lists_leave_vertical_navigation_to_the_outer_list() {
         .chain([Step::Element(first_item)])
         .collect();
     for width in [900.0, 240.0] {
-        let mut world = crate::test_editor(doc.clone());
-        world.model.selection = Some(make_selection(lists[0].clone()));
-        let mut runner = crate::EditorRunner::new(world);
-        let viewport = kurbo::Size::new(width, 600.0);
-        runner.refresh_frame(1.0, viewport);
+        let mut driver = Driver::new(
+            crate::test_editor(doc.clone()),
+            kurbo::Size::new(width, 600.0),
+        );
+        driver.select(&lists[0]);
         for (key, expected) in [
             (NamedKey::ArrowDown, &lists[1]),
             (NamedKey::ArrowDown, &lists[2]),
@@ -971,33 +871,10 @@ fn navigation_example_lists_leave_vertical_navigation_to_the_outer_list() {
             (NamedKey::ArrowUp, &lists[0]),
             (NamedKey::ArrowRight, &first_text),
         ] {
-            assert!(runner.keyboard_event(
-                &KeyboardEvent {
-                    key: Key::Named(key),
-                    state: KeyState::Down,
-                    ..Default::default()
-                },
-                1.0,
-                viewport
-            ));
-            assert_eq!(
-                runner.editor.model.selection.as_ref().unwrap().path(),
-                expected,
-                "width={width}, key={key:?}"
-            );
+            assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+            assert_eq!(driver.selection(), *expected, "width={width}, key={key:?}");
         }
-        assert_eq!(
-            runner
-                .editor
-                .model
-                .selection
-                .as_ref()
-                .unwrap()
-                .edit()
-                .unwrap()
-                .selection_offsets(),
-            (0, 0)
-        );
+        assert_eq!(driver.line_selection(), Some((0, 0)));
     }
 }
 
@@ -1020,15 +897,13 @@ fn navigation_nested_list_has_one_leading_stop_in_both_directions() {
         .chain([Step::Element(inner_positions[1].clone())])
         .collect();
     let h = vec![Step::Element(outer_positions[2].clone())];
-    let mut world = crate::test_editor(Document {
+    let world = crate::test_editor(Document {
         root: Some(outer),
         cells: Cells::new(),
     });
-    world.model.selection = Some(make_selection(e.clone()));
     let document = world.model.doc.clone();
-    let mut runner = crate::EditorRunner::new(world);
-    let viewport = kurbo::Size::new(900.0, 600.0);
-    runner.refresh_frame(1.0, viewport);
+    let mut driver = Driver::new(world, VIEWPORT);
+    driver.select(&e);
     for (key, path, offset) in [
         (NamedKey::ArrowRight, &list, None),
         (NamedKey::ArrowRight, &f, Some(0)),
@@ -1043,22 +918,10 @@ fn navigation_nested_list_has_one_leading_stop_in_both_directions() {
         (NamedKey::ArrowLeft, &list, None),
         (NamedKey::ArrowLeft, &e, Some(1)),
     ] {
-        assert!(runner.keyboard_event(
-            &KeyboardEvent {
-                key: Key::Named(key),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-            1.0,
-            viewport
-        ));
-        let selection = runner.editor.model.selection.as_ref().unwrap();
-        assert_eq!(selection.path(), path);
-        assert_eq!(
-            selection.edit().map(|line| line.selection_offsets()),
-            offset.map(|n| (n, n))
-        );
-        assert!(Rc::ptr_eq(&runner.editor.model.doc, &document));
+        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        assert_eq!(driver.selection(), *path);
+        assert_eq!(driver.line_selection(), offset.map(|n| (n, n)));
+        assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
     }
 }
 
@@ -1069,33 +932,20 @@ fn navigation_empty_list_stops_once_in_either_direction() {
         .into_iter()
         .map(|p| vec![Step::Element(p)])
         .collect();
-    let mut world = crate::test_editor(Document {
+    let world = crate::test_editor(Document {
         root: Some(outer),
         cells: Cells::new(),
     });
-    world.model.selection = Some(make_selection(paths[0].clone()));
-    let mut runner = crate::EditorRunner::new(world);
-    let viewport = kurbo::Size::new(900.0, 600.0);
-    runner.refresh_frame(1.0, viewport);
+    let mut driver = Driver::new(world, VIEWPORT);
+    driver.select(&paths[0]);
     for (key, expected) in [
         (NamedKey::ArrowRight, 1),
         (NamedKey::ArrowRight, 2),
         (NamedKey::ArrowLeft, 1),
         (NamedKey::ArrowLeft, 0),
     ] {
-        assert!(runner.keyboard_event(
-            &KeyboardEvent {
-                key: Key::Named(key),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-            1.0,
-            viewport
-        ));
-        assert_eq!(
-            runner.editor.model.selection.as_ref().unwrap().path(),
-            paths[expected]
-        );
+        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        assert_eq!(driver.selection(), paths[expected]);
     }
 }
 
@@ -1135,25 +985,14 @@ fn content_after_a_multiline_block_stays_on_its_content_line() {
             .map(|position| child(&block, &[Step::Element(position.clone())]))
             .collect()
     };
-    let viewport = kurbo::Size::new(900.0, 2400.0);
-    let mut runner = crate::EditorRunner::new(crate::test_editor(doc.clone()));
+    let mut driver = Driver::new(
+        crate::test_editor(doc.clone()),
+        kurbo::Size::new(900.0, 2400.0),
+    );
     let mut check = |from: &Path, key: NamedKey, to: &Path| {
-        runner.editor.model.selection = Some(make_selection(from.clone()));
-        runner.refresh_frame(1.0, viewport);
-        assert!(runner.keyboard_event(
-            &KeyboardEvent {
-                key: Key::Named(key),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-            1.0,
-            viewport
-        ));
-        assert_eq!(
-            runner.editor.model.selection.as_ref().unwrap().path(),
-            to.as_slice(),
-            "{key:?} from {from:?}"
-        );
+        driver.select(from);
+        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        assert_eq!(driver.selection(), *to, "{key:?} from {from:?}");
     };
 
     let body = section("after_label");
