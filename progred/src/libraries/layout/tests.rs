@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
+use crate::libraries::text;
 
 use crate::display::test_support::{ProjectionCall, inspect};
 use std::rc::Rc;

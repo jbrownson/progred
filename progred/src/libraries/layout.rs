@@ -11,7 +11,7 @@
 //!
 #[cfg(test)]
 use crate::display::ActionHandler;
-use crate::libraries::{Library, color, f64 as f64_convention, name, presentation, text};
+use crate::libraries::{Library, color, f64 as f64_convention, name, presentation};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
@@ -337,7 +337,7 @@ pub fn text_leaf(content: &str, face: CellId) -> Value {
     node(
         vocabulary::TEXT,
         Value::record([
-            (vocabulary::CONTENT, text::value(content)),
+            (vocabulary::CONTENT, crate::libraries::text::value(content)),
             (vocabulary::PAINT, Value::Cell(face)),
         ]),
     )
