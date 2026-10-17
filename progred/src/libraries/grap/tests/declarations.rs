@@ -1,5 +1,21 @@
 use super::*;
+use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::frame::Hovered;
+use crate::hover::Hover;
 use crate::libraries::control::vocabulary as control;
+use crate::libraries::{f64, text};
+use crate::navigate::Descend;
+use crate::placed;
+use crate::projection::test_support::*;
+use crate::selection::{pending_edge, pending_into};
+use gid::Path;
+use kurbo::Point;
+use puri::hover::Claim;
+use std::rc::Rc;
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent};
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+};
 
 #[test]
 fn expression_cells_are_shallow_only_with_a_valid_name() {
@@ -618,7 +634,7 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
         followed.push(Step::Follow(gid::Resolution::Document));
         assert_eq!(has(&followed), !direct_reference);
 
-        let marker_position = |descends: &[Descend<World>]| {
+        let marker_position = |descends: &[Descend<crate::Editor>]| {
             let wrapper = descends
                 .iter()
                 .find(|d| d.path.as_ref() == &expression_path[..1])
@@ -686,7 +702,7 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
                     .update(extra, text::value("metadata")),
             )),
         });
-        let has_metadata = |frame: &crate::placed::HoverOutput<World>| {
+        let has_metadata = |frame: &crate::placed::HoverOutput<crate::Editor>| {
             frame
                 .descends
                 .iter()

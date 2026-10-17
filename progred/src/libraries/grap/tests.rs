@@ -1133,3 +1133,5 @@ fn built_in_call_completion_opens_its_first_argument() {
         Some(&crate::libraries::selection::vocabulary::PENDING.into())
     );
 }
+
+mod declarations;

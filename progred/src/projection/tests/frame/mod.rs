@@ -158,7 +158,6 @@ mod completion;
 mod compositor;
 mod conject;
 mod custom_navigation;
-mod declarations;
 mod document_libraries;
 mod drawing;
 mod fidget_shapes;

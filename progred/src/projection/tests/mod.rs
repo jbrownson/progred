@@ -9,7 +9,7 @@ use crate::libraries::{f64, fidget, name, text};
 use crate::library::Libraries;
 use crate::sample::{sample_document, sample_vocabulary};
 use crate::selection::payload as selection_payload;
-use crate::selection::{break_edit_run, delete_edge, pending_edge, pending_into, pending_value};
+use crate::selection::{break_edit_run, delete_edge, pending_edge, pending_value};
 use crate::test_support::{
     arrow, completion_entries_with, core_libraries, doc_of, library_offers, make_selection,
     positions, root_completions, src,
