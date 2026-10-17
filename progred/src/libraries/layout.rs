@@ -29,6 +29,7 @@ use puri::{
 const APPLY_BORDER_PROJECTION: CellId = CellId::from_u128(0x9803fe7e085a661271b4339db22db136);
 const CAPTURED_BORDER_PROJECTION: CellId = CellId::from_u128(0x79e405aaf432422ca572617eb6d98fa3);
 
+mod drawing;
 mod events;
 pub use events::on_event;
 pub mod scope;
@@ -361,6 +362,27 @@ pub fn drawing(
     )
 }
 
+/// A drawing whose Grap `program` draws it, with `fuel` to run.
+#[cfg(test)]
+pub fn program_drawing(
+    width: f64,
+    ascent: f64,
+    descent: f64,
+    fuel: usize,
+    program: Value,
+) -> Value {
+    node(
+        vocabulary::DRAWING,
+        Value::record([
+            (vocabulary::WIDTH, number(width)),
+            (vocabulary::ASCENT, number(ascent)),
+            (vocabulary::DESCENT, number(descent)),
+            (vocabulary::FUEL, number(fuel as f64)),
+            (vocabulary::PROGRAM, program),
+        ]),
+    )
+}
+
 #[cfg(test)]
 pub fn fill(shape: Value, paint: Value) -> Value {
     node(
@@ -651,7 +673,7 @@ fn decode_with(
         let descent = read_nonnegative(content.field(vocabulary::DESCENT)?.as_value())?;
         if let Some(program) = content.field(vocabulary::PROGRAM) {
             let fuel = fuel(read_number(content.field(vocabulary::FUEL)?.as_value())?)?;
-            return Some(crate::display::drawing_program(
+            return Some(drawing::program(
                 crate::display::widget::Extent {
                     width,
                     ascent,

@@ -11,7 +11,7 @@ use kurbo::Point;
 #[test]
 fn declining_after_drawing_discards_the_whole_recording() {
     use crate::libraries::{control, f64};
-    use layout_data::vocabulary as draw;
+    use vocabulary as draw;
     let sequence = |values| {
         grap::call(
             control::vocabulary::DO.into(),
@@ -87,14 +87,14 @@ fn recorded_hits_keep_the_executing_library_definition() {
     let definition = grap::lambda(
         [],
         grap::call(
-            Value::from(layout_data::vocabulary::FILL),
+            Value::from(vocabulary::FILL),
             [
                 (
-                    layout_data::vocabulary::SHAPE,
-                    layout_data::rect(0.0, 0.0, 10.0, 10.0),
+                    vocabulary::SHAPE,
+                    crate::libraries::layout::rect(0.0, 0.0, 10.0, 10.0),
                 ),
                 (
-                    layout_data::vocabulary::PAINT,
+                    vocabulary::PAINT,
                     crate::libraries::color::value(peniko::Color::BLACK),
                 ),
             ],
@@ -139,7 +139,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
             panic!("drawing should have a source");
         };
         assert_eq!(
-            super::super::source_link::hover_source::<crate::Editor>(&sources, &[], &hover),
+            crate::projection::source_link::hover_source::<crate::Editor>(&sources, &[], &hover),
             Some(selected)
         );
         let other = SourceTrace::from_location(

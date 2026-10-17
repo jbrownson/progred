@@ -2,7 +2,6 @@
 //! retain source provenance, and fall back to total structural display.
 
 pub(crate) mod completion;
-pub(crate) mod drawing;
 pub(crate) mod line_control;
 mod location;
 pub(crate) mod source_link;

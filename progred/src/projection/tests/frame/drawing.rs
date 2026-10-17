@@ -305,12 +305,10 @@ fn drawing_frame(
     libraries: &Libraries,
     shape_function: CellId,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let layout = crate::projection::drawing::program(
-        Extent {
-            width: 40.0,
-            ascent: 0.0,
-            descent: 40.0,
-        },
+    let drawing = layout_data::program_drawing(
+        40.0,
+        0.0,
+        40.0,
         100,
         grap::call(
             Value::from(layout_data::vocabulary::FILL),
@@ -324,9 +322,15 @@ fn drawing_frame(
                     crate::libraries::color::value(Color::BLACK),
                 ),
             ],
-        )
-        .into(),
+        ),
     );
+    let select: crate::display::ActionHandler<crate::Editor> = Rc::new(|_| false);
+    let layout = layout_data::decode(
+        &drawing,
+        &select,
+        &crate::libraries::test_widgets::hover(vec![]),
+    )
+    .expect("a program drawing decodes");
     let mut build = measured::choices::ChoiceBuild::default();
     let prepared = crate::display::test_support::with_sources(
         Sources { doc, libraries },

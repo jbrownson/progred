@@ -1058,13 +1058,5 @@ pub fn overlay_value(current: &Value, patch: Value) -> Value {
     }
 }
 
-pub fn drawing_program(
-    extent: measured::Extent,
-    fuel: usize,
-    program: grap::RuntimeValue,
-) -> crate::view::Layout {
-    crate::projection::drawing::program(extent, fuel, program)
-}
-
 #[cfg(test)]
 mod tests;

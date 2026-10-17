@@ -1,25 +1,25 @@
-//! Grap drawing programs in the layout library's vocabulary: `fill`, and
-//! paths built with `path`, `move to`, `line to` and `close`. They draw into
-//! the toolkit's recorded leaf, which records a visible program once per
-//! frame for both hit-testing and painting.
+//! Drawing programs: Grap code that fills shapes with `fill`, building paths
+//! with `path`, `move to`, `line to` and `close`. They draw into the toolkit's
+//! recorded leaf, which records a visible program once per frame for both
+//! hit-testing and painting.
 
+use super::{read_paint, read_shape, read_transform, vocabulary};
 use crate::display::widget::recorded::{Record, Recorder};
-use crate::libraries::layout as layout_data;
 use gid::{CellId, Step, Value};
 use kurbo::{Affine, BezPath, Circle, Rect};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// A stored drawing's program, drawn into a recorded leaf `extent` logical
-/// units big.
-pub(crate) fn program(
+/// A drawing's program, drawn into a recorded leaf `extent` logical units
+/// big. The program is the occurrence's `program` field.
+pub(super) fn program(
     extent: measured::Extent,
     fuel: usize,
     program: grap::RuntimeValue,
 ) -> crate::view::Layout {
     crate::display::widget::recorded::recorded(
         extent,
-        vec![Step::Key(layout_data::vocabulary::PROGRAM)],
+        vec![Step::Key(vocabulary::PROGRAM)],
         record(program, fuel),
     )
 }
@@ -32,40 +32,40 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
         let path = RefCell::new(BezPath::new());
         let unit = Value::record([]);
         let functions = [
-            layout_data::vocabulary::FILL,
-            layout_data::vocabulary::PATH,
-            layout_data::vocabulary::MOVE_TO,
-            layout_data::vocabulary::LINE_TO,
-            layout_data::vocabulary::CLOSE,
+            vocabulary::FILL,
+            vocabulary::PATH,
+            vocabulary::MOVE_TO,
+            vocabulary::LINE_TO,
+            vocabulary::CLOSE,
         ];
         let draw = |function,
                     context: &mut grap::Context<'_>,
                     call: &grap::Expression,
                     environment: &grap::Environment| {
             match function {
-                layout_data::vocabulary::PATH => Ok(context.effect(|| {
+                vocabulary::PATH => Ok(context.effect(|| {
                     *path.borrow_mut() = BezPath::new();
                     unit.clone()
                 })),
-                layout_data::vocabulary::MOVE_TO | layout_data::vocabulary::LINE_TO => {
-                    let Some(x) = context.field(call, layout_data::vocabulary::X) else {
-                        return Ok(context.missing_argument(layout_data::vocabulary::X));
+                vocabulary::MOVE_TO | vocabulary::LINE_TO => {
+                    let Some(x) = context.field(call, vocabulary::X) else {
+                        return Ok(context.missing_argument(vocabulary::X));
                     };
-                    let Some(y) = context.field(call, layout_data::vocabulary::Y) else {
-                        return Ok(context.missing_argument(layout_data::vocabulary::Y));
+                    let Some(y) = context.field(call, vocabulary::Y) else {
+                        return Ok(context.missing_argument(vocabulary::Y));
                     };
                     let (Some(x), Some(y)) = (
                         number(context, x, environment)?,
                         number(context, y, environment)?,
                     ) else {
                         return Ok(::grap::absent::with_detail(
-                            layout_data::vocabulary::INVALID_DRAWING,
+                            vocabulary::INVALID_DRAWING,
                             ::grap::absent::VALUE,
                             context.value(call).clone(),
                         ));
                     };
                     Ok(context.effect(|| {
-                        if function == layout_data::vocabulary::MOVE_TO {
+                        if function == vocabulary::MOVE_TO {
                             path.borrow_mut().move_to((x, y));
                         } else {
                             path.borrow_mut().line_to((x, y));
@@ -73,35 +73,31 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                         unit.clone()
                     }))
                 }
-                layout_data::vocabulary::CLOSE => Ok(context.effect(|| {
+                vocabulary::CLOSE => Ok(context.effect(|| {
                     path.borrow_mut().close_path();
                     unit.clone()
                 })),
-                layout_data::vocabulary::FILL => {
-                    let Some(paint) = evaluated_field(
-                        context,
-                        call,
-                        environment,
-                        layout_data::vocabulary::PAINT,
-                    )?
+                vocabulary::FILL => {
+                    let Some(paint) =
+                        evaluated_field(context, call, environment, vocabulary::PAINT)?
                     else {
-                        return Ok(context.missing_argument(layout_data::vocabulary::PAINT));
+                        return Ok(context.missing_argument(vocabulary::PAINT));
                     };
-                    let shape = match context.field(call, layout_data::vocabulary::SHAPE) {
+                    let shape = match context.field(call, vocabulary::SHAPE) {
                         Some(shape) => evaluated_shape(&context.eval(shape, environment)?),
                         None => Some(puri::Shape::Path(path.borrow().clone())),
                     };
-                    let transform = match context.field(call, layout_data::vocabulary::TRANSFORM) {
+                    let transform = match context.field(call, vocabulary::TRANSFORM) {
                         Some(transform) => {
                             evaluated_transform(&context.eval(transform, environment)?)
                         }
                         None => Some(Affine::IDENTITY),
                     };
                     let (Some(shape), Some(paint), Some(transform)) =
-                        (shape, layout_data::read_paint(&paint), transform)
+                        (shape, read_paint(&paint), transform)
                     else {
                         return Ok(::grap::absent::with_detail(
-                            layout_data::vocabulary::INVALID_DRAWING,
+                            vocabulary::INVALID_DRAWING,
                             ::grap::absent::VALUE,
                             context.value(call).clone(),
                         ));
@@ -146,7 +142,7 @@ fn number(
 /// The common shapes read straight from evaluated values, sparing each
 /// coordinate a round trip through stored bytes; others read as stored data.
 fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::Shape> {
-    use layout_data::vocabulary::{CIRCLE, HEIGHT, RADIUS, RECT, ROUNDED_RECT, WIDTH, X, Y};
+    use vocabulary::{CIRCLE, HEIGHT, RADIUS, RECT, ROUNDED_RECT, WIDTH, X, Y};
     if let Some(rect) = value.field(RECT) {
         let (x, y, width, height) = (
             coordinate(&rect, X)?,
@@ -167,13 +163,13 @@ fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::Shape> {
         );
         return (radius >= 0.0).then(|| puri::Shape::Circle(Circle::new((x, y), radius)));
     }
-    layout_data::read_shape(&value.to_value())
+    read_shape(&value.to_value())
 }
 
 fn evaluated_transform(value: &grap::RuntimeValue) -> Option<Affine> {
-    use layout_data::vocabulary::{ROTATE, TRANSLATE, X, Y};
+    use vocabulary::{ROTATE, TRANSLATE, X, Y};
     let Some(mut operations) = value.list_values() else {
-        return layout_data::read_transform(&value.to_value());
+        return read_transform(&value.to_value());
     };
     operations.try_fold(Affine::IDENTITY, |transform, operation| {
         Some(match operation.field(TRANSLATE) {

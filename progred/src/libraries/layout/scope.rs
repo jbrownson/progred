@@ -327,7 +327,7 @@ fn operation(
                 return Err(invalid(function));
             };
             let program = context.eval(need!(context.field(call, PROGRAM)), environment)?;
-            crate::display::drawing_program(
+            super::drawing::program(
                 crate::display::widget::Extent {
                     width,
                     ascent,
