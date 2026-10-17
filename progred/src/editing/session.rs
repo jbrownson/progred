@@ -1,12 +1,13 @@
 //! What a handler acts on while an event is dispatched: the model, read over
-//! the loaded libraries, the drag a press starts, and the text tools a line
-//! editor needs. Nothing reachable from it leads to the window or the menus;
-//! the shell shows what changed once dispatch returns.
+//! the loaded libraries, the drag a press starts, the wakeups it schedules, and
+//! the text tools a line editor needs. Nothing reachable from it leads to the
+//! window or the menus; the shell shows what changed once dispatch returns.
 
 use crate::gesture::Active;
 use crate::library::Libraries;
 use crate::model::Model;
 use crate::sources::Sources;
+use crate::timers::Timers;
 use crate::workspace::Root;
 use gid::Step;
 use kurbo::Point;
@@ -20,6 +21,8 @@ pub(crate) struct Session<'a> {
     pub(crate) libraries: &'a Libraries,
     /// The drag a press started, which owns motion until release.
     pub(crate) gesture: &'a mut Option<Active>,
+    /// Frame wakeups a handler schedules, such as the end of a debounce.
+    pub(crate) timers: &'a mut Timers,
     pub(crate) text: TextTools<'a>,
 }
 
@@ -44,6 +47,7 @@ impl Session<'_> {
             model: &mut *self.model,
             libraries: self.libraries,
             gesture: &mut *self.gesture,
+            timers: &mut *self.timers,
             text: TextTools {
                 fonts: &mut *self.text.fonts,
                 layouts: &mut *self.text.layouts,
@@ -110,6 +114,7 @@ impl crate::Editor {
             model: &mut self.model,
             libraries: &self.stack.libraries,
             gesture: &mut self.gesture,
+            timers: &mut self.timers,
             text: TextTools {
                 fonts: &mut self.font_cx,
                 layouts: &mut self.layout_cx,

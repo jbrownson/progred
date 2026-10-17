@@ -16,7 +16,7 @@ pub fn set_worker_channel(name: String) {
 
 #[wasm_bindgen]
 pub fn worker_threads() -> usize {
-    fidget_engine::render::ThreadPool::Global.thread_count()
+    rayon::current_num_threads()
 }
 
 pub fn initialize() {

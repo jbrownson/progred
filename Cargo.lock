@@ -2456,6 +2456,7 @@ dependencies = [
  "puri-web",
  "puri-widgets",
  "raw-window-metal",
+ "rayon",
  "rfd",
  "serde_json",
  "skrifa",

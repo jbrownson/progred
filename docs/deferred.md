@@ -63,6 +63,39 @@ their definitions; loading needs that descriptor and a source that can resolve
 the listed cells, which a document can provide without becoming part of the
 library's semantic type.
 
+## Libraries with native code
+
+A library that needs native code, like the fidget library around the Fidget
+crate, could someday load as a plugin built from one source: a native dynamic
+library on macOS and Linux, and a WebAssembly module on the web. It would bring
+what an editor-authored library does, plus native FFIs that take GID values and
+return one, with images and meshes as blobs. Long calls would run as jobs with
+cancellation, progress and partial results, and the editor would draw their
+results with widgets it owns: an image, a mesh, an orbit viewport. Values would
+cross as bytes, so this needs a binary GID encoding first. A native plugin isn't
+sandboxed, so it's installed deliberately, never loaded because a document
+names it; on macOS it must be signed by the same team unless the app turns off
+library validation. On the web, a separately loaded module can't join the app's
+worker pool, so it runs single-threaded unless it brings its own workers or the
+host splits its jobs.
+
+None of this is planned, but the fidget library should stay separable:
+
+- Calls into the Fidget crate stay in the fidget library and the `volume` and
+  `cam` crates. Fidget objects, such as a lowered `Tree`, never go into Grap
+  values; memos keyed by the field value cache them.
+- The GPU handoff stays at pixels and meshes; the fidget library renders on its
+  own device.
+- Other libraries use the fidget library's vocabulary, not its functions. The
+  toolpath library is today's exception: its previews reuse the fidget
+  library's scene, raster, mesh and viewport code, so the two would leave
+  together unless that 3D preview code becomes the editor's.
+- Library handlers reach the editor only through the session, and background
+  jobs own their inputs.
+- FFIs evaluate their named arguments and return data. Toolpath's path
+  commands, which apply Grap functions to each point and emit effects, would
+  need the host to record commands as data, or calls back into the evaluator.
+
 ## Quotes that fill bound variables
 
 A quote fills only its `unquote` holes; a bare reference in a template stays
