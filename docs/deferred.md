@@ -348,10 +348,17 @@ first:
        recorded-drawing leaf. The rest are:
        - presentation's pane special cases, as a pane entry and a wrapping
          projection;
-       - Tab's skipping of name slots: the projection drawing a hole would
-         say whether it's optional, so navigation needn't know names;
-       - handlers getting their event under layout's label: a fixed event
-         format is fine, but the core should own it.
+       - Tab's skipping of name slots. The owner would rather Tab stop at
+         optional slots too. Every empty name in the bundled examples is an
+         unnamed lambda's `λ`, which the grap library draws as a marker to
+         click rather than as a slot: 39 of them in the toolpaths example,
+         which has no other stops. So the rule to try is that Tab stops
+         wherever a projection draws a hole, and navigation needn't know
+         names;
+       - the cells that label Grap handlers' event records, which are the
+         layout library's. Grap handlers need values, so the records stay;
+         the cells are the editor's input vocabulary, so they move to the
+         core, with layout re-exporting them as the selection stages did.
 
        Plain was one of these. The owner decided on 17 October 2026 that Plain
        is a list of libraries, not something each library provides. One list
@@ -385,8 +392,11 @@ first:
    then `Picking`, the open picker the session lends, which offers commit into
    and the query and card edit, so none of them takes the editor), the drawing
    note's first two, and half its last: the source-link handlers are the
-   toolkit's. The recorded leaf going generic waits on the session note's
-   `Host::Hover`. A site's edit says whether it's selected and what's typed
+   toolkit's. The picker note's fifth, typed picker state, is dropped: the
+   owner decided on 17 October 2026 that the picker's choice and scroll stay
+   in the selection's payload, since nothing should hard-code the picker,
+   which a Grap library should be able to recreate. The recorded leaf going
+   generic waits on the session note's `Host::Hover`. A site's edit says whether it's selected and what's typed
    there, as the session note's `Edit::selected` does, so number's operator
    keys read the selection through it. One handler still reaches past what
    a widget is lent: the picker's Tab moves on through the editor's
