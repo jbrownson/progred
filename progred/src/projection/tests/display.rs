@@ -6,11 +6,10 @@ fn projection_target_appends_relative_steps() {
     let parent = gid::new_cell_id();
     let field = gid::new_cell_id();
 
-    crate::display::test_support::with_context::<crate::Editor, Hovered, _>(
+    crate::display::test_support::with_empty_view::<crate::Editor, Hovered, _>(
         &crate::display::test_support::NoProject,
-        |context| {
-            let target =
-                projection_target(context.inputs, &[Step::Key(parent)], vec![Step::Key(field)]);
+        |cx, _, _| {
+            let target = projection_target(cx, &[Step::Key(parent)], vec![Step::Key(field)]);
             let expected = vec![Step::Key(parent), Step::Key(field)];
             assert_eq!(
                 target.hover,

@@ -17,10 +17,10 @@ fn native_annotation_handler_retains_the_projected_site() {
         Some(crate::display::widget::before(
             crate::display::text("scroll"),
             Rc::new(|context| {
-                let root = context.inputs.view.clone();
-                let path = context.path.to_vec();
+                let root = context.toolkit.view().clone();
+                let path = context.path().to_vec();
                 crate::display::widget::scroll::scroll(
-                    context.inputs.styles.scale,
+                    context.toolkit.styles().scale,
                     move |world: &mut crate::Editor, delta| {
                         crate::editing::annotate(
                             &mut world.session(),

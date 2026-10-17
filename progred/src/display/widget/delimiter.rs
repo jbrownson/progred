@@ -11,9 +11,9 @@ pub fn side<World: 'static, Hover: 'static>(
     Rc::new(move |context| {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Delimiter);
-        let size = 14.0 * context.inputs.styles.scale;
-        let gap = 2.0 * context.inputs.styles.scale;
-        let brush = context.inputs.styles.delimiter.clone();
+        let size = 14.0 * context.toolkit.styles().scale;
+        let gap = 2.0 * context.toolkit.styles().scale;
+        let brush = context.toolkit.styles().delimiter.clone();
         let (ascent, descent) = delim::minimum_span(size);
         paint(
             Extent {

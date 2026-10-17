@@ -278,19 +278,18 @@ pub fn gesture_place(
     else {
         panic!("widget wrapper");
     };
-    crate::display::test_support::with_context(
+    crate::display::test_support::with_empty_view(
         &crate::display::test_support::NoProject,
-        |context| {
-            let mut cx = context.inputs.clone();
+        |cx, text, project| {
+            let mut cx = cx.clone();
             if readonly {
                 cx.edits = cx.edits.detached(vec![]);
             }
             before(&mut crate::display::widget::Context {
-                inputs: &cx,
-                project: context.project,
-                path: context.path,
-                value: context.value,
-                text: &mut *context.text,
+                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
+                project,
+                value: None,
+                text,
             })
         },
     )

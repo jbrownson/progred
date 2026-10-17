@@ -52,8 +52,8 @@ pub fn hover_highlight<World: 'static, Hover: Clone + PartialEq + 'static>(
         child,
         Rc::new(move |context| {
             let target = target.clone();
-            let scale = context.inputs.styles.scale;
-            let palette = context.inputs.styles.palette;
+            let scale = context.toolkit.styles().scale;
+            let palette = context.toolkit.styles().palette;
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {
                     output.render(move |canvas, hovered| {

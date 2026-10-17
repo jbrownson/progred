@@ -23,12 +23,12 @@ fn card<World: 'static, Hover: Clone + PartialEq + 'static>(
         crate::display::padding((10.0, 10.0, 10.0, 10.0).into(), content),
         Rc::new(|context| {
             let panel = Panel {
-                fill: Some(context.inputs.styles.palette.panel.into()),
+                fill: Some(context.toolkit.styles().palette.panel.into()),
                 border: Some((
-                    Stroke::new(context.inputs.styles.scale),
-                    context.inputs.styles.palette.border.into(),
+                    Stroke::new(context.toolkit.styles().scale),
+                    context.toolkit.styles().palette.border.into(),
                 )),
-                radius: 6.0 * context.inputs.styles.scale,
+                radius: 6.0 * context.toolkit.styles().scale,
             };
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {

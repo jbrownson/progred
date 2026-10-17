@@ -3,7 +3,6 @@
 
 pub(crate) mod line_control;
 mod location;
-pub(crate) mod source_link;
 mod structure;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -132,6 +131,112 @@ pub(crate) struct Cx<'a> {
     /// The selected structural source, normalized across projections
     /// for execution-linked output.
     pub(crate) selected_trace: Option<SourceTrace>,
+}
+
+/// One occurrence in a view, as the widgets drawing it read the view.
+pub(crate) struct Occurrence<'a> {
+    pub(crate) cx: &'a Cx<'a>,
+    pub(crate) path: &'a [Step],
+}
+
+impl Occurrence<'_> {
+    fn below(&self, steps: &[Step]) -> Path {
+        self.path.iter().chain(steps).cloned().collect()
+    }
+}
+
+impl crate::display::Viewing for Occurrence<'_> {
+    fn scale(&self) -> f64 {
+        self.cx.styles.scale
+    }
+
+    fn writable(&self) -> bool {
+        self.cx.edits.writable(&self.cx.sources, self.path)
+    }
+
+    fn host(&self) -> &dyn grap::Host {
+        &self.cx.sources
+    }
+
+    fn computations(&self) -> &crate::computations::Computations {
+        self.cx.computations
+    }
+
+    fn state_below(&self, steps: &[Step]) -> Option<&Value> {
+        self.cx.annotations.at(&self.below(steps))
+    }
+
+    fn selected_below(&self, steps: &[Step]) -> bool {
+        let below = self.below(steps);
+        self.cx
+            .selection
+            .is_some_and(|selection| selection.path().starts_with(&below))
+    }
+}
+
+impl crate::display::Toolkit for Occurrence<'_> {
+    fn path(&self) -> &[Step] {
+        self.path
+    }
+
+    fn view(&self) -> &crate::workspace::Root {
+        self.cx.view
+    }
+
+    fn scope(&self) -> &crate::editing::Scope {
+        &self.cx.edits
+    }
+
+    fn site(&self) -> crate::editing::Site {
+        self.cx.site(Rc::from(self.path))
+    }
+
+    fn styles(&self) -> &Styles {
+        self.cx.styles
+    }
+
+    fn sources(&self) -> Sources<'_> {
+        self.cx.sources
+    }
+
+    fn location(&self) -> Option<Location<'_>> {
+        self.cx.edits.location(self.path)
+    }
+
+    fn focused(&self) -> bool {
+        self.cx.focused
+    }
+
+    fn raw(&self) -> bool {
+        self.cx.raw
+    }
+
+    fn selection(&self) -> Option<&Selection> {
+        self.cx.selection
+    }
+
+    fn selected(&self) -> bool {
+        self.cx.selected(self.path)
+    }
+
+    fn label_query(&self) -> Option<&LineEditState> {
+        self.cx.pending_edge_under(self.path)
+    }
+
+    fn completions(&self) -> Option<&crate::display::CompletionProvider> {
+        self.cx.completions
+    }
+
+    fn selected_trace(&self) -> Option<&SourceTrace> {
+        self.cx.selected_trace.as_ref()
+    }
+
+    fn trace_below(&self, steps: &[Step]) -> Option<SourceTrace> {
+        self.cx
+            .edits
+            .location(&self.below(steps))
+            .map(|location| SourceTrace::from_location(&self.cx.sources, &location))
+    }
 }
 
 #[derive(Clone, Default)]
@@ -291,8 +396,7 @@ fn prepare(
         &mut crate::display::widget::Context {
             project: &project,
             text: tcx,
-            inputs: cx,
-            path,
+            toolkit: &Occurrence { cx, path },
             value,
         },
         build,
@@ -467,11 +571,7 @@ fn tree_hovered(hover: &placed::Attribution) -> Option<&Hover> {
 
 /// Select `path` in this view, interpreted through this occurrence's scope.
 pub(crate) fn select_handler(path: SharedPath, cx: &Cx) -> crate::display::Action {
-    let site = cx.site(path);
-    Rc::new(move |session| {
-        site.open(session).select();
-        true
-    })
+    crate::display::widget::navigation::selecting(cx.site(path))
 }
 
 fn projection_target(
@@ -911,7 +1011,11 @@ fn prepare_value(
             } else {
                 crate::display::raw::picker(crate::display::CompletionKind::Value)
             };
-            ChoiceLayout::fixed(crate::display::widget::picker::hole(cx, tcx, path, &picker))
+            ChoiceLayout::fixed(crate::display::widget::picker::hole(
+                &Occurrence { cx, path },
+                tcx,
+                &picker,
+            ))
         }
         Some(layout) => {
             let inner = prepare(
@@ -949,7 +1053,8 @@ fn prepare_value(
             let root = cx.view.clone();
             let scale = cx.styles.scale;
             let palette = cx.styles.palette;
-            let select = crate::display::widget::navigation::arrival(landmark_path.clone(), cx);
+            let select =
+                crate::display::widget::navigation::arrival(cx.site(landmark_path.clone()));
             let target =
                 value.map(|value| (value.clone(), select_handler(landmark_path.clone(), cx)));
             let edits = cx.edits.clone();

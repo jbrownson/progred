@@ -20,9 +20,17 @@ const DIRECTIONS: [Direction; 4] = [
 // Pointer/source selection and Select All also use these direct selection helpers.
 pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
 
+/// Select `site`, as clicking it does.
+pub(crate) fn selecting(site: crate::editing::Site) -> crate::display::Action {
+    Rc::new(move |session| {
+        site.open(session).select();
+        true
+    })
+}
+
 /// Plain arrival at an occurrence: select it, whatever the direction.
-pub(crate) fn arrival(path: Rc<[Step]>, cx: &crate::projection::Cx<'_>) -> Select<crate::Editor> {
-    let select = crate::projection::select_handler(path, cx);
+pub(crate) fn arrival(site: crate::editing::Site) -> Select<crate::Editor> {
+    let select = selecting(site);
     Rc::new(move |editor: &mut crate::Editor, _| select(&mut editor.session()))
 }
 
@@ -31,8 +39,8 @@ pub fn target(child: crate::view::Layout) -> crate::view::Layout {
     super::before(
         child,
         Rc::new(|context| {
-            let path: Rc<[Step]> = Rc::from(context.path);
-            let selected = context.inputs.selected(context.path);
+            let path: Rc<[Step]> = Rc::from(context.path());
+            let selected = context.toolkit.selected();
             Box::new(move |output, _| output.navigation_stop(path, selected))
         }),
     )
@@ -42,8 +50,8 @@ pub fn nav_group(child: crate::view::Layout) -> crate::view::Layout {
     super::around(
         child,
         Rc::new(move |context| {
-            let path: Rc<[Step]> = Rc::from(context.path);
-            let selected = context.inputs.selected(context.path);
+            let path: Rc<[Step]> = Rc::from(context.path());
+            let selected = context.toolkit.selected();
             Box::new(move |child| {
                 measured::around_into(child, move |_, inner, pass| {
                     pass.navigation.begin_container(path, selected);

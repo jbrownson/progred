@@ -87,18 +87,19 @@ fn native_delimiter(
     } else {
         side
     };
-    let native = crate::display::test_support::with_context(
+    let native = crate::display::test_support::with_empty_view(
         &crate::display::test_support::NoProject,
-        |context| {
+        |cx, text, project| {
             let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
-            let mut inputs = context.inputs.clone();
-            inputs.styles = &styles;
+            let cx = crate::projection::Cx {
+                styles: &styles,
+                ..cx.clone()
+            };
             widget::fill_height(side)(&mut widget::Context {
                 value: Some(&value.into()),
-                inputs: &inputs,
-                project: context.project,
-                path: context.path,
-                text: &mut *context.text,
+                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
+                project,
+                text,
             })
         },
     );
@@ -829,7 +830,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
         p.occlude(placement);
         let claimed = target.clone();
         p.claim_dynamic(placement, move |_| Some(claimed.clone()));
-        crate::projection::source_link::handlers(
+        crate::display::widget::source_link::handlers(
             &mut p,
             placement,
             1.0,

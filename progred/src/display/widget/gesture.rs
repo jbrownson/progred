@@ -88,7 +88,7 @@ pub fn on_state_drag(
                 Rc::new(move |session, value| site.open(session).set_state(value));
             let handler = handler.clone();
             let on_press = on_press.clone();
-            let scale = context.inputs.styles.scale;
+            let scale = context.toolkit.styles().scale;
             let threshold = crate::gesture::DRAG_THRESHOLD;
             targeted(
                 target.clone(),
@@ -123,8 +123,8 @@ pub fn drag_outlined(child: crate::view::Layout) -> crate::view::Layout {
         child,
         Rc::new(|context| {
             let writable = context.viewing().writable();
-            let scale = context.inputs.styles.scale;
-            let palette = context.inputs.styles.palette;
+            let scale = context.toolkit.styles().scale;
+            let palette = context.toolkit.styles().palette;
             Box::new(move |child| {
                 if !writable {
                     return child;

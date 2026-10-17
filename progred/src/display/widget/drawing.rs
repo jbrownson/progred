@@ -24,11 +24,11 @@ pub fn prepare<W: 'static, H: 'static>(
         } => {
             let style = match paint {
                 Paint::Face(face) => {
-                    widget::style::face_style(context.inputs.styles, *face).clone()
+                    widget::style::face_style(context.toolkit.styles(), *face).clone()
                 }
                 Paint::Brush(brush) => TextStyle {
                     brush: brush.clone(),
-                    ..context.inputs.styles.name.clone()
+                    ..context.toolkit.styles().name.clone()
                 },
             };
             let text = puri::text::scripted_text(context.text, text, &style, *script);
@@ -37,9 +37,9 @@ pub fn prepare<W: 'static, H: 'static>(
             })
         }
         Leaf::Drawing(drawing) => {
-            let scale = context.inputs.styles.scale;
+            let scale = context.toolkit.styles().scale;
             let drawing = drawing.clone().map_paint(|paint| match paint {
-                Paint::Face(face) => widget::style::face_style(context.inputs.styles, face)
+                Paint::Face(face) => widget::style::face_style(context.toolkit.styles(), face)
                     .brush
                     .clone(),
                 Paint::Brush(brush) => brush,

@@ -45,7 +45,7 @@ fn website_forest_hover_finds_the_available_call() {
         })
     }).expect("a tree shape has a captured call chain");
     assert_eq!(
-        crate::projection::source_link::hover_source(
+        crate::display::widget::source_link::hover_source(
             &sources,
             &runner.frame.dispatch.descends,
             &hovered

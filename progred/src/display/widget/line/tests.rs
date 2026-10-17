@@ -2,17 +2,18 @@ use super::*;
 
 #[test]
 fn read_only_line_needs_no_selection_or_editing_capabilities() {
-    crate::display::test_support::with_context::<crate::Editor, crate::frame::Hovered, _>(
+    crate::display::test_support::with_empty_view::<crate::Editor, crate::frame::Hovered, _>(
         &crate::display::test_support::NoProject,
-        |context| {
-            let mut cx = context.inputs.clone();
-            cx.edits = cx.edits.detached(vec![]);
+        |cx, text, project| {
+            let cx = crate::projection::Cx {
+                edits: cx.edits.detached(vec![]),
+                ..cx.clone()
+            };
             let mut context = Context {
-                inputs: &cx,
-                project: context.project,
-                path: context.path,
-                value: context.value,
-                text: &mut *context.text,
+                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
+                project,
+                value: None,
+                text,
             };
             let measured = view(
                 &mut context,

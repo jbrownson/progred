@@ -7,7 +7,7 @@ fn controls_output(
     width: f64,
     frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
 ) -> Result<(Vec<Widget>, Value), Value> {
-    let callable = ::grap::evaluate(controls, &frame.inputs.sources, ::grap::DEFAULT_FUEL).result;
+    let callable = ::grap::evaluate(controls, frame.viewing().host(), ::grap::DEFAULT_FUEL).result;
     super::controls_output(&callable, state, width, frame)
         .map(|(widgets, value)| (widgets, value.into_value()))
         .map_err(RuntimeValue::into_value)
@@ -23,7 +23,9 @@ fn apply_change(
     super::apply_change(&mut editor.session(), site, &callable, value)
 }
 
-use crate::display::test_support::{ResolveForDispatch, with_context, with_sources};
+use crate::display::test_support::{
+    ResolveForDispatch, with_context, with_empty_view, with_sources, with_view,
+};
 use crate::display::widget::project::Project;
 use crate::libraries::control::vocabulary as c;
 use measured::choices::{ChoiceBuild, resolve_choices};
@@ -122,7 +124,7 @@ fn source_highlight_clips_its_rectangle_without_a_pane_sized_layer() {
         Rect::new(32.0, 45.0, 33.0, 50.0),
     ] {
         with_context(&Output::default(), |context| {
-            let decorate = crate::projection::source_link::decoration(source.clone())(context);
+            let decorate = crate::display::widget::source_link::decoration(source.clone())(context);
             let mut output = widget::HoverOutput::default();
             decorate(
                 &mut widget::HoverContext::new(
@@ -174,20 +176,18 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
             .unwrap()
             .get(&CONTROLS)
             .unwrap();
-        with_context(&Output::default(), |context| {
-            let inputs = crate::projection::Cx {
-                focused: true,
-                sources,
+        // One view and its computations across widths, so the work is reused.
+        with_view(sources, &Output::default(), |cx, text, project| {
+            let cx = crate::projection::Cx {
                 computations: &computations,
                 view: &root,
-                ..context.inputs.clone()
+                ..cx.clone()
             };
             let mut context = widget::Context {
-                inputs: &inputs,
-                text: context.text,
-                project: context.project,
-                path: context.path,
-                value: context.value,
+                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
+                text,
+                project,
+                value: None,
             };
             let start = std::time::Instant::now();
             let controls = ::grap::evaluate(controls, &sources, ::grap::DEFAULT_FUEL).result;
@@ -441,27 +441,18 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
         1000,
     )
     .result;
-    with_context(&Output::default(), |context| {
-        let sources = crate::sources::Sources {
-            libraries: &libraries,
-            ..context.inputs.sources
-        };
-        let computations = crate::computations::Computations::from_sources(sources);
-        let inputs = crate::projection::Cx {
-            sources,
-            computations: &computations,
-            ..context.inputs.clone()
-        };
-        let context = widget::Context {
-            inputs: &inputs,
-            text: context.text,
-            project: context.project,
-            path: context.path,
-            value: context.value,
-        };
+    let empty = gid::Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let sources = crate::sources::Sources {
+        doc: &empty,
+        libraries: &libraries,
+    };
+    with_sources(sources, &Output::default(), |context| {
         for _ in 0..2 {
             let (widgets, result) =
-                super::controls_output(&controls, None, 200.0, &context).unwrap();
+                super::controls_output(&controls, None, 200.0, context).unwrap();
             assert_eq!(widgets.len(), 2);
             assert!(
                 result
@@ -1137,18 +1128,16 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     let point = Point::new(50.0, 10.0);
 
     let build = |selected: Option<SourceTrace>, hovered: Option<SourceTrace>| {
-        let measured = with_context(&Output::default(), |context| {
-            let inputs = crate::projection::Cx {
-                focused: true,
+        let measured = with_empty_view(&Output::default(), |cx, text, project| {
+            let cx = crate::projection::Cx {
                 selected_trace: selected,
-                ..context.inputs.clone()
+                ..cx.clone()
             };
             let mut context = widget::Context {
-                inputs: &inputs,
-                text: context.text,
-                project: context.project,
-                path: context.path,
-                value: context.value,
+                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
+                text,
+                project,
+                value: None,
             };
             selection
                 .widgets(A, 180.0, Some(decorate.clone()))

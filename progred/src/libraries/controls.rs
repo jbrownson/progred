@@ -475,7 +475,7 @@ fn controls_output(
             let root = built.root.clone();
             let decorate: tree_range::ItemDecoration = Rc::new(move |key| {
                 let source = crate::hover::from_grap(root.at(key)?.source.clone()?, None)?;
-                Some(crate::projection::source_link::decoration(source))
+                Some(crate::display::widget::source_link::decoration(source))
             });
             let (controls, cursor) = tree_range::cursor_from_tree(
                 tree_range::emitted_tree(&built.root, Vec::new()),
@@ -596,7 +596,7 @@ fn stored_tree_items(
     context.value(&expression).as_list()?;
     let source = crate::hover::from_grap(context.source_origin(&expression)?, None)?;
     Some(Rc::new(move |key| {
-        Some(crate::projection::source_link::decoration(
+        Some(crate::display::widget::source_link::decoration(
             source.descendant(
                 &key.iter()
                     .cloned()

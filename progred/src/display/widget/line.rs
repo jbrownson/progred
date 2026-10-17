@@ -37,13 +37,13 @@ pub fn view(
 ) -> Measured<HoverPass<crate::Editor, crate::frame::Hovered>> {
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::LineEdit);
-    let cx = context.inputs;
-    let path = context.path;
-    let writable = cx.edits.writable(&cx.sources, path);
-    let active = cx.selection.filter(|selection| {
+    let toolkit = context.toolkit;
+    let path = toolkit.path();
+    let writable = toolkit.writable();
+    let active = toolkit.selection().filter(|selection| {
         writable
             && selection.path() == path
-            && selection.stage(&cx.sources) == crate::selection::Stage::Edge
+            && selection.stage(&toolkit.sources()) == crate::selection::Stage::Edge
     });
     let default = active
         .filter(|selection| selection.edit().is_none())
@@ -51,19 +51,19 @@ pub fn view(
     let editing = active.and_then(|selection| selection.edit().or(default.as_ref()));
     let site = context.site();
     let path: Rc<[gid::Step]> = Rc::from(path);
-    let style = context.inputs.styles.line_style(&line);
+    let style = context.toolkit.styles().line_style(&line);
     let placeholder_style = TextStyle {
         family: style.family,
-        ..context.inputs.styles.dim.clone()
+        ..context.toolkit.styles().dim.clone()
     };
     let content = match active.zip(editing) {
         Some((_, state)) => {
             let widget = puri::edit::text_edit(
                 LineEditDescription {
                     state,
-                    focused: cx.focused,
-                    presentation: context.inputs.styles.line_presentation(&line),
-                    style: &context.inputs.styles.edit,
+                    focused: toolkit.focused(),
+                    presentation: context.toolkit.styles().line_presentation(&line),
+                    style: &context.toolkit.styles().edit,
                     placeholder: line
                         .placeholder
                         .as_deref()
@@ -105,7 +105,7 @@ pub fn view(
         }
     };
     let active = active.is_some();
-    let selected = cx.selected(path.as_ref());
+    let selected = toolkit.selected();
     if writable {
         let nav_site = site.clone();
         let nav_line = line.clone();
@@ -128,8 +128,8 @@ pub fn view(
             true
         });
         let stop = path.clone();
-        let presentation = context.inputs.styles.line_presentation(&line);
-        let scale = context.inputs.styles.scale as f32;
+        let presentation = context.toolkit.styles().line_presentation(&line);
+        let scale = context.toolkit.styles().scale as f32;
         let target = crate::frame::Hovered::Tree(site.hover());
         crate::display::widget::before_place(content, move |placement: Placement, output| {
             output.navigation_stop(stop.clone(), selected);

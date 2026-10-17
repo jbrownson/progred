@@ -294,9 +294,9 @@ pub fn authoring(child: crate::view::Layout) -> crate::view::Layout {
     super::widget::around(
         child,
         Rc::new(|context| {
-            let root = context.inputs.view.clone();
-            let path = context.path.to_vec();
-            let scale = context.inputs.styles.scale;
+            let root = context.toolkit.view().clone();
+            let path = context.path().to_vec();
+            let scale = context.toolkit.styles().scale;
             Box::new(move |child| {
                 super::widget::before_place(child, move |_, output| {
                     output.handler().on_key_with(move |editor, event, input| {

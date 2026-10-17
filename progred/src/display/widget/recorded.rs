@@ -66,19 +66,12 @@ impl Recorder {
 /// to inside it name the document.
 pub fn recorded(extent: Extent, program: Vec<Step>, record: Record) -> crate::view::Layout {
     crate::display::Layout::widget(Rc::new(move |context| {
-        recorded_leaf(
-            context.inputs,
-            context.path,
-            extent,
-            &program,
-            record.clone(),
-        )
+        recorded_leaf(context.toolkit, extent, &program, record.clone())
     }))
 }
 
 fn recorded_leaf(
-    cx: &crate::projection::Cx,
-    path: &[Step],
+    toolkit: &dyn crate::display::Toolkit,
     extent: Extent,
     program: &[Step],
     record: Record,
@@ -88,20 +81,18 @@ fn recorded_leaf(
         ascent,
         descent,
     } = extent;
-    let scale = cx.styles.scale;
+    let styles = toolkit.styles();
+    let scale = styles.scale;
     let scaled = Extent {
         width: width * scale,
         ascent: ascent * scale,
         descent: descent * scale,
     };
-    let faces = Faces::new(cx.styles);
-    let program_path: Vec<_> = path.iter().chain(program).cloned().collect();
-    let input = cx
-        .edits
-        .location(&program_path)
-        .map(|location| SourceTrace::from_location(&cx.sources, &location));
-    let document = cx.sources.doc.clone();
-    let libraries = cx.sources.libraries.clone();
+    let faces = Faces::new(styles);
+    let input = toolkit.trace_below(program);
+    let sources = toolkit.sources();
+    let document = sources.doc.clone();
+    let libraries = sources.libraries.clone();
     // Recording runs after the projection pass's borrows end, so it keeps
     // its own clones of the document and libraries.
     let drawing = Rc::new(LazyCell::new(move || {
@@ -111,9 +102,9 @@ fn recorded_leaf(
         };
         draw(&record, &sources, input, faces)
     }));
-    let highlight = cx.styles.accent_wash.brush.clone();
-    let selected_highlight = cx.styles.selection_wash.clone();
-    let selected = cx.selected_trace.clone();
+    let highlight = styles.accent_wash.brush.clone();
+    let selected_highlight = styles.selection_wash.clone();
+    let selected = toolkit.selected_trace().cloned();
     leaf(scaled, move |builder, placement| {
         let outer =
             Affine::translate((placement.rect.x0, placement.rect.y0)) * Affine::scale(scale);
@@ -122,7 +113,7 @@ fn recorded_leaf(
             probe_drawing.target_at(point, outer)
         });
         let command = builder.command_modifier();
-        crate::projection::source_link::handlers(builder, placement, scale, command);
+        crate::display::widget::source_link::handlers(builder, placement, scale, command);
         builder.render(move |canvas: &mut dyn puri::draw::CanvasSink, hover| {
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),

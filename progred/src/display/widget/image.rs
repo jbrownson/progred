@@ -11,7 +11,7 @@ pub fn image<World: 'static, Hover: 'static>(size: Size, image: ImageData) -> La
         size.height / f64::from(image.height),
     );
     Layout::widget(Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
+        let scale = context.toolkit.styles().scale;
         let image = image.clone();
         widget::paint(
             widget::Extent {

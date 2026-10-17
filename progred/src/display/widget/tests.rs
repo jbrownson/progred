@@ -309,7 +309,7 @@ fn inert_widgets_and_pointer_wrappers_do_not_request_site_state() {
             }
             assert_eq!(
                 crate::display::widget::frame::place(
-                    empty::<(), ()>(context.text, context.inputs.styles),
+                    empty::<(), ()>(context.text, context.toolkit.styles()),
                     placement,
                     &Default::default()
                 )

@@ -940,7 +940,9 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
             resolution,
             path: Rc::from([Step::Key(call)]),
         };
-        let descend = projection::source_link::source_descend(&sources, &descends, &trace).unwrap();
+        let descend =
+            crate::display::widget::source_link::source_descend(&sources, &descends, &trace)
+                .unwrap();
         assert_eq!(descend.root, Some(root.clone()));
         assert_eq!(descend.rect, rect);
         let mut selected = None;

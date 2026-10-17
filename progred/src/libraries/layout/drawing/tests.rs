@@ -139,7 +139,11 @@ fn recorded_hits_keep_the_executing_library_definition() {
             panic!("drawing should have a source");
         };
         assert_eq!(
-            crate::projection::source_link::hover_source::<crate::Editor>(&sources, &[], &hover),
+            crate::display::widget::source_link::hover_source::<crate::Editor>(
+                &sources,
+                &[],
+                &hover
+            ),
             Some(selected)
         );
         let other = SourceTrace::from_location(

@@ -3,12 +3,12 @@
 //! Projections draw one where they want a hole, with their own offers or
 //! Raw's.
 
+use crate::display::Toolkit;
 use crate::display::widget::offers::{HoleOffers, Offers};
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::placed::{self, HoverPass, before, decorate, on_key};
-use crate::projection::Cx;
 use crate::render::text;
 use crate::selection::{Selection, Stage};
 use gid::Step;
@@ -53,59 +53,56 @@ pub fn picker(picker: Picker) -> crate::view::Layout {
     crate::display::Layout::widget(Rc::new(move |context| {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Completion);
-        hole(context.inputs, context.text, context.path, &picker)
+        hole(context.toolkit, context.text, &picker)
     }))
 }
 
-/// The hole at `path`, as [`picker`] draws it.
+/// The hole where `toolkit` is drawn, as [`picker`] draws it.
 pub(crate) fn hole(
-    cx: &Cx,
+    toolkit: &dyn Toolkit,
     tcx: &mut TextCtx,
-    path: &[Step],
     picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
     match picker.kind {
-        CompletionKind::Value => pending_view(cx, tcx, path.to_vec(), picker),
-        CompletionKind::Field => cx
-            .pending_edge_under(path)
-            .map(|query| label_query(cx, tcx, path, query, picker))
-            .unwrap_or_else(|| text(tcx, "…", &cx.styles.dim)),
+        CompletionKind::Value => pending_view(toolkit, tcx, picker),
+        CompletionKind::Field => toolkit
+            .label_query()
+            .map(|query| label_query(toolkit, tcx, query, picker))
+            .unwrap_or_else(|| text(tcx, "…", &toolkit.styles().dim)),
     }
 }
 
 /// A missing value with ordinary selection and navigation behavior.
 /// The active selection replaces its empty frame with a completion query.
 fn pending_view(
-    cx: &Cx,
+    toolkit: &dyn Toolkit,
     tcx: &mut TextCtx,
-    path: Vec<Step>,
     picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let writable = cx.edits.writable(&cx.sources, &path);
-    let selected = cx.selection.filter(|current| {
+    let writable = toolkit.writable();
+    let selected = toolkit.selection().filter(|current| {
         writable
-            && current.path() == path.as_slice()
-            && current.stage(&cx.sources) == Stage::Pending
+            && current.path() == toolkit.path()
+            && current.stage(&toolkit.sources()) == Stage::Pending
     });
     let default = selected
         .filter(|current| current.edit().is_none())
         .map(Selection::initial_query);
     let engaged = selected.and_then(Selection::edit).or(default.as_ref());
-    let content = placeholder(cx, tcx, &path, engaged, picker);
+    let content = placeholder(toolkit, tcx, engaged, picker);
     // Selection draws the same outline as the inactive frame.
-    pending_target(cx, path, content)
+    pending_target(toolkit, content)
 }
 
 fn pending_target(
-    cx: &Cx,
-    path: Vec<Step>,
+    toolkit: &dyn Toolkit,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let path: Rc<[Step]> = Rc::from(path);
-    let scale = cx.styles.scale;
-    let palette = cx.styles.palette;
-    let selected = cx.selected(path.as_ref());
-    let select = crate::projection::select_handler(path.clone(), cx);
+    let path: Rc<[Step]> = Rc::from(toolkit.path());
+    let scale = toolkit.styles().scale;
+    let palette = toolkit.styles().palette;
+    let selected = toolkit.selected();
+    let select = crate::display::widget::navigation::selecting(toolkit.site());
     let stop = path.clone();
     let child = crate::display::widget::before_place(child, move |_, output| {
         output.navigation_stop(stop, selected);
@@ -113,8 +110,8 @@ fn pending_target(
     let child = crate::display::widget::navigation::landmark(
         child,
         path.clone(),
-        crate::display::widget::navigation::arrival(path.clone(), cx),
-        cx.edits.clone(),
+        crate::display::widget::navigation::arrival(toolkit.site()),
+        toolkit.scope().clone(),
         None,
         selected,
     );
@@ -140,58 +137,57 @@ fn pending_target(
 }
 
 fn placeholder(
-    cx: &Cx,
+    toolkit: &dyn Toolkit,
     tcx: &mut TextCtx,
-    path: &[Step],
     engaged: Option<&LineEditState>,
     picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
     match engaged {
-        Some(query) => query_content(cx, tcx, path, query, picker),
-        None => crate::display::widget::empty(tcx, cx.styles),
+        Some(query) => query_content(toolkit, tcx, query, picker),
+        None => crate::display::widget::empty(tcx, toolkit.styles()),
     }
 }
 
 /// A focused completion query: the editor plus an ordinary floating
 /// card. Serves both pending stages — a value and a new field's label.
 fn query_content(
-    cx: &Cx,
+    toolkit: &dyn Toolkit,
     tcx: &mut TextCtx,
-    path: &[Step],
     query: &LineEditState,
     picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
+    let styles = toolkit.styles();
     // This is only reached for an active writable picker. Keep the boundary
     // total if a caller supplies an unmapped occurrence anyway.
-    let Some(location) = cx.edits.location(path) else {
-        return crate::display::widget::empty(tcx, cx.styles);
+    let Some(location) = toolkit.location() else {
+        return crate::display::widget::empty(tcx, styles);
     };
     // The card and keyboard commit must answer from one list, read from
     // where the hole's location starts.
     let start = location.start;
-    let value_at = move |path: &[Step]| cx.sources.read_from(start, path);
-    let resolve = |cell| cx.sources.definition(cell);
+    let sources = toolkit.sources();
+    let value_at = move |path: &[Step]| sources.read_from(start, path);
+    let resolve = |cell| sources.definition(cell);
     let request = CompletionRequest {
-        raw: cx.raw,
+        raw: toolkit.raw(),
         query: query.text(),
         kind: picker.kind,
         scope: CompletionScope::Everything,
         path: &location.path,
         value_at: &value_at,
         resolve: &resolve,
-        cells: &|| cx.sources.cells().collect(),
-        name: &|cell| cx.sources.name(cell),
-        libraries: cx.completions,
+        cells: &|| sources.cells().collect(),
+        name: &|cell| sources.name(cell),
+        libraries: toolkit.completions(),
     };
     let entries = (picker.offers)(&request);
-    let presentation =
-        LineEditPresentation::new(cx.styles.label.size, cx.styles.label.brush.clone());
+    let presentation = LineEditPresentation::new(styles.label.size, styles.label.brush.clone());
     let content = crate::render::text_edit(
         LineEditDescription {
             state: query,
-            focused: cx.focused,
+            focused: toolkit.focused(),
             presentation: presentation.clone(),
-            style: &cx.styles.edit,
+            style: &styles.edit,
             placeholder: None,
         },
         tcx,
@@ -199,13 +195,13 @@ fn query_content(
     );
     // Preserve the empty frame's width while the query is short.
     let content = min_width(
-        text_frame::empty_width(cx.styles.label.size, cx.styles.scale),
+        text_frame::empty_width(styles.label.size, styles.scale),
         content,
     );
     let offers = Offers {
         entries: entries.clone(),
     };
-    let scale = cx.styles.scale;
+    let scale = styles.scale;
     let trigger = before(content, move |p, placement| {
         let rect = placement.rect;
         *p.completion() = Some(offers);
@@ -235,17 +231,17 @@ fn query_content(
                 })
         });
     });
-    let choice = cx.selection.map(Selection::choice).unwrap_or(0);
-    let scroll = cx
-        .selection
+    let choice = toolkit.selection().map(Selection::choice).unwrap_or(0);
+    let scroll = toolkit
+        .selection()
         .map(Selection::completion_scroll)
         .unwrap_or(0.0);
-    let root = cx.view.clone();
+    let root = toolkit.view().clone();
     let scroll_root = root.clone();
-    let scroll_path = path.to_vec();
+    let scroll_path = toolkit.path().to_vec();
     let card = crate::display::widget::completion::card(
         tcx,
-        cx.styles,
+        styles,
         &entries,
         crate::display::widget::completion::State { choice, scroll },
         move |world: &crate::Editor| {
@@ -321,15 +317,14 @@ fn query_content(
 /// the way a value pending's does. Clicks inside belong to the query's
 /// own caret target; clicks beside fall through like any pending's.
 fn label_query(
-    cx: &Cx,
+    toolkit: &dyn Toolkit,
     tcx: &mut TextCtx,
-    path: &[Step],
     query: &LineEditState,
     picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let scale = cx.styles.scale;
-    let content = placeholder(cx, tcx, path, Some(query), picker);
-    let palette = cx.styles.palette;
+    let scale = toolkit.styles().scale;
+    let content = placeholder(toolkit, tcx, Some(query), picker);
+    let palette = toolkit.styles().palette;
     let ringed = decorate(content, move |p, rect| {
         crate::display::widget::style::primary_highlight(
             palette,

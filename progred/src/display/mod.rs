@@ -25,6 +25,7 @@ pub mod raw;
 pub mod recording;
 pub mod structure;
 mod viewing;
+pub(crate) use viewing::Toolkit;
 pub use viewing::Viewing;
 pub mod widget;
 
@@ -545,7 +546,7 @@ pub fn subscript<World: 'static, Hover: 'static>(
 
 pub fn slot<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
     Layout::widget(Rc::new(|context| {
-        widget::empty(context.text, context.inputs.styles)
+        widget::empty(context.text, context.toolkit.styles())
     }))
 }
 
@@ -670,8 +671,8 @@ pub fn center<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
 /// and glyph box.
 pub fn arrow<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
     Layout::widget(Rc::new(|context| {
-        let em = f64::from(context.inputs.styles.dim.size) * context.inputs.styles.scale;
-        let ink = context.inputs.styles.dim.brush.clone();
+        let em = f64::from(context.toolkit.styles().dim.size) * context.toolkit.styles().scale;
+        let ink = context.toolkit.styles().dim.brush.clone();
         let (ascent, descent) = puri::delim::minimum_span(em);
         widget::paint(
             widget::Extent {
@@ -710,8 +711,8 @@ const RULE_THICKNESS: f64 = 1.0;
 /// line just above the surrounding text's baseline.
 pub fn rule<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
     Layout::widget(Rc::new(|context| {
-        let scale = context.inputs.styles.scale;
-        let ink = context.inputs.styles.ink.brush.clone();
+        let scale = context.toolkit.styles().scale;
+        let ink = context.toolkit.styles().ink.brush.clone();
         measured::fill_width(widget::paint(
             widget::Extent {
                 width: 0.0,

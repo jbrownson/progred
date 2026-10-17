@@ -215,12 +215,47 @@ pub fn with_context<W: 'static, H: 'static, R>(
     project: &dyn widget::project::Project<W, H>,
     run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
 ) -> R {
+    with_empty_view(project, |cx, text, project| {
+        run(&mut widget::Context {
+            text,
+            project,
+            toolkit: &crate::projection::Occurrence { cx, path: &[] },
+            value: None,
+        })
+    })
+}
+
+/// [`with_context`] reading through `sources`.
+pub fn with_sources<W: 'static, H: 'static, R>(
+    sources: crate::sources::Sources<'_>,
+    project: &dyn widget::project::Project<W, H>,
+    run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
+) -> R {
+    with_view(sources, project, |cx, text, project| {
+        run(&mut widget::Context {
+            text,
+            project,
+            toolkit: &crate::projection::Occurrence { cx, path: &[] },
+            value: None,
+        })
+    })
+}
+
+/// [`with_view`] over an empty document and no libraries.
+pub(crate) fn with_empty_view<W: 'static, H: 'static, R>(
+    project: &dyn widget::project::Project<W, H>,
+    run: impl FnOnce(
+        &crate::projection::Cx<'_>,
+        &mut TextCtx<'_>,
+        &dyn widget::project::Project<W, H>,
+    ) -> R,
+) -> R {
     let document = gid::Document {
         root: None,
         cells: gid::Cells::new(),
     };
     let libraries = crate::library::Libraries::default();
-    with_sources(
+    with_view(
         crate::sources::Sources {
             doc: &document,
             libraries: &libraries,
@@ -230,11 +265,16 @@ pub fn with_context<W: 'static, H: 'static, R>(
     )
 }
 
-/// [`with_context`] reading through `sources`.
-pub fn with_sources<W: 'static, H: 'static, R>(
+/// The view a widget is built in, reading through `sources`, for a test to
+/// change before building a widget context over it.
+pub(crate) fn with_view<W: 'static, H: 'static, R>(
     sources: crate::sources::Sources<'_>,
     project: &dyn widget::project::Project<W, H>,
-    run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
+    run: impl FnOnce(
+        &crate::projection::Cx<'_>,
+        &mut TextCtx<'_>,
+        &dyn widget::project::Project<W, H>,
+    ) -> R,
 ) -> R {
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = LayoutContext::new();
@@ -256,18 +296,16 @@ pub fn with_sources<W: 'static, H: 'static, R>(
         selection: None,
         selected_trace: None,
     };
-    run(&mut widget::Context {
-        text: &mut TextCtx {
+    run(
+        &cx,
+        &mut TextCtx {
             fonts: &mut fonts,
             layouts: &mut layouts,
             cache: &mut cache,
             scale: 1.0,
         },
         project,
-        inputs: &cx,
-        path: &[],
-        value: None,
-    })
+    )
 }
 
 pub fn inspect<W: 'static, H: 'static>(layout: &impl Recordable<W, H>) -> ProjectionCall<W, H> {

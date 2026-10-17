@@ -77,15 +77,22 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Row);
         let children = self.children(children);
-        let row =
-            ChoiceLayout::aligned_row(alignment, gap * self.context.inputs.styles.scale, children);
+        let row = ChoiceLayout::aligned_row(
+            alignment,
+            gap * self.context.toolkit.styles().scale,
+            children,
+        );
         self.push(row)
     }
     fn col(&mut self, baseline: usize, gap: f64, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Column);
         let children = self.children(children);
-        let col = ChoiceLayout::col(baseline, gap * self.context.inputs.styles.scale, children);
+        let col = ChoiceLayout::col(
+            baseline,
+            gap * self.context.toolkit.styles().scale,
+            children,
+        );
         self.push(col)
     }
     fn overlay(&mut self, children: Vec<Node>) -> Node {
@@ -98,7 +105,7 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Padding);
         let child = self.build.take(child.0);
-        let scale = self.context.inputs.styles.scale;
+        let scale = self.context.toolkit.styles().scale;
         self.push(ChoiceLayout::pad(
             Insets::new(
                 insets.x0 * scale,
@@ -112,7 +119,7 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
     fn floating(&mut self, base: Node, content: Node, position: FloatingPosition) -> Node {
         let base = self.build.take(base.0);
         let content = self.build.take(content.0);
-        let scale = self.context.inputs.styles.scale;
+        let scale = self.context.toolkit.styles().scale;
         self.push(ChoiceLayout::attach(base, content, move |base, content| {
             widget::container::floating(base, content, move |placement, extent| {
                 position(scale, placement, extent)

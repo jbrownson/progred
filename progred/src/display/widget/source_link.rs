@@ -14,10 +14,10 @@ pub(crate) fn decoration(
 ) -> crate::display::widget::Decoration<Editor, Hovered> {
     Rc::new(move |context| {
         let source = source.clone();
-        let selected = context.inputs.selected_trace.as_ref() == Some(&source);
-        let selection = context.inputs.styles.selection_wash.clone();
-        let hover = context.inputs.styles.accent_wash.brush.clone();
-        let scale = context.inputs.styles.scale;
+        let selected = context.toolkit.selected_trace() == Some(&source);
+        let selection = context.toolkit.styles().selection_wash.clone();
+        let hover = context.toolkit.styles().accent_wash.brush.clone();
+        let scale = context.toolkit.styles().scale;
         Box::new(move |output, placement| {
             output.claim(puri::hover::Probe::exact(
                 placement,

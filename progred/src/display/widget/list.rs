@@ -12,8 +12,8 @@ pub fn insertion_gap<W: 'static, H: Clone + PartialEq + 'static>(
     target: Option<H>,
 ) -> Layout<W, H> {
     Layout::widget(Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
-        let brush = context.inputs.styles.selection_wash.clone();
+        let scale = context.toolkit.styles().scale;
+        let brush = context.toolkit.styles().selection_wash.clone();
         let target = target.clone();
         leaf(
             Extent {

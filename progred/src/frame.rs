@@ -114,7 +114,7 @@ fn attribute(
     // source for this frame's ordinary source/secondary decoration.
     let hovered = match hovered {
         Some(Hovered::Tree(ref calls @ hover::Hover::Calls(_))) => {
-            crate::projection::source_link::hover_source(sources, descends, calls)
+            crate::display::widget::source_link::hover_source(sources, descends, calls)
                 .map(|source| Hovered::Tree(hover::Hover::Source(source)))
         }
         other => other,

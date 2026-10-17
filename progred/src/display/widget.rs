@@ -34,6 +34,7 @@ pub mod project;
 pub mod recorded;
 pub mod scroll;
 pub mod source;
+pub(crate) mod source_link;
 pub mod style;
 pub mod view;
 
@@ -54,63 +55,39 @@ pub type Program<World, Hover> = Rc<
 pub struct Context<'a, 'fonts, World, Hover> {
     pub project: &'a dyn project::Project<World, Hover>,
     pub text: &'a mut TextCtx<'fonts>,
-    pub inputs: &'a crate::projection::Cx<'a>,
-    pub path: &'a [gid::Step],
+    /// The view as this widget's occurrence reads it.
+    pub(crate) toolkit: &'a dyn crate::display::Toolkit,
     pub value: Option<&'a grap::RuntimeValue>,
 }
 
 impl<World, Hover> Context<'_, '_, World, Hover> {
     /// Where this widget is drawn, as a place to act on.
     pub(crate) fn site(&self) -> crate::editing::Site {
-        self.inputs.site(Rc::from(self.path))
+        self.toolkit.site()
+    }
+
+    /// This widget's path in its view.
+    pub(crate) fn path(&self) -> &[gid::Step] {
+        self.toolkit.path()
     }
 
     /// What this widget reads about the view it's built in.
     pub fn viewing(&self) -> &dyn crate::display::Viewing {
-        self
+        self.toolkit
     }
 
     /// `text`, laid out in the theme's `face`.
     pub fn faced_text(&mut self, text: &str, face: crate::display::Face) -> puri::text::Text {
-        puri::text::text(self.text, text, style::face_style(self.inputs.styles, face))
+        puri::text::text(
+            self.text,
+            text,
+            style::face_style(self.toolkit.styles(), face),
+        )
     }
 
     /// The paint of the theme's `face`.
     pub fn face_brush(&self, face: crate::display::Face) -> puri::Brush {
-        style::face_style(self.inputs.styles, face).brush.clone()
-    }
-
-    fn below(&self, steps: &[gid::Step]) -> gid::Path {
-        self.path.iter().chain(steps).cloned().collect()
-    }
-}
-
-impl<World, Hover> crate::display::Viewing for Context<'_, '_, World, Hover> {
-    fn scale(&self) -> f64 {
-        self.inputs.styles.scale
-    }
-
-    fn writable(&self) -> bool {
-        self.inputs.edits.writable(&self.inputs.sources, self.path)
-    }
-
-    fn host(&self) -> &dyn grap::Host {
-        &self.inputs.sources
-    }
-
-    fn computations(&self) -> &crate::computations::Computations {
-        self.inputs.computations
-    }
-
-    fn state_below(&self, steps: &[gid::Step]) -> Option<&Value> {
-        self.inputs.annotations.at(&self.below(steps))
-    }
-
-    fn selected_below(&self, steps: &[gid::Step]) -> bool {
-        let below = self.below(steps);
-        self.inputs
-            .selection
-            .is_some_and(|selection| selection.path().starts_with(&below))
+        style::face_style(self.toolkit.styles(), face).brush.clone()
     }
 }
 
@@ -160,8 +137,8 @@ pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     after(
         child,
         Rc::new(|context| {
-            let stroke = puri::Stroke::new(context.inputs.styles.scale);
-            let brush = context.inputs.styles.dim.brush.clone();
+            let stroke = puri::Stroke::new(context.toolkit.styles().scale);
+            let brush = context.toolkit.styles().dim.brush.clone();
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {
                     output.render(move |canvas, _| {
@@ -186,8 +163,8 @@ pub fn ground<World: 'static, Hover: 'static>(
     before(
         child,
         Rc::new(move |context| {
-            let scale = context.inputs.styles.scale;
-            let color = color(&context.inputs.styles.palette);
+            let scale = context.toolkit.styles().scale;
+            let color = color(&context.toolkit.styles().palette);
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {
                     output.render(move |canvas, _| {
@@ -209,9 +186,9 @@ pub fn selectable(
     Measured<HoverPass<crate::Editor, crate::frame::Hovered>>,
 ) -> Measured<HoverPass<crate::Editor, crate::frame::Hovered>>
 + 'static {
-    let path: Rc<[gid::Step]> = Rc::from(context.path);
+    let path: Rc<[gid::Step]> = Rc::from(context.path());
     let target = crate::frame::Hovered::Tree(crate::hover::Hover::Value(path.clone()));
-    let select = crate::projection::select_handler(path, context.inputs);
+    let select = navigation::selecting(context.site());
     let value = context.value.cloned();
     move |child| {
         crate::display::widget::before_place(
