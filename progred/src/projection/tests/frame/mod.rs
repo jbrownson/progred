@@ -110,49 +110,6 @@ fn an_absent_value_reads_as_its_reason_then_its_fields_all_on_red() {
     assert!(washes(Value::record([(new_cell_id(), f64::value(3.0))])).is_empty());
 }
 
-fn click_at(world: &mut crate::Editor, point: Point) -> Option<Hovered> {
-    let frame = editing_frame(world, false);
-    let Some((_, Claim::Direct(target))) = frame.hover_geometry.probe(Some(point), None, 0.0)
-    else {
-        return None;
-    };
-    let mut input =
-        crate::placed::DispatchContext::new(Some(crate::test_root()), Some(target.clone()));
-    frame.resolve_for_dispatch().dispatch_pointer_down_with(
-        world,
-        &PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state: PointerState {
-                position: (point.x, point.y).into(),
-                ..Default::default()
-            },
-        },
-        &mut input,
-    );
-    Some(target)
-}
-
-/// Configure the editor's projection slots as a tutorial page does.
-fn tutorial_slots(world: &mut crate::Editor, slots: &[CellId]) {
-    world.stack.projection = crate::web_embed::tutorial_slots(
-        Some(
-            &slots
-                .iter()
-                .map(CellId::to_string)
-                .collect::<Vec<_>>()
-                .join(","),
-        ),
-        world.stack.projection.clone(),
-        &world.stack.libraries,
-    )
-    .unwrap();
-}
-
 mod completion;
 #[cfg(not(target_arch = "wasm32"))]
 mod compositor;
@@ -160,7 +117,6 @@ mod conject;
 mod custom_navigation;
 mod document_libraries;
 mod drawing;
-mod fidget_shapes;
 mod focus;
 mod folds;
 mod interaction;
@@ -170,4 +126,3 @@ mod logical_navigation;
 mod navigation;
 mod profile;
 mod svg;
-mod tutorial;

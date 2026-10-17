@@ -1,5 +1,6 @@
-//! The frame harness tests share: editors framed headlessly, projected
-//! selections, line writes, and a bench that times a frame's phases.
+//! The frame harness tests share: editors framed headlessly, clicks into a
+//! frame, projected selections, line writes, and a bench that times a frame's
+//! phases.
 
 use super::*;
 use crate::annotations::Annotations;
@@ -16,6 +17,9 @@ use puri::draw::{DrawList, GlyphRun, Shape};
 use puri::geometry::Placement;
 use puri::hover::Claim;
 use ui_events::keyboard::NamedKey;
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+};
 
 type World = crate::Editor;
 
@@ -103,6 +107,35 @@ pub(crate) fn editing_frame_with_annotations(
             ..Default::default()
         },
     )
+}
+
+/// Press the primary button at `point` in a fresh frame, answering what the
+/// press landed on.
+pub(crate) fn click_at(world: &mut EditingWorld, point: Point) -> Option<Hovered> {
+    let frame = editing_frame(world, false);
+    let Some((_, Claim::Direct(target))) = frame.hover_geometry.probe(Some(point), None, 0.0)
+    else {
+        return None;
+    };
+    let mut input =
+        crate::placed::DispatchContext::new(Some(crate::test_root()), Some(target.clone()));
+    frame.resolve_for_dispatch().dispatch_pointer_down_with(
+        world,
+        &PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state: PointerState {
+                position: (point.x, point.y).into(),
+                ..Default::default()
+            },
+        },
+        &mut input,
+    );
+    Some(target)
 }
 
 /// Select through the current projection, without an editing interaction.

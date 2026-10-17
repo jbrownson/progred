@@ -699,4 +699,5 @@ impl crate::display::Env for NoEval {
     }
 }
 
+mod examples;
 mod previews;

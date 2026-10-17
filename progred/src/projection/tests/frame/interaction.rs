@@ -671,7 +671,7 @@ fn lesson_world(
     let (doc, names) = crate::gid_text::parse(file).unwrap();
     let mut world =
         crate::test_editor_with_stack(doc, crate::stack::load_selected(libraries).unwrap());
-    tutorial_slots(&mut world, &slots.map(|slot| names[slot]));
+    set_tutorial_slots(&mut world, &slots.map(|slot| names[slot]));
     (world, names)
 }
 

@@ -151,3 +151,5 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
     assert_eq!(whole["selection"]["path"], serde_json::json!({"list": []}));
     assert!(changes.sample(&editor).is_none());
 }
+
+mod frames;

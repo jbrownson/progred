@@ -1,4 +1,17 @@
-use super::*;
+use crate::display::test_support::Landmarks;
+use crate::frame::Hovered;
+use crate::hover::Hover;
+use crate::identity::short_id;
+use crate::libraries::{f64, name, text};
+use crate::navigate::Descend;
+use crate::placed;
+use crate::projection::test_support::{Bench, editing_frame, settle};
+use crate::selection::pending_value;
+use crate::test_support::{EMPTY_SLOTS, positions, set_tutorial_slots};
+use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
+use kurbo::Point;
+use puri::draw::DrawCmd;
+use puri::hover::Claim;
 
 fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
@@ -24,7 +37,7 @@ fn empty_tutorial_slots_stay_visible_in_a_short_embed() {
     let slots = [names["first"], names["second"], names["third"]];
     let mut editor = crate::test_editor(doc);
     editor.drawn_menu = false;
-    tutorial_slots(&mut editor, &slots);
+    set_tutorial_slots(&mut editor, &slots);
     let mut runner = crate::EditorRunner::new(editor);
     let size = kurbo::Size::new(600.0, 304.0);
     runner.refresh_frame(1.0, size);
@@ -56,7 +69,7 @@ fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
         ])),
         cells: Cells::new(),
     });
-    tutorial_slots(&mut world, &slots);
+    set_tutorial_slots(&mut world, &slots);
     let frame = editing_frame(&mut world, false);
     assert_eq!(top_slots(&frame), slots);
     let path = [Step::Key(slots[1])];
@@ -106,7 +119,7 @@ fn tutorial_slots_have_no_gap_insertions_and_do_not_override_children() {
         ])),
         cells,
     });
-    tutorial_slots(&mut world, &slots);
+    set_tutorial_slots(&mut world, &slots);
     let frame = editing_frame(&mut world, false);
     let first = stop(&frame, &[Step::Key(slots[0])]).rect;
     let second = stop(&frame, &[Step::Key(slots[1])]).rect;
@@ -210,7 +223,7 @@ fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
         root: None,
         cells: Cells::new(),
     });
-    tutorial_slots(&mut world, &slots);
+    set_tutorial_slots(&mut world, &slots);
     let frame = editing_frame(&mut world, false);
     assert!(top_slots(&frame).is_empty());
     assert!(world.model.doc.root.is_none());
