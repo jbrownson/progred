@@ -1,6 +1,17 @@
 //! Layout navigation through real projections and the ordinary event chain.
-use super::*;
+
+use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::display::{self as d, widget::navigation as nav};
+use crate::libraries::{f64, name, text};
+use crate::location::{Location, Start};
+use crate::projection::Projection;
+use crate::projection::test_support::{editing_frame, editing_frame_with_projection};
+use crate::test_support::{make_selection, positions};
+use gid::{Cells, Document, Path, Step, Value, new_cell_id};
+use std::rc::Rc;
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+
+type World = crate::Editor;
 use nav::Direction;
 
 fn sample_projection() -> Projection<World> {
@@ -155,7 +166,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                     root: Some(Value::record([(wrapper, siblings)])),
                     cells,
                 });
-                let ordinary = world.stack.projection.partial.clone();
+                let ordinary = world.stack.projection.partial().clone();
                 let projection = Projection::new([
                     d::runtime_partial(move |input| {
                         input.value?.field(wrapper)?;
@@ -307,7 +318,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
                     ],
                 )))
             }),
-            ordinary.partial,
+            ordinary.partial().clone(),
         ]);
 
         editing_frame_with_projection(world, false, Some(&projection))
@@ -397,7 +408,7 @@ fn navigation_named_number_hands_off_from_name_at_text_boundary() {
 
 #[test]
 fn navigation_example_projects_and_navigates_without_an_app_window() {
-    let (doc, _) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
+    let (doc, _) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
     let viewport = kurbo::Size::new(900.0, 600.0);
     runner.refresh_frame(1.0, viewport);
@@ -416,7 +427,7 @@ fn navigation_example_projects_and_navigates_without_an_app_window() {
 
 fn navigation_example_cells() -> (World, Vec<Path>) {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
+    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let (section_position, section) = fields
         .get(&OUTLINE)
@@ -453,7 +464,7 @@ fn navigation_example_cells() -> (World, Vec<Path>) {
 #[test]
 fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
+    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     let root = doc.root.as_ref().unwrap();
     let field = |value: &Value, key| value.as_record().unwrap().get(&key).unwrap().clone();
     let section = |value: &Value, key, occurrence| -> Path {
@@ -571,7 +582,7 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
 #[test]
 fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
+    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let sections: Vec<_> = fields
         .get(&OUTLINE)
@@ -715,7 +726,7 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
     });
     world.stack.projection = Projection::new([
         d::structure::list_column(8.0, None),
-        world.stack.projection.partial.clone(),
+        world.stack.projection.partial().clone(),
     ]);
     world.model.selection = Some(make_selection(paths[0].clone()));
     let document = world.model.doc.clone();
@@ -887,7 +898,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
     let ordinary = sample_projection();
     let projection = Projection::new([
         d::runtime_partial(|input| crate::libraries::text::display(input).map(nav::nav_group)),
-        ordinary.partial,
+        ordinary.partial().clone(),
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
@@ -898,7 +909,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
 #[test]
 fn navigation_example_lists_leave_vertical_navigation_to_the_outer_list() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
+    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     let section = binders["lists"];
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let (section_position, _) = fields
@@ -1091,7 +1102,7 @@ fn navigation_empty_list_stops_once_in_either_direction() {
 #[test]
 fn content_after_a_multiline_block_stays_on_its_content_line() {
     use crate::libraries::presentation::vocabulary::OUTLINE;
-    let (doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
+    let (doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     let fields = doc.root.as_ref().unwrap().as_record().unwrap();
     let section = |name: &str| -> Path {
         let (position, _) = fields

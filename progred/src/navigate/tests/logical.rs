@@ -1,5 +1,16 @@
-use super::*;
+//! Arrows over document-authored layouts.
+
+use crate::display::test_support::ResolveForDispatch;
 use crate::display::widget::navigation::Direction;
+use crate::libraries::{name, text};
+use crate::location::Location;
+use crate::projection::test_support::editing_frame;
+use crate::test_support::{make_selection, positions};
+use gid::{Cells, Document, Path, Step, Value};
+use std::rc::Rc;
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+
+type World = crate::Editor;
 
 fn step(world: &mut World, direction: Direction) -> bool {
     editing_frame(world, false).navigate(world, direction)
@@ -7,7 +18,7 @@ fn step(world: &mut World, direction: Direction) -> bool {
 
 /// Exercise the actual document-authored layouts, not Rust substitutes for them.
 fn example_section(section: &str) -> (World, crate::gid_text::Binders) {
-    let (mut doc, binders) = crate::gid_text::parse(NAVIGATION_EXAMPLE).unwrap();
+    let (mut doc, binders) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     doc.root = Some(
         doc.root
             .as_ref()

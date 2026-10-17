@@ -6,10 +6,6 @@ use puri::hover::Claim;
 
 type World = crate::Editor;
 
-/// The keyboard-navigation fixture, opened from disk rather than the
-/// Examples menu.
-const NAVIGATION_EXAMPLE: &str = include_str!("../../../../../examples/navigation.gid");
-
 #[test]
 fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
     use crate::libraries::{absent, f64};
@@ -118,5 +114,3 @@ mod folds;
 mod interaction;
 mod iop_tree_native;
 mod layout;
-mod logical_navigation;
-mod navigation;

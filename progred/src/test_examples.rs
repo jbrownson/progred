@@ -10,6 +10,10 @@ pub const TANGLECUBE: &str = include_str!("../../examples/fidget-tanglecube.gid"
 pub const GYROID: &str = include_str!("../../examples/fidget-gyroid.gid");
 pub const CUBE: &str = include_str!("../../examples/fidget-cube.gid");
 
+/// The keyboard-navigation fixture, opened from disk rather than the
+/// Examples menu.
+pub const NAVIGATION: &str = include_str!("../../examples/navigation.gid");
+
 pub const FIDGET: [(&str, &str); 5] = [
     ("spheres", SPHERES),
     ("torus", TORUS),
