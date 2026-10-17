@@ -96,7 +96,7 @@ impl Level {
                 }
             }
             Level::Plain => format!(
-                "{drawn} with the name, text, and blob libraries, plus f64’s numbers but not its arithmetic"
+                "{drawn} with the name, text, blob, and absent libraries, plus numbers but not their arithmetic"
             ),
             Level::Raw if same => "The same value in the base projection: no libraries".into(),
             Level::Raw => "The base projection: no libraries".into(),
@@ -158,21 +158,8 @@ pub(crate) fn tutorial_slots(
                 .iter()
                 .any(|(_, level)| matches!(level, Level::Plain))
                 .then(|| {
-                    // Names, text, and numbers read as themselves; calls,
-                    // including arithmetic, stay records.
-                    crate::stack::load_selected(&[
-                        crate::libraries::name::ID,
-                        crate::libraries::text::ID,
-                        crate::libraries::blob::ID,
-                    ])
-                    .map(|stack| {
-                        crate::display::compose_partials([
-                            stack.projection.partial().clone(),
-                            crate::display::runtime_partial(|input| {
-                                crate::libraries::f64::convention().display(input)
-                            }),
-                        ])
-                    })
+                    crate::stack::load_selected(&crate::stack::PLAIN)
+                        .map(|stack| stack.plain().partial().clone())
                 })
                 .transpose()?;
             let plain_inside = plain.clone().map(|plain| {

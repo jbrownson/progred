@@ -298,12 +298,17 @@ first:
      - 60 are the core doing a library's job. Most of these are the engine
        interpreting the layout library's drawing programs, which would become
        a recorded-drawing widget the layout library fills. The rest are:
-       - the hard-coded set of libraries in Plain, which the tutorials copy
-         with f64 only, as a per-library plain projection;
        - presentation's pane special cases, as a pane entry and a wrapping
          projection;
-       - Tab's skipping of name slots, as an optional-slot flag;
-       - handlers getting their event under layout's label.
+       - Tab's skipping of name slots: the projection drawing a hole would
+         say whether it's optional, so navigation needn't know names;
+       - handlers getting their event under layout's label: a fixed event
+         format is fine, but the core should own it.
+
+       Plain was one of these. The owner decided on 17 October 2026 that Plain
+       is a list of libraries, not something each library provides. One list
+       in stack.rs now serves the editor and the tutorial page, which had a
+       narrower copy.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:

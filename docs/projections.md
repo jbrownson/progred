@@ -100,12 +100,13 @@ by a total structural fallback. A partial checks its preconditions and fails
 closed by declining; malformed shapes must remain accessible through a later
 projection or Raw. Raw uses the structural fallback alone: the same `Layout`
 language, total rather than `Option`, with cells as their short identities.
-Plain is Raw with names, text, bytes and numbers reading as themselves through
-their libraries; calls, arithmetic included, stay the records they are. The View
-menu switches the selected area to either and back. Specific domain projections
-precede general ones. Libraries
-contribute these functions explicitly; composition does not depend on registering
-them under a shared cell identity. The current host partials are Rust callbacks,
+Plain is Raw with names, text, bytes, absent values and numbers reading as
+themselves through their libraries; calls, arithmetic included, stay the records
+they are. One list in stack.rs defines it for the editor and the tutorial page
+alike. The View menu switches the selected area to either and back. Specific
+domain projections precede general ones. Libraries contribute these functions
+explicitly; composition does not depend on registering them under a shared cell
+identity. The current host partials are Rust callbacks,
 while presentation declarations can apply ordinary Grap callables.
 
 Recognition checks the fields a partial uses, not the absence of unrelated

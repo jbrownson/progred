@@ -43,35 +43,43 @@ impl<World> Stack<World> {
     }
 }
 
+/// The libraries Plain reads through, for the editor and the tutorial page
+/// alike: names, text, bytes and absent values read as themselves, and
+/// numbers as numbers, but nothing else a library draws, so calls,
+/// arithmetic included, stay records.
+pub const PLAIN: [gid::CellId; 7] = [
+    name::ID,
+    text::ID,
+    blob::ID,
+    absent::ID,
+    f32::ID,
+    f64::ID,
+    u64::ID,
+];
+
 impl Stack<crate::Editor> {
-    /// Plain's projection: names, text and bytes read as themselves through
-    /// their libraries, and numbers as numbers, but nothing else a library
-    /// draws, so calls, arithmetic included, stay records.
+    /// Plain's projection, from those of its libraries this stack loads.
     pub fn plain(&self) -> Projection<crate::Editor> {
-        let loaded = |library| self.partials.iter().any(|(id, _)| *id == library);
-        let readings = self
-            .partials
-            .iter()
-            .filter(|(id, _)| [name::ID, text::ID, blob::ID].contains(id))
-            .map(|(_, partial)| partial.clone());
-        let numbers = [
-            (
-                f32::ID,
-                crate::display::runtime_partial(|input| f32::convention().display(input)),
-            ),
-            (
-                f64::ID,
-                crate::display::runtime_partial(|input| f64::convention().display(input)),
-            ),
-            (
-                u64::ID,
-                crate::display::runtime_partial(|input| u64::convention().display(input)),
-            ),
-        ]
-        .into_iter()
-        .filter(|(library, _)| loaded(*library))
-        .map(|(_, partial)| partial);
-        Projection::new(readings.chain(numbers))
+        Projection::new(
+            PLAIN
+                .into_iter()
+                .filter_map(|library| self.plain_reading(library)),
+        )
+    }
+
+    /// A number library draws its numbers but not its arithmetic; Plain's
+    /// other libraries draw as they always do.
+    fn plain_reading(
+        &self,
+        library: gid::CellId,
+    ) -> Option<crate::display::Partial<crate::Editor, Hovered>> {
+        let (_, partial) = self.partials.iter().find(|(id, _)| *id == library)?;
+        Some(match library {
+            f32::ID => crate::display::runtime_partial(|input| f32::convention().display(input)),
+            f64::ID => crate::display::runtime_partial(|input| f64::convention().display(input)),
+            u64::ID => crate::display::runtime_partial(|input| u64::convention().display(input)),
+            _ => partial.clone(),
+        })
     }
 
     /// The document and pane projections with `hidden` libraries' own

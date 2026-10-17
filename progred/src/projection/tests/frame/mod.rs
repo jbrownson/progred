@@ -31,15 +31,20 @@ struct Bench {
 }
 
 #[test]
-fn plain_reads_text_and_numbers_but_keeps_calls_records() {
-    use crate::libraries::f64;
+fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
+    use crate::libraries::{absent, f64};
     use crate::workspace::Projection;
-    let (words, number, sum) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let (words, number, sum, missing) =
+        (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let doc = Document {
         root: Some(Value::record([
             (words, text::value("hello")),
             (number, f64::value(3.0)),
             (sum, grap::call(f64::vocabulary::SUM.into(), [])),
+            (
+                missing,
+                absent::with_reason(absent::vocabulary::NO_ALTERNATIVE),
+            ),
         ])),
         cells: Cells::new(),
     };
@@ -69,15 +74,19 @@ fn plain_reads_text_and_numbers_but_keeps_calls_records() {
             glyphs(words),
             glyphs(number),
             driver.drawn(&[Step::Key(sum), Step::Key(grap::vocabulary::FUNCTION)]),
+            driver.drawn(&[Step::Key(missing), Step::Key(absent::vocabulary::ABSENT)]),
         )
     };
-    let (words_plain, number_plain, function_plain) = drawn(Projection::Plain);
-    let (words_raw, number_raw, _) = drawn(Projection::Raw);
+    let (words_plain, number_plain, function_plain, reason_plain) = drawn(Projection::Plain);
+    let (words_raw, number_raw, _, reason_raw) = drawn(Projection::Raw);
     // Plain reads "hello" and 3; Raw spells out their bytes.
     assert!(words_plain >= "hello".len(), "{words_plain}");
     assert!(words_plain < words_raw, "{words_plain} < {words_raw}");
     assert!(number_plain < number_raw, "{number_plain} < {number_raw}");
     assert!(function_plain, "a call stays a record");
+    // Plain reads an absent value as its reason; Raw draws the reason's field.
+    assert!(!reason_plain, "Plain draws the reason as the value itself");
+    assert!(reason_raw, "Raw draws the reason as a field");
 }
 
 #[test]
