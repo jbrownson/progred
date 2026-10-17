@@ -1,5 +1,6 @@
 //! Final-encoded trees. Consumers choose what to retain; source links are not GID fields.
 use super::{Definitions, Library, absent, layout, name, presentation};
+use crate::computations::memo;
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
     SourceOrigin,
@@ -313,12 +314,11 @@ pub(crate) fn prepared(
                     let mut built = None;
                     // The returned Built contains every emission; replaying those
                     // effects would only rebuild the same immutable output.
-                    let evaluation =
-                        ::grap::memo::with_recorded_effects(&definitions, read, |host| {
-                            let (evaluation, output) = evaluate(&input.0, host, input.1);
-                            built = output;
-                            evaluation
-                        });
+                    let evaluation = memo::with_recorded_effects(&definitions, read, |host| {
+                        let (evaluation, output) = evaluate(&input.0, host, input.1);
+                        built = output;
+                        evaluation
+                    });
                     Ok(outcome(evaluation, built))
                 }
             },
@@ -332,7 +332,7 @@ pub(crate) fn prepared(
     computations
         .runtime
         .read(&prepared.result)
-        .unwrap_or_else(|error| Rc::new(Err(::grap::memo::failure(error).into())))
+        .unwrap_or_else(|error| Rc::new(Err(memo::failure(error).into())))
 }
 
 fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>) -> bool {

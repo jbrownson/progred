@@ -6,4 +6,3 @@ license.workspace = true
 
 [dependencies]
 gid.workspace = true
-incremental.workspace = true

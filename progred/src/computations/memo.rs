@@ -1,8 +1,12 @@
 //! Whole-evaluation memo boundaries. Each execution owns a fresh interpreter,
 //! so prepared calls cannot bypass an enclosing computation's observations.
+//! The evaluation's host records each definition it resolves, and gives up
+//! reuse when Grap reports an untracked call or an effect the memo doesn't own.
 
-use super::*;
-use incremental::{Input, Memo, Observation, Read, Runtime, Source};
+use gid::{CellId, Resolution, Value};
+use grap::{Definition, Evaluation, Host, absent};
+use incremental::{Read, Source};
+use std::{cell::RefCell, rc::Rc};
 
 #[cfg(test)]
 mod tests;
@@ -49,9 +53,6 @@ impl<S: 'static> Host for ObservingHost<'_, S> {
     fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)> {
         self.definitions.read(cell, &mut self.read.borrow_mut()).0
     }
-    fn observe(&self, observation: Observation) {
-        self.read.borrow_mut().record(observation);
-    }
     fn untracked(&self) {
         self.read.borrow_mut().untracked();
     }
@@ -95,19 +96,4 @@ fn observed<S: 'static, T>(
         read.untracked();
     }
     result
-}
-
-pub fn evaluate<S: 'static>(
-    runtime: &Runtime,
-    definitions: Definitions<S>,
-    expression: Input<Value>,
-    fuel: Input<usize>,
-) -> Memo<Evaluation<Value>> {
-    runtime.memo(move |read| {
-        let expression = expression.read(read);
-        let fuel = *fuel.read(read);
-        Ok(run(&definitions, read, |host| {
-            super::evaluate_value(&expression, host, fuel)
-        }))
-    })
 }

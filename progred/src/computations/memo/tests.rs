@@ -1,5 +1,10 @@
 use super::*;
 use gid::new_cell_id;
+use grap::{
+    Context, Environment, Expression, ForeignFunction, ForeignOverlay, call, evaluate_value,
+    evaluate_value_scoped,
+};
+use incremental::{Input, Memo, Runtime};
 use std::cell::Cell;
 
 type Table = Vec<(CellId, Resolution, Definition)>;
@@ -27,6 +32,21 @@ fn counted(runs: &Rc<Cell<usize>>, result: Value) -> Definition {
         })
         .tracked(),
     )
+}
+
+fn evaluate(
+    runtime: &Runtime,
+    definitions: Definitions<Table>,
+    expression: Input<Value>,
+    fuel: Input<usize>,
+) -> Memo<Evaluation<Value>> {
+    runtime.memo(move |read| {
+        let expression = expression.read(read);
+        let fuel = *fuel.read(read);
+        Ok(run(&definitions, read, |host| {
+            evaluate_value(&expression, host, fuel)
+        }))
+    })
 }
 
 #[test]
@@ -143,44 +163,6 @@ fn undeclared_foreign_reads_disable_reuse() {
 }
 
 #[test]
-fn foreign_input_observations_and_fuel_are_dependencies() {
-    let runtime = Runtime::default();
-    let cell = new_cell_id();
-    let value = runtime.input(1u8);
-    let runs = Rc::new(Cell::new(0));
-    let definition = Definition::foreign(
-        Value::record([]),
-        ForeignFunction::from_value({
-            let value = value.clone();
-            let runs = runs.clone();
-            move |context, _, _| {
-                runs.set(runs.get() + 1);
-                Ok(Value::from(vec![*context.read(&value)]))
-            }
-        })
-        .tracked(),
-    );
-    let (_, source) = definitions(&runtime, vec![(cell, Resolution::Document, definition)]);
-    let fuel = runtime.input(100);
-    let query = evaluate(
-        &runtime,
-        source,
-        runtime.input(call(cell.into(), [])),
-        fuel.clone(),
-    );
-    runtime.read(&query).unwrap();
-    runtime.read(&query).unwrap();
-    assert_eq!(runs.get(), 1);
-    value.set(2);
-    assert_eq!(runtime.read(&query).unwrap().result, Value::from(vec![2]));
-    assert_eq!(runs.get(), 2);
-    fuel.set(0);
-    assert!(!runtime.read(&query).unwrap().completed);
-    fuel.set(100);
-    assert_eq!(runtime.read(&query).unwrap().result, Value::from(vec![2]));
-}
-
-#[test]
 fn effects_are_repeated_unless_the_boundary_owns_the_recording() {
     for recorded in [false, true] {
         let runtime = Runtime::default();
@@ -250,7 +232,7 @@ fn halts_are_not_reused_even_when_the_returned_value_is_equal() {
         move |read| {
             runs.set(runs.get() + 1);
             Ok(run(&source, read, |host| {
-                super::super::evaluate_value(&Value::record([]), host, 0)
+                evaluate_value(&Value::record([]), host, 0)
             }))
         }
     });

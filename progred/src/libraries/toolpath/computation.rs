@@ -1,7 +1,7 @@
 //! Dependency-tracked path generation, shared by the rendering interpretations.
 
 use super::{paths::Recording, run};
-use crate::computations::Computations;
+use crate::computations::{Computations, memo};
 use ::grap::RuntimeValue;
 use gid::Value;
 use incremental::{Input, Memo};
@@ -42,7 +42,7 @@ pub(super) fn recording(
             let program = program.read(read);
             let fuel = *fuel.read(read);
             let mut path = Recording::default();
-            let evaluation = ::grap::memo::with_recorded_effects(&definitions, read, |host| {
+            let evaluation = memo::with_recorded_effects(&definitions, read, |host| {
                 record_program(&program, host, fuel, &mut path)
             });
             Ok(Recorded {

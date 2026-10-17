@@ -1,6 +1,7 @@
 //! Stream path segments into triangles alongside a meshed Fidget model.
 
 use super::{paths::*, playback, vocabulary::*};
+use crate::computations::memo;
 use crate::libraries::{absent, f64, fidget, layout, presentation};
 use crate::view::{Layout, ProjectionInput};
 use ::grap::RuntimeValue;
@@ -71,7 +72,7 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
         let geometry = computations.runtime.read(&computation.geometry);
         let result = geometry
             .as_ref()
-            .map_err(|error| ::grap::memo::failure(*error))
+            .map_err(|error| memo::failure(*error))
             .and_then(|geometry| geometry.as_ref().as_ref().map_err(Clone::clone));
         let drawing = result.and_then(|geometry| {
             fidget::mesh::drawing(&geometry.geometry, &model, state.as_ref(), scale)

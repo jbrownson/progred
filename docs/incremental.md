@@ -50,10 +50,14 @@ An asynchronous node can also retain that result while its replacement runs.
 
 ## Grap and foreign calls
 
-`grap::memo` observes whole evaluations, using a fresh interpreter on a miss so
-prepared calls cannot bypass another memo's observations. This is a Rust API,
-**not yet a Grap `memo` function or arbitrary-expression intrinsic**. Native nodes
-can nest evaluations and other native nodes in the same graph.
+The editor's `computations::memo` observes whole evaluations, using a fresh
+interpreter on a miss so prepared calls cannot bypass another memo's
+observations. Grap knows nothing of memos. Its `Host` resolves every definition
+an evaluation reads, hears of each untracked foreign call and each effect, and
+sees whether the evaluation completed; the memo's host turns those into
+observations. This is a Rust API, **not yet a Grap `memo` function or
+arbitrary-expression intrinsic**. Native nodes can nest evaluations and other
+native nodes in the same graph.
 
 The editor supplies a document/ordered-library snapshot. Cell reads and calls
 observe the selected source and definition, including missing definitions and
@@ -65,14 +69,14 @@ and fuel belong in explicit node inputs.
 
 Foreign calls are untracked by default and prevent reuse. `tracked()` opts a
 function or scoped overlay into an author contract: captured state is immutable
-or evaluation-local; changing external reads use `Context::read(&Input<T>)`;
-observable writes use `Context::effect`. The input owner calls `set` when the
-resource changes. This is not discovery of arbitrary Rust closure reads.
+or evaluation-local, every changing read goes through evaluation, and
+observable writes use `Context::effect`. This is not discovery of arbitrary
+Rust closure reads.
 
 Ordinary effects prevent reuse: a hit must not omit a write.
-`grap::memo::with_recorded_effects` declares that the caller owns and returns
-**all** effects, such as toolpath commands; it does not itself record anything.
-It must not wrap unrecorded writes into an enclosing editor or drawing
+`computations::memo::with_recorded_effects` declares that the caller owns and
+returns **all** effects, such as toolpath commands; it does not itself record
+anything. It must not wrap unrecorded writes into an enclosing editor or drawing
 sink. Unknown foreign calls still prevent reuse there. Evaluator halts are not
 reused; normally returned absents are ordinary retained results, even if their
 reason names cancellation or another halt. Completion status, not the reason,

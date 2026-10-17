@@ -15,7 +15,6 @@ mod effect_tests;
 #[cfg(test)]
 mod runtime_tests;
 
-pub mod memo;
 pub mod path;
 mod reify;
 pub mod source;
@@ -288,10 +287,15 @@ impl Definition {
     }
 }
 
+/// Where an evaluation finds definitions. A host that reuses results can rely
+/// on every changing read being a `resolve`, except where `untracked` says
+/// otherwise.
 pub trait Host {
     fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)>;
-    fn observe(&self, _observation: incremental::Observation) {}
+    /// A foreign call not declared tracked ran, so the result may depend on
+    /// reads the host didn't see.
     fn untracked(&self) {}
+    /// An observable write ran, which a reused result would leave out.
     fn effect(&self) {}
 }
 
@@ -335,9 +339,9 @@ impl ForeignFunction {
         }
     }
 
-    /// Opt in only when all changing reads use Context::read/evaluation and
-    /// all observable writes use Context::effect. Captures must be immutable
-    /// or evaluation-local; hidden mutable state prevents sound memoization.
+    /// Opt in only when every changing read goes through evaluation and every
+    /// observable write uses Context::effect. Captures must be immutable or
+    /// evaluation-local; hidden mutable state prevents sound memoization.
     pub fn tracked(mut self) -> Self {
         self.tracked = true;
         self
@@ -1326,12 +1330,6 @@ impl<'a> Context<'a> {
         self.host.effect();
         self.effects += 1;
         run()
-    }
-
-    pub fn read<T: 'static>(&self, input: &incremental::Input<T>) -> Rc<T> {
-        let (value, observation) = input.observed();
-        self.host.observe(observation);
-        value
     }
 
     fn checked_call(

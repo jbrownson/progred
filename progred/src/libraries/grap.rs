@@ -2,6 +2,7 @@
 //! The live `evaluate` projection is separate from evaluator syntax: a host
 //! that never loads it never gives that field evaluation behavior.
 
+use crate::computations::memo;
 use crate::identity::short_id;
 use crate::libraries::{Library, absent, name};
 use crate::view::{Layout, Partial, ProjectionInput};
@@ -485,16 +486,13 @@ pub fn library() -> Library {
     }
     for (cell, value) in [
         (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
-        (::grap::memo::CYCLE, "computation cycle"),
+        (memo::CYCLE, "computation cycle"),
+        (memo::INPUTS_CHANGED, "inputs changed during computation"),
         (
-            ::grap::memo::INPUTS_CHANGED,
-            "inputs changed during computation",
-        ),
-        (
-            ::grap::memo::DIFFERENT_RUNTIME,
+            memo::DIFFERENT_RUNTIME,
             "computation belongs to another runtime",
         ),
-        (::grap::memo::CANCELLED, "computation cancelled"),
+        (memo::CANCELLED, "computation cancelled"),
         (
             ::grap::absent::EFFECTFUL_DECLINE,
             "declined after an effect",

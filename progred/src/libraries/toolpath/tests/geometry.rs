@@ -71,11 +71,12 @@ fn cube_edits_change_paths_and_cached_results_match_fresh_evaluation() {
         let program = Value::from(names["ball_path"]);
         move |read| {
             let mut recording = Recording::default();
-            let result = ::grap::memo::with_recorded_effects(&definitions, read, |host| {
-                run(&mut recording, |scope| {
-                    ::grap::apply_value_scoped(&program, [], host, scope, 500_000)
-                })
-            });
+            let result =
+                crate::computations::memo::with_recorded_effects(&definitions, read, |host| {
+                    run(&mut recording, |scope| {
+                        ::grap::apply_value_scoped(&program, [], host, scope, 500_000)
+                    })
+                });
             assert!(
                 result.completed && !absent::is_absent(&result.result),
                 "{:?}",

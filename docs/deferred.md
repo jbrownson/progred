@@ -501,8 +501,11 @@ not assume every absent warrants an alert.
 The [computation graph](incremental.md) serves CAM geometry; canvas programs
 still record once per visible frame, and other projections aren't converted.
 Grap path generation is synchronous, and there are no Grap-language memo or
-async boundaries, user-facing quality controls, or durability tiers. Future
-readers of ordered contributor sets must observe that set, not just a selected
+async boundaries, user-facing quality controls, or durability tiers. A
+Grap-language memo would still live above the evaluator: Grap would hand its
+host the evaluation to reuse and its key, and the host would keep the memo, as
+the editor's `computations::memo` does for Rust boundaries. Future readers of
+ordered contributor sets must observe that set, not just a selected
 definition. Do not add an ad-hoc cache or event-specific relevance checks
 alongside this mechanism. Incremental lambda calculus and incremental Fidget
 algorithms are separate research.

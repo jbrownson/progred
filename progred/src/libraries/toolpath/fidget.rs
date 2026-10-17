@@ -6,6 +6,7 @@ use super::playback;
 #[cfg(test)]
 use super::playback::Draw;
 use super::{Error, argument, invalid, number, paths::*, runtime_result, vocabulary::*};
+use crate::computations::memo;
 use crate::libraries::{absent, color, f64, fidget, layout, presentation};
 use crate::view::{Layout, ProjectionInput};
 use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
@@ -266,12 +267,12 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
         let paths = computations.runtime.read(&computation.paths);
         let result = image
             .as_ref()
-            .map_err(|error| ::grap::memo::failure(*error))
+            .map_err(|error| memo::failure(*error))
             .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone))
             .and_then(|image| {
                 let paths = paths
                     .as_ref()
-                    .map_err(|e| ::grap::memo::failure(*e))?
+                    .map_err(|e| memo::failure(*e))?
                     .as_ref()
                     .as_ref()
                     .map_err(Clone::clone)?;

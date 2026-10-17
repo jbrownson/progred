@@ -8,6 +8,8 @@ use incremental::{Input, Roots, Runtime, Source};
 use std::{cell::Cell, rc::Rc};
 use web_time::Instant;
 
+pub(crate) mod memo;
+
 #[derive(Clone)]
 pub(crate) struct Snapshot {
     doc: Rc<Document>,
@@ -20,7 +22,7 @@ pub(crate) struct Computations {
     pub pointer_pressed: Input<bool>,
     pub frame_time: Cell<Instant>,
     snapshot: Input<Snapshot>,
-    pub definitions: grap::memo::Definitions<Snapshot>,
+    pub definitions: memo::Definitions<Snapshot>,
     roots: Roots<(Root, Vec<Step>)>,
 }
 
@@ -46,7 +48,7 @@ impl Computations {
             libraries: Libraries::default(),
         });
         let definitions = Source::new(snapshot.clone(), |snapshot: &Snapshot, cell| {
-            grap::memo::Resolved(Host::resolve(
+            memo::Resolved(Host::resolve(
                 &Sources {
                     doc: &snapshot.doc,
                     libraries: &snapshot.libraries,
@@ -123,7 +125,7 @@ impl Computations {
                         let expression = expression.read(read);
                         let fuel = *fuel.read(read);
                         let origin = origin.read(read).as_ref().clone();
-                        Ok(grap::memo::run(&definitions, read, |host| {
+                        Ok(memo::run(&definitions, read, |host| {
                             grap::evaluate_runtime_at(&expression, origin, host, fuel)
                         }))
                     }
@@ -145,7 +147,7 @@ impl Computations {
         self.runtime
             .read(&evaluation.result)
             .map(|evaluation| evaluation.result.clone())
-            .unwrap_or_else(|error| grap::memo::failure(error).into())
+            .unwrap_or_else(|error| memo::failure(error).into())
     }
 
     #[cfg(test)]
@@ -183,7 +185,7 @@ impl Computations {
                     move |read| {
                         let input = input.read(read);
                         let (function, arguments, fuel) = &*input;
-                        Ok(grap::memo::run(&definitions, read, |host| {
+                        Ok(memo::run(&definitions, read, |host| {
                             grap::apply_expression(
                                 &function.into(),
                                 arguments.iter().map(|(k, v)| (*k, v.into())),
@@ -201,7 +203,7 @@ impl Computations {
         self.runtime
             .read(&application.result)
             .map(|evaluation| evaluation.result.clone())
-            .unwrap_or_else(|error| grap::memo::failure(error).into())
+            .unwrap_or_else(|error| memo::failure(error).into())
     }
 }
 

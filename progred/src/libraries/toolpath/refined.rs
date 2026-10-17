@@ -6,7 +6,7 @@ use super::{
     fidget as implicit, mesh, playback,
     vocabulary::*,
 };
-use crate::computations::Computations;
+use crate::computations::{Computations, memo};
 #[cfg(test)]
 use crate::libraries::f64;
 use crate::libraries::{absent, fidget, layout, presentation};
@@ -195,7 +195,7 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
         let view = computations.runtime.read(&computation.view);
         let drawing = view
             .as_ref()
-            .map_err(|error| ::grap::memo::failure(*error))
+            .map_err(|error| memo::failure(*error))
             .and_then(|view| match view.as_ref() {
                 View::Mesh(geometry, progress) => {
                     let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
