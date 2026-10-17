@@ -84,6 +84,9 @@ at the time; code some of them describe has since been retired.
 - [Library vocabulary audit](library-vocabulary-audit-2026-10-17.md): where the
   core names the built-in libraries, why, and which uses stay, move into the
   core, or become library interface.
+- [Projection tests survey](projection-tests-survey-2026-10-17.md): what
+  projection/tests covers, how it drives the editor, what it costs, and where
+  each file belongs.
 
 ## Earlier notes
 
