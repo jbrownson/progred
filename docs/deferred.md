@@ -430,9 +430,11 @@ first:
    scope answers an occurrence's `location`. "Source" now means the document
    and libraries values are read from (`Sources`) and the code that drew
    something (`SourceTrace`, `source_link`, `SourceCalls`).
-6. Give the occurrence-to-location mapping one owning module, and pass an
+6. ~~Give the occurrence-to-location mapping one owning module, and pass an
    opaque handle through display and the libraries instead of `Location` and
-   `Conject`.
+   `Conject`.~~ Done on 17 October 2026: a scope maps occurrences to where
+   they're stored, a library names a place by its `Site`, and only the
+   toolkit's jumps and source traces see `Location` and `Conject`.
 7. Move the rest of the volume and CAM geometry out of progred, into crates
    built optimized like the other dependencies (see item 4). Meshing moved to
    `volume` on 17 October 2026. Still in progred, and still most of its test

@@ -1,8 +1,8 @@
 //! The editor's projection runtime: resolve locations, supply borrowed widget inputs,
 //! retain source provenance, and fall back to total structural display.
 
+mod child;
 pub(crate) mod line_control;
-mod location;
 mod structure;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -928,7 +928,7 @@ fn prepare_descend_path(
         value = match (!scope.descends()).then(|| scope.location(&path)).flatten() {
             Some(location) => cx.sources.read(&location).map(grap::RuntimeValue::from),
             None => value.as_ref().and_then(|value| {
-                location::child(value, step, |cell, source| cx.sources.value(cell, source))
+                child::of(value, step, |cell, source| cx.sources.value(cell, source))
             }),
         };
     }

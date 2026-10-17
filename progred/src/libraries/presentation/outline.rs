@@ -89,7 +89,6 @@ fn section(
     let body = d::jump_to(
         steps.clone(),
         outline.below(&[Step::Key(key)]),
-        d::Conject::descend(),
         body_projection,
         unstored,
     );

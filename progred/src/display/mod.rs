@@ -980,12 +980,12 @@ pub fn jump_with_conject<World: 'static, Hover: 'static>(
     }))
 }
 
-/// Draw at `steps` the value stored where `target` is, edited there, as
-/// [`jump_with_conject`] does; `otherwise` where nothing stores it.
+/// Draw at `steps` the value stored where `target` is, edited there along
+/// with what's stored below it, as [`jump`] does; `otherwise` where nothing
+/// stores it.
 pub fn jump_to<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     target: crate::editing::Site,
-    conject: Conject,
     projection: Option<Partial<World, Hover>>,
     otherwise: Layout<World, Hover>,
 ) -> Layout<World, Hover> {
@@ -996,7 +996,7 @@ pub fn jump_to<World: 'static, Hover: 'static>(
             build,
             steps.clone(),
             document,
-            conject.clone(),
+            Conject::descend(),
             projection.clone(),
             None,
         ),

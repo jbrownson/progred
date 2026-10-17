@@ -4,7 +4,7 @@
 use crate::libraries::f64;
 use gid::{CellId, Resolution, Step, Value};
 
-pub(super) fn child<'a>(
+pub(super) fn of<'a>(
     parent: &grap::RuntimeValue,
     step: &Step,
     resolve: impl Fn(CellId, &Resolution) -> Option<&'a Value>,
