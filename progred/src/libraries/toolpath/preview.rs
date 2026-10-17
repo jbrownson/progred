@@ -4,8 +4,9 @@ use super::{
     run,
     vocabulary::*,
 };
-use crate::display::{Layout, ProjectionInput, widget};
+use crate::display::widget;
 use crate::libraries::{absent, layout};
+use crate::view::{Layout, ProjectionInput};
 use puri::draw::Canvas;
 use puri::{Affine, BezPath, Color, Point, Rect, Size, Stroke};
 use std::rc::Rc;
@@ -96,9 +97,7 @@ fn fitted(lines: Lines2D, size: Size) -> Option<BezPath> {
     Some(path)
 }
 
-pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(super) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let fields = input.value?.field(PREVIEW)?;
     let program = fields.field(PROGRAM)?;
     let width = fields.field(layout::vocabulary::WIDTH)?.as_f64()?;

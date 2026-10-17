@@ -140,7 +140,7 @@ fn record_uses_the_supplied_order_in_both_responsive_forms() {
     const SECOND: CellId = CellId::from_u128(2);
     let first = Value::from(vec![1]);
     let second = Value::from(vec![2]);
-    let layout: Layout<crate::Editor, crate::frame::Hovered> = crate::display::record(
+    let layout: crate::view::Layout = crate::display::record(
         [(FIRST, &first), (SECOND, &second)],
         |left, right| right.cmp(left),
         |key, value| RecordField {

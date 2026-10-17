@@ -6,13 +6,11 @@ use super::{
     fidget as implicit, mesh, playback,
     vocabulary::*,
 };
+use crate::computations::Computations;
 #[cfg(test)]
 use crate::libraries::f64;
 use crate::libraries::{absent, fidget, layout, presentation};
-use crate::{
-    computations::Computations,
-    display::{Layout, ProjectionInput},
-};
+use crate::view::{Layout, ProjectionInput};
 use ::grap::RuntimeValue;
 #[cfg(test)]
 use gid::Value;
@@ -153,9 +151,7 @@ impl Computation {
     }
 }
 
-pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     let fields = input.value?.field(PREVIEW_REFINED)?;
     let (model, depth) =
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;

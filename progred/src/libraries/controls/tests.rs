@@ -1,4 +1,5 @@
 use super::*;
+use crate::view::Partial;
 
 fn controls_output(
     controls: &Value,
@@ -61,8 +62,8 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: &mut puri::text::TextCtx,
         _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
         _: &[gid::Step],
-        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
-        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
+        _: Option<Partial>,
+        _: Option<Partial>,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
         unreachable!()
     }
@@ -73,8 +74,8 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: Vec<gid::Step>,
         _: crate::location::Location<'static>,
         _: display::Conject,
-        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
-        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
+        _: Option<Partial>,
+        _: Option<Partial>,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
         unreachable!()
     }
@@ -84,8 +85,8 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
         _: Vec<gid::Step>,
         value: ::grap::RuntimeValue,
-        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
-        _: Option<display::Partial<crate::Editor, crate::frame::Hovered>>,
+        _: Option<Partial>,
+        _: Option<Partial>,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
         let height = value.field(HEIGHT).unwrap().as_f64().unwrap();
         self.0.replace(Some(value.into_value()));

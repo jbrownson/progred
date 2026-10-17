@@ -4,13 +4,14 @@
 
 use crate::identity::short_id;
 use crate::libraries::{Library, absent, name};
+use crate::view::{Layout, Partial, ProjectionInput};
 use gid::{CellId, Cells, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::projection::{group, group_hug};
 use crate::display::{
-    Completion, CompletionKind, CompletionProvider, Delim, Face, Layout, Pending, ProjectionInput,
-    RecordField, ResolvedCell, activatable, alternatives, at, col, completion, descend_local,
+    Completion, CompletionKind, CompletionProvider, Delim, Face, Pending, RecordField,
+    ResolvedCell, activatable, alternatives, at, col, completion, descend_local,
     descend_path_local, dim, faced, pad, record_fragment_with, row, selectable_bracket, shared,
 };
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
@@ -18,9 +19,7 @@ use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions
 
 mod suggestions;
 
-pub(crate) fn expression(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(crate) fn expression(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     match input.value {
         Some(_) => shallow_cell(input),
         None => (input.default_projection)(&input.with_value(None::<&::grap::RuntimeValue>))
@@ -43,18 +42,14 @@ pub mod vocabulary {
 
 /// A named cell as a reference, otherwise leave its definition visible.
 /// Contextual projections use this for expression and callable references.
-pub(crate) fn shallow_cell(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(crate) fn shallow_cell(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     shallow_cell_with(input, |label| label)
 }
 
 pub(crate) fn shallow_cell_with(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-    decorate: impl FnOnce(
-        Layout<crate::Editor, crate::frame::Hovered>,
-    ) -> Layout<crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
+    decorate: impl FnOnce(Layout) -> Layout,
+) -> Option<Layout> {
     let cell = input.value?.as_cell()?;
     let name = input.env.name(cell)?;
     let target = input.targets.current();
@@ -67,9 +62,7 @@ pub(crate) fn shallow_cell_with(
 
 /// A parameter is a cell. An empty slot offers a new one named as typed,
 /// ahead of existing cells that happen to share the name.
-fn parameter(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn parameter(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     match input.value {
         Some(_) => declaration_cell(input),
         None => Some(completion(
@@ -102,9 +95,7 @@ fn parameter(
     }
 }
 
-fn declaration_cell(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn declaration_cell(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let cell = input.value?.as_cell()?;
     let definition = input.env.resolve(cell)?;
     Some(group(selectable_bracket(
@@ -117,9 +108,7 @@ fn declaration_cell(
     )))
 }
 
-fn declaration_name(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn declaration_name(input: &ProjectionInput<'_>) -> Option<Layout> {
     input.pending.is_none().then_some(())?;
     name::read(input.value?)?;
     Some(descend_local(
@@ -129,9 +118,7 @@ fn declaration_name(
     ))
 }
 
-fn lambda_name(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn lambda_name(input: &ProjectionInput<'_>) -> Option<Layout> {
     Some(match input.value {
         Some(value) => crate::display::line_edit(name::editor(value)?),
         // Naming an anonymous lambda is clickable, not an arrow-navigation
@@ -144,10 +131,7 @@ fn lambda_name(
     })
 }
 
-pub fn shallow_path(
-    steps: impl Into<Vec<Step>>,
-    default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub fn shallow_path(steps: impl Into<Vec<Step>>, default: &Partial) -> Layout {
     descend_path_local(
         steps,
         crate::display::runtime_partial(shallow_cell),
@@ -157,19 +141,14 @@ pub fn shallow_path(
 
 /// A named direct expression reference is shallow. A compound expression's
 /// projection explicitly chooses the roles of its own children.
-pub(crate) fn expression_path(
-    steps: impl Into<Vec<Step>>,
-    default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn expression_path(steps: impl Into<Vec<Step>>, default: &Partial) -> Layout {
     descend_path_local(steps, crate::display::runtime_partial(expression), default)
 }
 
 /// A record naming a Grap program: the program its `grap` field names is
 /// code, so an empty one offers Grap's suggestions. Its other fields, and
 /// code further in, keep their ordinary projections.
-pub fn program_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn program_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     input.value?.field(vocabulary::GRAP)?;
     crate::display::structure::record_layout(input, |key| {
         (key == vocabulary::GRAP).then(|| crate::display::runtime_partial(program))
@@ -177,9 +156,7 @@ pub fn program_display(
 }
 
 /// The program's cell keeps its parentheses; what fills it is an expression.
-fn program(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn program(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let cell = input.value?.as_cell()?;
     let source = input
         .env
@@ -193,10 +170,7 @@ fn program(
 
 /// Declaration cells keep their parentheses, with a named definition
 /// shown as an unquoted editor at the real name field.
-pub(crate) fn declaration_path(
-    steps: impl Into<Vec<Step>>,
-    default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn declaration_path(steps: impl Into<Vec<Step>>, default: &Partial) -> Layout {
     descend_path_local(
         steps,
         crate::display::runtime_partial(declaration_cell),
@@ -204,10 +178,7 @@ pub(crate) fn declaration_path(
     )
 }
 
-pub(crate) fn expression_descend(
-    step: Step,
-    default: &crate::display::Partial<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn expression_descend(step: Step, default: &Partial) -> Layout {
     expression_path([step], default)
 }
 
@@ -278,16 +249,14 @@ fn standard_field_order(
 /// Calls read as calls. Their function position is a shallow
 /// reference when it is a named cell; arguments retain Grap's contextual
 /// projection.
-pub fn call_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn call_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     call_with_function(input, None)
 }
 
 pub(crate) fn call_with_function(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-    function_projection: Option<crate::display::Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
+    function_projection: Option<Partial>,
+) -> Option<Layout> {
     // A call's arguments are its parameters, so it takes no new field from
     // Enter; one being added some other way shows in the plain record view,
     // as for the other compact forms.
@@ -353,9 +322,7 @@ pub(crate) fn call_with_function(
 
 /// A stored lambda exposes its parameter declarations deeply and
 /// projects its body as an expression.
-pub fn lambda_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn lambda_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let fields = input.value?;
     match &input.pending {
         None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | BODY))) => (),
@@ -393,9 +360,7 @@ pub fn lambda_display(
 
 /// A named expression, not a lexical binding. The name slot is always
 /// present in the projection; only the value field matters to evaluation.
-pub fn value_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn value_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let fields = input.value?;
     fields.field(VALUE)?;
     match &input.pending {
@@ -421,9 +386,7 @@ pub fn value_display(
 
 /// Foreignness is an evaluator implementation detail. In source, an
 /// FFI callable projects exactly like the cell it names.
-pub fn ffi_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn ffi_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let ffi = input.value?.field(FFI)?;
     ffi.as_cell()?;
     Some(group(shallow_path(
@@ -432,9 +395,7 @@ pub fn ffi_display(
     )))
 }
 
-pub fn evaluate_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn evaluate_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let expression = input.value?.field(EVALUATE)?;
     let result =
         input
@@ -497,7 +458,7 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     for (cell, value) in [
         (::grap::vocabulary::FUNCTION, "function"),

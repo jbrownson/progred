@@ -1,5 +1,6 @@
 use super::*;
 use crate::display as d;
+use crate::view::Partial;
 
 fn world(root: Value) -> crate::Editor {
     crate::test_editor(Document {
@@ -8,10 +9,7 @@ fn world(root: Value) -> crate::Editor {
     })
 }
 
-fn projection(
-    world: &crate::Editor,
-    rule: d::Partial<crate::Editor, Hovered>,
-) -> Projection<crate::Editor> {
+fn projection(world: &crate::Editor, rule: Partial) -> Projection<crate::Editor> {
     Projection::new([rule, world.stack.projection.partial.clone()])
 }
 

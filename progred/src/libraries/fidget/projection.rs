@@ -1,11 +1,12 @@
 use super::{one_marker, parameters, vocabulary::*};
 use crate::display::projection::{group, group_hug, hug};
 use crate::display::{
-    Delim, Face, Layout, ProjectionInput, activatable, alternatives, col, descend_path, dim, faced,
-    row, selectable_bracket, shared,
+    Delim, Face, activatable, alternatives, col, descend_path, dim, faced, row, selectable_bracket,
+    shared,
 };
 use crate::libraries::name;
 use crate::libraries::representation::Precedence;
+use crate::view::{Layout, ProjectionInput};
 use gid::{CellId, Step, Value};
 
 #[cfg(test)]
@@ -36,11 +37,7 @@ fn form(value: &Value) -> Option<(CellId, &Value)> {
     Some((marker, content))
 }
 
-fn operand(
-    marker: CellId,
-    key: CellId,
-    value: &Value,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+fn operand(marker: CellId, key: CellId, value: &Value) -> Layout {
     let child = descend_path([Step::Key(marker), Step::Key(key)]);
     let needs_group = value
         .as_record()
@@ -59,12 +56,7 @@ fn operand(
     }
 }
 
-fn infix(
-    marker: CellId,
-    left: &Value,
-    right: &Value,
-    operator: Layout<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+fn infix(marker: CellId, left: &Value, right: &Value, operator: Layout) -> Layout {
     let left = shared(operand(marker, LEFT, left));
     let right = shared(operand(marker, RIGHT, right));
     let operator = shared(operator);
@@ -74,9 +66,7 @@ fn infix(
     ])
 }
 
-fn arguments(
-    children: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+fn arguments(children: impl IntoIterator<Item = Layout>) -> Layout {
     let children: Vec<_> = children.into_iter().map(shared).collect();
     selectable_bracket(
         Delim::Paren,
@@ -108,9 +98,7 @@ fn arguments(
     )
 }
 
-pub(super) fn field(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(super) fn field(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     // An active new field needs the structural record's insertion control.
     input.pending.is_none().then_some(())?;
     super::one_marker_by(|marker| input.value.is_some_and(|v| v.contains_field(marker)))?;

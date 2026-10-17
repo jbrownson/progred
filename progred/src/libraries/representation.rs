@@ -4,11 +4,9 @@
 
 use crate::display::Pending;
 use crate::display::projection::group;
-use crate::display::{
-    Delim, Face, Layout, Partial, ProjectionInput, alternatives, col, row, selectable_bracket,
-    shared, subscript,
-};
+use crate::display::{Delim, Face, alternatives, col, row, selectable_bracket, shared, subscript};
 use crate::libraries::number::vocabulary::{LEFT, RIGHT};
+use crate::view::{Layout, Partial, ProjectionInput};
 use ::grap::RuntimeValue;
 use ::grap::vocabulary::FUNCTION;
 use gid::{CellId, Step};
@@ -16,10 +14,10 @@ use std::rc::Rc;
 
 /// `content` followed by the representation's name as a subscript.
 pub(crate) fn tagged<V>(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, V>,
-    content: Layout<crate::Editor, crate::frame::Hovered>,
+    input: &ProjectionInput<'_, V>,
+    content: Layout,
     representation: CellId,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> Layout {
     row(
         2.0,
         [
@@ -36,7 +34,7 @@ pub(crate) fn tagged<V>(
     )
 }
 
-pub(crate) fn operation(representation: CellId) -> Partial<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn operation(representation: CellId) -> Partial {
     crate::display::runtime_partial(move |input| {
         crate::libraries::grap::shallow_cell_with(input, |label| {
             tagged(input, label, representation)
@@ -75,8 +73,8 @@ impl Precedence {
 pub(crate) fn infix_display(
     representation: CellId,
     operators: &[(CellId, Precedence)],
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input: &ProjectionInput<'_, RuntimeValue>,
+) -> Option<Layout> {
     match &input.pending {
         None | Some(Pending::Field | Pending::Child(Step::Key(_))) => {}
         Some(Pending::Child(_)) => return None,
@@ -124,10 +122,7 @@ pub(crate) fn infix_display(
 }
 
 /// Calls of `operations`, headed by the operator with its tag.
-pub(crate) fn calls(
-    representation: CellId,
-    operations: impl Into<Rc<[CellId]>>,
-) -> Partial<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn calls(representation: CellId, operations: impl Into<Rc<[CellId]>>) -> Partial {
     let operations = operations.into();
     let function_projection = operation(representation);
     crate::display::runtime_partial(move |input| {

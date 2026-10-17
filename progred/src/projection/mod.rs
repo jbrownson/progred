@@ -23,6 +23,7 @@ use crate::render;
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
 use crate::styles::Styles;
+use crate::view::{Layout, Partial};
 use completion::pending_view;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
@@ -290,7 +291,7 @@ fn prepare(
     path: &[Step],
     ancestors: &Ancestry,
     value: Option<&grap::RuntimeValue>,
-    layout: crate::display::Layout<crate::Editor, Hovered>,
+    layout: Layout,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let project = ProjectionScope {
@@ -326,8 +327,8 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         steps: &[Step],
-        current: Option<crate::display::Partial<crate::Editor, Hovered>>,
-        default: Option<crate::display::Partial<crate::Editor, Hovered>>,
+        current: Option<Partial>,
+        default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         prepare_descend_path(
             self.cx,
@@ -374,8 +375,8 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         steps: Vec<Step>,
         document: Location<'static>,
         conject: crate::display::Conject,
-        current: Option<crate::display::Partial<crate::Editor, Hovered>>,
-        default: Option<crate::display::Partial<crate::Editor, Hovered>>,
+        current: Option<Partial>,
+        default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let path: Vec<_> = self.path.iter().cloned().chain(steps).collect();
         let cx = Cx {
@@ -418,8 +419,8 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         steps: Vec<Step>,
         value: grap::RuntimeValue,
-        current: Option<crate::display::Partial<crate::Editor, Hovered>>,
-        default: Option<crate::display::Partial<crate::Editor, Hovered>>,
+        current: Option<Partial>,
+        default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         prepare_at(
             self.cx,
@@ -444,8 +445,8 @@ fn prepare_at(
     ground: Ground,
     steps: Vec<Step>,
     nested: grap::RuntimeValue,
-    current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
-    default_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
+    current_projection: Option<Partial>,
+    default_projection: Option<Partial>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let path: Vec<_> = path.iter().cloned().chain(steps).collect();
@@ -884,8 +885,8 @@ fn prepare_descend_path(
     ancestors: &Ancestry,
     parent: Option<&grap::RuntimeValue>,
     steps: &[Step],
-    current_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
-    default_projection: Option<crate::display::Partial<crate::Editor, Hovered>>,
+    current_projection: Option<Partial>,
+    default_projection: Option<Partial>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let mut path = parent_path.to_vec();
@@ -942,8 +943,8 @@ fn prepare_descend_path(
 fn prepare_value(
     cx: &Cx,
     projection: &Projection<crate::Editor>,
-    current_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
-    default_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
+    current_projection: Option<&Partial>,
+    default_projection: Option<&Partial>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Ancestry,
@@ -1088,13 +1089,13 @@ fn prepare_value(
 fn value_layout(
     cx: &Cx,
     projection: &Projection<crate::Editor>,
-    current_projection: Option<&crate::display::Partial<crate::Editor, Hovered>>,
-    default_projection: &crate::display::Partial<crate::Editor, Hovered>,
+    current_projection: Option<&Partial>,
+    default_projection: &Partial,
     path: &[Step],
     source: Option<&Location>,
     value: Option<&grap::RuntimeValue>,
     fold_default: Option<bool>,
-) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
+) -> Option<Layout> {
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
     if let Some(value) = value

@@ -338,7 +338,7 @@ fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>)
     }
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     for (cell, label) in [
         (ID, "Trees"),

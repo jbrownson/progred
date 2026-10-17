@@ -12,13 +12,13 @@
 #[cfg(test)]
 use crate::display::ActionHandler;
 use crate::libraries::{Library, color, f64 as f64_convention, name, presentation};
+use crate::view::{Layout, ProjectionInput};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
-    Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment, activatable,
-    alternatives, block_hover, border, bracket, descend, leaf, overlay as layout_overlay,
-    pickable_runtime, slot,
+    Delim, Face, Paint, ProjectionTarget, RowAlignment, activatable, alternatives, block_hover,
+    border, bracket, descend, leaf, overlay as layout_overlay, pickable_runtime, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use puri::{
@@ -522,7 +522,7 @@ pub fn decode(
     value: &Value,
     select: &ActionHandler<crate::Editor>,
     hover: &crate::frame::Hovered,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<Layout> {
     decode_with(&value.into(), &|| ProjectionTarget {
         select: select.clone(),
         select_with: {
@@ -543,7 +543,7 @@ fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
 fn decode_with(
     value: &::grap::RuntimeValue,
     target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<Layout> {
     value.record_len()?;
     if let Some(content) = value.field(vocabulary::ROW) {
         content.record_len()?;
@@ -707,7 +707,7 @@ fn decode_with(
 fn children(
     list: &::grap::RuntimeValue,
     target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
-) -> Option<Vec<Layout<crate::Editor, crate::frame::Hovered>>> {
+) -> Option<Vec<Layout>> {
     list.list_values()?
         .map(|child| decode_with(&child, target))
         .collect()
@@ -932,13 +932,11 @@ fn read_point(value: &Value) -> Option<Point> {
     ))
 }
 
-pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     scope::display(input).or_else(|| decode_with(input.value?, &|| input.targets.current()))
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::ROW, "row"),

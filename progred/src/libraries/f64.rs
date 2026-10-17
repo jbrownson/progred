@@ -10,8 +10,6 @@ use gid::{Step, Value};
 pub const ID: CellId = CellId::from_u128(0x1fdb573a2c56a7063546c195318214bc);
 use crate::display::overlay_value;
 #[cfg(test)]
-use crate::display::{Layout, ProjectionInput};
-#[cfg(test)]
 use ::grap;
 #[cfg(test)]
 use ::grap::vocabulary::FUNCTION;
@@ -203,7 +201,7 @@ fn lerp(
     })
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     convention().library(ID, parts(), std::iter::empty())
 }
 

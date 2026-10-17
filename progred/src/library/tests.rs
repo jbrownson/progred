@@ -1,7 +1,8 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
+use crate::view::{Layout, ProjectionInput};
 
-use crate::display::{Env, Layout, ProjectionInput, text as text_layout};
+use crate::display::{Env, text as text_layout};
 use ::grap::{Environment, Expression, ForeignFunction, Halt};
 use gid::{CellId, Value};
 use puri::Leaf;
@@ -20,15 +21,11 @@ fn right_function(_: &mut ::grap::Context, _: &Expression, _: &Environment) -> R
     Ok(Value::from(b"right".to_vec()))
 }
 
-fn left_projection(
-    _: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn left_projection(_: &ProjectionInput<'_>) -> Option<Layout> {
     Some(text_layout("left"))
 }
 
-fn right_projection(
-    _: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn right_projection(_: &ProjectionInput<'_>) -> Option<Layout> {
     Some(text_layout("right"))
 }
 

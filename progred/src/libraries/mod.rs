@@ -2,7 +2,9 @@
 //! library and exports its complete contribution to the editor, through
 //! the interface in [`crate::library`].
 
-pub use crate::library::{Definitions, Library};
+pub use crate::library::Definitions;
+/// A built-in library's contribution, over the editor and its hover type.
+pub type Library = crate::library::Library<crate::Editor, crate::frame::Hovered>;
 #[cfg(test)]
 use ::grap::{Definition, ForeignFunctions};
 

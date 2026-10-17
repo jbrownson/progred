@@ -6,32 +6,24 @@ use super::*;
 use puri::handler::HasHandler;
 use ui_events::keyboard::{Key, NamedKey};
 
-pub fn list(
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Partial<crate::Editor, crate::frame::Hovered> {
+pub fn list(child: Option<crate::view::Partial>) -> crate::view::Partial {
     runtime_partial(move |input| list_layout(input, child.clone()))
 }
 
 /// An editable list without brackets or commas; items retain the standard
 /// occurrence paths, child projections, and pending insertion behavior.
-pub fn list_column(
-    gap: f64,
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Partial<crate::Editor, crate::frame::Hovered> {
+pub fn list_column(gap: f64, child: Option<crate::view::Partial>) -> crate::view::Partial {
     runtime_partial(move |input| list_column_with(input, gap, child.clone(), |_, entry| entry))
 }
 
 /// Compose content beside each projected item, outside that item's value
 /// boundary. The list still owns element paths and pending insertion slots.
 pub(crate) fn list_column_with(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     gap: f64,
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-    item: impl Fn(
-        gid::Position,
-        Layout<crate::Editor, crate::frame::Hovered>,
-    ) -> Layout<crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    child: Option<crate::view::Partial>,
+    item: impl Fn(gid::Position, crate::view::Layout) -> crate::view::Layout,
+) -> Option<crate::view::Layout> {
     let items = list_items(input, child)?;
     Some(authoring(group(if items.is_empty() {
         selectable_bracket(Delim::Bracket, row(0.0, []))
@@ -49,17 +41,17 @@ pub(crate) fn list_column_with(
 /// Prepare element paths, including a pending insertion, and share their
 /// projection and measurement across any presentations the caller builds.
 pub fn list_items(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Option<Vec<(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)>> {
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
+    child: Option<crate::view::Partial>,
+) -> Option<Vec<(gid::Position, crate::view::Layout)>> {
     Some(list_items_at(input, input.value?.list_positions()?, child))
 }
 
 fn list_items_at(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     mut positions: Vec<gid::Position>,
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Vec<(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)> {
+    child: Option<crate::view::Partial>,
+) -> Vec<(gid::Position, crate::view::Layout)> {
     if let Some(Pending::Child(Step::Element(position))) = &input.pending
         && !positions.contains(position)
     {
@@ -84,16 +76,13 @@ fn list_items_at(
 /// supplies item decoration and separator paint; this function owns insertion
 /// eligibility and interaction. Arrange the returned sequence with row/col/etc.
 pub fn list_with<S>(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-    items: &[(gid::Position, Layout<crate::Editor, crate::frame::Hovered>)],
-    item: impl Fn(
-        gid::Position,
-        Layout<crate::Editor, crate::frame::Hovered>,
-    ) -> Layout<crate::Editor, crate::frame::Hovered>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
+    items: &[(gid::Position, crate::view::Layout)],
+    item: impl Fn(gid::Position, crate::view::Layout) -> crate::view::Layout,
     separator: impl Fn(Option<&gid::Position>, Option<&gid::Position>) -> Option<S>,
-) -> Vec<Layout<crate::Editor, crate::frame::Hovered>>
+) -> Vec<crate::view::Layout>
 where
-    S: FnOnce(Option<crate::frame::Hovered>) -> Layout<crate::Editor, crate::frame::Hovered>,
+    S: FnOnce(Option<crate::frame::Hovered>) -> crate::view::Layout,
 {
     let mut separated = Vec::with_capacity(items.len() * 2 + 1);
     for index in 0..=items.len() {
@@ -130,9 +119,7 @@ fn list_gap(
     gap: f64,
     before: Option<&gid::Position>,
     after: Option<&gid::Position>,
-) -> Option<
-    impl FnOnce(Option<crate::frame::Hovered>) -> Layout<crate::Editor, crate::frame::Hovered> + use<>,
-> {
+) -> Option<impl FnOnce(Option<crate::frame::Hovered>) -> crate::view::Layout + use<>> {
     let height = if before.is_some() && after.is_some() {
         gap
     } else {
@@ -143,17 +130,17 @@ fn list_gap(
 }
 
 pub fn list_layout(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
+    child: Option<crate::view::Partial>,
+) -> Option<crate::view::Layout> {
     Some(list_layout_at(input, input.value?.list_positions()?, child))
 }
 
 pub fn list_layout_at(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     positions: Vec<gid::Position>,
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+    child: Option<crate::view::Partial>,
+) -> crate::view::Layout {
     let items = list_items_at(input, positions, child);
     let horizontal = list_with(
         input,
@@ -183,23 +170,23 @@ pub fn list_layout_at(
 
 #[cfg(test)]
 pub fn record(
-    child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>> + 'static,
-) -> Partial<crate::Editor, crate::frame::Hovered> {
+    child: impl Fn(CellId) -> Option<crate::view::Partial> + 'static,
+) -> crate::view::Partial {
     runtime_partial(move |input| record_layout(input, &child))
 }
 
 pub fn record_layout(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-    child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
+    child: impl Fn(CellId) -> Option<crate::view::Partial>,
+) -> Option<crate::view::Layout> {
     Some(record_layout_at(input, input.value?.record_keys()?, child))
 }
 
 pub fn record_layout_at(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     keys: Vec<CellId>,
-    child: impl Fn(CellId) -> Option<Partial<crate::Editor, crate::frame::Hovered>>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+    child: impl Fn(CellId) -> Option<crate::view::Partial>,
+) -> crate::view::Layout {
     authoring(record_heads(
         ordered_keys(input, keys)
             .into_iter()
@@ -209,14 +196,14 @@ pub fn record_layout_at(
 }
 
 pub(crate) fn record_keys(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
 ) -> Option<Vec<CellId>> {
     Some(ordered_keys(input, input.value?.record_keys()?))
 }
 
 /// Display order, including a pending new field.
 fn ordered_keys(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     mut keys: Vec<CellId>,
 ) -> Vec<CellId> {
     if let Some(Pending::Child(Step::Key(key))) = &input.pending
@@ -236,9 +223,9 @@ fn ordered_keys(
 }
 
 pub(crate) fn record_field(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     key: CellId,
-    child: Option<Partial<crate::Editor, crate::frame::Hovered>>,
+    child: Option<crate::view::Partial>,
 ) -> RecordField<crate::Editor, crate::frame::Hovered> {
     RecordField {
         label: record_label(input, key),
@@ -253,9 +240,9 @@ pub(crate) fn record_field(
 /// The ordinary field-name presentation and interaction, independent of how
 /// the enclosing record arranges its fields.
 pub(crate) fn record_label(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     key: CellId,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     let label = match input.env.name(key) {
         Some(name) => faced(name, Face::Label),
         None => faced(crate::identity::short_id(key), Face::Id),
@@ -272,9 +259,9 @@ pub(crate) fn record_label(
 /// The fields a projection leaves undrawn, and one being added, as a
 /// record fragment to follow what it does draw.
 pub(crate) fn extra_fields(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     drawn: impl Fn(CellId) -> bool,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<crate::view::Layout> {
     let fields = record_keys(input)?
         .into_iter()
         .filter(|key| !drawn(*key))
@@ -288,10 +275,10 @@ pub(crate) fn extra_fields(
 /// arguments. Drawn as one piece, the value takes no new field from Enter:
 /// these views don't offer [`authoring`], which a rawer view of it does.
 pub(crate) fn with_extra_fields(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
     drawn: impl Fn(CellId) -> bool,
-    content: Layout<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+    content: crate::view::Layout,
+) -> crate::view::Layout {
     match extra_fields(input, drawn) {
         Some(extras) => super::projection::group_hug(content, extras, 0.0, 20.0),
         None => content,
@@ -303,9 +290,7 @@ pub(crate) fn with_extra_fields(
 /// (see [`crate::Editor::enter_pending`]). The children's own handlers come
 /// first. A projection that doesn't offer this, such as a number's, takes
 /// nothing in from Enter.
-pub fn authoring(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub fn authoring(child: crate::view::Layout) -> crate::view::Layout {
     super::widget::around(
         child,
         Rc::new(|context| {
@@ -326,8 +311,8 @@ pub fn authoring(
 }
 
 pub(crate) fn pending_field(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    input: &crate::view::ProjectionInput<'_, ::grap::RuntimeValue>,
+) -> Option<crate::view::Layout> {
     matches!(input.pending, Some(Pending::Field)).then(|| {
         block_hover(on_click(
             row(

@@ -25,7 +25,7 @@ pub struct LineEdit {
 
 pub type LineUpdate = Rc<dyn Fn(&dyn Env, &str, Option<&Value>) -> Option<Value>>;
 
-pub fn layout(line: LineEdit) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub fn layout(line: LineEdit) -> crate::view::Layout {
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::LineEdit);
     Layout::widget(Rc::new(move |context| view(context, line.clone())))

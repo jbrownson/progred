@@ -1,8 +1,7 @@
 use super::*;
+use crate::view::{Layout, ProjectionInput};
 
-fn field(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn field(input: &ProjectionInput<'_>) -> Option<Layout> {
     let value = input.value.map(::grap::RuntimeValue::from);
     super::field(&input.with_value(value.as_ref()))
 }
@@ -41,7 +40,7 @@ fn target(path: Vec<Step>) -> ProjectionTarget<crate::Editor, crate::frame::Hove
     }
 }
 
-fn input(value: &Value) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered> {
+fn input(value: &Value) -> ProjectionInput<'_> {
     ProjectionInput {
         default_projection: crate::display::runtime_partial(|_| None),
         env: &Names,

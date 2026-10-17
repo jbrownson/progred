@@ -1,15 +1,12 @@
 use super::*;
-use crate::display::{
-    Layout, ProjectionInput, RowAlignment, activatable, aligned_row, structure, widget,
-};
+use crate::display::{RowAlignment, activatable, aligned_row, structure, widget};
+use crate::view::{Layout, ProjectionInput};
 use puri::draw::Canvas;
 use puri::{Affine, BezPath, Color, Stroke};
 use std::rc::Rc;
 
 /// A picture alongside, not instead of, the editable profile data.
-pub(crate) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(crate) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let value = input.value?;
     value.field(vocabulary::TOOL)?;
     let tool = Tool::read(value.as_value())?;
@@ -23,7 +20,7 @@ pub(crate) fn display(
     ))
 }
 
-pub(super) fn picture(tool: &Tool) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(super) fn picture(tool: &Tool) -> Option<Layout> {
     let mut radius: f64 = 0.0;
     let mut low = f64::INFINITY;
     let mut high = f64::NEG_INFINITY;

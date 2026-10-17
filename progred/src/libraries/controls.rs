@@ -1,7 +1,8 @@
 //! Evaluation-local controls: native widgets emit alongside ordinary Grap values.
 use super::{Definitions, Library, absent, f64, layout, name, presentation, tree};
 use crate::display::widget::view::Root;
-use crate::display::{self, Layout, ProjectionInput, widget};
+use crate::display::{self, widget};
+use crate::view::{Layout, ProjectionInput};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
     RuntimeValue,
@@ -339,9 +340,7 @@ fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: 
     })
 }
 
-fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let fields = input.value?.field(WITH_CONTROLS)?;
     let controls = fields.field(CONTROLS)?;
     let view = fields.field(VIEW)?;
@@ -632,7 +631,7 @@ fn stored_tree_items(
     }))
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     for (key, label) in [
         (WITH_CONTROLS, "with controls"),

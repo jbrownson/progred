@@ -3,9 +3,10 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
-use crate::display::{Layout, Partial, ProjectionInput, activatable, overlay_value};
+use crate::display::{activatable, overlay_value};
 use crate::libraries::representation::{Precedence, calls, infix_display, tagged};
 use crate::libraries::{Library, absent, line_edit, logic, name};
+use crate::view::{Layout, Partial, ProjectionInput};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
@@ -27,7 +28,7 @@ pub mod vocabulary {
     pub const OPERAND: CellId = CellId::from_u128(0x50a20d15e4ae56be51b882de9d58c676);
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::LEFT, "left"),
@@ -161,8 +162,8 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         self,
         id: CellId,
         parts: Parts,
-        before: impl IntoIterator<Item = Partial<crate::Editor, crate::frame::Hovered>>,
-    ) -> Library<crate::Editor, crate::frame::Hovered> {
+        before: impl IntoIterator<Item = Partial>,
+    ) -> Library {
         let Parts {
             cells,
             functions,
@@ -202,10 +203,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
 
     /// A number reads as its spelling, then any other fields, including one
     /// being added.
-    pub fn display(
-        self,
-        input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    pub fn display(self, input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
         layout(input, (self.read)(input.value?)?, self.tag, self.encode)
     }
 
@@ -343,9 +341,9 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
 /// with the right operand's picker open. A sign or exponent that doesn't yet
 /// make a number still goes into its text.
 fn typed_operators<N: std::str::FromStr + 'static>(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
+    child: Layout,
     symbols: Rc<[(&'static str, CellId)]>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> Layout {
     crate::display::widget::after(
         child,
         Rc::new(move |context| {
@@ -432,11 +430,11 @@ pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
 }
 
 pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
     number: N,
     representation: CellId,
     encode: fn(N) -> Value,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<Layout> {
     let original = input.value?;
     let digits = line_edit::layout(
         number.to_string(),

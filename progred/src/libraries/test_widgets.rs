@@ -2,6 +2,7 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
 use crate::display::widget;
 use crate::placed::{self, leaf};
+use crate::view::Layout;
 use crate::{Editor, frame::Hovered};
 use kurbo::Rect;
 use measured::Extent;
@@ -269,7 +270,7 @@ pub fn press(x: f64, pick: bool) -> PointerButtonEvent {
 }
 
 pub fn gesture_place(
-    layout: crate::display::Layout<crate::Editor, Hovered>,
+    layout: Layout,
     readonly: bool,
 ) -> crate::display::widget::HoverCallback<crate::Editor, Hovered> {
     let crate::display::recording::Recorded::Before { before, .. } =

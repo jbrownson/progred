@@ -3,10 +3,11 @@
 //! the native widget composes Puri text, painting, and handlers directly.
 
 use crate::libraries::{Library, name};
+use crate::view::Layout;
 use gid::{Cells, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x26b5394bf7beb5dce00140f9e03bc465);
-use crate::display::{Layout, LineEdit, LineUpdate, TextFamily, line_edit};
+use crate::display::{LineEdit, LineUpdate, TextFamily, line_edit};
 use std::rc::Rc;
 
 pub fn native(update: impl Fn(&str, Option<&Value>) -> Option<Value> + 'static) -> LineUpdate {
@@ -42,7 +43,7 @@ pub fn layout(
     update: LineUpdate,
     prefix: impl Into<String>,
     suffix: impl Into<String>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> Layout {
     layout_with_family(text, update, prefix, suffix, TextFamily::SystemUi)
 }
 
@@ -52,7 +53,7 @@ pub fn layout_with_family(
     prefix: impl Into<String>,
     suffix: impl Into<String>,
     family: TextFamily,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> Layout {
     line_edit(description(
         text,
         None::<String>,
@@ -81,7 +82,7 @@ pub fn description(
     }
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::CURRENT, name::record("current", []));
     cells.set_value(vocabulary::INPUT, name::record("input", []));

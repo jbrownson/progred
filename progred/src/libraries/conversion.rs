@@ -19,7 +19,7 @@ fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::F32_FROM_F64, name::record("f32 from f64", []));
     Library::named(

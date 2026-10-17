@@ -8,12 +8,13 @@
 #[cfg(test)]
 use crate::libraries::absent;
 use crate::libraries::{Library, f64, layout, name};
+use crate::view::{Layout, Partial, ProjectionInput};
 use gid::{Cells, Step};
 
 mod outline;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xd22b834154d60b1df228f9bb4d3c13de);
-use crate::display::{Layout, ProjectionInput, at};
+use crate::display::at;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -41,11 +42,7 @@ pub fn viewport(value: &gid::Value) -> Option<(&gid::Value, &gid::Value)> {
 
 /// A viewport function receives its assigned logical size, not a size
 /// inferred from its output. Its result uses the ordinary layout and handlers.
-pub fn viewport_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-    width: f64,
-    height: f64,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn viewport_display(input: &ProjectionInput<'_>, width: f64, height: f64) -> Option<Layout> {
     viewport(input.value?)?;
     if width <= 0.0 || height <= 0.0 {
         return Some(crate::display::row(0.0, []));
@@ -104,9 +101,7 @@ pub(crate) fn viewport_runtime_output(
     ))
 }
 
-pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let expression = input.value?.field(vocabulary::RENDER)?;
     let evaluated = (|| {
         let fuel = layout::fuel(expression.field(layout::vocabulary::FUEL)?.as_f64()?)?;
@@ -162,9 +157,7 @@ impl Drop for Drawing {
 /// projection that emits a layout draws the record in place, so whatever it
 /// descends into stays editable; one that returns a value draws that value
 /// with the loaded libraries; an absent passes the record on.
-pub(crate) fn document_libraries(
-    loaded: crate::display::Partial<crate::Editor, crate::frame::Hovered>,
-) -> crate::display::Partial<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn document_libraries(loaded: Partial) -> Partial {
     crate::display::runtime_partial(move |input| {
         let value = input.value?;
         let occurrence: std::rc::Rc<[Step]> = input.env.occurrence().into();
@@ -216,9 +209,7 @@ pub(crate) fn document_libraries(
 
 /// Opt-in presentation of a declaration; not part of the library's
 /// ordinary authoring projection.
-pub fn projected_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn projected_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let value = input.value?.field(vocabulary::VALUE)?;
     let function = input.value?.field(vocabulary::PROJECTION)?;
     let result = input
@@ -231,7 +222,7 @@ pub fn projected_display(
     })
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::RENDER, "render"),

@@ -2,9 +2,9 @@
 
 use super::vocabulary::OUTLINE;
 use crate::display::projection::group;
-use crate::display::{self as d, Layout, ProjectionInput, col};
-use crate::frame::Hovered;
+use crate::display::{self as d, col};
 use crate::location::Location;
+use crate::view::{Layout, Partial, ProjectionInput};
 use gid::{CellId, Path, Step, Value};
 use std::rc::Rc;
 
@@ -18,9 +18,7 @@ fn sections(value: &Value) -> Option<Vec<CellId>> {
         .collect()
 }
 
-pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, Hovered>,
-) -> Option<Layout<crate::Editor, Hovered>> {
+pub(super) fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
     let keys = sections(input.value?)?;
     let fields = input.value?.as_record()?.clone();
     let value = ::grap::RuntimeValue::from(input.value?.clone());
@@ -80,11 +78,11 @@ pub(super) fn display(
 fn section(
     position: gid::Position,
     key: CellId,
-    heading: Layout<crate::Editor, Hovered>,
+    heading: Layout,
     source: Option<&Location>,
     fields: &gid::Record,
-    default_projection: &d::Partial<crate::Editor, Hovered>,
-) -> Layout<crate::Editor, Hovered> {
+    default_projection: &Partial,
+) -> Layout {
     let value = fields.get(&key).cloned();
     let steps = [Step::Element(position), Step::Key(key)];
     let body_projection = Some(d::compose_partials([
@@ -134,9 +132,9 @@ fn visibility(
 }
 
 fn heading(
-    input: &ProjectionInput<'_, crate::Editor, Hovered, ::grap::RuntimeValue>,
+    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
     fields: &gid::Record,
-) -> Option<Layout<crate::Editor, Hovered>> {
+) -> Option<Layout> {
     let key = input.value?.as_cell()?;
     let value = fields.get(&key).cloned();
     let target = input.targets.current();

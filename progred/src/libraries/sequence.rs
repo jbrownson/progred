@@ -180,7 +180,7 @@ fn functions() -> ForeignFunctions {
         )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (RANGE, "range"),

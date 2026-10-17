@@ -13,7 +13,7 @@ pub mod vocabulary {
     pub use ::grap::path::vocabulary::*;
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     use vocabulary::*;
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [

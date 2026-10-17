@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
+use crate::view::ProjectionInput;
 
 use crate::display::Env;
 use crate::display::test_support::{ProjectionCall, inspect};
@@ -43,9 +44,7 @@ fn relative_target(
     }
 }
 
-fn projection_input(
-    value: &RuntimeValue,
-) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue> {
+fn projection_input(value: &RuntimeValue) -> ProjectionInput<'_, RuntimeValue> {
     ProjectionInput {
         default_projection: crate::display::runtime_partial(|_| None),
         env: &NoEval,
@@ -59,9 +58,7 @@ fn projection_input(
     }
 }
 
-fn relative_projection_input(
-    value: &RuntimeValue,
-) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue> {
+fn relative_projection_input(value: &RuntimeValue) -> ProjectionInput<'_, RuntimeValue> {
     ProjectionInput {
         default_projection: crate::display::runtime_partial(|_| None),
         env: &NoEval,

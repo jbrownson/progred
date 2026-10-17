@@ -1,4 +1,5 @@
 use super::*;
+use crate::view::{Layout, ProjectionInput};
 
 #[test]
 fn native_annotation_handler_retains_the_projected_site() {
@@ -84,9 +85,7 @@ fn native_annotation_handler_retains_the_projected_site() {
 
 #[test]
 fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
-    fn probe(
-        input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>,
-    ) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
+    fn probe(input: &ProjectionInput<'_>) -> Option<Layout> {
         use crate::libraries::layout as data;
         input.value?.as_blob()?;
         let target = input.targets.current();

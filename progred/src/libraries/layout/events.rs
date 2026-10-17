@@ -1,8 +1,9 @@
 //! Grap's ordinary event adapter. Native widgets use Puri handlers directly.
 
 use super as layout_data;
-use crate::display::{Layout, widget};
+use crate::display::widget;
 use crate::libraries::{f64 as f64_convention, text};
+use crate::view::Layout;
 use gid::{CellId, Value};
 use puri::handler::{
     Event, EventOutcome, HasHandler, ImeEvent, KeyState, KeyboardEvent, Modifiers, PointerButton,
@@ -12,10 +13,7 @@ use puri::handler::{
 use puri::{Placement, Point};
 use std::rc::Rc;
 
-pub fn on_event(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
-    function: impl Into<::grap::RuntimeValue>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Layout {
     let function = function.into();
     widget::before(
         child,

@@ -3,6 +3,7 @@
 //! the host representation.
 
 use crate::libraries::{Library, absent, color, control, f32, name, presentation, representation};
+use crate::view::{Layout, ProjectionInput};
 #[cfg(test)]
 use fidget_engine::shape::EzShape;
 #[cfg(not(target_arch = "wasm32"))]
@@ -29,7 +30,7 @@ mod projection;
 pub(crate) mod raster;
 
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
-use crate::display::{Layout, ProjectionInput, on_hover, on_state_drag, widget};
+use crate::display::{on_hover, on_state_drag, widget};
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
 use puri::{Affine, ImageAlphaType, ImageData, ImageFormat, Size, Vec2};
@@ -530,10 +531,7 @@ fn slice_preview(value: &Value) -> Option<SlicePreview> {
     (preview.min_x < preview.max_x && preview.min_y < preview.max_y).then_some(preview)
 }
 
-fn slice_display(
-    preview: SlicePreview,
-    scale_factor: f64,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn slice_display(preview: SlicePreview, scale_factor: f64) -> Option<Layout> {
     let raster_size = raster_size(preview.size, scale_factor)?;
     let minimum = raster_size.width().min(raster_size.height()) as f32;
     let half_width = (preview.max_x - preview.min_x) / 2.0;
@@ -583,11 +581,7 @@ fn raster_size(size: Size, scale: f64) -> Option<PixelRenderSize> {
     ))
 }
 
-fn image_layout(
-    size: Size,
-    raster_size: PixelRenderSize,
-    rgba: Vec<u8>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+fn image_layout(size: Size, raster_size: PixelRenderSize, rgba: Vec<u8>) -> Layout {
     let image = ImageData {
         data: rgba.into(),
         format: ImageFormat::Rgba8,
@@ -1031,7 +1025,7 @@ pub(crate) fn volume_display(
     state: Option<&Value>,
     scale_factor: f64,
     renderer: &mut PreviewRenderer,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<Layout> {
     let raster_size = raster_size(preview.size, scale_factor)?;
     Some(image_layout(
         preview.size,
@@ -1041,9 +1035,9 @@ pub(crate) fn volume_display(
 }
 
 fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
+    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
     renderer: &RefCell<PreviewRenderer>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<Layout> {
     let value = input.value?;
     if value.contains_field(vocabulary::PREVIEW_3D) {
         let drawing = volume_display(
@@ -1059,10 +1053,7 @@ fn display(
     }
 }
 
-pub(crate) fn interactive_volume<V>(
-    drawing: Layout<crate::Editor, crate::frame::Hovered>,
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, V>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_, V>) -> Layout {
     let target = input.targets.current();
     let hover = target.hover;
     crate::display::widget::before(
@@ -1121,7 +1112,7 @@ pub(crate) fn interactive_volume<V>(
     )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::FIDGET, "fidget"),

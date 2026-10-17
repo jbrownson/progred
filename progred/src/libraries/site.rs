@@ -13,7 +13,7 @@ pub mod vocabulary {
     pub use crate::site::vocabulary::{GET, NO_STATE, PATH, SET, VALUE};
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::GET, "get"),

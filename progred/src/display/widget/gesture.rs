@@ -1,5 +1,5 @@
 use super::{Annotate, HoverCallback, before};
-use crate::display::{ActionHandler, Layout};
+use crate::display::ActionHandler;
 use gid::Value;
 use puri::drag::Drag;
 use puri::handler::{HasHandler, PointerButtonEvent};
@@ -75,11 +75,11 @@ pub fn targeted<World: 'static, Hover: 'static>(
 }
 
 pub fn on_state_drag(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
+    child: crate::view::Layout,
     target: crate::frame::Hovered,
     on_press: ActionHandler<crate::Editor>,
     handler: StateDragHandler,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     before(
         child,
         Rc::new(move |context| {
@@ -125,10 +125,7 @@ pub fn on_state_drag(
     )
 }
 
-pub fn on_point(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
-    handler: PointHandler,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub fn on_point(child: crate::view::Layout, handler: PointHandler) -> crate::view::Layout {
     before(
         child,
         Rc::new(move |context| {

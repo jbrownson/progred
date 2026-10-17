@@ -6,8 +6,8 @@ use super::playback;
 #[cfg(test)]
 use super::playback::Draw;
 use super::{Error, argument, invalid, number, paths::*, runtime_result, vocabulary::*};
-use crate::display::{Layout, ProjectionInput};
 use crate::libraries::{absent, color, f64, fidget, layout, presentation};
+use crate::view::{Layout, ProjectionInput};
 use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 use fidget_engine::context::Tree;
 use gid::Value;
@@ -18,9 +18,9 @@ pub(super) mod computation;
 
 /// Overlay only: progress never changes the viewport's size or input handling.
 pub(super) fn progress_bar(
-    drawing: Layout<crate::Editor, crate::frame::Hovered>,
+    drawing: Layout,
     progress: Option<incremental::background::Progress>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> Layout {
     crate::display::widget::after(
         drawing,
         Rc::new(move |context| {
@@ -267,9 +267,7 @@ pub(super) fn preview_with(
     })())
 }
 
-pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     let fields = input.value?.field(PREVIEW_3D)?;
     let model = fidget::volume_preview(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
     let program = fields.field(PROGRAM)?;

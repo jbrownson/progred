@@ -1,4 +1,5 @@
 use super::*;
+use crate::view::{Layout, ProjectionInput};
 
 #[test]
 fn projection_target_appends_relative_steps() {
@@ -349,9 +350,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     // The first library code ever to SEE editor state — as data,
     // positionally: the payload only at the selected path, the
     // annotation record only at its own.
-    fn probe(
-        input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>,
-    ) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
+    fn probe(input: &ProjectionInput<'_>) -> Option<Layout> {
         input.value?.as_blob()?;
         Some(crate::display::dim(
             match (input.selection.is_some(), input.state.is_some()) {
@@ -427,9 +426,7 @@ fn a_projection_defined_as_data_realizes() {
     // The display language's data form, decoded with the PROVIDED
     // intents and realized through the ordinary pipeline — the same
     // boundary a Grap-backed library projection can use.
-    fn probe(
-        input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>,
-    ) -> Option<crate::display::Layout<crate::Editor, Hovered>> {
+    fn probe(input: &ProjectionInput<'_>) -> Option<Layout> {
         use crate::libraries::layout as data;
         input.value?.as_blob()?;
         let target = input.targets.current();

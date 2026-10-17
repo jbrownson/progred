@@ -1,7 +1,8 @@
 //! Hex spelling and editing for GID blobs.
 
-use crate::display::{Layout, ProjectionInput, TextFamily};
+use crate::display::TextFamily;
 use crate::libraries::{Library, line_edit, name, text};
+use crate::view::{Layout, ProjectionInput};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{Cells, Value};
 
@@ -65,9 +66,7 @@ pub fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
     parse_hex(spelling.trim()).map(Value::from)
 }
 
-pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     Some(line_edit::layout_with_family(
         gid::hex_string(input.value?.as_blob()?),
         line_edit::native(edit),
@@ -77,7 +76,7 @@ pub fn display(
     ))
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UPDATE, name::record("blob update", []));
     cells.set_value(

@@ -2,6 +2,7 @@
 //! editor assumes the library; other hosts need not.
 
 use crate::libraries::{Library, text};
+use crate::view::{Layout, Partial, ProjectionInput};
 use gid::{CellId, Cells, Value};
 
 pub const ID: CellId = CellId::from_u128(0x3209ad5d23a0c8513f6bd76324a5cf60);
@@ -39,14 +40,9 @@ pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
 /// Explicitly include the stored name beside a facet's own presentation.
 /// This is decoration, not a binding or a record field/value pair.
 pub(crate) fn with_name(
-    input: &crate::display::ProjectionInput<
-        '_,
-        crate::Editor,
-        crate::frame::Hovered,
-        ::grap::RuntimeValue,
-    >,
-    content: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
-) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
+    content: Layout,
+) -> Layout {
     use crate::display::{Pending, descend_local};
     let step = gid::Step::Key(vocabulary::NAME);
     let has_name = input
@@ -64,7 +60,7 @@ pub(crate) fn with_name(
     )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::NAME, record("name", []));
     Library::named(
@@ -76,7 +72,7 @@ pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
 
 /// A name as its line editor or, missing, a hole for one. A projection
 /// passes this where it descends into a name.
-pub(crate) fn projection() -> crate::display::Partial<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn projection() -> Partial {
     crate::display::partial(|input| match input.value {
         Some(value) => editor(value).map(crate::display::line_edit),
         None => Some(hole()),
@@ -84,7 +80,7 @@ pub(crate) fn projection() -> crate::display::Partial<crate::Editor, crate::fram
 }
 
 /// An empty name, which takes whatever is typed as its text.
-pub(crate) fn hole() -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn hole() -> Layout {
     crate::display::completion(
         crate::display::CompletionKind::Value,
         Some(std::rc::Rc::new(|request| {

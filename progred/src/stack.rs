@@ -8,6 +8,7 @@ use crate::libraries::{
 };
 use crate::library::{Libraries, Library};
 use crate::projection::Projection;
+use crate::view::Partial;
 use std::rc::Rc;
 
 pub struct Stack<World> {
@@ -70,10 +71,7 @@ impl Stack<crate::Editor> {
 
     /// A number library draws its numbers but not its arithmetic; Plain's
     /// other libraries draw as they always do.
-    fn plain_reading(
-        &self,
-        library: gid::CellId,
-    ) -> Option<crate::display::Partial<crate::Editor, Hovered>> {
+    fn plain_reading(&self, library: gid::CellId) -> Option<Partial> {
         let (_, partial) = self.partials.iter().find(|(id, _)| *id == library)?;
         Some(match library {
             f32::ID => crate::display::runtime_partial(|input| f32::convention().display(input)),
@@ -137,7 +135,7 @@ fn compose(
 /// Libraries' projections composed for the document, and for a pane, whose
 /// entry may present its value instead.
 fn projections(
-    partials: impl IntoIterator<Item = crate::display::Partial<crate::Editor, Hovered>>,
+    partials: impl IntoIterator<Item = Partial>,
     document_libraries: bool,
 ) -> (Projection<crate::Editor>, Projection<crate::Editor>) {
     let partials: Vec<_> = partials.into_iter().collect();

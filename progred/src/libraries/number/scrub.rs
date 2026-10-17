@@ -1,7 +1,8 @@
+use crate::display::widget;
 use crate::display::widget::gesture::Gesture;
-use crate::display::{Layout, widget};
 use crate::gesture::EditRun;
 use crate::placed::Cursor;
+use crate::view::Layout;
 use gid::Value;
 use puri::{Point, drag::Drag};
 use std::rc::Rc;
@@ -21,10 +22,10 @@ pub(crate) type ScrubGesture = Box<dyn FnMut(ScrubEvent) -> ScrubUpdate>;
 pub(crate) type ScrubHandler = Rc<dyn Fn() -> ScrubGesture>;
 
 pub(crate) fn on_scrub(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
+    child: Layout,
     target: crate::frame::Hovered,
     handler: ScrubHandler,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> Layout {
     widget::before(
         child,
         Rc::new(move |context| {
@@ -82,9 +83,7 @@ pub(crate) fn on_scrub(
 /// While the command modifier is held, a number that holding it lets be
 /// dragged is outlined as hovering outlines a value, in the number's own
 /// color: every place the pointer can drag shows at once.
-pub(crate) fn outlined(
-    digits: Layout<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub(crate) fn outlined(digits: Layout) -> Layout {
     widget::around(
         digits,
         Rc::new(|context| {

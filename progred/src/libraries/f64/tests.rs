@@ -1,15 +1,12 @@
 use super::*;
+use crate::view::{Layout, ProjectionInput};
 
-fn binary_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn binary_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     crate::libraries::representation::infix_display(vocabulary::F64, &parts().infix, input)
 }
 
 /// Binary notation's one-line form; the other wraps after the left operand.
-fn infix_children(
-    layout: &Layout<crate::Editor, crate::frame::Hovered>,
-) -> Option<Vec<Recorded<crate::Editor, crate::frame::Hovered>>> {
+fn infix_children(layout: &Layout) -> Option<Vec<Recorded<crate::Editor, crate::frame::Hovered>>> {
     fn unshared(
         layout: &Recorded<crate::Editor, crate::frame::Hovered>,
     ) -> Recorded<crate::Editor, crate::frame::Hovered> {
@@ -57,9 +54,7 @@ fn target(_: Vec<Step>) -> crate::display::ProjectionTarget<crate::Editor, crate
     }
 }
 
-fn projection_input(
-    value: &RuntimeValue,
-) -> ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue> {
+fn projection_input(value: &RuntimeValue) -> ProjectionInput<'_, RuntimeValue> {
     ProjectionInput {
         default_projection: crate::display::runtime_partial(|_| None),
         env: &TestEnv,
@@ -75,9 +70,7 @@ fn projection_input(
 
 #[test]
 fn numeric_projections_read_runtime_facets_and_ignore_unrelated_children() {
-    type Project = for<'a, 'b> fn(
-        &'b ProjectionInput<'a, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>>;
+    type Project = for<'a, 'b> fn(&'b ProjectionInput<'a, RuntimeValue>) -> Option<Layout>;
     let extra = new_cell_id();
     let functions = functions();
     let host = crate::libraries::test_host(|_| None, &functions);
@@ -330,7 +323,7 @@ fn binary_notation_wraps_before_its_operator() {
 #[test]
 fn every_numeric_operator_reads_infix() {
     use crate::libraries::{f32, u64};
-    let infix = |library: &Library<crate::Editor, crate::frame::Hovered>, call: Value| {
+    let infix = |library: &Library, call: Value| {
         let layout =
             (library.projection.as_ref().unwrap())(&projection_input(&RuntimeValue::from(&call)))
                 .expect("a call projects");

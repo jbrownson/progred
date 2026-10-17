@@ -1,12 +1,13 @@
 //! Open sRGB RGB8 and RGBA8 conventions with an editable projected spelling.
 
 use crate::libraries::{Library, f64, line_edit, name, text};
+use crate::view::{Layout, ProjectionInput};
 use gid::{Cells, Step, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
 use crate::display::{
-    Layout, PointEvent, PointUpdate, ProjectionInput, TextFamily, activatable, centered_row, col,
-    descend, on_point, popover, widget,
+    PointEvent, PointUpdate, TextFamily, activatable, centered_row, col, descend, on_point,
+    popover, widget,
 };
 use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
 use puri::draw::CanvasSink;
@@ -173,9 +174,7 @@ fn completions(
 
 /// The seed belongs only to the picker. The first point interaction writes the
 /// chosen color through the same location and gesture machinery as an edit.
-fn missing_picker(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn missing_picker(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     input.value.is_none().then_some(())?;
     input.writable.then_some(())?;
     let hue = picker_hue(input.selection)?;
@@ -226,11 +225,7 @@ fn without_picker(selection: Option<&Value>) -> Value {
     Value::Record(fields)
 }
 
-fn picker_leaf(
-    height: f64,
-    color: Hsva,
-    draw: fn(Hsva, &mut dyn CanvasSink, Affine),
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+fn picker_leaf(height: f64, color: Hsva, draw: fn(Hsva, &mut dyn CanvasSink, Affine)) -> Layout {
     Layout::widget(Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
         widget::paint(
@@ -280,11 +275,7 @@ fn hsva(encoded: Encoded) -> Hsva {
     Hsva::from_rgba8(rgba)
 }
 
-fn picker(
-    original: &Value,
-    encoded: Encoded,
-    hue: f64,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+fn picker(original: &Value, encoded: Encoded, hue: f64) -> Layout {
     let color = Hsva {
         hue,
         ..hsva(encoded)
@@ -357,7 +348,7 @@ pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
     replace_color(current?, parse(spelling)?)
 }
 
-fn swatch(color: Color) -> Layout<crate::Editor, crate::frame::Hovered> {
+fn swatch(color: Color) -> Layout {
     Layout::widget(Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
         let border = context.inputs.styles.dim.brush.clone();
@@ -378,9 +369,7 @@ fn swatch(color: Color) -> Layout<crate::Editor, crate::frame::Hovered> {
     }))
 }
 
-pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     if input.value.is_none() {
         return missing_picker(input);
     }
@@ -443,7 +432,7 @@ fn hex_editor(color: Encoded) -> crate::display::LineEdit {
     )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::RGB, name::record("rgb", []));
     cells.set_value(vocabulary::RGBA, name::record("rgba", []));

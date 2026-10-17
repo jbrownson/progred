@@ -2,6 +2,7 @@
 //! borrowed FFIs emit into this Rust buffer, including through calls and loops.
 use super::*;
 use crate::libraries::absent;
+use crate::view::{Layout, ProjectionInput};
 use ::grap::{Context, Evaluation, ForeignOverlay, RuntimeValue};
 use std::cell::RefCell;
 use vocabulary::*;
@@ -43,7 +44,7 @@ pub(super) fn program(
 }
 
 struct Output {
-    children: RefCell<Vec<Layout<crate::Editor, crate::frame::Hovered>>>,
+    children: RefCell<Vec<Layout>>,
 }
 
 enum BuildError {
@@ -69,10 +70,7 @@ fn invalid(function: CellId) -> BuildError {
 }
 
 impl Output {
-    fn collect<T>(
-        &self,
-        run: impl FnOnce() -> Result<T, Halt>,
-    ) -> Result<(T, Vec<Layout<crate::Editor, crate::frame::Hovered>>), Halt> {
+    fn collect<T>(&self, run: impl FnOnce() -> Result<T, Halt>) -> Result<(T, Vec<Layout>), Halt> {
         let parent = self.children.take();
         let result = run();
         let children = self.children.replace(parent);
@@ -85,10 +83,7 @@ impl Output {
 pub fn run(
     target: impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
     evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
-) -> (
-    Evaluation,
-    Option<Layout<crate::Editor, crate::frame::Hovered>>,
-) {
+) -> (Evaluation, Option<Layout>) {
     let output = Output {
         children: RefCell::new(Vec::new()),
     };
@@ -117,9 +112,7 @@ pub fn run(
     (evaluation, layout)
 }
 
-pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(super) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let function = input.value?.field(LAYOUT_PROGRAM)?;
     let (evaluation, layout) = run(
         || input.targets.current(),
@@ -172,9 +165,7 @@ fn number_argument(
     }
 }
 
-fn single(
-    children: Vec<Layout<crate::Editor, crate::frame::Hovered>>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn single(children: Vec<Layout>) -> Option<Layout> {
     if children.len() == 1 {
         children.into_iter().next()
     } else {
@@ -189,7 +180,7 @@ fn operation(
     environment: &Environment,
     output: &Output,
     target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
-) -> Result<Layout<crate::Editor, crate::frame::Hovered>, BuildError> {
+) -> Result<Layout, BuildError> {
     macro_rules! need {
         ($value:expr) => {
             match $value {

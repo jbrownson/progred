@@ -67,6 +67,7 @@ mod text_store;
 mod timers;
 #[cfg(test)]
 mod tutorials;
+mod view;
 #[cfg(target_arch = "wasm32")]
 mod web;
 #[cfg(any(test, target_arch = "wasm32"))]

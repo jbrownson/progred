@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
+use crate::view::{Layout, ProjectionInput};
 
 use crate::display::test_support::{ProjectionCall, inspect};
 use crate::display::{Env, ProjectionTargets};
@@ -8,16 +9,12 @@ use std::rc::Rc;
 
 const LEFT_VALUE: CellId = CellId::from_u128(1);
 
-fn projected_display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn projected_display(input: &ProjectionInput<'_>) -> Option<Layout> {
     let value = input.value.map(::grap::RuntimeValue::from);
     super::projected_display(&input.with_value(value.as_ref()))
 }
 
-fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
     let value = input.value.map(::grap::RuntimeValue::from);
     super::display(&input.with_value(value.as_ref()))
 }
@@ -200,10 +197,8 @@ impl Env for EvaluateTo {
 fn projected<V>(
     value: &V,
     env: &dyn Env,
-    projection: impl FnOnce(
-        &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, V>,
-    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    projection: impl FnOnce(&ProjectionInput<'_, V>) -> Option<Layout>,
+) -> Option<Layout> {
     let target = |_| crate::display::ProjectionTarget {
         select: Rc::new(|_| false),
         select_with: Rc::new(|_, _| false),

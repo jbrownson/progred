@@ -15,7 +15,7 @@ pub mod vocabulary {
     };
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::GET, "selection get"),

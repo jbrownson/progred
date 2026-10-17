@@ -79,18 +79,18 @@ pub fn on_activate<World: 'static, Hover: Clone + PartialEq + 'static>(
 }
 
 pub fn pickable(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
+    child: crate::view::Layout,
     target: crate::frame::Hovered,
     value: Value,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     pickable_runtime(child, target, value.into())
 }
 
 pub fn pickable_runtime(
-    child: Layout<crate::Editor, crate::frame::Hovered>,
+    child: crate::view::Layout,
     target: crate::frame::Hovered,
     value: grap::RuntimeValue,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     before(
         child,
         Rc::new(move |context| {

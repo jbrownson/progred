@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
+use crate::view::{Layout, ProjectionInput};
 
 use crate::display::Env;
 use crate::display::test_support::{ProjectionCall, inspect};
@@ -141,11 +142,9 @@ fn relative_target(
 }
 
 fn project_runtime(
-    projection: impl FnOnce(
-        &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-    ) -> Option<Layout<crate::Editor, crate::frame::Hovered>>,
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+    projection: impl FnOnce(&ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout>,
+    input: &ProjectionInput<'_>,
+) -> Option<Layout> {
     let value = input.value.map(::grap::RuntimeValue::from);
     projection(&input.with_value(value.as_ref()))
 }
@@ -178,10 +177,7 @@ fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
     assert!(value_display(&input.with_value(Some(&wrapper))).is_some());
 }
 
-fn input<'a>(
-    env: &'a dyn Env,
-    value: &'a Value,
-) -> ProjectionInput<'a, crate::Editor, crate::frame::Hovered> {
+fn input<'a>(env: &'a dyn Env, value: &'a Value) -> ProjectionInput<'a> {
     ProjectionInput {
         default_projection: crate::display::runtime_partial(|_| None),
         env,
@@ -195,10 +191,7 @@ fn input<'a>(
     }
 }
 
-fn relative_input<'a>(
-    env: &'a dyn Env,
-    value: &'a Value,
-) -> ProjectionInput<'a, crate::Editor, crate::frame::Hovered> {
+fn relative_input<'a>(env: &'a dyn Env, value: &'a Value) -> ProjectionInput<'a> {
     ProjectionInput {
         default_projection: crate::display::runtime_partial(|_| None),
         env,

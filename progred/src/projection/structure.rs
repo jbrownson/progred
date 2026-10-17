@@ -4,21 +4,22 @@
 
 use super::{Cx, select_handler};
 use crate::display::{
-    Delim, Layout, ProjectionInput, activatable, descend, dim, id, on_activate, on_hover,
-    pickable_runtime, selectable_bracket,
+    Delim, activatable, descend, dim, id, on_activate, on_hover, pickable_runtime,
+    selectable_bracket,
 };
 use crate::frame::Hovered;
 use crate::hover::Hover;
+use crate::view::{Layout, ProjectionInput};
 use gid::{CellId, Resolution, Step, hex_string};
 use std::rc::Rc;
 
-type View = Layout<crate::Editor, Hovered>;
+type View = Layout;
 
 pub fn of(
     cx: &Cx,
     path: &[Step],
     value: &grap::RuntimeValue,
-    input: &ProjectionInput<'_, crate::Editor, Hovered, grap::RuntimeValue>,
+    input: &ProjectionInput<'_, grap::RuntimeValue>,
 ) -> View {
     match value.shape() {
         grap::Shape::Blob(bytes) => selectable(cx, id(blob_text(bytes)), path, value),

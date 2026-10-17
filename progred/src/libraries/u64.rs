@@ -136,7 +136,7 @@ fn functions() -> ::grap::ForeignFunctions {
     parts().functions
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     convention().library(ID, parts(), std::iter::empty())
 }
 

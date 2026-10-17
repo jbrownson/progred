@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::control::vocabulary as control;
+use crate::view::Layout;
 use std::rc::Rc;
 
 fn call(function: CellId, args: impl IntoIterator<Item = (CellId, Value)>) -> Value {
@@ -97,13 +98,7 @@ fn text(value: &str) -> Value {
     call(TEXT, [(CONTENT, crate::libraries::text::value(value))])
 }
 
-fn evaluate(
-    program: &Value,
-    fuel: usize,
-) -> (
-    Evaluation,
-    Option<Layout<crate::Editor, crate::frame::Hovered>>,
-) {
+fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
     let libraries = [
         crate::libraries::control::library(),
         super::super::library(),

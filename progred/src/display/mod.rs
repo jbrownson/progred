@@ -535,7 +535,7 @@ pub fn subscript<World: 'static, Hover: 'static>(
 pub fn completion(
     kind: CompletionKind,
     provider: Option<CompletionProvider>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     Layout::widget(Rc::new(move |context| {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Completion);
@@ -758,7 +758,7 @@ pub fn record<'a>(
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     order: impl FnMut(&CellId, &CellId) -> Ordering,
     field: impl FnMut(CellId, &'a Value) -> RecordField<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     record_with(fields, order, field, [])
 }
 
@@ -770,7 +770,7 @@ pub fn record_with<T>(
     order: impl FnMut(&CellId, &CellId) -> Ordering,
     field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
     trailing: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     record_heads(
         ordered_record_fields(fields, order, field)
             .chain(trailing)
@@ -785,7 +785,7 @@ pub fn record_fragment_with<T>(
     order: impl FnMut(&CellId, &CellId) -> Ordering,
     field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
     trailing: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     record_fragment(
         ordered_record_fields(fields, order, field)
             .chain(trailing)
@@ -819,8 +819,8 @@ fn record_colon(
 /// interaction target; trailing rows can be incomplete field editors.
 pub fn record_heads(
     fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-    trailing: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+    trailing: impl IntoIterator<Item = crate::view::Layout>,
+) -> crate::view::Layout {
     let [horizontal, vertical] = record_forms(fields, trailing);
     selectable_bracket(
         Delim::Brace,
@@ -832,15 +832,15 @@ pub fn record_heads(
 /// navigation, but the enclosing projection owns the whole-value stop.
 pub fn record_fragment(
     fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-    trailing: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+    trailing: impl IntoIterator<Item = crate::view::Layout>,
+) -> crate::view::Layout {
     selectable_bracket(Delim::Brace, alternatives(record_forms(fields, trailing)))
 }
 
 fn record_forms(
     fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-    trailing: impl IntoIterator<Item = Layout<crate::Editor, crate::frame::Hovered>>,
-) -> [Layout<crate::Editor, crate::frame::Hovered>; 2] {
+    trailing: impl IntoIterator<Item = crate::view::Layout>,
+) -> [crate::view::Layout; 2] {
     let fields = fields
         .into_iter()
         .map(|field| RecordField {
@@ -1062,7 +1062,7 @@ pub fn drawing_program(
     extent: measured::Extent,
     fuel: usize,
     program: grap::RuntimeValue,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+) -> crate::view::Layout {
     Layout::widget(Rc::new(move |context| {
         crate::projection::drawing::program_leaf(
             context.inputs,

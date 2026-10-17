@@ -7,8 +7,8 @@
 
 use super::{Action, Session};
 use crate::gid_text::Binders;
+use crate::libraries::Library;
 use crate::libraries::{absent, name, png, text};
-use crate::library::Library;
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use gid::{CellId, Cells, Value};
 use kurbo::{Point, Vec2};
@@ -82,9 +82,7 @@ const NAMES: [(CellId, &str); 24] = {
     ]
 };
 
-pub(super) fn library(
-    session: &Rc<RefCell<Session>>,
-) -> Library<crate::Editor, crate::frame::Hovered> {
+pub(super) fn library(session: &Rc<RefCell<Session>>) -> Library {
     let mut cells = Cells::new();
     for (cell, spelling) in NAMES {
         cells.set_value(cell, name::record(spelling, []));

@@ -53,7 +53,7 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::CIRCLE, name::record("circle", []));
     cells.set_value(vocabulary::RADIUS, name::record("radius", []));

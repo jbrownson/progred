@@ -56,10 +56,7 @@ pub fn bracket<World: 'static, Hover: 'static>(
     )
 }
 
-pub fn selectable_bracket(
-    delim: Delim,
-    child: Layout<crate::Editor, crate::frame::Hovered>,
-) -> Layout<crate::Editor, crate::frame::Hovered> {
+pub fn selectable_bracket(delim: Delim, child: crate::view::Layout) -> crate::view::Layout {
     crate::display::row(
         0.0,
         [

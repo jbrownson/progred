@@ -1,6 +1,7 @@
 //! An opt-in triangle viewport. Geometry and camera rendering are independent.
 
 use super::*;
+use crate::view::{Layout, ProjectionInput};
 use fidget_engine::mesh::{Octree, Settings};
 
 #[cfg(test)]
@@ -167,9 +168,7 @@ fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Opt
     })
 }
 
-pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(super) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let value = input.value?;
     value.field(vocabulary::PREVIEW_MESH)?;
     let (preview, depth) = read(value.as_value())?;
@@ -196,7 +195,7 @@ pub(crate) fn drawing(
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<Layout> {
     drawing_surface(geometry, None, preview, state, scale_factor)
 }
 
@@ -206,7 +205,7 @@ pub(crate) fn drawing_surface(
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+) -> Option<Layout> {
     let pixels = raster_size(preview.size, scale_factor)?;
     let scene = puri::mesh::Scene {
         geometry: geometry.clone(),

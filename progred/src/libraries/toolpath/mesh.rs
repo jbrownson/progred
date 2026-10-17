@@ -1,8 +1,8 @@
 //! Stream path segments into triangles alongside a meshed Fidget model.
 
 use super::{fidget::coordinate, paths::*, playback, vocabulary::*};
-use crate::display::{Layout, ProjectionInput};
 use crate::libraries::{absent, f64, fidget, layout, presentation};
+use crate::view::{Layout, ProjectionInput};
 use ::grap::RuntimeValue;
 use fidget::mesh::{Geometry, Mesh, Normal, Vertex};
 #[cfg(test)]
@@ -29,9 +29,7 @@ pub(super) fn preview(
     )
 }
 
-pub(super) fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     let fields = input.value?.field(PREVIEW_MESH)?;
     let (model, depth) =
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;

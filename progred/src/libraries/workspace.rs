@@ -12,7 +12,7 @@ pub mod vocabulary {
     pub use crate::workspace::vocabulary::{KEYS, LEFT, LIBRARIES, PANES, RIGHT};
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::PANES, "panes"),

@@ -8,10 +8,11 @@
 //! and build with `RuntimeValue::text`.
 
 use crate::libraries::{Library, line_edit, name};
+use crate::view::{Layout, ProjectionInput};
 use gid::{Cells, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xeaaf309c36a65d2811083944da29aec9);
-use crate::display::{Layout, ProjectionInput, overlay_value};
+use crate::display::overlay_value;
 use ::grap::{ForeignFunction, ForeignFunctions};
 
 pub mod vocabulary {
@@ -77,9 +78,7 @@ pub fn functions() -> ForeignFunctions {
 
 /// Text reads as its characters, then any other fields, including one
 /// being added.
-pub fn display(
-    input: &ProjectionInput<'_, crate::Editor, crate::frame::Hovered, ::grap::RuntimeValue>,
-) -> Option<Layout<crate::Editor, crate::frame::Hovered>> {
+pub fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let text = input.value?.as_text()?;
     Some(crate::display::structure::with_extra_fields(
         input,
@@ -103,7 +102,7 @@ fn editor_for_text(text: &str) -> crate::display::LineEdit {
     )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     cells.set_value(
         vocabulary::INVALID_INPUT,

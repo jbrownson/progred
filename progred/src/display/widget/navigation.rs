@@ -27,9 +27,7 @@ pub(crate) fn arrival(path: Rc<[Step]>, cx: &crate::projection::Cx<'_>) -> Selec
 }
 
 /// A native control supplies its entry without introducing child routing.
-pub fn target(
-    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
-) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+pub fn target(child: crate::view::Layout) -> crate::view::Layout {
     super::before(
         child,
         Rc::new(|context| {
@@ -40,9 +38,7 @@ pub fn target(
     )
 }
 
-pub fn nav_group(
-    child: crate::display::Layout<crate::Editor, crate::frame::Hovered>,
-) -> crate::display::Layout<crate::Editor, crate::frame::Hovered> {
+pub fn nav_group(child: crate::view::Layout) -> crate::view::Layout {
     super::around(
         child,
         Rc::new(move |context| {

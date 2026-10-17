@@ -2,6 +2,7 @@
 //! its cell payload is the stable, language-independent reason identity.
 
 use crate::libraries::{Library, name};
+use crate::view::{Layout, ProjectionInput};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{CellId, Cells, Value};
 
@@ -47,14 +48,7 @@ pub fn named_reason(value: impl Into<String>) -> Value {
 
 /// An absent value reads as its reason, then any other fields, such as a
 /// failed alternative's causes, all on red.
-fn display(
-    input: &crate::display::ProjectionInput<
-        '_,
-        crate::Editor,
-        crate::frame::Hovered,
-        ::grap::RuntimeValue,
-    >,
-) -> Option<crate::display::Layout<crate::Editor, crate::frame::Hovered>> {
+fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let reason = input.value?.field(vocabulary::ABSENT)?.as_cell()?;
     let name = input
         .env
@@ -102,7 +96,7 @@ fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
+pub fn library() -> Library {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::ABSENT, name::record("absent", []));
     cells.set_value(vocabulary::CELL, name::record("cell", []));
