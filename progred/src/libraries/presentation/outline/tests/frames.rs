@@ -1,5 +1,23 @@
 use super::*;
+use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::frame::Hovered;
+use crate::hover::Hover;
 use crate::libraries::presentation::vocabulary::{OUTLINE, RESULT};
+use crate::libraries::{f64, name};
+use crate::navigate::Descend;
+use crate::placed;
+use crate::projection::test_support::*;
+use crate::selection::{pending_edge, pending_value};
+use crate::test_support::make_selection;
+use gid::{Cells, Document, new_cell_id};
+use kurbo::{Point, Rect};
+use peniko::Brush;
+use puri::draw::{DrawCmd, Shape};
+use puri::hover::Claim;
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+};
 
 fn document() -> (Document, CellId, CellId, CellId) {
     let (a, b, extra) = (new_cell_id(), new_cell_id(), new_cell_id());

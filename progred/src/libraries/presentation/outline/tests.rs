@@ -18,3 +18,5 @@ fn outline_order_preserves_repeated_occurrences_and_unrelated_fields() {
         .is_none()
     );
 }
+
+mod frames;
