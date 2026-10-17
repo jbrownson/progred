@@ -455,3 +455,6 @@ impl Editor {
         true
     }
 }
+
+#[cfg(test)]
+mod tests;

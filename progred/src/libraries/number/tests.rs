@@ -197,3 +197,4 @@ fn coarse_precision_grows_horizontal_sensitivity_sublinearly() {
 }
 
 mod frames;
+mod typing;

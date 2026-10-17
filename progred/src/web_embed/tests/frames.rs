@@ -1,4 +1,5 @@
 use crate::display::test_support::Landmarks;
+use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::identity::short_id;
@@ -12,6 +13,7 @@ use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 use kurbo::Point;
 use puri::draw::DrawCmd;
 use puri::hover::Claim;
+use ui_events::keyboard::NamedKey;
 
 fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
@@ -38,23 +40,53 @@ fn empty_tutorial_slots_stay_visible_in_a_short_embed() {
     let mut editor = crate::test_editor(doc);
     editor.drawn_menu = false;
     set_tutorial_slots(&mut editor, &slots);
-    let mut runner = crate::EditorRunner::new(editor);
     let size = kurbo::Size::new(600.0, 304.0);
-    runner.refresh_frame(1.0, size);
+    let driver = Driver::new(editor, size);
     for key in slots {
-        let target = runner
-            .frame
-            .dispatch
-            .descends
-            .iter()
-            .find(|target| target.path.as_ref() == [Step::Key(key)])
-            .unwrap();
+        let rect = driver.rect(&[Step::Key(key)]);
         assert!(
-            target.rect.y1 <= size.height,
-            "empty slot is below the embed: {:?}",
-            target.rect
+            rect.y1 <= size.height,
+            "empty slot is below the embed: {rect:?}"
         );
     }
+}
+
+#[test]
+fn empty_slots_make_values_through_the_picker() {
+    let (doc, names) = crate::gid_text::parse(EMPTY_SLOTS).unwrap();
+    let mut editor = crate::test_editor_with_stack(
+        doc,
+        crate::stack::load_selected(&[
+            name::ID,
+            text::ID,
+            crate::libraries::blob::ID,
+            crate::libraries::number::ID,
+            f64::ID,
+        ])
+        .unwrap(),
+    );
+    set_tutorial_slots(
+        &mut editor,
+        &["first", "second", "third"].map(|key| names[key]),
+    );
+    let mut driver = Driver::new(editor, kurbo::Size::new(900.0, 600.0));
+    // `[` opens the list it makes, so 7 goes inside it.
+    for (slot, typed) in [("first", "42"), ("second", "\"hello\""), ("third", "[7")] {
+        driver.select(&[Step::Key(names[slot])]);
+        driver.type_text(typed);
+        driver.press(NamedKey::Enter);
+    }
+    let root = driver.value(&[]);
+    let values = root.as_record().unwrap();
+    assert_eq!(values.get(&names["first"]).and_then(f64::read), Some(42.0));
+    assert_eq!(
+        values.get(&names["second"]).and_then(text::read),
+        Some("hello")
+    );
+    assert_eq!(
+        values.get(&names["third"]),
+        Some(&Value::list([f64::value(7.0)]))
+    );
 }
 
 #[test]
@@ -236,4 +268,147 @@ fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
         None
     ));
     assert_eq!(top_slots(&editing_frame(&mut world, false)), slots);
+}
+
+/// A stack of `libraries` whose projection shows `slots` as a tutorial
+/// page does.
+fn tutorial_stack(libraries: &[CellId], slots: &str) -> crate::stack::Stack<crate::Editor> {
+    let mut stack = crate::stack::load_selected(libraries).unwrap();
+    stack.projection =
+        crate::web_embed::tutorial_slots(Some(slots), stack.projection, &stack.libraries).unwrap();
+    stack
+}
+
+#[test]
+fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
+    use crate::libraries::{absent, blob, grap as grap_library, number};
+    use ::grap::vocabulary::FUNCTION;
+    let (doc, names) = crate::gid_text::parse(
+        r#"{
+          "binders": {
+            "name": 02e562654d6d0828d3a7559e6f75fffe,
+            "function": 751fca4373debdd0b7e6eb73e08d684b,
+            "params": 195b378d0d31d90ab0d7366c15346b70,
+            "body": 986143866eda2e2fbf9ab8484357a0c9,
+            "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+            "tree": 7f46dd29d8450afe5b1ef07d72098f91,
+            "x": 9aa131305c35532eeb45a876bc8fdc22,
+            "call": d3ff654ad635e00b1a21b6ff849231b2,
+            "first": 9940ece27410c72a5308a544890ccc71,
+            "second": f717b766d250a7b86c5eb842885c4417,
+            "third": 5e716c07490849f072b4e9017dd6230d,
+          },
+          "cells": {
+            x: {name: "x"},
+            tree: {name: "tree", params: [x], body: x},
+            call: {function: tree, x: {f64: 0x0000000000004e40}},
+          },
+          "root": {first: call, second: call, third: tree},
+        }"#,
+    )
+    .unwrap();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        tutorial_stack(
+            &[
+                name::ID,
+                text::ID,
+                blob::ID,
+                absent::ID,
+                number::ID,
+                f64::ID,
+                grap_library::ID,
+            ],
+            &format!(
+                "{}:plain,{}:raw,{}",
+                names["first"], names["second"], names["third"]
+            ),
+        ),
+    );
+    let frame = editing_frame(&mut world, false);
+    let placed = |path: &[Step]| frame.descends.iter().any(|d| d.path.as_ref() == path);
+    let opened = |path: &[Step]| {
+        frame
+            .descends
+            .iter()
+            .any(|d| d.path.len() > path.len() && d.path.starts_with(path))
+    };
+    for slot in ["first", "second"] {
+        let callee = [
+            Step::Key(names[slot]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(FUNCTION),
+        ];
+        assert!(placed(&callee), "{slot} shows its call's function");
+        assert!(!opened(&callee), "{slot} doesn't inline the definition");
+        assert!(placed(&[
+            Step::Key(names[slot]),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(names["x"]),
+        ]));
+    }
+    // A slot showing the definition itself still opens it.
+    assert!(opened(&[Step::Key(names["third"])]));
+}
+
+#[test]
+fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
+    use crate::libraries::{blob, number};
+    use ::grap::vocabulary::FUNCTION;
+    let (doc, names) =
+        crate::gid_text::parse(include_str!("../../../fixtures/functions.gid")).unwrap();
+    let mut world = crate::test_editor_with_stack(
+        doc,
+        tutorial_stack(
+            &[name::ID, text::ID, blob::ID, number::ID, f64::ID],
+            &names["second"].to_string(),
+        ),
+    );
+    let frame = editing_frame(&mut world, false);
+    let callee = [
+        Step::Key(names["second"]),
+        Step::Key(::grap::vocabulary::EVALUATE),
+        Step::Key(FUNCTION),
+    ];
+    assert!(frame.descends.iter().any(|d| d.path.as_ref() == callee));
+    assert!(
+        !frame
+            .descends
+            .iter()
+            .any(|d| d.path.len() > callee.len() && d.path.starts_with(&callee)),
+        "the call shows (scale), not scale's whole definition"
+    );
+}
+
+#[test]
+fn swapping_libraries_keeps_the_document_and_selection() {
+    use crate::libraries::{blob, number};
+    let (doc, names) = crate::gid_text::parse(include_str!("../../../fixtures/model.gid")).unwrap();
+    let slots = names["first"].to_string();
+    let mut driver = Driver::new(
+        crate::test_editor_with_stack(
+            doc,
+            tutorial_stack(&[name::ID, text::ID, blob::ID, number::ID, f64::ID], &slots),
+        ),
+        kurbo::Size::new(620.0, 400.0),
+    );
+    let planet = [
+        Step::Key(names["first"]),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(names["planet"]),
+    ];
+    let bytes: Vec<Step> = [&planet[..], &[Step::Key(text::vocabulary::UTF8)]].concat();
+    driver.select(&planet);
+    assert!(
+        !driver.drawn(&bytes),
+        "the text library draws the planet as a line of text"
+    );
+    let document = driver.editor().model.doc.clone();
+    driver.stack(tutorial_stack(&[blob::ID], &slots));
+    assert!(std::rc::Rc::ptr_eq(&driver.editor().model.doc, &document));
+    assert_eq!(driver.selection(), planet);
+    assert!(
+        driver.drawn(&bytes),
+        "without it, the same value is a record holding bytes"
+    );
 }

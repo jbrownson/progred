@@ -6,6 +6,7 @@ use gid::Value;
 mod analytic;
 mod encoding;
 mod shoulders;
+mod view;
 
 fn samples(tree: Tree, points: &[[f32; 3]]) -> Vec<f32> {
     let shape = VmShape::from(tree);

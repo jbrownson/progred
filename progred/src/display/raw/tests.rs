@@ -7,7 +7,8 @@ use crate::test_support::{
     CompletionResult, activated, completion_entries_with, core_libraries, doc_of, library_offers,
     src,
 };
-use gid::{Cells, Document};
+use gid::{Cells, Document, Step};
+use ui_events::keyboard::NamedKey;
 
 /// Raw's offers for `query`, reading what's typed through the core libraries.
 fn completion_entries(
@@ -471,4 +472,72 @@ fn completion_constructor_aliases_rank_ahead_of_literal_text() {
             }
         }
     }
+}
+
+/// A hole where the middle of three empty lists was, with `delimiter` typed
+/// into its picker.
+fn made(delimiter: &str) -> (crate::driver::Driver, Vec<Step>) {
+    let root = Value::list([Value::list([]), Value::list([]), Value::list([])]);
+    let place = vec![Step::Element(
+        crate::test_support::positions(&root)[1].clone(),
+    )];
+    let mut driver = crate::driver::Driver::new(
+        crate::test_editor(Document {
+            root: Some(root),
+            cells: Cells::new(),
+        }),
+        kurbo::Size::new(600.0, 400.0),
+    );
+    driver.select(&place);
+    driver.press(NamedKey::Backspace);
+    driver.type_text(delimiter);
+    (driver, place)
+}
+
+#[test]
+fn a_new_cell_list_or_record_opens_for_what_goes_inside_it() {
+    use crate::selection::Stage;
+    let typed = |driver: &mut crate::driver::Driver, text: &str| {
+        driver.type_text(text);
+        driver.press(NamedKey::Enter);
+    };
+    let cell = [Step::Follow(gid::Resolution::Document)];
+    for key in ["(", "[", "{"] {
+        let (mut driver, place) = made(key);
+        let inside = driver.selection();
+        let (path, stage) = match key {
+            "(" => ([&place[..], &cell].concat(), Stage::Pending),
+            "[" => (inside.clone(), Stage::Pending),
+            _ => (place.clone(), Stage::Label),
+        };
+        assert_eq!(inside, path, "{key} selects inside what it made");
+        assert_eq!(driver.stage(), Some(stage), "{key}");
+        if key == "[" {
+            assert!(matches!(
+                inside.split_last(),
+                Some((Step::Element(_), list)) if list == place
+            ));
+        }
+        assert!(driver.picker_entries().is_some(), "{key} shows its picker");
+        driver.press(NamedKey::Escape);
+        assert_eq!(driver.selection(), place, "Escape steps back out of {key}");
+        assert_eq!(driver.stage(), Some(Stage::Edge));
+    }
+
+    let (mut driver, place) = made("(");
+    typed(&mut driver, "5");
+    assert!(
+        driver
+            .editor()
+            .sources()
+            .resolve_path(&[&place[..], &cell].concat())
+            .is_some()
+    );
+    let (mut driver, place) = made("[");
+    typed(&mut driver, "5");
+    assert_eq!(driver.value(&place).as_list().unwrap().len(), 1);
+    let (mut driver, place) = made("{");
+    typed(&mut driver, "width");
+    typed(&mut driver, "5");
+    assert_eq!(driver.value(&place).as_record().unwrap().len(), 1);
 }

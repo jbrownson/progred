@@ -1,6 +1,6 @@
 //! What tests read back from the driver's frames: what is drawn where and
 //! what it holds, the conveniences that click, type and select by document
-//! path, and the window's focus and appearance.
+//! path, and the window's focus and appearance and the page's libraries.
 
 use super::{Driver, keystroke_for};
 use crate::display::test_support::Landmarks;
@@ -94,6 +94,13 @@ impl<P> Driver<P> {
         changed
     }
 
+    /// The page swaps the libraries the editor draws and reads with.
+    pub(crate) fn stack(&mut self, stack: crate::stack::Stack<crate::Editor>) {
+        self.runner
+            .stack_changed(stack, self.scale(), self.viewport);
+        self.present();
+    }
+
     /// Select what's drawn at `path`, as arriving there with the keyboard
     /// would.
     pub(crate) fn select(&mut self, path: &[Step]) {
@@ -143,6 +150,13 @@ impl<P> Driver<P> {
             .expect("a selection")
             .path()
             .to_vec()
+    }
+
+    /// Whether the selection selects a value, authors one, or authors a
+    /// field's label.
+    pub(crate) fn stage(&self) -> Option<crate::selection::Stage> {
+        let editor = self.editor();
+        Some(editor.model.selection.as_ref()?.stage(&editor.sources()))
     }
 
     /// Where the selected data is stored.

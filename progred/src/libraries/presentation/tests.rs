@@ -326,3 +326,5 @@ fn render_projects_only_the_evaluation_result() {
         )
     );
 }
+
+mod rendered;

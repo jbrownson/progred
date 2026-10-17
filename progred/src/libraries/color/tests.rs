@@ -352,3 +352,29 @@ impl Env for NoEval {
         panic!("color projection does not evaluate while projecting")
     }
 }
+
+#[test]
+fn a_read_only_swatch_selects_its_color() {
+    use crate::libraries::presentation::vocabulary::RESULT;
+    let color = value(Color::from_rgb8(0x50, 0x96, 0xdc));
+    let mut driver = crate::driver::Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(Value::record([(::grap::vocabulary::EVALUATE, color)])),
+            cells: gid::Cells::new(),
+        }),
+        kurbo::Size::new(900.0, 600.0),
+    );
+    // The evaluated result is computed, so it's read-only.
+    let result = vec![gid::Step::Key(RESULT)];
+    let rect = driver.rect(&result);
+    driver.click_at(kurbo::Point::new(rect.x0 + 7.0, rect.center().y));
+    assert_eq!(driver.selection(), result);
+    let selection = driver.editor().model.selection.as_ref().unwrap();
+    assert!(
+        selection
+            .payload()
+            .as_record()
+            .is_none_or(|fields| !fields.contains_key(&vocabulary::PICKER)),
+        "no picker opens on a read-only color"
+    );
+}

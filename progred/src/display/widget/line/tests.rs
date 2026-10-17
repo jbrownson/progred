@@ -35,3 +35,37 @@ fn read_only_line_needs_no_selection_or_editing_capabilities() {
         },
     );
 }
+
+#[test]
+fn sample_text_line_click_mounts_its_own_editor() {
+    use crate::sample::sample_vocabulary;
+    let (doc, _) = crate::gid_text::parse(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../examples/sample.gid"
+    )))
+    .expect("the sample parses");
+    let mut driver = crate::driver::Driver::new(
+        crate::test_editor_with_stack(doc, crate::stack::load()),
+        // Tall enough to show the style's color without scrolling.
+        kurbo::Size::new(900.0, 1200.0),
+    );
+    let path = vec![
+        gid::Step::Key(sample_vocabulary::STYLE),
+        gid::Step::Follow(gid::Resolution::Document),
+        gid::Step::Key(sample_vocabulary::COLOR),
+    ];
+    driver.click(&path);
+    assert_eq!(driver.selection(), path);
+
+    // The next frame's focused editor still owns pointer-down: a double
+    // click selects its word, and a later single click can collapse that
+    // selection to a new caret. This is distinct from the first click
+    // above, which mounts the editor.
+    let line = driver.rect(&path);
+    driver.clicks_at(line.center(), 2);
+    let (anchor, focus) = driver.line_selection().unwrap();
+    assert_ne!(anchor, focus);
+    driver.click_at(Point::new(line.x0 + 1.0, line.center().y));
+    let (anchor, focus) = driver.line_selection().unwrap();
+    assert_eq!(anchor, focus);
+}

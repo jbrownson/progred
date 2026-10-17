@@ -17,7 +17,6 @@ mod lessons;
 /// The tutorial column's frame less its border, tall enough that no lesson
 /// scrolls.
 const VIEWPORT: Size = Size::new(704.0, 1400.0);
-const SCALE: f64 = 1.0;
 const FOLLOW: Step = Step::Follow(gid::Resolution::Document);
 
 fn website(path: &str) -> String {
@@ -191,8 +190,7 @@ impl Driver<Page> {
             depth < layers.len(),
         )
         .unwrap();
-        self.runner.stack_changed(stack, SCALE, VIEWPORT);
-        self.present();
+        self.stack(stack);
     }
 
     pub(super) fn layers() -> usize {

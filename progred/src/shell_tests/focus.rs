@@ -111,16 +111,8 @@ fn focus_loss_clears_completion_for_values_and_labels() {
             // Enter on a record starts a new field's label.
             driver.press(NamedKey::Enter);
         }
-        let stage = |driver: &Driver| {
-            let editor = driver.editor();
-            editor
-                .model
-                .selection
-                .as_ref()
-                .map(|selection| selection.stage(&editor.sources()))
-        };
         assert_eq!(
-            stage(&driver),
+            driver.stage(),
             Some(if labels { Stage::Label } else { Stage::Pending })
         );
         driver.type_text("hello");

@@ -327,3 +327,6 @@ pub(crate) fn pending_field(
         ))
     })
 }
+
+#[cfg(test)]
+mod tests;
