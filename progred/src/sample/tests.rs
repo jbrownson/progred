@@ -108,3 +108,14 @@ fn the_sample_document_shows_the_constructs() {
     assert_eq!(loaded.cells.value(roof).and_then(name::read), Some("roof"));
     assert_eq!(serde_json::to_string(&loaded).unwrap(), json);
 }
+
+#[test]
+fn checked_in_projection_uses_the_current_selection_capabilities() {
+    let (document, _) =
+        crate::gid_text::parse(include_str!("../../../examples/sample.gid")).unwrap();
+    let projection = document
+        .cells
+        .iter()
+        .find_map(|(_, value)| (name::read(value) == Some("at display")).then_some(value));
+    assert_eq!(projection, Some(&at_display_partial()));
+}

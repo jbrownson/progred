@@ -30,8 +30,6 @@ struct Bench {
     frame_elapsed: std::time::Duration,
 }
 
-/// A primary click at `point`, acting on whatever the settled hover there
-/// names, as the window does. `None` when nothing claims the point.
 #[test]
 fn plain_reads_text_and_numbers_but_keeps_calls_records() {
     use crate::libraries::f64;
