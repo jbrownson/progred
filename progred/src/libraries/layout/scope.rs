@@ -81,7 +81,7 @@ impl Output {
 /// Exactly one emitted root is a layout; no emission leaves the ordinary
 /// value result alone. A halt or final absent drops the entire output.
 pub fn run(
-    target: impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
+    target: impl Fn() -> ProjectionTarget<crate::frame::Hovered>,
     evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
 ) -> (Evaluation, Option<Layout>) {
     let output = Output {
@@ -179,7 +179,7 @@ fn operation(
     call: &Expression,
     environment: &Environment,
     output: &Output,
-    target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
+    target: &impl Fn() -> ProjectionTarget<crate::frame::Hovered>,
 ) -> Result<Layout, BuildError> {
     macro_rules! need {
         ($value:expr) => {

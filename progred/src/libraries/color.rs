@@ -196,7 +196,10 @@ fn missing_picker(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
                                 ui_events::keyboard::NamedKey::Escape,
                             )
                     {
-                        close(world, crate::selection::payload::empty_pending());
+                        close(
+                            &mut world.session(),
+                            crate::selection::payload::empty_pending(),
+                        );
                         true
                     } else {
                         false
@@ -384,9 +387,9 @@ pub fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     };
     let target = input.targets.current();
     // Read-only colors still select; only a writable one opens the picker.
-    let activate: crate::display::ActionHandler<crate::Editor> = if input.writable {
+    let activate: crate::display::Action = if input.writable {
         let select_picker = target.select_with;
-        Rc::new(move |world| select_picker(world, next_selection.clone()))
+        Rc::new(move |session| select_picker(session, next_selection.clone()))
     } else {
         target.select
     };

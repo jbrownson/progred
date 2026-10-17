@@ -1,15 +1,23 @@
 use super::{HoverCallback, before};
 use crate::display::widget::HoverContext;
-use crate::display::{ActionHandler, Layout};
+use crate::display::{Action, Host, Layout};
 use gid::Value;
 use puri::handler::HasHandler;
 use puri::{Placement, Point};
 use std::rc::Rc;
 
+/// What a press runs on the world it's dispatched to.
+pub type WorldHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
+
+/// `action`, run through the session the world lends.
+fn lent<World: Host>(action: Action) -> WorldHandler<World> {
+    Rc::new(move |world| action(&mut world.session()))
+}
+
 /// Run `handler` on a press inside the placement that `primary` accepts,
 /// given the frame's command key.
 pub fn click<World: 'static, Hover: 'static>(
-    handler: ActionHandler<World>,
+    handler: WorldHandler<World>,
     primary: crate::modifiers::PressRule,
 ) -> HoverCallback<World, Hover> {
     Box::new(
@@ -29,7 +37,7 @@ pub fn click<World: 'static, Hover: 'static>(
 /// key is held exactly if `pick`.
 pub fn target_action<World: 'static, Hover: 'static>(
     target: Hover,
-    handler: ActionHandler<World>,
+    handler: WorldHandler<World>,
     pick: bool,
     same_target: fn(&Hover, &Hover) -> bool,
 ) -> HoverCallback<World, Hover> {
@@ -52,21 +60,23 @@ pub fn target_action<World: 'static, Hover: 'static>(
     )
 }
 
-pub fn on_click<World: 'static, Hover: 'static>(
+pub fn on_click<World: Host, Hover: 'static>(
     child: Layout<World, Hover>,
-    handler: ActionHandler<World>,
+    action: Action,
 ) -> Layout<World, Hover> {
+    let handler = lent(action);
     before(
         child,
         Rc::new(move |_| click(handler.clone(), crate::modifiers::primary_edit)),
     )
 }
 
-pub fn on_activate<World: 'static, Hover: Clone + PartialEq + 'static>(
+pub fn on_activate<World: Host, Hover: Clone + PartialEq + 'static>(
     child: Layout<World, Hover>,
     target: Hover,
-    handler: ActionHandler<World>,
+    action: Action,
 ) -> Layout<World, Hover> {
+    let handler = lent(action);
     before(
         child,
         Rc::new(move |_| target_action(target.clone(), handler.clone(), false, PartialEq::eq)),
@@ -92,7 +102,9 @@ pub fn pickable_runtime(
             let value = value.clone();
             target_action(
                 target.clone(),
-                Rc::new(move |world| world.pick_identity(value.to_value())),
+                Rc::new(move |world: &mut crate::Editor| {
+                    crate::editing::pick_identity(&mut world.session(), value.to_value())
+                }),
                 true,
                 PartialEq::eq,
             )

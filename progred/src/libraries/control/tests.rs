@@ -24,9 +24,7 @@ impl Env for NoEval {
     }
 }
 
-fn unit_target(
-    _: Vec<Step>,
-) -> crate::display::ProjectionTarget<crate::Editor, crate::frame::Hovered> {
+fn unit_target(_: Vec<Step>) -> crate::display::ProjectionTarget<crate::frame::Hovered> {
     crate::display::ProjectionTarget {
         select: std::rc::Rc::new(|_| false),
         select_with: std::rc::Rc::new(|_, _| false),
@@ -34,9 +32,7 @@ fn unit_target(
     }
 }
 
-fn relative_target(
-    steps: Vec<Step>,
-) -> crate::display::ProjectionTarget<crate::Editor, crate::frame::Hovered> {
+fn relative_target(steps: Vec<Step>) -> crate::display::ProjectionTarget<crate::frame::Hovered> {
     crate::display::ProjectionTarget {
         select: std::rc::Rc::new(|_| false),
         select_with: std::rc::Rc::new(|_, _| false),

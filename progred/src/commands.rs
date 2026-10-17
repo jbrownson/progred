@@ -96,27 +96,6 @@ impl Editor {
     /// False when nothing is pending — or when the picked value
     /// cannot label (a list, a record, a blob) at the label stage —
     /// so the click falls through rather than spending the pending.
-    pub(crate) fn pick_identity(&mut self, id: Value) -> bool {
-        let continuation = match self.model.selection.as_ref() {
-            Some(current)
-                if current.stage(&self.sources()) == selection::Stage::Label
-                    && id.as_cell().is_some_and(|label| {
-                        let path: Vec<_> = current
-                            .path()
-                            .iter()
-                            .cloned()
-                            .chain([gid::Step::Key(label)])
-                            .collect();
-                        current.scope().read(&self.sources(), &path).is_none()
-                    }) =>
-            {
-                crate::selection::pending_at(&[])
-            }
-            _ => crate::selection::at(&[], crate::selection::payload::edge()),
-        };
-        crate::completion::commit(&mut self.session(), id, None, Some(continuation))
-    }
-
     /// Structural paste, the shell's fallback after text editing.
     /// Copy and cut belong to the selected projected occurrence. Deliberately
     /// NOT menu items — native menu accelerators intercept ahead of key
@@ -167,7 +146,7 @@ impl Editor {
         let Some(value) = self.clipboard_structure() else {
             return false;
         };
-        self.pick_identity(value);
+        crate::editing::pick_identity(&mut self.session(), value);
         true
     }
 
@@ -193,7 +172,7 @@ impl Editor {
     }
 
     pub(crate) fn paste_value(&mut self, value: Value) -> bool {
-        if self.pick_identity(value.clone()) {
+        if crate::editing::pick_identity(&mut self.session(), value.clone()) {
             return true;
         }
         let Some(current) = &self.model.selection else {
@@ -474,21 +453,5 @@ impl Editor {
         self.model.selection = Some(replacing);
         geometry.reveal_selection(self);
         true
-    }
-
-    /// Fold state belongs to an occurrence. Projection supplies its default;
-    /// no document lookup or writable source is needed to change it.
-    pub(crate) fn set_collapsed(
-        &mut self,
-        root: &crate::workspace::Root,
-        path: &[gid::Step],
-        default: bool,
-        closed: Option<bool>,
-    ) -> bool {
-        let changed = self.model.set_collapsed(root, path, default, closed);
-        if changed {
-            self.finish_gesture();
-        }
-        changed
     }
 }

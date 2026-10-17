@@ -246,27 +246,29 @@ fn slider_control(
                 output.render(move |canvas, _| {
                     slider.draw_with_ticks(canvas, placement.rect, scale, &ticks)
                 });
-                output.handler().on_pointer_down(move |editor, event| {
-                    let point = Point::new(event.state.position.x, event.state.position.y);
-                    if !puri::interact::is_primary_contact(event) || !placement.contains(point) {
-                        return false;
-                    }
-                    crate::editing::start_gesture(
-                        editor,
-                        Box::new(Drag {
-                            root: root.clone(),
-                            path: path.clone(),
-                            edits: edits.clone(),
-                            on_change: on_change.clone(),
-                            slider,
-                            value: value.clone(),
-                            rect: placement.rect,
-                            scale,
-                        }),
-                        &[point],
-                    );
-                    true
-                });
+                output
+                    .handler()
+                    .on_pointer_down(move |editor: &mut crate::Editor, event| {
+                        let point = Point::new(event.state.position.x, event.state.position.y);
+                        if !puri::interact::is_primary_contact(event) || !placement.contains(point)
+                        {
+                            return false;
+                        }
+                        editor.session().start_gesture(
+                            Box::new(Drag {
+                                root: root.clone(),
+                                path: path.clone(),
+                                edits: edits.clone(),
+                                on_change: on_change.clone(),
+                                slider,
+                                value: value.clone(),
+                                rect: placement.rect,
+                                scale,
+                            }),
+                            &[point],
+                        );
+                        true
+                    });
             },
         );
         measured::pad((PADDING_X * scale, PADDING_Y * scale).into(), rail)

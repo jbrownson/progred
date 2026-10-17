@@ -46,7 +46,7 @@ impl crate::display::Env for TestEnv {
     }
 }
 
-fn target(_: Vec<Step>) -> crate::display::ProjectionTarget<crate::Editor, crate::frame::Hovered> {
+fn target(_: Vec<Step>) -> crate::display::ProjectionTarget<crate::frame::Hovered> {
     crate::display::ProjectionTarget {
         select: std::rc::Rc::new(|_| false),
         select_with: std::rc::Rc::new(|_, _| false),

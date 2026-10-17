@@ -134,7 +134,7 @@ fn pending_target(
         p.claim(placement, Hovered::Tree(Hover::Value(path.clone())));
         let select = select.clone();
         p.activate(Hovered::Tree(Hover::Value(path.clone())), move |ctx| {
-            select(ctx)
+            select(&mut ctx.session())
         });
     })
 }

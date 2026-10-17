@@ -149,7 +149,7 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
         Step::Element(entries.keys().next().unwrap().clone()),
     ];
     for (position, value) in entries {
-        world.set_collapsed(
+        world.session().set_collapsed(
             &crate::test_root(),
             &[
                 Step::Key(OUTLINE),
@@ -225,7 +225,10 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         let a_body = body(&a_heading, a);
         let b_body = body(&b_heading, b);
         for path in [&a_body, &b_body] {
-            runner.editor.set_collapsed(&root, path, false, Some(false));
+            runner
+                .editor
+                .session()
+                .set_collapsed(&root, path, false, Some(false));
         }
         let positions = runner
             .editor
@@ -289,6 +292,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         runner.editor.model.selection = None;
         runner
             .editor
+            .session()
             .set_collapsed(&root, &b_body, false, Some(true));
         runner.refresh_frame(1.0, viewport);
         for path in [vec![], b_heading, a_heading] {
@@ -400,7 +404,9 @@ fn outline_library_tint_stops_at_the_heading() {
     });
     let heading_path = entry(&world, &[], key);
     let body_path = body(&heading_path, key);
-    world.set_collapsed(&crate::test_root(), &body_path, false, Some(false));
+    world
+        .session()
+        .set_collapsed(&crate::test_root(), &body_path, false, Some(false));
     let f = frame(&mut world);
     let heading_rect = stop(&f, &heading_path).rect;
     let body_rect = stop(&f, &body_path).rect;

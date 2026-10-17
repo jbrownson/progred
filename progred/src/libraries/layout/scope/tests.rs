@@ -19,7 +19,7 @@ fn quote(value: Value) -> Value {
     call(control::QUOTE, [(::grap::vocabulary::EXPRESSION, value)])
 }
 
-fn target() -> ProjectionTarget<crate::Editor, crate::frame::Hovered> {
+fn target() -> ProjectionTarget<crate::frame::Hovered> {
     ProjectionTarget {
         select: Rc::new(|_| true),
         select_with: Rc::new(|_, _| true),

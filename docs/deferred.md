@@ -325,10 +325,14 @@ first:
    recorded by the layout library into a toolkit widget. Done on 17 October
    2026: the session note's first five steps (the view aliases, the command key
    read from the frame's input, the session that edits act through, and
-   gestures and offers acting through it too), the picker note's first three (the card, its
-   placement and the selection ring moved to display, then Raw's offers and the
-   ranking of a projection's, then the picker itself as a toolkit widget), and
-   the drawing note's first two. The drawing note's last step waits on the session note's `Host`.
+   gestures and offers acting through it too) and half its sixth (actions and
+   targets act through the session too, which a first `Host` lends, and the
+   session holds the drag, so starting one, folding and picking need no
+   editor; `Site` remains), the picker note's first three (the card, its
+   placement and the selection ring moved to display, then Raw's offers and
+   the ranking of a projection's, then the picker itself as a toolkit widget),
+   and the drawing note's first two. The drawing note's last step waits on the
+   session note's `Host::Hover`.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:

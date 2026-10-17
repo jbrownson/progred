@@ -32,7 +32,7 @@ impl Env for Names {
     }
 }
 
-fn target(path: Vec<Step>) -> ProjectionTarget<crate::Editor, crate::frame::Hovered> {
+fn target(path: Vec<Step>) -> ProjectionTarget<crate::frame::Hovered> {
     ProjectionTarget {
         hover: crate::libraries::test_widgets::hover(path),
         select: Rc::new(|_| true),

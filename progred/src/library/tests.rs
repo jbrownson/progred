@@ -106,8 +106,8 @@ fn library_definitions_and_projections_compose_in_order() {
             .iter()
             .map(|(_, projection)| {
                 let target = |_| crate::display::ProjectionTarget {
-                    select: Rc::new(|_: &mut crate::Editor| false),
-                    select_with: Rc::new(|_: &mut crate::Editor, _| false),
+                    select: Rc::new(|_| false),
+                    select_with: Rc::new(|_, _| false),
                     hover: crate::libraries::test_widgets::hover(vec![]),
                 };
                 projection(&ProjectionInput {

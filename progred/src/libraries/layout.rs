@@ -10,7 +10,7 @@
 //! `None`, and the whole layout falls through to the next partial.
 //!
 #[cfg(test)]
-use crate::display::ActionHandler;
+use crate::display::Action;
 use crate::libraries::{Library, color, f64 as f64_convention, name, presentation};
 use crate::view::{Layout, ProjectionInput};
 use gid::{CellId, Step, Value};
@@ -540,16 +540,12 @@ pub fn bordered(child: Value) -> Value {
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
 #[cfg(test)]
-pub fn decode(
-    value: &Value,
-    select: &ActionHandler<crate::Editor>,
-    hover: &crate::frame::Hovered,
-) -> Option<Layout> {
+pub fn decode(value: &Value, select: &Action, hover: &crate::frame::Hovered) -> Option<Layout> {
     decode_with(&value.into(), &|| ProjectionTarget {
         select: select.clone(),
         select_with: {
             let select = select.clone();
-            std::rc::Rc::new(move |world, _| select(world))
+            std::rc::Rc::new(move |session, _| select(session))
         },
         hover: hover.clone(),
     })
@@ -564,7 +560,7 @@ fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
 
 fn decode_with(
     value: &::grap::RuntimeValue,
-    target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
+    target: &impl Fn() -> ProjectionTarget<crate::frame::Hovered>,
 ) -> Option<Layout> {
     value.record_len()?;
     if let Some(content) = value.field(vocabulary::ROW) {
@@ -728,7 +724,7 @@ fn decode_with(
 
 fn children(
     list: &::grap::RuntimeValue,
-    target: &impl Fn() -> ProjectionTarget<crate::Editor, crate::frame::Hovered>,
+    target: &impl Fn() -> ProjectionTarget<crate::frame::Hovered>,
 ) -> Option<Vec<Layout>> {
     list.list_values()?
         .map(|child| decode_with(&child, target))

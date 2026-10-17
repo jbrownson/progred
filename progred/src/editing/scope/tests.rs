@@ -285,13 +285,21 @@ fn folds_are_occurrence_local_and_undoable_without_dirtying_the_document() {
     let (mut editor, root, _source, first, _scope) = fixture(Value::list([text::value("item")]));
     let second = path();
     let document = editor.model.doc.clone();
-    assert!(editor.set_collapsed(&root, &first, false, Some(true)));
+    assert!(
+        editor
+            .session()
+            .set_collapsed(&root, &first, false, Some(true))
+    );
     let annotations = &editor.model.workspace.view(&root).unwrap().annotations;
     assert!(crate::annotations::collapsed(annotations, &first, false));
     assert!(!crate::annotations::collapsed(annotations, &second, false));
     assert!(Rc::ptr_eq(&document, &editor.model.doc));
     assert!(editor.model.step_history(true));
-    assert!(editor.set_collapsed(&root, &second, false, Some(true)));
+    assert!(
+        editor
+            .session()
+            .set_collapsed(&root, &second, false, Some(true))
+    );
 }
 
 #[test]

@@ -3,7 +3,7 @@
 
 use crate::{Editor, projection, selection, sources, sources::Sources, workspace::Root};
 use gid::{Path, Step, Value};
-use puri::{Point, edit::EditCtx};
+use puri::edit::EditCtx;
 
 mod scope;
 mod session;
@@ -44,16 +44,6 @@ pub(crate) fn annotate(
     }
 }
 
-pub(crate) fn start_gesture(
-    app: &mut Editor,
-    continuation: Box<dyn crate::display::widget::gesture::Gesture>,
-    samples: &[Point],
-) {
-    app.finish_gesture();
-    app.gesture = Some(continuation);
-    app.advance_gesture(samples);
-}
-
 /// Whether the selection is at `stage`.
 fn staged(session: &Session<'_>, stage: selection::Stage) -> bool {
     session
@@ -71,6 +61,29 @@ pub(crate) fn commit_value(
     if staged(session, selection::Stage::Pending) {
         crate::completion::commit(session, value, None, on_commit);
     }
+}
+
+/// Commits a picked identity into the open picker. A label that names a
+/// field not yet there leaves its value pending; anything else is selected.
+pub(crate) fn pick_identity(session: &mut Session<'_>, id: Value) -> bool {
+    let continuation = match session.model.selection.as_ref() {
+        Some(current)
+            if current.stage(&session.sources()) == selection::Stage::Label
+                && id.as_cell().is_some_and(|label| {
+                    let path: Vec<_> = current
+                        .path()
+                        .iter()
+                        .cloned()
+                        .chain([Step::Key(label)])
+                        .collect();
+                    current.scope().read(&session.sources(), &path).is_none()
+                }) =>
+        {
+            selection::pending_at(&[])
+        }
+        _ => selection::at(&[], selection::payload::edge()),
+    };
+    crate::completion::commit(session, id, None, Some(continuation))
 }
 
 /// Commits an empty cell, list or record into the pending, then opens it,
@@ -191,6 +204,7 @@ pub(crate) fn edit_line(
         model,
         libraries,
         text,
+        ..
     } = session;
     let sources = sources::Sources {
         doc: &model.doc,

@@ -6,7 +6,7 @@ use crate::display::test_support::{ProjectionCall, inspect};
 use std::rc::Rc;
 
 fn decoded(value: &Value) -> Option<Recorded<crate::Editor, crate::frame::Hovered>> {
-    let select: ActionHandler<crate::Editor> = Rc::new(|_| false);
+    let select: crate::display::Action = Rc::new(|_| false);
     decode(
         value,
         &select,

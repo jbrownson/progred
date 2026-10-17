@@ -374,25 +374,17 @@ impl Editor {
     }
 
     pub(crate) fn advance_gesture(&mut self, samples: &[Point]) -> bool {
-        if let Some(mut gesture) = self.gesture.take() {
-            let changed = gesture.advance(&mut self.session(), samples);
-            self.gesture = Some(gesture);
-            if changed {
-                self.refresh_title();
-            }
-            true
-        } else {
-            false
+        let Some(changed) = self.session().advance_gesture(samples) else {
+            return false;
+        };
+        if changed {
+            self.refresh_title();
         }
+        true
     }
 
     pub(crate) fn finish_gesture(&mut self) -> bool {
-        if let Some(mut gesture) = self.gesture.take() {
-            gesture.finish(&mut self.session());
-            true
-        } else {
-            false
-        }
+        self.session().finish_gesture()
     }
 
     /// The current document read over the app's library.

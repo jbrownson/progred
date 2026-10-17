@@ -20,9 +20,12 @@ fn projection_target_appends_relative_steps() {
                 root: Some(Value::record([])),
                 cells: Cells::new(),
             });
-            assert!((target.select)(&mut world));
+            assert!((target.select)(&mut world.session()));
             assert_eq!(world.model.selection.as_ref().unwrap().path(), expected);
-            assert!((target.select_with)(&mut world, Value::record([])));
+            assert!((target.select_with)(
+                &mut world.session(),
+                Value::record([])
+            ));
             assert_eq!(world.model.selection.as_ref().unwrap().path(), expected);
         },
     );

@@ -14,6 +14,8 @@ use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 pub mod builder;
 mod conject;
 pub use conject::Conject;
+mod host;
+pub use host::Host;
 mod measure;
 #[cfg(all(test, feature = "layout-profile"))]
 pub mod profile;
@@ -67,9 +69,10 @@ pub use widget::picker::{Picker, picker};
 
 pub use measured::RowAlignment;
 
-/// A coordinate-free action. Interaction combinators decide which input
-/// invokes it, in the same handler chain as raw pointer events.
-pub type ActionHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
+/// A coordinate-free action, run through the session a dispatch lends.
+/// Interaction combinators decide which input invokes it, in the same handler
+/// chain as raw pointer events.
+pub type Action = Rc<dyn Fn(&mut crate::editing::Session<'_>) -> bool>;
 
 pub use widget::gesture::{
     PointEvent, PointHandler, PointUpdate, StateDragEvent, StateDragGesture, StateDragHandler,
@@ -216,11 +219,11 @@ pub enum Pending {
 /// Selection and hover behavior for a location relative to the value
 /// currently being projected. The host resolves the relative steps;
 /// libraries never receive its absolute document path.
-pub struct ProjectionTarget<World, Hover> {
-    pub select: ActionHandler<World>,
+pub struct ProjectionTarget<Hover> {
+    pub select: Action,
     /// Select this location with an explicit data payload. Controls use
     /// it for transient modes without exposing the host's path.
-    pub select_with: Rc<dyn Fn(&mut World, Value) -> bool>,
+    pub select_with: Rc<dyn Fn(&mut crate::editing::Session<'_>, Value) -> bool>,
     pub hover: Hover,
 }
 
@@ -228,20 +231,20 @@ pub struct ProjectionTarget<World, Hover> {
 /// targets beneath it. Resolving owns the returned interaction data;
 /// merely trying a partial projection allocates nothing.
 #[derive(Clone, Copy)]
-pub struct ProjectionTargets<'a, World, Hover> {
-    at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>,
+pub struct ProjectionTargets<'a, Hover> {
+    at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<Hover>,
 }
 
-impl<'a, World, Hover> ProjectionTargets<'a, World, Hover> {
-    pub fn new(at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>) -> Self {
+impl<'a, Hover> ProjectionTargets<'a, Hover> {
+    pub fn new(at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<Hover>) -> Self {
         Self { at }
     }
 
-    pub fn at(&self, steps: impl Into<Vec<Step>>) -> ProjectionTarget<World, Hover> {
+    pub fn at(&self, steps: impl Into<Vec<Step>>) -> ProjectionTarget<Hover> {
         (self.at)(steps.into())
     }
 
-    pub fn current(&self) -> ProjectionTarget<World, Hover> {
+    pub fn current(&self) -> ProjectionTarget<Hover> {
         (self.at)(Vec::new())
     }
 }
@@ -439,7 +442,7 @@ pub struct ProjectionInput<'a, World, Hover, V = Value> {
     /// Derive this value's interaction target, or one below it,
     /// without exposing the host's full path. The host work is lazy:
     /// a declining projection need never construct either target.
-    pub targets: ProjectionTargets<'a, World, Hover>,
+    pub targets: ProjectionTargets<'a, Hover>,
 }
 
 /// A partial borrows the shared projection input. Ordered composition
@@ -550,12 +553,12 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, on_click, pickable, pickable_runtime};
 
-pub fn activatable<World: 'static, Hover: Clone + PartialEq + 'static>(
+pub fn activatable<World: Host, Hover: Clone + PartialEq + 'static>(
     child: Layout<World, Hover>,
     target: Hover,
-    handler: ActionHandler<World>,
+    action: Action,
 ) -> Layout<World, Hover> {
-    on_hover(on_activate(child, target.clone(), handler), target)
+    on_hover(on_activate(child, target.clone(), action), target)
 }
 
 pub use widget::gesture::{on_point, on_state_drag};

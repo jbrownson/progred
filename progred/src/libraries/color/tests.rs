@@ -149,8 +149,8 @@ fn spelling_round_trips_through_the_update_function() {
 fn projection_is_a_swatch_and_editable_spelling() {
     let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
     let target = |_| crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_: &mut crate::Editor| false),
-        select_with: std::rc::Rc::new(|_: &mut crate::Editor, _| false),
+        select: std::rc::Rc::new(|_| false),
+        select_with: std::rc::Rc::new(|_, _| false),
         hover: crate::libraries::test_widgets::hover(vec![]),
     };
     let layout = display(&ProjectionInput {
@@ -196,8 +196,8 @@ fn a_read_only_color_selects_without_a_picker_or_popup() {
     let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
     let selection = picker_selection(0.1);
     let target = |_| crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_: &mut crate::Editor| false),
-        select_with: std::rc::Rc::new(|_: &mut crate::Editor, _| false),
+        select: std::rc::Rc::new(|_| false),
+        select_with: std::rc::Rc::new(|_, _| false),
         hover: crate::libraries::test_widgets::hover(vec![]),
     };
     let layout = display(&ProjectionInput {
@@ -235,8 +235,8 @@ fn a_named_color_projects_its_editable_name_and_hex() {
         [(vocabulary::RGB, Value::from(vec![0x66, 0x33, 0x99]))],
     );
     let target = |_| crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_: &mut crate::Editor| false),
-        select_with: std::rc::Rc::new(|_: &mut crate::Editor, _| false),
+        select: std::rc::Rc::new(|_| false),
+        select_with: std::rc::Rc::new(|_, _| false),
         hover: crate::libraries::test_widgets::hover(vec![]),
     };
     let layout = display(&ProjectionInput {
@@ -279,8 +279,8 @@ fn picker_mode_floats_point_controls_and_preserves_open_metadata() {
     );
     let selection = picker_selection(0.1);
     let target = |_| crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_: &mut crate::Editor| false),
-        select_with: std::rc::Rc::new(|_: &mut crate::Editor, _| false),
+        select: std::rc::Rc::new(|_| false),
+        select_with: std::rc::Rc::new(|_, _| false),
         hover: crate::libraries::test_widgets::hover(vec![]),
     };
     // Its extra field would follow the color in a record of its own.

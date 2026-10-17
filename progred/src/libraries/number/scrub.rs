@@ -50,9 +50,9 @@ pub(crate) fn on_scrub(
                             path.clone(),
                             edits.clone(),
                         );
-                        if edit.select(&mut world.session()) {
-                            crate::editing::start_gesture(
-                                world,
+                        let mut session = world.session();
+                        if edit.select(&mut session) {
+                            session.start_gesture(
                                 scrub(
                                     Drag::new(point, scale, crate::gesture::DRAG_THRESHOLD),
                                     handler(),

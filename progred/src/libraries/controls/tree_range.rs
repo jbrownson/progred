@@ -349,8 +349,7 @@ fn range_widget(
                         editor.annotate(&root, &path, state);
                     } else {
                         let drag = slider.begin(placement.rect, scale, point);
-                        crate::editing::start_gesture(
-                            editor,
+                        editor.session().start_gesture(
                             Box::new(RangeDrag {
                                 root: root.clone(),
                                 path: path.clone(),

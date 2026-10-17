@@ -23,7 +23,7 @@ pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
 /// Plain arrival at an occurrence: select it, whatever the direction.
 pub(crate) fn arrival(path: Rc<[Step]>, cx: &crate::projection::Cx<'_>) -> Select<crate::Editor> {
     let select = crate::projection::select_handler(path, cx);
-    Rc::new(move |editor, _| select(editor))
+    Rc::new(move |editor: &mut crate::Editor, _| select(&mut editor.session()))
 }
 
 /// A native control supplies its entry without introducing child routing.

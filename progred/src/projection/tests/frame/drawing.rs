@@ -209,7 +209,7 @@ fn drawing_frame(
             ],
         ),
     );
-    let select: crate::display::ActionHandler<crate::Editor> = Rc::new(|_| false);
+    let select: crate::display::Action = Rc::new(|_| false);
     let layout = layout_data::decode(
         &drawing,
         &select,

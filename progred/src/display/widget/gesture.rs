@@ -1,5 +1,5 @@
 use super::{Annotate, HoverCallback, before};
-use crate::display::ActionHandler;
+use crate::display::Action;
 use gid::Value;
 use puri::drag::Drag;
 use puri::handler::HasHandler;
@@ -77,7 +77,7 @@ pub fn targeted<World: 'static, Hover: 'static>(
 pub fn on_state_drag(
     child: crate::view::Layout,
     target: crate::frame::Hovered,
-    on_press: ActionHandler<crate::Editor>,
+    on_press: Action,
     handler: StateDragHandler,
 ) -> crate::view::Layout {
     before(
@@ -99,22 +99,27 @@ pub fn on_state_drag(
             let on_press = on_press.clone();
             let scale = context.inputs.styles.scale;
             let threshold = crate::gesture::DRAG_THRESHOLD;
-            targeted(target.clone(), false, PartialEq::eq, move |world, point| {
-                if on_press(world) {
-                    crate::editing::start_gesture(
-                        world,
-                        state_drag(
-                            Drag::new(point, scale, threshold),
-                            handler(),
-                            annotate.clone(),
-                        ),
-                        &[],
-                    );
-                    true
-                } else {
-                    false
-                }
-            })
+            targeted(
+                target.clone(),
+                false,
+                PartialEq::eq,
+                move |world: &mut crate::Editor, point| {
+                    let mut session = world.session();
+                    if on_press(&mut session) {
+                        session.start_gesture(
+                            state_drag(
+                                Drag::new(point, scale, threshold),
+                                handler(),
+                                annotate.clone(),
+                            ),
+                            &[],
+                        );
+                        true
+                    } else {
+                        false
+                    }
+                },
+            )
         }),
     )
 }
@@ -136,8 +141,7 @@ pub fn on_point(child: crate::view::Layout, handler: PointHandler) -> crate::vie
                     output.handler().on_pointer_down(move |world, event| {
                         let at = Point::new(event.state.position.x, event.state.position.y);
                         if is_primary_contact(event) && placement.contains(at) {
-                            crate::editing::start_gesture(
-                                world,
+                            world.session().start_gesture(
                                 point(
                                     placement.rect,
                                     handler.clone(),

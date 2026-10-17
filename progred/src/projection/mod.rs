@@ -474,15 +474,12 @@ fn tree_hovered(hover: &placed::Attribution) -> Option<&Hover> {
 }
 
 /// Select `path` in this view, interpreted through this occurrence's scope.
-pub(crate) fn select_handler(
-    path: SharedPath,
-    cx: &Cx,
-) -> crate::display::ActionHandler<crate::Editor> {
+pub(crate) fn select_handler(path: SharedPath, cx: &Cx) -> crate::display::Action {
     let root = cx.view.clone();
     let edits = cx.edits.clone();
-    Rc::new(move |world| {
+    Rc::new(move |session| {
         edits
-            .open(crate::editing::Access::new(world))
+            .open(crate::editing::Access::of(session))
             .select(&root, &path);
         true
     })
@@ -492,16 +489,16 @@ fn projection_target(
     cx: &Cx,
     path: &[Step],
     steps: Vec<Step>,
-) -> crate::display::ProjectionTarget<crate::Editor, Hovered> {
+) -> crate::display::ProjectionTarget<Hovered> {
     let path: SharedPath = Rc::from(path.iter().cloned().chain(steps).collect::<Path>());
     let payload_root = cx.view.clone();
     let payload_destination = path.clone();
     let payload_edits = cx.edits.clone();
     crate::display::ProjectionTarget {
         select: select_handler(path.clone(), cx),
-        select_with: Rc::new(move |world, payload| {
+        select_with: Rc::new(move |session, payload| {
             payload_edits
-                .open(crate::editing::Access::new(world))
+                .open(crate::editing::Access::of(session))
                 .select_payload(&payload_root, payload_destination.to_vec(), payload);
             true
         }),
@@ -750,7 +747,7 @@ fn bind_selection(
                     _ => None,
                 };
                 if let Some(closed) = closed {
-                    return ctx.set_collapsed(&root, &path, default, closed);
+                    return ctx.session().set_collapsed(&root, &path, default, closed);
                 }
             }
             crate::modifiers::plain(&event.modifiers)
@@ -1065,15 +1062,16 @@ fn value_layout(
 fn pick_target_with(
     path: SharedPath,
     value: grap::RuntimeValue,
-    select: crate::display::ActionHandler<crate::Editor>,
+    select: crate::display::Action,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
     before(child, move |p, _| {
         let value = value.clone();
         let select = select.clone();
         p.pick(Hovered::Tree(Hover::Value(path.clone())), move |world| {
-            if !world.pick_identity(value.to_value()) {
-                select(world);
+            let mut session = world.session();
+            if !crate::editing::pick_identity(&mut session, value.to_value()) {
+                select(&mut session);
             }
             true
         });

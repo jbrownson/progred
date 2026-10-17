@@ -172,11 +172,14 @@ pub fn selectable(
                             puri::interact::is_primary_contact(event)
                                 && hovered.hovered().is_some_and(|hovered| hovered == &target)
                                 && if command.pressed(&event.state.modifiers) {
-                                    value
-                                        .as_ref()
-                                        .is_some_and(|value| world.pick_identity(value.to_value()))
+                                    value.as_ref().is_some_and(|value| {
+                                        crate::editing::pick_identity(
+                                            &mut world.session(),
+                                            value.to_value(),
+                                        )
+                                    })
                                 } else {
-                                    select(world)
+                                    select(&mut world.session())
                                 }
                         });
                 }
