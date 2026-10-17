@@ -402,7 +402,16 @@ first:
       interaction's timer tests and one navigation test still drive the
       runner: that one checks the next key's handlers are installed without
       a paint, which the driver always does.
-   6. Rewrite 30 tests that drive the whole editor but check one system.
+   6. Rewrite 30 tests that drive the whole editor but check one system. The
+      event encoding has moved to the layout library. What's left is mostly
+      two groups. Nine write-through tests in projection/tests/editing.rs
+      get their editing selection by projecting a frame and pressing End;
+      targeted, each would build it from its library's own line editor, as
+      `Selection::from_line` does, before `line_control::commit`. Seven in
+      frame/layout.rs check the toolkit's placement, hover and dispatch
+      through a throwaway projection in a whole frame; targeted, they'd
+      measure and place the layout in display's tests, which first needs
+      display's test support to hover and dispatch a placed layout.
    7. ~~Give the captures and the frame canaries modules of their own, with
       the SVG writer in test support.~~ Done on 17 October 2026. The SVG
       writer and its captures are `crate::svg`, and the frame canaries
@@ -451,7 +460,12 @@ first:
    `ToolValue`, and its picture. Still in progred:
    - the software raster and its tile assembly (libraries/fidget/raster),
      which `volume` could take once a render request takes a camera rather
-     than reading one from the view's state;
+     than reading one from the view's state. Moving it would also build the
+     app's software previews optimized in development, since Fidget's
+     generic scene rendering is instantiated where it's called. The CAM
+     profile reaches four of its internals (`refine_depth`, `view_at`, the
+     request's pixels and `software_tiles`), so those would move behind a
+     profiling feature of `volume`'s rather than become its API;
    - the playback core and the tube meshing (libraries/toolpath/playback.rs
      and mesh/tubes.rs), whose generic paths still compile at progred's
      level.
