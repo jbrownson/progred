@@ -1,5 +1,6 @@
 //! What tests read back from the driver's frames: what is drawn where and
-//! what it holds, and the conveniences that click and type by document path.
+//! what it holds, the conveniences that click, type and select by document
+//! path, and the window's focus and appearance.
 
 use super::{Driver, keystroke_for};
 use crate::display::test_support::Landmarks;
@@ -72,6 +73,54 @@ impl<P> Driver<P> {
             ::grap::evaluate_value(expression, &self.editor().sources(), ::grap::DEFAULT_FUEL);
         assert!(evaluation.completed);
         evaluation.result
+    }
+
+    /// The window gains or loses focus; whether that changed anything.
+    pub(crate) fn focus(&mut self, focused: bool) -> bool {
+        let changed = self
+            .runner
+            .focus_changed(focused, self.scale(), self.viewport);
+        self.present();
+        changed
+    }
+
+    /// The system's appearance becomes `palette`; whether that changed
+    /// anything.
+    pub(crate) fn palette(&mut self, palette: crate::styles::Palette) -> bool {
+        let changed = self
+            .runner
+            .palette_changed(palette, self.scale(), self.viewport);
+        self.present();
+        changed
+    }
+
+    /// Select what's drawn at `path`, as arriving there with the keyboard
+    /// would.
+    pub(crate) fn select(&mut self, path: &[Step]) {
+        let select = self
+            .landmark(path)
+            .unwrap_or_else(|| panic!("nothing drawn at {path:?}"))
+            .select
+            .clone();
+        assert!(select(&mut self.runner.editor, None), "{path:?} refused");
+        self.present();
+    }
+
+    /// The text of the line the selection edits, if it edits one.
+    pub(crate) fn line(&self) -> Option<&str> {
+        Some(self.editor().model.selection.as_ref()?.edit()?.text())
+    }
+
+    /// What the open picker offers, in order; `None` when none is open.
+    pub(crate) fn picker_entries(&mut self) -> Option<Vec<String>> {
+        let frame = crate::projection::test_support::editing_frame(&mut self.runner.editor, false);
+        frame.completion.map(|offers| {
+            offers
+                .entries
+                .iter()
+                .map(|entry| entry.display.clone())
+                .collect()
+        })
     }
 
     pub(crate) fn selection(&self) -> Vec<Step> {
