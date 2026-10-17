@@ -64,6 +64,9 @@ pub(crate) fn editing_frame_with_annotations(
 ) -> crate::placed::HoverOutput<EditingWorld> {
     let stack = &world.stack;
     let styles = crate::styles::editor(world.palette, 1.0);
+    world
+        .computations
+        .begin(world.model.doc.clone(), stack.libraries.clone());
     let mut tcx = TextCtx {
         fonts: &mut world.font_cx,
         layouts: &mut world.layout_cx,
@@ -73,7 +76,7 @@ pub(crate) fn editing_frame_with_annotations(
     let measured = project(
         ProjectDescription {
             focused: world.focused,
-            computations: None,
+            computations: &world.computations,
             view: &crate::test_root(),
             completions: Some(&stack.completions),
             sources: Sources {
@@ -423,7 +426,7 @@ impl BenchContext {
         let graph = prepare_project(
             ProjectDescription {
                 focused: true,
-                computations: Some(computations),
+                computations,
                 view: &crate::test_root(),
                 completions: Some(&stack.completions),
                 sources,

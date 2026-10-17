@@ -1060,9 +1060,11 @@ pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_,
             orbit_handler(input.state),
         ),
         Rc::new(move |context| {
-            let activity = context.inputs.computations.map(|computations| {
-                interaction::Interaction::at(computations, context.inputs.view, context.path)
-            });
+            let activity = interaction::Interaction::at(
+                context.inputs.computations,
+                context.inputs.view,
+                context.path,
+            );
             let pinch_activity = activity.clone();
             let site = context.site();
             let pinch_site = site.clone();
@@ -1074,9 +1076,7 @@ pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_,
                     let (state, outcome) = zoom_handler(edit.state())(delta);
                     if let Some(state) = state {
                         edit.set_state(state);
-                        if let Some(activity) = &activity {
-                            activity.zoomed(&mut world.timers, web_time::Instant::now());
-                        }
+                        activity.zoomed(&mut world.timers, web_time::Instant::now());
                     }
                     outcome
                 },
@@ -1091,9 +1091,7 @@ pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_,
                         let mut edit = pinch_site.open(&mut session);
                         if let Some(state) = pinch_zoom(edit.state(), delta) {
                             edit.set_state(state);
-                            if let Some(activity) = &pinch_activity {
-                                activity.zoomed(&mut world.timers, web_time::Instant::now());
-                            }
+                            pinch_activity.zoomed(&mut world.timers, web_time::Instant::now());
                         }
                         // Own the gesture even at a zoom limit.
                         true

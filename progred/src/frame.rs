@@ -581,7 +581,7 @@ fn project_workspace_view(
     };
     let projected = projection::project(
         projection::ProjectDescription {
-            computations: Some(computations),
+            computations,
             focused,
             view: &view.root,
             completions: Some(&stack.completions),

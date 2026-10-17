@@ -269,12 +269,22 @@ fn evaluate(
     (evaluation, built.into_inner())
 }
 
+/// What `program` builds when evaluated directly, without memoizing.
+#[cfg(any(test, feature = "cam-profile"))]
 pub(crate) fn build(
     program: &RuntimeValue,
     host: &dyn ::grap::Host,
     fuel: usize,
 ) -> Result<Built, RuntimeValue> {
     let (evaluation, built) = evaluate(program, host, fuel);
+    outcome(evaluation, built)
+}
+
+/// What an evaluation built: the tree once it completes, or why there's none.
+fn outcome(
+    evaluation: ::grap::Evaluation,
+    built: Option<Result<Built, RuntimeValue>>,
+) -> Result<Built, RuntimeValue> {
     if evaluation.completed {
         built.unwrap_or(Err(evaluation.result))
     } else {
@@ -310,11 +320,7 @@ pub(crate) fn prepared(
                             built = output;
                             evaluation
                         });
-                    Ok(if evaluation.completed {
-                        built.unwrap_or(Err(evaluation.result))
-                    } else {
-                        Err(evaluation.result)
-                    })
+                    Ok(outcome(evaluation, built))
                 }
             },
             same_output,

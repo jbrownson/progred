@@ -51,14 +51,7 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
         playback,
     };
     let drawing = Layout::program(Rc::new(move |context, build| {
-        let local;
-        let computations = match context.inputs.computations {
-            Some(computations) => computations,
-            None => {
-                local = crate::computations::Computations::from_sources(context.inputs.sources);
-                &local
-            }
-        };
+        let computations = context.inputs.computations;
         let computation = computations.at(context.inputs.view, context.path, || {
             computation::Computation::new(
                 computations,

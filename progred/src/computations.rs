@@ -71,6 +71,7 @@ impl Computations {
         *self = Self::with_tasks(runtime, tasks);
     }
 
+    #[cfg(any(test, feature = "cam-profile"))]
     pub fn from_sources(sources: Sources<'_>) -> Self {
         let computations = Self::default();
         computations.begin(Rc::new(sources.doc.clone()), sources.libraries.clone());

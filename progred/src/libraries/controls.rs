@@ -462,21 +462,18 @@ fn controls_output(
                 },
                 None => 0.0,
             };
-            let result = match frame.inputs.computations {
-                Some(computations) => tree::prepared(
-                    computations,
-                    frame.inputs.view,
-                    &frame
-                        .path
-                        .iter()
-                        .cloned()
-                        .chain([gid::Step::Key(key)])
-                        .collect::<Vec<_>>(),
-                    program,
-                    fuel,
-                ),
-                None => Rc::new(tree::build(&program, &frame.inputs.sources, fuel)),
-            };
+            let result = tree::prepared(
+                frame.inputs.computations,
+                frame.inputs.view,
+                &frame
+                    .path
+                    .iter()
+                    .cloned()
+                    .chain([gid::Step::Key(key)])
+                    .collect::<Vec<_>>(),
+                program,
+                fuel,
+            );
             let built = match result.as_ref() {
                 Ok(tree) => tree,
                 Err(error) => return Ok(error.clone()),

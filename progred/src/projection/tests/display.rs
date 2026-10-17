@@ -373,6 +373,10 @@ fn partials_receive_selection_and_annotations_positionally() {
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
+    let computations = crate::computations::Computations::from_sources(Sources {
+        doc: &doc,
+        libraries: &lib,
+    });
     let mut width = |selection: Option<&Selection>, annotations: &Annotations| {
         let mut tcx = TextCtx {
             fonts: &mut fonts,
@@ -383,7 +387,7 @@ fn partials_receive_selection_and_annotations_positionally() {
         project(
             ProjectDescription {
                 focused: true,
-                computations: None,
+                computations: &computations,
                 view: &crate::test_root(),
                 completions: None,
                 sources: Sources {
@@ -461,10 +465,14 @@ fn a_projection_defined_as_data_realizes() {
         cache: &mut cache,
     };
     let empty = Annotations::default();
+    let computations = crate::computations::Computations::from_sources(Sources {
+        doc: &doc,
+        libraries: &lib,
+    });
     let measured = project(
         ProjectDescription {
             focused: true,
-            computations: None,
+            computations: &computations,
             view: &crate::test_root(),
             completions: None,
             sources: Sources {

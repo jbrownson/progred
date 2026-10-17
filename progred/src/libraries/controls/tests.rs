@@ -23,7 +23,7 @@ fn apply_change(
     super::apply_change(&mut editor.session(), site, &callable, value)
 }
 
-use crate::display::test_support::{ResolveForDispatch, with_context};
+use crate::display::test_support::{ResolveForDispatch, with_context, with_sources};
 use crate::display::widget::project::Project;
 use crate::libraries::control::vocabulary as c;
 use measured::choices::{ChoiceBuild, resolve_choices};
@@ -178,7 +178,7 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
             let inputs = crate::projection::Cx {
                 focused: true,
                 sources,
-                computations: Some(&computations),
+                computations: &computations,
                 view: &root,
                 ..context.inputs.clone()
             };
@@ -269,20 +269,8 @@ fn program_cursor_preserves_list_leaves_and_captures_sources_directly() {
             [(KEY, quote(B.into())), (t::PROGRAM, quote(A.into()))],
         ),
     );
-    with_context(&Output::default(), |context| {
-        let inputs = crate::projection::Cx {
-            focused: true,
-            sources,
-            ..context.inputs.clone()
-        };
-        let mut context = widget::Context {
-            inputs: &inputs,
-            text: context.text,
-            project: context.project,
-            path: context.path,
-            value: context.value,
-        };
-        let (widgets, result) = controls_output(&controls, None, 200.0, &context).unwrap();
+    with_sources(sources, &Output::default(), |context| {
+        let (widgets, result) = controls_output(&controls, None, 200.0, context).unwrap();
         let fields = result.as_record().unwrap();
         assert_eq!(
             fields.get(&ITEMS),
@@ -293,7 +281,7 @@ fn program_cursor_preserves_list_leaves_and_captures_sources_directly() {
         assert_eq!(widgets.len(), 3, "playback and two grouping rows");
         drop(result);
         let placed = widget::frame::place(
-            widgets[1](&mut context),
+            widgets[1](context),
             Placement::root(Rect::new(0.0, 0.0, 200.0, 20.0)),
             &widget::HoverInput {
                 pointer: Some(Point::new(30.0, 10.0)),
@@ -343,22 +331,15 @@ fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
     );
     let libraries = crate::stack::load().libraries;
     let expected = ::grap::evaluate_value(&collect, &libraries, 1000).result;
-    with_context(&Output::default(), |context| {
-        let inputs = crate::projection::Cx {
-            focused: true,
-            sources: crate::sources::Sources {
-                libraries: &libraries,
-                ..context.inputs.sources
-            },
-            ..context.inputs.clone()
-        };
-        let context = widget::Context {
-            inputs: &inputs,
-            text: context.text,
-            project: context.project,
-            path: context.path,
-            value: context.value,
-        };
+    let empty = gid::Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let sources = crate::sources::Sources {
+        doc: &empty,
+        libraries: &libraries,
+    };
+    with_sources(sources, &Output::default(), |context| {
         let (widgets, result) =
             controls_output(&::grap::lambda([], collect), None, 200.0, &context).unwrap();
         assert!(widgets.is_empty());
@@ -391,22 +372,15 @@ fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
                 ],
             ),
         );
-        with_context(&Output::default(), |context| {
-            let inputs = crate::projection::Cx {
-                focused: true,
-                sources: crate::sources::Sources {
-                    libraries: &libraries,
-                    ..context.inputs.sources
-                },
-                ..context.inputs.clone()
-            };
-            let context = widget::Context {
-                inputs: &inputs,
-                text: context.text,
-                project: context.project,
-                path: context.path,
-                value: context.value,
-            };
+        let empty = gid::Document {
+            root: None,
+            cells: Cells::new(),
+        };
+        let sources = crate::sources::Sources {
+            doc: &empty,
+            libraries: &libraries,
+        };
+        with_sources(sources, &Output::default(), |context| {
             let (widgets, result) = controls_output(&controls, None, 200.0, &context).unwrap();
             assert_eq!(widgets.len(), widget_count);
             let fields = result.as_record().unwrap();
@@ -473,32 +447,30 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
             ..context.inputs.sources
         };
         let computations = crate::computations::Computations::from_sources(sources);
-        for memo in [None, Some(&computations)] {
-            let inputs = crate::projection::Cx {
-                sources,
-                computations: memo,
-                ..context.inputs.clone()
-            };
-            let context = widget::Context {
-                inputs: &inputs,
-                text: context.text,
-                project: context.project,
-                path: context.path,
-                value: context.value,
-            };
-            for _ in 0..2 {
-                let (widgets, result) =
-                    super::controls_output(&controls, None, 200.0, &context).unwrap();
-                assert_eq!(widgets.len(), 2);
-                assert!(
-                    result
-                        .field(ITEMS)
-                        .unwrap()
-                        .list_get(0)
-                        .unwrap()
-                        .same_result(&callback)
-                );
-            }
+        let inputs = crate::projection::Cx {
+            sources,
+            computations: &computations,
+            ..context.inputs.clone()
+        };
+        let context = widget::Context {
+            inputs: &inputs,
+            text: context.text,
+            project: context.project,
+            path: context.path,
+            value: context.value,
+        };
+        for _ in 0..2 {
+            let (widgets, result) =
+                super::controls_output(&controls, None, 200.0, &context).unwrap();
+            assert_eq!(widgets.len(), 2);
+            assert!(
+                result
+                    .field(ITEMS)
+                    .unwrap()
+                    .list_get(0)
+                    .unwrap()
+                    .same_result(&callback)
+            );
         }
     });
 }
@@ -837,27 +809,18 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
     let output = Output::default();
     let mut build = ChoiceBuild::default();
     // The test's ordinary projection interpreter records the viewport arguments.
-    let graph = with_context(&output, |context| {
-        let libraries = &host.0;
-        let inputs = crate::projection::Cx {
-            focused: true,
-            edits: Default::default(),
-            sources: crate::sources::Sources {
-                doc: context.inputs.sources.doc,
-                libraries,
-            },
-            ..context.inputs.clone()
-        };
-        let mut context = widget::Context {
-            inputs: &inputs,
-            text: context.text,
-            project: context.project,
-            path: context.path,
-            value: context.value,
-        };
+    let empty = gid::Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let sources = crate::sources::Sources {
+        doc: &empty,
+        libraries: &host.0,
+    };
+    let graph = with_sources(sources, &output, |context| {
         display(&input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref()))
             .unwrap()
-            .measure(&mut context, &mut build)
+            .measure(context, &mut build)
     });
     let measured = resolve_choices(build.finish(graph), 200.0, false);
     assert_eq!(measured.extent.height(), 300.0);

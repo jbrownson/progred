@@ -242,10 +242,11 @@ pub fn with_sources<W: 'static, H: 'static, R>(
     let root = crate::test_root();
     let annotations = crate::annotations::Annotations::default();
     let styles = widget::style::editor(widget::style::Theme::Light.palette(), 1.0);
+    let computations = crate::computations::Computations::from_sources(sources);
     let cx = crate::projection::Cx {
         focused: true,
         edits: Default::default(),
-        computations: None,
+        computations: &computations,
         view: &root,
         completions: None,
         sources,

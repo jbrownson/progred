@@ -112,7 +112,7 @@ impl<World: 'static> Projection<World> {
 /// Read-only projection context threaded through every view.
 #[derive(Clone)]
 pub(crate) struct Cx<'a> {
-    pub(crate) computations: Option<&'a crate::computations::Computations>,
+    pub(crate) computations: &'a crate::computations::Computations,
     pub(crate) focused: bool,
     pub(crate) view: &'a crate::workspace::Root,
     pub(crate) completions: Option<&'a crate::display::CompletionProvider>,
@@ -204,16 +204,13 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
         fuel: usize,
         steps: &[Step],
     ) -> grap::RuntimeValue {
-        match self.cx.computations {
-            Some(c) => c.evaluate_runtime(
-                self.cx.view,
-                self.path,
-                expression,
-                fuel,
-                self.origin(steps),
-            ),
-            None => self.evaluate_runtime(expression, fuel, steps),
-        }
+        self.cx.computations.evaluate_runtime(
+            self.cx.view,
+            self.path,
+            expression,
+            fuel,
+            self.origin(steps),
+        )
     }
     fn apply_runtime_scoped(
         &self,
@@ -231,18 +228,9 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
         arguments: &[(CellId, Value)],
         fuel: usize,
     ) -> grap::RuntimeValue {
-        match self.cx.computations {
-            Some(c) => c.apply_runtime(self.cx.view, self.path, function, arguments, fuel),
-            None => {
-                grap::apply_expression(
-                    &function.into(),
-                    arguments.iter().map(|(k, v)| (*k, v.into())),
-                    &self.cx.sources,
-                    fuel,
-                )
-                .result
-            }
-        }
+        self.cx
+            .computations
+            .apply_runtime(self.cx.view, self.path, function, arguments, fuel)
     }
 
     fn apply_scoped(
@@ -561,7 +549,7 @@ impl Cx<'_> {
 /// `root_path` let an editor pane begin at a value occurrence
 /// while retaining ordinary document-relative interaction paths.
 pub struct ProjectDescription<'a> {
-    pub computations: Option<&'a crate::computations::Computations>,
+    pub computations: &'a crate::computations::Computations,
     pub focused: bool,
     pub view: &'a crate::workspace::Root,
     pub completions: Option<&'a crate::display::CompletionProvider>,

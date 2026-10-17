@@ -238,10 +238,11 @@ pub(crate) fn projected_completion_entries_in(
         scale: 1.0,
         cache: &mut cache,
     };
+    let computations = crate::computations::Computations::from_sources(src(doc, &stack.libraries));
     let measured = project(
         ProjectDescription {
             focused: true,
-            computations: None,
+            computations: &computations,
             view: &crate::test_root(),
             completions: provider.or(Some(&stack.completions)),
             sources: src(doc, &stack.libraries),
