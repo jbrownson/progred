@@ -352,9 +352,12 @@ first:
          optional slots too. Every empty name in the bundled examples is an
          unnamed lambda's `λ`, which the grap library draws as a marker to
          click rather than as a slot: 39 of them in the toolpaths example,
-         which has no other stops. So the rule to try is that Tab stops
-         wherever a projection draws a hole, and navigation needn't know
-         names;
+         which has no other stops. Arrow keys skip it because it registers
+         no navigation stop, but only the arrow keys read those stops, keeping
+         just the selection's neighbours. The owner's direction: stops aren't
+         the arrow keys' alone. The frame keeps the stops widgets register,
+         arrows find neighbours among them, and Tab takes the empty, writable
+         ones in reading order, so navigation needn't know names;
        - the cells that label Grap handlers' event records, which are the
          layout library's. Grap handlers need values, so the records stay;
          the cells are the editor's input vocabulary, so they move to the
