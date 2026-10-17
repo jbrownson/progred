@@ -1,4 +1,7 @@
-use super::super::{paths::InvalidPath, vocabulary::*};
+use super::super::{
+    paths::{Cursor, InvalidPath},
+    vocabulary::*,
+};
 use super::*;
 use crate::libraries::{absent, control, f64};
 
@@ -222,7 +225,7 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
     let evaluation = record_program(&tree.clone().into(), &libraries, 10000, &mut recording);
     assert!(evaluation.completed && !evaluation.result.is_absent());
     let pose = recording
-        .playback_parts::<InvalidPath>(0.5, Some(1..2), |_, _, _, _, _| Ok(()))
+        .playback_cursor::<InvalidPath>(Cursor::Progress(0.5), Some(1..2), |_, _, _, _, _| Ok(()))
         .unwrap()
         .unwrap()
         .0;
@@ -397,7 +400,9 @@ fn cube_grouping_records_the_same_cuts_as_the_complete_program() {
     );
     assert!(
         recording
-            .playback_parts::<InvalidPath>(0.0, Some(6..8), |_, _, _, _, _| Ok(()))
+            .playback_cursor::<InvalidPath>(Cursor::Progress(0.0), Some(6..8), |_, _, _, _, _| Ok(
+                ()
+            ))
             .unwrap()
             .is_some()
     );

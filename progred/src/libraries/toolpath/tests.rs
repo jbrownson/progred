@@ -1,4 +1,4 @@
-use super::{paths::*, *};
+use super::{cutter::Tool, paths::*, *};
 use crate::libraries::{control, number};
 
 mod chamfers;
@@ -8,9 +8,36 @@ mod render_profile;
 mod runtime;
 mod scopes;
 
-impl Recording {
+/// What the tests read of a recording.
+trait Inspect {
+    fn commands(&self) -> Vec<Command>;
+    /// The cutting distance: starts carry no rapid or linking move.
+    fn length(&self) -> f64;
+    /// Plays back to `progress` along the whole recording.
+    fn playback<E: From<InvalidPath>>(
+        &self,
+        progress: f64,
+        emit: impl FnMut(Point3, Point3, Axis, Option<&Tool>, bool) -> Result<(), E>,
+    ) -> Result<Option<(Pose, Option<&Tool>)>, E>;
+}
+
+impl Inspect for Recording {
     fn commands(&self) -> Vec<Command> {
         self.moves().map(|(command, _)| command).collect()
+    }
+
+    fn length(&self) -> f64 {
+        self.segments()
+            .map(|(a, b, _)| (b[0] - a[0]).hypot(b[1] - a[1]).hypot(b[2] - a[2]))
+            .sum()
+    }
+
+    fn playback<E: From<InvalidPath>>(
+        &self,
+        progress: f64,
+        emit: impl FnMut(Point3, Point3, Axis, Option<&Tool>, bool) -> Result<(), E>,
+    ) -> Result<Option<(Pose, Option<&Tool>)>, E> {
+        self.playback_cursor(Cursor::Progress(progress), None, emit)
     }
 }
 

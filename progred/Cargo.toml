@@ -42,6 +42,7 @@ fidget-engine = { workspace = true, features = ["raster", "mesh"] }
 nalgebra = "0.35"
 uig.workspace = true
 volume.workspace = true
+cam.workspace = true
 kurbo.workspace = true
 peniko.workspace = true
 parley.workspace = true

@@ -256,6 +256,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cam"
+version = "0.1.0"
+dependencies = [
+ "fidget",
+ "nalgebra",
+]
+
+[[package]]
 name = "cc"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2424,6 +2432,7 @@ name = "progred"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "cam",
  "clipboard-rs",
  "console_error_panic_hook",
  "fidget",

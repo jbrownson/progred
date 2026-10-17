@@ -12,7 +12,7 @@ impl Point {
     pub fn new(radius: f64, axial: f64) -> Self {
         Self { radius, axial }
     }
-    pub(super) fn valid(self) -> bool {
+    pub fn valid(self) -> bool {
         self.radius >= 0.0 && self.radius.is_finite() && self.axial.is_finite()
     }
 }
@@ -103,7 +103,7 @@ impl ArcGeometry {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Bounds {
+pub struct Bounds {
     pub radius: f64,
     pub min_axial: f64,
     pub max_axial: f64,
@@ -144,7 +144,7 @@ impl Section {
         }
     }
 
-    pub(super) fn bounds(&self) -> Option<Bounds> {
+    pub fn bounds(&self) -> Option<Bounds> {
         if !self.start.valid() || self.profile.is_empty() {
             return None;
         }
@@ -298,7 +298,7 @@ impl Section {
         Some(Sampled { points, shoulders })
     }
 
-    pub(crate) fn sweep(
+    pub fn sweep(
         &self,
         tolerance: f64,
         a: Point3,

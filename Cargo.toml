@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "cam",
     "gid",
     "grap",
     "incremental",
@@ -27,6 +28,7 @@ fidget-raster = { path = "vendor/fidget-raster" }
 fidget-wgpu = { path = "vendor/fidget-wgpu" }
 
 [workspace.dependencies]
+cam = { path = "cam" }
 fidget-engine = { package = "fidget", version = "0.5.1", default-features = false }
 getrandom = "0.3"
 gid = { path = "gid" }

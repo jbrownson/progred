@@ -15,15 +15,14 @@ mod computation;
 pub mod cutter;
 mod fidget;
 mod mesh;
-pub mod paths;
 #[cfg(feature = "cam-profile")]
 pub(crate) mod performance;
 mod playback;
 mod preview;
 mod refined;
-pub mod stock;
 #[cfg(test)]
 mod tests;
+pub use cam::{paths, stock};
 
 pub const ID: CellId = CellId::from_u128(0xa3f84c8e8c0930058475518fe17bf84a);
 
@@ -61,6 +60,7 @@ pub mod vocabulary {
     pub const STOCK: CellId = CellId::from_u128(0xc7dc9217fe6809ea89ba31d458706e5c);
 }
 
+use cutter::ToolValue;
 use paths::{Axis, InvalidPath, Point3, Sink};
 use vocabulary::*;
 

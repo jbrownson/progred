@@ -1,8 +1,8 @@
 //! Volumetric stock subtraction through ordinary Fidget expressions.
 
-use super::{
+use crate::{
     cutter::Tool,
-    fidget::coordinate,
+    field::coordinate,
     paths::{Axis, InvalidPath, Point3},
 };
 use fidget_engine::context::Tree;

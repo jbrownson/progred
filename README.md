@@ -216,6 +216,8 @@ format is future work. See [GID](docs/gid.md) and [the text bridge](docs/gid-tex
 - [`grap/`](grap) — evaluator
 - [`incremental/`](incremental) — dependency graph and background computations
 - [`volume/`](volume) — Fidget shapes meshed for display, built optimized
+- [`cam/`](cam) — cutters, toolpaths and stock as Fidget fields, built
+  optimized
 - [`progred/`](progred) — editor application; libraries and projections live in
   [`progred/src/libraries/`](progred/src/libraries), layout in
   [`progred/src/display/`](progred/src/display)

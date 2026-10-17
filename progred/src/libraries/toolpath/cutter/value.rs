@@ -154,8 +154,15 @@ fn profile_value(section: &Section, current: &mut Point) -> Value {
     Value::list(moves)
 }
 
-impl Tool {
-    pub fn value(&self) -> Value {
+/// A cutter as a document value: its sections, in order, each a cutting or
+/// non-cutting profile.
+pub trait ToolValue: Sized {
+    fn value(&self) -> Value;
+    fn read(value: &Value) -> Option<Self>;
+}
+
+impl ToolValue for Tool {
+    fn value(&self) -> Value {
         let mut current = Point::new(0.0, 0.0);
         Value::record([(
             TOOL,
@@ -169,7 +176,7 @@ impl Tool {
         )])
     }
 
-    pub fn read(value: &Value) -> Option<Self> {
+    fn read(value: &Value) -> Option<Self> {
         let fields = value.as_record()?;
         let mut current = Point::new(0.0, 0.0);
         let sections = fields

@@ -443,12 +443,18 @@ first:
    toolkit's jumps and source traces see `Location` and `Conject`.
 7. Move the rest of the volume and CAM geometry out of progred, into crates
    built optimized like the other dependencies (see item 4). Meshing moved to
-   `volume` on 17 October 2026. Still in progred, and still most of its test
-   time:
-   - the software raster and its tile assembly (libraries/fidget/raster);
-   - the cutter profiles and sweeps, stock and toolpath recordings
-     (libraries/toolpath), with their tests: the cutter tests' reference loops
-     alone take 10 s unoptimized.
+   `volume` on 17 October 2026, and the same day the cutter profiles and
+   sweeps, stock and toolpath recordings moved to `cam`, with the tests that
+   need no document: their dense reference checks went from about 11 s, run
+   one after another, to under half a second, and progred's tests from 14 s to
+   11 s. The toolpath library keeps a cutter's document encoding, through
+   `ToolValue`, and its picture. Still in progred:
+   - the software raster and its tile assembly (libraries/fidget/raster),
+     which `volume` could take once a render request takes a camera rather
+     than reading one from the view's state;
+   - the playback core and the tube meshing (libraries/toolpath/playback.rs
+     and mesh/tubes.rs), whose generic paths still compile at progred's
+     level.
 8. Split progred into three crates, which would also keep the layering honest:
    - core: the model and display;
    - the libraries;

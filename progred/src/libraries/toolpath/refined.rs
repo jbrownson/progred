@@ -157,7 +157,7 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
     let program = fields.field(PROGRAM)?;
     let radius = fields.field(LINE_RADIUS)?.as_f64()?;
-    implicit::read_radius(radius)?;
+    cam::field::read_radius(radius)?;
     let color = implicit::read_color(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
     let fuel = super::read_fuel(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
     let playback = match fields.field(PLAYBACK) {

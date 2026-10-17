@@ -55,7 +55,7 @@ fn playback_changes_axis_at_path_breaks_without_an_interpolated_link() {
     path.line_to([1.0, 0.0, 0.0]).unwrap();
     path.start_at([0.0; 3], x).unwrap();
     path.line_to([0.0, 1.0, 0.0]).unwrap();
-    assert_eq!(path.length().unwrap(), 2.0);
+    assert_eq!(path.length(), 2.0);
     for (progress, center, axis) in [
         (0.25, [0.5, 0.0, 0.0], Axis::Z),
         (0.5, [1.0, 0.0, 0.0], Axis::Z),
@@ -363,9 +363,7 @@ fn op2_is_an_independent_bottom_program_and_preview_combines_without_a_link() {
         preview.commands()[op1.commands().len()],
         Command::StartAt(..)
     ));
-    assert!(
-        (preview.length().unwrap() - op1.length().unwrap() - op2.length().unwrap()).abs() < 1e-10
-    );
+    assert!((preview.length() - op1.length() - op2.length()).abs() < 1e-10);
     assert_eq!(preview.segments().count(), 6336 + 12 * 21);
     let values = stock_samples(&preview);
     assert!(values[..6].iter().all(|v| *v > 0.0), "{values:?}");

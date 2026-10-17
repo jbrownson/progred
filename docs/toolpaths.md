@@ -1,8 +1,10 @@
 # Toolpaths
 
 The toolpath library is an experimental path-geometry layer, not a machine
-program or a collision/clearance check. Its geometry remains library-owned;
-the mesh preview uses the general dependency-tracked computation runtime.
+program or a collision/clearance check. Its geometry is the
+[`cam`](../cam/src/lib.rs) crate's, which knows nothing of the editor: the
+library reads and writes cutters as document values, and the mesh preview uses
+the general dependency-tracked computation runtime.
 
 ## Focusing the preview
 

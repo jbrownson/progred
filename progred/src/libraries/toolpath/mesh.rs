@@ -1,9 +1,10 @@
 //! Stream path segments into triangles alongside a meshed Fidget model.
 
-use super::{fidget::coordinate, paths::*, playback, vocabulary::*};
+use super::{paths::*, playback, vocabulary::*};
 use crate::libraries::{absent, f64, fidget, layout, presentation};
 use crate::view::{Layout, ProjectionInput};
 use ::grap::RuntimeValue;
+use cam::field::{coordinate, read_radius};
 use fidget::mesh::{Geometry, Mesh, Normal, Vertex};
 #[cfg(test)]
 use gid::Value;
@@ -36,7 +37,7 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
     let program = fields.field(PROGRAM)?;
     let radius = fields.field(LINE_RADIUS)?.as_f64()?;
     let color = super::fidget::read_color(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
-    super::fidget::read_radius(radius)?;
+    read_radius(radius)?;
     let fuel = super::read_fuel(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
     let playback = match fields.field(PLAYBACK) {
         Some(value) => Some(playback::Settings::read(value.as_value())?),

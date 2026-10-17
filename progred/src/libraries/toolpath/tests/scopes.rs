@@ -22,7 +22,7 @@ fn nested_tools_are_scoped_recorded_and_replayable() {
     assert!(result.completed && !absent::is_absent(&result.result));
     let tools: Vec<_> = path.tool_segments().map(|(_, _, _, tool)| tool).collect();
     assert_eq!(tools, [Some(&ball), Some(&square), Some(&ball), None]);
-    assert_eq!(path.length().unwrap(), 4.0);
+    assert_eq!(path.length(), 4.0);
     let Entry::WithTool(_, children) = &path.entries[0] else {
         panic!("tool hierarchy missing")
     };

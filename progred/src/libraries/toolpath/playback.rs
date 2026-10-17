@@ -1,5 +1,6 @@
-use super::{cutter::Tool, fidget::coordinate, paths::*, stock::Stock, vocabulary::*};
+use super::{cutter::Tool, paths::*, stock::Stock, vocabulary::*};
 use crate::libraries::{f64, fidget};
+use cam::field::coordinate;
 use gid::Value;
 
 pub(super) trait Draw: Sink<Error = InvalidPath> {

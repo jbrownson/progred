@@ -1,6 +1,6 @@
 //! Streaming path geometry. Starting a path never implies a connecting move.
 
-use super::cutter::Tool;
+use crate::cutter::Tool;
 
 pub type Point3 = [f64; 3];
 
@@ -164,7 +164,7 @@ pub struct Recording {
 }
 
 impl Recording {
-    pub(crate) fn append_part(&mut self, part: Recording) {
+    pub fn append_part(&mut self, part: Recording) {
         let start = self.parts.last().map_or(0, |range| range.end);
         self.parts.push(start..start + part.segments().count());
         self.entries.extend(part.entries);

@@ -413,7 +413,7 @@ fn chamfer_groups_cover_each_edge_once_with_the_shared_square_tool_dimensions() 
             let path = program(&sources, &names, name);
             assert_eq!(path.commands().len(), count * 2);
             assert_eq!(path.segments().count(), count);
-            assert!((path.length().unwrap() - size * count as f64).abs() < 1e-12);
+            assert!((path.length() - size * count as f64).abs() < 1e-12);
             for (a, b, axis, active) in path.tool_segments() {
                 assert_eq!(active, Some(&tool));
                 let feed = (Vector3::from(b) - Vector3::from(a)).normalize();
@@ -531,7 +531,7 @@ fn crosswise_passes_clear_stock_at_both_ends_and_include_both_edge_ends() {
             assert_eq!(path.commands().len(), 2 * rows * edges);
             let segments: Vec<_> = path.tool_segments().collect();
             assert_eq!(segments.len(), rows * edges);
-            assert!((path.length().unwrap() - (rows * edges) as f64 * stroke_length).abs() < 1e-10);
+            assert!((path.length() - (rows * edges) as f64 * stroke_length).abs() < 1e-10);
             for edge in segments.chunks_exact(rows) {
                 let mid = |s: &(Point3, Point3, Axis, Option<&Tool>)| {
                     (Vector3::from(s.0) + Vector3::from(s.1)) / 2.0

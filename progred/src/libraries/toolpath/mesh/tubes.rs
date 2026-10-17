@@ -20,8 +20,7 @@ pub(super) struct Tubes {
 
 impl Tubes {
     pub(super) fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath> {
-        self.radius =
-            super::super::fidget::read_radius(radius).ok_or(InvalidPath::CoordinateRange)?;
+        self.radius = cam::field::read_radius(radius).ok_or(InvalidPath::CoordinateRange)?;
         self.color = color.map(|v| f32::from(v) / 255.0);
         Ok(())
     }
@@ -29,7 +28,7 @@ impl Tubes {
     pub(super) fn new(radius: f64, color: [u8; 3]) -> Option<Self> {
         Some(Self {
             geometry: Geometry::default(),
-            radius: super::super::fidget::read_radius(radius)?,
+            radius: cam::field::read_radius(radius)?,
             color: color.map(|v| f32::from(v) / 255.0),
             previous: None,
             circle: circle(),
