@@ -105,7 +105,6 @@ fn an_absent_value_reads_as_its_reason_then_its_fields_all_on_red() {
     assert!(washes(Value::record([(new_cell_id(), f64::value(3.0))])).is_empty());
 }
 
-mod completion;
 mod conject;
 mod custom_navigation;
 mod document_libraries;

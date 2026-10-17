@@ -753,3 +753,45 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             .dispatch_key(&mut world, &press(NamedKey::Enter))
     );
 }
+
+#[test]
+fn completion_activation_precedes_the_real_editor_it_covers() {
+    use crate::libraries::text;
+    use gid::{Cells, Document, Step};
+    // An empty record above a long line of text: typing over the record
+    // opens a picker whose card covers the line.
+    let root = Value::list([Value::record([]), text::value(&"long ".repeat(40))]);
+    let [hole, line] = [0, 1].map(|index| {
+        vec![Step::Element(
+            crate::test_support::positions(&root)[index].clone(),
+        )]
+    });
+    let mut driver = crate::driver::Driver::new(
+        crate::test_editor(Document {
+            root: Some(root),
+            cells: Cells::new(),
+        }),
+        kurbo::Size::new(600.0, 400.0),
+    );
+    driver.select(&hole);
+    driver.type_text("\"t");
+    assert_eq!(driver.picker_entries().unwrap()[0], "\"t\"");
+    let covered = driver.rect(&line);
+    let entry = Hovered::Tree(crate::hover::Hover::Entry(0));
+    let point = (covered.y0.ceil() as usize..covered.y1 as usize)
+        .flat_map(|y| {
+            (covered.x0.ceil() as usize..covered.x1 as usize)
+                .map(move |x| kurbo::Point::new(x as f64, y as f64))
+        })
+        .find(|point| driver.hover_at(*point).as_ref() == Some(&entry))
+        .expect("the card's first entry covers the line");
+    let beneath = driver.value(&line);
+    driver.click_at(point);
+    assert_eq!(
+        driver.value(&hole),
+        text::value("t"),
+        "the entry took the click"
+    );
+    assert_eq!(driver.selection(), hole);
+    assert_eq!(driver.value(&line), beneath);
+}

@@ -474,6 +474,16 @@ fn completion_constructor_aliases_rank_ahead_of_literal_text() {
     }
 }
 
+fn document(root: Option<Value>) -> crate::driver::Driver {
+    crate::driver::Driver::new(
+        crate::test_editor(Document {
+            root,
+            cells: Cells::new(),
+        }),
+        kurbo::Size::new(600.0, 400.0),
+    )
+}
+
 /// A hole where the middle of three empty lists was, with `delimiter` typed
 /// into its picker.
 fn made(delimiter: &str) -> (crate::driver::Driver, Vec<Step>) {
@@ -481,13 +491,7 @@ fn made(delimiter: &str) -> (crate::driver::Driver, Vec<Step>) {
     let place = vec![Step::Element(
         crate::test_support::positions(&root)[1].clone(),
     )];
-    let mut driver = crate::driver::Driver::new(
-        crate::test_editor(Document {
-            root: Some(root),
-            cells: Cells::new(),
-        }),
-        kurbo::Size::new(600.0, 400.0),
-    );
+    let mut driver = document(Some(root));
     driver.select(&place);
     driver.press(NamedKey::Backspace);
     driver.type_text(delimiter);
@@ -540,4 +544,98 @@ fn a_new_cell_list_or_record_opens_for_what_goes_inside_it() {
     typed(&mut driver, "width");
     typed(&mut driver, "5");
     assert_eq!(driver.value(&place).as_record().unwrap().len(), 1);
+}
+
+#[test]
+fn constructor_keys_make_their_offer_from_an_empty_query() {
+    use puri::handler::ImeEvent;
+    use ui_events::keyboard::{Key, Modifiers};
+    for labels in [false, true] {
+        for key in ["[", "(", "{"] {
+            // An empty document's root, or a new field's label on a record.
+            let mut driver = document(labels.then(|| Value::record([])));
+            driver.select(&[]);
+            if labels {
+                driver.press(NamedKey::Enter);
+            }
+            driver.type_text(key);
+            if labels && key != "(" {
+                assert_eq!(driver.value(&[]), Value::record([]));
+                assert_eq!(driver.line(), Some(key));
+            } else {
+                let value = driver.value(&[]);
+                if labels {
+                    assert_eq!(value.as_record().unwrap().len(), 0);
+                    assert!(matches!(driver.selection().as_slice(), [Step::Key(_)]));
+                } else {
+                    match key {
+                        "[" => assert_eq!(value, Value::list([])),
+                        "{" => assert_eq!(value, Value::record([])),
+                        _ => assert!(value.as_cell().is_some()),
+                    };
+                }
+            }
+        }
+    }
+    for modifiers in [Modifiers::CONTROL, Modifiers::META] {
+        let mut driver = document(None);
+        driver.select(&[]);
+        assert!(!driver.keystroke(Key::Character("[".into()), modifiers));
+        assert!(driver.editor().model.doc.root.is_none());
+    }
+    for query in ["\"", "search"] {
+        let mut driver = document(None);
+        driver.select(&[]);
+        driver.type_text(query);
+        driver.type_text("[");
+        assert!(driver.editor().model.doc.root.is_none());
+        assert_eq!(driver.line(), Some(format!("{query}[").as_str()));
+    }
+    // While an input method composes, the key is its own, and what it
+    // commits is typed.
+    let mut driver = document(None);
+    driver.select(&[]);
+    assert!(driver.ime(ImeEvent::Preedit("[".into(), Some((1, 1)))));
+    assert!(!driver.keystroke(Key::Character("[".into()), Modifiers::empty()));
+    assert!(driver.ime(ImeEvent::Commit("[".into())));
+    assert!(driver.editor().model.doc.root.is_none());
+    assert_eq!(driver.line(), Some("["));
+}
+
+#[test]
+fn delimiters_make_constructors_in_raw_s_holes_and_are_text_in_grap_s() {
+    use crate::selection::Stage;
+    let function = Value::record([(
+        ::grap::vocabulary::PARAMS,
+        Value::list([new_cell_id().into()]),
+    )]);
+    let body = vec![Step::Key(::grap::vocabulary::BODY)];
+    for key in ["(", "[", "{"] {
+        // Raw draws a plain document's root: the key makes what it does and
+        // opens it, its picker showing.
+        let mut driver = document(None);
+        driver.select(&[]);
+        driver.type_text(key);
+        assert!(
+            driver.editor().model.doc.root.is_some(),
+            "{key} makes a value"
+        );
+        assert!(
+            matches!(driver.stage(), Some(stage) if stage != Stage::Edge),
+            "{key} opens what it made: {:?}",
+            driver.selection()
+        );
+        assert!(driver.picker_entries().is_some(), "{key} shows its picker");
+        // Grap draws a function's body, and its hole takes the key as text.
+        let mut driver = document(Some(function.clone()));
+        driver.select(&body);
+        driver.type_text(key);
+        assert_eq!(
+            driver.editor().model.doc.root,
+            Some(function.clone()),
+            "{key} makes nothing"
+        );
+        assert_eq!(driver.selection(), body);
+        assert_eq!(driver.line(), Some(key));
+    }
 }

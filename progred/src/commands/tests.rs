@@ -183,3 +183,25 @@ fn enter_beside_text_in_a_list_adds_an_element_but_nothing_within_the_text() {
     assert!(!enter(&mut driver, crate::modifiers::command()));
     assert_eq!(driver.selection(), first);
 }
+
+#[test]
+fn pasting_a_copied_value_over_a_number_or_text_replaces_it() {
+    let mut driver = driver(Value::list([
+        f64::value(1.0),
+        f64::value(2.0),
+        text::value("hello"),
+    ]));
+    let chord = |driver: &mut Driver, key: &str| {
+        driver.keystroke(Key::Character(key.into()), crate::modifiers::command())
+    };
+    driver.select(&driver.element(&[], 0, &[]));
+    assert!(chord(&mut driver, "c"));
+    // The copy's text is its JSON, not something to type into the
+    // selected value's editor.
+    for index in [1, 2] {
+        let element = driver.element(&[], index, &[]);
+        driver.select(&element);
+        assert!(chord(&mut driver, "v"));
+        assert_eq!(driver.value(&element), f64::value(1.0));
+    }
+}

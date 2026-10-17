@@ -209,7 +209,7 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
 
 #[test]
 fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
-    use ui_events::keyboard::NamedKey;
+    use crate::driver::Driver;
     for with_extras in [false, true] {
         let (mut doc, a, b, extra) = document();
         if !with_extras {
@@ -218,40 +218,42 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             };
             fields.remove(&extra);
         }
-        let mut runner = crate::EditorRunner::new(crate::test_editor(doc));
-        let root = runner.editor.model.workspace.document_root().clone();
-        let a_heading = entry(&runner.editor, &[], a);
-        let b_heading = entry(&runner.editor, &[], b);
+        let editor = crate::test_editor(doc.clone());
+        let a_heading = entry(&editor, &[], a);
+        let b_heading = entry(&editor, &[], b);
         let a_body = body(&a_heading, a);
         let b_body = body(&b_heading, b);
-        for path in [&a_body, &b_body] {
-            runner
-                .editor
-                .session()
-                .set_collapsed(&root, path, false, Some(false));
-        }
-        let positions = runner
-            .editor
+        let items = editor
             .sources()
             .resolve_path(&[Step::Key(a)])
             .unwrap()
             .as_list()
             .unwrap()
             .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        let items = positions
-            .into_iter()
             .map(|position| {
                 a_body
                     .iter()
                     .cloned()
-                    .chain([Step::Element(position)])
+                    .chain([Step::Element(position.clone())])
                     .collect::<Path>()
             })
             .collect::<Vec<_>>();
-        let viewport = kurbo::Size::new(700.0, 600.0);
-        runner.refresh_frame(1.0, viewport);
+        // The document with B's body folded or not, and A's open.
+        let driver = |b_folded| {
+            let mut editor = crate::test_editor(doc.clone());
+            let root = editor.model.workspace.document_root().clone();
+            for (path, folded) in [(&a_body, false), (&b_body, b_folded)] {
+                editor
+                    .session()
+                    .set_collapsed(&root, path, false, Some(folded));
+            }
+            Driver::new(editor, kurbo::Size::new(700.0, 600.0))
+        };
+        let arrow = |driver: &mut Driver, key, path: &Path| {
+            assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+            assert_eq!(driver.selection(), *path);
+        };
+        let mut open = driver(false);
         // Right retains the whole-list stop. Down skips that enclosing stop;
         // Up from the first heading returns to the outermost whole value.
         for (direction, path) in [
@@ -261,11 +263,9 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             (NamedKey::ArrowDown, b_heading.clone()),
             (NamedKey::ArrowUp, vec![]),
         ] {
-            assert!(runner.keyboard_event(&key(Key::Named(direction)), 1.0, viewport));
-            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+            arrow(&mut open, direction, &path);
         }
-        runner.editor.model.selection = None;
-        runner.refresh_frame(1.0, viewport);
+        open.press(NamedKey::Escape);
         let mut expected = vec![
             vec![],
             b_heading.clone(),
@@ -273,33 +273,25 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             a_heading.clone(),
             a_body.clone(),
         ];
-        expected.extend(items.clone());
+        expected.extend(items);
         if with_extras {
             expected.push(vec![Step::Key(extra)]);
         }
         for path in &expected {
-            assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowDown)), 1.0, viewport));
-            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+            arrow(&mut open, NamedKey::ArrowDown, path);
         }
         // Including the extras boundary: backward travel re-enters the last
         // child, rather than skipping the outline's contents to its whole stop.
         for path in expected.iter().rev().skip(1) {
-            assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowUp)), 1.0, viewport));
-            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+            arrow(&mut open, NamedKey::ArrowUp, path);
         }
         // Collapsed bodies contribute no stops; moving onto a heading doesn't
         // run its pointer activation handler or unfold it.
-        runner.editor.model.selection = None;
-        runner
-            .editor
-            .session()
-            .set_collapsed(&root, &b_body, false, Some(true));
-        runner.refresh_frame(1.0, viewport);
+        let mut folded = driver(true);
         for path in [vec![], b_heading, a_heading] {
-            assert!(runner.keyboard_event(&key(Key::Named(NamedKey::ArrowDown)), 1.0, viewport));
-            assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
+            arrow(&mut folded, NamedKey::ArrowDown, &path);
         }
-        assert!(hidden(&runner.editor, &b_body));
+        assert!(hidden(folded.editor(), &b_body));
     }
 }
 

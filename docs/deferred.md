@@ -256,7 +256,7 @@ found almost no dead code: 60% of progred's 94k lines are tests, much of them
 inside source files, and 93% of its production code is one dependency cycle.
 Its first recommendation is done: inline test modules now live in their own
 files. projection/tests is still under projection/. It held 20.8k lines that
-mostly test the frame and the whole editor, and is down to 13.7k as suites move
+mostly test the frame and the whole editor, and is down to 6.3k as suites move
 to their own modules (item 4). The private items it reaches point at misplaced
 code, not at internals the tests should see. A follow-up
 [crate split analysis](history/crate-split-2026-10-16.md) maps the coupling
@@ -372,17 +372,17 @@ first:
       2026. The harness is the projection runtime's own test support, so it
       times both phases without exposing them. The layout FFI tests moved to
       the layout library and the Fidget render check to the Fidget library.
-   5. Give the driver the verbs that end-to-end tests now reach around it
-      for, and move the 67 of them onto it:
-      - select a path;
-      - read the selection's stage and caret;
-      - read the picker's entries;
-      - IME input;
-      - focus, palette, library-swap and resize changes;
-      - read the clipboard;
-      - step background work.
-
-      Many of those tests now re-implement the shell's key routing.
+   5. ~~Give the driver the verbs that end-to-end tests now reach around it
+      for, and move the 67 of them onto it.~~ Done on 17 October 2026. The
+      driver selects a path through its landmark, reads the selection's stage
+      and the edited line's caret, reads and chooses the picker's entries, and
+      takes input-method text and the window's focus, appearance and
+      libraries. Each flow went to the code it exercises, not to a suite of
+      its own. Reading the clipboard, resizing and stepping background work
+      wait for a test that needs them. The runner's own tests, the Fidget
+      interaction's timer tests and one navigation test still drive the
+      runner: that one checks the next key's handlers are installed without
+      a paint, which the driver always does.
    6. Rewrite 30 tests that drive the whole editor but check one system.
    7. ~~Give the captures and the frame canaries modules of their own, with
       the SVG writer in test support.~~ Done on 17 October 2026. The SVG
@@ -436,7 +436,9 @@ first:
    Do this only after item 3, a `cargo build --timings` baseline, and a `Host`
    trait that makes display and the libraries generic over the editor. The
    saving is in lines, not measured time, and `make test` could get slower for
-   edits to core.
+   edits to core. The tests that drive the whole editor, frames and driver
+   flows alike, sit beside the display and library code they exercise; the
+   split would move them to the top crate's tests.
 
 ## Reporting completion failures
 

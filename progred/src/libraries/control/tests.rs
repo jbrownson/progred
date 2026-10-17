@@ -1111,3 +1111,62 @@ fn library_describes_control_forms_and_absence_reasons() {
         assert_eq!(absent::reason(&absent::with_reason(cell)), Some(cell));
     }
 }
+
+#[test]
+fn quote_and_unquote_are_offered_under_their_marks() {
+    use crate::driver::Driver;
+    use crate::libraries::grap::vocabulary::GRAP;
+    use crate::selection::Stage;
+    use ::grap::vocabulary::{BODY, EXPRESSION};
+    use gid::{Cells, Document, Step};
+    use ui_events::keyboard::NamedKey;
+
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::record([(GRAP, new_cell_id().into())])),
+            cells: Cells::new(),
+        }),
+        kurbo::Size::new(900.0, 600.0),
+    );
+    let program = vec![Step::Key(GRAP), Step::Follow(gid::Resolution::Document)];
+    driver.select(&program);
+    driver.type_text("λ");
+    driver.choose("new lambda");
+    let offered = |driver: &mut Driver| {
+        driver
+            .picker_entries()
+            .expect("the pending shows its picker")
+    };
+
+    driver.type_text("\"hi");
+    assert!(
+        !offered(&mut driver).contains(&"quote".to_owned()),
+        "text after the mark is a string"
+    );
+    driver.press(NamedKey::Backspace);
+    driver.press(NamedKey::Backspace);
+    assert!(
+        !offered(&mut driver).contains(&"unquote".to_owned()),
+        "outside a quote there is nothing to unquote"
+    );
+    assert_eq!(offered(&mut driver)[0], "quote");
+    driver.press(NamedKey::Enter);
+    let body = [&program[..], &[Step::Key(BODY)]].concat();
+    assert_eq!(
+        driver.value(&body),
+        ::grap::call(vocabulary::QUOTE.into(), [])
+    );
+    let expression = [&body[..], &[Step::Key(EXPRESSION)]].concat();
+    assert_eq!(driver.selection(), expression);
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+
+    driver.type_text("`");
+    assert_eq!(offered(&mut driver)[0], "unquote");
+    driver.press(NamedKey::Enter);
+    assert_eq!(driver.value(&expression), Value::record([]));
+    let hole = [&expression[..], &[Step::Key(vocabulary::UNQUOTE)]].concat();
+    assert_eq!(driver.selection(), hole);
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    driver.type_text("\"");
+    assert_eq!(offered(&mut driver)[0], "quote", "the hole is code again");
+}

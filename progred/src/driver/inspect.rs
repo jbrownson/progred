@@ -1,6 +1,7 @@
 //! What tests read back from the driver's frames: what is drawn where and
 //! what it holds, the conveniences that click, type and select by document
-//! path, and the window's focus and appearance and the page's libraries.
+//! path, input-method text, and the window's focus and appearance and the
+//! page's libraries.
 
 use super::{Driver, keystroke_for};
 use crate::display::test_support::Landmarks;
@@ -94,6 +95,15 @@ impl<P> Driver<P> {
         changed
     }
 
+    /// The platform's input method composes or commits text; whether the
+    /// editor took it.
+    pub(crate) fn ime(&mut self, event: puri::handler::ImeEvent) -> bool {
+        self.runner.flush_pending_continuous();
+        let handled = self.runner.ime_event(&event, self.scale(), self.viewport);
+        self.present();
+        handled
+    }
+
     /// The page swaps the libraries the editor draws and reads with.
     pub(crate) fn stack(&mut self, stack: crate::stack::Stack<crate::Editor>) {
         self.runner
@@ -132,14 +142,42 @@ impl<P> Driver<P> {
 
     /// What the open picker offers, in order; `None` when none is open.
     pub(crate) fn picker_entries(&mut self) -> Option<Vec<String>> {
+        Some(
+            self.offers()?
+                .into_iter()
+                .map(|(display, _)| display)
+                .collect(),
+        )
+    }
+
+    /// What the open picker says beside its entry `display`.
+    pub(crate) fn picker_detail(&mut self, display: &str) -> Option<String> {
+        self.offers()?
+            .into_iter()
+            .find(|(shown, _)| shown == display)
+            .and_then(|(_, detail)| detail)
+    }
+
+    /// The open picker's entries and the details beside them.
+    fn offers(&mut self) -> Option<Vec<(String, Option<String>)>> {
         let frame = crate::projection::test_support::editing_frame(&mut self.runner.editor, false);
         frame.completion.map(|offers| {
             offers
                 .entries
                 .iter()
-                .map(|entry| entry.display.clone())
+                .map(|entry| (entry.display.clone(), entry.detail.clone()))
                 .collect()
         })
+    }
+
+    /// Click the open picker's entry `display`.
+    pub(crate) fn choose(&mut self, display: &str) {
+        let entries = self.picker_entries().expect("an open picker");
+        let index = entries
+            .iter()
+            .position(|entry| entry == display)
+            .unwrap_or_else(|| panic!("no {display:?} among {entries:?}"));
+        self.click_at(self.locate(Hovered::Tree(crate::hover::Hover::Entry(index))));
     }
 
     pub(crate) fn selection(&self) -> Vec<Step> {

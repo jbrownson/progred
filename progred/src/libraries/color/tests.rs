@@ -378,3 +378,89 @@ fn a_read_only_swatch_selects_its_color() {
         "no picker opens on a read-only color"
     );
 }
+
+#[test]
+fn new_color_completion_opens_without_editing_and_commits_at_the_missing_location() {
+    use crate::driver::Driver;
+    use crate::selection::Stage;
+    use kurbo::Point;
+    use puri::draw::{DrawCmd, Shape};
+    use ui_events::keyboard::{Key, NamedKey};
+    let function = new_cell_id();
+    let argument = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(function, ::grap::lambda([argument], argument.into()));
+    let root = ::grap::call(function.into(), []);
+    let mut driver = Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(root.clone()),
+            cells,
+        }),
+        kurbo::Size::new(900.0, 600.0),
+    );
+    // A Grap argument's hole offers the libraries' values, a new color among
+    // them.
+    let path = vec![Step::Key(argument)];
+    let open = |driver: &mut Driver| {
+        driver.select(&path);
+        driver.type_text("new color");
+        driver.choose("new color");
+    };
+    let document = driver.editor().model.doc.clone();
+    let unchanged = |driver: &Driver| {
+        std::rc::Rc::ptr_eq(&document, &driver.editor().model.doc)
+            && !driver.editor().model.history.can_undo()
+    };
+    open(&mut driver);
+    assert!(unchanged(&driver));
+    assert_eq!(driver.selection(), path);
+    assert!(
+        driver.picker_entries().is_none(),
+        "picker replaces completion"
+    );
+    driver.select(&[]);
+    assert!(unchanged(&driver), "leaving does not insert the seed");
+    open(&mut driver);
+    driver.press(NamedKey::Escape);
+    assert!(unchanged(&driver));
+    assert!(
+        driver.picker_entries().is_some(),
+        "Escape returns to the offers"
+    );
+
+    // Drag across the color plane the picker draws.
+    driver.select(&[]);
+    open(&mut driver);
+    let plane = crate::display::test_support::painted(&driver.painted().0)
+        .find_map(|command| match command {
+            DrawCmd::Fill {
+                shape: Shape::Rect(rect),
+                brush: peniko::Brush::Gradient(_),
+                transform,
+                ..
+            } if rect.width() == puri_widgets::color_picker::WIDTH
+                && rect.height() == puri_widgets::color_picker::PLANE_HEIGHT =>
+            {
+                Some(transform.transform_rect_bbox(*rect))
+            }
+            _ => None,
+        })
+        .expect("visible color plane");
+    driver.drag(
+        plane.center(),
+        &[Point::new(
+            plane.x0 + plane.width() * 0.75,
+            plane.center().y,
+        )],
+    );
+    assert!(read(&driver.value(&path)).is_some());
+    assert_eq!(driver.selection(), path);
+    assert_eq!(driver.stage(), Some(Stage::Edge));
+    assert!(driver.picker_entries().is_none());
+    assert!(
+        driver.keystroke(Key::Character("z".into()), crate::modifiers::command()),
+        "one undo for the whole drag"
+    );
+    assert_eq!(driver.editor().model.doc.root, Some(root));
+    assert!(!driver.editor().model.history.can_undo());
+}

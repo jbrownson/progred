@@ -1174,4 +1174,48 @@ fn grap_results_take_no_typing() {
     assert!(std::rc::Rc::ptr_eq(&driver.editor().model.doc, &before));
 }
 
+#[test]
+fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
+    use ::grap::vocabulary::PARAMS;
+    use ui_events::keyboard::{Key, NamedKey};
+    let function = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(function, Value::record([(PARAMS, Value::list([]))]));
+    let mut driver = crate::driver::Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::record([(vocabulary::GRAP, function.into())])),
+            cells,
+        }),
+        kurbo::Size::new(900.0, 600.0),
+    );
+    let params = [
+        Step::Key(vocabulary::GRAP),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(PARAMS),
+    ];
+    driver.select(&params);
+    assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::modifiers::command()));
+    driver.type_text("x");
+    let entries = driver
+        .picker_entries()
+        .expect("the empty parameter shows its picker");
+    assert_eq!(entries[0], "x");
+    assert_eq!(driver.picker_detail("x").as_deref(), Some("new parameter"));
+    driver.press(NamedKey::Enter);
+    let added = driver
+        .value(&params)
+        .as_list()
+        .and_then(|list| list.values().next().cloned())
+        .and_then(|value| value.as_cell())
+        .expect("the list holds the new parameter");
+    assert_eq!(
+        driver
+            .editor()
+            .sources()
+            .resolve(added)
+            .map(|definition| definition.value.clone()),
+        Some(crate::libraries::name::record("x", []))
+    );
+}
+
 mod declarations;

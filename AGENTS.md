@@ -135,7 +135,9 @@ upstream when it can be.
 - Prefer tests over draw-list data, which need no window; use GPU readback only
   when a visual golden is genuinely needed.
 - Drive interactions headlessly with `crate::driver::Driver`: it clicks, types,
-  and reads by document path through the shell's own event translation.
+  and reads by document path through the shell's own event translation. Put a
+  flow's test with the code that implements it, and send its keys and clicks
+  through the driver: a frame's handler alone skips the shell's key routing.
 - Check visual changes without launching the app, through the SVG captures.
 - Keep a module's tests in their own file, `foo/tests.rs` declared by
   `#[cfg(test)] mod tests;` in `foo.rs`, not inline, so reading code doesn't

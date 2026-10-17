@@ -32,11 +32,9 @@ visual testing.
   [`projection/tests`](../progred/src/projection/tests/mod.rs) keeps the
   engine's own tests, such as the phase-ordering ones: placement doesn't run
   hover, hover doesn't paint or dispatch, paint sees the final target, and
-  discarding paint leaves a working handler. It also still holds interaction
-  regressions and navigation tests that drive the whole editor, until the
-  driver can do what they need. Projection-shape tests record layout calls and
-  projection recursion through test-only recorders that production doesn't
-  use.
+  discarding paint leaves a working handler. Projection-shape tests record
+  layout calls and projection recursion through test-only recorders that
+  production doesn't use.
   [`display/test_support.rs`](../progred/src/display/test_support.rs) records
   projection calls and supplies small helpers such as `painted`, `Landmarks`,
   and `mouse`. Some load the small documents in
@@ -52,9 +50,15 @@ visual testing.
   window events through the shell's own translation, keys as the platform
   delivers them, and the queries in
   [`driver/inspect.rs`](../progred/src/driver/inspect.rs) read back what is
-  drawn where by document path. The tutorial tests follow the tutorial page's
-  steps with it, and the menu interaction tests use it too. Its input also
-  serves the [session an agent drives](#a-session-an-agent-drives).
+  drawn where by document path. It also selects a path as arriving there with
+  the keyboard would, reads the selection, its stage and the edited line,
+  chooses among the picker's entries, and takes input-method text and the
+  window's focus, appearance and libraries. A flow's test sits with the code
+  that implements it: the editing keys in `commands`, arrows and Tab in
+  `navigate`, a library's flows beside the library, and the tutorial page's in
+  `web_embed`. The tutorial tests follow the tutorial page's steps with it, and
+  the menu interaction tests use it too. Its input also serves the
+  [session an agent drives](#a-session-an-agent-drives).
 - **Browser.** The website's server and scripts have their own tests, and
   headless Chrome diagnostics measure the browser build; see the
   [website](../website/README.md) and [browser host](../web/README.md) notes.

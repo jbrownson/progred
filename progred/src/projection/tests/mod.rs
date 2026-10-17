@@ -2,13 +2,12 @@ use super::test_support::*;
 use super::*;
 use crate::annotations::Annotations;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
-use crate::display::widget::offers::Entry;
 use crate::libraries::layout as layout_data;
 use crate::libraries::{f64, fidget, name, text};
 use crate::library::Libraries;
 use crate::sample::{sample_document, sample_vocabulary};
 use crate::selection::payload as selection_payload;
-use crate::selection::{break_edit_run, delete_edge, pending_edge, pending_value};
+use crate::selection::{break_edit_run, delete_edge, pending_value};
 use crate::test_support::{
     arrow, core_libraries, doc_of, make_selection, positions, root_completions, src,
 };
@@ -19,8 +18,8 @@ use measured::Extent;
 use peniko::Brush;
 use puri::geometry::Placement;
 use ui_events::ScrollDelta;
+use ui_events::keyboard::KeyState;
 use ui_events::keyboard::KeyboardEvent;
-use ui_events::keyboard::{KeyState, Modifiers};
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
     PointerType,

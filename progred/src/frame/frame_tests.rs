@@ -1673,3 +1673,81 @@ fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
         assert_eq!(runner.frame.dispatch.pointer_root, Some(root.clone()));
     }
 }
+
+#[test]
+fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
+    use crate::libraries::{absent, grap::vocabulary::GRAP, presentation};
+    use puri::draw::{DrawCmd, Shape};
+    let program = gid::new_cell_id();
+    let doc = Document {
+        root: Some(Value::record([
+            (GRAP, program.into()),
+            (
+                workspace::vocabulary::PANES,
+                Value::record([(
+                    workspace::vocabulary::LEFT,
+                    Value::list([Value::record([(
+                        presentation::vocabulary::RENDER,
+                        program.into(),
+                    )])]),
+                )]),
+            ),
+        ])),
+        cells: Cells::new(),
+    };
+    let mut driver = crate::driver::Driver::new(crate::test_editor(doc), Size::new(900.0, 600.0));
+    let drawn = |driver: &crate::driver::Driver, key| {
+        driver
+            .drawn_under(&[])
+            .into_iter()
+            .find(|(path, _)| path.last() == Some(&Step::Key(key)))
+            .expect("drawn")
+    };
+    // The document's program field, and the pane's result naming it missing.
+    let (field, missing) = (
+        drawn(&driver, GRAP),
+        drawn(&driver, absent::vocabulary::CELL),
+    );
+    assert!(
+        missing
+            .0
+            .starts_with(&[Step::Key(workspace::vocabulary::PANES)])
+    );
+    let marked = |driver: &crate::driver::Driver, alpha, other: Rect| {
+        let brush = Brush::from(
+            crate::styles::Theme::Light
+                .palette()
+                .accent
+                .with_alpha(alpha),
+        );
+        let outline = crate::display::widget::style::highlight_outline(1.0, other);
+        crate::display::test_support::painted(&driver.painted().0).any(|command| {
+            matches!(command, DrawCmd::Fill {
+                shape: Shape::RoundedRect(rect),
+                brush: fill,
+                ..
+            } if *fill == brush && *rect == outline)
+        })
+    };
+    for (selected, other) in [(&field, &missing), (&missing, &field)] {
+        driver.select(&selected.0);
+        assert!(
+            marked(&driver, 0.10, other.1),
+            "selecting {:?} marks {:?}",
+            selected.0,
+            other.0,
+        );
+    }
+    driver.press(ui_events::keyboard::NamedKey::Escape);
+    assert!(driver.editor().model.selection.is_none());
+    for (hovered, other) in [(&field, &missing), (&missing, &field)] {
+        // On the reference's opening parenthesis, not the missing value inside.
+        driver.move_to(Point::new(hovered.1.x0 + 2.0, hovered.1.center().y));
+        assert!(
+            marked(&driver, 0.05, other.1),
+            "hovering {:?} marks {:?}",
+            hovered.0,
+            other.0,
+        );
+    }
+}
