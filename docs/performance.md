@@ -83,6 +83,21 @@ apart ran the projection canaries 25–70% apart, a gap that interleaved runs of
 their two commits on one machine didn't show. So on a VM, the machine also names
 the processor's family, model and stepping.
 
+When interleaved medians differ by less than that noise, count instructions,
+which a VM doesn't disturb. Copy each build's test executable out of
+`target/sandbox/build/perf/deps`, then run a canary under Valgrind's callgrind
+from `progred/`, with fewer frames and the arguments `tools/perf.py` passes:
+
+```sh
+FRAME_PROFILE_ITERATIONS=20 valgrind --tool=callgrind --callgrind-out-file=after.out \
+  ./progred-after --ignored --exact --nocapture --test-threads=1 \
+  perf::frames::cam_source_scroll_profile_loop
+```
+
+`callgrind_annotate` on each output says where the instructions went. In
+October 2026, editor canaries whose medians read 3–14% slower ran at most 1%
+more instructions, nearly all of it one allocation per selectable node.
+
 The tool runs the test executables directly, outside the build sandbox, so on a
 Mac the voxel orbits use Metal, as the app does. A machine without a GPU may
 offer a software adapter such as Mesa's llvmpipe; the voxel orbits then measure
