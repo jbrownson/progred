@@ -12,6 +12,8 @@ pub mod vocabulary {
     pub const DOCUMENT: CellId = CellId::from_u128(0xef62fa62f008c1eca70389571933aba0);
     pub const LIBRARY: CellId = CellId::from_u128(0x0f1b1da59ceff3c9cfb3aaefe39466ed);
     pub const INDEXABLE: CellId = CellId::from_u128(0xbd69ea5a7f839fe98dab761c01c22c13);
+    /// The absence reason for data that doesn't read as a path.
+    pub const INVALID_PATH: CellId = CellId::from_u128(0xda56222f270f28fa7f18a02f0c277f47);
 }
 
 pub fn value(path: &[Step]) -> Value {

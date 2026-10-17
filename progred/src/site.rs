@@ -2,7 +2,7 @@
 //! Reads observe staged writes; a declined handler commits neither.
 
 use crate::Editor;
-use crate::libraries::{layout, path as path_data, selection as selection_capability, site};
+use crate::libraries::layout;
 use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::workspace::Root;
@@ -10,6 +10,27 @@ use gid::{Path, Value};
 use grap::absent;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+/// The functions an event handler calls at its projection site, which this
+/// module implements; the site and selection libraries name them.
+pub mod vocabulary {
+    use gid::CellId;
+
+    /// Per-site state: GET reads it, SET stores VALUE, evaluated, and PATH
+    /// answers the site's path as data.
+    pub const GET: CellId = CellId::from_u128(0xbba7ddab82fa7d703c90b250785e3273);
+    pub const SET: CellId = CellId::from_u128(0xd9329d07bcdc791919f5252846fa152c);
+    pub const VALUE: CellId = CellId::from_u128(0x544d3b52ea73cd263c435ecddfe5e8bf);
+    pub const PATH: CellId = CellId::from_u128(0x803e2b0d0c621eb9688569d0879c3b23);
+    pub const NO_STATE: CellId = CellId::from_u128(0xee0b3857bf9f615333e0b0f5feebd92e);
+
+    /// The selection: SELECTION_GET reads its payload at the site, and
+    /// SELECTION_SET selects SELECTION_PATH with VALUE.
+    pub const SELECTION_GET: CellId = CellId::from_u128(0x67de640ac4e9859c87668564bc008ea0);
+    pub const SELECTION_SET: CellId = CellId::from_u128(0xa12f30681dc2a8465da7673a7e2da9a8);
+    pub const SELECTION_PATH: CellId = CellId::from_u128(0xa1005961125b04b7285b8d5aa54a0566);
+    pub const NO_SELECTION: CellId = CellId::from_u128(0x3f6d3e25a51b978f0b607d6a8a4b8123);
+}
 
 #[derive(Debug, PartialEq)]
 pub struct PendingChanges {
@@ -82,11 +103,11 @@ fn handler(
 }
 
 const EVENT_FUNCTIONS: [gid::CellId; 5] = [
-    site::vocabulary::GET,
-    site::vocabulary::SET,
-    site::vocabulary::PATH,
-    selection_capability::vocabulary::GET,
-    selection_capability::vocabulary::SET,
+    vocabulary::GET,
+    vocabulary::SET,
+    vocabulary::PATH,
+    vocabulary::SELECTION_GET,
+    vocabulary::SELECTION_SET,
 ];
 
 /// Apply one event handler with its get/set functions bound to this
@@ -232,39 +253,39 @@ fn event_foreign(
     path: &[gid::Step],
     staged: &RefCell<PendingChanges>,
 ) -> Result<Value, grap::Halt> {
-    if function == site::vocabulary::PATH {
+    if function == vocabulary::PATH {
         return Ok(grap::path::value(path));
     }
-    if function == site::vocabulary::GET {
+    if function == vocabulary::GET {
         return Ok(staged
             .borrow()
             .annotation
             .clone()
-            .unwrap_or_else(|| absent::value(site::vocabulary::NO_STATE)));
+            .unwrap_or_else(|| absent::value(vocabulary::NO_STATE)));
     }
-    if function == selection_capability::vocabulary::GET {
+    if function == vocabulary::SELECTION_GET {
         return Ok(staged
             .borrow()
             .selection
             .as_ref()
             .filter(|(selected_path, _)| selected_path == path)
             .map(|(_, payload)| payload.clone())
-            .unwrap_or_else(|| absent::value(selection_capability::vocabulary::NO_SELECTION)));
+            .unwrap_or_else(|| absent::value(vocabulary::NO_SELECTION)));
     }
-    if function == selection_capability::vocabulary::SET {
-        let Some(expression) = context.field(call, selection_capability::vocabulary::PATH) else {
-            return Ok(context.missing_argument(selection_capability::vocabulary::PATH));
+    if function == vocabulary::SELECTION_SET {
+        let Some(expression) = context.field(call, vocabulary::SELECTION_PATH) else {
+            return Ok(context.missing_argument(vocabulary::SELECTION_PATH));
         };
         let encoded = context.eval_to_value(expression, environment)?;
         let Some(path) = grap::path::read(&encoded) else {
             return Ok(absent::with_detail(
-                path_data::vocabulary::INVALID_PATH,
-                site::vocabulary::VALUE,
+                grap::path::vocabulary::INVALID_PATH,
+                vocabulary::VALUE,
                 encoded,
             ));
         };
-        let Some(expression) = context.field(call, site::vocabulary::VALUE) else {
-            return Ok(context.missing_argument(site::vocabulary::VALUE));
+        let Some(expression) = context.field(call, vocabulary::VALUE) else {
+            return Ok(context.missing_argument(vocabulary::VALUE));
         };
         let value = context.eval_to_value(expression, environment)?;
         let mut staged = staged.borrow_mut();
@@ -280,9 +301,9 @@ fn event_foreign(
         }
         return Ok(Value::record([]));
     }
-    if function == site::vocabulary::SET {
-        let Some(expression) = context.field(call, site::vocabulary::VALUE) else {
-            return Ok(context.missing_argument(site::vocabulary::VALUE));
+    if function == vocabulary::SET {
+        let Some(expression) = context.field(call, vocabulary::VALUE) else {
+            return Ok(context.missing_argument(vocabulary::VALUE));
         };
         let value = context.eval_to_value(expression, environment)?;
         let value = (!absent::is_absent(&value)).then_some(value.clone());

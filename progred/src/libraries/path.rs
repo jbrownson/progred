@@ -11,9 +11,6 @@ pub const ID: CellId = CellId::from_u128(0x7f18fc9a3362e8c7e4cd7e21501a71f6);
 
 pub mod vocabulary {
     pub use ::grap::path::vocabulary::*;
-    use gid::CellId;
-
-    pub const INVALID_PATH: CellId = CellId::from_u128(0xda56222f270f28fa7f18a02f0c277f47);
 }
 
 pub fn library() -> Library<crate::Editor, crate::frame::Hovered> {
