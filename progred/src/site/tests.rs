@@ -42,11 +42,8 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
             grap::evaluate_value_scoped(&grap::call(get.into(), []), &stack.libraries, &scope, 100)
                 .result
         };
-        assert_eq!(read(), absent::with_reason(reason));
-        for payload in [
-            Value::from(vec![42]),
-            absent::with_reason(gid::new_cell_id()),
-        ] {
+        assert_eq!(read(), absent::value(reason));
+        for payload in [Value::from(vec![42]), absent::value(gid::new_cell_id())] {
             let expression = grap::call(
                 set.into(),
                 [
@@ -64,7 +61,7 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
             assert_eq!(
                 read(),
                 if absent::is_absent(&payload) {
-                    absent::with_reason(reason)
+                    absent::value(reason)
                 } else {
                     payload
                 }
@@ -107,7 +104,7 @@ fn capabilities_read_replace_and_clear_their_own_staged_value() {
                         (
                             site::vocabulary::VALUE,
                             if clear {
-                                absent::with_reason(gid::new_cell_id())
+                                absent::value(gid::new_cell_id())
                             } else {
                                 grap::call(get.into(), [])
                             },
@@ -344,7 +341,7 @@ fn clearing_another_location_does_not_clear_the_selection() {
     let handler = sequence([
         set_selection(
             grap::call(site::vocabulary::PATH.into(), []),
-            absent::with_reason(selection_capability::vocabulary::NO_SELECTION),
+            absent::value(selection_capability::vocabulary::NO_SELECTION),
         ),
         Value::record([]),
     ]);

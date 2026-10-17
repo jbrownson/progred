@@ -2,13 +2,12 @@
 //! Reads observe staged writes; a declined handler commits neither.
 
 use crate::Editor;
-use crate::libraries::{
-    absent, layout, path as path_data, selection as selection_capability, site,
-};
+use crate::libraries::{layout, path as path_data, selection as selection_capability, site};
 use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::workspace::Root;
 use gid::{Path, Value};
+use grap::absent;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -234,14 +233,14 @@ fn event_foreign(
     staged: &RefCell<PendingChanges>,
 ) -> Result<Value, grap::Halt> {
     if function == site::vocabulary::PATH {
-        return Ok(path_data::value(path));
+        return Ok(grap::path::value(path));
     }
     if function == site::vocabulary::GET {
         return Ok(staged
             .borrow()
             .annotation
             .clone()
-            .unwrap_or_else(|| absent::with_reason(site::vocabulary::NO_STATE)));
+            .unwrap_or_else(|| absent::value(site::vocabulary::NO_STATE)));
     }
     if function == selection_capability::vocabulary::GET {
         return Ok(staged
@@ -250,17 +249,15 @@ fn event_foreign(
             .as_ref()
             .filter(|(selected_path, _)| selected_path == path)
             .map(|(_, payload)| payload.clone())
-            .unwrap_or_else(|| {
-                absent::with_reason(selection_capability::vocabulary::NO_SELECTION)
-            }));
+            .unwrap_or_else(|| absent::value(selection_capability::vocabulary::NO_SELECTION)));
     }
     if function == selection_capability::vocabulary::SET {
         let Some(expression) = context.field(call, selection_capability::vocabulary::PATH) else {
             return Ok(context.missing_argument(selection_capability::vocabulary::PATH));
         };
         let encoded = context.eval_to_value(expression, environment)?;
-        let Some(path) = path_data::read(&encoded) else {
-            return Ok(grap::absent::with_detail(
+        let Some(path) = grap::path::read(&encoded) else {
+            return Ok(absent::with_detail(
                 path_data::vocabulary::INVALID_PATH,
                 site::vocabulary::VALUE,
                 encoded,

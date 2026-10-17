@@ -37,7 +37,7 @@ fn declining_after_drawing_discards_the_whole_recording() {
                 point(draw::MOVE_TO, 100.0, 100.0),
                 point(draw::LINE_TO, 110.0, 110.0),
                 fill.clone(),
-                absent::decline(),
+                ::grap::absent::decline(),
             ]),
         ),
     );

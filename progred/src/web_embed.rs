@@ -1,7 +1,8 @@
 //! Browser-host observation and opt-in fixed-slot tutorial presentation.
 
 use crate::location::{Location, Start};
-use crate::{Editor, libraries::path, selection::Stage, workspace};
+use crate::{Editor, selection::Stage, workspace};
+use ::grap::path;
 use gid::{Document, Path, Resolution, Step, Value};
 use std::rc::Rc;
 

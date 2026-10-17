@@ -4,7 +4,7 @@
 use super::Cx;
 use crate::frame::Hovered;
 use crate::hover::{Hover, SourceCalls, SourceTrace};
-use crate::libraries::{absent, layout as layout_data};
+use crate::libraries::layout as layout_data;
 use crate::placed::{HoverPass, leaf};
 use crate::sources::Sources;
 use gid::{CellId, Step, Value};
@@ -251,7 +251,7 @@ fn record_program(
                 ) else {
                     return Ok(::grap::absent::with_detail(
                         layout_data::vocabulary::INVALID_DRAWING,
-                        absent::vocabulary::VALUE,
+                        ::grap::absent::VALUE,
                         context.value(call).clone(),
                     ));
                 };
@@ -287,7 +287,7 @@ fn record_program(
                 else {
                     return Ok(::grap::absent::with_detail(
                         layout_data::vocabulary::INVALID_DRAWING,
-                        absent::vocabulary::VALUE,
+                        ::grap::absent::VALUE,
                         context.value(call).clone(),
                     ));
                 };

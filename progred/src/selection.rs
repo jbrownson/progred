@@ -771,7 +771,7 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 /// are encoded when requested and decoded when a capability supplies
 /// a replacement. They are never mirrored in the stored payload.
 pub mod payload {
-    use crate::libraries::f64 as f64_convention;
+    use ::grap::f64 as f64_convention;
     use ::grap::text;
     use gid::{CellId, Value};
     use kurbo::Point;
