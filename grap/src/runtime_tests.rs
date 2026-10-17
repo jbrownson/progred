@@ -503,6 +503,70 @@ fn runtime_built_callable_records_match_their_gid_forms() {
 }
 
 #[test]
+fn unboxed_values_keep_the_callable_facets_of_their_records() {
+    let (identity, argument) = (new_cell_id(), new_cell_id());
+    let receiver = host(vec![(
+        identity,
+        Definition::foreign(
+            Value::record([]),
+            ForeignFunction::new(move |context, call, environment| {
+                context.eval(context.field(call, argument).unwrap(), environment)
+            }),
+        ),
+    )]);
+    let number = (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec()));
+    let foreign =
+        gid::Record::from_iter([number.clone(), (vocabulary::FFI, Value::from(identity))]);
+    let closure = gid::Record::from_iter([
+        number,
+        (
+            vocabulary::CLOSURE,
+            Value::record([
+                (vocabulary::PARAMS, Value::list([])),
+                (vocabulary::BODY, Value::from(argument)),
+                (
+                    vocabulary::ENVIRONMENT,
+                    Value::record([(argument, f64::value(8.0))]),
+                ),
+            ]),
+        ),
+    ]);
+    let noop = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| unreachable!();
+    let overlay = ForeignOverlay::new(&[], &noop);
+    for record in [foreign, closure] {
+        let unboxed = lowered(record.clone());
+        assert_eq!(unboxed.as_f64(), Some(3.0));
+        // The number answers each call as its record form does.
+        for function in [RuntimeValue::from(Value::Record(record)), unboxed] {
+            let arguments = || [(argument, RuntimeValue::f64(8.0))];
+            assert_eq!(
+                apply(&function, arguments(), &receiver, 100)
+                    .result
+                    .as_f64(),
+                Some(8.0)
+            );
+            assert_eq!(
+                apply_expression(&function, arguments(), &receiver, 100)
+                    .result
+                    .as_f64(),
+                Some(8.0)
+            );
+            let expression = RuntimeValue::record(
+                [(vocabulary::FUNCTION, function.clone())]
+                    .into_iter()
+                    .chain(arguments()),
+            );
+            assert_eq!(
+                evaluate_runtime_scoped(&expression, &receiver, &overlay, 100)
+                    .result
+                    .as_f64(),
+                Some(8.0)
+            );
+        }
+    }
+}
+
+#[test]
 fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
     let (factory, captured, sink, callback) =
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());

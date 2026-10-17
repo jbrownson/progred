@@ -1935,7 +1935,9 @@ impl<'a> Context<'a> {
             Some(self.eval_grap_call(closure, call, environment, plan))
         } else {
             match &callable.0 {
-                RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => {
+                RuntimeValueKind::Data(_)
+                | RuntimeValueKind::Unboxed(_)
+                | RuntimeValueKind::Record(_) => {
                     let cell = callable
                         .as_cell()
                         .or_else(|| callable.field(vocabulary::FFI)?.as_cell());
@@ -2212,7 +2214,9 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> PreparedCallable {
         let callable = match &callable.0 {
-            RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => self
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => self
                 .runtime_closure(&callable)
                 .map(|closure| RuntimeValue::new(RuntimeValueKind::Closure(closure)))
                 .unwrap_or(callable),
@@ -2268,7 +2272,9 @@ impl<'a> Context<'a> {
                         ),
                     }
                 }
-                RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => {
+                RuntimeValueKind::Data(_)
+                | RuntimeValueKind::Unboxed(_)
+                | RuntimeValueKind::Record(_) => {
                     let value = &callable.value;
                     let target = value
                         .as_cell()
@@ -2298,13 +2304,11 @@ impl<'a> Context<'a> {
                         }
                     }
                 }
-                RuntimeValueKind::Unboxed(_) | RuntimeValueKind::List(_) => {
-                    Ok(RuntimeValue::from_value(absent::with_detail(
-                        absent::NOT_CALLABLE,
-                        absent::VALUE,
-                        callable.value.to_value(),
-                    )))
-                }
+                RuntimeValueKind::List(_) => Ok(RuntimeValue::from_value(absent::with_detail(
+                    absent::NOT_CALLABLE,
+                    absent::VALUE,
+                    callable.value.to_value(),
+                ))),
             }
         })
     }
@@ -2454,7 +2458,9 @@ impl<'a> Context<'a> {
                     ));
                 }
             }
-            RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => {
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => {
                 let cell = callable
                     .as_cell()
                     .or_else(|| callable.field(vocabulary::FFI)?.as_cell());
@@ -2470,9 +2476,7 @@ impl<'a> Context<'a> {
                 }
                 cell.and_then(|cell| self.foreign_target_cell(cell))
             }
-            RuntimeValueKind::Unboxed(_)
-            | RuntimeValueKind::List(_)
-            | RuntimeValueKind::Closure(_) => None,
+            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
         };
         foreign.map(|foreign| {
             let call = self.lower_runtime_code(&RuntimeValue::record(
@@ -2532,7 +2536,9 @@ impl<'a> Context<'a> {
     fn runtime_closure(&mut self, value: &RuntimeValue) -> Option<Closure> {
         match &value.0 {
             RuntimeValueKind::Closure(closure) => Some(closure.clone()),
-            RuntimeValueKind::Data(_) | RuntimeValueKind::Record(_) => {
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => {
                 let fields = value.field(vocabulary::CLOSURE)?;
                 let params = fields
                     .field(vocabulary::PARAMS)?
@@ -2560,9 +2566,7 @@ impl<'a> Context<'a> {
                     fields: fields.as_value().as_record()?.clone(),
                 })
             }
-            RuntimeValueKind::Unboxed(_)
-            | RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_) => None,
+            RuntimeValueKind::List(_) | RuntimeValueKind::Foreign(_) => None,
         }
     }
 }
