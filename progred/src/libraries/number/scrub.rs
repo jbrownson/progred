@@ -29,14 +29,10 @@ pub(crate) fn on_scrub(
     widget::before(
         child,
         Rc::new(move |context| {
-            if context
-                .inputs
-                .edits
-                .writable(&context.inputs.sources, context.path)
-            {
+            if context.viewing().writable() {
                 let site = context.site();
                 let handler = handler.clone();
-                let scale = context.inputs.styles.scale;
+                let scale = context.viewing().scale();
                 let target = target.clone();
                 let drag = widget::gesture::targeted(
                     target.clone(),
@@ -69,36 +65,6 @@ pub(crate) fn on_scrub(
             } else {
                 Box::new(|_, _| {})
             }
-        }),
-    )
-}
-
-/// While the command modifier is held, a number that holding it lets be
-/// dragged is outlined as hovering outlines a value, in the number's own
-/// color: every place the pointer can drag shows at once.
-pub(crate) fn outlined(digits: Layout) -> Layout {
-    widget::around(
-        digits,
-        Rc::new(|context| {
-            let writable = context
-                .inputs
-                .edits
-                .writable(&context.inputs.sources, context.path);
-            let scale = context.inputs.styles.scale;
-            let palette = context.inputs.styles.palette;
-            Box::new(move |digits| {
-                if !writable {
-                    return digits;
-                }
-                widget::before_place(digits, move |placement, output| {
-                    if output.input.picking && !placement.clipped_out() {
-                        let outline = widget::style::highlight_outline(scale, placement.rect);
-                        output.render(move |canvas, _| {
-                            widget::style::drag_highlight(palette, scale, canvas, outline);
-                        });
-                    }
-                })
-            })
         }),
     )
 }

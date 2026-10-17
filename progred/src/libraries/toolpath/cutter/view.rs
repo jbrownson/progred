@@ -61,7 +61,7 @@ pub(super) fn picture(tool: &Tool) -> Option<Layout> {
         p.apply_affine(transform);
     }
     Some(Layout::program(Rc::new(move |context, _| {
-        let scale = context.inputs.styles.scale;
+        let scale = context.viewing().scale();
         let paths = paths.clone();
         measured::choices::ChoiceLayout::fixed(widget::paint(
             widget::Extent {

@@ -64,6 +64,54 @@ impl<World, Hover> Context<'_, '_, World, Hover> {
     pub(crate) fn site(&self) -> crate::editing::Site {
         self.inputs.site(Rc::from(self.path))
     }
+
+    /// What this widget reads about the view it's built in.
+    pub fn viewing(&self) -> &dyn crate::display::Viewing {
+        self
+    }
+
+    /// `text`, laid out in the theme's `face`.
+    pub fn faced_text(&mut self, text: &str, face: crate::display::Face) -> puri::text::Text {
+        puri::text::text(self.text, text, style::face_style(self.inputs.styles, face))
+    }
+
+    /// The paint of the theme's `face`.
+    pub fn face_brush(&self, face: crate::display::Face) -> puri::Brush {
+        style::face_style(self.inputs.styles, face).brush.clone()
+    }
+
+    fn below(&self, steps: &[gid::Step]) -> gid::Path {
+        self.path.iter().chain(steps).cloned().collect()
+    }
+}
+
+impl<World, Hover> crate::display::Viewing for Context<'_, '_, World, Hover> {
+    fn scale(&self) -> f64 {
+        self.inputs.styles.scale
+    }
+
+    fn writable(&self) -> bool {
+        self.inputs.edits.writable(&self.inputs.sources, self.path)
+    }
+
+    fn host(&self) -> &dyn grap::Host {
+        &self.inputs.sources
+    }
+
+    fn computations(&self) -> &crate::computations::Computations {
+        self.inputs.computations
+    }
+
+    fn state_below(&self, steps: &[gid::Step]) -> Option<&Value> {
+        self.inputs.annotations.at(&self.below(steps))
+    }
+
+    fn selected_below(&self, steps: &[gid::Step]) -> bool {
+        let below = self.below(steps);
+        self.inputs
+            .selection
+            .is_some_and(|selection| selection.path().starts_with(&below))
+    }
 }
 
 pub type Widget<World, Hover> = Rc<

@@ -52,14 +52,6 @@ impl<'a> Location<'a> {
         }
     }
 
-    /// The location `steps` below this one.
-    pub fn descendant(&self, steps: &[Step]) -> Location<'static> {
-        Location {
-            start: self.start,
-            path: self.path.iter().chain(steps).cloned().collect(),
-        }
-    }
-
     /// The same location from where its data is stored: the definition its
     /// last Follow enters, or else its own start. None when the route to that
     /// Follow no longer reaches a cell.

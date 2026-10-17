@@ -51,8 +51,8 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
         playback,
     };
     let drawing = Layout::program(Rc::new(move |context, build| {
-        let computations = context.inputs.computations;
-        let computation = computations.at(context.inputs.view, context.path, || {
+        let computations = context.viewing().computations();
+        let computation = context.site().memo(computations, || {
             computation::Computation::new(
                 computations,
                 program.clone(),

@@ -308,7 +308,7 @@ fn range_widget(
 ) -> Widget {
     let current = position.and_then(|position| selection.current_item(level, position));
     Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
+        let scale = context.viewing().scale();
         let site = context.site();
         let slider = slider.clone();
         let selection = selection.clone();

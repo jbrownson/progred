@@ -110,7 +110,7 @@ pub(super) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Opti
     Some(Layout::program(Rc::new(move |context, build| {
         let mut lines = projected();
         let evaluation = run(&mut lines, |scope| {
-            ::grap::apply_expression_scoped(&program, [], &context.inputs.sources, scope, fuel)
+            ::grap::apply_expression_scoped(&program, [], context.viewing().host(), scope, fuel)
         });
         if !evaluation.completed || evaluation.result.is_absent() {
             return crate::display::at(
@@ -130,7 +130,7 @@ pub(super) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Opti
             )
             .measure(context, build);
         };
-        let scale = context.inputs.styles.scale;
+        let scale = context.viewing().scale();
         measured::choices::ChoiceLayout::fixed(widget::paint(
             widget::Extent {
                 width: width * scale,

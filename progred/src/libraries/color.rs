@@ -230,7 +230,7 @@ fn without_picker(selection: Option<&Value>) -> Value {
 
 fn picker_leaf(height: f64, color: Hsva, draw: fn(Hsva, &mut dyn CanvasSink, Affine)) -> Layout {
     Layout::widget(Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
+        let scale = context.viewing().scale();
         widget::paint(
             widget::Extent {
                 width: color_picker::WIDTH * scale,
@@ -353,8 +353,8 @@ pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
 
 fn swatch(color: Color) -> Layout {
     Layout::widget(Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
-        let border = context.inputs.styles.dim.brush.clone();
+        let scale = context.viewing().scale();
+        let border = context.face_brush(crate::display::Face::Dim);
         widget::paint(
             widget::Extent {
                 width: 15.0 * scale,

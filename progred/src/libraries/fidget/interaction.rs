@@ -1,7 +1,6 @@
 //! Per-preview scheduling policy, shared by camera handlers and async rendering.
 
-use crate::{computations::Computations, workspace::Root};
-use gid::Step;
+use crate::computations::Computations;
 use incremental::{Input, Memo};
 use puri::timer::{Duration, Instant, Timers};
 use puri_widgets::debounce::Debounce;
@@ -30,8 +29,8 @@ impl Interaction {
         }
     }
 
-    pub fn at(computations: &Computations, view: &Root, path: &[Step]) -> Rc<Self> {
-        let state = computations.at(view, path, || Self::new(computations));
+    pub fn at(computations: &Computations, site: &crate::editing::Site) -> Rc<Self> {
+        let state = site.memo(computations, || Self::new(computations));
         state.refresh(computations.frame_time.get());
         state
     }

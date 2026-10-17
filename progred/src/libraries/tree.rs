@@ -294,8 +294,7 @@ fn outcome(
 
 pub(crate) fn prepared(
     computations: &crate::computations::Computations,
-    root: &crate::workspace::Root,
-    path: &[gid::Step],
+    site: &crate::editing::Site,
     program: RuntimeValue,
     fuel: usize,
 ) -> Rc<Result<Built, RuntimeValue>> {
@@ -303,7 +302,7 @@ pub(crate) fn prepared(
         input: incremental::Input<(RuntimeValue, usize)>,
         result: incremental::Memo<Result<Built, RuntimeValue>>,
     }
-    let prepared = computations.at(root, path, || {
+    let prepared = site.memo(computations, || {
         let input = computations.runtime.input((program.clone(), fuel));
         let result = computations.runtime.memo_by(
             {

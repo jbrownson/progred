@@ -1060,16 +1060,12 @@ pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_,
             orbit_handler(input.state),
         ),
         Rc::new(move |context| {
-            let activity = interaction::Interaction::at(
-                context.inputs.computations,
-                context.inputs.view,
-                context.path,
-            );
-            let pinch_activity = activity.clone();
             let site = context.site();
+            let activity = interaction::Interaction::at(context.viewing().computations(), &site);
+            let pinch_activity = activity.clone();
             let pinch_site = site.clone();
             let scroll = crate::display::widget::scroll::scroll(
-                context.inputs.styles.scale,
+                context.viewing().scale(),
                 move |world: &mut crate::Editor, delta| {
                     let mut session = world.session();
                     let mut edit = site.open(&mut session);

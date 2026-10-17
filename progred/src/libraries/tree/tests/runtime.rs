@@ -131,12 +131,12 @@ fn memo_keeps_runtime_input_output_and_absence_origins_distinct() {
             .clone()
             .map(|value| ::grap::apply(&maker, [(VALUE, value)], &host, 1000).result);
         assert_ne!(programs[0].to_value(), programs[1].to_value());
-        let first = prepared(&computations, &root, &[], programs[0].clone(), 1000);
+        let first = prepared(&computations, &site(&root), programs[0].clone(), 1000);
         assert!(Rc::ptr_eq(
             &first,
-            &prepared(&computations, &root, &[], programs[0].clone(), 1000)
+            &prepared(&computations, &site(&root), programs[0].clone(), 1000)
         ));
-        let second = prepared(&computations, &root, &[], programs[1].clone(), 1000);
+        let second = prepared(&computations, &site(&root), programs[1].clone(), 1000);
         assert!(!Rc::ptr_eq(&first, &second));
         assert!(!same_output(&first, &second));
         for (result, expected) in [first, second].iter().zip(&payloads) {

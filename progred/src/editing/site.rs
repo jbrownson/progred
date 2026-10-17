@@ -34,9 +34,27 @@ impl Site {
         selection.root() == &self.root && selection.path() == &*self.path
     }
 
+    /// Where this occurrence is stored, if anywhere: what a jump to it
+    /// draws.
+    pub(crate) fn location(&self) -> Option<crate::location::Location<'static>> {
+        self.scope
+            .location(&self.path)
+            .map(crate::location::Location::into_owned)
+    }
+
     /// What hovering this occurrence shows.
     pub(crate) fn hover(&self) -> Hover {
         Hover::Value(self.path.clone())
+    }
+
+    /// Work `computations` keeps for this occurrence across frames, made by
+    /// `create` the first time.
+    pub(crate) fn memo<T: 'static>(
+        &self,
+        computations: &crate::computations::Computations,
+        create: impl FnOnce() -> T,
+    ) -> Rc<T> {
+        computations.at(&self.root, &self.path, create)
     }
 
     /// A drag's writes to the value here, recorded as one undo step.

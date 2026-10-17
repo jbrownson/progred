@@ -19,7 +19,7 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
         child,
         Rc::new(move |context| {
             let site = context.site();
-            let scale = context.inputs.styles.scale;
+            let scale = context.viewing().scale();
             let function = function.clone();
             Box::new(move |output, placement| {
                 let command = output.input.command_modifier.predicate();

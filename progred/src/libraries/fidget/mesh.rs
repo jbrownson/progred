@@ -171,7 +171,7 @@ pub(crate) fn drawing_surface(
         size.height / f64::from(pixels.height()),
     );
     Some(Layout::widget(Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
+        let scale = context.viewing().scale();
         let scene = scene.clone();
         widget::paint(
             widget::Extent {

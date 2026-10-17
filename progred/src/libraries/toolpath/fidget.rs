@@ -24,7 +24,7 @@ pub(super) fn progress_bar(
     crate::display::widget::after(
         drawing,
         Rc::new(move |context| {
-            let height = 3.0 * context.inputs.styles.scale;
+            let height = 3.0 * context.viewing().scale();
             let bar = puri_widgets::progress::ProgressBar {
                 fraction: progress.map_or(0.0, |p| p.fraction()),
                 track: puri::Color::from_rgba8(196, 204, 214, 220),
@@ -289,10 +289,10 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
     let state = input.state.cloned();
     let scale = input.scale_factor;
     let drawing = Layout::program(Rc::new(move |context, build| {
-        let computations = context.inputs.computations;
-        let interaction =
-            fidget::interaction::Interaction::at(computations, context.inputs.view, context.path);
-        let computation = computations.at(context.inputs.view, context.path, || {
+        let computations = context.viewing().computations();
+        let site = context.site();
+        let interaction = fidget::interaction::Interaction::at(computations, &site);
+        let computation = site.memo(computations, || {
             computation::Computation::new(
                 computations,
                 program.clone(),

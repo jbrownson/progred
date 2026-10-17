@@ -115,15 +115,38 @@ pub fn on_state_drag(
     )
 }
 
+/// While the command modifier is held, what can be dragged here is outlined
+/// as hovering outlines a value, in the drag color: every place the pointer
+/// can drag shows at once.
+pub fn drag_outlined(child: crate::view::Layout) -> crate::view::Layout {
+    super::around(
+        child,
+        Rc::new(|context| {
+            let writable = context.viewing().writable();
+            let scale = context.inputs.styles.scale;
+            let palette = context.inputs.styles.palette;
+            Box::new(move |child| {
+                if !writable {
+                    return child;
+                }
+                super::before_place(child, move |placement, output| {
+                    if output.input.picking && !placement.clipped_out() {
+                        let outline = super::style::highlight_outline(scale, placement.rect);
+                        output.render(move |canvas, _| {
+                            super::style::drag_highlight(palette, scale, canvas, outline);
+                        });
+                    }
+                })
+            })
+        }),
+    )
+}
+
 pub fn on_point(child: crate::view::Layout, handler: PointHandler) -> crate::view::Layout {
     before(
         child,
         Rc::new(move |context| {
-            if context
-                .inputs
-                .edits
-                .writable(&context.inputs.sources, context.path)
-            {
+            if context.viewing().writable() {
                 let site = context.site();
                 let handler = handler.clone();
                 Box::new(move |output, placement| {

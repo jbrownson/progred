@@ -24,6 +24,8 @@ pub mod raw;
 #[cfg(test)]
 pub mod recording;
 pub mod structure;
+mod viewing;
+pub use viewing::Viewing;
 pub mod widget;
 
 #[cfg(test)]
@@ -562,7 +564,7 @@ pub fn activatable<World: Host, Hover: Clone + PartialEq + 'static>(
     on_hover(on_activate(child, target.clone(), action), target)
 }
 
-pub use widget::gesture::{on_point, on_state_drag};
+pub use widget::gesture::{drag_outlined, on_point, on_state_drag};
 
 pub fn row<World: 'static, Hover: 'static>(
     gap: f64,
@@ -974,6 +976,30 @@ pub fn jump_with_conject<World: 'static, Hover: 'static>(
             projection.clone(),
             default_projection.clone(),
         )
+    }))
+}
+
+/// Draw at `steps` the value stored where `target` is, edited there, as
+/// [`jump_with_conject`] does; `otherwise` where nothing stores it.
+pub fn jump_to<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    target: crate::editing::Site,
+    conject: Conject,
+    projection: Option<Partial<World, Hover>>,
+    otherwise: Layout<World, Hover>,
+) -> Layout<World, Hover> {
+    let steps = steps.into();
+    Layout::program(Rc::new(move |context, build| match target.location() {
+        Some(document) => context.project.jump(
+            context.text,
+            build,
+            steps.clone(),
+            document,
+            conject.clone(),
+            projection.clone(),
+            None,
+        ),
+        None => otherwise.measure(context, build),
     }))
 }
 

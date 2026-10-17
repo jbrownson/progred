@@ -437,7 +437,7 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
         let original = original.clone();
         // Outlined where it drags: the whole number, its tag too.
         on_scrub(
-            scrub::outlined(line),
+            crate::display::drag_outlined(line),
             target.hover,
             Rc::new(move || {
                 let original = original.to_value();

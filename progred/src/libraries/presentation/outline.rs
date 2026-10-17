@@ -3,9 +3,8 @@
 use super::vocabulary::OUTLINE;
 use crate::display::projection::group;
 use crate::display::{self as d, col};
-use crate::location::Location;
 use crate::view::{Layout, Partial, ProjectionInput};
-use gid::{CellId, Path, Step, Value};
+use gid::{CellId, Step, Value};
 use std::rc::Rc;
 
 fn sections(value: &Value) -> Option<Vec<CellId>> {
@@ -27,20 +26,13 @@ pub(super) fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
         d::structure::extra_fields(&runtime_input, |key| key == OUTLINE || keys.contains(&key));
     let label = d::structure::record_label(&runtime_input, OUTLINE);
     Some(Layout::program(Rc::new(move |context, build| {
-        let source = context
-            .inputs
-            .edits
-            .location(context.path)
-            .map(Location::into_owned);
+        let here = context.site();
         let entries = d::runtime_partial({
             let fields = fields.clone();
             move |input| {
                 let elements = input.value?;
                 elements.list_len()?;
-                let heading = d::runtime_partial({
-                    let fields = fields.clone();
-                    move |input| heading(input, &fields)
-                });
+                let heading = d::runtime_partial(heading);
                 d::structure::list_column_with(input, 24.0, Some(heading), |position, heading| {
                     let Some(key) = elements.list_element(&position).and_then(|v| v.as_cell())
                     else {
@@ -50,7 +42,7 @@ pub(super) fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
                         position,
                         key,
                         heading,
-                        source.as_ref(),
+                        &here,
                         &fields,
                         &input.default_projection,
                     )
@@ -75,36 +67,34 @@ pub(super) fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
     })))
 }
 
+/// A section whose body is the outline's field `key`, drawn where the
+/// outline is stored and edited there.
 fn section(
     position: gid::Position,
     key: CellId,
     heading: Layout,
-    source: Option<&Location>,
+    outline: &crate::editing::Site,
     fields: &gid::Record,
     default_projection: &Partial,
 ) -> Layout {
-    let value = fields.get(&key).cloned();
     let steps = [Step::Element(position), Step::Key(key)];
     let body_projection = Some(d::compose_partials([
         d::structure::list_column(16.0, None),
         default_projection.clone(),
     ]));
-    let body = match source {
-        Some(source) => d::jump_with_conject(
-            steps.clone(),
-            source.descendant(&[Step::Key(key)]),
-            d::Conject::descend(),
-            body_projection,
-            None,
-        ),
-        None => match &value {
-            Some(value) => d::at_with_projection(steps.clone(), value, body_projection, None),
-            None => d::slot(),
-        },
+    let unstored = match fields.get(&key) {
+        Some(value) => d::at_with_projection(steps.clone(), value, body_projection.clone(), None),
+        None => d::slot(),
     };
+    let body = d::jump_to(
+        steps.clone(),
+        outline.below(&[Step::Key(key)]),
+        d::Conject::descend(),
+        body_projection,
+        unstored,
+    );
     Layout::program(Rc::new(move |context, build| {
-        let path: Path = context.path.iter().cloned().chain(steps.clone()).collect();
-        let (_, visible) = visibility(context.inputs, &path, value.as_ref());
+        let visible = open(context.viewing(), &steps);
         col(
             0,
             8.0,
@@ -116,37 +106,21 @@ fn section(
     }))
 }
 
-fn visibility(
-    cx: &crate::projection::Cx<'_>,
-    path: &[Step],
-    value: Option<&Value>,
-) -> (bool, bool) {
-    let default_closed = value
-        .and_then(|value| {
-            crate::selection::collapse_default_for_value(&cx.sources, &value.clone().into(), false)
-        })
-        .unwrap_or(false);
-    let selected = cx.selection.is_some_and(|s| s.path().starts_with(path));
-    let visible = selected || !crate::annotations::collapsed(cx.annotations, path, default_closed);
-    (default_closed, visible)
+/// Whether the section `steps` below here shows its body. Sections start
+/// open, and stay open around the selection.
+fn open(viewing: &dyn crate::display::Viewing, steps: &[Step]) -> bool {
+    viewing.selected_below(steps) || !crate::annotations::folded(viewing.state_below(steps), CLOSED)
 }
 
-fn heading(
-    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
-    fields: &gid::Record,
-) -> Option<Layout> {
+/// Whether a section starts closed.
+const CLOSED: bool = false;
+
+fn heading(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let key = input.value?.as_cell()?;
-    let value = fields.get(&key).cloned();
     let target = input.targets.current();
     crate::libraries::grap::shallow_cell_with(input, move |label| {
         Layout::program(Rc::new(move |context, build| {
-            let path: Path = context
-                .path
-                .iter()
-                .cloned()
-                .chain([Step::Key(key)])
-                .collect();
-            let (default_closed, visible) = visibility(context.inputs, &path, value.as_ref());
+            let visible = open(context.viewing(), &[Step::Key(key)]);
             let section = context.site().below(&[Step::Key(key)]);
             let select = target.select.clone();
             d::on_activate(
@@ -156,7 +130,7 @@ fn heading(
                 ),
                 target.hover.clone(),
                 Rc::new(move |session| {
-                    section.open(session).fold(default_closed, Some(visible));
+                    section.open(session).fold(CLOSED, Some(visible));
                     select(session);
                     true
                 }),

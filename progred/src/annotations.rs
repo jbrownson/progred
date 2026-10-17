@@ -26,6 +26,7 @@ impl Annotations {
     }
 
     /// One convention field at a path.
+    #[cfg(test)]
     pub fn field(&self, path: &[Step], key: CellId) -> Option<&Value> {
         self.at(path)?.as_record()?.get(&key)
     }
@@ -88,10 +89,20 @@ impl Annotations {
 }
 
 pub fn collapsed(annotations: &Annotations, path: &[Step], in_cycle: bool) -> bool {
-    match annotations.field(path, FOLD).and_then(Value::as_cell) {
+    folded(annotations.at(path), in_cycle)
+}
+
+/// Whether a path's `state` says it's folded, or `default` where it
+/// says nothing.
+pub fn folded(state: Option<&Value>, default: bool) -> bool {
+    match state
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&FOLD))
+        .and_then(Value::as_cell)
+    {
         Some(state) if state == FOLDED => true,
         Some(state) if state == EXPANDED => false,
-        _ => in_cycle,
+        _ => default,
     }
 }
 

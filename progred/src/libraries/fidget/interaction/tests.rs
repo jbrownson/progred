@@ -4,7 +4,7 @@ use crate::{
     display::{Layout, partial, widget},
     projection::Projection,
 };
-use gid::{Cells, Document, Value};
+use gid::{Cells, Document, Step, Value};
 use kurbo::Size;
 use puri::handler::{PointerInfo, PointerState, ScrollDelta};
 use ui_events::pointer::{PointerEvent, PointerGesture, PointerGestureEvent, PointerScrollEvent};
@@ -36,12 +36,18 @@ fn runner() -> EditorRunner {
     runner
 }
 
+/// The interaction of the occurrence at `path` in the document's view.
+fn at(runner: &EditorRunner, path: Vec<Step>) -> Rc<Interaction> {
+    let site = crate::editing::Site::new(
+        runner.editor.model.workspace.document_root().clone(),
+        Rc::from(path),
+        Default::default(),
+    );
+    Interaction::at(&runner.editor.computations, &site)
+}
+
 fn activity(runner: &EditorRunner) -> Rc<Interaction> {
-    Interaction::at(
-        &runner.editor.computations,
-        runner.editor.model.workspace.document_root(),
-        &[],
-    )
+    at(runner, Vec::new())
 }
 
 fn permitted(runner: &EditorRunner, activity: &Interaction) -> bool {
@@ -77,11 +83,7 @@ fn scroll(runner: &mut EditorRunner, position: (f64, f64), delta: (f64, f64)) {
 fn only_changed_camera_input_starts_a_local_debounce() {
     let mut runner = runner();
     let activity = activity(&runner);
-    let other = Interaction::at(
-        &runner.editor.computations,
-        runner.editor.model.workspace.document_root(),
-        &[Step::Key(gid::new_cell_id())],
-    );
+    let other = at(&runner, vec![Step::Key(gid::new_cell_id())]);
     for (position, delta) in [((250.0, 250.0), (0.0, 10.0)), ((25.0, 25.0), (10.0, 0.0))] {
         scroll(&mut runner, position, delta);
         assert!(runner.editor.timers.deadline().is_none());

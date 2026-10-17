@@ -2,6 +2,11 @@ use super::super::{paths::InvalidPath, vocabulary::*};
 use super::*;
 use crate::libraries::{absent, control, f64};
 
+/// The pane's occurrence at `path`, where the tree program's work is kept.
+fn site(root: &crate::workspace::Root, path: &[gid::Step]) -> crate::editing::Site {
+    crate::editing::Site::new(root.clone(), std::rc::Rc::from(path), Default::default())
+}
+
 struct ViewportEnv<'a> {
     sources: crate::sources::Sources<'a>,
     computations: &'a Computations,
@@ -81,12 +86,17 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
             .get(&presentation::vocabulary::VALUE)
             .unwrap()
             .clone();
-        crate::libraries::tree::prepared(&computations, &root, &pane.path, program.into(), 300_000)
-            .as_ref()
-            .as_ref()
-            .unwrap()
-            .items
-            .clone()
+        crate::libraries::tree::prepared(
+            &computations,
+            &site(&root, &pane.path),
+            program.into(),
+            300_000,
+        )
+        .as_ref()
+        .as_ref()
+        .unwrap()
+        .items
+        .clone()
     };
     let tree = prepare(&doc, 400.0, 750.0);
     program.set_by(tree.clone(), RuntimeValue::same_result);
@@ -163,8 +173,7 @@ fn profile_program_tree_construction() {
             let start = Instant::now();
             let memoized = crate::libraries::tree::prepared(
                 &computations,
-                &root,
-                &pane.path,
+                &site(&root, &pane.path),
                 Value::from(names["program_tree"]).into(),
                 300_000,
             );

@@ -173,10 +173,10 @@ pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layou
     let state = input.state.cloned();
     let scale = input.scale_factor;
     let drawing = Layout::program(Rc::new(move |context, build| {
-        let computations = context.inputs.computations;
-        let interaction =
-            fidget::interaction::Interaction::at(computations, context.inputs.view, context.path);
-        let computation = computations.at(context.inputs.view, context.path, || {
+        let computations = context.viewing().computations();
+        let site = context.site();
+        let interaction = fidget::interaction::Interaction::at(computations, &site);
+        let computation = site.memo(computations, || {
             Computation::new(
                 computations,
                 program.clone(),

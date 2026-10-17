@@ -215,7 +215,7 @@ fn slider_control(
 ) -> Widget {
     let ticks: Rc<[puri_widgets::slider::TickLevel]> = ticks.into();
     Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
+        let scale = context.viewing().scale();
         let site = context.site();
         let value = value.clone();
         let on_change = on_change.clone();
@@ -280,10 +280,10 @@ fn radio_options(value: &Value) -> Option<Vec<RadioOption>> {
 
 fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: f64) -> Widget {
     Rc::new(move |context| {
-        let scale = context.inputs.styles.scale;
+        let scale = context.viewing().scale();
         let mut buttons = Vec::new();
         for option in &options {
-            let label = puri::text::text(context.text, &option.label, &context.inputs.styles.label);
+            let label = context.faced_text(&option.label, crate::display::Face::Label);
             let label_extent = widget::extent(label.metrics());
             let indicator_size = puri_widgets::radio::SIZE * scale;
             let radio = puri_widgets::radio::Radio {
@@ -354,7 +354,7 @@ fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> 
                 (WIDTH, ::grap::RuntimeValue::f64(width)),
                 (HEIGHT, ::grap::RuntimeValue::f64(height)),
             ],
-            &context.inputs.sources,
+            context.viewing().host(),
             ::grap::DEFAULT_FUEL,
         );
         let content = display::at(
@@ -463,14 +463,8 @@ fn controls_output(
                 None => 0.0,
             };
             let result = tree::prepared(
-                frame.inputs.computations,
-                frame.inputs.view,
-                &frame
-                    .path
-                    .iter()
-                    .cloned()
-                    .chain([gid::Step::Key(key)])
-                    .collect::<Vec<_>>(),
+                frame.viewing().computations(),
+                &frame.site().below(&[gid::Step::Key(key)]),
                 program,
                 fuel,
             );
@@ -581,7 +575,7 @@ fn controls_output(
             (STATE, current_state(state).into()),
             (UPDATE, update_function().into()),
         ],
-        &frame.inputs.sources,
+        frame.viewing().host(),
         &ForeignOverlay::new(
             &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR, TREE_PROGRAM_CURSOR],
             &emit,
