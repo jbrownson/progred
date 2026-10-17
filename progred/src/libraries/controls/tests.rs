@@ -322,7 +322,7 @@ fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
     };
     with_sources(sources, &Output::default(), |context| {
         let (widgets, result) =
-            controls_output(&::grap::lambda([], collect), None, 200.0, &context).unwrap();
+            controls_output(&::grap::lambda([], collect), None, 200.0, context).unwrap();
         assert!(widgets.is_empty());
         assert_eq!(result, expected);
         assert_eq!(result, Value::list([f64::value(7.0)]));
@@ -362,7 +362,7 @@ fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
             libraries: &libraries,
         };
         with_sources(sources, &Output::default(), |context| {
-            let (widgets, result) = controls_output(&controls, None, 200.0, &context).unwrap();
+            let (widgets, result) = controls_output(&controls, None, 200.0, context).unwrap();
             assert_eq!(widgets.len(), widget_count);
             let fields = result.as_record().unwrap();
             assert_eq!(fields.get(&ITEMS), Some(&Value::list([])));

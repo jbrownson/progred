@@ -20,7 +20,7 @@ impl<'a> Session<'a> {
     /// The open picker, if a value or a new field's label is pending.
     pub(crate) fn pending(&mut self) -> Option<Picking<'_, 'a>> {
         let stage = self.model.selection.as_ref()?.stage(&self.sources());
-        (stage != Stage::Edge).then(|| Picking {
+        (stage != Stage::Edge).then_some(Picking {
             session: self,
             stage,
         })
