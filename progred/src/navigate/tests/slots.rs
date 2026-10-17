@@ -74,3 +74,35 @@ fn tab_goes_from_empty_slot_to_empty_slot_keeping_what_was_typed() {
     assert!(cleared(&driver));
     assert!(!tab(&mut driver, Modifiers::empty()));
 }
+
+#[test]
+fn tab_stops_at_empty_holes_optional_or_not_but_not_at_markers() {
+    // An unnamed value draws its name as an empty hole, which Tab visits
+    // though naming is optional. An unnamed lambda draws a λ to click
+    // instead, which marks no tab stop.
+    let parameter = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(parameter, name::record("y", []));
+    let root = Value::record([(
+        ::grap::vocabulary::VALUE,
+        ::grap::lambda([parameter], parameter.into()),
+    )]);
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(root),
+            cells,
+        }),
+        kurbo::Size::new(600.0, 400.0),
+    );
+    let tab = |driver: &mut Driver| driver.keystroke(Key::Named(NamedKey::Tab), Modifiers::empty());
+    assert!(tab(&mut driver));
+    assert_eq!(
+        (driver.selection(), driver.stage()),
+        (
+            vec![Step::Key(name::vocabulary::NAME)],
+            Some(Stage::Pending)
+        )
+    );
+    assert!(tab(&mut driver));
+    assert!(driver.editor().model.selection.is_none());
+}

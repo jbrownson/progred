@@ -100,19 +100,23 @@ reveals the selection it lands on. With no selection, a root navigation handler
 selects the document's root occurrence. Landmarks also serve pointer and source
 selection and the explicit Select All command.
 
-Tab moves to the next empty slot, a writable landmark with no value yet, and
-Shift+Tab to the one before, in reading order within the selection's view:
-line by line, where a line is what overlaps vertically, then left to right.
+Tab moves to the next tab stop, a place to fill in, and Shift+Tab to the one
+before, in reading order within the selection's view: line by line, where a
+line is what overlaps vertically, then left to right. A widget marks its own
+occurrence as a tab stop, as it registers an arrow stop. The picker marks
+every empty, writable hole it draws, optional ones such as a value's missing
+name included, so navigation needn't know which fields are optional.
 With nothing selected, Tab starts at the first. In a picker, Tab first commits
 what was typed, as Enter would. It stays there when that opened a slot of its
-own, such as a new call's first argument, or when no slot is left, so the
+own, such as a new call's first argument, or when no tab stop is left, so the
 commit shows before focus moves on. A Tab with nothing to commit and nowhere
 to go declines, so a browser moves focus on to the rest of its page, which
 clears the selection. A window has nowhere else to go, so there that Tab clears
-the selection itself, and the next starts over from the first slot.
+the selection itself, and the next starts over from the first.
 
-The anonymous lambda's `λ` marker is clickable to name the function but is not
-an arrow stop; the whole lambda, parameter list, and body remain navigable.
+The anonymous lambda's `λ` marker is clickable to name the function but is
+neither an arrow stop nor a tab stop; the whole lambda, parameter list, and
+body remain navigable.
 
 Revealing a destination uses its full painted rectangle, independently of its
 navigation position. A fully visible selection stays put; a clipped selection

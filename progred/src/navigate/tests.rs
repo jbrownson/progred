@@ -70,6 +70,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             select: Rc::new(|_, _| false),
             secondary: None,
             selected: false,
+            tab_stop: false,
         },
         Descend {
             scope: Default::default(),
@@ -79,6 +80,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             select: Rc::new(|_, _| false),
             secondary: None,
             selected: false,
+            tab_stop: false,
         },
     ];
     let regions = [ViewRegion {
@@ -110,6 +112,7 @@ fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
         select: Rc::new(|_, _| true),
         secondary: None,
         selected: false,
+        tab_stop: false,
     }
 }
 

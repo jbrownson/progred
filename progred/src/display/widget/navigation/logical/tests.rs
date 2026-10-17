@@ -401,6 +401,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
                         scope: Default::default(),
                         secondary: None,
                         selected: false,
+                        tab_stop: false,
                     });
                 });
             }

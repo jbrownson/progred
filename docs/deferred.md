@@ -348,18 +348,11 @@ first:
        recorded-drawing leaf. The rest are:
        - presentation's pane special cases, as a pane entry and a wrapping
          projection;
-       - Tab's skipping of name slots. The owner would rather Tab stop at
-         optional slots too. Every empty name in the bundled examples is an
-         unnamed lambda's `λ`, which the grap library draws as a marker to
-         click rather than as a slot: 39 of them in the toolpaths example,
-         which has no other stops. Arrow keys skip it because it registers
-         no navigation stop, but only the arrow keys read those stops, keeping
-         just the selection's neighbours. The owner's direction: Tab gets its
-         own stops, annotated as arrow stops are. The picker, which draws
-         every hole, Raw's and the name's alike, adds one where it draws an
-         empty, writable hole, and a projection can add one to a place of
-         its own to fill in. Tab visits them in reading order, so navigation
-         needn't know names or check for empty places;
+       - ~~Tab's skipping of name slots.~~ Done on 17 October 2026, at the
+         owner's direction: Tab visits tab stops, which a widget marks on its
+         occurrence as it registers an arrow stop. The picker marks every
+         empty, writable hole, so an unnamed value's name is one, while an
+         unnamed lambda's `λ`, a marker to click, isn't;
        - the cells that label Grap handlers' event records, which are the
          layout library's. Grap handlers need values, so the records stay;
          the cells are the editor's input vocabulary, so they move to the

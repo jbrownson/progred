@@ -288,6 +288,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             }),
             secondary: None,
             selected: false,
+            tab_stop: false,
         }]);
         let mut state = ui_events::pointer::PointerState::default();
         state.position.x = 5.0;
@@ -438,6 +439,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         }),
         secondary: None,
         selected: false,
+        tab_stop: false,
     }]);
     input.view_regions = Rc::from([placed::ViewRegion {
         root: source_view.clone(),

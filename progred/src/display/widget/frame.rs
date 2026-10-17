@@ -130,6 +130,11 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         self.navigation.stop(path, selected);
     }
 
+    /// Marks this occurrence as a place to fill in, which Tab visits.
+    pub fn tab_stop(&mut self, path: std::rc::Rc<[gid::Step]>) {
+        self.output.tab_stop = Some(path);
+    }
+
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
         &mut self.output.completion
     }
@@ -505,6 +510,10 @@ pub struct HoverOutput<C, Hover> {
     /// selected. The nearest enclosing landmark consumes this while
     /// assembling this frame, so it never leaks into an ancestor.
     pub landmark_select: Option<(std::rc::Rc<[gid::Step]>, Select<C>)>,
+    /// A widget marks its occurrence as a place to fill in, which Tab
+    /// visits. The nearest enclosing landmark consumes it, as it does an
+    /// arrival override.
+    pub tab_stop: Option<std::rc::Rc<[gid::Step]>>,
     pub completion: Option<Offers<C>>,
     /// The focused text editor's caret, for platform text composition.
     pub input_area: Option<Rect>,
@@ -535,6 +544,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
             descends: Vec::new(),
             view_regions: Vec::new(),
             landmark_select: None,
+            tab_stop: None,
             completion: None,
             input_area: None,
             after_hover: AfterHover::default(),
@@ -557,6 +567,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
         append(&mut self.descends, above.descends);
         append(&mut self.view_regions, above.view_regions);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
+        self.tab_stop = above.tab_stop.or(self.tab_stop);
         self.completion = above.completion.or(self.completion);
         self.input_area = above.input_area.or(self.input_area);
         self.after_hover.append(above.after_hover);

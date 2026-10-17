@@ -73,6 +73,9 @@ pub struct Landmark<World> {
     pub secondary: Option<Secondary>,
     /// Whether it carries the primary highlight.
     pub selected: bool,
+    /// Whether Tab visits it: a place to fill in, as the widget drawn there
+    /// marked it.
+    pub tab_stop: bool,
 }
 
 impl<World> Clone for Landmark<World> {
@@ -85,6 +88,7 @@ impl<World> Clone for Landmark<World> {
             scope: self.scope.clone(),
             secondary: self.secondary.clone(),
             selected: self.selected,
+            tab_stop: self.tab_stop,
         }
     }
 }
@@ -117,6 +121,13 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                         select
                     }
                 };
+                let tab_stop = match output.tab_stop.take() {
+                    Some(at) => {
+                        debug_assert!(at == path, "tab stop at another occurrence");
+                        at == path
+                    }
+                    None => false,
+                };
                 output.descends.push(Landmark {
                     root: None,
                     path,
@@ -125,6 +136,7 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     scope,
                     secondary,
                     selected,
+                    tab_stop,
                 });
                 output
             },

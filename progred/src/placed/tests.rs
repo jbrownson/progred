@@ -860,6 +860,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
             }),
             secondary: None,
             selected: false,
+            tab_stop: false,
         }]);
         let mut event = down_at(5.0, 5.0);
         event.state.modifiers =

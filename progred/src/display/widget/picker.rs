@@ -104,9 +104,13 @@ fn pending_target(
     let scale = toolkit.styles().scale;
     let palette = toolkit.styles().palette;
     let selected = toolkit.selected();
+    let writable = toolkit.writable();
     let select = crate::display::widget::navigation::selecting(toolkit.site());
     let stop = path.clone();
     let child = crate::display::widget::before_place(child, move |_, output| {
+        if writable {
+            output.tab_stop(stop.clone());
+        }
         output.navigation_stop(stop, selected);
     });
     let child = crate::display::widget::navigation::landmark(
