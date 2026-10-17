@@ -22,8 +22,13 @@ fn native_annotation_handler_retains_the_projected_site() {
                 let path = context.path.to_vec();
                 crate::display::widget::scroll::scroll(
                     context.inputs.styles.scale,
-                    move |world, delta| {
-                        crate::editing::annotate(world, &root, &path, f64::value(delta.y));
+                    move |world: &mut crate::Editor, delta| {
+                        crate::editing::annotate(
+                            &mut world.session(),
+                            &root,
+                            &path,
+                            f64::value(delta.y),
+                        );
                         puri::handler::ScrollOutcome::with_remainder(Default::default())
                     },
                 )

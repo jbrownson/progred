@@ -19,7 +19,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
                     Rc::new(move |world: &mut crate::Editor| {
                         select_log.borrow_mut().push("select");
                         if accepts {
-                            crate::editing::select(world, &crate::test_root(), &[]);
+                            crate::editing::select(&mut world.session(), &crate::test_root(), &[]);
                         }
                         accepts
                     }),

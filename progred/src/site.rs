@@ -1,7 +1,6 @@
 //! Interpret site and selection effects while applying a Grap callable.
 //! Reads observe staged writes; a declined handler commits neither.
 
-use crate::Editor;
 use crate::libraries::layout;
 use crate::selection::Selection;
 use crate::sources::Sources;
@@ -114,20 +113,20 @@ const EVENT_FUNCTIONS: [gid::CellId; 5] = [
 /// projection site. Explicit decline or evaluator halt returns without
 /// committing any pending annotation or selection change.
 pub(crate) fn apply_scoped_event(
-    app: &mut Editor,
+    session: &mut crate::editing::Session<'_>,
     scope: crate::editing::Scope,
     root: Root,
     path: Path,
     function: grap::RuntimeValue,
     event: Value,
 ) -> bool {
-    let current = app
+    let current = session
         .model
         .selection
         .as_ref()
         .filter(|selection| selection.root() == &root)
         .map(|selection| (selection.path().to_vec(), selection.payload()));
-    let annotation = app
+    let annotation = session
         .model
         .workspace
         .view(&root)
@@ -140,25 +139,26 @@ pub(crate) fn apply_scoped_event(
         selection_changed: false,
     };
     let handled = grap(function, [(layout::vocabulary::EVENT, event)])(
-        &scope.view(app.sources()),
+        &scope.view(session.sources()),
         &path,
         &mut staged,
     );
     if handled {
-        let Some(view) = app.model.workspace.view_mut(&root) else {
+        let model = &mut *session.model;
+        let Some(view) = model.workspace.view_mut(&root) else {
             return false;
         };
         install_scoped(
             staged,
             &Sources {
-                doc: &app.model.doc,
-                libraries: &app.stack.libraries,
+                doc: &model.doc,
+                libraries: session.libraries,
             },
             &root,
             scope,
             &path,
             &mut view.annotations,
-            &mut app.model.selection,
+            &mut model.selection,
         );
     }
     handled

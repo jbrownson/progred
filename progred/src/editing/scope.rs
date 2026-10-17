@@ -164,12 +164,14 @@ impl<'data> Read<'_, 'data> {
 
 /// Dispatch-time access. Widgets cannot extract the root editor from this token.
 pub(crate) struct Access<'a> {
-    editor: &'a mut Editor,
+    session: Session<'a>,
 }
 
 impl<'a> Access<'a> {
     pub(crate) fn new(editor: &'a mut Editor) -> Self {
-        Self { editor }
+        Self {
+            session: editor.session(),
+        }
     }
 }
 
@@ -182,7 +184,7 @@ pub(crate) struct Edit<'a> {
 impl Edit<'_> {
     pub(crate) fn annotation(&self, root: &Root, path: &[Step]) -> Option<&Value> {
         self.access
-            .editor
+            .session
             .model
             .workspace
             .view(root)?
@@ -191,60 +193,53 @@ impl Edit<'_> {
     }
 
     pub(crate) fn replace(&mut self, path: &[Step], value: Value) -> bool {
-        let app = &mut self.access.editor;
+        let session = &mut self.access.session;
         let Some(source) = self.scope.source(path) else {
             return false;
         };
-        if self.scope.read(&app.sources(), path) == Some(&value) {
+        if self.scope.read(&session.sources(), path) == Some(&value) {
             return true;
         }
-        let before = app.model.snapshot();
-        if !selection::set_value(&mut app.model.doc, &app.stack.libraries, &source, value) {
+        let before = session.model.snapshot();
+        if !selection::set_value(&mut session.model.doc, session.libraries, &source, value) {
             return false;
         }
-        app.model.history.record(before);
-        app.refresh_title();
+        session.model.history.record(before);
         true
     }
 
     pub(crate) fn select(&mut self, root: &Root, path: &[Step]) {
-        if self
-            .access
-            .editor
-            .model
-            .selection
-            .as_ref()
-            .is_some_and(|selection| {
-                selection.root() == root
-                    && selection.path() == path
-                    && !selection.scope().same_location(
-                        self.scope,
-                        &self.access.editor.sources(),
-                        path,
-                    )
-            })
-        {
-            self.access.editor.model.selection = None;
+        let session = &mut self.access.session;
+        if session.model.selection.as_ref().is_some_and(|selection| {
+            selection.root() == root
+                && selection.path() == path
+                && !selection
+                    .scope()
+                    .same_location(self.scope, &session.sources(), path)
+        }) {
+            session.model.selection = None;
         }
-        select(self.access.editor, root, path);
-        if let Some(selection) = &mut self.access.editor.model.selection {
+        select(session, root, path);
+        if let Some(selection) = &mut session.model.selection {
             selection.set_scope(self.scope.clone());
         }
     }
 
     pub(crate) fn select_payload(&mut self, root: &Root, path: Path, payload: Value) {
-        self.access.editor.model.selection = Some(selection::Selection::from_scoped_payload(
+        let session = &mut self.access.session;
+        let selection = selection::Selection::from_scoped_payload(
             root,
-            &self.access.editor.sources(),
+            &session.sources(),
             self.scope.clone(),
             path,
             payload,
-        ));
+        );
+        session.model.selection = Some(selection);
     }
 
     pub(crate) fn annotate(&mut self, root: &Root, path: &[Step], value: Value) -> bool {
         // UI state belongs to the displayed occurrence, not the shared source.
-        annotate(self.access.editor, root, path, value)
+        annotate(&mut self.access.session, root, path, value)
     }
 
     pub(crate) fn edit_line(
@@ -254,27 +249,25 @@ impl Edit<'_> {
         line: &crate::display::LineEdit,
         operation: &puri::edit::EditOperation<'_>,
     ) -> bool {
-        if self
-            .access
-            .editor
-            .model
-            .selection
-            .as_ref()
-            .is_none_or(|selection| {
-                !selection
-                    .scope()
-                    .same_location(self.scope, &self.access.editor.sources(), path)
-            })
-        {
+        let session = &mut self.access.session;
+        if session.model.selection.as_ref().is_none_or(|selection| {
+            !selection
+                .scope()
+                .same_location(self.scope, &session.sources(), path)
+        }) {
             return false;
         }
-        edit_line(self.access.editor, root, path, line, operation)
+        edit_line(session, root, path, line, operation)
     }
 
     #[cfg(test)]
     pub(crate) fn grap(&mut self, root: Root, path: Path, function: Value, event: Value) -> bool {
-        let function =
-            grap::evaluate(&function, &self.access.editor.sources(), grap::DEFAULT_FUEL).result;
+        let function = grap::evaluate(
+            &function,
+            &self.access.session.sources(),
+            grap::DEFAULT_FUEL,
+        )
+        .result;
         self.grap_runtime(root, path, function, event)
     }
 
@@ -286,7 +279,7 @@ impl Edit<'_> {
         event: Value,
     ) -> bool {
         crate::site::apply_scoped_event(
-            self.access.editor,
+            &mut self.access.session,
             self.scope.clone(),
             root,
             path,

@@ -445,6 +445,8 @@ impl EditorRunner {
     }
 
     fn rebuild_frame(&mut self, scale: f64, viewport: Size) {
+        // Handlers' edits can't reach the window, so the title follows here.
+        self.editor.refresh_title();
         let frame = self
             .editor
             .build_frame(scale, viewport, self.frame.hover_location());

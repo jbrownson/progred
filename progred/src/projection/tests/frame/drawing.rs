@@ -546,8 +546,8 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         select: Rc::new({
             let root = source_view.clone();
             let path = path.clone();
-            move |editor, _| {
-                crate::editing::select(editor, &root, &path);
+            move |editor: &mut crate::Editor, _| {
+                crate::editing::select(&mut editor.session(), &root, &path);
                 true
             }
         }),

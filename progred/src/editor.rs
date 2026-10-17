@@ -117,6 +117,7 @@ pub(crate) struct Editor {
     /// Where the document lives; `None` is untitled until the first
     /// save asks for a path.
     pub(crate) doc_path: Option<PathBuf>,
+    pub(crate) shown_title: Option<ShownTitle>,
     /// The text bridge's file-local binder table, surviving load → save
     /// so spellings round-trip; never part of the model, invisible
     /// in the document.
@@ -139,6 +140,15 @@ pub(crate) struct Editor {
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
     pub(crate) pending_discard: Option<AfterDiscard>,
+}
+
+/// What a window last showed of its document, so it's told only of changes.
+#[derive(PartialEq)]
+pub(crate) struct ShownTitle {
+    window: WindowId,
+    title: String,
+    edited: bool,
+    path: Option<PathBuf>,
 }
 
 /// Per-window execution state. Widgets receive only `editor`, never this runner.
@@ -320,6 +330,7 @@ pub(crate) fn new_editor(
         stack,
         model: Model::new(doc),
         doc_path,
+        shown_title: None,
         text_binders,
         menu: menu::State::default(),
         cursor: Point::ZERO,
@@ -418,16 +429,30 @@ impl Editor {
         }
     }
 
-    pub(crate) fn refresh_title(&self) {
-        if let Some(window) = self.window() {
-            window.set_title(&self.title());
-            #[cfg(target_os = "macos")]
-            {
-                use winit::platform::macos::WindowExtMacOS;
-                window.set_document_edited(self.model.dirty());
-                macos_window::set_represented(&window, self.doc_path.as_deref());
-            }
+    /// Show the document's title, and on macOS whether it's edited and where
+    /// it lives, if they changed. The shell calls this after dispatch too,
+    /// since the edits handlers make can't reach the window.
+    pub(crate) fn refresh_title(&mut self) {
+        let Some(window) = self.window() else {
+            return;
+        };
+        let shown = ShownTitle {
+            window: window.id(),
+            title: self.title(),
+            edited: self.model.dirty(),
+            path: self.doc_path.clone(),
+        };
+        if self.shown_title.as_ref() == Some(&shown) {
+            return;
         }
+        window.set_title(&shown.title);
+        #[cfg(target_os = "macos")]
+        {
+            use winit::platform::macos::WindowExtMacOS;
+            window.set_document_edited(shown.edited);
+            macos_window::set_represented(&window, shown.path.as_deref());
+        }
+        self.shown_title = Some(shown);
     }
 
     pub(crate) fn menu_toggles(&self) -> command::Toggles {
@@ -773,6 +798,7 @@ impl Editor {
             stack: _,
             model,
             doc_path,
+            shown_title: _,
             text_binders: binders,
             menu,
             cursor: _,

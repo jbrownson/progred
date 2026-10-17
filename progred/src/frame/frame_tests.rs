@@ -549,7 +549,7 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
         .rect;
     let target = runner.frame.dispatch.descends.landmark(path).unwrap();
     runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
-    crate::editing::select(&mut runner.editor, &root, previous);
+    crate::editing::select(&mut runner.editor.session(), &root, previous);
     runner.refresh_frame(1.0, viewport);
     let target = runner.frame.dispatch.descends.landmark(path).unwrap();
     assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
@@ -610,11 +610,8 @@ fn selection_changes_do_not_implicitly_request_reveal() {
         .path
         .to_vec();
     runner.update_frame(1.0, viewport, |editor, _, _| {
-        crate::editing::select(
-            editor,
-            &editor.model.workspace.document_root().clone(),
-            &path,
-        );
+        let root = editor.model.workspace.document_root().clone();
+        crate::editing::select(&mut editor.session(), &root, &path);
         FrameDisposition::Remint
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
@@ -638,7 +635,11 @@ fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> gid::Path {
         .find(|target| target.rect.y0 > viewport.height)
         .unwrap();
     let path = target.path.to_vec();
-    crate::editing::select(&mut runner.editor, target.root.as_ref().unwrap(), &path);
+    crate::editing::select(
+        &mut runner.editor.session(),
+        target.root.as_ref().unwrap(),
+        &path,
+    );
     path
 }
 

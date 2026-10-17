@@ -1,22 +1,25 @@
-//! Document-facing widget operations. Handlers pass the live editor explicitly.
+//! Document-facing widget operations, given the session a dispatch lends or,
+//! where they haven't moved onto it, the live editor.
 
 use crate::{Editor, projection, selection, sources, sources::Sources, workspace::Root};
 use gid::{Path, Step, Value};
 use puri::{Point, edit::EditCtx};
 
 mod scope;
+mod session;
 pub use scope::Read;
 pub(crate) use scope::{Access, Scope};
+pub(crate) use session::Session;
 
-pub(crate) fn select(app: &mut Editor, root: &Root, path: &[Step]) {
-    let fresh = app.model.selection.as_ref().is_none_or(|current| {
+pub(crate) fn select(session: &mut Session<'_>, root: &Root, path: &[Step]) {
+    let fresh = session.model.selection.as_ref().is_none_or(|current| {
         current.root() != root
-            || current.stage(&app.sources()) == selection::Stage::Label
+            || current.stage(&session.sources()) == selection::Stage::Label
             || current.path() != path
     });
     if fresh {
-        app.model.selection = Some(selection::Selection::edge(root, path.to_vec()));
-    } else if let Some(line) = app
+        session.model.selection = Some(selection::Selection::edge(root, path.to_vec()));
+    } else if let Some(line) = session
         .model
         .selection
         .as_mut()
@@ -26,8 +29,13 @@ pub(crate) fn select(app: &mut Editor, root: &Root, path: &[Step]) {
     }
 }
 
-pub(crate) fn annotate(app: &mut Editor, root: &Root, path: &[Step], state: Value) -> bool {
-    match app.model.workspace.view_mut(root) {
+pub(crate) fn annotate(
+    session: &mut Session<'_>,
+    root: &Root,
+    path: &[Step],
+    state: Value,
+) -> bool {
+    match session.model.workspace.view_mut(root) {
         Some(view) if view.annotations.at(path) != Some(&state) => {
             view.annotations.set(path, Some(state));
             true
@@ -157,24 +165,21 @@ pub(crate) fn edit_query(app: &mut Editor, operation: &puri::edit::EditOperation
 }
 
 pub(crate) fn edit_line(
-    app: &mut Editor,
+    session: &mut Session<'_>,
     root: &Root,
     path: &[gid::Step],
     line: &crate::display::LineEdit,
     operation: &puri::edit::EditOperation<'_>,
 ) -> bool {
-    let before = app.model.snapshot();
-    let Editor {
+    let before = session.model.snapshot();
+    let Session {
         model,
-        stack,
-        font_cx,
-        layout_cx,
-        text_clipboard,
-        ..
-    } = app;
+        libraries,
+        text,
+    } = session;
     let sources = sources::Sources {
         doc: &model.doc,
-        libraries: &stack.libraries,
+        libraries,
     };
     let selected = model.selection.as_mut().filter(|selected| {
         selected.root() == root
@@ -183,25 +188,20 @@ pub(crate) fn edit_line(
             && selected.writable(&sources)
     });
     let (handled, record) = match selected {
-        Some(selected) => projection::line_control::edit(
-            &mut model.doc,
-            &stack.libraries,
-            selected,
-            line,
-            |state| {
+        Some(selected) => {
+            projection::line_control::edit(&mut model.doc, libraries, selected, line, |state| {
                 operation(EditCtx {
                     state,
-                    fonts: font_cx,
-                    layouts: layout_cx,
-                    clipboard: text_clipboard,
+                    fonts: text.fonts,
+                    layouts: text.layouts,
+                    clipboard: text.clipboard,
                 })
-            },
-        ),
+            })
+        }
         None => (false, false),
     };
     if record {
         model.history.record(before);
-        app.refresh_title();
     }
     handled
 }
