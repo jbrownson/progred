@@ -1,7 +1,6 @@
 //! Real projection and dispatch fixtures, without a window.
 
 use super::*;
-use peniko::ImageData;
 use puri::draw::{DrawCmd, DrawList, Shape};
 use puri::hover::Claim;
 
@@ -111,8 +110,6 @@ fn an_absent_value_reads_as_its_reason_then_its_fields_all_on_red() {
 }
 
 mod completion;
-#[cfg(not(target_arch = "wasm32"))]
-mod compositor;
 mod conject;
 mod custom_navigation;
 mod document_libraries;
@@ -124,4 +121,3 @@ mod iop_tree_native;
 mod layout;
 mod logical_navigation;
 mod navigation;
-mod profile;

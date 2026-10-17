@@ -1,8 +1,17 @@
 //! Opt-in, headless frame canaries. See docs/performance.md for scope and commands.
 
-use super::*;
+use crate::annotations::Annotations;
 use crate::command::Example;
+use crate::frame::Hovered;
 use crate::perf::{distribution, iterations};
+use crate::projection::Projection;
+use crate::projection::test_support::{Bench, BenchContext, FrameTimes, ProfileView};
+use crate::selection::Selection;
+use crate::sources::Sources;
+use gid::{Document, Step, Value};
+use peniko::{Brush, ImageData};
+use puri::draw::{DrawCmd, DrawList};
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 mod forest;
@@ -293,7 +302,8 @@ fn camera_at(path: &[Step], frame: usize) -> Annotations {
 
 fn fidget_orbit_profile(name: &str, source: &str) {
     // This canary records deferred mesh draws; GPU composition is measured by
-    // compositor::mesh::cam_mesh_roundtrip_profile. CPU validation is untimed.
+    // shell_tests::compositor::mesh::cam_mesh_roundtrip_profile. CPU
+    // validation is untimed.
     let doc = fixture(source);
     let path = first_viewport(&doc);
     let view = ProfileView {
@@ -301,10 +311,10 @@ fn fidget_orbit_profile(name: &str, source: &str) {
         scale: 2.0,
         root: Some(path.clone()),
     };
-    let (view, mut context) = view.prepare(&doc);
     let camera_path = Rc::new(std::cell::RefCell::new(None));
     let observed = camera_path.clone();
-    context.stack.projection.partial = crate::display::compose_partials([
+    let mut context = BenchContext::new();
+    context.stack.projection = Projection::new([
         crate::display::partial(move |input| {
             use crate::libraries::{fidget::vocabulary as f, toolpath::vocabulary as t};
             let fields = input.value?.as_record()?;
@@ -321,8 +331,9 @@ fn fidget_orbit_profile(name: &str, source: &str) {
             }
             None
         }),
-        context.stack.projection.partial.clone(),
+        context.stack.projection.partial().clone(),
     ]);
+    let (view, mut context) = view.prepare_with(&doc, context);
     let first_image = std::cell::RefCell::new(None::<ImageData>);
     let changed = std::cell::Cell::new(false);
     profile(
@@ -402,12 +413,12 @@ fn cam_controls_profile_loop() {
         scale: 2.0,
         root: Some(first_viewport(&doc)),
     };
-    let (view, mut context) = view.prepare(&doc);
     // Keep viewport, memo, controls, and view-call evaluation intact. Only the
     // final 3D projection is replaced, avoiding the headless CPU raster fallback.
     let previews = Rc::new(std::cell::Cell::new(0));
     let rendered = previews.clone();
-    context.stack.projection.partial = crate::display::compose_partials([
+    let mut context = BenchContext::new();
+    context.stack.projection = Projection::new([
         crate::display::runtime_partial(move |input| {
             input
                 .value?
@@ -415,8 +426,9 @@ fn cam_controls_profile_loop() {
             rendered.set(rendered.get() + 1);
             Some(crate::display::dim("preview omitted"))
         }),
-        context.stack.projection.partial.clone(),
+        context.stack.projection.partial().clone(),
     ]);
+    let (view, mut context) = view.prepare_with(&doc, context);
     profile(
         "CAM viewport/control pipeline, 400x600 @2, no 3D work",
         |_| context.frame(view.frame(&doc, &Annotations::default())).0,

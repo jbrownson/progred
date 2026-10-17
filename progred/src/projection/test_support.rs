@@ -503,8 +503,16 @@ pub(crate) struct ProfileView {
 impl ProfileView {
     /// A bench for this view, with a pane's projection when it shows a
     /// viewport, and the viewport's path resolved through its cells.
-    pub(crate) fn prepare(mut self, doc: &Document) -> (Self, BenchContext) {
-        let mut context = BenchContext::new();
+    pub(crate) fn prepare(self, doc: &Document) -> (Self, BenchContext) {
+        self.prepare_with(doc, BenchContext::new())
+    }
+
+    /// As [`Self::prepare`], on a bench whose projection the caller chose.
+    pub(crate) fn prepare_with(
+        mut self,
+        doc: &Document,
+        mut context: BenchContext,
+    ) -> (Self, BenchContext) {
         context.styles = crate::styles::editor(crate::styles::Theme::Light.palette(), self.scale);
         if let Some(path) = &self.root {
             let sources = Sources {

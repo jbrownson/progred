@@ -33,30 +33,30 @@ COLUMNS = [
 # whose 60 frames would last only a few milliseconds after the test starts.
 # Those measure for about a third of a second on a fast machine.
 SUITE = [
-    ("projection::tests::frame::profile::iop_tree_profile_loop", None),
-    ("projection::tests::frame::profile::iop_tree_source_profile_loop", None),
-    ("projection::tests::frame::profile::color_picker_profile_loop", 20000),
-    ("projection::tests::frame::profile::forest::forest_slider_profile_loop", 600),
-    ("projection::tests::frame::profile::forest::forest_source_hover_profile_loop", 600),
+    ("perf::frames::iop_tree_profile_loop", None),
+    ("perf::frames::iop_tree_source_profile_loop", None),
+    ("perf::frames::color_picker_profile_loop", 20000),
+    ("perf::frames::forest::forest_slider_profile_loop", 600),
+    ("perf::frames::forest::forest_source_hover_profile_loop", 600),
     ("libraries::layout::tests::programs::grap_layout_ffi_profile_loop", 1500),
-    ("projection::tests::frame::profile::cam_controls_profile_loop", 600),
-    ("projection::tests::frame::profile::cam_source_profile_loop", None),
-    ("projection::tests::frame::profile::cam_source_scroll_profile_loop", None),
-    ("projection::tests::frame::profile::cam_editor_scroll_profile_loop", None),
+    ("perf::frames::cam_controls_profile_loop", 600),
+    ("perf::frames::cam_source_profile_loop", None),
+    ("perf::frames::cam_source_scroll_profile_loop", None),
+    ("perf::frames::cam_editor_scroll_profile_loop", None),
     ("libraries::toolpath::computation::tests::profile_program_tree_construction", None),
     ("libraries::toolpath::tests::stock_meshing_profile", None),
     ("libraries::toolpath::tests::render_profile::stock_render_profile", None),
-    ("projection::tests::frame::profile::fidget_cube_profile_loop", None),
-    ("projection::tests::frame::profile::fidget_toolpaths_profile_loop", None),
-    ("projection::tests::frame::profile::fidget_orbit_profile_loop", 12),
-    ("projection::tests::frame::profile::fidget_torus_profile_loop", 12),
-    ("projection::tests::frame::profile::fidget_tanglecube_profile_loop", 12),
-    ("projection::tests::frame::profile::fidget_gyroid_profile_loop", 12),
+    ("perf::frames::fidget_cube_profile_loop", None),
+    ("perf::frames::fidget_toolpaths_profile_loop", None),
+    ("perf::frames::fidget_orbit_profile_loop", 12),
+    ("perf::frames::fidget_torus_profile_loop", 12),
+    ("perf::frames::fidget_tanglecube_profile_loop", 12),
+    ("perf::frames::fidget_gyroid_profile_loop", 12),
 ]
 # Run when the adapter is a hardware GPU, or with --gpu.
 GPU_SUITE = [
-    ("projection::tests::frame::compositor::editor_compositor_profile", None),
-    ("projection::tests::frame::compositor::mesh::cam_mesh_roundtrip_profile", None),
+    ("shell_tests::compositor::editor_compositor_profile", None),
+    ("shell_tests::compositor::mesh::cam_mesh_roundtrip_profile", None),
 ]
 ADAPTER = "libraries::fidget::tests::report_gpu_adapter"
 # The canaries an editor change drives: projecting a large source, hovering

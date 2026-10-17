@@ -288,3 +288,6 @@ fn redraw_release_and_cancellation_flush_motion_before_dispatch() {
         );
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+mod compositor;

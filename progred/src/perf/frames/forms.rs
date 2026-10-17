@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::profile::{self as costs, Cost, KINDS, Kind};
+use crate::test_support::make_selection;
 use std::alloc::{GlobalAlloc, Layout, System};
 
 struct CountingAllocator;

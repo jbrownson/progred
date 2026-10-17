@@ -343,8 +343,9 @@ first:
      and route calls into the projection runtime through `Project`.
 4. Move projection/tests' frame- and editor-level suites to where they belong,
    leaving only the runtime's own tests; nothing stays anywhere for historical
-   reasons. Some suites wait on what they reach for: two private items, down
-   from six, since nothing should become visible just for tests. The
+   reasons. Some suites wait on what they reach for: one private item,
+   `projection_target`, down from six, since nothing should become visible
+   just for tests. The
    [survey](history/projection-tests-survey-2026-10-17.md) of its 324 tests
    orders the work:
    1. ~~Move the 46 already-targeted tests to their own modules.~~ Done on 17
@@ -360,9 +361,6 @@ first:
       2026. The harness is the projection runtime's own test support, so it
       times both phases without exposing them. The layout FFI tests moved to
       the layout library and the Fidget render check to the Fidget library.
-      The frame canaries can follow into a perf module of their own once they
-      add their partials before the view adds its entry, instead of replacing
-      the projection's private partial.
    5. Give the driver the verbs that end-to-end tests now reach around it
       for, and move the 67 of them onto it:
       - select a path;
@@ -375,14 +373,16 @@ first:
 
       Many of those tests now re-implement the shell's key routing.
    6. Rewrite 30 tests that drive the whole editor but check one system.
-   7. Give the captures and the frame canaries modules of their own, with the
-      SVG writer in test support. On 17 October 2026 the two GPU mesh tests
-      moved to puri-vello, with the image round trip they compare against in
-      its `capture` module, and the SVG writer and its captures to
-      `crate::svg`. The lesson tests went to the tutorials, the failed
+   7. ~~Give the captures and the frame canaries modules of their own, with
+      the SVG writer in test support.~~ Done on 17 October 2026. The SVG
+      writer and its captures are `crate::svg`, and the frame canaries
+      `crate::perf`'s, adding their partials before the view adds its entry
+      rather than replacing the projection's private one. The full-editor GPU
+      tests went to the shell's tests and the two GPU mesh tests to
+      puri-vello, with the image round trip they compare against in its
+      `capture` module. The lesson tests went to the tutorials, the failed
       toolpath preview to the toolpath library, and the example editors they
-      share to `crate::test_examples`. The frame canaries and the full-editor
-      GPU tests remain.
+      share to `crate::test_examples`.
 
    CAM tests took 84% of progred's test time, running Fidget's generic
    meshing and rendering and the cutter geometry at progred's debug level. On
@@ -399,7 +399,6 @@ first:
      phases.~~ It still does, as the runtime's own test support.
    - ~~`Projection::without_entry` serves one profiling test.~~ The canary
      builds its bench without the entry instead.
-   - The frame canaries replace the projection's private partial.
 5. Give the six things called "source" distinct names.
 6. Give the occurrence-to-location mapping one owning module, and pass an
    opaque handle through display and the libraries instead of `Location` and

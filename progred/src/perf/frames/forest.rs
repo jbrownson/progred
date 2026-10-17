@@ -1,6 +1,8 @@
 use super::*;
 use crate::hover::{Hover, SourceTrace};
 use crate::libraries::{controls, presentation};
+use kurbo::Point;
+use puri::hover::Claim;
 use ui_events::pointer::{PointerEvent, PointerState, PointerUpdate};
 
 const SIZE: kurbo::Size = kurbo::Size::new(720.0, 684.0);

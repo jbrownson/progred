@@ -1,4 +1,14 @@
-use super::*;
+//! The shell's painted frames through the production compositor, on a
+//! headless GPU: a pixel regression and two timing canaries. They need a real
+//! adapter or Mesa's lavapipe; `make test-gpu` runs them.
+
+use crate::frame::Hovered;
+use crate::hover::{Hover, SourceTrace};
+use gid::{Step, Value};
+use kurbo::Point;
+use peniko::Color;
+use puri::draw::{DrawCmd, DrawList};
+use puri::hover::Claim;
 use puri_vello::{
     VelloCanvas,
     compositor::{Compositor, Resources, SplitCanvas},

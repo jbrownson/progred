@@ -1,7 +1,9 @@
 //! Machine-readable timings that `tools/perf.py` collects from the opt-in
-//! profiles; see docs/performance.md.
+//! profiles, and the frame canaries; see docs/performance.md.
 
 use std::time::Duration;
+
+mod frames;
 
 /// How many frames a frame profile measures after its warm-up:
 /// `FRAME_PROFILE_ITERATIONS`, or 60.

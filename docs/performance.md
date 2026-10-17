@@ -147,8 +147,8 @@ These are a smoke check of the checked-in example, not a performance guarantee.
 
 ## Frame timing
 
-The opt-in tests in `progred/src/projection/tests/frame/profile.rs`, and the
-layout library's FFI canary, share one headless frame harness,
+The opt-in tests in `progred/src/perf/frames.rs`, and the layout library's FFI
+canary, share one headless frame harness,
 `progred/src/projection/test_support.rs`. They are not assertions about
 interactive frame rate, and ordinary builds and launches contain none of this
 instrumentation.
