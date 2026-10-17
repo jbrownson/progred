@@ -186,6 +186,20 @@ removed, so it isn't lost:
 
 Directions this surfaced:
 
+- The picker as a widget a projection uses, not special machinery. This is the
+  owner's direction from 17 October 2026.
+  - A projection puts a picker in a hole and supplies its offers.
+  - Raw becomes one more projection supplying its constructors and typed
+    values, instead of being the picker's fallback mode.
+  - Choosing an offer acts through the interface the editor gives projections
+    (see [Code size and structure](#code-size-and-structure)). That interface
+    also supplies what a picker needs to read, such as names and libraries.
+
+  Today, by contrast:
+  - Raw's offers are built inside the editor's picker code, and Grap's offers
+    borrow them from there.
+  - The engine builds the picker's card.
+  - Choosing an offer receives the whole editor.
 - A record combinator taking a spec: expected fields in order, how each field's
   value is drawn and what its hole offers, missing expected fields shown as
   holes, then any other fields. Its "add a field" picker offers the missing
@@ -249,8 +263,30 @@ first:
    sections they need.
 2. Share one `display::Env` test double and the common evaluate, apply and
    projection-input test helpers, now copied 19 to 29 times.
-3. Take the crate split analysis's first four steps, each of which pays off on
-   its own:
+3. Give projections and libraries a clear interface to the editor: a stated
+   subset of it rather than the whole editor. This also makes libraries
+   plug-ins that can't reach menus or the window. The owner's direction, from
+   17 October 2026:
+   - **Read side.** It partly exists already. The host services a projection
+     calls (evaluate, apply, a cell's name and definition) are an interface
+     that the document's reading context implements. What a view can see while
+     it's built is an ad hoc bag defined inside the projection engine, and it
+     would become the rest of the read side. The selection belongs in it.
+     Folds are one convention of the per-path state it carries.
+   - **The theme.** It feels more like a combinator than part of the
+     interface: a projection says what kind of text something is, and the
+     toolkit applies the theme, as the picker already does. Projections that
+     render pixels still need the zoom scale.
+   - **Write side.** It replaces handing handlers the whole editor. It covers
+     edits where they are allowed, the selection, per-path state, drags, and
+     the picker.
+   - **Library vocabularies.** The core libraries' vocabularies, such as
+     text, names and numbers, can stay referenced by the editor. Audit where
+     the core uses library vocabularies, and add to the library interface
+     where that removes a reference.
+
+   The crate split analysis's first four steps start on this, and each pays
+   off on its own:
    - alias the concrete `<Editor, Hovered>` pair, written out 332 times;
    - let the model own the vocabularies and codecs it interprets, as grap owns
      f64's convention;
@@ -258,9 +294,10 @@ first:
      `&mut Editor`, and let the shell set the window title after dispatch;
    - move the hover types, `projection::Cx` and the completion helpers down,
      and route calls into the projection runtime through `Project`.
-4. Fix what projection/tests reaches for: 14 calls to six private items. Then
-   move its frame- and editor-level suites out of projection/, leaving only the
-   runtime's own tests, with nothing made visible just for tests.
+4. Move projection/tests' frame- and editor-level suites to where they belong,
+   leaving only the runtime's own tests; nothing stays anywhere for historical
+   reasons. Some suites wait on what they reach for: 14 calls to six private
+   items, since nothing should become visible just for tests.
    - The completion card, its placement and the selection-ring drawing
      (`completion_card`, `completion_placement`, `primary_highlight`) are
      display code filed in the projection runtime. The tests build the card
@@ -279,7 +316,8 @@ first:
 8. Split progred into three crates, which would also keep the layering honest:
    - core: the model and display;
    - the libraries;
-   - top: the projection runtime, the shell and the app.
+   - top: the projection runtime, the shell and the app. The shell and the app
+     stay together, since the editor is specific to its platforms.
 
    Do this only after item 3, a `cargo build --timings` baseline, and a `Host`
    trait that makes display and the libraries generic over the editor. The
