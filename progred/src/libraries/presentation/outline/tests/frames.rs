@@ -450,7 +450,7 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     assert!(stop(&f, &b_path).rect.y0 < stop(&f, &a_path).rect.y0);
     assert!(stop(&f, &a_path).rect.y1 < stop(&f, &[Step::Key(extra)]).rect.y0);
     assert_eq!(
-        stop(&f, &b_path).scope.source(&b_path),
+        stop(&f, &b_path).scope.location(&b_path),
         Some(Location::root(vec![Step::Key(b)]))
     );
     assert!((stop(&f, &b_path).select)(&mut world, None));

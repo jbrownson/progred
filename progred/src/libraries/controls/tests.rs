@@ -1162,7 +1162,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         .iter()
         .map(|position| SourceTrace::InCell {
             cell: owner,
-            source: gid::Resolution::Library(library),
+            resolution: gid::Resolution::Library(library),
             path: Rc::from([
                 Step::Key(::grap::vocabulary::BODY),
                 Step::Key(ITEMS),

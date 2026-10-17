@@ -30,7 +30,7 @@ pub(super) fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
         let source = context
             .inputs
             .edits
-            .source(context.path)
+            .location(context.path)
             .map(Location::into_owned);
         let entries = d::runtime_partial({
             let fields = fields.clone();

@@ -14,8 +14,11 @@ use std::borrow::Cow;
 pub enum Start {
     /// The document's root value.
     Root,
-    /// The definition `source` gives `cell`.
-    Cell { cell: CellId, source: Resolution },
+    /// The definition `resolution` gives `cell`.
+    Cell {
+        cell: CellId,
+        resolution: Resolution,
+    },
 }
 
 /// A start and the steps from it. The steps can still follow cells, as a
@@ -35,9 +38,9 @@ impl<'a> Location<'a> {
         }
     }
 
-    pub fn in_cell(cell: CellId, source: Resolution, path: impl Into<Cow<'a, [Step]>>) -> Self {
+    pub fn in_cell(cell: CellId, resolution: Resolution, path: impl Into<Cow<'a, [Step]>>) -> Self {
         Self {
-            start: Start::Cell { cell, source },
+            start: Start::Cell { cell, resolution },
             path: path.into(),
         }
     }
@@ -81,7 +84,7 @@ pub fn owned(start: Start) -> bool {
         start,
         Start::Root
             | Start::Cell {
-                source: Resolution::Document,
+                resolution: Resolution::Document,
                 ..
             }
     )

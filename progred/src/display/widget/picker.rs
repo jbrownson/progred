@@ -163,7 +163,7 @@ fn query_content(
 ) -> Measured<HoverPass<crate::Editor>> {
     // This is only reached for an active writable picker. Keep the boundary
     // total if a caller supplies an unmapped occurrence anyway.
-    let Some(location) = cx.edits.source(path) else {
+    let Some(location) = cx.edits.location(path) else {
         return crate::display::widget::empty(tcx, cx.styles);
     };
     // The card and keyboard commit must answer from one list, read from

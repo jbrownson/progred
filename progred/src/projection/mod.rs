@@ -158,13 +158,17 @@ struct ProjectEnv<'a, 's> {
 impl ProjectEnv<'_, '_> {
     fn origin(&self, steps: &[Step]) -> Option<grap::SourceOrigin> {
         let path: Vec<_> = self.path.iter().chain(steps).cloned().collect();
-        let location = self.cx.edits.source(&path)?;
+        let location = self.cx.edits.location(&path)?;
         Some(
             match SourceTrace::from_location(&self.cx.sources, &location) {
                 SourceTrace::Stored(path) => grap::SourceOrigin::Stored(path.to_vec()),
-                SourceTrace::InCell { cell, source, path } => grap::SourceOrigin::Cell {
+                SourceTrace::InCell {
                     cell,
-                    source,
+                    resolution,
+                    path,
+                } => grap::SourceOrigin::Cell {
+                    cell,
+                    resolution,
                     path: path.to_vec(),
                 },
             },
@@ -380,7 +384,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         let value = cx.edits.read(&cx.sources, &path);
         let mut ancestry = self.ancestors.clone();
         // Following the same source through jumps must not bypass cycle checks.
-        if let Some(location) = cx.edits.source(&path) {
+        if let Some(location) = cx.edits.location(&path) {
             if let Start::Cell { cell, .. } = location.start {
                 ancestry.cells.insert(cell);
             }
@@ -614,8 +618,8 @@ fn prepare_project(
     let followed = Location::root(root_path)
         .stored(&sources)
         .and_then(|stored| match stored.start {
-            Start::Cell { cell, source } => {
-                Some((cell, source, root_path.len() - stored.path.len()))
+            Start::Cell { cell, resolution } => {
+                Some((cell, resolution, root_path.len() - stored.path.len()))
             }
             Start::Root => None,
         });
@@ -833,7 +837,7 @@ fn prepare_descend_path(
             );
         }
         let scope = edits.as_ref().unwrap_or(&cx.edits);
-        value = match (!scope.descends()).then(|| scope.source(&path)).flatten() {
+        value = match (!scope.descends()).then(|| scope.location(&path)).flatten() {
             Some(location) => cx.sources.read(&location).map(grap::RuntimeValue::from),
             None => value.as_ref().and_then(|value| {
                 location::child(value, step, |cell, source| cx.sources.value(cell, source))
@@ -870,7 +874,7 @@ fn prepare_value(
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
     let value = value.filter(|_| !cx.pending_at(path));
-    let source = cx.edits.source(path);
+    let source = cx.edits.location(path);
     let ground = ground(cx, source.as_ref(), value);
     let changed_ground = (ground != ancestors.ground).then_some(ground);
     let changed_ancestors = changed_ground.map(|ground| Ancestry {

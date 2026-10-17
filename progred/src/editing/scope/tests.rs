@@ -54,18 +54,18 @@ fn conjects_compose_and_the_identity_scope_borrows_its_path() {
     let scope = Scope::default().jump(first.clone(), source.clone());
     let inner = scope.with_conject(
         second.clone(),
-        scope.source(&inner_source).unwrap().into_owned(),
+        scope.location(&inner_source).unwrap().into_owned(),
         crate::display::Conject::descend(),
     );
     let expected = [source.clone(), vec![child]].concat();
-    assert_eq!(inner.source(&second), Some(Location::root(expected)));
-    assert_eq!(inner.source(&first), Some(Location::root(source.clone())));
+    assert_eq!(inner.location(&second), Some(Location::root(expected)));
+    assert_eq!(inner.location(&first), Some(Location::root(source.clone())));
     assert_eq!(
-        inner.source(&sibling),
+        inner.location(&sibling),
         Some(Location::root(sibling.clone()))
     );
     assert!(matches!(
-        Scope::default().source(&source),
+        Scope::default().location(&source),
         Some(Location {
             path: Cow::Borrowed(_),
             ..
@@ -79,13 +79,13 @@ fn detached_boundaries_do_not_fall_back() {
     let detached = Scope::default()
         .jump(Vec::new(), document.clone())
         .detached(prefix.clone());
-    assert!(detached.source(&prefix).is_none());
+    assert!(detached.location(&prefix).is_none());
     assert_eq!(
-        detached.source(&outside),
+        detached.location(&outside),
         Some(Location::root([document, outside.clone()].concat()))
     );
     let restored = detached.jump(prefix.clone(), outside.clone());
-    assert_eq!(restored.source(&prefix), Some(Location::root(outside)));
+    assert_eq!(restored.location(&prefix), Some(Location::root(outside)));
 }
 
 #[test]
@@ -398,21 +398,21 @@ fn following_a_cell_starts_a_location_at_its_definition() {
     assert!(followed.descends());
     assert!(!computed.descends());
     assert!(
-        followed.source(&reference).is_none(),
+        followed.location(&reference).is_none(),
         "the reference is computed"
     );
     assert_eq!(
-        followed.source(&definition),
+        followed.location(&definition),
         Some(Location::in_cell(cell, source, Vec::new()))
     );
     let inside = [definition, vec![field.clone()]].concat();
     assert_eq!(
-        followed.source(&inside),
+        followed.location(&inside),
         Some(Location::in_cell(cell, source, vec![field]))
     );
     let elsewhere = path();
     assert_eq!(
-        followed.source(&elsewhere),
+        followed.location(&elsewhere),
         Some(Location::root(elsewhere.clone()))
     );
 }
@@ -430,7 +430,10 @@ fn a_route_through_a_cell_and_its_definitions_location_are_the_same_location() {
     let definition = vec![Step::Key(field), follow.clone()];
     let within = [definition.clone(), vec![Step::Key(inner)]].concat();
     let restarted = Scope::default().in_cell(definition, cell, gid::Resolution::Document);
-    assert_ne!(Scope::default().source(&within), restarted.source(&within));
+    assert_ne!(
+        Scope::default().location(&within),
+        restarted.location(&within)
+    );
     assert!(Scope::default().same_location(&restarted, &editor.sources(), &within));
     assert!(!restarted.same_location(
         &Scope::default().detached(within.clone()),

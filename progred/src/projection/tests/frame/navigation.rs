@@ -536,7 +536,7 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
             .as_ref()
             .unwrap()
             .scope()
-            .source(&name);
+            .location(&name);
         assert_eq!(
             selected
                 .as_ref()

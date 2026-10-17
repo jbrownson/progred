@@ -101,7 +101,7 @@ fn declaration_cell(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option
     Some(group(selectable_bracket(
         Delim::Paren,
         descend_local(
-            Step::Follow(definition.source),
+            Step::Follow(definition.resolution),
             crate::display::partial(declaration_name),
             &input.default_projection,
         ),
@@ -161,7 +161,9 @@ fn program(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> 
     let source = input
         .env
         .resolve(cell)
-        .map_or(gid::Resolution::Document, |definition| definition.source);
+        .map_or(gid::Resolution::Document, |definition| {
+            definition.resolution
+        });
     Some(group(selectable_bracket(
         Delim::Paren,
         expression_path([Step::Follow(source)], &input.default_projection),
@@ -587,8 +589,11 @@ fn new_program() -> Completion {
 }
 
 /// Where a call offer's function comes from: the document, or a library by name.
-fn call_detail(request: &crate::display::CompletionRequest<'_>, source: gid::Resolution) -> String {
-    match source {
+fn call_detail(
+    request: &crate::display::CompletionRequest<'_>,
+    resolution: gid::Resolution,
+) -> String {
+    match resolution {
         gid::Resolution::Document => "call".to_owned(),
         gid::Resolution::Library(library) => format!(
             "call · {}",
@@ -614,9 +619,9 @@ fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Comp
                     || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
                 .then(|| {
                     let offer = call_completion(cell.into(), cell, request.resolve)
-                        .with_detail(call_detail(request, definition.source));
+                        .with_detail(call_detail(request, definition.resolution));
                     (
-                        matches!(definition.source, gid::Resolution::Library(_)),
+                        matches!(definition.resolution, gid::Resolution::Library(_)),
                         name,
                         offer,
                     )

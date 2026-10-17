@@ -40,7 +40,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
     }
     .definition(function)
     .unwrap();
-    assert_eq!(native.source, Resolution::Library(library));
+    assert_eq!(native.resolution, Resolution::Library(library));
     assert!(native.native);
     assert_eq!(native.value, &Value::record([]));
     let answer = Value::from(b"document".to_vec());
@@ -63,7 +63,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
             libraries: &libraries,
         };
         let resolved = sources.definition(function).unwrap();
-        assert_eq!(resolved.source, Resolution::Document);
+        assert_eq!(resolved.resolution, Resolution::Document);
         assert!(!resolved.native);
         assert_eq!(Some(resolved.value), doc.cells.value(function));
         for result in [
@@ -133,10 +133,10 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
             assert_eq!(evaluation.result, crate::libraries::absent::decline());
             assert_eq!(
                 origins.into_inner(),
-                [Resolution::Document].map(|source| {
+                [Resolution::Document].map(|resolution| {
                     grap::SourceOrigin::Cell {
                         cell: function,
-                        source,
+                        resolution,
                         path: vec![Step::Key(grap::vocabulary::BODY)],
                     }
                 })
@@ -215,12 +215,9 @@ fn plural_lookup_keeps_document_first_and_names_library_origins() {
     assert_eq!(
         sources
             .values(cell)
-            .map(|definition| definition.source)
+            .map(|definition| definition.resolution)
             .collect::<Vec<_>>(),
-        [
-            DefinitionSource::Document,
-            DefinitionSource::Library(library_id)
-        ]
+        [Resolution::Document, Resolution::Library(library_id)]
     );
     assert_eq!(sources.name(library_id), Some("test"));
 }
@@ -303,7 +300,7 @@ fn external_means_the_library_answers() {
     let mut cells = Cells::new();
     cells.set_value(doc_cell, crate::test_values::text("doc"));
 
-    let owned = |cell, source| crate::location::owned(Start::Cell { cell, source });
+    let owned = |cell, resolution| crate::location::owned(Start::Cell { cell, resolution });
     let library = Resolution::Library(libraries.iter().next().unwrap().0);
     let doc = doc_of(cells.clone());
     let sources = Sources {

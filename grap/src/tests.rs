@@ -291,7 +291,7 @@ fn value_wrappers_preserve_the_inner_expression_source() {
         origin.into_inner(),
         Some(SourceOrigin::Cell {
             cell,
-            source: Resolution::Document,
+            resolution: Resolution::Document,
             path: vec![gid::Step::Key(vocabulary::VALUE)],
         }),
     );
@@ -1277,18 +1277,18 @@ fn a_foreign_call_retains_its_cell_relative_source_origin() {
         *source.borrow(),
         Some(SourceOrigin::Cell {
             cell: function,
-            source: Resolution::Document,
+            resolution: Resolution::Document,
             path: vec![gid::Step::Key(vocabulary::BODY)],
         }),
     );
 }
 
 #[test]
-fn a_single_value_definition_retains_its_resolution_source() {
+fn a_single_value_definition_retains_its_resolution() {
     let cell = new_cell_id();
     let foreign = new_cell_id();
     let functions = [foreign];
-    for source in [Resolution::Document, Resolution::Library(new_cell_id())] {
+    for resolution in [Resolution::Document, Resolution::Library(new_cell_id())] {
         let origin = RefCell::new(None);
         let scoped = |_, context: &mut Context<'_>, call: &Expression, _: &Environment| {
             *origin.borrow_mut() = context.source_origin(call);
@@ -1299,7 +1299,10 @@ fn a_single_value_definition_retains_its_resolution_source() {
             &Value::from(cell),
             &TestHost(|queried| {
                 assert_eq!(queried, cell);
-                vec![(source, Definition::Value(call(Value::from(foreign), [])))]
+                vec![(
+                    resolution,
+                    Definition::Value(call(Value::from(foreign), [])),
+                )]
             }),
             &overlay,
             20,
@@ -1309,7 +1312,7 @@ fn a_single_value_definition_retains_its_resolution_source() {
             origin.into_inner(),
             Some(SourceOrigin::Cell {
                 cell,
-                source,
+                resolution,
                 path: vec![]
             })
         );

@@ -7,11 +7,10 @@ use crate::library::Libraries;
 use crate::location::{Location, Start};
 use gid::{CellId, Document, Resolution, Step, Value};
 
-pub type DefinitionSource = Resolution;
-
 #[derive(Clone, Copy)]
 pub struct LocatedValue<'a> {
-    pub source: DefinitionSource,
+    /// Whether the document or a library defines it.
+    pub resolution: Resolution,
     pub value: &'a Value,
 }
 
@@ -175,8 +174,8 @@ impl<'a> Sources<'a> {
     pub fn definition(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'a>> {
         self.definitions(cell)
             .next()
-            .map(|(source, contribution)| crate::display::ResolvedCell {
-                source,
+            .map(|(resolution, contribution)| crate::display::ResolvedCell {
+                resolution,
                 value: contribution.value(),
                 native: matches!(
                     contribution,
@@ -187,7 +186,7 @@ impl<'a> Sources<'a> {
 
     pub fn value(&self, cell: CellId, resolution: &Resolution) -> Option<&'a Value> {
         self.values(cell)
-            .find(|value| &value.source == resolution)
+            .find(|value| &value.resolution == resolution)
             .map(|value| value.value)
     }
 
@@ -197,8 +196,8 @@ impl<'a> Sources<'a> {
 
     pub fn values(&self, cell: CellId) -> impl Iterator<Item = LocatedValue<'a>> {
         self.definitions(cell)
-            .map(|(source, contribution)| LocatedValue {
-                source,
+            .map(|(resolution, contribution)| LocatedValue {
+                resolution,
                 value: contribution.value(),
             })
     }
@@ -229,7 +228,7 @@ impl<'a> Sources<'a> {
         path.iter().try_fold(
             match start {
                 Start::Root => self.root(),
-                Start::Cell { cell, source } => self.value(cell, &source),
+                Start::Cell { cell, resolution } => self.value(cell, &resolution),
             }?,
             |value, step| match step {
                 Step::Follow(resolution) => self.value(value.as_cell()?, resolution),

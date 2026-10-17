@@ -35,12 +35,12 @@ fn a_source_descendant_does_not_highlight_its_operation() {
     let argument = new_cell_id();
     let source = SourceTrace::InCell {
         cell,
-        source: Resolution::Document,
+        resolution: Resolution::Document,
         path: Rc::from([Step::Key(call)]),
     };
     let hovered = SourceTrace::InCell {
         cell,
-        source: Resolution::Document,
+        resolution: Resolution::Document,
         path: Rc::from([Step::Key(call), Step::Key(argument)]),
     };
     let drawing = Recorded {
@@ -69,7 +69,7 @@ fn an_exact_source_highlights_its_operation() {
     let call = new_cell_id();
     let source = SourceTrace::InCell {
         cell,
-        source: Resolution::Document,
+        resolution: Resolution::Document,
         path: Rc::from([Step::Key(call)]),
     };
     let drawing = Recorded {

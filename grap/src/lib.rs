@@ -192,7 +192,7 @@ pub enum SourceOrigin {
     Stored(Vec<gid::Step>),
     Cell {
         cell: CellId,
-        source: Resolution,
+        resolution: Resolution,
         path: Vec<gid::Step>,
     },
 }
@@ -1242,7 +1242,10 @@ struct OriginId(Rc<OriginNode>);
 enum OriginRoot {
     Input,
     Located(SourceOrigin),
-    Cell { cell: CellId, source: Resolution },
+    Cell {
+        cell: CellId,
+        resolution: Resolution,
+    },
 }
 
 enum OriginNode {
@@ -1859,8 +1862,8 @@ impl<'a> Context<'a> {
                     Some((_, Definition::Foreign(definition))) => {
                         PreparedCallTargetKind::Foreign(definition.implementation.clone())
                     }
-                    Some((source, Definition::Value(value))) => PreparedCallTargetKind::Value(
-                        self.lower_source(&value, OriginRoot::Cell { cell, source }),
+                    Some((resolution, Definition::Value(value))) => PreparedCallTargetKind::Value(
+                        self.lower_source(&value, OriginRoot::Cell { cell, resolution }),
                     ),
                     None => PreparedCallTargetKind::Missing,
                 };
@@ -2051,7 +2054,7 @@ impl<'a> Context<'a> {
                 absent::CELL,
                 Value::from(cell),
             ))),
-            Some((source, definition)) => {
+            Some((resolution, definition)) => {
                 while self.cell_states.len() <= index.0 {
                     self.cell_states.push(CellState::Unknown);
                 }
@@ -2073,8 +2076,10 @@ impl<'a> Context<'a> {
                         )))
                     }
                     CellState::Unknown => {
-                        let expression = self
-                            .lower_source(definition.value(), OriginRoot::Cell { cell, source });
+                        let expression = self.lower_source(
+                            definition.value(),
+                            OriginRoot::Cell { cell, resolution },
+                        );
                         self.cell_states[index.0] = CellState::Ready(expression.clone());
                         self.eval_resolved_cell(index, cell, expression, environment)
                     }
@@ -2415,8 +2420,9 @@ impl<'a> Context<'a> {
                     environment,
                 )
             }
-            Some((source, Definition::Value(value))) => {
-                let expression = context.lower_source(&value, OriginRoot::Cell { cell, source });
+            Some((resolution, Definition::Value(value))) => {
+                let expression =
+                    context.lower_source(&value, OriginRoot::Cell { cell, resolution });
                 let callable = context.eval_definition(cell, expression, environment)?;
                 if callable.is_absent() {
                     Ok(callable)

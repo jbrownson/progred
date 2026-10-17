@@ -160,7 +160,7 @@ impl Selection {
 
     /// Where the selected data is stored, as this selection's scope names it.
     pub(crate) fn location(&self) -> Option<Location<'_>> {
-        self.scope.source(&self.path)
+        self.scope.location(&self.path)
     }
 
     pub(crate) fn value<'a>(&self, sources: &Sources<'a>) -> Option<&'a Value> {
@@ -482,7 +482,7 @@ pub(crate) fn pending_edge(
             let value = sources.resolve(*cell)?;
             value.value.as_record()?;
             let mut followed = parent;
-            followed.push(Step::Follow(value.source));
+            followed.push(Step::Follow(value.resolution));
             followed
         }
         Value::Blob(_) | Value::List(_) => return None,
@@ -569,7 +569,7 @@ fn pending_into_at(
             let value = sources.resolve(*cell)?;
             let elements = value.value.as_list()?;
             let mut followed = path.to_vec();
-            followed.push(Step::Follow(value.source));
+            followed.push(Step::Follow(value.resolution));
             (followed, elements)
         }
         Value::Blob(_) | Value::Record(_) => return None,

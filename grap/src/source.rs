@@ -21,11 +21,11 @@ pub fn value(origin: &SourceOrigin) -> Value {
         SourceOrigin::Stored(steps) => Value::record([(STORED, path::value(steps))]),
         SourceOrigin::Cell {
             cell,
-            source,
+            resolution,
             path: steps,
         } => Value::record([
             (CELL, (*cell).into()),
-            (SOURCE, path::resolution_value(*source)),
+            (SOURCE, path::resolution_value(*resolution)),
             (PATH, path::value(steps)),
         ]),
     }
@@ -39,7 +39,7 @@ pub fn read(value: &Value) -> Option<SourceOrigin> {
         (None, Some(steps), None) => path::read(steps).map(SourceOrigin::Stored),
         (None, None, Some(cell)) => Some(SourceOrigin::Cell {
             cell: cell.as_cell()?,
-            source: path::read_resolution(fields.get(&SOURCE)?)?,
+            resolution: path::read_resolution(fields.get(&SOURCE)?)?,
             path: path::read(fields.get(&PATH)?)?,
         }),
         _ => None,
@@ -64,9 +64,9 @@ pub(crate) fn origin(expression: &Expression) -> Option<SourceOrigin> {
                         prefix.extend(path);
                         base
                     }
-                    OriginRoot::Cell { cell, source } => SourceOrigin::Cell {
+                    OriginRoot::Cell { cell, resolution } => SourceOrigin::Cell {
                         cell: *cell,
-                        source: *source,
+                        resolution: *resolution,
                         path,
                     },
                 });

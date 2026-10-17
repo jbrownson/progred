@@ -12,19 +12,19 @@ fn detached_drawing_has_no_input_source_but_still_traces_called_cells() {
         None
     );
     let cell = new_cell_id();
-    let source = gid::Resolution::Document;
+    let resolution = gid::Resolution::Document;
     assert_eq!(
         from_grap(
             grap::SourceOrigin::Cell {
                 cell,
-                source,
+                resolution,
                 path: path.clone()
             },
             None
         ),
         Some(SourceTrace::InCell {
             cell,
-            source,
+            resolution,
             path: path.into()
         })
     );

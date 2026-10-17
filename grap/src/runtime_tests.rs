@@ -742,7 +742,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
             [
                 SourceOrigin::Cell {
                     cell: factory,
-                    source: Resolution::Document,
+                    resolution: Resolution::Document,
                     path: vec![
                         gid::Step::Key(vocabulary::BODY),
                         gid::Step::Key(vocabulary::BODY)
@@ -777,7 +777,7 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
         Some(SourceOrigin::Stored(path.clone())),
         Some(SourceOrigin::Cell {
             cell: ancestor,
-            source: Resolution::Library(library),
+            resolution: Resolution::Library(library),
             path,
         }),
         None,
@@ -932,7 +932,7 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
         source::read(fields.get(&source::vocabulary::BODY_ORIGIN).unwrap()),
         Some(SourceOrigin::Cell {
             cell: enclosing,
-            source: Resolution::Library(library),
+            resolution: Resolution::Library(library),
             path: vec![
                 gid::Step::Key(vocabulary::VALUE),
                 gid::Step::Key(vocabulary::BODY)

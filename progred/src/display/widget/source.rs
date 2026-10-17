@@ -11,7 +11,7 @@ pub enum SourceTrace {
     Stored(Rc<[Step]>),
     InCell {
         cell: CellId,
-        source: Resolution,
+        resolution: Resolution,
         path: Rc<[Step]>,
     },
 }
@@ -25,7 +25,11 @@ impl SourceTrace {
         let path = Rc::from(location.path.as_ref());
         match location.start {
             Start::Root => Self::Stored(path),
-            Start::Cell { cell, source } => Self::InCell { cell, source, path },
+            Start::Cell { cell, resolution } => Self::InCell {
+                cell,
+                resolution,
+                path,
+            },
         }
     }
 
@@ -38,9 +42,13 @@ impl SourceTrace {
         };
         match self {
             Self::Stored(path) => Self::Stored(append(path)),
-            Self::InCell { cell, source, path } => Self::InCell {
+            Self::InCell {
+                cell,
+                resolution,
+                path,
+            } => Self::InCell {
                 cell: *cell,
-                source: *source,
+                resolution: *resolution,
                 path: append(path),
             },
         }
@@ -56,7 +64,7 @@ pub enum Secondary {
     Stored(Rc<[Step]>),
     InCell {
         cell: CellId,
-        source: Resolution,
+        resolution: Resolution,
         path: Rc<[Step]>,
         /// The first step relative to `cell`, immediately after its
         /// `Follow` step in `path`.
@@ -73,9 +81,9 @@ impl Secondary {
         match cell {
             Some(cell) => Self::Cell(cell),
             None => match enclosing {
-                Some((cell, source, relative_from)) => Self::InCell {
+                Some((cell, resolution, relative_from)) => Self::InCell {
                     cell,
-                    source,
+                    resolution,
                     path,
                     relative_from,
                 },
@@ -87,9 +95,13 @@ impl Secondary {
     pub fn from_trace(trace: &SourceTrace) -> Self {
         match trace {
             SourceTrace::Stored(path) => Self::Stored(path.clone()),
-            SourceTrace::InCell { cell, source, path } => Self::InCell {
+            SourceTrace::InCell {
+                cell,
+                resolution,
+                path,
+            } => Self::InCell {
                 cell: *cell,
-                source: *source,
+                resolution: *resolution,
                 path: path.clone(),
                 relative_from: 0,
             },
@@ -110,19 +122,19 @@ impl PartialEq for Secondary {
             (
                 Self::InCell {
                     cell: left_cell,
-                    source: left_source,
+                    resolution: left_resolution,
                     path: left_path,
                     relative_from: left_from,
                 },
                 Self::InCell {
                     cell: right_cell,
-                    source: right_source,
+                    resolution: right_resolution,
                     path: right_path,
                     relative_from: right_from,
                 },
             ) => {
                 left_cell == right_cell
-                    && left_source == right_source
+                    && left_resolution == right_resolution
                     && left_path[*left_from..] == right_path[*right_from..]
             }
             _ => false,

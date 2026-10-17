@@ -64,7 +64,7 @@ impl EditRun {
     }
 
     pub(crate) fn write(&mut self, session: &mut Session<'_>, value: Value) -> bool {
-        let Some(source) = self.scope.source(&self.path) else {
+        let Some(source) = self.scope.location(&self.path) else {
             return false;
         };
         write_value(

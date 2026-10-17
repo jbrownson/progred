@@ -70,7 +70,7 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
                 .iter()
                 .position(|candidate| *candidate == cell)
                 .map(|index| ResolvedCell {
-                    source: definitions[index].0,
+                    resolution: definitions[index].0,
                     value: &definitions[index].1,
                     native: false,
                 })
@@ -235,7 +235,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
         fn resolve(&self, _: CellId) -> Option<ResolvedCell<'_>> {
             Some(ResolvedCell {
                 value: &self.0,
-                source: self.1,
+                resolution: self.1,
                 native: false,
             })
         }
@@ -369,7 +369,7 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
     let reference = Value::from(function);
     let resolve = |cell| {
         Some(ResolvedCell {
-            source: gid::Resolution::Library(ID),
+            resolution: gid::Resolution::Library(ID),
             value: if cell == alias { &reference } else { &lambda },
             native: false,
         })
@@ -381,7 +381,7 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
     assert_eq!(function_parameters(&(&reference).into(), &|_| None), None);
     assert_eq!(
         function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
-            source: gid::Resolution::Document,
+            resolution: gid::Resolution::Document,
             value: &reference,
             native: false,
         })),
@@ -394,7 +394,7 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
     ] {
         assert_eq!(
             function_parameters(&(&reference).into(), &|_| Some(ResolvedCell {
-                source: gid::Resolution::Library(ID),
+                resolution: gid::Resolution::Library(ID),
                 value: description,
                 native: true,
             })),
@@ -675,7 +675,7 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
 
         fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {
             (cell == FUNCTION_CELL).then_some(ResolvedCell {
-                source: gid::Resolution::Document,
+                resolution: gid::Resolution::Document,
                 value: &self.definition,
                 native: self.native,
             })

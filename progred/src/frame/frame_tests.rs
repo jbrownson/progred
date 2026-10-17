@@ -921,23 +921,23 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         ),
     ];
     let descends = targets.map(
-        |(source, rect)| navigate::Descend::<Option<gid::Resolution>> {
+        |(resolution, rect)| navigate::Descend::<Option<gid::Resolution>> {
             scope: Default::default(),
             root: Some(root.clone()),
-            path: Rc::from([Step::Follow(source), Step::Key(call)]),
+            path: Rc::from([Step::Follow(resolution), Step::Key(call)]),
             rect,
             select: Rc::new(move |selected, _| {
-                *selected = Some(source);
+                *selected = Some(resolution);
                 true
             }),
             secondary: None,
             selected: false,
         },
     );
-    for (source, rect) in targets {
+    for (resolution, rect) in targets {
         let trace = hover::SourceTrace::InCell {
             cell,
-            source,
+            resolution,
             path: Rc::from([Step::Key(call)]),
         };
         let descend = projection::source_link::source_descend(&sources, &descends, &trace).unwrap();
@@ -945,7 +945,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         assert_eq!(descend.rect, rect);
         let mut selected = None;
         assert!((descend.select)(&mut selected, None));
-        assert_eq!(selected, Some(source));
+        assert_eq!(selected, Some(resolution));
     }
 }
 

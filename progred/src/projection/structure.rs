@@ -53,7 +53,7 @@ pub(super) fn collapsed_layout(
         Some(cell) => {
             let value = cx.sources.resolve(cell)?;
             let mut followed = path.to_vec();
-            followed.push(Step::Follow(value.source));
+            followed.push(Step::Follow(value.resolution));
             (cx.pending_child_of(&followed).is_none() && cx.pending_edge_under(&followed).is_none())
                 .then_some(Delim::Paren)?
         }
@@ -82,7 +82,7 @@ fn cell_layout(cx: &Cx, cell: CellId) -> View {
     let source = cx
         .sources
         .resolve(cell)
-        .map_or(Resolution::Document, |value| value.source);
+        .map_or(Resolution::Document, |value| value.resolution);
     crate::display::structure::authoring(crate::display::projection::group(selectable_bracket(
         Delim::Paren,
         descend(Step::Follow(source), None, None),

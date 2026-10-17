@@ -24,7 +24,7 @@ fn website_forest_hover_finds_the_available_call() {
         .descends
         .iter()
         .find_map(|descend| {
-            let location = descend.scope.source(&descend.path)?;
+            let location = descend.scope.location(&descend.path)?;
             let value = sources.read(&location)?;
             (value
                 .as_record()?

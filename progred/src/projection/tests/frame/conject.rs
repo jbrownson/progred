@@ -103,7 +103,7 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
             .as_ref()
             .unwrap()
             .scope()
-            .source(&child_path)
+            .location(&child_path)
             .is_none()
     );
     let frame = editing_frame(&mut world, false);
@@ -457,7 +457,7 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
             Some(&text::value("before!"))
         );
         assert_eq!(
-            target.scope.source(path),
+            target.scope.location(path),
             Some(Location::root(vec![Step::Key(source)]))
         );
     }

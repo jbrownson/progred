@@ -255,9 +255,9 @@ struct Selection {
 fn source(location: &Location) -> serde_json::Value {
     match location.start {
         Start::Root => serde_json::json!({"path": path::value(&location.path)}),
-        Start::Cell { cell, source } => serde_json::json!({
+        Start::Cell { cell, resolution } => serde_json::json!({
             "cell": cell,
-            "library": match source {
+            "library": match resolution {
                 Resolution::Document => None,
                 Resolution::Library(library) => Some(library),
             },

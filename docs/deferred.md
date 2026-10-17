@@ -410,7 +410,12 @@ first:
      phases.~~ It still does, as the runtime's own test support.
    - ~~`Projection::without_entry` serves one profiling test.~~ The canary
      builds its bench without the entry instead.
-5. Give the six things called "source" distinct names.
+5. ~~Give the six things called "source" distinct names.~~ Done on 17 October
+   2026. Where a cell's definition comes from is a `resolution` everywhere, as
+   gid's `Resolution` names it, and the `DefinitionSource` alias is gone; a
+   scope answers an occurrence's `location`. "Source" now means the document
+   and libraries values are read from (`Sources`) and the code that drew
+   something (`SourceTrace`, `source_link`, `SourceCalls`).
 6. Give the occurrence-to-location mapping one owning module, and pass an
    opaque handle through display and the libraries instead of `Location` and
    `Conject`.

@@ -51,7 +51,7 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
     assert!(step(&mut world, Direction::Right));
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(
-        selection.scope().source(selection.path()),
+        selection.scope().location(selection.path()),
         Some(Location::root(field("d")))
     );
     assert!(
@@ -333,7 +333,7 @@ fn logical_navigation_retains_jump_editing_targets() {
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(selection.path(), body);
     assert_eq!(
-        selection.scope().source(selection.path()),
+        selection.scope().location(selection.path()),
         Some(Location::root(vec![Step::Key(field)]))
     );
 }
@@ -353,7 +353,7 @@ fn logical_computed_children_remain_readonly_and_text_handles_keys_first() {
     assert!(step(&mut world, Direction::Right));
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(selection.path(), result);
-    assert!(selection.scope().source(selection.path()).is_none());
+    assert!(selection.scope().location(selection.path()).is_none());
 
     world.model.selection = Some(make_selection(vec![]));
     let document = world.model.doc.clone();

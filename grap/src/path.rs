@@ -24,8 +24,8 @@ pub fn read(value: &Value) -> Option<Path> {
     value.as_list()?.values().map(read_step).collect()
 }
 
-pub fn resolution_value(source: Resolution) -> Value {
-    match source {
+pub fn resolution_value(resolution: Resolution) -> Value {
+    match resolution {
         Resolution::Document => vocabulary::DOCUMENT.into(),
         Resolution::Library(cell) => Value::record([(vocabulary::LIBRARY, cell.into())]),
     }

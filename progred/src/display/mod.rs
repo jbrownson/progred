@@ -163,7 +163,8 @@ pub enum CompletionScope {
 /// Read-only definition metadata; native implementations are never exposed here.
 #[derive(Clone, Copy)]
 pub struct ResolvedCell<'a> {
-    pub source: Resolution,
+    /// Whether the document or a library defines it.
+    pub resolution: Resolution,
     pub value: &'a Value,
     pub native: bool,
 }

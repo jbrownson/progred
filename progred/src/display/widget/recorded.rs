@@ -98,7 +98,7 @@ fn recorded_leaf(
     let program_path: Vec<_> = path.iter().chain(program).cloned().collect();
     let input = cx
         .edits
-        .source(&program_path)
+        .location(&program_path)
         .map(|location| SourceTrace::from_location(&cx.sources, &location));
     let document = cx.sources.doc.clone();
     let libraries = cx.sources.libraries.clone();

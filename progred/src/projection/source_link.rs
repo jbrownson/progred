@@ -130,7 +130,7 @@ pub(crate) fn source_descend<'a, World>(
         descend.root.is_some()
             && descend
                 .scope
-                .source(&descend.path)
+                .location(&descend.path)
                 .is_some_and(|location| SourceTrace::from_location(sources, &location) == *source)
     })
 }

@@ -28,7 +28,10 @@ enum Reading {
     },
     /// A cell's definition, followed at the occurrence: a location starts
     /// there, however the cell was reached.
-    Cell { cell: CellId, source: Resolution },
+    Cell {
+        cell: CellId,
+        resolution: Resolution,
+    },
 }
 
 impl std::fmt::Debug for Scope {
@@ -83,17 +86,18 @@ impl Scope {
 
     /// The occurrence follows `cell` to its definition from `source`, where
     /// it and everything beneath it start their locations.
-    pub(crate) fn in_cell(&self, occurrence: Path, cell: CellId, source: Resolution) -> Self {
-        self.layer(occurrence, Reading::Cell { cell, source })
+    pub(crate) fn in_cell(&self, occurrence: Path, cell: CellId, resolution: Resolution) -> Self {
+        self.layer(occurrence, Reading::Cell { cell, resolution })
     }
 
-    pub(crate) fn source<'p>(&self, path: &'p [Step]) -> Option<Location<'p>> {
+    /// Where the data at `path` is stored, as this scope reads it.
+    pub(crate) fn location<'p>(&self, path: &'p [Step]) -> Option<Location<'p>> {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Conject);
         match &self.0 {
             None => Some(Location::root(path)),
             Some(layer) => match path.strip_prefix(layer.occurrence.as_slice()) {
-                None => layer.within.source(path),
+                None => layer.within.location(path),
                 Some(rest) => match &layer.reading {
                     Reading::Conject { location, conject } => {
                         conject.apply(rest, &location.path).map(|path| Location {
@@ -101,7 +105,9 @@ impl Scope {
                             path: path.into(),
                         })
                     }
-                    Reading::Cell { cell, source } => Some(Location::in_cell(*cell, *source, rest)),
+                    Reading::Cell { cell, resolution } => {
+                        Some(Location::in_cell(*cell, *resolution, rest))
+                    }
                 },
             },
         }
@@ -120,7 +126,7 @@ impl Scope {
     /// route through a cell and a location starting at that cell are the
     /// same data.
     pub(crate) fn same_location(&self, other: &Self, sources: &Sources, path: &[Step]) -> bool {
-        match (self.source(path), other.source(path)) {
+        match (self.location(path), other.location(path)) {
             (Some(left), Some(right)) => left
                 .stored(sources)
                 .zip(right.stored(sources))
@@ -134,7 +140,7 @@ impl Scope {
     }
 
     pub(crate) fn writable(&self, sources: &Sources<'_>, path: &[Step]) -> bool {
-        self.source(path)
+        self.location(path)
             .is_some_and(|location| crate::location::writable(sources, &location))
     }
 
@@ -154,7 +160,7 @@ pub struct Read<'scope, 'data> {
 
 impl<'data> Read<'_, 'data> {
     pub fn resolve_path(&self, path: &[Step]) -> Option<&'data Value> {
-        self.sources.read(&self.scope.source(path)?)
+        self.sources.read(&self.scope.location(path)?)
     }
 
     pub(crate) fn writable(&self, path: &[Step]) -> bool {
@@ -201,7 +207,7 @@ impl Edit<'_> {
 
     pub(crate) fn replace(&mut self, path: &[Step], value: Value) -> bool {
         let session = &mut self.access.session;
-        let Some(source) = self.scope.source(path) else {
+        let Some(source) = self.scope.location(path) else {
             return false;
         };
         if self.scope.read(&session.sources(), path) == Some(&value) {
