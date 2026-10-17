@@ -44,13 +44,13 @@ pub(crate) fn on_scrub(
                     target.clone(),
                     true,
                     PartialEq::eq,
-                    move |world, point| {
+                    move |world: &mut crate::Editor, point| {
                         let edit = crate::gesture::scoped_value_edit(
                             root.clone(),
                             path.clone(),
                             edits.clone(),
                         );
-                        if edit.select(world) {
+                        if edit.select(&mut world.session()) {
                             crate::editing::start_gesture(
                                 world,
                                 scrub(
@@ -116,11 +116,7 @@ struct Scrub {
     edited_spelling: bool,
 }
 
-pub(crate) fn scrub(
-    drag: Drag,
-    update: ScrubGesture,
-    edit: EditRun,
-) -> Box<dyn Gesture<crate::Editor>> {
+pub(crate) fn scrub(drag: Drag, update: ScrubGesture, edit: EditRun) -> Box<dyn Gesture> {
     Box::new(Scrub {
         drag,
         update,
@@ -129,17 +125,17 @@ pub(crate) fn scrub(
     })
 }
 
-impl Gesture<crate::Editor> for Scrub {
-    fn advance(&mut self, world: &mut crate::Editor, samples: &[Point]) -> bool {
+impl Gesture for Scrub {
+    fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
         samples.iter().fold(false, |changed, point| {
             self.drag.advance(*point).is_some_and(|motion| {
                 let update = (self.update)(ScrubEvent {
                     movement_x: motion.movement.x,
                     distance_y: motion.distance.y,
                 });
-                let wrote = self.edit.write(world, update.value);
+                let wrote = self.edit.write(session, update.value);
                 if let Some(spelling) = update.spelling
-                    && let Some(selected) = self.edit.selected(world)
+                    && let Some(selected) = self.edit.selected(session)
                 {
                     *selected.edit_line_mut(&spelling) =
                         puri::edit::LineEditState::new(&spelling).with_cursor_at_end();
@@ -154,9 +150,9 @@ impl Gesture<crate::Editor> for Scrub {
         Some(Cursor::HorizontalDrag)
     }
 
-    fn finish(&mut self, world: &mut crate::Editor) {
+    fn finish(&mut self, session: &mut crate::editing::Session<'_>) {
         if self.edited_spelling
-            && let Some(selected) = self.edit.selected(world)
+            && let Some(selected) = self.edit.selected(session)
         {
             selected.clear_editor();
         }

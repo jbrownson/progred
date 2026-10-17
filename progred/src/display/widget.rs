@@ -38,7 +38,7 @@ pub mod style;
 pub mod view;
 
 pub use navigation::{Direction, Select};
-pub type Annotate<World> = Rc<dyn Fn(&mut World, Value) -> bool>;
+pub type Annotate = Rc<dyn Fn(&mut crate::editing::Session<'_>, Value) -> bool>;
 pub type HoverCallback<World, Hover> =
     Box<dyn FnOnce(&mut HoverContext<'_, World, Hover>, Placement)>;
 pub type Decoration<World, Hover> = Rc<

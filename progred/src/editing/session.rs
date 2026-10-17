@@ -31,6 +31,19 @@ impl Session<'_> {
             libraries: self.libraries,
         }
     }
+
+    /// The same capabilities, lent on for a shorter while.
+    pub(crate) fn reborrow(&mut self) -> Session<'_> {
+        Session {
+            model: &mut *self.model,
+            libraries: self.libraries,
+            text: TextTools {
+                fonts: &mut *self.text.fonts,
+                layouts: &mut *self.text.layouts,
+                clipboard: &mut *self.text.clipboard,
+            },
+        }
+    }
 }
 
 impl crate::Editor {

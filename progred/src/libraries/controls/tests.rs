@@ -22,7 +22,7 @@ fn apply_change(
     value: Value,
 ) {
     let callable = ::grap::evaluate(handler, &editor.sources(), ::grap::DEFAULT_FUEL).result;
-    super::apply_change(editor, scope, root, path, &callable, value)
+    super::apply_change(&mut editor.session(), scope, root, path, &callable, value)
 }
 
 use crate::display::test_support::{ResolveForDispatch, with_context};

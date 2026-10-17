@@ -134,7 +134,7 @@ pub(crate) struct Editor {
     /// hover resolution stands down until release.
     pub(crate) pressed: bool,
     /// The continuation installed by the accepting projection handler.
-    pub(crate) gesture: Option<gesture::Active<Editor>>,
+    pub(crate) gesture: Option<gesture::Active>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -375,7 +375,7 @@ impl Editor {
 
     pub(crate) fn advance_gesture(&mut self, samples: &[Point]) -> bool {
         if let Some(mut gesture) = self.gesture.take() {
-            let changed = gesture.advance(self, samples);
+            let changed = gesture.advance(&mut self.session(), samples);
             self.gesture = Some(gesture);
             if changed {
                 self.refresh_title();
@@ -388,7 +388,7 @@ impl Editor {
 
     pub(crate) fn finish_gesture(&mut self) -> bool {
         if let Some(mut gesture) = self.gesture.take() {
-            gesture.finish(self);
+            gesture.finish(&mut self.session());
             true
         } else {
             false

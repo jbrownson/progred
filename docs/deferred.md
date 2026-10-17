@@ -322,9 +322,9 @@ first:
    through a session of capabilities instead of the editor, the picker as a
    widget with Raw's offers as an ordinary projection's, and drawing programs
    recorded by the layout library into a toolkit widget. Done on 17 October
-   2026: the session note's first three steps (the view aliases, the command key
-   read from the frame's input, and the session that edits act through), the
-   picker note's first three (the card, its
+   2026: the session note's first four steps (the view aliases, the command key
+   read from the frame's input, the session that edits act through, and
+   gestures acting through it too), the picker note's first three (the card, its
    placement and the selection ring moved to display, then Raw's offers and the
    ranking of a projection's, then the picker itself as a toolkit widget), and
    the drawing note's first two. The drawing note's last step waits on the session note's `Host`.

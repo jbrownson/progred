@@ -1,4 +1,5 @@
 use super::*;
+use crate::Editor;
 use crate::libraries::f64;
 use gid::Step;
 use std::rc::Rc;
@@ -16,13 +17,7 @@ fn model(value: Value) -> Editor {
     })
 }
 
-fn scrub(
-    origin: Point,
-    scale: f64,
-    root: Root,
-    path: Path,
-    handler: ScrubHandler,
-) -> Active<Editor> {
+fn scrub(origin: Point, scale: f64, root: Root, path: Path, handler: ScrubHandler) -> Active {
     let edit = value_edit(root.clone(), path.clone());
     crate::libraries::number::scrub::scrub(
         Drag::new(origin, scale, DRAG_THRESHOLD),
@@ -37,14 +32,14 @@ fn state_drag(
     root: Root,
     path: Path,
     handler: StateDragHandler,
-) -> Active<Editor> {
+) -> Active {
     let state_root = root.clone();
     let state_path = path.clone();
     native::state_drag(
         Drag::new(origin, scale, DRAG_THRESHOLD),
         handler(),
-        Rc::new(move |world: &mut Editor, value| {
-            if let Some(view) = world.model.workspace.view_mut(&state_root) {
+        Rc::new(move |session: &mut crate::editing::Session<'_>, value| {
+            if let Some(view) = session.model.workspace.view_mut(&state_root) {
                 view.annotations.set(&state_path, Some(value));
                 true
             } else {
@@ -54,7 +49,7 @@ fn state_drag(
     )
 }
 
-fn point(root: Root, path: Path, rect: Rect, handler: PointHandler) -> Active<Editor> {
+fn point(root: Root, path: Path, rect: Rect, handler: PointHandler) -> Active {
     let edit = value_edit(root.clone(), path.clone());
     native::point(rect, handler, edit)
 }
@@ -68,13 +63,13 @@ fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
     world.model.selection = Some(selection::bare_edge(&root, other_path.clone()));
     let mut edit = value_edit(root, vec![]);
     assert!(Rc::ptr_eq(&original, &world.model.doc));
-    assert!(!edit.write(&mut world, f64::value(10.0)));
+    assert!(!edit.write(&mut world.session(), f64::value(10.0)));
     assert!(Rc::ptr_eq(&original, &world.model.doc));
     assert!(!world.model.history.can_undo());
-    edit.selection(&mut world, selection::payload::edge());
+    edit.selection(&mut world.session(), selection::payload::edge());
     assert_eq!(world.model.selection.as_ref().unwrap().path(), other_path);
-    assert!(edit.write(&mut world, f64::value(11.0)));
-    assert!(edit.write(&mut world, f64::value(12.0)));
+    assert!(edit.write(&mut world.session(), f64::value(11.0)));
+    assert!(edit.write(&mut world.session(), f64::value(12.0)));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), other_path);
     assert!(world.model.step_history(true));
     assert!(Rc::ptr_eq(&original, &world.model.doc));
@@ -108,7 +103,7 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
         )
     };
     let mut active = gesture();
-    active.advance(&mut world, &[Point::new(10.0, 0.0)]);
+    active.advance(&mut world.session(), &[Point::new(10.0, 0.0)]);
     assert_eq!(
         world
             .model
@@ -120,25 +115,25 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
             .text(),
         "2.0"
     );
-    active.finish(&mut world);
+    active.finish(&mut world.session());
     assert_eq!(world.model.selection.as_ref().unwrap().payload(), payload);
     let mut active = gesture();
-    active.advance(&mut world, &[Point::new(10.0, 0.0)]);
+    active.advance(&mut world.session(), &[Point::new(10.0, 0.0)]);
     let other = vec![Step::Key(gid::new_cell_id())];
     world.model.selection = Some(Selection::edge(&root, other.clone()));
-    active.finish(&mut world);
+    active.finish(&mut world.session());
     assert_eq!(world.model.selection.as_ref().unwrap().path(), other);
 }
 
 #[test]
 fn gesture_finalization_runs_before_replacement_and_history_restore() {
     struct Finish(Rc<std::cell::RefCell<Vec<Option<Value>>>>);
-    impl Gesture<Editor> for Finish {
-        fn advance(&mut self, _: &mut Editor, _: &[Point]) -> bool {
+    impl Gesture for Finish {
+        fn advance(&mut self, _: &mut crate::editing::Session<'_>, _: &[Point]) -> bool {
             false
         }
-        fn finish(&mut self, world: &mut Editor) {
-            self.0.borrow_mut().push(world.model.doc.root.clone());
+        fn finish(&mut self, session: &mut crate::editing::Session<'_>) {
+            self.0.borrow_mut().push(session.model.doc.root.clone());
         }
     }
     let mut world = model(f64::value(1.0));
@@ -185,15 +180,15 @@ fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
             })
         }),
     );
-    assert!(!gesture.advance(&mut model, &[Point::new(102.0, 202.0)]));
+    assert!(!gesture.advance(&mut model.session(), &[Point::new(102.0, 202.0)]));
     assert!(!model.model.history.can_undo());
-    assert!(gesture.advance(&mut model, &[Point::new(108.0, 206.0)]));
+    assert!(gesture.advance(&mut model.session(), &[Point::new(108.0, 206.0)]));
     assert_eq!(model.model.doc.root, Some(f64::value(14.0)));
-    assert!(gesture.advance(&mut model, &[Point::new(110.0, 206.0)]));
+    assert!(gesture.advance(&mut model.session(), &[Point::new(110.0, 206.0)]));
     assert_eq!(model.model.doc.root, Some(f64::value(15.0)));
-    assert!(gesture.advance(&mut model, &[Point::new(-20.0, 206.0)]));
+    assert!(gesture.advance(&mut model.session(), &[Point::new(-20.0, 206.0)]));
     assert_eq!(model.model.doc.root, Some(f64::value(-50.0)));
-    assert!(gesture.advance(&mut model, &[Point::new(110.0, 206.0)]));
+    assert!(gesture.advance(&mut model.session(), &[Point::new(110.0, 206.0)]));
     assert_eq!(model.model.doc.root, Some(f64::value(15.0)));
     assert_eq!(
         model
@@ -206,7 +201,7 @@ fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
             .text(),
         "15.0"
     );
-    gesture.finish(&mut model);
+    gesture.finish(&mut model.session());
     assert!(model.model.selection.as_ref().unwrap().edit().is_none());
     assert!(model.model.step_history(true));
     assert_eq!(model.model.doc.root, original.root);
@@ -227,7 +222,7 @@ fn state_drags_use_total_logical_distance_and_only_update_their_view() {
             Box::new(|event, _| Value::list([f64::value(event.delta_x), f64::value(event.delta_y)]))
         }),
     );
-    gesture.advance(&mut model, &[Point::new(5.0, 0.0)]);
+    gesture.advance(&mut model.session(), &[Point::new(5.0, 0.0)]);
     assert!(
         model
             .model
@@ -238,8 +233,8 @@ fn state_drags_use_total_logical_distance_and_only_update_their_view() {
             .at(&path)
             .is_none()
     );
-    gesture.advance(&mut model, &[Point::new(8.0, 12.0)]);
-    gesture.advance(&mut model, &[Point::new(10.0, 12.0)]);
+    gesture.advance(&mut model.session(), &[Point::new(8.0, 12.0)]);
+    gesture.advance(&mut model.session(), &[Point::new(10.0, 12.0)]);
     assert_eq!(
         model
             .model
@@ -283,7 +278,7 @@ fn scrubbing_a_batch_preserves_the_precision_path_and_one_undo_step() {
             })
         }),
     );
-    assert!(gesture.advance(&mut model, &samples));
+    assert!(gesture.advance(&mut model.session(), &samples));
     assert_eq!(*received.borrow(), [(10.0, 0.0), (0.0, 10.0), (10.0, 10.0)]);
     assert_eq!(
         model.model.doc.root,
@@ -314,7 +309,10 @@ fn state_drag_gets_one_batch_including_threshold_excursions() {
             })
         }),
     );
-    gesture.advance(&mut model, &[Point::new(8.0, 0.0), Point::new(1.0, 0.0)]);
+    gesture.advance(
+        &mut model.session(),
+        &[Point::new(8.0, 0.0), Point::new(1.0, 0.0)],
+    );
     let sample = |x| crate::display::StateDragEvent {
         delta_x: x,
         delta_y: 0.0,
@@ -348,17 +346,17 @@ fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
             selection: Some(selection::payload::edge()),
         }),
     );
-    assert!(gesture.advance(&mut model, &[Point::new(30.0, 40.0)]));
+    assert!(gesture.advance(&mut model.session(), &[Point::new(30.0, 40.0)]));
     assert_eq!(
         model.model.doc.root,
         Some(Value::list([f64::value(0.2), f64::value(0.2)]))
     );
-    assert!(gesture.advance(&mut model, &[Point::new(210.0, -20.0)]));
+    assert!(gesture.advance(&mut model.session(), &[Point::new(210.0, -20.0)]));
     assert_eq!(
         model.model.doc.root,
         Some(Value::list([f64::value(1.0), f64::value(0.0)]))
     );
-    assert!(!gesture.advance(&mut model, &[Point::new(210.0, -20.0)]));
+    assert!(!gesture.advance(&mut model.session(), &[Point::new(210.0, -20.0)]));
     assert_eq!(model.model.selection.as_ref().unwrap().root(), &root);
     assert!(model.model.step_history(true));
     assert_eq!(model.model.doc.root, original.root);

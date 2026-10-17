@@ -173,6 +173,13 @@ impl<'a> Access<'a> {
             session: editor.session(),
         }
     }
+
+    /// Access through a session already lent, as a gesture has one.
+    pub(crate) fn of(session: &'a mut Session<'_>) -> Self {
+        Self {
+            session: session.reborrow(),
+        }
+    }
 }
 
 /// A borrowed interface, not an editor copy or an allocated callback dictionary.

@@ -38,12 +38,12 @@ pub struct PointUpdate {
 
 pub type PointHandler = Rc<dyn Fn(PointEvent) -> PointUpdate>;
 
-pub trait Gesture<World> {
+pub trait Gesture {
     /// Document writes return true; annotation-only changes do not.
     /// This does not control event propagation: an active gesture owns motion.
-    fn advance(&mut self, world: &mut World, samples: &[Point]) -> bool;
+    fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool;
 
-    fn finish(&mut self, _world: &mut World) {}
+    fn finish(&mut self, _session: &mut crate::editing::Session<'_>) {}
 
     /// The pointer's look while this runs, wherever it goes.
     fn cursor(&self) -> Option<super::frame::Cursor> {
@@ -88,8 +88,8 @@ pub fn on_state_drag(
             let annotation_root = root.clone();
             let annotation_path = path.clone();
             let edits = context.inputs.edits.clone();
-            let annotate: Annotate<crate::Editor> = Rc::new(move |world, value| {
-                edits.open(crate::editing::Access::new(world)).annotate(
+            let annotate: Annotate = Rc::new(move |session, value| {
+                edits.open(crate::editing::Access::of(session)).annotate(
                     &annotation_root,
                     &annotation_path,
                     value,
@@ -162,17 +162,17 @@ pub fn on_point(child: crate::view::Layout, handler: PointHandler) -> crate::vie
     )
 }
 
-struct StateDrag<World> {
+struct StateDrag {
     drag: Drag,
     update: crate::display::StateDragGesture,
-    annotate: Annotate<World>,
+    annotate: Annotate,
 }
 
-pub fn state_drag<World: 'static>(
+pub fn state_drag(
     drag: Drag,
     update: crate::display::StateDragGesture,
-    annotate: Annotate<World>,
-) -> Box<dyn Gesture<World>> {
+    annotate: Annotate,
+) -> Box<dyn Gesture> {
     Box::new(StateDrag {
         drag,
         update,
@@ -180,8 +180,8 @@ pub fn state_drag<World: 'static>(
     })
 }
 
-impl<World> Gesture<World> for StateDrag<World> {
-    fn advance(&mut self, world: &mut World, samples: &[Point]) -> bool {
+impl Gesture for StateDrag {
+    fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
         let samples: Vec<_> = samples
             .iter()
             .filter_map(|point| self.drag.advance(*point))
@@ -191,7 +191,7 @@ impl<World> Gesture<World> for StateDrag<World> {
             })
             .collect();
         if let Some((current, coalesced)) = samples.split_last() {
-            (self.annotate)(world, (self.update)(*current, coalesced));
+            (self.annotate)(session, (self.update)(*current, coalesced));
         }
         false
     }
@@ -207,20 +207,20 @@ pub(crate) fn point(
     rect: Rect,
     update: PointHandler,
     edit: crate::gesture::EditRun,
-) -> Box<dyn Gesture<crate::Editor>> {
+) -> Box<dyn Gesture> {
     Box::new(PointControl { rect, update, edit })
 }
 
-impl Gesture<crate::Editor> for PointControl {
-    fn advance(&mut self, world: &mut crate::Editor, samples: &[Point]) -> bool {
+impl Gesture for PointControl {
+    fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
         samples.iter().fold(false, |changed, point| {
             let update = (self.update)(crate::display::PointEvent {
                 x: ((point.x - self.rect.x0) / self.rect.width()).clamp(0.0, 1.0),
                 y: ((point.y - self.rect.y0) / self.rect.height()).clamp(0.0, 1.0),
             });
-            let wrote = self.edit.write(world, update.value);
+            let wrote = self.edit.write(session, update.value);
             if let Some(payload) = update.selection {
-                self.edit.selection(world, payload);
+                self.edit.selection(session, payload);
             }
             wrote || changed
         })

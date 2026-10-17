@@ -274,8 +274,8 @@ struct RangeDrag {
     scale: f64,
 }
 
-impl widget::gesture::Gesture<crate::Editor> for RangeDrag {
-    fn advance(&mut self, editor: &mut crate::Editor, samples: &[Point]) -> bool {
+impl widget::gesture::Gesture for RangeDrag {
+    fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
         if let Some(point) = samples.last() {
             let selected = self
                 .slider
@@ -291,9 +291,9 @@ impl widget::gesture::Gesture<crate::Editor> for RangeDrag {
                 || self.selection.state(),
                 |p| cursor_state(&self.selection, p),
             );
-            let mut editor = self.edits.open(crate::editing::Access::new(editor));
-            let state = set_state(editor.annotation(&self.root, &self.path), self.key, value);
-            editor.annotate(&self.root, &self.path, state);
+            let mut edit = self.edits.open(crate::editing::Access::of(session));
+            let state = set_state(edit.annotation(&self.root, &self.path), self.key, value);
+            edit.annotate(&self.root, &self.path, state);
         }
         false
     }

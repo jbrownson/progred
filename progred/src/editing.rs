@@ -46,7 +46,7 @@ pub(crate) fn annotate(
 
 pub(crate) fn start_gesture(
     app: &mut Editor,
-    continuation: Box<dyn crate::display::widget::gesture::Gesture<Editor>>,
+    continuation: Box<dyn crate::display::widget::gesture::Gesture>,
     samples: &[Point],
 ) {
     app.finish_gesture();

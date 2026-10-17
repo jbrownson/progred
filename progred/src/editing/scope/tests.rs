@@ -297,10 +297,10 @@ fn folds_are_occurrence_local_and_undoable_without_dirtying_the_document() {
 fn gesture_writes_share_the_scope_and_one_undo_step() {
     let (mut editor, root, source, occurrence, scope) = fixture(text::value("before"));
     let mut run = crate::gesture::scoped_value_edit(root, occurrence, scope.clone());
-    assert!(run.select(&mut editor));
-    assert!(run.write(&mut editor, text::value("first")));
-    assert!(run.write(&mut editor, text::value("second")));
-    assert!(!run.write(&mut editor, text::value("second")));
+    assert!(run.select(&mut editor.session()));
+    assert!(run.write(&mut editor.session(), text::value("first")));
+    assert!(run.write(&mut editor.session(), text::value("second")));
+    assert!(!run.write(&mut editor.session(), text::value("second")));
     assert!(editor.model.step_history(true));
     assert_eq!(
         editor.sources().resolve_path(&source),

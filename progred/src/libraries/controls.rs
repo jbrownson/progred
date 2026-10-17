@@ -51,7 +51,9 @@ use presentation::vocabulary::VALUE;
 use vocabulary::*;
 
 type Widget = widget::Widget<crate::Editor, crate::frame::Hovered>;
-type Change = Rc<dyn Fn(&mut crate::Editor, &crate::editing::Scope, &Root, &[gid::Step], Value)>;
+type Change = Rc<
+    dyn Fn(&mut crate::editing::Session<'_>, &crate::editing::Scope, &Root, &[gid::Step], Value),
+>;
 
 const PADDING_X: f64 = 10.0;
 const PADDING_Y: f64 = 4.0;
@@ -110,7 +112,7 @@ fn update_function() -> Value {
 }
 
 fn apply_change(
-    editor: &mut crate::Editor,
+    session: &mut crate::editing::Session<'_>,
     scope: &crate::editing::Scope,
     root: &Root,
     path: &[gid::Step],
@@ -119,7 +121,7 @@ fn apply_change(
 ) {
     let state = current_state(
         scope
-            .open(crate::editing::Access::new(editor))
+            .open(crate::editing::Access::of(session))
             .annotation(root, path),
     );
     let staged = RefCell::new(None);
@@ -140,7 +142,7 @@ fn apply_change(
             (STATE, state.into()),
             (UPDATE, update_function().into()),
         ],
-        &scope.view(editor.sources()).sources,
+        &scope.view(session.sources()).sources,
         &ForeignOverlay::from_value(&[UPDATE], &update),
         ::grap::DEFAULT_FUEL,
     );
@@ -148,14 +150,14 @@ fn apply_change(
         && !result.result.declines()
         && let Some(value) = staged.into_inner()
     {
-        let mut editor = scope.open(crate::editing::Access::new(editor));
-        let mut annotation = editor
+        let mut edit = scope.open(crate::editing::Access::of(session));
+        let mut annotation = edit
             .annotation(root, path)
             .and_then(Value::as_record)
             .cloned()
             .unwrap_or_default();
         annotation.insert(STATE, value);
-        editor.annotate(root, path, Value::Record(annotation));
+        edit.annotate(root, path, Value::Record(annotation));
     }
 }
 
@@ -170,11 +172,11 @@ struct Drag {
     scale: f64,
 }
 
-impl widget::gesture::Gesture<crate::Editor> for Drag {
-    fn advance(&mut self, editor: &mut crate::Editor, samples: &[Point]) -> bool {
+impl widget::gesture::Gesture for Drag {
+    fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
         if let Some(point) = samples.last() {
             (self.on_change)(
-                editor,
+                session,
                 &self.edits,
                 &self.root,
                 &self.path,
@@ -209,10 +211,10 @@ fn slider_widget_with(
         width,
         ticks,
         value,
-        Rc::new(move |editor, scope, root, path, value| {
-            let mut editor = scope.open(crate::editing::Access::new(editor));
-            let state = set_state(editor.annotation(root, path), key, value);
-            editor.annotate(root, path, state);
+        Rc::new(move |session, scope, root, path, value| {
+            let mut edit = scope.open(crate::editing::Access::of(session));
+            let state = set_state(edit.annotation(root, path), key, value);
+            edit.annotate(root, path, state);
         }),
     )
 }

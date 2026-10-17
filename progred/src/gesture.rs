@@ -1,8 +1,8 @@
 //! Caller-owned continuations for projection gestures. The accepting
 //! press installs one; it owns motion until release or cancellation.
 
-use crate::Editor;
 use crate::display::widget::gesture::Gesture;
+use crate::editing::Session;
 use crate::library::Libraries;
 use crate::location::Location;
 use crate::model::Model;
@@ -16,7 +16,7 @@ use kurbo::Point;
 // Logical pixels; replace when the input adapter exposes the platform threshold.
 pub(crate) const DRAG_THRESHOLD: f64 = 3.0;
 
-pub(crate) type Active<World> = Box<dyn Gesture<World>>;
+pub(crate) type Active = Box<dyn Gesture>;
 
 pub(crate) struct EditRun {
     root: Root,
@@ -40,44 +40,45 @@ pub(crate) fn scoped_value_edit(root: Root, path: Path, scope: crate::editing::S
 }
 
 impl EditRun {
-    pub(crate) fn selected<'a>(&self, app: &'a mut Editor) -> Option<&'a mut Selection> {
-        app.model
+    pub(crate) fn selected<'a>(&self, session: &'a mut Session<'_>) -> Option<&'a mut Selection> {
+        session
+            .model
             .selection
             .as_mut()
             .filter(|s| s.root() == &self.root && s.path() == self.path)
     }
-    pub(crate) fn select(&self, app: &mut Editor) -> bool {
-        if app.model.selection.as_ref().is_some_and(|selection| {
+    pub(crate) fn select(&self, session: &mut Session<'_>) -> bool {
+        if session.model.selection.as_ref().is_some_and(|selection| {
             matches!(
-                selection.stage(&app.sources()),
+                selection.stage(&session.sources()),
                 selection::Stage::Pending | selection::Stage::Label
             )
         }) {
             false
         } else {
             self.scope
-                .open(crate::editing::Access::new(app))
+                .open(crate::editing::Access::of(session))
                 .select(&self.root, &self.path);
             true
         }
     }
 
-    pub(crate) fn write(&mut self, app: &mut Editor, value: Value) -> bool {
+    pub(crate) fn write(&mut self, session: &mut Session<'_>, value: Value) -> bool {
         let Some(source) = self.scope.source(&self.path) else {
             return false;
         };
         write_value(
-            &mut app.model,
-            &app.stack.libraries,
+            session.model,
+            session.libraries,
             &source,
             value,
             &mut self.recorded,
         )
     }
 
-    pub(crate) fn selection(&self, app: &mut Editor, payload: Value) {
-        let model = &mut app.model;
-        let libraries = &app.stack.libraries;
+    pub(crate) fn selection(&self, session: &mut Session<'_>, payload: Value) {
+        let model = &mut *session.model;
+        let libraries = session.libraries;
         if let Some(recorded) = model
             .selection
             .as_ref()
