@@ -140,24 +140,24 @@ fn picker_selection(hue: f64) -> Value {
 }
 
 fn new_color() -> crate::display::Completion {
-    crate::display::Completion::new("new color", |world| {
-        let Some(selection) = world.model.selection.as_ref() else {
+    crate::display::Completion::new("new color", |session| {
+        let Some(selection) = session.model.selection.as_ref() else {
             return;
         };
-        if selection.stage(&world.sources()) != crate::selection::Stage::Pending
-            || !selection.writable(&world.sources())
-            || selection.value(&world.sources()).is_some()
+        if selection.stage(&session.sources()) != crate::selection::Stage::Pending
+            || !selection.writable(&session.sources())
+            || selection.value(&session.sources()).is_some()
         {
             return;
         }
         let next = crate::selection::Selection::from_scoped_payload(
             selection.root(),
-            &world.sources(),
+            &session.sources(),
             selection.scope().clone(),
             selection.path().to_vec(),
             picker_selection(0.0),
         );
-        world.model.selection = Some(next);
+        session.model.selection = Some(next);
     })
     .with_aliases(["color", "colour"])
 }

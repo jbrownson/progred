@@ -85,7 +85,7 @@ fn label_offer_explicitly_opens_its_missing_value() {
     );
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(pending);
-    (offer.activate)(&mut world);
+    (offer.activate)(&mut world.session());
     assert_eq!(world.model.doc.root, doc.root);
     assert!(!world.model.history.can_undo());
     let selected = world.model.selection.as_ref().unwrap();
@@ -194,7 +194,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         &root,
         vec![Step::Key(field)],
     ));
-    (offer.activate)(&mut world);
+    (offer.activate)(&mut world.session());
     let inserted = world
         .model
         .doc

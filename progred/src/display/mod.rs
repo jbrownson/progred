@@ -82,7 +82,7 @@ pub struct Completion {
     pub display: CompletionText,
     pub aliases: Vec<String>,
     pub detail: Option<CompletionText>,
-    pub activate: Rc<dyn Fn(&mut crate::Editor)>,
+    pub activate: Rc<dyn Fn(&mut crate::editing::Session<'_>)>,
     pub face: Face,
     /// Optional advertised value, for source attribution and contextual filtering.
     /// Activation never derives its behavior from this metadata.
@@ -118,7 +118,7 @@ impl From<CellId> for CompletionText {
 impl Completion {
     pub fn new(
         display: impl Into<CompletionText>,
-        activate: impl Fn(&mut crate::Editor) + 'static,
+        activate: impl Fn(&mut crate::editing::Session<'_>) + 'static,
     ) -> Self {
         Self {
             display: display.into(),

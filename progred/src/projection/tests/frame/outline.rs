@@ -579,7 +579,12 @@ fn outline_column_gaps_open_pending_before_between_and_after_items() {
         );
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
         assert!(frame(&mut world).completion.is_some());
-        assert!(world.commit_completion(a.into(), None, None));
+        assert!(crate::completion::commit(
+            &mut world.session(),
+            a.into(),
+            None,
+            None
+        ));
         let list = world
             .sources()
             .resolve_path(&[Step::Key(OUTLINE)])
@@ -650,7 +655,12 @@ fn outline_body_column_gap_inserts_through_its_jump() {
             "both gaps beside a pending stay inactive"
         );
     }
-    assert!(world.commit_completion(f64::value(7.0), None, None));
+    assert!(crate::completion::commit(
+        &mut world.session(),
+        f64::value(7.0),
+        None,
+        None
+    ));
     assert_eq!(
         world
             .sources()
@@ -692,7 +702,8 @@ fn outline_preserves_pending_insertions_in_both_lists() {
         let f = frame(&mut world);
         assert!(f.completion.is_some());
         stop(&f, &path);
-        assert!(world.commit_completion(
+        assert!(crate::completion::commit(
+            &mut world.session(),
             if path.len() == 2 {
                 a.into()
             } else {
@@ -802,7 +813,12 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     let f = frame(&mut world);
     assert!((stop(&f, &p).select)(&mut world, None));
     assert!(frame(&mut world).completion.is_some());
-    assert!(world.commit_completion(f64::value(4.0), None, None));
+    assert!(crate::completion::commit(
+        &mut world.session(),
+        f64::value(4.0),
+        None,
+        None
+    ));
     assert_eq!(
         world.sources().resolve_path(&[Step::Key(a)]),
         Some(&f64::value(4.0))

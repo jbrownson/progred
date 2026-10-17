@@ -54,68 +54,83 @@ pub(crate) fn start_gesture(
     app.advance_gesture(samples);
 }
 
-pub(crate) fn commit_value(
-    app: &mut Editor,
-    value: Value,
-    on_commit: Option<crate::site::Continuation>,
-) {
-    if app
+/// Whether the selection is at `stage`.
+fn staged(session: &Session<'_>, stage: selection::Stage) -> bool {
+    session
         .model
         .selection
         .as_ref()
-        .is_some_and(|s| s.stage(&app.sources()) == selection::Stage::Pending)
-    {
-        app.commit_completion(value, None, on_commit);
+        .is_some_and(|selection| selection.stage(&session.sources()) == stage)
+}
+
+pub(crate) fn commit_value(
+    session: &mut Session<'_>,
+    value: Value,
+    on_commit: Option<crate::site::Continuation>,
+) {
+    if staged(session, selection::Stage::Pending) {
+        crate::completion::commit(session, value, None, on_commit);
     }
 }
 
 /// Commits an empty cell, list or record into the pending, then opens it,
 /// so what's typed next goes inside it.
-pub(crate) fn commit_container(app: &mut Editor, value: Value) {
-    if app
-        .model
-        .selection
-        .as_ref()
-        .is_some_and(|s| s.stage(&app.sources()) == selection::Stage::Pending)
-        && app.commit_completion(
+pub(crate) fn commit_container(session: &mut Session<'_>, value: Value) {
+    if staged(session, selection::Stage::Pending)
+        && crate::completion::commit(
+            session,
             value,
             None,
             Some(crate::selection::at(&[], crate::selection::payload::edge())),
         )
     {
-        app.open_within();
+        open_within(session);
     }
+}
+
+/// Opens the selected container for what goes inside it, as Cmd+Enter would.
+fn open_within(session: &mut Session<'_>) {
+    let Some(current) = &session.model.selection else {
+        return;
+    };
+    let scope = current.scope().clone();
+    let origin = current.path().to_vec();
+    let Some(mut within) = selection::pending_insert(
+        current.root(),
+        &scope.view(session.sources()),
+        &origin,
+        false,
+    ) else {
+        return;
+    };
+    within.set_scope(scope);
+    session.model.selection = Some(within.with_origin(Some(origin)));
 }
 
 /// Commits a reference to a new cell, defined as given, into the pending.
 pub(crate) fn commit_new_cell(
-    app: &mut Editor,
+    session: &mut Session<'_>,
     definition: Value,
     on_commit: Option<crate::site::Continuation>,
 ) {
-    if app
-        .model
-        .selection
-        .as_ref()
-        .is_some_and(|s| s.stage(&app.sources()) == selection::Stage::Pending)
-    {
-        app.commit_completion(gid::new_cell_id().into(), Some(definition), on_commit);
+    if staged(session, selection::Stage::Pending) {
+        crate::completion::commit(
+            session,
+            gid::new_cell_id().into(),
+            Some(definition),
+            on_commit,
+        );
     }
 }
 
 pub(crate) fn commit_label(
-    app: &mut Editor,
+    session: &mut Session<'_>,
     label: gid::CellId,
     definition: Option<Value>,
     on_commit: Option<crate::site::Continuation>,
 ) {
-    if app
-        .model
-        .selection
-        .as_ref()
-        .is_some_and(|s| s.stage(&app.sources()) == selection::Stage::Label)
-    {
-        app.commit_completion(label.into(), definition, on_commit);
+    if staged(session, selection::Stage::Label) {
+        crate::completion::commit(session, label.into(), definition, on_commit);
     }
 }
 

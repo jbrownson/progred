@@ -270,7 +270,7 @@ fn query_content(
                 && let Key::Character(key) = &event.key
                 && let Some((_, offer)) = keys.iter().find(|(typed, _)| *typed == key.as_str())
             {
-                (offer.activate)(world);
+                (offer.activate)(&mut world.session());
                 true
             } else {
                 false

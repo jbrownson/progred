@@ -72,7 +72,12 @@ fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
     assert!(empty.rect.width() > 0.0 && empty.rect.height() > 0.0);
     assert!((empty.select)(&mut world, None));
     assert!(editing_frame(&mut world, false).completion.is_some());
-    assert!(world.commit_completion(f64::value(9.0), None, None));
+    assert!(crate::completion::commit(
+        &mut world.session(),
+        f64::value(9.0),
+        None,
+        None
+    ));
     assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(9.0)));
     assert_eq!(top_slots(&editing_frame(&mut world, false)), slots);
     assert!(world.model.step_history(true));
@@ -134,7 +139,12 @@ fn tutorial_slots_have_no_gap_insertions_and_do_not_override_children() {
     let path = vec![Step::Key(slots[0]), Step::Element(position)];
     world.model.selection = Some(pending_value(&crate::test_root(), path.clone()));
     assert!(editing_frame(&mut world, false).completion.is_some());
-    assert!(world.commit_completion(f64::value(5.0), None, None));
+    assert!(crate::completion::commit(
+        &mut world.session(),
+        f64::value(5.0),
+        None,
+        None
+    ));
     assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(5.0)));
 }
 
@@ -206,6 +216,11 @@ fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
     assert!(world.model.doc.root.is_none());
     assert!((stop(&frame, &[]).select)(&mut world, None));
     assert!(editing_frame(&mut world, false).completion.is_some());
-    assert!(world.commit_completion(Value::record([]), None, None));
+    assert!(crate::completion::commit(
+        &mut world.session(),
+        Value::record([]),
+        None,
+        None
+    ));
     assert_eq!(top_slots(&editing_frame(&mut world, false)), slots);
 }

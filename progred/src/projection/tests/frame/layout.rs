@@ -1176,7 +1176,12 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                     .completion
                     .is_some()
             );
-            assert!(world.commit_completion(f64::value(9.0), None, None));
+            assert!(crate::completion::commit(
+                &mut world.session(),
+                f64::value(9.0),
+                None,
+                None
+            ));
             assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(9.0)));
         }
     }
@@ -1387,7 +1392,12 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
                 ));
             }
         }
-        assert!(world.commit_completion(f64::value(9.0), None, None));
+        assert!(crate::completion::commit(
+            &mut world.session(),
+            f64::value(9.0),
+            None,
+            None
+        ));
         assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(9.0)));
     }
 }

@@ -191,7 +191,8 @@ fn a_missing_scoped_child_uses_the_ordinary_completion_and_continuation() {
             .stage(&editor.sources()),
         selection::Stage::Pending
     );
-    assert!(editor.commit_completion(
+    assert!(crate::completion::commit(
+        &mut editor.session(),
         text::value("inserted"),
         None,
         Some(Rc::new(|view, path, changes| {
@@ -360,7 +361,8 @@ fn inserting_a_scoped_list_sibling_preserves_the_occurrence() {
             .scope()
             .same_location(&scope, &editor.sources(), selected.path())
     );
-    assert!(editor.commit_completion(
+    assert!(crate::completion::commit(
+        &mut editor.session(),
         text::value("second"),
         None,
         Some(crate::selection::at(&[], crate::selection::payload::edge()))

@@ -5,7 +5,6 @@ use crate::location::Location;
 use crate::modifiers;
 use crate::navigate;
 use crate::selection;
-use crate::sources;
 use gid::Value;
 use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -35,64 +34,6 @@ impl Editor {
                 .open(crate::editing::Access::new(self))
                 .select(root, &path);
         }
-    }
-
-    pub(crate) fn commit_completion(
-        &mut self,
-        value: Value,
-        definition: Option<Value>,
-        on_commit: Option<crate::site::Continuation>,
-    ) -> bool {
-        let Some((root, scope)) = self
-            .model
-            .selection
-            .as_ref()
-            .map(|selection| (selection.root().clone(), selection.scope().clone()))
-        else {
-            return false;
-        };
-        let before = self.model.snapshot();
-        let model = &mut self.model;
-        let libraries = &self.stack.libraries;
-        let (Some(selection), Some(view)) =
-            (model.selection.as_ref(), model.workspace.view_mut(&root))
-        else {
-            return false;
-        };
-        let Some(prepared) = crate::completion::prepare(
-            &sources::Sources {
-                doc: &model.doc,
-                libraries,
-            },
-            selection,
-            &view.annotations,
-            value,
-            definition,
-            on_commit.as_ref(),
-        ) else {
-            return false;
-        };
-        let document_changed = prepared.document_changed;
-        if document_changed {
-            model.doc = prepared.document;
-            model.history.record(before);
-        }
-        crate::site::install_scoped(
-            prepared.effects,
-            &sources::Sources {
-                doc: &model.doc,
-                libraries,
-            },
-            &root,
-            scope,
-            &prepared.path,
-            &mut view.annotations,
-            &mut model.selection,
-        );
-        if document_changed {
-            self.refresh_title();
-        }
-        true
     }
 
     /// Backspace or Delete empties the selected edge in place — a focused
@@ -173,7 +114,7 @@ impl Editor {
             }
             _ => crate::selection::at(&[], crate::selection::payload::edge()),
         };
-        self.commit_completion(id, None, Some(continuation))
+        crate::completion::commit(&mut self.session(), id, None, Some(continuation))
     }
 
     /// Structural paste, the shell's fallback after text editing.
@@ -372,21 +313,6 @@ impl Editor {
     /// Opens the selected value for what goes inside it, as the command
     /// chord's Enter would: a field on a record, an element of a list, a
     /// bare cell's value. Escape steps back out to it.
-    pub(crate) fn open_within(&mut self) {
-        let Some(current) = &self.model.selection else {
-            return;
-        };
-        let scope = current.scope().clone();
-        let origin = current.path().to_vec();
-        let Some(mut within) =
-            selection::pending_insert(current.root(), &scope.view(self.sources()), &origin, false)
-        else {
-            return;
-        };
-        within.set_scope(scope);
-        self.model.selection = Some(within.with_origin(Some(origin)));
-    }
-
     /// Starts what Enter would author from the selected value in the view
     /// `root`, if it lands in the container drawn at `container`: a field on
     /// that record, or an element of that list or cell. Containers offer this

@@ -92,15 +92,17 @@ fn fitting(request: &CompletionRequest<'_>, offer: Completion) -> Option<Entry<c
     .then(|| entry(request, offer))
 }
 
-/// `offer` as listed, unmatched.
+/// `offer` as listed, unmatched, choosing it through the session the
+/// dispatching editor lends.
 pub(crate) fn entry(request: &CompletionRequest<'_>, offer: Completion) -> Entry<crate::Editor> {
+    let activate = offer.activate;
     Entry {
         display: text(request, &offer.display),
         detail: offer.detail.as_ref().map(|detail| text(request, detail)),
         matches: Vec::new(),
         face: offer.face,
         source: offer.preview.as_ref().and_then(Value::as_cell),
-        activate: offer.activate,
+        activate: Rc::new(move |world: &mut crate::Editor| activate(&mut world.session())),
     }
 }
 

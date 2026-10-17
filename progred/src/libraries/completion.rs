@@ -46,20 +46,20 @@ fn insertion(
     } else {
         Face::Label
     };
-    let mut offer = Completion::new(display, move |world| {
+    let mut offer = Completion::new(display, move |session| {
         let value = create();
-        match world
+        match session
             .model
             .selection
             .as_ref()
-            .map(|s| s.stage(&world.sources()))
+            .map(|s| s.stage(&session.sources()))
         {
             Some(crate::selection::Stage::Pending) => {
-                crate::editing::commit_value(world, value, on_commit.clone())
+                crate::editing::commit_value(session, value, on_commit.clone())
             }
             Some(crate::selection::Stage::Label) => {
                 if let Some(cell) = value.as_cell() {
-                    crate::editing::commit_label(world, cell, None, on_commit.clone());
+                    crate::editing::commit_label(session, cell, None, on_commit.clone());
                 }
             }
             _ => (),

@@ -58,10 +58,10 @@ pub fn constructors(kind: CompletionKind) -> Vec<Completion> {
 /// the list and `{` for the record. Raw's holes make one at once when its
 /// delimiter is typed into an empty query.
 fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
-    let cell = Completion::new("new cell", move |world| match kind {
-        CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
+    let cell = Completion::new("new cell", move |session| match kind {
+        CompletionKind::Value => crate::editing::commit_container(session, new_cell_id().into()),
         CompletionKind::Field => crate::editing::commit_label(
-            world,
+            session,
             new_cell_id(),
             None,
             Some(crate::selection::pending_at(&[])),
@@ -74,8 +74,8 @@ fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
     .into_iter()
     .filter(|_| kind == CompletionKind::Value)
     .map(|(delimiter, display, value)| {
-        let offer = Completion::new(display, move |world| {
-            crate::editing::commit_container(world, value.clone())
+        let offer = Completion::new(display, move |session| {
+            crate::editing::commit_container(session, value.clone())
         });
         (delimiter, offer)
     });
@@ -136,9 +136,9 @@ fn entries(request: &CompletionRequest<'_>) -> Vec<Entry<crate::Editor>> {
                 matches: Vec::new(),
                 face: Face::Dim,
                 source: None,
-                activate: Rc::new(move |world| {
+                activate: Rc::new(move |world: &mut crate::Editor| {
                     crate::editing::commit_label(
-                        world,
+                        &mut world.session(),
                         new_cell_id(),
                         Some(name::record(&spelling, [])),
                         Some(crate::selection::pending_at(&[])),

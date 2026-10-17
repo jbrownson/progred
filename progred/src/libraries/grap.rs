@@ -74,9 +74,9 @@ fn parameter(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout
                         .then(|| {
                             Completion::new(
                                 crate::display::CompletionText::Literal(spelling.clone()),
-                                move |world| {
+                                move |session| {
                                     crate::editing::commit_new_cell(
-                                        world,
+                                        session,
                                         name::record(&spelling, []),
                                         Some(crate::selection::at(
                                             &[],

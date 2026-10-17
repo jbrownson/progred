@@ -19,7 +19,7 @@ pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
         cells: gid::Cells::new(),
     });
     world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
-    (offer.activate)(&mut world);
+    (offer.activate)(&mut world.session());
     world
 }
 

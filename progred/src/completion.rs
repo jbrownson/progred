@@ -1,9 +1,66 @@
 //! Committing a picker's choice: the edit it makes, prepared against the
 //! document so that nothing is installed unless all of it succeeds.
 
+use crate::editing::Session;
 use crate::site::Continuation;
 use crate::sources::Sources;
 use gid::Value;
+
+/// Commits `value`, with `definition` for a new cell it names, into the
+/// pending selection, then interprets `on_commit` against the result. False,
+/// changing nothing, when nothing is pending or a step declines.
+pub(crate) fn commit(
+    session: &mut Session<'_>,
+    value: Value,
+    definition: Option<Value>,
+    on_commit: Option<Continuation>,
+) -> bool {
+    let Some((root, scope)) = session
+        .model
+        .selection
+        .as_ref()
+        .map(|selection| (selection.root().clone(), selection.scope().clone()))
+    else {
+        return false;
+    };
+    let before = session.model.snapshot();
+    let model = &mut *session.model;
+    let libraries = session.libraries;
+    let (Some(selection), Some(view)) = (model.selection.as_ref(), model.workspace.view_mut(&root))
+    else {
+        return false;
+    };
+    let Some(prepared) = prepare(
+        &Sources {
+            doc: &model.doc,
+            libraries,
+        },
+        selection,
+        &view.annotations,
+        value,
+        definition,
+        on_commit.as_ref(),
+    ) else {
+        return false;
+    };
+    if prepared.document_changed {
+        model.doc = prepared.document;
+        model.history.record(before);
+    }
+    crate::site::install_scoped(
+        prepared.effects,
+        &Sources {
+            doc: &model.doc,
+            libraries,
+        },
+        &root,
+        scope,
+        &prepared.path,
+        &mut view.annotations,
+        &mut model.selection,
+    );
+    true
+}
 
 pub(crate) struct Prepared {
     pub document: std::rc::Rc<gid::Document>,

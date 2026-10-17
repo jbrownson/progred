@@ -486,7 +486,12 @@ fn missing_jump_target_is_a_real_editable_location() {
     ));
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     assert!(frame.completion.is_some());
-    assert!(world.commit_completion(text::value("created"), None, None));
+    assert!(crate::completion::commit(
+        &mut world.session(),
+        text::value("created"),
+        None,
+        None
+    ));
     assert_eq!(
         world.sources().resolve_path(&[Step::Key(missing)]),
         Some(&text::value("created"))
