@@ -298,9 +298,10 @@ first:
        beside the code that interprets them, with the libraries re-exporting
        the cells, and the library interface itself (`Library`, `Libraries`,
        `Definitions`) moved to `crate::library`.
-     - 60 are the core doing a library's job. Most of these are the engine
-       interpreting the layout library's drawing programs, which would become
-       a recorded-drawing widget the layout library fills. The rest are:
+     - 60 are the core doing a library's job. Most of these were the engine
+       interpreting the layout library's drawing programs; since 17 October
+       2026 the layout library records them itself into the toolkit's
+       recorded-drawing leaf. The rest are:
        - presentation's pane special cases, as a pane entry and a wrapping
          projection;
        - Tab's skipping of name slots: the projection drawing a hole would
