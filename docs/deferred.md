@@ -280,10 +280,11 @@ first:
    - **Write side.** It replaces handing handlers the whole editor. It covers
      edits where they are allowed, the selection, per-path state, drags, and
      the picker.
-   - **Text in Grap.** Grap should lower text the way it lowers f64 numbers,
-     and own text's encoding beside f64's. This is the owner's direction from
-     17 October 2026. More number formats will come later, with no rush, so
-     lowering should make a new format straightforward to add.
+   - **Text in Grap.** Done on 17 October 2026, at the owner's direction: Grap
+     owns text's encoding beside f64's and lowers text as it lowers numbers.
+     More number formats will come later, with no rush. A new one adds a native
+     form to the runtime's unboxed values, moves its encoding into Grap as f32's
+     and u64's would, and reads and builds through `RuntimeValue` like f64.
    - **Library vocabularies.** The core libraries' vocabularies, such as
      text, names and numbers, can stay referenced by the editor, and the
      library interface can grow where that removes a reference. The

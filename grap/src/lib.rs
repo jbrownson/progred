@@ -119,8 +119,9 @@ pub mod f64 {
 }
 
 /// The UTF-8 text convention: a record whose `utf8` field holds the text's
-/// bytes. It is ordinary data, kept here beside f64's so every host and
-/// library reads the same encoding.
+/// bytes. Privileged like f64's, so text stays unboxed through calls,
+/// containers, and environments, and readers borrow it without decoding;
+/// it remains an ordinary convention an external library could own.
 pub mod text {
     use gid::{CellId, Record, Value};
 
@@ -468,6 +469,12 @@ impl RuntimeValue {
         Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::F64(number))))
     }
 
+    pub fn text(text: impl Into<Rc<str>>) -> Self {
+        Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::Text(
+            text.into(),
+        ))))
+    }
+
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
         let mut fields: Vec<_> = fields.into_iter().collect();
         if fields.windows(2).all(|pair| pair[0].0 < pair[1].0) {
@@ -495,6 +502,7 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
                 Native::F64(number) => Some(*number),
+                Native::Text(_) => crate::f64::read_record(unboxed.original()?),
             },
             RuntimeValueKind::Data(value) => crate::f64::read(value),
             RuntimeValueKind::Record(_) => {
@@ -511,7 +519,10 @@ impl RuntimeValue {
     /// without materializing it.
     pub fn as_text(&self) -> Option<&str> {
         match &self.0 {
-            RuntimeValueKind::Unboxed(unboxed) => crate::text::read_record(unboxed.original()?),
+            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
+                Native::Text(text) => Some(text.as_ref()),
+                Native::F64(_) => crate::text::read_record(unboxed.original()?),
+            },
             RuntimeValueKind::Data(value) => crate::text::read(value),
             RuntimeValueKind::Record(fields) => runtime_field(fields, crate::text::UTF8)?
                 .as_blob()

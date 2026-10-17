@@ -189,11 +189,17 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
         (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
         (metadata, Value::from(vec![9])),
     ]);
+    let decorated_text = gid::Record::from_iter([
+        (crate::text::UTF8, Value::from(b"three".to_vec())),
+        (metadata, Value::from(vec![9])),
+    ]);
     for value in [
         RuntimeValue::from(Value::record([(metadata, Value::record([]))])),
         RuntimeValue::record([(metadata, closure.clone())]),
         RuntimeValue::f64(3.0),
         lowered(decorated_number),
+        RuntimeValue::text("three"),
+        lowered(decorated_text),
         RuntimeValue::new(RuntimeValueKind::Foreign(metadata)),
         closure,
         RuntimeValue::list([]),
@@ -217,6 +223,7 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
         for key in [
             metadata,
             crate::f64::F64,
+            crate::text::UTF8,
             vocabulary::FFI,
             vocabulary::CLOSURE,
         ] {
@@ -325,6 +332,73 @@ fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
     ] {
         assert_eq!(other.as_blob(), None);
     }
+}
+
+#[test]
+fn text_lowers_on_entry_and_keeps_its_source_record() {
+    let (metadata, parameter) = (new_cell_id(), new_cell_id());
+    let decorated = Value::record([
+        (crate::text::UTF8, Value::from(b"hello".to_vec())),
+        (metadata, Value::from(vec![9])),
+    ]);
+    // A literal, and the same text passed through a closure's parameter,
+    // lower to native text and materialize as their exact source.
+    let echo = lambda([parameter], Value::from(parameter));
+    for expression in [
+        decorated.clone(),
+        call(echo, [(parameter, decorated.clone())]),
+    ] {
+        let result = evaluate(&expression, &host(vec![]), 100).result;
+        assert!(matches!(&result.0, RuntimeValueKind::Unboxed(_)));
+        assert_eq!(result.as_text(), Some("hello"));
+        assert_eq!(
+            result.field(metadata).map(|value| value.to_value()),
+            Some(Value::from(vec![9]))
+        );
+        assert_eq!(result.into_value(), decorated);
+    }
+    // Bytes that aren't UTF-8 stay data.
+    let invalid = Value::record([(crate::text::UTF8, Value::from(vec![0xff]))]);
+    let result = evaluate(&invalid, &host(vec![]), 100).result;
+    assert!(matches!(&result.0, RuntimeValueKind::Data(_)));
+    assert_eq!(result.as_text(), None);
+    // Text made natively answers as its record.
+    let native = RuntimeValue::text("hi");
+    assert_eq!(native.as_text(), Some("hi"));
+    assert_eq!(native.as_f64(), None);
+    assert_eq!(native.to_value(), crate::text::value("hi"));
+    assert_eq!(
+        native
+            .field(crate::text::UTF8)
+            .map(|value| value.to_value()),
+        Some(Value::from(b"hi".to_vec()))
+    );
+    assert!(native.same_result(&RuntimeValue::text("hi")));
+    assert!(!native.same_result(&RuntimeValue::text("ho")));
+    assert!(!native.same_result(&RuntimeValue::f64(1.0)));
+}
+
+#[test]
+fn interpreting_lowered_text_as_code_preserves_syntax_precedence() {
+    let interpret = new_cell_id();
+    let source = gid::Record::from_iter([
+        (crate::text::UTF8, Value::from(b"three".to_vec())),
+        (vocabulary::VALUE, f64::value(9.0)),
+    ]);
+    let value = lowered(source);
+    assert_eq!(value.as_text(), Some("three"));
+    let receiver = host(vec![(
+        interpret,
+        Definition::foreign(
+            Value::record([]),
+            ForeignFunction::new(move |context, _, environment| {
+                context.eval_runtime_code(&value, environment)
+            }),
+        ),
+    )]);
+    let result = evaluate(&call(interpret.into(), []), &receiver, 100);
+    assert!(result.completed);
+    assert_eq!(result.result.as_f64(), Some(9.0));
 }
 
 #[test]

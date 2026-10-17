@@ -851,17 +851,20 @@ Drawing-source origins are separate from failures.
 
 ## Equivalent host representations
 
-The runtime can carry unboxed f64 values and containers with lowered children.
-Numbers stay unboxed through calls, containers, and environments until a
-generic boundary asks for `Value`. The f64 encoder/decoder live with the runtime
-carrier and are re-exported by the f64 library, which still owns its functions,
-projections, and absences. They accelerate an ordinary convention without
-adding numeric syntax or new GID primitives. Privileged knowledge of a library
-convention is an accelerator only, never a capability: each such library must
-remain expressible externally, evaluating correctly at reduced speed, and reads to
-Grap as an ordinary library. An enriched source number retains its original
-value so a pass-through preserves unrelated fields. Public `evaluate` and
-`apply` return `Evaluation<RuntimeValue>`. `RuntimeValue::into_value` (or
+The runtime can carry unboxed f64 numbers and text, and containers with lowered
+children. Numbers and text stay unboxed through calls, containers, and
+environments until a generic boundary asks for `Value`. Their encoders and
+decoders live with the runtime carrier and are re-exported by the f64 and text
+libraries, which still own their functions, projections, and absences. They
+accelerate ordinary conventions without adding numeric or string syntax or new
+GID primitives. A new privileged convention adds a native form to the runtime's
+unboxed values, which answer every record question as their records would.
+Privileged knowledge of a library convention is an accelerator only, never a
+capability: each such library must remain expressible externally, evaluating
+correctly at reduced speed, and reads to Grap as an ordinary library. An
+enriched source number or text retains its original value so a pass-through
+preserves unrelated fields. Public `evaluate` and `apply` return
+`Evaluation<RuntimeValue>`. `RuntimeValue::into_value` (or
 `Evaluation::into_value`) explicitly materializes GID; the `*_value` entry
 points adapt callers that still need that representation.
 

@@ -651,6 +651,7 @@ fn runtime_fold_classification_matches_stored_data() {
             Runtime::record([(text::UTF8, Value::from(b"hello".to_vec()).into())]),
             None,
         ),
+        (Runtime::text("hello"), None),
         (
             Runtime::record([(text::UTF8, Value::from(vec![0xff]).into())]),
             Some(false),
