@@ -170,7 +170,6 @@ mod iop_tree_native;
 mod layout;
 mod logical_navigation;
 mod navigation;
-mod numbers;
 mod outline;
 mod profile;
 mod svg;

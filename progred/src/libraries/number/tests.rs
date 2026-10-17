@@ -195,3 +195,5 @@ fn coarse_precision_grows_horizontal_sensitivity_sublinearly() {
     assert_eq!(horizontal_scale(1.0), 1.0);
     assert!((horizontal_scale(1_000.0) - 100.0).abs() < 1e-12);
 }
+
+mod frames;

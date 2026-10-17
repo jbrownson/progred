@@ -1,5 +1,19 @@
 use super::*;
-use crate::libraries::{f32, number, u64};
+use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::frame::Hovered;
+use crate::hover::Hover;
+use crate::libraries::{f32, f64, text, u64};
+use crate::placed;
+use crate::projection::test_support::*;
+use crate::selection::pending_value;
+use crate::test_values::numeric_calls;
+use gid::{Document, Step, new_cell_id};
+use kurbo::Point;
+use puri::hover::Claim;
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+};
 
 #[test]
 fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
@@ -151,41 +165,10 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
     }
 }
 
-pub(super) fn calls() -> Vec<(CellId, CellId, Value)> {
-    [
-        (f64::vocabulary::F64, f64::vocabulary::SUM, f64::value(1.0)),
-        (f32::vocabulary::F32, f32::vocabulary::SUM, f32::value(2.0)),
-        (u64::vocabulary::U64, u64::vocabulary::LESS, u64::value(3)),
-    ]
-    .into_iter()
-    .map(|(representation, function, value)| {
-        (
-            representation,
-            function,
-            grap::call(
-                function.into(),
-                [
-                    (number::vocabulary::LEFT, value.clone()),
-                    (number::vocabulary::RIGHT, value),
-                ],
-            ),
-        )
-    })
-    .chain([(
-        f64::vocabulary::F64,
-        f64::vocabulary::SIN,
-        grap::call(
-            f64::vocabulary::SIN.into(),
-            [(number::vocabulary::OPERAND, f64::value(0.5))],
-        ),
-    )])
-    .collect()
-}
-
 #[test]
 fn numeric_operation_labels_preserve_function_hover_and_selection() {
     let function_path = [Step::Key(grap::vocabulary::FUNCTION)];
-    for (_, _, call) in calls() {
+    for (_, _, call) in numeric_calls() {
         let doc = Document {
             root: Some(call),
             cells: Cells::new(),
@@ -218,7 +201,7 @@ fn numeric_operation_labels_preserve_function_hover_and_selection() {
 #[test]
 fn numeric_operation_labels_read_both_names_from_the_graph() {
     let function_path = [Step::Key(grap::vocabulary::FUNCTION)];
-    for (representation, function, call) in calls() {
+    for (representation, function, call) in numeric_calls() {
         let mut doc = Document {
             root: Some(call),
             cells: Cells::new(),
@@ -248,7 +231,7 @@ fn numeric_operation_labels_read_both_names_from_the_graph() {
 #[test]
 fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
     let extra = new_cell_id();
-    for (_, _, call) in calls() {
+    for (_, _, call) in numeric_calls() {
         let call = Value::record(
             call.as_record()
                 .unwrap()

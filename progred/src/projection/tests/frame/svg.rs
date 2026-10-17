@@ -1183,7 +1183,9 @@ fn svg_bench_renders_numeric_type_labels() {
 fn svg_bench_renders_numeric_operation_labels() {
     let doc = Document {
         root: Some(Value::list(
-            super::numbers::calls().into_iter().map(|(_, _, call)| call),
+            crate::test_values::numeric_calls()
+                .into_iter()
+                .map(|(_, _, call)| call),
         )),
         cells: Cells::new(),
     };
