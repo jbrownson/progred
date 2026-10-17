@@ -255,9 +255,10 @@ An audit on 16 October 2026 ([the evidence](history/codebase-audit-2026-10-16.md
 found almost no dead code: 60% of progred's 94k lines are tests, much of them
 inside source files, and 93% of its production code is one dependency cycle.
 Its first recommendation is done: inline test modules now live in their own
-files. projection/tests is still under projection/. It holds 20.8k lines that
-mostly test the frame and the whole editor. The private items it reaches point
-at misplaced code, not at internals the tests should see. A follow-up
+files. projection/tests is still under projection/. It held 20.8k lines that
+mostly test the frame and the whole editor, and is down to 13.7k as suites move
+to their own modules (item 4). The private items it reaches point at misplaced
+code, not at internals the tests should see. A follow-up
 [crate split analysis](history/crate-split-2026-10-16.md) maps the coupling
 that blocks a split and the steps that break it. The rest, most worthwhile
 first:
@@ -347,10 +348,11 @@ first:
    [survey](history/projection-tests-survey-2026-10-17.md) of its 324 tests
    orders the work:
    1. ~~Move the 46 already-targeted tests to their own modules.~~ Done on 17
-      October 2026. The tutorial-slot and event-encoding tests wait on the
-      harness moving in step 2.
-   2. Move the 39 library projection tests next to their libraries, through
-      the shared harness and the public `project()`.
+      October 2026, with the tutorial-slot and event-encoding tests once the
+      harness had moved.
+   2. ~~Move the 39 library projection tests next to their libraries, through
+      the shared harness and the public `project()`.~~ Done on 17 October
+      2026. The harness is now `projection::test_support`.
    3. ~~Move the completion card tests to display, with the card.~~ Done on 17
       October 2026. The one that places the card over a projected editor stays
       with the picker flows, for step 5.

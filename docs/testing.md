@@ -24,12 +24,17 @@ visual testing.
 
 - **Pure logic.** GID, Grap, `incremental`, layout, and the libraries test their
   functions directly. Prefer these where they can say what's being tested.
-- **Frames.** [`projection/tests`](../progred/src/projection/tests/mod.rs)
+- **Frames.** The frame harness in
+  [`projection/test_support.rs`](../progred/src/projection/test_support.rs)
   builds whole headless frames from an editor state and inspects their draw
-  lists, hover, and handlers: projection fixtures, interaction regressions,
-  navigation, and phase-ordering tests: placement doesn't run hover, hover
-  doesn't paint or dispatch, paint sees the final target, and discarding paint
-  leaves a working handler. Projection-shape tests record layout calls and
+  lists, hover, and handlers. A library's frame tests sit beside the library,
+  as the number library's do in `libraries/number/tests/frames.rs`.
+  [`projection/tests`](../progred/src/projection/tests/mod.rs) keeps the
+  engine's own tests, such as the phase-ordering ones: placement doesn't run
+  hover, hover doesn't paint or dispatch, paint sees the final target, and
+  discarding paint leaves a working handler. It also still holds interaction
+  regressions and navigation tests that drive the whole editor, until the
+  driver can do what they need. Projection-shape tests record layout calls and
   projection recursion through test-only recorders that production doesn't
   use.
   [`display/test_support.rs`](../progred/src/display/test_support.rs) records
