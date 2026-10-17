@@ -376,6 +376,10 @@ first:
 
       Many of those tests now re-implement the shell's key routing.
    6. Rewrite 30 tests that drive the whole editor but check one system.
+   7. Give the captures and the frame canaries modules of their own, with the
+      SVG writer in test support. The two GPU mesh tests moved to puri-vello
+      on 17 October 2026, with the image round trip they compare against in
+      its `capture` module.
 
    CAM tests took 84% of progred's test time, running Fidget's generic
    meshing and rendering and the cutter geometry at progred's debug level. On

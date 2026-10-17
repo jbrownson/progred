@@ -128,13 +128,14 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
   [performance checks](performance.md). Puri's
   `handler_dispatch_profile` checks the cost of dispatching through unrelated
   handlers.
-- **GPU tests** need a real adapter: `make test-gpu` runs the compositor tests
-  and Fidget's GPU raster and mesh tests. The build sandbox provides no GPU, so
-  [`tools/test_binaries.py`](../tools/test_binaries.py) builds the tests through
-  the wrapper and runs the executables outside it; it takes `cargo test`
-  arguments, then test arguments after `--`. On Linux without a GPU, Mesa's
-  lavapipe driver works. The readback helper is `puri-vello`'s `capture` module,
-  behind its `capture` feature.
+- **GPU tests** need a real adapter: `make test-gpu` runs the compositor and
+  mesh renderer tests and Fidget's GPU raster and mesh tests. The build sandbox
+  provides no GPU, so [`tools/test_binaries.py`](../tools/test_binaries.py)
+  builds the tests through the wrapper and runs the executables outside it; it
+  takes `cargo test` arguments, then test arguments after `--`. On Linux
+  without a GPU, Mesa's lavapipe driver works. The readback helpers, and the
+  image round trip meshes took before the compositor drew them directly, are
+  `puri-vello`'s `capture` module, behind its `capture` feature.
 - **Browser presentation** has its own pixel test: `make test-web-gpu` builds the
   GPU probe, then drives the installed Chrome headlessly through the
   `playwright-core` pinned in `tools/package.json`, on WebGPU and on the

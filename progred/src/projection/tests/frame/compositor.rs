@@ -235,10 +235,10 @@ fn editor_compositor_profile() {
         puri::frame::render(runner.prepare_paint(2.0, size).renders, &mut list);
         // This older benchmark isolates image/vector composition, not mesh
         // drawing. Freeze identical GPU-rasterized images for both routes.
-        let list = mesh::images(
+        let list = gpu::mesh_images(
             &gpu,
             &mut puri_vello::mesh::Renderer::new(&gpu.device, &gpu.queue),
-            &mut mesh::Readback::default(),
+            &mut gpu::Readback::default(),
             &list,
         );
         let reference = gpu.texture(size.width as u32, size.height as u32);

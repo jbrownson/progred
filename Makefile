@@ -106,7 +106,7 @@ test-vendor:
 
 # Ignored tests that need a GPU, run outside the build sandbox.
 test-gpu:
-	@python3 -B tools/test_binaries.py --release -p puri-vello --features capture --test compositor -- --ignored --test-threads=1
+	@python3 -B tools/test_binaries.py --release -p puri-vello --features capture --test compositor --test mesh -- --ignored --test-threads=1
 	@python3 -B tools/test_binaries.py --release -p progred --lib -- --ignored --test-threads=1 compositor gpu
 
 perf:
