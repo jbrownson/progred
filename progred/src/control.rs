@@ -12,7 +12,7 @@ mod computer;
 use crate::clipboard::Clipboard;
 use crate::driver::{Driver, keystroke_for};
 use crate::gid_text::{self, Binders};
-use crate::libraries::Libraries;
+use crate::library::Libraries;
 use crate::sources::Sources;
 use gid::{CellId, Cells, Document, Value};
 use kurbo::{Point, Size, Vec2};

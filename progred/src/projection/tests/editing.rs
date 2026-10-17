@@ -468,7 +468,7 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
     let mut libraries = core_libraries();
     libraries.insert(
         library,
-        crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+        crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
     );
     for (raw, value, path) in [
         (true, text::value("raw"), vec![]),
@@ -1019,7 +1019,7 @@ fn a_read_only_anonymous_lambda_cannot_open_name_entry() {
     let mut libraries = core_libraries();
     libraries.insert(
         library,
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        crate::library::Definitions::from_parts(cells, Default::default()),
     );
     let doc = Document {
         root: Some(cell.into()),

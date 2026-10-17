@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::Libraries;
+use crate::library::Libraries;
 use crate::location::Location;
 use gid::{Cells, Resolution, new_cell_id};
 
@@ -48,7 +48,7 @@ fn declining_after_drawing_discards_the_whole_recording() {
     fallback.set_value(function, grap::lambda([], fill));
     stack.libraries.insert(
         library,
-        crate::libraries::Definitions::from_parts(fallback, Default::default()),
+        crate::library::Definitions::from_parts(fallback, Default::default()),
     );
     let drawing = record_program(
         sequence(vec![
@@ -102,10 +102,10 @@ fn recorded_hits_keep_the_executing_library_definition() {
             cells.set_value(function, definition.clone());
             (
                 id,
-                crate::libraries::Library::<(), ()>::named(
+                crate::library::Library::<(), ()>::named(
                     id,
                     "drawing",
-                    crate::libraries::Definitions::from_parts(
+                    crate::library::Definitions::from_parts(
                         cells,
                         grap::ForeignFunctions::default(),
                     ),

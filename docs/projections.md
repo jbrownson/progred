@@ -13,22 +13,22 @@ lambda/application, value wrappers, environments, callable representations, fuel
 origins, and stable evaluator absence reasons. It has no editor, geometry,
 window, or file services.
 
-Progred's [libraries module](../progred/src/libraries/mod.rs) contains conceptual libraries
-as modules alongside their editor-facing widgets: names, text, f64, control,
-Grap, geometry, presentation, layout, and other domains. The built-in
-`libraries::grap` module owns Grap's self-description, the `evaluate` Rust
-function, and Grap's projection; geometry and CAD concepts remain separate
-libraries. Nothing in this representation requires Rust FFIs, so
-editor-authored libraries can later lower into it. A `Library` carries
-definitions and one partial projection. A library with several forms composes
-them with `compose_partials`: first success wins, and the empty composition
-declines.
-The editor composes these library projections in load order above its one
-total structural fallback. `Libraries` keeps an insertion-ordered unique map
-keyed by stable random library identities supplied externally; the identity is
-not a field inside the library. Loaded libraries are read-only. Repeating a
-library identity replaces its entire contribution in place before composition.
-Loading is an explicit editor operation, not an FFI or reserved-cell discovery.
+Progred's [libraries module](../progred/src/libraries/mod.rs) contains
+conceptual libraries as modules alongside their editor-facing widgets, each a
+contribution through the [library interface](../progred/src/library.rs): names,
+text, f64, control, Grap, geometry, presentation, layout, and other domains. The
+built-in `libraries::grap` module owns Grap's self-description, the `evaluate`
+Rust function, and Grap's projection; geometry and CAD concepts remain separate
+libraries. Nothing in this representation requires Rust FFIs, so editor-authored
+libraries can later lower into it. A `Library` carries definitions and one
+partial projection. A library with several forms composes them with
+`compose_partials`: first success wins, and the empty composition declines. The
+editor composes these library projections in load order above its one total
+structural fallback. `Libraries` keeps an insertion-ordered unique map keyed by
+stable random library identities supplied externally; the identity is not a
+field inside the library. Loaded libraries are read-only. Repeating a library
+identity replaces its entire contribution in place before composition. Loading
+is an explicit editor operation, not an FFI or reserved-cell discovery.
 
 Each library stores one sorted definition table. An entry is either an ordinary
 `Value` or a shared native definition containing its descriptive `Value` and Rust

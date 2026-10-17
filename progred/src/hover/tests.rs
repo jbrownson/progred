@@ -53,13 +53,13 @@ fn definitions_have_distinct_source_traces_and_secondary_marks() {
         cells,
     };
     let libraries = |order: [CellId; 2]| {
-        crate::libraries::Libraries::from_contributions(order.map(|id| {
+        crate::library::Libraries::from_contributions(order.map(|id| {
             (
                 id,
-                crate::libraries::Library::<(), ()>::named(
+                crate::library::Library::<(), ()>::named(
                     id,
                     "source",
-                    crate::libraries::Definitions::from_parts(
+                    crate::library::Definitions::from_parts(
                         doc.cells.clone(),
                         grap::ForeignFunctions::default(),
                     ),
@@ -156,7 +156,7 @@ fn nested_values_match_by_cell_and_relative_path() {
         root: Some(root),
         cells,
     };
-    let libraries = crate::libraries::Libraries::default();
+    let libraries = crate::library::Libraries::default();
     let sources = Sources {
         doc: &doc,
         libraries: &libraries,

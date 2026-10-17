@@ -238,7 +238,7 @@ fn declining_after_editing_discards_the_whole_editor_operation() {
     );
     stack.libraries.insert(
         gid::new_cell_id(),
-        crate::libraries::Definitions::from_parts(fallback, Default::default()),
+        crate::library::Definitions::from_parts(fallback, Default::default()),
     );
     let original = Some((vec![], crate::selection::payload::edge()));
     let staged = evaluate(

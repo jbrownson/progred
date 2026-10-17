@@ -1,5 +1,6 @@
 use super::*;
-use crate::libraries::{Libraries, text};
+use crate::libraries::text;
+use crate::library::Libraries;
 use gid::{Cells, Document, Value, new_cell_id};
 
 fn sources<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {

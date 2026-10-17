@@ -28,7 +28,7 @@ Replacing a loaded library replaces all its contributions in place, including
 projections and completions, before those are composed.
 Explicit source-qualified paths still reach a particular definition; loaded
 library values remain read-only. See [Sources](../progred/src/sources.rs),
-[Library and Libraries](../progred/src/libraries/mod.rs), and
+[Library and Libraries](../progred/src/library.rs), and
 [Grap evaluation](projections.md#evaluation).
 
 The text bridge is a temporary import/export representation. Its binders and

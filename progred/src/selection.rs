@@ -1,7 +1,8 @@
 //! Selection, collapse, and the writes they drive. Selection paths name
 //! projected occurrences; their conject locates document data for mutations.
 
-use crate::libraries::{Libraries, blob};
+use crate::libraries::blob;
+use crate::library::Libraries;
 use crate::location::{Location, Start};
 use crate::sources::Sources;
 use crate::spine;

@@ -8,10 +8,10 @@ use gid::{Cells, new_cell_id};
 fn libraries(cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         CellId::from_u128(1),
-        crate::libraries::Library::<(), ()>::named(
+        crate::library::Library::<(), ()>::named(
             CellId::from_u128(1),
             "test",
-            crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+            crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
         ),
     )])
     .0
@@ -696,7 +696,7 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
         root: None,
         cells: gid::Cells::new(),
     };
-    let empty = crate::libraries::Libraries::default();
+    let empty = crate::library::Libraries::default();
     let stack = crate::stack::load();
     let site = vec![gid::Step::Key(gid::new_cell_id())];
     let child = vec![gid::Step::Element(

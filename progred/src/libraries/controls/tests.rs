@@ -33,7 +33,7 @@ use puri::{Affine, DrawCmd, DrawList, Placement, Shape};
 const A: CellId = CellId::from_u128(1);
 const B: CellId = CellId::from_u128(2);
 
-struct Host(crate::libraries::Libraries);
+struct Host(crate::library::Libraries);
 impl display::Env for Host {
     fn apply_scoped(
         &self,

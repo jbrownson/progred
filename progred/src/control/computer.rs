@@ -7,7 +7,8 @@
 
 use super::{Action, Session};
 use crate::gid_text::Binders;
-use crate::libraries::{Library, absent, name, png, text};
+use crate::libraries::{absent, name, png, text};
+use crate::library::Library;
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use gid::{CellId, Cells, Value};
 use kurbo::{Point, Vec2};
@@ -91,7 +92,7 @@ pub(super) fn library(
     Library::named(
         ID,
         "computer",
-        crate::libraries::Definitions::from_parts(cells, functions(session)),
+        crate::library::Definitions::from_parts(cells, functions(session)),
     )
 }
 

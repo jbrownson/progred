@@ -895,12 +895,12 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         root: Some(Value::Cell(cell)),
         cells,
     };
-    let libraries = crate::libraries::Libraries::from_contributions([(
+    let libraries = crate::library::Libraries::from_contributions([(
         library_id,
-        crate::libraries::Library::<(), ()>::named(
+        crate::library::Library::<(), ()>::named(
             library_id,
             "source",
-            crate::libraries::Definitions::from_parts(
+            crate::library::Definitions::from_parts(
                 doc.cells.clone(),
                 grap::ForeignFunctions::default(),
             ),
@@ -950,7 +950,8 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
 
 #[test]
 fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
-    use crate::libraries::{Definitions, presentation};
+    use crate::libraries::presentation;
+    use crate::library::Definitions;
     use std::cell::{Cell, RefCell};
 
     let projector = CellId::from_u128(1);
@@ -1155,7 +1156,8 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
 
 #[test]
 fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
-    use crate::libraries::{Definitions, f64, layout, presentation};
+    use crate::libraries::{f64, layout, presentation};
+    use crate::library::Definitions;
     use std::cell::RefCell;
     let function = gid::new_cell_id();
     let source = Value::from(b"source".to_vec());

@@ -5,7 +5,7 @@
 use crate::annotations::Annotations;
 use crate::completion::Entry;
 use crate::display::CompletionKind;
-use crate::libraries::Libraries;
+use crate::library::Libraries;
 use crate::projection::{ProjectDescription, Projection, project};
 use crate::selection::{Selection, pending_edge};
 use crate::sources::Sources;

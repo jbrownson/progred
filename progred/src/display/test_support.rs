@@ -222,7 +222,7 @@ pub fn with_context<W: 'static, H: 'static, R>(
         root: None,
         cells: gid::Cells::new(),
     };
-    let libraries = crate::libraries::Libraries::default();
+    let libraries = crate::library::Libraries::default();
     let root = crate::test_root();
     let annotations = crate::annotations::Annotations::default();
     let styles = widget::style::editor(widget::style::Theme::Light.palette(), 1.0);

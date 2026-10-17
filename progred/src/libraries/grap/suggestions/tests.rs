@@ -6,7 +6,7 @@ fn visible(root: Value, path: &[Step]) -> BTreeSet<CellId> {
         root: Some(root),
         cells: Cells::new(),
     };
-    let libraries = crate::libraries::Libraries::default();
+    let libraries = crate::library::Libraries::default();
     let sources = crate::sources::Sources {
         doc: &document,
         libraries: &libraries,
@@ -40,7 +40,7 @@ fn completion_bindings_sort_nearest_scope_first_then_by_current_name() {
     for (cell, label) in [(outer, "apple"), (inner_z, "Zebra"), (inner_a, "banana")] {
         document.cells.set_value(cell, name::record(label, []));
     }
-    let libraries = crate::libraries::Libraries::default();
+    let libraries = crate::library::Libraries::default();
     for (label, expected) in [
         ("banana", [inner_a, inner_z, outer]),
         ("zz", [inner_z, inner_a, outer]),

@@ -240,7 +240,7 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
     let replacement = Library::named(LEFT_LIBRARY, "replacement", Definitions::default())
         .with_projection(replacement_projection.clone())
         .with_completions(|request| {
-            Some(vec![completion::select(
+            Some(vec![crate::libraries::completion::select(
                 request.query,
                 SHARED_FUNCTION.into(),
             )])

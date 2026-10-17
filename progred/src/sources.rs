@@ -2,7 +2,8 @@
 //! libraries. Ordinary lookup selects the document, then the first
 //! library definition. A stored Follow step still names its source.
 
-use crate::libraries::{Libraries, name};
+use crate::libraries::name;
+use crate::library::Libraries;
 use crate::location::{Location, Start};
 use gid::{CellId, Document, Resolution, Step, Value};
 

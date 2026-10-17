@@ -78,7 +78,7 @@ impl Level {
     /// Shown above each slot when slots differ in level, so the views
     /// explain themselves without the surrounding page. A slot showing the
     /// cell the slot above it shows says so.
-    fn caption(self, libraries: &crate::libraries::Libraries, same: bool) -> String {
+    fn caption(self, libraries: &crate::library::Libraries, same: bool) -> String {
         let drawn = if same {
             "The same value, drawn"
         } else {
@@ -125,7 +125,7 @@ fn same_as_above(slots: &[(gid::CellId, Level)], root: Option<&Value>) -> Vec<bo
 pub(crate) fn tutorial_slots(
     ids: Option<&str>,
     projection: crate::projection::Projection<Editor>,
-    libraries: &crate::libraries::Libraries,
+    libraries: &crate::library::Libraries,
 ) -> Result<crate::projection::Projection<Editor>, String> {
     match ids {
         None => Ok(projection),

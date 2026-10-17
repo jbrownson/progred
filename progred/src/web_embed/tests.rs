@@ -32,7 +32,7 @@ fn a_slot_showing_the_cell_above_says_it_is_the_same_value() {
         (b, crate::libraries::f64::value(1.0)),
     ]);
     assert_eq!(same_as_above(&slots[..2], Some(&copies)), [false, false]);
-    let libraries = crate::libraries::Libraries::default();
+    let libraries = crate::library::Libraries::default();
     assert_eq!(
         Level::Raw.caption(&libraries, true),
         "The same value in the base projection: no libraries"

@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::Libraries;
+use crate::library::Libraries;
 use gid::{Cells, Document, Resolution, new_cell_id};
 
 #[test]

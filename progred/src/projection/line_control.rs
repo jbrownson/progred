@@ -5,7 +5,7 @@ use super::*;
 /// Apply this handler's conversion and report whether it opens an undo step.
 pub(crate) fn commit(
     doc: &mut Rc<gid::Document>,
-    libraries: &crate::libraries::Libraries,
+    libraries: &crate::library::Libraries,
     selection: &mut Selection,
     update: &crate::display::LineUpdate,
 ) -> bool {
@@ -32,7 +32,7 @@ pub(crate) fn commit(
 
 pub(crate) fn edit(
     doc: &mut Rc<gid::Document>,
-    libraries: &crate::libraries::Libraries,
+    libraries: &crate::library::Libraries,
     selection: &mut Selection,
     line: &crate::display::LineEdit,
     operation: impl FnOnce(&mut LineEditState) -> bool,

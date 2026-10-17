@@ -28,7 +28,7 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
         } else {
             implementation.tracked()
         };
-        let mut definitions = crate::libraries::Definitions::default();
+        let mut definitions = crate::library::Definitions::default();
         definitions.insert(
             function,
             Definition::foreign(Value::record([]), implementation),
@@ -91,7 +91,7 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
         gid::new_cell_id(),
     );
     let runs = Rc::new(Cell::new(0));
-    let mut definitions = crate::libraries::Definitions::default();
+    let mut definitions = crate::library::Definitions::default();
     definitions.insert(
         function,
         Definition::foreign(

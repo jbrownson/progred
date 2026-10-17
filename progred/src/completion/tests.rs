@@ -1,6 +1,7 @@
 use super::*;
 use crate::annotations::Annotations;
-use crate::libraries::{Libraries, control, f64, fidget, presentation};
+use crate::libraries::{control, f64, fidget, presentation};
+use crate::library::Libraries;
 use crate::selection::payload as selection_payload;
 use crate::selection::{Stage, pending_edge};
 use crate::test_support::{
@@ -415,8 +416,8 @@ fn document_function_completion_inserts_a_call_and_opens_its_first_argument() {
 fn call_offers_follow_resolved_definitions_without_evaluating_them() {
     let function = new_cell_id();
     let mut cells = Cells::new();
-    let library = crate::libraries::Library::<crate::Editor, crate::frame::Hovered>::new(
-        crate::libraries::Definitions::from_parts(
+    let library = crate::library::Library::<crate::Editor, crate::frame::Hovered>::new(
+        crate::library::Definitions::from_parts(
             {
                 let mut definitions = Cells::new();
                 definitions.set_value(function, name::record("probe", []));
@@ -835,7 +836,7 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
     definitions.set_value(cell, definition.clone());
     let libraries = Libraries::from_contributions([(
         library_id,
-        crate::libraries::Library::<(), ()>::new(crate::libraries::Definitions::from_parts(
+        crate::library::Library::<(), ()>::new(crate::library::Definitions::from_parts(
             definitions,
             grap::ForeignFunctions::default(),
         )),
@@ -928,7 +929,7 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
         root: None,
         cells: Cells::new(),
     };
-    let libraries = crate::libraries::Libraries::default();
+    let libraries = crate::library::Libraries::default();
     let sources = src(&doc, &libraries);
     let entries = completion_entries(&sources, false, false, "");
     let bare = entries
@@ -1056,7 +1057,7 @@ fn completion_constructor_aliases_rank_ahead_of_literal_text() {
         root: None,
         cells: Cells::new(),
     };
-    let libraries = crate::libraries::Libraries::default();
+    let libraries = crate::library::Libraries::default();
     let sources = src(&document, &libraries);
     for raw in [false, true] {
         for (query, display, value) in [

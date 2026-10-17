@@ -3,7 +3,7 @@
 
 use crate::Editor;
 use crate::display::widget::gesture::Gesture;
-use crate::libraries::Libraries;
+use crate::library::Libraries;
 use crate::location::Location;
 use crate::model::Model;
 use crate::selection::{self, Selection};

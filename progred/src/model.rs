@@ -3,7 +3,7 @@
 
 use crate::history;
 #[cfg(test)]
-use crate::libraries::Libraries;
+use crate::library::Libraries;
 use crate::selection;
 use crate::workspace;
 use gid::{Document, Path, Step};

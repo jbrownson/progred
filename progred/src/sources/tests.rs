@@ -4,10 +4,10 @@ use gid::{Cells, new_cell_id};
 fn libraries(id: CellId, cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         id,
-        crate::libraries::Library::<(), ()>::named(
+        crate::library::Library::<(), ()>::named(
             id,
             "test",
-            crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+            crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
         ),
     )])
     .0
@@ -23,7 +23,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
     let library = new_cell_id();
     let (libraries, _, _) = Libraries::from_contributions([(
         library,
-        crate::libraries::Library::<(), ()>::new(crate::libraries::Definitions::from_parts(
+        crate::library::Library::<(), ()>::new(crate::library::Definitions::from_parts(
             Cells::new(),
             grap::ForeignFunctions::default().register(
                 function,
@@ -92,10 +92,10 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
             cells.set_value(function, definition(Value::from(id)));
             (
                 id,
-                crate::libraries::Library::<(), ()>::named(
+                crate::library::Library::<(), ()>::named(
                     id,
                     "source",
-                    crate::libraries::Definitions::from_parts(
+                    crate::library::Definitions::from_parts(
                         cells,
                         grap::ForeignFunctions::default(),
                     ),
@@ -233,10 +233,10 @@ fn follow_names_a_library_source_not_its_load_order() {
     let library = |id, name| {
         let mut cells = Cells::new();
         cells.set_value(cell, crate::test_values::text(name));
-        crate::libraries::Library::<(), ()>::named(
+        crate::library::Library::<(), ()>::named(
             id,
             name,
-            crate::libraries::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+            crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
         )
     };
     let doc = Document {
