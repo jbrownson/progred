@@ -15,7 +15,9 @@ use gid::Step;
 use kurbo::Insets;
 use measured::{Measured, min_width, pad};
 use puri::Point;
-use puri::edit::{LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState};
+use puri::edit::{
+    EditOperation, LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState,
+};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
@@ -191,7 +193,7 @@ fn query_content(
             placeholder: None,
         },
         tcx,
-        crate::editing::edit_query,
+        edit_query,
     );
     // Preserve the empty frame's width while the query is short.
     let content = min_width(
@@ -212,7 +214,7 @@ fn query_content(
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && crate::editing::edit_query(ctx, &|edit| {
+                && edit_query(ctx, &|edit| {
                     edit.state.pointer_down(
                         &presentation,
                         edit.fonts,
@@ -236,27 +238,29 @@ fn query_content(
         .selection()
         .map(Selection::completion_scroll)
         .unwrap_or(0.0);
-    let root = toolkit.view().clone();
-    let scroll_root = root.clone();
-    let scroll_path = toolkit.path().to_vec();
+    let site = toolkit.site();
+    let scroll_site = site.clone();
     let card = crate::display::widget::completion::card(
         tcx,
         styles,
         &entries,
         crate::display::widget::completion::State { choice, scroll },
-        move |world: &crate::Editor| {
+        move |world: &mut crate::Editor| {
             world
-                .model
-                .selection
-                .as_ref()
-                .filter(|selection| {
-                    selection.root() == &scroll_root
-                        && selection.path() == scroll_path
-                        && selection.stage(&world.sources()) != Stage::Edge
-                })
-                .map(Selection::completion_scroll)
+                .session()
+                .pending()
+                .filter(|picking| picking.is_at(&scroll_site))
+                .map(|picking| picking.scroll())
         },
-        move |world, view| crate::editing::completion_view(world, &root, view.scroll, view.choice),
+        move |world: &mut crate::Editor, view| {
+            if let Some(mut picking) = world
+                .session()
+                .pending()
+                .filter(|picking| picking.is_at(&site))
+            {
+                picking.set_view(view.scroll, view.choice);
+            }
+        },
     );
     let card = if !picker.keys.is_empty() && query.text().is_empty() && !query.is_composing() {
         let keys = picker.keys.clone();
@@ -309,6 +313,15 @@ fn query_content(
     placed::floating(trigger, card, move |placement, extent| {
         crate::display::widget::completion::placement(placement, extent, scale)
     })
+}
+
+/// Edits the open picker's query. A retained handler can outlive it, and
+/// then declines.
+fn edit_query(world: &mut crate::Editor, operation: &EditOperation<'_>) -> bool {
+    world
+        .session()
+        .pending()
+        .is_some_and(|mut picking| picking.edit_query(operation))
 }
 
 /// The new-field label stage engaged, its query wearing the primary

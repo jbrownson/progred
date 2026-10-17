@@ -103,7 +103,10 @@ pub fn pickable_runtime(
             target_action(
                 target.clone(),
                 Rc::new(move |world: &mut crate::Editor| {
-                    crate::editing::pick_identity(&mut world.session(), value.to_value())
+                    world
+                        .session()
+                        .pending()
+                        .is_some_and(|picking| picking.pick(value.to_value()))
                 }),
                 true,
                 PartialEq::eq,

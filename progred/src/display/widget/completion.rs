@@ -64,7 +64,7 @@ pub fn card<C: 'static>(
     styles: &Styles,
     entries: &[Entry<C>],
     state: State,
-    current_scroll: impl Fn(&C) -> Option<f64> + 'static,
+    current_scroll: impl Fn(&mut C) -> Option<f64> + 'static,
     set_view: impl Fn(&mut C, State) + 'static,
 ) -> Measured<HoverPass<C, Hovered>> {
     let State { choice, scroll } = state;

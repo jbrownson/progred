@@ -205,10 +205,10 @@ pub fn selectable(
                                 && hovered.hovered().is_some_and(|hovered| hovered == &target)
                                 && if command.pressed(&event.state.modifiers) {
                                     value.as_ref().is_some_and(|value| {
-                                        crate::editing::pick_identity(
-                                            &mut world.session(),
-                                            value.to_value(),
-                                        )
+                                        world
+                                            .session()
+                                            .pending()
+                                            .is_some_and(|picking| picking.pick(value.to_value()))
                                     })
                                 } else {
                                     select(&mut world.session())

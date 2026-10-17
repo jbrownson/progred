@@ -91,7 +91,10 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         let pick = target_action(
             target(),
             Rc::new(move |world: &mut crate::Editor| {
-                crate::editing::pick_identity(&mut world.session(), value.clone())
+                world
+                    .session()
+                    .pending()
+                    .is_some_and(|picking| picking.pick(value.clone()))
             }),
             true,
             PartialEq::eq,

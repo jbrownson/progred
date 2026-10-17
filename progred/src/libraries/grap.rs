@@ -75,14 +75,15 @@ fn parameter(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout
                             Completion::new(
                                 crate::display::CompletionText::Literal(spelling.clone()),
                                 move |session| {
-                                    crate::editing::commit_new_cell(
-                                        session,
-                                        name::record(&spelling, []),
-                                        Some(crate::selection::at(
-                                            &[],
-                                            crate::selection::payload::edge(),
-                                        )),
-                                    )
+                                    if let Some(picking) = session.pending() {
+                                        picking.commit_new_cell(
+                                            name::record(&spelling, []),
+                                            Some(crate::selection::at(
+                                                &[],
+                                                crate::selection::payload::edge(),
+                                            )),
+                                        );
+                                    }
                                 },
                             )
                             .with_detail("new parameter")

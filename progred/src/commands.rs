@@ -146,7 +146,9 @@ impl Editor {
         let Some(value) = self.clipboard_structure() else {
             return false;
         };
-        crate::editing::pick_identity(&mut self.session(), value);
+        if let Some(picking) = self.session().pending() {
+            picking.pick(value);
+        }
         true
     }
 
@@ -172,7 +174,11 @@ impl Editor {
     }
 
     pub(crate) fn paste_value(&mut self, value: Value) -> bool {
-        if crate::editing::pick_identity(&mut self.session(), value.clone()) {
+        if self
+            .session()
+            .pending()
+            .is_some_and(|picking| picking.pick(value.clone()))
+        {
             return true;
         }
         let Some(current) = &self.model.selection else {

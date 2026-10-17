@@ -339,12 +339,17 @@ first:
    for its `Site`, and names a `Face` rather than reading the theme; and the
    toolkit reads through `Toolkit`, so nothing below the runtime names its
    per-view bag. The outline's sections jump to a site rather than a
-   `Location`. Also done: the picker note's first three (the card, its
+   `Location`. Also done: the picker note's first four (the card, its
    placement and the selection ring moved to display, then Raw's offers and
-   the ranking of a projection's, then the picker itself as a toolkit widget),
-   the drawing note's first two, and half its last: the source-link handlers
-   are the toolkit's. The recorded leaf going generic waits on the session
-   note's `Host::Hover`.
+   the ranking of a projection's, then the picker itself as a toolkit widget,
+   then `Picking`, the open picker the session lends, which offers commit into
+   and the query and card edit, so none of them takes the editor), the drawing
+   note's first two, and half its last: the source-link handlers are the
+   toolkit's. The recorded leaf going generic waits on the session note's
+   `Host::Hover`. Two reads still reach past what a widget is lent: number's
+   operator keys read the line being typed at their site, which the session
+   note's `Edit::selected` would answer, and the picker's Tab moves on through
+   the editor's navigation once it has committed.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:

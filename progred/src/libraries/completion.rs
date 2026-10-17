@@ -47,22 +47,16 @@ fn insertion(
         Face::Label
     };
     let mut offer = Completion::new(display, move |session| {
+        let Some(picking) = session.pending() else {
+            return;
+        };
         let value = create();
-        match session
-            .model
-            .selection
-            .as_ref()
-            .map(|s| s.stage(&session.sources()))
-        {
-            Some(crate::selection::Stage::Pending) => {
-                crate::editing::commit_value(session, value, on_commit.clone())
+        if picking.stage() == crate::selection::Stage::Label {
+            if let Some(cell) = value.as_cell() {
+                picking.commit_label(cell, None, on_commit.clone());
             }
-            Some(crate::selection::Stage::Label) => {
-                if let Some(cell) = value.as_cell() {
-                    crate::editing::commit_label(session, cell, None, on_commit.clone());
-                }
-            }
-            _ => (),
+        } else {
+            picking.commit(value, on_commit.clone());
         }
     });
     offer.preview = preview;

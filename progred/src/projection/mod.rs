@@ -1165,7 +1165,10 @@ fn pick_target_with(
         let select = select.clone();
         p.pick(Hovered::Tree(Hover::Value(path.clone())), move |world| {
             let mut session = world.session();
-            if !crate::editing::pick_identity(&mut session, value.to_value()) {
+            if !session
+                .pending()
+                .is_some_and(|picking| picking.pick(value.to_value()))
+            {
                 select(&mut session);
             }
             true

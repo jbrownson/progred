@@ -2,8 +2,9 @@
 //! Scopes own no editor state. Mutable access is lent only during dispatch.
 
 use super::*;
+use crate::Editor;
 use crate::location::Location;
-use gid::{CellId, Resolution};
+use gid::{CellId, Path, Resolution};
 use std::rc::Rc;
 
 /// How a projection's occurrences name stored data. Each layer reads the
