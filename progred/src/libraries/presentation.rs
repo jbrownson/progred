@@ -19,7 +19,7 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const RENDER: CellId = CellId::from_u128(0x37cda4bdea0091349e305951564fbdf1);
-    pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
+    pub use crate::workspace::vocabulary::PROJECTION;
     pub const VIEWPORT: CellId = CellId::from_u128(0x709c987e4c2a110931d8597c4da68f69);
     /// Optional size-independent preparation of a viewport's data input.
     pub const PREPARE: CellId = CellId::from_u128(0x8b782978097343efd90f6fb61f649419);

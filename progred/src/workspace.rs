@@ -5,11 +5,27 @@
 //! sizing remain process state.
 
 use crate::annotations::Annotations;
-pub use crate::libraries::workspace::vocabulary;
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
 #[cfg(test)]
 use std::rc::Rc;
+
+/// The root's workspace declarations, which this module interprets: its
+/// panes, on the left or the right, and its own libraries. The workspace and
+/// presentation libraries name them.
+pub mod vocabulary {
+    use gid::CellId;
+
+    pub const PANES: CellId = CellId::from_u128(0xf30d400a4321a4d44d1628a8adc5a84d);
+    pub const LEFT: CellId = CellId::from_u128(0xdc3a1b9a7fb4bc348760160e3b365bca);
+    pub const RIGHT: CellId = CellId::from_u128(0xf13a5c1c4471c00178575a0e876768f8);
+    pub const LIBRARIES: CellId = CellId::from_u128(0xbc197ad66fea59a9bd97c4191c7845b2);
+    /// The keys a document library owns: it draws records carrying them.
+    pub const KEYS: CellId = CellId::from_u128(0xbb30d215605f5599e31f6274641ca89f);
+    /// A projection function: the one a document library draws its records
+    /// with, and the one presentation and layout take.
+    pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
+}
 
 const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
 
@@ -173,10 +189,7 @@ pub(crate) fn libraries(
                     .values()
                     .filter_map(Value::as_cell)
                     .collect(),
-                projection: fields
-                    .get(&crate::libraries::presentation::vocabulary::PROJECTION)?
-                    .clone()
-                    .into(),
+                projection: fields.get(&vocabulary::PROJECTION)?.clone().into(),
             })
         })
         .collect()
