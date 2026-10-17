@@ -105,14 +105,14 @@ fn selectable(cx: &Cx, child: View, path: &[Step], value: &grap::RuntimeValue) -
 /// brackets would, so Space closes it again.
 fn toggle(child: View, path: &[Step], cx: &Cx, default: bool) -> View {
     let target: Rc<[Step]> = Rc::from(path);
-    let root = cx.view.clone();
-    let select = select_handler(target.clone(), cx);
+    let site = cx.site(target.clone());
     activatable(
         crate::display::hover_highlight(child, Hovered::Tree(Hover::Toggle(target.clone()))),
-        Hovered::Tree(Hover::Toggle(target.clone())),
-        Rc::new(move |world| {
-            select(world);
-            world.set_collapsed(&root, &target, default, None);
+        Hovered::Tree(Hover::Toggle(target)),
+        Rc::new(move |session| {
+            let mut edit = site.open(session);
+            edit.select();
+            edit.fold(default, None);
             true
         }),
     )

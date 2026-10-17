@@ -34,9 +34,7 @@ pub(crate) fn on_scrub(
                 .edits
                 .writable(&context.inputs.sources, context.path)
             {
-                let root = context.inputs.view.clone();
-                let path = context.path.to_vec();
-                let edits = context.inputs.edits.clone();
+                let site = context.site();
                 let handler = handler.clone();
                 let scale = context.inputs.styles.scale;
                 let target = target.clone();
@@ -45,11 +43,7 @@ pub(crate) fn on_scrub(
                     true,
                     PartialEq::eq,
                     move |world: &mut crate::Editor, point| {
-                        let edit = crate::gesture::scoped_value_edit(
-                            root.clone(),
-                            path.clone(),
-                            edits.clone(),
-                        );
+                        let edit = site.edit_run();
                         let mut session = world.session();
                         if edit.select(&mut session) {
                             session.start_gesture(

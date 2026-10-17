@@ -1,0 +1,122 @@
+//! One projected occurrence as a place to act: the view it's drawn in, its
+//! path there, and the scope that reads that path. Widgets act on their place
+//! through it, without carrying the view or the path themselves.
+
+use super::{Access, Edit, Scope, Session};
+use crate::hover::Hover;
+use crate::workspace::Root;
+use gid::{Step, Value};
+use std::rc::Rc;
+
+#[derive(Clone)]
+pub(crate) struct Site {
+    root: Root,
+    path: Rc<[Step]>,
+    scope: Scope,
+}
+
+impl Site {
+    pub(crate) fn new(root: Root, path: Rc<[Step]>, scope: Scope) -> Self {
+        Self { root, path, scope }
+    }
+
+    /// The occurrence `steps` below this one, read through the same scope.
+    pub(crate) fn below(&self, steps: &[Step]) -> Self {
+        Self {
+            root: self.root.clone(),
+            path: self.path.iter().chain(steps).cloned().collect(),
+            scope: self.scope.clone(),
+        }
+    }
+
+    /// Whether `selection` is at this occurrence.
+    pub(crate) fn holds(&self, selection: &crate::selection::Selection) -> bool {
+        selection.root() == &self.root && selection.path() == &*self.path
+    }
+
+    /// What hovering this occurrence shows.
+    pub(crate) fn hover(&self) -> Hover {
+        Hover::Value(self.path.clone())
+    }
+
+    /// A drag's writes to the value here, recorded as one undo step.
+    pub(crate) fn edit_run(&self) -> crate::gesture::EditRun {
+        crate::gesture::scoped_value_edit(self.root.clone(), self.path.to_vec(), self.scope.clone())
+    }
+
+    /// Edits of this occurrence, through the session a dispatch lends.
+    pub(crate) fn open<'s>(&'s self, session: &'s mut Session<'_>) -> SiteEdit<'s> {
+        SiteEdit {
+            site: self,
+            edit: self.scope.open(Access::of(session)),
+        }
+    }
+}
+
+/// Edits of one occurrence, bound to the session they act through.
+pub(crate) struct SiteEdit<'s> {
+    site: &'s Site,
+    edit: Edit<'s>,
+}
+
+impl SiteEdit<'_> {
+    /// This occurrence's state, which its view keeps.
+    pub(crate) fn state(&self) -> Option<&Value> {
+        self.edit.annotation(&self.site.root, &self.site.path)
+    }
+
+    /// Replaces this occurrence's state; false when it was already `state`.
+    pub(crate) fn set_state(&mut self, state: Value) -> bool {
+        self.edit.annotate(&self.site.root, &self.site.path, state)
+    }
+
+    /// Writes `value` where this occurrence is stored.
+    pub(crate) fn replace(&mut self, value: Value) -> bool {
+        self.edit.replace(&self.site.path, value)
+    }
+
+    pub(crate) fn select(&mut self) {
+        self.edit.select(&self.site.root, &self.site.path);
+    }
+
+    /// Opens or closes this occurrence's fold, whose state is `default`
+    /// until set, toggling it without `closed`.
+    pub(crate) fn fold(&mut self, default: bool, closed: Option<bool>) -> bool {
+        self.edit
+            .fold(&self.site.root, &self.site.path, default, closed)
+    }
+
+    /// Leaves the value `steps` below this occurrence pending, for the
+    /// picker to fill.
+    pub(crate) fn pend(&mut self, steps: &[Step]) {
+        self.edit.pend(
+            &self.site.root,
+            self.site.path.iter().chain(steps).cloned().collect(),
+        );
+    }
+
+    /// Selects this occurrence with a projection's own selection payload.
+    pub(crate) fn select_with(&mut self, payload: Value) {
+        self.edit
+            .select_payload(&self.site.root, self.site.path.to_vec(), payload);
+    }
+
+    pub(crate) fn edit_line(
+        &mut self,
+        line: &crate::display::LineEdit,
+        operation: &puri::edit::EditOperation<'_>,
+    ) -> bool {
+        self.edit
+            .edit_line(&self.site.root, &self.site.path, line, operation)
+    }
+
+    /// Runs a Grap event handler here, with `event` as its argument.
+    pub(crate) fn run_handler(&mut self, function: grap::RuntimeValue, event: Value) -> bool {
+        self.edit.grap_runtime(
+            self.site.root.clone(),
+            self.site.path.to_vec(),
+            function,
+            event,
+        )
+    }
+}

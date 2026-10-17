@@ -260,9 +260,7 @@ pub(super) fn cursor_from_tree(
 }
 
 struct RangeDrag {
-    root: Root,
-    path: gid::Path,
-    edits: crate::editing::Scope,
+    site: crate::editing::Site,
     key: CellId,
     slider: RangeSlider,
     drag: range_slider::Drag,
@@ -291,9 +289,9 @@ impl widget::gesture::Gesture for RangeDrag {
                 || self.selection.state(),
                 |p| cursor_state(&self.selection, p),
             );
-            let mut edit = self.edits.open(crate::editing::Access::of(session));
-            let state = set_state(edit.annotation(&self.root, &self.path), self.key, value);
-            edit.annotate(&self.root, &self.path, state);
+            let mut edit = self.site.open(session);
+            let state = set_state(edit.state(), self.key, value);
+            edit.set_state(state);
         }
         false
     }
@@ -311,9 +309,7 @@ fn range_widget(
     let current = position.and_then(|position| selection.current_item(level, position));
     Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
-        let root = context.inputs.view.clone();
-        let path = context.path.to_vec();
-        let edits = context.inputs.edits.clone();
+        let site = context.site();
         let slider = slider.clone();
         let selection = selection.clone();
         let decorations: Vec<_> = decorations
@@ -333,49 +329,51 @@ fn range_widget(
                 let painted_slider = slider.clone();
                 output
                     .render(move |canvas, _| painted.draw(canvas, placement.rect, scale, current));
-                output.handler().on_pointer_down(move |editor, event| {
-                    let point = Point::new(event.state.position.x, event.state.position.y);
-                    if !puri::interact::is_primary_contact(event) || !placement.contains(point) {
-                        return false;
-                    }
-                    if event.state.count == 2 {
-                        let selection = selection.select_all(level);
-                        let value = position.map_or_else(
-                            || selection.state(),
-                            |p| cursor_state(&selection, selection.position(p)),
-                        );
-                        let mut editor = edits.open(crate::editing::Access::new(editor));
-                        let state = set_state(editor.annotation(&root, &path), key, value);
-                        editor.annotate(&root, &path, state);
-                    } else {
-                        let drag = slider.begin(placement.rect, scale, point);
-                        editor.session().start_gesture(
-                            Box::new(RangeDrag {
-                                root: root.clone(),
-                                path: path.clone(),
-                                edits: edits.clone(),
-                                key,
-                                drag,
-                                current: match drag {
-                                    range_slider::Drag::Span { anchor }
-                                        if Some(anchor) == current =>
-                                    {
-                                        current
-                                    }
-                                    _ => None,
-                                },
-                                slider: slider.clone(),
-                                level,
-                                selection: selection.clone(),
-                                position,
-                                rect: placement.rect,
-                                scale,
-                            }),
-                            &[point],
-                        );
-                    }
-                    true
-                });
+                output
+                    .handler()
+                    .on_pointer_down(move |editor: &mut crate::Editor, event| {
+                        let point = Point::new(event.state.position.x, event.state.position.y);
+                        if !puri::interact::is_primary_contact(event) || !placement.contains(point)
+                        {
+                            return false;
+                        }
+                        if event.state.count == 2 {
+                            let selection = selection.select_all(level);
+                            let value = position.map_or_else(
+                                || selection.state(),
+                                |p| cursor_state(&selection, selection.position(p)),
+                            );
+                            let mut session = editor.session();
+                            let mut edit = site.open(&mut session);
+                            let state = set_state(edit.state(), key, value);
+                            edit.set_state(state);
+                        } else {
+                            let drag = slider.begin(placement.rect, scale, point);
+                            editor.session().start_gesture(
+                                Box::new(RangeDrag {
+                                    site: site.clone(),
+                                    key,
+                                    drag,
+                                    current: match drag {
+                                        range_slider::Drag::Span { anchor }
+                                            if Some(anchor) == current =>
+                                        {
+                                            current
+                                        }
+                                        _ => None,
+                                    },
+                                    slider: slider.clone(),
+                                    level,
+                                    selection: selection.clone(),
+                                    position,
+                                    rect: placement.rect,
+                                    scale,
+                                }),
+                                &[point],
+                            );
+                        }
+                        true
+                    });
                 for (item, decorate) in decorations.into_iter().enumerate() {
                     if let Some(decorate) = decorate
                         && let Some(rect) = painted_slider.item_rect(placement.rect, scale, item)

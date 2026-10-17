@@ -1064,20 +1064,16 @@ pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_,
                 interaction::Interaction::at(computations, context.inputs.view, context.path)
             });
             let pinch_activity = activity.clone();
-            let root = context.inputs.view.clone();
-            let path = context.path.to_vec();
-            let pinch_root = root.clone();
-            let pinch_path = path.clone();
-            let edits = context.inputs.edits.clone();
-            let pinch_edits = edits.clone();
+            let site = context.site();
+            let pinch_site = site.clone();
             let scroll = crate::display::widget::scroll::scroll(
                 context.inputs.styles.scale,
                 move |world: &mut crate::Editor, delta| {
-                    let mut editor = edits.open(crate::editing::Access::new(world));
-                    let state = editor.annotation(&root, &path);
-                    let (state, outcome) = zoom_handler(state)(delta);
+                    let mut session = world.session();
+                    let mut edit = site.open(&mut session);
+                    let (state, outcome) = zoom_handler(edit.state())(delta);
                     if let Some(state) = state {
-                        editor.annotate(&root, &path, state);
+                        edit.set_state(state);
                         if let Some(activity) = &activity {
                             activity.zoomed(&mut world.timers, web_time::Instant::now());
                         }
@@ -1091,10 +1087,10 @@ pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_,
                     output,
                     placement,
                     move |world: &mut crate::Editor, delta| {
-                        let mut editor = pinch_edits.open(crate::editing::Access::new(world));
-                        let state = editor.annotation(&pinch_root, &pinch_path);
-                        if let Some(state) = pinch_zoom(state, delta) {
-                            editor.annotate(&pinch_root, &pinch_path, state);
+                        let mut session = world.session();
+                        let mut edit = pinch_site.open(&mut session);
+                        if let Some(state) = pinch_zoom(edit.state(), delta) {
+                            edit.set_state(state);
                             if let Some(activity) = &pinch_activity {
                                 activity.zoomed(&mut world.timers, web_time::Instant::now());
                             }

@@ -83,18 +83,9 @@ pub fn on_state_drag(
     before(
         child,
         Rc::new(move |context| {
-            let root = context.inputs.view.clone();
-            let path = context.path.to_vec();
-            let annotation_root = root.clone();
-            let annotation_path = path.clone();
-            let edits = context.inputs.edits.clone();
-            let annotate: Annotate = Rc::new(move |session, value| {
-                edits.open(crate::editing::Access::of(session)).annotate(
-                    &annotation_root,
-                    &annotation_path,
-                    value,
-                )
-            });
+            let site = context.site();
+            let annotate: Annotate =
+                Rc::new(move |session, value| site.open(session).set_state(value));
             let handler = handler.clone();
             let on_press = on_press.clone();
             let scale = context.inputs.styles.scale;
@@ -133,24 +124,14 @@ pub fn on_point(child: crate::view::Layout, handler: PointHandler) -> crate::vie
                 .edits
                 .writable(&context.inputs.sources, context.path)
             {
-                let root = context.inputs.view.clone();
-                let path = context.path.to_vec();
-                let edits = context.inputs.edits.clone();
+                let site = context.site();
                 let handler = handler.clone();
                 Box::new(move |output, placement| {
                     output.handler().on_pointer_down(move |world, event| {
                         let at = Point::new(event.state.position.x, event.state.position.y);
                         if is_primary_contact(event) && placement.contains(at) {
                             world.session().start_gesture(
-                                point(
-                                    placement.rect,
-                                    handler.clone(),
-                                    crate::gesture::scoped_value_edit(
-                                        root.clone(),
-                                        path.clone(),
-                                        edits.clone(),
-                                    ),
-                                ),
+                                point(placement.rect, handler.clone(), site.edit_run()),
                                 &[at],
                             );
                             true

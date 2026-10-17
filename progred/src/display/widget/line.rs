@@ -49,8 +49,7 @@ pub fn view(
         .filter(|selection| selection.edit().is_none())
         .map(|selection| selection.initial_line(&line.text));
     let editing = active.and_then(|selection| selection.edit().or(default.as_ref()));
-    let root = cx.view.clone();
-    let edits = cx.edits.clone();
+    let site = context.site();
     let path: Rc<[gid::Step]> = Rc::from(path);
     let style = context.inputs.styles.line_style(&line);
     let placeholder_style = TextStyle {
@@ -72,16 +71,16 @@ pub fn view(
                 },
                 context.text,
             );
-            let root = root.clone();
-            let path = path.clone();
+            let site = site.clone();
             let line = line.clone();
-            let edits = edits.clone();
             leaf(extent(widget.metrics()), move |output, placement| {
-                output.line_edit(widget, placement, move |world, operation| {
-                    edits
-                        .open(crate::editing::Access::new(world))
-                        .edit_line(&root, &path, &line, operation)
-                });
+                output.line_edit(
+                    widget,
+                    placement,
+                    move |world: &mut crate::Editor, operation| {
+                        site.open(&mut world.session()).edit_line(&line, operation)
+                    },
+                );
             })
         }
         None => {
@@ -108,18 +107,17 @@ pub fn view(
     let active = active.is_some();
     let selected = cx.selected(path.as_ref());
     if writable {
-        let nav_root = root.clone();
-        let nav_path = path.clone();
-        let nav_edits = edits.clone();
+        let nav_site = site.clone();
         let nav_line = line.clone();
         let navigation: Select<crate::Editor> = Rc::new(move |world, direction| {
-            let mut editor = nav_edits.open(crate::editing::Access::new(world));
-            editor.select(&nav_root, &nav_path);
+            let mut session = world.session();
+            let mut edit = nav_site.open(&mut session);
+            edit.select();
             if matches!(
                 direction,
                 Some(super::navigation::Direction::Left | super::navigation::Direction::Right)
             ) {
-                editor.edit_line(&nav_root, &nav_path, &nav_line, &|edit| {
+                edit.edit_line(&nav_line, &|edit| {
                     match direction {
                         Some(super::navigation::Direction::Right) => edit.state.cursor_to_start(),
                         _ => edit.state.cursor_to_end(),
@@ -132,7 +130,7 @@ pub fn view(
         let stop = path.clone();
         let presentation = context.inputs.styles.line_presentation(&line);
         let scale = context.inputs.styles.scale as f32;
-        let target = crate::frame::Hovered::Tree(crate::hover::Hover::Value(path.clone()));
+        let target = crate::frame::Hovered::Tree(site.hover());
         crate::display::widget::before_place(content, move |placement: Placement, output| {
             output.navigation_stop(stop.clone(), selected);
             // Arriving from the left or right places the caret at that edge.
@@ -146,11 +144,12 @@ pub fn view(
                     && placement
                         .contains(Point::new(event.state.position.x, event.state.position.y))
                     && {
-                        let mut editor = edits.open(crate::editing::Access::new(world));
+                        let mut session = world.session();
+                        let mut edit = site.open(&mut session);
                         if !active {
-                            editor.select(&root, &path);
+                            edit.select();
                         }
-                        editor.edit_line(&root, &path, &line, &|edit| {
+                        edit.edit_line(&line, &|edit| {
                             edit.state.pointer_down(
                                 &presentation,
                                 edit.fonts,

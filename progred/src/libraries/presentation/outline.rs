@@ -147,7 +147,7 @@ fn heading(
                 .chain([Step::Key(key)])
                 .collect();
             let (default_closed, visible) = visibility(context.inputs, &path, value.as_ref());
-            let root = context.inputs.view.clone();
+            let section = context.site().below(&[Step::Key(key)]);
             let select = target.select.clone();
             d::on_activate(
                 d::row(
@@ -155,9 +155,9 @@ fn heading(
                     [d::dim(if visible { "▾" } else { "▸" }), label.clone()],
                 ),
                 target.hover.clone(),
-                Rc::new(move |editor| {
-                    editor.set_collapsed(&root, &path, default_closed, Some(visible));
-                    select(editor);
+                Rc::new(move |session| {
+                    section.open(session).fold(default_closed, Some(visible));
+                    select(session);
                     true
                 }),
             )

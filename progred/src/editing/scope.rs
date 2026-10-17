@@ -244,6 +244,27 @@ impl Edit<'_> {
         session.model.selection = Some(selection);
     }
 
+    /// Opens or closes the fold at `path` in `root`'s view, toggling it
+    /// without `closed`.
+    pub(crate) fn fold(
+        &mut self,
+        root: &Root,
+        path: &[Step],
+        default: bool,
+        closed: Option<bool>,
+    ) -> bool {
+        self.access
+            .session
+            .set_collapsed(root, path, default, closed)
+    }
+
+    /// Leaves the value at `path` pending, for the picker to fill.
+    pub(crate) fn pend(&mut self, root: &Root, path: Path) {
+        let mut pending = selection::pending_value(root, path);
+        pending.set_scope(self.scope.clone());
+        self.access.session.model.selection = Some(pending);
+    }
+
     pub(crate) fn annotate(&mut self, root: &Root, path: &[Step], value: Value) -> bool {
         // UI state belongs to the displayed occurrence, not the shared source.
         annotate(&mut self.access.session, root, path, value)

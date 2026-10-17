@@ -18,9 +18,7 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
     widget::before(
         child,
         Rc::new(move |context| {
-            let root = context.inputs.view.clone();
-            let path = context.path.to_vec();
-            let edits = context.inputs.edits.clone();
+            let site = context.site();
             let scale = context.inputs.styles.scale;
             let function = function.clone();
             Box::new(move |output, placement| {
@@ -45,13 +43,9 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
                                         })),
                                     )],
                                 );
-                                let handled =
-                                    edits.open(crate::editing::Access::new(world)).grap_runtime(
-                                        root.clone(),
-                                        path.clone(),
-                                        function.clone(),
-                                        value,
-                                    );
+                                let handled = site
+                                    .open(&mut world.session())
+                                    .run_handler(function.clone(), value);
                                 EventOutcome::from_handled(Event::Scroll(events), handled)
                             },
                         );
@@ -75,13 +69,9 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
                                         })),
                                     )],
                                 );
-                                let handled =
-                                    edits.open(crate::editing::Access::new(world)).grap_runtime(
-                                        root.clone(),
-                                        path.clone(),
-                                        function.clone(),
-                                        value,
-                                    );
+                                let handled = site
+                                    .open(&mut world.session())
+                                    .run_handler(function.clone(), value);
                                 EventOutcome::from_handled(Event::Gesture(events), handled)
                             },
                         );
@@ -128,12 +118,8 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
                                 [modifier_field(modifiers, command)],
                             ),
                         };
-                        edits.open(crate::editing::Access::new(world)).grap_runtime(
-                            root.clone(),
-                            path.clone(),
-                            function.clone(),
-                            value,
-                        )
+                        site.open(&mut world.session())
+                            .run_handler(function.clone(), value)
                     };
                     EventOutcome::from_handled(event, handled)
                 });

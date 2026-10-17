@@ -475,12 +475,9 @@ fn tree_hovered(hover: &placed::Attribution) -> Option<&Hover> {
 
 /// Select `path` in this view, interpreted through this occurrence's scope.
 pub(crate) fn select_handler(path: SharedPath, cx: &Cx) -> crate::display::Action {
-    let root = cx.view.clone();
-    let edits = cx.edits.clone();
+    let site = cx.site(path);
     Rc::new(move |session| {
-        edits
-            .open(crate::editing::Access::of(session))
-            .select(&root, &path);
+        site.open(session).select();
         true
     })
 }
@@ -491,15 +488,11 @@ fn projection_target(
     steps: Vec<Step>,
 ) -> crate::display::ProjectionTarget<Hovered> {
     let path: SharedPath = Rc::from(path.iter().cloned().chain(steps).collect::<Path>());
-    let payload_root = cx.view.clone();
-    let payload_destination = path.clone();
-    let payload_edits = cx.edits.clone();
+    let site = cx.site(path.clone());
     crate::display::ProjectionTarget {
         select: select_handler(path.clone(), cx),
         select_with: Rc::new(move |session, payload| {
-            payload_edits
-                .open(crate::editing::Access::of(session))
-                .select_payload(&payload_root, payload_destination.to_vec(), payload);
+            site.open(session).select_with(payload);
             true
         }),
         hover: Hovered::Tree(Hover::Value(path)),
@@ -507,6 +500,11 @@ fn projection_target(
 }
 
 impl Cx<'_> {
+    /// The occurrence at `path` in this view, as a place to act.
+    pub(crate) fn site(&self, path: SharedPath) -> crate::editing::Site {
+        crate::editing::Site::new(self.view.clone(), path, self.edits.clone())
+    }
+
     /// The display name at this projection. Raw interprets no naming
     /// convention and therefore falls back to the short id.
     fn name(&self, cell: CellId) -> Option<&str> {

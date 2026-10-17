@@ -15,14 +15,12 @@ fn controls_output(
 
 fn apply_change(
     editor: &mut crate::Editor,
-    scope: &crate::editing::Scope,
-    root: &Root,
-    path: &[gid::Step],
+    site: &crate::editing::Site,
     handler: &Value,
     value: Value,
 ) {
     let callable = ::grap::evaluate(handler, &editor.sources(), ::grap::DEFAULT_FUEL).result;
-    super::apply_change(&mut editor.session(), scope, root, path, &callable, value)
+    super::apply_change(&mut editor.session(), site, &callable, value)
 }
 
 use crate::display::test_support::{ResolveForDispatch, with_context};
@@ -646,12 +644,15 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
         root: None,
         cells: Cells::new(),
     });
-    let root = editor.model.workspace.document_root().clone();
-    let scope = crate::editing::Scope::default();
+    let site = crate::editing::Site::new(
+        editor.model.workspace.document_root().clone(),
+        Rc::from([]),
+        Default::default(),
+    );
     let first = field_update(A, B);
     let second = field_update(B, A);
     for (handler, value) in [(&first, 0.2), (&second, 0.8), (&first, 0.4)] {
-        apply_change(&mut editor, &scope, &root, &[], handler, f64::value(value));
+        apply_change(&mut editor, &site, handler, f64::value(value));
     }
     assert_eq!(
         current_state(editor.model.workspace.document.annotations.at(&[])),
@@ -671,7 +672,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
             )],
         ),
     );
-    apply_change(&mut editor, &scope, &root, &[], &rejected, f64::value(0.9));
+    apply_change(&mut editor, &site, &rejected, f64::value(0.9));
     assert_eq!(
         current_state(editor.model.workspace.document.annotations.at(&[])),
         previous
@@ -689,7 +690,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
             )],
         ),
     );
-    apply_change(&mut editor, &scope, &root, &[], &recovered, f64::value(0.6));
+    apply_change(&mut editor, &site, &recovered, f64::value(0.6));
     assert_eq!(
         current_state(editor.model.workspace.document.annotations.at(&[])),
         f64::value(0.6)
@@ -754,7 +755,7 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
             ],
         );
         let computations = Computations::default();
-        let root = Root::document();
+        let root = crate::workspace::Root::document();
         let evaluate = |doc: &gid::Document| {
             computations.begin(Rc::new(doc.clone()), libraries.clone());
             let result = computations.evaluate(&root, &[], &expression, 1000);

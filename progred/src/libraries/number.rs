@@ -347,25 +347,23 @@ fn typed_operators<N: std::str::FromStr + 'static>(
     crate::display::widget::after(
         child,
         Rc::new(move |context| {
-            let root = context.inputs.view.clone();
-            let path = context.path.to_vec();
-            let edits = context.inputs.edits.clone();
+            let site = context.site();
             let symbols = symbols.clone();
             Box::new(move |output, _| {
-                output.handler().on_key(move |editor, event| {
-                    wrap_typed::<N>(editor, event, &root, &path, &edits, &symbols)
-                });
+                output
+                    .handler()
+                    .on_key(move |editor: &mut crate::Editor, event| {
+                        wrap_typed::<N>(&mut editor.session(), event, &site, &symbols)
+                    });
             })
         }),
     )
 }
 
 fn wrap_typed<N: std::str::FromStr>(
-    editor: &mut crate::Editor,
+    session: &mut crate::editing::Session<'_>,
     event: &ui_events::keyboard::KeyboardEvent,
-    root: &crate::workspace::Root,
-    path: &[gid::Step],
-    edits: &crate::editing::Scope,
+    site: &crate::editing::Site,
     symbols: &[(&'static str, CellId)],
 ) -> bool {
     if !event.state.is_down()
@@ -384,11 +382,11 @@ fn wrap_typed<N: std::str::FromStr>(
     else {
         return false;
     };
-    let Some(current) = editor
+    let Some(current) = session
         .model
         .selection
         .as_ref()
-        .filter(|current| current.root() == root && current.path() == path)
+        .filter(|current| site.holds(current))
     else {
         return false;
     };
@@ -399,25 +397,15 @@ fn wrap_typed<N: std::str::FromStr>(
             return false;
         }
     }
-    let Some(left) = current.value(&editor.sources()).cloned() else {
+    let Some(left) = current.value(&session.sources()).cloned() else {
         return false;
     };
     let wrapped = ::grap::call(Value::from(operator), [(vocabulary::LEFT, left)]);
-    if !edits
-        .open(crate::editing::Access::new(editor))
-        .replace(path, wrapped)
-    {
+    let mut edit = site.open(session);
+    if !edit.replace(wrapped) {
         return false;
     }
-    let mut right = crate::selection::pending_value(
-        root,
-        path.iter()
-            .cloned()
-            .chain([gid::Step::Key(vocabulary::RIGHT)])
-            .collect(),
-    );
-    right.set_scope(edits.clone());
-    editor.model.selection = Some(right);
+    edit.pend(&[gid::Step::Key(vocabulary::RIGHT)]);
     true
 }
 

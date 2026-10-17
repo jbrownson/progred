@@ -1,6 +1,5 @@
 //! Evaluation-local controls: native widgets emit alongside ordinary Grap values.
 use super::{Definitions, Library, absent, f64, layout, name, presentation, tree};
-use crate::display::widget::view::Root;
 use crate::display::{self, widget};
 use crate::view::{Layout, ProjectionInput};
 use ::grap::{
@@ -51,9 +50,7 @@ use presentation::vocabulary::VALUE;
 use vocabulary::*;
 
 type Widget = widget::Widget<crate::Editor, crate::frame::Hovered>;
-type Change = Rc<
-    dyn Fn(&mut crate::editing::Session<'_>, &crate::editing::Scope, &Root, &[gid::Step], Value),
->;
+type Change = Rc<dyn Fn(&mut crate::editing::Session<'_>, &crate::editing::Site, Value)>;
 
 const PADDING_X: f64 = 10.0;
 const PADDING_Y: f64 = 4.0;
@@ -113,17 +110,11 @@ fn update_function() -> Value {
 
 fn apply_change(
     session: &mut crate::editing::Session<'_>,
-    scope: &crate::editing::Scope,
-    root: &Root,
-    path: &[gid::Step],
+    site: &crate::editing::Site,
     handler: &::grap::RuntimeValue,
     value: Value,
 ) {
-    let state = current_state(
-        scope
-            .open(crate::editing::Access::of(session))
-            .annotation(root, path),
-    );
+    let state = current_state(site.open(session).state());
     let staged = RefCell::new(None);
     let update = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let Some(expression) = context.field(call, VALUE) else {
@@ -142,7 +133,7 @@ fn apply_change(
             (STATE, state.into()),
             (UPDATE, update_function().into()),
         ],
-        &scope.view(session.sources()).sources,
+        &session.sources(),
         &ForeignOverlay::from_value(&[UPDATE], &update),
         ::grap::DEFAULT_FUEL,
     );
@@ -150,21 +141,19 @@ fn apply_change(
         && !result.result.declines()
         && let Some(value) = staged.into_inner()
     {
-        let mut edit = scope.open(crate::editing::Access::of(session));
+        let mut edit = site.open(session);
         let mut annotation = edit
-            .annotation(root, path)
+            .state()
             .and_then(Value::as_record)
             .cloned()
             .unwrap_or_default();
         annotation.insert(STATE, value);
-        edit.annotate(root, path, Value::Record(annotation));
+        edit.set_state(Value::Record(annotation));
     }
 }
 
 struct Drag {
-    root: Root,
-    path: gid::Path,
-    edits: crate::editing::Scope,
+    site: crate::editing::Site,
     on_change: Change,
     slider: Slider,
     value: Rc<dyn Fn(f64) -> Value>,
@@ -177,9 +166,7 @@ impl widget::gesture::Gesture for Drag {
         if let Some(point) = samples.last() {
             (self.on_change)(
                 session,
-                &self.edits,
-                &self.root,
-                &self.path,
+                &self.site,
                 (self.value)(self.slider.value_at(self.rect, self.scale, *point)),
             );
         }
@@ -193,8 +180,8 @@ fn slider_widget(slider: Slider, width: f64, handler: ::grap::RuntimeValue) -> W
         width,
         Vec::new(),
         Rc::new(f64::value),
-        Rc::new(move |editor, scope, root, path, value| {
-            apply_change(editor, scope, root, path, &handler, value);
+        Rc::new(move |session, site, value| {
+            apply_change(session, site, &handler, value);
         }),
     )
 }
@@ -211,10 +198,10 @@ fn slider_widget_with(
         width,
         ticks,
         value,
-        Rc::new(move |session, scope, root, path, value| {
-            let mut edit = scope.open(crate::editing::Access::of(session));
-            let state = set_state(edit.annotation(root, path), key, value);
-            edit.annotate(root, path, state);
+        Rc::new(move |session, site, value| {
+            let mut edit = site.open(session);
+            let state = set_state(edit.state(), key, value);
+            edit.set_state(state);
         }),
     )
 }
@@ -229,9 +216,7 @@ fn slider_control(
     let ticks: Rc<[puri_widgets::slider::TickLevel]> = ticks.into();
     Rc::new(move |context| {
         let scale = context.inputs.styles.scale;
-        let root = context.inputs.view.clone();
-        let path = context.path.to_vec();
-        let edits = context.inputs.edits.clone();
+        let site = context.site();
         let value = value.clone();
         let on_change = on_change.clone();
         let ticks = ticks.clone();
@@ -256,9 +241,7 @@ fn slider_control(
                         }
                         editor.session().start_gesture(
                             Box::new(Drag {
-                                root: root.clone(),
-                                path: path.clone(),
-                                edits: edits.clone(),
+                                site: site.clone(),
                                 on_change: on_change.clone(),
                                 slider,
                                 value: value.clone(),
@@ -318,17 +301,15 @@ fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: 
                 label.place(canvas, placement)
             });
             let button = measured::centered_row(4.0 * scale, vec![indicator, label]);
-            let root = context.inputs.view.clone();
-            let path = context.path.to_vec();
-            let edits = context.inputs.edits.clone();
+            let site = context.site();
             let value = option.value.clone();
             buttons.push(widget::before_place(button, move |placement, output| {
                 output.claim(puri::hover::Probe::occludes(placement));
                 puri::interact::clickable(output, placement, move |editor: &mut crate::Editor| {
-                    let mut editor = edits.open(crate::editing::Access::new(editor));
-                    let state = editor.annotation(&root, &path);
-                    let state = set_state(state, key, value.clone());
-                    editor.annotate(&root, &path, state);
+                    let mut session = editor.session();
+                    let mut edit = site.open(&mut session);
+                    let state = set_state(edit.state(), key, value.clone());
+                    edit.set_state(state);
                 });
             }));
         }

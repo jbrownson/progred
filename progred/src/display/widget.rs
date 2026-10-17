@@ -59,6 +59,13 @@ pub struct Context<'a, 'fonts, World, Hover> {
     pub value: Option<&'a grap::RuntimeValue>,
 }
 
+impl<World, Hover> Context<'_, '_, World, Hover> {
+    /// Where this widget is drawn, as a place to act on.
+    pub(crate) fn site(&self) -> crate::editing::Site {
+        self.inputs.site(Rc::from(self.path))
+    }
+}
+
 pub type Widget<World, Hover> = Rc<
     dyn for<'a, 'fonts> Fn(
         &mut Context<'a, 'fonts, World, Hover>,
