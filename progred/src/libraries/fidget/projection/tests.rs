@@ -222,3 +222,5 @@ fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
     }
     assert!(!reads_infix(MAX));
 }
+
+mod frames;

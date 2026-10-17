@@ -161,7 +161,6 @@ mod custom_navigation;
 mod document_libraries;
 mod drawing;
 mod fidget_shapes;
-mod fidget_source;
 mod focus;
 mod folds;
 mod interaction;
