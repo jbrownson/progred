@@ -2,7 +2,7 @@
 //! bridges to text-based tools; it is not GID's native representation.
 
 use crate::libraries::name;
-use crate::libraries::text;
+use ::grap::text;
 use gid::{CellId, Cells, Document, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
@@ -521,7 +521,7 @@ fn plain_text(value: &Value) -> Option<&str> {
     value
         .as_record()?
         .keys()
-        .all(|label| *label == text::vocabulary::UTF8)
+        .all(|label| *label == text::UTF8)
         .then_some(text)
 }
 

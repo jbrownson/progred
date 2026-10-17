@@ -1,5 +1,6 @@
-//! A UTF-8 text convention over ordinary GID data. Text is a
-//! positively recognized record facet, not a GID-core atom.
+//! A UTF-8 text library over ordinary GID data. Text is a positively
+//! recognized record facet, not a GID-core atom; Grap owns its encoding,
+//! beside f64's.
 //!
 //! When a real string-function library lands here, funnel argument
 //! reads and result construction through shared helpers, the way f64
@@ -18,24 +19,16 @@ use ::grap::{ForeignFunction, ForeignFunctions};
 pub mod vocabulary {
     use gid::CellId;
 
-    pub const UTF8: CellId = CellId::from_u128(0x332529b8ea83a7ba10fd7f6d942e5016);
+    pub use ::grap::text::UTF8;
     /// The text line's write-back rule: overlay the typed spelling
     /// onto the current record, other fields carried.
     pub const UPDATE: CellId = CellId::from_u128(0x27c58b96e1f4d03a8d17b62c94e05fa3);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0xce8afed4a11b74c359ac5c99aa48aae2);
 }
 
-pub fn value(text: impl Into<String>) -> Value {
-    Value::record([(vocabulary::UTF8, Value::from(text.into().into_bytes()))])
-}
-
-pub fn read(value: &Value) -> Option<&str> {
-    value
-        .as_record()?
-        .get(&vocabulary::UTF8)?
-        .as_blob()
-        .and_then(|bytes| std::str::from_utf8(bytes).ok())
-}
+// The convention itself lives in Grap, beside f64's; this library remains
+// its owner in vocabulary, functions, and projections.
+pub use ::grap::text::{read, value};
 
 pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
     Some(

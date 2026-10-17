@@ -648,14 +648,11 @@ fn runtime_fold_classification_matches_stored_data() {
             None,
         ),
         (
-            Runtime::record([(
-                text::vocabulary::UTF8,
-                Value::from(b"hello".to_vec()).into(),
-            )]),
+            Runtime::record([(text::UTF8, Value::from(b"hello".to_vec()).into())]),
             None,
         ),
         (
-            Runtime::record([(text::vocabulary::UTF8, Value::from(vec![0xff]).into())]),
+            Runtime::record([(text::UTF8, Value::from(vec![0xff]).into())]),
             Some(false),
         ),
         (

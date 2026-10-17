@@ -116,6 +116,30 @@ pub mod f64 {
     }
 }
 
+/// The UTF-8 text convention: a record whose `utf8` field holds the text's
+/// bytes. It is ordinary data, kept here beside f64's so every host and
+/// library reads the same encoding.
+pub mod text {
+    use gid::{CellId, Record, Value};
+
+    pub const UTF8: CellId = CellId::from_u128(0x332529b8ea83a7ba10fd7f6d942e5016);
+
+    pub fn value(text: impl Into<String>) -> Value {
+        Value::record([(UTF8, Value::from(text.into().into_bytes()))])
+    }
+
+    pub fn read(value: &Value) -> Option<&str> {
+        read_record(value.as_record()?)
+    }
+
+    pub fn read_record(fields: &Record) -> Option<&str> {
+        fields
+            .get(&UTF8)?
+            .as_blob()
+            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+    }
+}
+
 pub const DEFAULT_FUEL: usize = 1_024;
 
 /// Shared code, independent of the evaluator that executes it.

@@ -20,8 +20,9 @@ The logical model currently consists of:
 
 Names, UTF-8 text, numbers, Grap (including its tagged absence values), and
 CAD concepts are open conventions or libraries embedded in GID values. They
-are not primitive GID forms. UTF-8 text, for example, is the open
-`libraries::text` record convention over a blob.
+are not primitive GID forms. UTF-8 text, for example, is an open record
+convention over a blob. Grap keeps its encoding beside f64's, in `grap::text`,
+and the text library owns its names, functions and projections.
 
 A `CellId` is not an RFC 4122 UUID: all 128 bits are random, with no version
 or variant fields. Every textual spelling, including `Display` and

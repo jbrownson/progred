@@ -235,7 +235,13 @@ fn literals(
         .and_then(|provider| provider(&literal))
         .unwrap_or_default()
         .into_iter()
-        .partition(|offer| offer.preview.as_ref().and_then(text::read).is_some());
+        .partition(|offer| {
+            offer
+                .preview
+                .as_ref()
+                .and_then(::grap::text::read)
+                .is_some()
+        });
     (readings, strings)
 }
 

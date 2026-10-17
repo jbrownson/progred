@@ -1,11 +1,12 @@
 //! Selection, collapse, and the writes they drive. Selection paths name
 //! projected occurrences; their conject locates document data for mutations.
 
-use crate::libraries::{Libraries, blob, text};
+use crate::libraries::{Libraries, blob};
 use crate::location::{Location, Start};
 use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
+use ::grap::text;
 use gid::CellId;
 use gid::{Document, Path, Position, Resolution, Step, Value, position};
 use puri::edit::LineEditState;
@@ -742,7 +743,7 @@ pub(crate) fn collapse_default_for_value(
     value: &grap::RuntimeValue,
     folded: bool,
 ) -> Option<bool> {
-    let is_text = value.field(text::vocabulary::UTF8).is_some_and(|bytes| {
+    let is_text = value.field(text::UTF8).is_some_and(|bytes| {
         bytes
             .as_blob()
             .is_some_and(|bytes| std::str::from_utf8(bytes).is_ok())
@@ -775,7 +776,8 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 /// are encoded when requested and decoded when a capability supplies
 /// a replacement. They are never mirrored in the stored payload.
 pub mod payload {
-    use crate::libraries::{f64 as f64_convention, text};
+    use crate::libraries::f64 as f64_convention;
+    use ::grap::text;
     use gid::{CellId, Value};
     use kurbo::Point;
     use puri::edit::LineEditState;
