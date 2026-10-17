@@ -291,8 +291,8 @@ first:
      [audit](history/library-vocabulary-audit-2026-10-17.md) found 257
      references:
      - 79 are the registry.
-     - 54 are core vocabulary to keep. 28 of these should call Grap's
-       conventions directly instead of library re-exports.
+     - 54 are core vocabulary to keep. 28 of these called Grap's conventions
+       through library re-exports; the core now calls Grap directly.
      - 64 are vocabulary only the core interprets: selection stages, per-site
        state, folds and panes. These move into the core, with the libraries
        re-exporting the cells.
@@ -310,6 +310,12 @@ first:
        is a list of libraries, not something each library provides. One list
        in stack.rs now serves the editor and the tutorial page, which had a
        narrower copy.
+
+   [Design notes](history/projection-interface-design-2026-10-17.md) work out
+   its three larger pieces with signatures and landable steps: handlers acting
+   through a session of capabilities instead of the editor, the picker as a
+   widget with Raw's offers as an ordinary projection's, and drawing programs
+   recorded by the layout library into a toolkit widget.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:

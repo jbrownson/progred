@@ -87,6 +87,9 @@ at the time; code some of them describe has since been retired.
 - [Projection tests survey](projection-tests-survey-2026-10-17.md): what
   projection/tests covers, how it drives the editor, what it costs, and where
   each file belongs.
+- [Projection interface design notes](projection-interface-design-2026-10-17.md):
+  handlers given capabilities instead of the editor, the picker as a widget,
+  and drawing programs recorded by the layout library.
 
 ## Earlier notes
 
