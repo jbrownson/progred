@@ -186,9 +186,9 @@ pub fn selectable(
     Measured<HoverPass<crate::Editor, crate::frame::Hovered>>,
 ) -> Measured<HoverPass<crate::Editor, crate::frame::Hovered>>
 + 'static {
-    let path: Rc<[gid::Step]> = Rc::from(context.path());
-    let target = crate::frame::Hovered::Tree(crate::hover::Hover::Value(path.clone()));
-    let select = navigation::selecting(context.site());
+    let site = context.site();
+    let target = crate::frame::Hovered::Tree(site.hover());
+    let select = navigation::selecting(site);
     let value = context.value.cloned();
     move |child| {
         crate::display::widget::before_place(
