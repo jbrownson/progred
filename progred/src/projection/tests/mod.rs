@@ -1,4 +1,3 @@
-use super::completion::{completion_card, completion_placement};
 use super::*;
 use crate::annotations::Annotations;
 use crate::completion::Entry;

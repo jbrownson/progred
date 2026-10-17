@@ -14,6 +14,53 @@ pub fn highlight_outline(scale: f64, rect: Rect) -> RoundedRect {
     RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
 }
 
+/// The pane-local primary: translucent system blue, like the Swift
+/// version's selection, ringed at full strength — the strongest mark
+/// in the shared vocabulary.
+pub fn primary_highlight<P: Canvas + ?Sized>(
+    palette: Palette,
+    scale: f64,
+    canvas: &mut P,
+    outline: RoundedRect,
+) {
+    canvas.fill(outline, palette.accent.with_alpha(0.22), Affine::IDENTITY);
+    canvas.stroke(
+        outline,
+        primary_highlight_stroke(scale),
+        palette.accent,
+        Affine::IDENTITY,
+    );
+}
+
+/// The primary highlight's ring, which what floats beside it clears.
+pub fn primary_highlight_stroke(scale: f64) -> Stroke {
+    Stroke::new(2.5 * scale)
+}
+
+/// A secondary copy of the selected or hovered value, such as another
+/// reference to its cell; `strong` for the selection's copies.
+pub fn secondary_highlight<P: Canvas + ?Sized>(
+    palette: Palette,
+    scale: f64,
+    canvas: &mut P,
+    outline: RoundedRect,
+    strong: bool,
+) {
+    canvas.fill(
+        outline,
+        palette.accent.with_alpha(if strong { 0.10 } else { 0.05 }),
+        Affine::IDENTITY,
+    );
+    if strong {
+        canvas.stroke(
+            outline,
+            Stroke::new(1.5 * scale),
+            palette.accent.with_alpha(0.55),
+            Affine::IDENTITY,
+        );
+    }
+}
+
 pub fn hover_highlight<P: Canvas + ?Sized>(
     palette: Palette,
     scale: f64,

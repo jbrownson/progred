@@ -1,6 +1,7 @@
 //! Real projection and dispatch fixtures, without a window.
 
 use super::*;
+use kurbo::Stroke;
 use peniko::ImageData;
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::hover::Claim;

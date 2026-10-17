@@ -1,26 +1,21 @@
 //! Completion interaction is a native widget; callers supply offers and own state.
 
 use crate::display::widget::{HoverContext, HoverPass};
+use crate::frame::Hovered;
+use crate::hover::Hover;
 
 use super::frame::Probe;
-use super::{container, extent, leaf, scroll, style::Styles};
+use super::offers::Entry;
+use super::style::{Styles, face_style, primary_highlight_stroke};
+use super::{container, extent, leaf, popover, scroll};
 use measured::{Extent, Measured, col, pad};
 use peniko::kurbo::Insets;
 use puri::handler::{HasHandler, Key, NamedKey, PointerType};
-use puri::text::{TextCtx, TextStyle};
-use puri::{Point, Size, Stroke, Vec2};
+use puri::text::TextCtx;
+use puri::{Placement, Point, Size, Stroke, Vec2};
 use puri_widgets::panel::Panel;
-use std::ops::Range;
+use puri_widgets::text_frame;
 use std::rc::Rc;
-
-pub struct Entry<'a, World, Hover> {
-    pub display: &'a str,
-    pub detail: Option<&'a str>,
-    pub matches: &'a [Range<usize>],
-    pub style: &'a TextStyle,
-    pub target: Hover,
-    pub activate: Rc<dyn Fn(&mut World)>,
-}
 
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct State {
@@ -28,26 +23,58 @@ pub struct State {
     pub scroll: f64,
 }
 
-pub fn border(scale: f64) -> Stroke {
+fn border(scale: f64) -> Stroke {
     Stroke::new(scale)
 }
 
-pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
+/// Where the card for a query drawn in `field` floats: against the field's
+/// selection ring, below it or above, as [`popover::shortened`] decides.
+/// None when the field is clipped out.
+pub fn placement(field: Placement, extent: Extent, scale: f64) -> Option<Placement> {
+    (!field.clipped_out()).then(|| {
+        let ring_outset = primary_highlight_stroke(scale).width / 2.0;
+        let anchor = text_frame::outline(scale, field.rect)
+            .rect()
+            .inflate(ring_outset, ring_outset);
+        let border_outset = border(scale).width / 2.0;
+        // Shortened, the card scrolls what it can't show; it keeps at least
+        // about a row, the field's own height.
+        let outer = popover::shortened(
+            anchor,
+            Size::new(
+                extent.width + 2.0 * border_outset,
+                extent.height() + 2.0 * border_outset,
+            ),
+            field.clip_rect,
+            0.0,
+            anchor.height(),
+        );
+        Placement::new(
+            outer.inflate(-border_outset, -border_outset),
+            field.clip_rect,
+        )
+    })
+}
+
+/// A card listing `entries`, `state.choice` chosen. Each row claims its index
+/// among them as [`Hover::Entry`], so the caller retains the same entries as
+/// the frame's offers for the index to name.
+pub fn card<C: 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
-    entries: &[Entry<'_, C, H>],
+    entries: &[Entry<C>],
     state: State,
     current_scroll: impl Fn(&C) -> Option<f64> + 'static,
     set_view: impl Fn(&mut C, State) + 'static,
-) -> Measured<HoverPass<C, H>> {
+) -> Measured<HoverPass<C, Hovered>> {
     let State { choice, scroll } = state;
     let set_view = move |world: &mut C, scroll, choice| set_view(world, State { scroll, choice });
     let scale = styles.scale;
     let widget_entries = entries.iter().map(|entry| puri_widgets::completion::Entry {
-        display: entry.display,
-        detail: entry.detail,
-        matches: entry.matches,
-        style: entry.style,
+        display: &entry.display,
+        detail: entry.detail.as_deref(),
+        matches: &entry.matches,
+        style: face_style(styles, entry.face),
     });
     let widget = puri_widgets::completion::Completion::new(
         tcx,
@@ -63,7 +90,14 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
         .rows
         .into_iter()
         .zip(entries)
-        .map(|(row, entry)| (row, entry.target.clone(), entry.activate.clone()))
+        .enumerate()
+        .map(|(index, (row, entry))| {
+            (
+                row,
+                Hovered::Tree(Hover::Entry(index)),
+                entry.activate.clone(),
+            )
+        })
         .collect::<Vec<_>>();
     let count = items.len();
     let choice = choice.min(count.saturating_sub(1));
@@ -135,7 +169,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + 'static>(
         let card = pad(Insets::uniform(inset), viewport);
         let card = crate::display::widget::before_place(
             card,
-            move |_, output: &mut HoverContext<'_, C, H>| {
+            move |_, output: &mut HoverContext<'_, C, Hovered>| {
                 let command = output.input.command_modifier;
                 output.handler().on_key(move |world, event| {
                     if event.state.is_down() {
@@ -259,3 +293,6 @@ fn completion_row<C: 'static, H: Clone + PartialEq + 'static>(
         output.render(move |canvas, _| row.draw(canvas, placement, chosen));
     })
 }
+
+#[cfg(test)]
+mod tests;

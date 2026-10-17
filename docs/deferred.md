@@ -198,7 +198,8 @@ Directions this surfaced:
   Today, by contrast:
   - Raw's offers are built inside the editor's picker code, and Grap's offers
     borrow them from there.
-  - The engine builds the picker's card.
+  - The engine builds the picker around display's card: the hole, the query's
+    line editor, Raw's bracket keys and Tab.
   - Choosing an offer receives the whole editor.
 - A record combinator taking a spec: expected fields in order, how each field's
   value is drawn and what its hole offers, missing expected fields shown as
@@ -253,8 +254,8 @@ found almost no dead code: 60% of progred's 94k lines are tests, much of them
 inside source files, and 93% of its production code is one dependency cycle.
 Its first recommendation is done: inline test modules now live in their own
 files. projection/tests is still under projection/. It holds 20.8k lines that
-mostly test the frame and the whole editor. The six private items it reaches
-point at misplaced code, not at internals the tests should see. A follow-up
+mostly test the frame and the whole editor. The private items it reaches point
+at misplaced code, not at internals the tests should see. A follow-up
 [crate split analysis](history/crate-split-2026-10-16.md) maps the coupling
 that blocks a split and the steps that break it. The rest, most worthwhile
 first:
@@ -318,11 +319,16 @@ first:
    its three larger pieces with signatures and landable steps: handlers acting
    through a session of capabilities instead of the editor, the picker as a
    widget with Raw's offers as an ordinary projection's, and drawing programs
-   recorded by the layout library into a toolkit widget.
+   recorded by the layout library into a toolkit widget. Done on 17 October
+   2026: the session note's first two steps (the view aliases, and the command
+   key read from the frame's input), the picker note's first (the card, its
+   placement and the selection ring moved to display), and the drawing note's
+   first two. The drawing note's last step waits on the session note's `Host`.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:
-   - alias the concrete `<Editor, Hovered>` pair, written out 332 times;
+   - ~~alias the concrete `<Editor, Hovered>` pair, written out 332 times;~~
+     done on 17 October 2026, as `crate::view`'s aliases;
    - ~~let the model own the vocabularies and codecs it interprets, as grap
      owns f64's convention;~~ done on 17 October 2026;
    - back `editing::Access` with the model and the libraries rather than
@@ -331,8 +337,8 @@ first:
      and route calls into the projection runtime through `Project`.
 4. Move projection/tests' frame- and editor-level suites to where they belong,
    leaving only the runtime's own tests; nothing stays anywhere for historical
-   reasons. Some suites wait on what they reach for: 14 calls to six private
-   items, since nothing should become visible just for tests. The
+   reasons. Some suites wait on what they reach for: three private items, down
+   from six, since nothing should become visible just for tests. The
    [survey](history/projection-tests-survey-2026-10-17.md) of its 324 tests
    orders the work:
    1. ~~Move the 46 already-targeted tests to their own modules.~~ Done on 17
@@ -340,7 +346,9 @@ first:
       harness moving in step 2.
    2. Move the 39 library projection tests next to their libraries, through
       the shared harness and the public `project()`.
-   3. Move the completion card tests to display, with the card.
+   3. ~~Move the completion card tests to display, with the card.~~ Done on 17
+      October 2026. The one that places the card over a projected editor stays
+      with the picker flows, for step 5.
    4. Give the profiling tests both projection phases.
    5. Give the driver the verbs that end-to-end tests now reach around it
       for, and move the 67 of them onto it:
@@ -358,10 +366,10 @@ first:
    One CAM lesson test takes 17 s of progred's 37 s test wall time, because
    CAM code runs unoptimized in progred's tests. Item 7's CAM crate, built
    optimized like the other dependencies, is the likely fix.
-   - The completion card, its placement and the selection-ring drawing
+   - ~~The completion card, its placement and the selection-ring drawing
      (`completion_card`, `completion_placement`, `primary_highlight`) are
-     display code filed in the projection runtime. The tests build the card
-     with stand-in worlds such as `usize`.
+     display code filed in the projection runtime.~~ Moved to display on 17
+     October 2026.
    - `projection_target` builds display's `ProjectionTarget` from `Cx`, and
      moves down with it.
    - The frame harness calls `prepare_project` to time the projection's two

@@ -11,7 +11,9 @@ mod tests;
 pub(crate) mod viewport;
 
 use crate::annotations::Annotations;
-use crate::display::widget::style::{face_style, highlight_outline, hover_highlight};
+use crate::display::widget::style::{
+    highlight_outline, hover_highlight, primary_highlight, secondary_highlight,
+};
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 use crate::location::{Location, Start};
@@ -27,7 +29,7 @@ use completion::pending_view;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use kurbo::Point;
-use kurbo::{Affine, RoundedRect, Stroke};
+use kurbo::{Affine, RoundedRect};
 use measured::Measured;
 use measured::choices::{ChoiceBuild, ChoiceGraph, ChoiceLayout, resolve_choices};
 use peniko::Color;
@@ -582,28 +584,6 @@ fn hover_block(p: &mut placed::Builder<'_, '_, crate::Editor>, placement: Placem
     p.occlude(placement);
 }
 
-/// The pane-local primary: translucent system blue, like the Swift
-/// version's selection, ringed at full strength — the strongest mark
-/// in the shared vocabulary.
-fn primary_highlight<P: Canvas + ?Sized>(
-    palette: crate::styles::Palette,
-    scale: f64,
-    p: &mut P,
-    outline: RoundedRect,
-) {
-    p.fill(outline, palette.accent.with_alpha(0.22), Affine::IDENTITY);
-    p.stroke(
-        outline,
-        primary_highlight_stroke(scale),
-        palette.accent,
-        Affine::IDENTITY,
-    );
-}
-
-fn primary_highlight_stroke(scale: f64) -> Stroke {
-    Stroke::new(2.5 * scale)
-}
-
 /// The explicit-state boundary: everything a projection pass reads.
 /// `width` is the space the projection may fill. `root` and
 /// `root_path` let an editor pane begin at a value occurrence
@@ -841,28 +821,6 @@ fn ground_with(
         let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
         p.fill(bg, color, Affine::IDENTITY);
     })
-}
-
-fn secondary_highlight<P: Canvas + ?Sized>(
-    palette: crate::styles::Palette,
-    scale: f64,
-    p: &mut P,
-    outline: RoundedRect,
-    strong: bool,
-) {
-    p.fill(
-        outline,
-        palette.accent.with_alpha(if strong { 0.10 } else { 0.05 }),
-        Affine::IDENTITY,
-    );
-    if strong {
-        p.stroke(
-            outline,
-            Stroke::new(1.5 * scale),
-            palette.accent.with_alpha(0.55),
-            Affine::IDENTITY,
-        );
-    }
 }
 
 /// Adds GID steps to the occurrence and resolves through its conject.

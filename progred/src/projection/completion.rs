@@ -1,25 +1,23 @@
 //! Adapt completion offers and pending queries to the editor’s floating card.
 
 use super::{
-    Cx, SharedPath, atom_content, edit_presentation, face_style, hover_block, hover_claim,
-    hover_highlight, placeholder_box, primary_highlight, primary_highlight_stroke, tree_hovered,
+    Cx, SharedPath, atom_content, edit_presentation, hover_block, hover_claim, hover_highlight,
+    placeholder_box, primary_highlight, tree_hovered,
 };
-use crate::completion::{Entry, HoleOffers, Offers, completion_entries_with};
-use crate::display::widget::completion::border as completion_border;
+use crate::completion::{HoleOffers, Offers, completion_entries_with};
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::placed::{self, HoverPass, before, decorate, on_key};
 use crate::render::text;
 use crate::selection::{Selection, Stage};
-use crate::styles::Styles;
 use gid::Path;
-use kurbo::{Insets, Size};
-use measured::{Extent, Measured, min_width, pad};
+use kurbo::Insets;
+use measured::{Measured, min_width, pad};
+use puri::Point;
 use puri::edit::{LineEditPointerDown, LineEditState};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
-use puri::{Placement, Point};
 use puri_widgets::text_frame;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
@@ -216,12 +214,11 @@ fn query_content(
     let root = cx.view.clone();
     let scroll_root = root.clone();
     let scroll_path = path.to_vec();
-    let card = completion_card(
+    let card = crate::display::widget::completion::card(
         tcx,
         cx.styles,
         &entries,
-        choice,
-        scroll,
+        crate::display::widget::completion::State { choice, scroll },
         move |world: &crate::Editor| {
             world
                 .model
@@ -234,7 +231,7 @@ fn query_content(
                 })
                 .map(Selection::completion_scroll)
         },
-        move |world, scroll, choice| crate::editing::completion_view(world, &root, scroll, choice),
+        move |world, view| crate::editing::completion_view(world, &root, view.scroll, view.choice),
     );
     // Raw's holes make a constructor at once when its delimiter is typed into
     // an empty query. A projection's holes take the delimiter as text.
@@ -289,69 +286,8 @@ fn query_content(
             });
     });
     placed::floating(trigger, card, move |placement, extent| {
-        completion_placement(placement, extent, scale)
+        crate::display::widget::completion::placement(placement, extent, scale)
     })
-}
-
-pub(super) fn completion_placement(
-    placement: Placement,
-    extent: Extent,
-    scale: f64,
-) -> Option<Placement> {
-    (!placement.clipped_out()).then(|| {
-        let ring_outset = primary_highlight_stroke(scale).width / 2.0;
-        let anchor = text_frame::outline(scale, placement.rect)
-            .rect()
-            .inflate(ring_outset, ring_outset);
-        let border_outset = completion_border(scale).width / 2.0;
-        // Shortened, the card scrolls what it can't show; it keeps at least
-        // about a row, the field's own height.
-        let outer = crate::display::widget::popover::shortened(
-            anchor,
-            Size::new(
-                extent.width + 2.0 * border_outset,
-                extent.height() + 2.0 * border_outset,
-            ),
-            placement.clip_rect,
-            0.0,
-            anchor.height(),
-        );
-        Placement::new(
-            outer.inflate(-border_outset, -border_outset),
-            placement.clip_rect,
-        )
-    })
-}
-
-pub(super) fn completion_card<C: 'static>(
-    tcx: &mut TextCtx,
-    styles: &Styles,
-    entries: &[Entry<C>],
-    choice: usize,
-    scroll: f64,
-    current_scroll: impl Fn(&C) -> Option<f64> + 'static,
-    set_view: impl Fn(&mut C, f64, usize) + 'static,
-) -> Measured<HoverPass<C>> {
-    let entries = entries
-        .iter()
-        .enumerate()
-        .map(|(index, entry)| crate::display::widget::completion::Entry {
-            display: &entry.display,
-            detail: entry.detail.as_deref(),
-            matches: &entry.matches,
-            style: face_style(styles, entry.face),
-            target: Hovered::Tree(Hover::Entry(index)),
-            activate: entry.activate.clone(),
-        })
-        .collect::<Vec<_>>();
-    crate::display::widget::completion::card(
-        tcx,
-        styles,
-        &entries,
-        crate::display::widget::completion::State { choice, scroll },
-        current_scroll,
-        move |world, state| set_view(world, state.scroll, state.choice),
-    )
 }
 
 /// The new-field label stage engaged, its query wearing the primary
