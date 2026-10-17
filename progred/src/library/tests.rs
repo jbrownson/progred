@@ -2,7 +2,9 @@ use super::*;
 use crate::display::recording::{Recordable, Recorded};
 use crate::view::{Layout, ProjectionInput};
 
-use crate::display::{Env, text as text_layout};
+use crate::display::test_support::NoEval;
+use crate::display::text as text_layout;
+use crate::libraries::test_widgets::projection_input;
 use ::grap::{Environment, Expression, ForeignFunction, Halt};
 use gid::{CellId, Value};
 use puri::Leaf;
@@ -27,23 +29,6 @@ fn left_projection(_: &ProjectionInput<'_>) -> Option<Layout> {
 
 fn right_projection(_: &ProjectionInput<'_>) -> Option<Layout> {
     Some(text_layout("right"))
-}
-
-struct NoEval;
-
-impl Env for NoEval {
-    fn apply_scoped(
-        &self,
-        _: &gid::Value,
-        _: &[(gid::CellId, gid::Value)],
-        _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        panic!("unexpected projection application")
-    }
-
-    fn evaluate(&self, _: &Value) -> Value {
-        Value::record([])
-    }
 }
 
 #[test]
@@ -105,27 +90,12 @@ fn library_definitions_and_projections_compose_in_order() {
         projections
             .iter()
             .map(|(_, projection)| {
-                let target = |_| crate::display::ProjectionTarget {
-                    select: Rc::new(|_| false),
-                    select_with: Rc::new(|_, _| false),
-                    hover: crate::libraries::test_widgets::hover(vec![]),
-                };
-                projection(&ProjectionInput {
-                    default_projection: crate::display::runtime_partial(|_| None),
-                    env: &NoEval,
-                    value: Some(&(&value).into()),
-                    scale_factor: 1.0,
-                    writable: true,
-                    selection: None,
-                    pending: None,
-                    state: None,
-                    targets: crate::display::ProjectionTargets::new(&target),
-                })
-                .and_then(|layout| match layout.record() {
-                    Recorded::Leaf(Leaf::Text { text, .. }) => Some(text),
-                    _ => None,
-                })
-                .unwrap()
+                projection(&projection_input(&NoEval, &(&value).into()))
+                    .and_then(|layout| match layout.record() {
+                        Recorded::Leaf(Leaf::Text { text, .. }) => Some(text),
+                        _ => None,
+                    })
+                    .unwrap()
             })
             .collect::<Vec<_>>(),
         ["left", "right"]

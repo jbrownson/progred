@@ -1,8 +1,9 @@
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
 use crate::display::widget;
+use crate::display::{Env, ProjectionTarget, ProjectionTargets};
 use crate::placed::{self, leaf};
-use crate::view::Layout;
+use crate::view::{Layout, ProjectionInput};
 use crate::{Editor, frame::Hovered};
 use kurbo::Rect;
 use measured::Extent;
@@ -184,6 +185,55 @@ pub fn assert_delimiter(
 
 pub fn hover(path: Vec<gid::Step>) -> Hovered {
     Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from(path)))
+}
+
+/// A target that selects nothing and hovers the projected value, whatever
+/// the steps below it.
+pub fn unit_target(_: Vec<gid::Step>) -> ProjectionTarget<Hovered> {
+    relative_target(Vec::new())
+}
+
+/// A target that selects nothing and hovers the steps it's given.
+pub fn relative_target(steps: Vec<gid::Step>) -> ProjectionTarget<Hovered> {
+    ProjectionTarget {
+        select: std::rc::Rc::new(|_| false),
+        select_with: std::rc::Rc::new(|_, _| false),
+        hover: hover(steps),
+    }
+}
+
+/// `value` projected writably at scale 1 through `env`, with no default
+/// projection, selection, pending or state, and targets from [`unit_target`].
+pub fn projection_input<'a, V>(env: &'a dyn Env, value: &'a V) -> ProjectionInput<'a, V> {
+    ProjectionInput {
+        env,
+        default_projection: crate::display::runtime_partial(|_| None),
+        value: Some(value),
+        scale_factor: 1.0,
+        writable: true,
+        selection: None,
+        pending: None,
+        state: None,
+        targets: ProjectionTargets::new(&unit_target),
+    }
+}
+
+/// `projection` of `input`'s value read as a runtime value, as the projection
+/// runtime hands values to projections.
+pub fn project_runtime(
+    projection: impl FnOnce(&ProjectionInput<'_, grap::RuntimeValue>) -> Option<Layout>,
+    input: &ProjectionInput<'_>,
+) -> Option<Layout> {
+    let value = input.value.map(grap::RuntimeValue::from);
+    projection(&input.with_value(value.as_ref()))
+}
+
+/// [`projection_input`], its targets from [`relative_target`].
+pub fn relative_projection_input<'a, V>(env: &'a dyn Env, value: &'a V) -> ProjectionInput<'a, V> {
+    ProjectionInput {
+        targets: ProjectionTargets::new(&relative_target),
+        ..projection_input(env, value)
+    }
 }
 
 pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {

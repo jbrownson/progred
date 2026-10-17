@@ -7,66 +7,25 @@ fn binary_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
 
 /// Binary notation's one-line form; the other wraps after the left operand.
 fn infix_children(layout: &Layout) -> Option<Vec<Recorded<crate::Editor, crate::frame::Hovered>>> {
-    fn unshared(
-        layout: &Recorded<crate::Editor, crate::frame::Hovered>,
-    ) -> Recorded<crate::Editor, crate::frame::Hovered> {
-        match layout.content() {
-            Recorded::Shared { child, .. } => unshared(child),
-            content => content.clone(),
-        }
-    }
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         return None;
     };
     let Recorded::Row { children, .. } = options.first()?.content() else {
         return None;
     };
-    Some(children.iter().map(unshared).collect())
+    Some(
+        children
+            .iter()
+            .map(|child| unshared(child).clone())
+            .collect(),
+    )
 }
 use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::{line_edit, logic};
 
-use crate::display::test_support::{ProjectionCall, inspect};
+use crate::display::test_support::{NoEval, ProjectionCall, inspect, unshared};
+use crate::libraries::test_widgets::projection_input;
 use gid::new_cell_id;
-
-struct TestEnv;
-
-impl crate::display::Env for TestEnv {
-    fn apply_scoped(
-        &self,
-        _: &gid::Value,
-        _: &[(gid::CellId, gid::Value)],
-        _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        panic!("unexpected projection application")
-    }
-
-    fn evaluate(&self, _: &Value) -> Value {
-        unreachable!()
-    }
-}
-
-fn target(_: Vec<Step>) -> crate::display::ProjectionTarget<crate::frame::Hovered> {
-    crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    }
-}
-
-fn projection_input(value: &RuntimeValue) -> ProjectionInput<'_, RuntimeValue> {
-    ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env: &TestEnv,
-        value: Some(value),
-        scale_factor: 1.0,
-        writable: true,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&target),
-    }
-}
 
 #[test]
 fn numeric_projections_read_runtime_facets_and_ignore_unrelated_children() {
@@ -96,14 +55,14 @@ fn numeric_projections_read_runtime_facets_and_ignore_unrelated_children() {
             (field, Value::from(bytes).into()),
             (extra, callback.clone()),
         ]);
-        assert!(project(&projection_input(&number)).is_some());
+        assert!(project(&projection_input(&NoEval, &number)).is_some());
         assert!(number.field(extra).unwrap().same_result(&callback));
         let invalid = RuntimeValue::record([(field, Value::from(vec![0]).into())]);
-        assert!(project(&projection_input(&invalid)).is_none());
+        assert!(project(&projection_input(&NoEval, &invalid)).is_none());
     }
     assert!(
         convention()
-            .display(&projection_input(&RuntimeValue::f64(3.5)))
+            .display(&projection_input(&NoEval, &RuntimeValue::f64(3.5)))
             .is_some()
     );
 }
@@ -120,7 +79,8 @@ fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
         (vocabulary::LEFT, sum),
         (vocabulary::RIGHT, RuntimeValue::f64(3.0)),
     ]);
-    let children = infix_children(&binary_display(&projection_input(&product)).unwrap()).unwrap();
+    let children =
+        infix_children(&binary_display(&projection_input(&NoEval, &product)).unwrap()).unwrap();
     crate::display::test_support::delimited(&children[0]);
 }
 
@@ -274,7 +234,7 @@ fn runtime_lowering_preserves_an_enriched_value_through_a_binding() {
 fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
     let product = call(vocabulary::MULTIPLY, value(2.0), value(3.0));
     let sum = call(vocabulary::SUM, value(1.0), product);
-    let layout = binary_display(&projection_input(&(&sum).into())).unwrap();
+    let layout = binary_display(&projection_input(&NoEval, &(&sum).into())).unwrap();
     let children = infix_children(&layout).unwrap();
     assert!(matches!(&inspect(&(&children[0])),
         ProjectionCall::Descend {
@@ -301,7 +261,7 @@ fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
         call(vocabulary::SUM, value(1.0), value(2.0)),
         value(3.0),
     );
-    let layout = binary_display(&projection_input(&(&product).into())).unwrap();
+    let layout = binary_display(&projection_input(&NoEval, &(&product).into())).unwrap();
     let children = infix_children(&layout).unwrap();
     crate::display::test_support::delimited(&children[0]);
 }
@@ -309,7 +269,7 @@ fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
 #[test]
 fn binary_notation_wraps_before_its_operator() {
     let sum = call(vocabulary::SUM, value(1.0), value(2.0));
-    let layout = binary_display(&projection_input(&(&sum).into())).unwrap();
+    let layout = binary_display(&projection_input(&NoEval, &(&sum).into())).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("binary notation has a one-line form and a wrapped one");
     };
@@ -324,9 +284,11 @@ fn binary_notation_wraps_before_its_operator() {
 fn every_numeric_operator_reads_infix() {
     use crate::libraries::{f32, u64};
     let infix = |library: &Library, call: Value| {
-        let layout =
-            (library.projection.as_ref().unwrap())(&projection_input(&RuntimeValue::from(&call)))
-                .expect("a call projects");
+        let layout = (library.projection.as_ref().unwrap())(&projection_input(
+            &NoEval,
+            &RuntimeValue::from(&call),
+        ))
+        .expect("a call projects");
         let Some(children) = infix_children(&layout) else {
             return false;
         };
@@ -402,7 +364,7 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
             (extra, value(3.0)),
         ],
     );
-    assert!(binary_display(&projection_input(&(&sum).into())).is_some());
+    assert!(binary_display(&projection_input(&NoEval, &(&sum).into())).is_some());
     for (parent, field, grouped) in [
         (vocabulary::MULTIPLY, vocabulary::LEFT, true),
         (vocabulary::SUM, vocabulary::LEFT, false),
@@ -413,8 +375,11 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
         } else {
             (value(4.0), sum.clone(), 2)
         };
-        let layout =
-            binary_display(&projection_input(&(&call(parent, left, right)).into())).unwrap();
+        let layout = binary_display(&projection_input(
+            &NoEval,
+            &(&call(parent, left, right)).into(),
+        ))
+        .unwrap();
         let children = infix_children(&layout).unwrap();
         assert_eq!(
             matches!(children[index].content(), Recorded::Row { .. }),
@@ -422,11 +387,18 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
         );
     }
     let without = |value: &Value, key| Value::record(value.as_record().unwrap().without(&key));
-    assert!(binary_display(&projection_input(&(&without(&sum, FUNCTION)).into())).is_none());
+    assert!(
+        binary_display(&projection_input(
+            &NoEval,
+            &(&without(&sum, FUNCTION)).into()
+        ))
+        .is_none()
+    );
     // From the moment the operator is chosen, a missing operand is a slot.
     let plain = without(&sum, extra);
     for (key, index) in [(vocabulary::LEFT, 0), (vocabulary::RIGHT, 2)] {
-        let layout = binary_display(&projection_input(&(&without(&plain, key)).into())).unwrap();
+        let layout =
+            binary_display(&projection_input(&NoEval, &(&without(&plain, key)).into())).unwrap();
         let children = infix_children(&layout).unwrap();
         assert!(matches!(&inspect(&(&children[index])),
             ProjectionCall::Descend { step: Step::Key(field), .. } if *field == key

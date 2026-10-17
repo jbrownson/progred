@@ -26,8 +26,9 @@ fn new_color_is_only_offered_where_its_picker_can_be_presented() {
 }
 use crate::display::recording::{Recordable, Recorded};
 
-use crate::display::test_support::{ProjectionCall, inspect};
-use crate::display::{Env, RowAlignment};
+use crate::display::RowAlignment;
+use crate::display::test_support::{NoEval, ProjectionCall, inspect};
+use crate::libraries::test_widgets::projection_input;
 use gid::new_cell_id;
 
 #[test]
@@ -148,23 +149,7 @@ fn spelling_round_trips_through_the_update_function() {
 #[test]
 fn projection_is_a_swatch_and_editable_spelling() {
     let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
-    let target = |_| crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    };
-    let layout = display(&ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env: &NoEval,
-        value: Some(&(&color).into()),
-        scale_factor: 1.0,
-        writable: true,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&target),
-    })
-    .expect("color projection");
+    let layout = display(&projection_input(&NoEval, &(&color).into())).expect("color projection");
     let Recorded::Row {
         alignment,
         children,
@@ -195,21 +180,10 @@ fn projection_is_a_swatch_and_editable_spelling() {
 fn a_read_only_color_selects_without_a_picker_or_popup() {
     let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
     let selection = picker_selection(0.1);
-    let target = |_| crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    };
     let layout = display(&ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env: &NoEval,
-        value: Some(&(&color).into()),
-        scale_factor: 1.0,
         writable: false,
         selection: Some(&selection),
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&target),
+        ..projection_input(&NoEval, &(&color).into())
     })
     .expect("read-only color projection");
     let Recorded::Row { children, .. } = layout.record() else {
@@ -234,23 +208,8 @@ fn a_named_color_projects_its_editable_name_and_hex() {
         "rebeccapurple",
         [(vocabulary::RGB, Value::from(vec![0x66, 0x33, 0x99]))],
     );
-    let target = |_| crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    };
-    let layout = display(&ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env: &NoEval,
-        value: Some(&(&color).into()),
-        scale_factor: 1.0,
-        writable: true,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&target),
-    })
-    .expect("named color projection");
+    let layout =
+        display(&projection_input(&NoEval, &(&color).into())).expect("named color projection");
     let Recorded::Row { children, .. } = layout.record() else {
         panic!("named color projection is one row")
     };
@@ -278,23 +237,11 @@ fn picker_mode_floats_point_controls_and_preserves_open_metadata() {
             .update(extra, Value::from(vec![7])),
     );
     let selection = picker_selection(0.1);
-    let target = |_| crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    };
     // Its extra field would follow the color in a record of its own.
     let plain = value(Color::from_rgba8(0x66, 0x33, 0x99, 0xff));
     let layout = display(&ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env: &NoEval,
-        value: Some(&(&plain).into()),
-        scale_factor: 1.0,
-        writable: true,
         selection: Some(&selection),
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&target),
+        ..projection_input(&NoEval, &(&plain).into())
     })
     .expect("selected color projection");
     let Recorded::Row { children, .. } = layout.record() else {
@@ -334,23 +281,6 @@ fn closing_the_picker_removes_only_its_selection_state() {
         closed.as_record().unwrap().get(&other),
         Some(&Value::from(vec![7]))
     );
-}
-
-struct NoEval;
-
-impl Env for NoEval {
-    fn apply_scoped(
-        &self,
-        _: &gid::Value,
-        _: &[(gid::CellId, gid::Value)],
-        _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        panic!("unexpected projection application")
-    }
-
-    fn evaluate(&self, _: &Value) -> Value {
-        panic!("color projection does not evaluate while projecting")
-    }
 }
 
 #[test]

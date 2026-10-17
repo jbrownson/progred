@@ -7,6 +7,7 @@ use crate::test_support::{core_libraries, src};
 use gid::{Cells, Document};
 use kurbo::Point;
 use puri::hover::Claim;
+use std::rc::Rc;
 
 fn sum(left: Value, right: Value) -> Value {
     Value::record([(SUM, Value::record([(LEFT, left), (RIGHT, right)]))])

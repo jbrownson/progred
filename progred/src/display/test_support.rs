@@ -60,11 +60,60 @@ impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::HoverO
 
 pub use crate::display::recording::{Recordable, Recorded, record};
 use crate::display::{Partial, widget};
-use gid::{Step, Value};
+use gid::{CellId, Step, Value};
 use measured::Extent;
 use measured::choices::{ChoiceBuild, ChoiceLayout};
 use puri::text::{LayoutContext, TextCache, TextCtx};
 use std::cell::RefCell;
+
+/// A host that applies and evaluates nothing: a projection that asks fails
+/// its test.
+pub struct NoEval;
+
+impl crate::display::Env for NoEval {
+    fn apply_scoped(
+        &self,
+        _: &Value,
+        _: &[(CellId, Value)],
+        _: Option<&::grap::ForeignOverlay<'_>>,
+    ) -> ::grap::Evaluation<Value> {
+        panic!("unexpected application")
+    }
+
+    fn evaluate(&self, _: &Value) -> Value {
+        panic!("unexpected evaluation")
+    }
+}
+
+/// A host whose every application and evaluation answers its value.
+pub struct EvaluatesTo(pub Value);
+
+impl crate::display::Env for EvaluatesTo {
+    fn apply_scoped(
+        &self,
+        _: &Value,
+        _: &[(CellId, Value)],
+        _: Option<&::grap::ForeignOverlay<'_>>,
+    ) -> ::grap::Evaluation<Value> {
+        ::grap::Evaluation {
+            result: self.0.clone(),
+            completed: true,
+            remaining_fuel: 0,
+        }
+    }
+
+    fn evaluate(&self, _: &Value) -> Value {
+        self.0.clone()
+    }
+}
+
+/// What `layout` records inside the wrappers that share or decorate it.
+pub fn unshared<W, H>(mut layout: &Recorded<W, H>) -> &Recorded<W, H> {
+    while let Recorded::Shared { child, .. } = layout.content() {
+        layout = child.as_ref();
+    }
+    layout.content()
+}
 
 pub enum ProjectionCall<W, H> {
     Descend {

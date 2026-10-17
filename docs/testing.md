@@ -37,7 +37,12 @@ visual testing.
   production doesn't use.
   [`display/test_support.rs`](../progred/src/display/test_support.rs) records
   projection calls and supplies small helpers such as `painted`, `Landmarks`,
-  and `mouse`. Some load the small documents in
+  and `mouse`, and the hosts a projection test needs: `NoEval`, which fails
+  the test if asked to evaluate, and `EvaluatesTo`, which answers one value.
+  [`libraries/test_widgets.rs`](../progred/src/libraries/test_widgets.rs)
+  builds a projection's input and targets for a library's tests. A test keeps
+  its own host only when the host checks what it's asked. Some load the small
+  documents in
   [`progred/fixtures`](../progred/fixtures). Helpers shared by tests in
   several modules live in [`crate::test_support`](../progred/src/test_support.rs):
   - the loaded core libraries and reading contexts;

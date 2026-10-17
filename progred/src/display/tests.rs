@@ -1,13 +1,6 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
-use crate::display::test_support::{ProjectionCall, inspect};
-
-fn unshared<World, Hover>(mut layout: &Recorded<World, Hover>) -> &Recorded<World, Hover> {
-    while let Recorded::Shared { child, .. } = layout {
-        layout = child.as_ref();
-    }
-    layout
-}
+use crate::display::test_support::{NoEval, ProjectionCall, inspect, unshared};
 
 fn probe(_: &ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
     None
@@ -54,22 +47,6 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
 }
 
 fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {
-    struct NoEval;
-    impl Env for NoEval {
-        fn apply_scoped(
-            &self,
-            _: &Value,
-            _: &[(CellId, Value)],
-            _scope: Option<&grap::ForeignOverlay<'_>>,
-        ) -> grap::Evaluation<gid::Value> {
-            panic!("unexpected application")
-        }
-
-        fn evaluate(&self, _: &Value) -> Value {
-            panic!("unexpected evaluation")
-        }
-    }
-
     projection(&ProjectionInput {
         default_projection: partial(|_| None),
         env: &NoEval,

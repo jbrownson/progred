@@ -28,31 +28,12 @@ use crate::display::test_support::{
 };
 use crate::display::widget::project::Project;
 use crate::libraries::control::vocabulary as c;
+use crate::libraries::test_widgets::{project_runtime, projection_input};
 use measured::choices::{ChoiceBuild, resolve_choices};
 use puri::{Affine, DrawCmd, DrawList, Placement, Shape};
 
 const A: CellId = CellId::from_u128(1);
 const B: CellId = CellId::from_u128(2);
-
-struct Host(crate::library::Libraries);
-impl display::Env for Host {
-    fn apply_scoped(
-        &self,
-        function: &Value,
-        args: &[(CellId, Value)],
-        scope: Option<&ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        match scope {
-            Some(scope) => {
-                ::grap::apply_value_scoped(function, args.iter().cloned(), &self.0, scope, 10_000)
-            }
-            None => ::grap::apply_value(function, args.iter().cloned(), &self.0, 10_000),
-        }
-    }
-    fn evaluate(&self, _: &Value) -> Value {
-        unreachable!()
-    }
-}
 
 #[derive(Default)]
 struct Output(RefCell<Option<Value>>);
@@ -746,7 +727,7 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
 
 #[test]
 fn controls_overlay_the_full_height_view_and_supply_their_values() {
-    let host = Host(crate::stack::load().libraries);
+    let libraries = crate::stack::load().libraries;
     let controls = ::grap::lambda(
         [],
         quote(Value::list([
@@ -784,32 +765,24 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
             (HEIGHT, f64::value(300.0)),
         ],
     );
-    let declaration = ::grap::evaluate_value(&call, &host.0, 10_000).result;
-    let target = |_| unreachable!();
-    let input = ProjectionInput {
-        env: &host,
-        value: Some(&declaration),
-        default_projection: display::partial(|_| None),
-        scale_factor: 1.0,
-        writable: false,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: display::ProjectionTargets::new(&target),
-    };
-    let output = Output::default();
-    let mut build = ChoiceBuild::default();
-    // The test's ordinary projection interpreter records the viewport arguments.
+    let declaration = ::grap::evaluate_value(&call, &libraries, 10_000).result;
     let empty = gid::Document {
         root: None,
         cells: Cells::new(),
     };
     let sources = crate::sources::Sources {
         doc: &empty,
-        libraries: &host.0,
+        libraries: &libraries,
     };
+    let input = ProjectionInput {
+        writable: false,
+        ..projection_input(&sources, &declaration)
+    };
+    let output = Output::default();
+    let mut build = ChoiceBuild::default();
+    // The test's ordinary projection interpreter records the viewport arguments.
     let graph = with_sources(sources, &output, |context| {
-        display(&input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref()))
+        project_runtime(display, &input)
             .unwrap()
             .measure(context, &mut build)
     });

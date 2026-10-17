@@ -267,8 +267,13 @@ first:
    sections they need.~~ Done on 17 October 2026: ripgrep skips docs/history
    unless the directory is named, and AGENTS.md says which docs are large
    references to search rather than read whole.
-2. Share one `display::Env` test double and the common evaluate, apply and
-   projection-input test helpers, now copied 19 to 29 times.
+2. ~~Share one `display::Env` test double and the common evaluate, apply and
+   projection-input test helpers, now copied 19 to 29 times.~~ Done on 17
+   October 2026: display's test support has the inert and one-answer hosts,
+   and the libraries' test widgets build a projection's input and targets.
+   Eight hosts stay with their tests, since they check their arguments, count
+   calls or answer one test's definitions; the evaluate and apply helpers were
+   already shared, and the copies left bind each module's own functions.
 3. Give projections and libraries a clear interface to the editor: a stated
    subset of it rather than the whole editor. This also makes libraries
    plug-ins that can't reach menus or the window. The owner's direction, from

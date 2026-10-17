@@ -1,9 +1,12 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
-use crate::view::{Layout, ProjectionInput};
+use crate::view::ProjectionInput;
 
 use crate::display::Env;
-use crate::display::test_support::{ProjectionCall, inspect};
+use crate::display::test_support::{EvaluatesTo, ProjectionCall, inspect, unshared};
+use crate::libraries::test_widgets::{
+    project_runtime, projection_input, relative_projection_input,
+};
 use crate::library::Libraries;
 use crate::test_support::{
     activated, completion_entries_with, core_libraries, library_offers, src,
@@ -98,57 +101,12 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
     }
 }
 
-struct TestEnv {
-    result: Value,
-}
-
-impl Env for TestEnv {
-    fn apply_scoped(
-        &self,
-        _: &gid::Value,
-        _: &[(gid::CellId, gid::Value)],
-        _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        panic!("unexpected projection application")
-    }
-
-    fn evaluate(&self, _: &Value) -> Value {
-        self.result.clone()
-    }
-}
-
 fn wrapper(expression: Value, extra: impl IntoIterator<Item = (gid::CellId, Value)>) -> Value {
     Value::record(std::iter::once((EVALUATE, expression)).chain(extra))
 }
 
-fn env() -> TestEnv {
-    TestEnv {
-        result: Value::from(vec![1]),
-    }
-}
-
-fn unit_target(_: Vec<Step>) -> crate::display::ProjectionTarget<crate::frame::Hovered> {
-    crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    }
-}
-
-fn relative_target(steps: Vec<Step>) -> crate::display::ProjectionTarget<crate::frame::Hovered> {
-    crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(steps),
-    }
-}
-
-fn project_runtime(
-    projection: impl FnOnce(&ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout>,
-    input: &ProjectionInput<'_>,
-) -> Option<Layout> {
-    let value = input.value.map(::grap::RuntimeValue::from);
-    projection(&input.with_value(value.as_ref()))
+fn env() -> EvaluatesTo {
+    EvaluatesTo(Value::from(vec![1]))
 }
 
 #[test]
@@ -168,7 +126,7 @@ fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
     ]);
     let env = env();
     let source = Value::record([]);
-    let input = input(&env, &source);
+    let input = projection_input(&env, &source);
     let layout = call_display(&input.with_value(Some(&call))).unwrap();
     assert_eq!(argument_order(&layout), [parameter, extra]);
     assert!(lambda_display(&input.with_value(Some(&lambda))).is_some());
@@ -179,39 +137,11 @@ fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
     assert!(value_display(&input.with_value(Some(&wrapper))).is_some());
 }
 
-fn input<'a>(env: &'a dyn Env, value: &'a Value) -> ProjectionInput<'a> {
-    ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env,
-        value: Some(value),
-        scale_factor: 1.0,
-        writable: true,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&unit_target),
-    }
-}
-
-fn relative_input<'a>(env: &'a dyn Env, value: &'a Value) -> ProjectionInput<'a> {
-    ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env,
-        value: Some(value),
-        scale_factor: 1.0,
-        writable: true,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&relative_target),
-    }
-}
-
 fn projected(
     env: &dyn Env,
     value: &Value,
 ) -> Option<Recorded<crate::Editor, crate::frame::Hovered>> {
-    project_runtime(evaluate_display, &input(env, value))
+    project_runtime(evaluate_display, &projection_input(env, value))
         .map(|layout| layout.record().content().clone())
 }
 
@@ -249,7 +179,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             let env = DefinitionEnv(name::record(spelling, []), source);
             let cell = Value::from(new_cell_id());
             let declaration =
-                declaration_cell(&input(&env, &cell).with_value(Some(&(&cell).into())))
+                declaration_cell(&projection_input(&env, &cell).with_value(Some(&(&cell).into())))
                     .unwrap()
                     .record()
                     .content()
@@ -269,7 +199,8 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
                 projection: Some(projection),
                 ..
             } = &inspect(
-                &(projection(&input(&env, &env.0).with_value(Some(&(&env.0).into()))).unwrap()),
+                &(projection(&projection_input(&env, &env.0).with_value(Some(&(&env.0).into())))
+                    .unwrap()),
             )
             else {
                 panic!("the compact definition descends to its actual name");
@@ -281,7 +212,10 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
                 .unwrap()
                 .get(&name::vocabulary::NAME)
                 .unwrap();
-            assert!(projection(&input(&env, value).with_value(Some(&value.into()))).is_some());
+            assert!(
+                projection(&projection_input(&env, value).with_value(Some(&value.into())))
+                    .is_some()
+            );
             let line = name::editor(value).unwrap();
             assert_eq!(line.text, spelling);
             assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
@@ -291,7 +225,8 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             );
             assert!(
                 projection(
-                    &input(&env, &Value::record([])).with_value(Some(&Value::record([]).into()))
+                    &projection_input(&env, &Value::record([]))
+                        .with_value(Some(&Value::record([]).into()))
                 )
                 .is_none()
             );
@@ -306,10 +241,10 @@ fn compact_declarations_ignore_metadata_but_decline_invalid_names_and_active_ins
         Value::record([]),
         Value::record([(name::vocabulary::NAME, Value::from(vec![1]))]),
     ] {
-        assert!(declaration_name(&input(&env, &value)).is_none());
+        assert!(declaration_name(&projection_input(&env, &value)).is_none());
     }
     let value = name::record("size", [(new_cell_id(), Value::record([]))]);
-    let mut input = input(&env, &value);
+    let mut input = projection_input(&env, &value);
     assert!(declaration_name(&input).is_some());
     input.pending = Some(Pending::Field);
     assert!(declaration_name(&input).is_none());
@@ -325,15 +260,10 @@ fn value_projection_leaves_competing_forms_to_composition() {
         (BODY, Value::record([])),
         (VALUE, Value::record([])),
     ]);
-    let input = input(&env, &malformed_lambda);
+    let input = projection_input(&env, &malformed_lambda);
     assert!(project_runtime(lambda_display, &input).is_none());
     assert!(project_runtime(value_display, &input).is_some());
-    assert!(
-        (library().projection.unwrap())(
-            &input.with_value(input.value.map(::grap::RuntimeValue::from).as_ref())
-        )
-        .is_some()
-    );
+    assert!(project_runtime(&*library().projection.unwrap(), &input).is_some());
 
     let call = Value::record([(FUNCTION, Value::record([])), (VALUE, Value::record([]))]);
     let input = ProjectionInput {
@@ -416,15 +346,6 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
             None
         );
     }
-}
-
-fn unshared(
-    mut layout: &Recorded<crate::Editor, crate::frame::Hovered>,
-) -> &Recorded<crate::Editor, crate::frame::Hovered> {
-    while let Recorded::Shared { child, .. } = layout.content() {
-        layout = child.as_ref();
-    }
-    layout.content()
 }
 
 fn arms(
@@ -554,9 +475,7 @@ fn an_evaluate_shaped_result_is_another_projection() {
     let inner = Value::from(vec![2]);
     let result = wrapper(inner.clone(), []);
     let layout = projected(
-        &TestEnv {
-            result: result.clone(),
-        },
+        &EvaluatesTo(result.clone()),
         &wrapper(Value::from(vec![0]), []),
     )
     .unwrap();
@@ -578,7 +497,7 @@ fn a_call_projects_its_function_cell_shallowly() {
     let argument = new_cell_id();
     let layout = project_runtime(
         call_display,
-        &input(
+        &projection_input(
             &env(),
             &::grap::call(Value::from(function), [(argument, Value::from(vec![1]))]),
         ),
@@ -604,7 +523,7 @@ fn a_call_argument_label_targets_its_value() {
     let function = new_cell_id();
     let argument = new_cell_id();
     let call = ::grap::call(Value::from(function), [(argument, Value::from(vec![1]))]);
-    let layout = project_runtime(call_display, &relative_input(&env(), &call)).unwrap();
+    let layout = project_runtime(call_display, &relative_projection_input(&env(), &call)).unwrap();
     let Recorded::Alternatives(call_options) = layout.record().content().clone() else {
         panic!("call has responsive forms");
     };
@@ -698,7 +617,7 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
             (FIRST_PARAMETER, Value::from(vec![3])),
         ],
     );
-    let layout = project_runtime(call_display, &input(&env, &call)).unwrap();
+    let layout = project_runtime(call_display, &projection_input(&env, &call)).unwrap();
 
     assert_eq!(
         argument_order(&layout),
@@ -711,7 +630,7 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
             (FIRST_EXTRA, Value::from(vec![4])),
         ],
     );
-    let initial = input(&env, &incomplete);
+    let initial = projection_input(&env, &incomplete);
     assert_eq!(
         argument_order(&project_runtime(call_display, &initial).unwrap()),
         [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA]
@@ -741,11 +660,15 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
         )]),
     };
     assert_eq!(
-        argument_order(&project_runtime(call_display, &input(&declared, &call)).unwrap()),
+        argument_order(
+            &project_runtime(call_display, &projection_input(&declared, &call)).unwrap()
+        ),
         [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA, SECOND_EXTRA],
     );
     assert_eq!(
-        argument_order(&project_runtime(call_display, &input(&declared, &incomplete)).unwrap()),
+        argument_order(
+            &project_runtime(call_display, &projection_input(&declared, &incomplete)).unwrap()
+        ),
         [FIRST_PARAMETER, SECOND_PARAMETER, FIRST_EXTRA]
     );
     let undeclared = DefinitionEnv {
@@ -753,11 +676,15 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
         definition: Value::record([]),
     };
     assert_eq!(
-        argument_order(&project_runtime(call_display, &input(&undeclared, &call)).unwrap()),
+        argument_order(
+            &project_runtime(call_display, &projection_input(&undeclared, &call)).unwrap()
+        ),
         [SECOND_PARAMETER, FIRST_PARAMETER, FIRST_EXTRA, SECOND_EXTRA],
     );
     assert_eq!(
-        argument_order(&project_runtime(call_display, &input(&undeclared, &incomplete)).unwrap()),
+        argument_order(
+            &project_runtime(call_display, &projection_input(&undeclared, &incomplete)).unwrap()
+        ),
         [SECOND_PARAMETER, FIRST_EXTRA]
     );
 }
@@ -776,7 +703,7 @@ fn a_call_uses_an_inline_lambdas_parameter_order() {
             (FIRST_PARAMETER, Value::from(vec![2])),
         ],
     );
-    let layout = project_runtime(call_display, &input(&env(), &call)).unwrap();
+    let layout = project_runtime(call_display, &projection_input(&env(), &call)).unwrap();
 
     assert_eq!(argument_order(&layout), [FIRST_PARAMETER, SECOND_PARAMETER]);
     let empty = ::grap::call(
@@ -787,7 +714,7 @@ fn a_call_uses_an_inline_lambdas_parameter_order() {
         [],
     );
     assert_eq!(
-        argument_order(&project_runtime(call_display, &input(&env(), &empty)).unwrap()),
+        argument_order(&project_runtime(call_display, &projection_input(&env(), &empty)).unwrap()),
         [FIRST_PARAMETER, SECOND_PARAMETER]
     );
 }
@@ -796,7 +723,11 @@ fn a_call_uses_an_inline_lambdas_parameter_order() {
 fn a_lambda_targets_its_syntax_and_projects_its_body_as_grap() {
     let parameter = new_cell_id();
     let definition = ::grap::lambda([parameter], Value::from(parameter));
-    let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
+    let layout = project_runtime(
+        lambda_display,
+        &relative_projection_input(&env(), &definition),
+    )
+    .unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("lambda has responsive forms");
     };
@@ -847,7 +778,7 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
         (PARAMS, Value::list([])),
         (new_cell_id(), Value::record([])),
     ]);
-    let mut input = relative_input(&env, &definition);
+    let mut input = relative_projection_input(&env, &definition);
     assert!(project_runtime(lambda_display, &input).is_some());
     input.pending = Some(Pending::Child(Step::Key(BODY)));
     assert!(project_runtime(lambda_display, &input).is_some());
@@ -862,7 +793,9 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
             Value::list([crate::libraries::text::value("not a cell")]),
         )]),
     ] {
-        assert!(project_runtime(lambda_display, &relative_input(&env, &malformed)).is_none());
+        assert!(
+            project_runtime(lambda_display, &relative_projection_input(&env, &malformed)).is_none()
+        );
     }
 }
 
@@ -876,7 +809,11 @@ fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
             (new_cell_id(), Value::record([])),
         ],
     );
-    let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
+    let layout = project_runtime(
+        lambda_display,
+        &relative_projection_input(&env(), &definition),
+    )
+    .unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("lambda has responsive forms");
     };
@@ -900,7 +837,10 @@ fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
         .unwrap()
         .get(&name::vocabulary::NAME)
         .unwrap();
-    assert!(projection(&relative_input(&env(), value).with_value(Some(&value.into()))).is_some());
+    assert!(
+        projection(&relative_projection_input(&env(), value).with_value(Some(&value.into())))
+            .is_some()
+    );
     let line = name::editor(value).unwrap();
     assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
 }
@@ -909,7 +849,7 @@ fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
 fn the_lambda_name_partial_handles_missing_names_or_text() {
     let env = env();
     let value = Value::record([]);
-    let mut input = input(&env, &value);
+    let mut input = projection_input(&env, &value);
     input.value = None;
     assert!(lambda_name(&input).is_some());
 
@@ -932,7 +872,11 @@ fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
         "",
         [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
     );
-    let layout = project_runtime(lambda_display, &relative_input(&env(), &definition)).unwrap();
+    let layout = project_runtime(
+        lambda_display,
+        &relative_projection_input(&env(), &definition),
+    )
+    .unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("lambda has responsive forms");
     };
@@ -954,7 +898,10 @@ fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
         .unwrap()
         .get(&name::vocabulary::NAME)
         .unwrap();
-    assert!(projection(&relative_input(&env(), value).with_value(Some(&value.into()))).is_some());
+    assert!(
+        projection(&relative_projection_input(&env(), value).with_value(Some(&value.into())))
+            .is_some()
+    );
     let line = name::editor(value).unwrap();
     assert_eq!(line.text, "");
     assert_eq!(line.placeholder, None);

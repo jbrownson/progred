@@ -1,72 +1,10 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
-use crate::view::ProjectionInput;
 
-use crate::display::Env;
-use crate::display::test_support::{ProjectionCall, inspect};
+use crate::display::test_support::{NoEval, ProjectionCall, inspect};
+use crate::libraries::test_widgets::{projection_input, relative_projection_input};
 use gid::new_cell_id;
 use std::sync::atomic::{AtomicUsize, Ordering};
-
-struct NoEval;
-
-impl Env for NoEval {
-    fn apply_scoped(
-        &self,
-        _: &gid::Value,
-        _: &[(gid::CellId, gid::Value)],
-        _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        panic!("unexpected projection application")
-    }
-
-    fn evaluate(&self, expression: &Value) -> Value {
-        expression.clone()
-    }
-}
-
-fn unit_target(_: Vec<Step>) -> crate::display::ProjectionTarget<crate::frame::Hovered> {
-    crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    }
-}
-
-fn relative_target(steps: Vec<Step>) -> crate::display::ProjectionTarget<crate::frame::Hovered> {
-    crate::display::ProjectionTarget {
-        select: std::rc::Rc::new(|_| false),
-        select_with: std::rc::Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(steps),
-    }
-}
-
-fn projection_input(value: &RuntimeValue) -> ProjectionInput<'_, RuntimeValue> {
-    ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env: &NoEval,
-        value: Some(value),
-        scale_factor: 1.0,
-        writable: true,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&unit_target),
-    }
-}
-
-fn relative_projection_input(value: &RuntimeValue) -> ProjectionInput<'_, RuntimeValue> {
-    ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env: &NoEval,
-        value: Some(value),
-        scale_factor: 1.0,
-        writable: true,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: crate::display::ProjectionTargets::new(&relative_target),
-    }
-}
 
 fn blob(text: &str) -> Value {
     Value::from(text.as_bytes().to_vec())
@@ -243,7 +181,7 @@ fn ordinary_bindings_may_contain_absents_without_short_circuiting() {
 fn do_projects_its_expression_list_despite_unrelated_fields() {
     let expression = do_call([blob("first"), blob("second")]);
     let Recorded::Row { children, .. } =
-        do_display(&relative_projection_input(&(&expression).into()))
+        do_display(&relative_projection_input(&NoEval, &(&expression).into()))
             .expect("coherent do projection")
             .record()
             .content()
@@ -257,7 +195,13 @@ fn do_projects_its_expression_list_despite_unrelated_fields() {
         .as_record()
         .unwrap()
         .update(new_cell_id(), blob("extra"));
-    assert!(do_display(&relative_projection_input(&Value::record(decorated).into())).is_some());
+    assert!(
+        do_display(&relative_projection_input(
+            &NoEval,
+            &Value::record(decorated).into()
+        ))
+        .is_some()
+    );
 }
 
 #[test]
@@ -291,13 +235,13 @@ fn compact_control_projections_recognize_required_fields_in_open_records() {
             name::vocabulary::NAME,
             crate::libraries::text::value("named"),
         ));
-        assert!(projection(&projection_input(&(&decorated).into())).is_some());
+        assert!(projection(&projection_input(&NoEval, &(&decorated).into())).is_some());
         for key in fields.keys() {
             let missing = Value::record(decorated.as_record().unwrap().without(key));
-            assert!(projection(&projection_input(&(&missing).into())).is_none());
+            assert!(projection(&projection_input(&NoEval, &(&missing).into())).is_none());
         }
         let runtime = (&decorated).into();
-        let mut input = projection_input(&runtime);
+        let mut input = projection_input(&NoEval, &runtime);
         input.pending = Some(Pending::Field);
         assert!(projection(&input).is_none());
     }
@@ -347,7 +291,7 @@ fn compact_control_projections_still_decline_malformed_contents_and_conflicting_
             ),
         ),
     ] {
-        assert!(projection(&projection_input(&(&value).into())).is_none());
+        assert!(projection(&projection_input(&NoEval, &(&value).into())).is_none());
     }
 }
 
@@ -388,7 +332,7 @@ fn quote_preserves_value_wrappers_and_splices_inside_them() {
 fn quote_projects_a_selectable_marker_and_its_expression() {
     let expression = blob("body");
     let quoted = quote_call(expression.clone());
-    let layout = quote_display(&projection_input(&(&quoted).into())).unwrap();
+    let layout = quote_display(&projection_input(&NoEval, &(&quoted).into())).unwrap();
     let Recorded::Row { children, .. } = &layout.record().content().clone() else {
         panic!("quote is an inline prefix");
     };
@@ -410,7 +354,11 @@ fn quote_projects_a_selectable_marker_and_its_expression() {
     };
     assert_eq!(step, &Step::Key(grap::vocabulary::EXPRESSION));
 
-    let marker = quote_marker(&projection_input(&Value::from(vocabulary::QUOTE).into())).unwrap();
+    let marker = quote_marker(&projection_input(
+        &NoEval,
+        &Value::from(vocabulary::QUOTE).into(),
+    ))
+    .unwrap();
     let Recorded::Before { child, .. } = marker.record() else {
         panic!("the marker contributes its navigation target");
     };
@@ -443,7 +391,7 @@ fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
             (extra, blob("visible")),
         ],
     );
-    assert!(quote_display(&projection_input(&(&quote).into())).is_some());
+    assert!(quote_display(&projection_input(&NoEval, &(&quote).into())).is_some());
     let unquote = name::record(
         "named unquote",
         [
@@ -451,7 +399,7 @@ fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
             (extra, blob("metadata")),
         ],
     );
-    assert!(unquote_display(&projection_input(&(&unquote).into())).is_some());
+    assert!(unquote_display(&projection_input(&NoEval, &(&unquote).into())).is_some());
     for malformed in [
         Value::record([]),
         Value::record([(grap::vocabulary::FUNCTION, vocabulary::QUOTE.into())]),
@@ -461,8 +409,8 @@ fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
             [(grap::vocabulary::EXPRESSION, blob("body"))],
         ),
     ] {
-        assert!(quote_display(&projection_input(&(&malformed).into())).is_none());
-        assert!(unquote_display(&projection_input(&(&malformed).into())).is_none());
+        assert!(quote_display(&projection_input(&NoEval, &(&malformed).into())).is_none());
+        assert!(unquote_display(&projection_input(&NoEval, &(&malformed).into())).is_none());
     }
 }
 
@@ -839,7 +787,8 @@ fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
     let let_call = bindings_call(vocabulary::LET, clauses(), body.clone());
     let where_call = bindings_call(vocabulary::WHERE, clauses(), body.clone());
 
-    let let_layout = bindings_display(&relative_projection_input(&(&let_call).into())).unwrap();
+    let let_layout =
+        bindings_display(&relative_projection_input(&NoEval, &(&let_call).into())).unwrap();
     let Recorded::Alternatives(let_options) = let_layout.record().content().clone() else {
         panic!("let has responsive forms");
     };
@@ -877,7 +826,8 @@ fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
     };
     assert_eq!(step, &Step::Key(vocabulary::BINDINGS));
 
-    let where_layout = bindings_display(&relative_projection_input(&(&where_call).into())).unwrap();
+    let where_layout =
+        bindings_display(&relative_projection_input(&NoEval, &(&where_call).into())).unwrap();
     let Recorded::Alternatives(where_options) = where_layout.record().content().clone() else {
         panic!("where has responsive forms");
     };
@@ -897,7 +847,7 @@ fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
 fn direct_binding_is_deep_and_centered_beside_its_equals() {
     let binder = new_cell_id();
     let binding = bind_clause(binder, blob("value"));
-    let layout = binding_display(&relative_projection_input(&(&binding).into())).unwrap();
+    let layout = binding_display(&relative_projection_input(&NoEval, &(&binding).into())).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("a binding has responsive forms");
     };
@@ -934,7 +884,7 @@ fn match_augments_its_standard_cases_list_with_the_case_projection() {
             case_arm(binding(binder), Value::from(binder)),
         ],
     );
-    let layout = match_display(&projection_input(&(&expression).into())).unwrap();
+    let layout = match_display(&projection_input(&NoEval, &(&expression).into())).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("match has responsive forms");
     };
@@ -960,12 +910,12 @@ fn match_augments_its_standard_cases_list_with_the_case_projection() {
         .get(&vocabulary::CASES)
         .unwrap();
 
-    assert!(case_display(&relative_projection_input(&cases.into())).is_none());
+    assert!(case_display(&relative_projection_input(&NoEval, &cases.into())).is_none());
     let case = cases
         .as_list()
         .and_then(|cases| cases.values().next())
         .expect("the standard list contains its cases");
-    let case = case_display(&relative_projection_input(&case.into())).unwrap();
+    let case = case_display(&relative_projection_input(&NoEval, &case.into())).unwrap();
     let Recorded::Alternatives(options) = case.record().content().clone() else {
         panic!("a case has responsive forms");
     };
@@ -993,14 +943,14 @@ fn match_augments_its_standard_cases_list_with_the_case_projection() {
 #[test]
 fn non_case_elements_use_the_standard_projection_inside_match() {
     let malformed = match_call(blob("subject"), [blob("not a case")]);
-    assert!(match_display(&projection_input(&(&malformed).into())).is_some());
+    assert!(match_display(&projection_input(&NoEval, &(&malformed).into())).is_some());
     let case = malformed
         .as_record()
         .and_then(|fields| fields.get(&vocabulary::CASES))
         .and_then(Value::as_list)
         .and_then(|cases| cases.values().next())
         .unwrap();
-    assert!(case_display(&projection_input(&case.into())).is_none());
+    assert!(case_display(&projection_input(&NoEval, &case.into())).is_none());
 }
 
 #[test]

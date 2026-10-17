@@ -1,7 +1,7 @@
 use super::*;
 
-use crate::display::ProjectionTargets;
-use std::rc::Rc;
+use crate::display::test_support::NoEval;
+use crate::libraries::test_widgets::projection_input;
 
 mod cube;
 
@@ -384,23 +384,12 @@ fn preview_is_an_ordinary_projected_value() {
         )],
     );
     let value = evaluate(&expression);
-    let target = |_| crate::display::ProjectionTarget {
-        select: Rc::new(|_| false),
-        select_with: Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    };
     let renderer = RefCell::new(PreviewRenderer::default());
     let layout = display(
         &ProjectionInput {
-            default_projection: crate::display::runtime_partial(|_| None),
-            env: &NoEval,
-            value: Some(&value.into()),
             scale_factor: 2.0,
             writable: false,
-            selection: None,
-            pending: None,
-            state: None,
-            targets: ProjectionTargets::new(&target),
+            ..projection_input(&NoEval, &value.into())
         },
         &renderer,
     )
@@ -680,23 +669,6 @@ fn camera_zoom_passes_unused_scroll_to_its_parent() {
     }
     let (_, outcome) = zoom_handler(None)(Vec2 { x: 8.0, y: 10.0 });
     assert_eq!(outcome.remaining, Vec2 { x: 8.0, y: 0.0 });
-}
-
-struct NoEval;
-
-impl crate::display::Env for NoEval {
-    fn apply_scoped(
-        &self,
-        _: &gid::Value,
-        _: &[(gid::CellId, gid::Value)],
-        _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        panic!("unexpected projection application")
-    }
-
-    fn evaluate(&self, _: &Value) -> Value {
-        unreachable!()
-    }
 }
 
 mod examples;

@@ -2,21 +2,19 @@ use super::*;
 use crate::display::recording::{Recordable, Recorded};
 use crate::view::{Layout, ProjectionInput};
 
-use crate::display::test_support::{ProjectionCall, inspect};
-use crate::display::{Env, ProjectionTargets};
+use crate::display::Env;
+use crate::display::test_support::{EvaluatesTo, NoEval, ProjectionCall, inspect};
+use crate::libraries::test_widgets::{project_runtime, projection_input};
 use gid::{CellId, Value};
-use std::rc::Rc;
 
 const LEFT_VALUE: CellId = CellId::from_u128(1);
 
 fn projected_display(input: &ProjectionInput<'_>) -> Option<Layout> {
-    let value = input.value.map(::grap::RuntimeValue::from);
-    super::projected_display(&input.with_value(value.as_ref()))
+    project_runtime(super::projected_display, input)
 }
 
 fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
-    let value = input.value.map(::grap::RuntimeValue::from);
-    super::display(&input.with_value(value.as_ref()))
+    project_runtime(super::display, input)
 }
 
 #[test]
@@ -68,8 +66,6 @@ fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {
         Some(Recorded::Row { .. })
     ));
 }
-
-struct EvaluateTo(Value);
 
 #[test]
 fn viewport_preparation_failure_does_not_call_the_viewport() {
@@ -175,46 +171,12 @@ fn viewport_preparation_receives_only_data_before_dimensions_are_supplied() {
     assert_eq!(env.0.get(), 1, "a zero-sized viewport doesn't prepare");
 }
 
-impl Env for EvaluateTo {
-    fn apply_scoped(
-        &self,
-        _: &gid::Value,
-        _: &[(gid::CellId, gid::Value)],
-        _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        ::grap::Evaluation {
-            result: self.0.clone(),
-            remaining_fuel: 17,
-            completed: true,
-        }
-    }
-
-    fn evaluate(&self, _: &Value) -> Value {
-        self.0.clone()
-    }
-}
-
 fn projected<V>(
     value: &V,
     env: &dyn Env,
     projection: impl FnOnce(&ProjectionInput<'_, V>) -> Option<Layout>,
 ) -> Option<Layout> {
-    let target = |_| crate::display::ProjectionTarget {
-        select: Rc::new(|_| false),
-        select_with: Rc::new(|_, _| false),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    };
-    projection(&ProjectionInput {
-        default_projection: crate::display::runtime_partial(|_| None),
-        env,
-        value: Some(value),
-        scale_factor: 1.0,
-        writable: true,
-        selection: None,
-        pending: None,
-        state: None,
-        targets: ProjectionTargets::new(&target),
-    })
+    projection(&projection_input(env, value))
 }
 
 #[test]
@@ -269,35 +231,21 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
 
 #[test]
 fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source() {
-    struct NoEvaluation;
-    impl Env for NoEvaluation {
-        fn apply_scoped(
-            &self,
-            _: &Value,
-            _: &[(CellId, Value)],
-            _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation<gid::Value> {
-            panic!("authoring a declaration must not apply its projection")
-        }
-        fn evaluate(&self, _: &Value) -> Value {
-            panic!("authoring a declaration must not evaluate it")
-        }
-    }
     let source = Value::from(b"source".to_vec());
     let value = Value::record([
         (vocabulary::VALUE, source),
         (vocabulary::PROJECTION, Value::from(LEFT_VALUE)),
     ]);
     let result = Value::from(b"projected".to_vec());
-    assert!(projected(&value, &NoEvaluation, display).is_none());
+    assert!(projected(&value, &NoEval, display).is_none());
     assert!(
-        matches!((projected(&value, &EvaluateTo(result.clone()), projected_display)).map(|layout| inspect(&layout)),
+        matches!((projected(&value, &EvaluatesTo(result.clone()), projected_display)).map(|layout| inspect(&layout)),
         Some(ProjectionCall::At { value, .. }) if value == result)
     );
     assert!(matches!(
         (projected(
             &value,
-            &EvaluateTo(absent::with_reason(LEFT_VALUE)),
+            &EvaluatesTo(absent::with_reason(LEFT_VALUE)),
             projected_display
         ))
         .map(|layout| inspect(&layout)),
@@ -309,7 +257,7 @@ fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source()
     assert!(
         projected(
             &Value::record([(vocabulary::VALUE, value)]),
-            &NoEvaluation,
+            &NoEval,
             projected_display,
         )
         .is_none()
@@ -321,7 +269,7 @@ fn render_projects_only_the_evaluation_result() {
     let result = Value::from(b"picture".to_vec());
     let value = Value::record([(vocabulary::RENDER, Value::from(LEFT_VALUE))]);
     assert!(
-        matches!((projected(&value, &EvaluateTo(result.clone()), display)).map(|layout| inspect(&layout)),
+        matches!((projected(&value, &EvaluatesTo(result.clone()), display)).map(|layout| inspect(&layout)),
             Some(ProjectionCall::At { value, .. }) if value == result
         )
     );
