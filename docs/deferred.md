@@ -368,9 +368,11 @@ first:
       Many of those tests now re-implement the shell's key routing.
    6. Rewrite 30 tests that drive the whole editor but check one system.
 
-   One CAM lesson test takes 17 s of progred's 37 s test wall time, because
-   CAM code runs unoptimized in progred's tests. Item 7's CAM crate, built
-   optimized like the other dependencies, is the likely fix.
+   CAM tests took 84% of progred's test time, running Fidget's generic
+   meshing and rendering and the cutter geometry at progred's debug level. On
+   17 October 2026 the meshing moved to the optimized `volume` crate, which
+   cut the slowest test from 10 s to under 1 s and progred's tests from 22 s
+   to 13 s. Item 7 moves the rest.
    - ~~The completion card, its placement and the selection-ring drawing
      (`completion_card`, `completion_placement`, `primary_highlight`) are
      display code filed in the projection runtime.~~ Moved to display on 17
@@ -385,9 +387,14 @@ first:
 6. Give the occurrence-to-location mapping one owning module, and pass an
    opaque handle through display and the libraries instead of `Location` and
    `Conject`.
-7. Split the CAM geometry into its own crate: small but easy. Built optimized
-   like the other dependencies, it would speed up the CAM tests, which now
-   dominate progred's test time (see item 4).
+7. Move the rest of the volume and CAM geometry out of progred, into crates
+   built optimized like the other dependencies (see item 4). Meshing moved to
+   `volume` on 17 October 2026. Still in progred, and still most of its test
+   time:
+   - the software raster and its tile assembly (libraries/fidget/raster);
+   - the cutter profiles and sweeps, stock and toolpath recordings
+     (libraries/toolpath), with their tests: the cutter tests' reference loops
+     alone take 10 s unoptimized.
 8. Split progred into three crates, which would also keep the layering honest:
    - core: the model and display;
    - the libraries;

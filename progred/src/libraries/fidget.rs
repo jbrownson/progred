@@ -700,11 +700,7 @@ fn pinch_zoom(state: Option<&Value>, delta: f32) -> Option<Value> {
     (zoom != initial.zoom).then(|| with_camera(state, Camera { zoom, ..initial }))
 }
 
-#[derive(Clone, PartialEq)]
-pub(crate) struct SceneObject {
-    pub(crate) tree: Tree,
-    pub(crate) color: [u8; 3],
-}
+pub(crate) use volume::SceneObject;
 
 fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
     let Some(scene) = value

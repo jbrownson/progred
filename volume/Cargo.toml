@@ -1,0 +1,11 @@
+[package]
+name = "volume"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+fidget-engine = { workspace = true, features = ["mesh"] }
+incremental.workspace = true
+nalgebra = "0.35"
+puri.workspace = true

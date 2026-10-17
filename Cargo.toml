@@ -14,6 +14,7 @@ members = [
     "vendor/fidget-core",
     "vendor/fidget-raster",
     "vendor/fidget-wgpu",
+    "volume",
 ]
 
 [workspace.package]
@@ -42,6 +43,7 @@ skrifa = "0.44.0"
 ui-events = "0.3"
 uig = { path = "ui/uig" }
 vello = "0.11.0"
+volume = { path = "volume" }
 wasm-bindgen = "0.2"
 web-sys = "0.3"
 
