@@ -281,20 +281,20 @@ handle the shortcut first and select their own text.
 ## Completion
 
 The projection drawing a hole decides what it offers. A hole is a pending value
-or label; its projection requests completion explicitly and may hand it a
-provider, which is then the hole's whole vocabulary: the picker shows those
-offers and nothing else. A hole no projection supplies offers for is Raw's: one
-the generic structure projection draws, or one the editor draws itself. Raw
-offers the editor's constructors and what's typed, read as a value: what the
+or label; its projection draws a [picker](../progred/src/display/widget/picker.rs)
+there, an ordinary toolkit widget, and gives it the hole's offers. A
+projection's own offers, ranked against the query, are then the hole's whole
+vocabulary: the picker shows those offers and nothing else. The generic
+structure projection's holes, and the hole the editor draws for a missing value
+no projection draws, take Raw's picker. Raw offers the editor's constructors and what's typed, read as a value: what the
 libraries read the query as, such as a number, then text or bytes, or for a
 field a new label named as typed. It offers no existing cells. An existing cell
 is reused by pointing at it (Cmd+click) or pasting it; typing makes something
 new. Outside Raw, the hole at a document's root starts the document: it leads
 with what the libraries start one as, such as a Grap program or a Fidget scene,
-then offers Raw's. Completion is an ordinary native widget function; its explicit kind and provider
-arguments go to a scoped app adapter returning the same measured widget output as
-other projections. No provider is hidden in traversal context. Only the active
-picker asks for offers.
+then offers Raw's. A picker can also take keys that choose an offer at once
+from an empty query, as Raw's brackets do. No provider is hidden in traversal
+context. Only the active picker asks for offers.
 
 This is a deliberately simple starting point, reached by removing more
 elaborate behavior. What was removed, and what may come back in another form,
@@ -450,7 +450,7 @@ insertion, or Grap. The editor owns document operations and query state. See
 [ranking](../progred/src/display/widget/offers.rs),
 [Raw's offers](../progred/src/display/raw.rs),
 [committing a choice](../progred/src/completion.rs), and
-[document adaptation](../progred/src/projection/completion.rs).
+[the picker](../progred/src/display/widget/picker.rs).
 The card meets the query's painted frame, accounting for the frame outline and
 both border widths. Placement uses those same drawing parameters above or below
 the query, and includes the card's stroke when keeping it within the viewport.

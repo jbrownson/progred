@@ -3,10 +3,22 @@
 //! Grap's slots do.
 
 use crate::display::widget::offers::{Entry, HoleOffers, entry, rank};
+use crate::display::widget::picker::Picker;
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face};
 use crate::libraries::{blob, name, text};
 use gid::{Value, new_cell_id};
 use std::rc::Rc;
+
+/// Raw's picker for a hole of `kind`, its brackets making its constructors.
+pub fn picker(kind: CompletionKind) -> Picker {
+    Picker::new(kind, offers()).with_keys(keys(kind))
+}
+
+/// The picker of a document's empty root: Raw's, led by what the libraries
+/// start a document as.
+pub fn start_picker() -> Picker {
+    Picker::new(CompletionKind::Value, start()).with_keys(keys(CompletionKind::Value))
+}
 
 /// Raw's offers: the editor's constructors, and what's typed read as a value,
 /// or for a field's label a new cell named as typed. An empty query reads as
@@ -14,13 +26,12 @@ use std::rc::Rc;
 /// text and bytes lead; otherwise a reading that spells the query exactly
 /// comes first, then the constructors the query names, then the other
 /// readings and the text.
-pub fn offers() -> HoleOffers {
+fn offers() -> HoleOffers {
     Rc::new(entries)
 }
 
-/// A document's empty root's offers: what the libraries start a document as,
-/// then [`offers`].
-pub fn start() -> HoleOffers {
+/// What the libraries start a document as, then [`offers`].
+fn start() -> HoleOffers {
     Rc::new(|request| {
         let start = CompletionRequest {
             scope: CompletionScope::Start,
@@ -46,7 +57,7 @@ pub fn constructors(kind: CompletionKind) -> Vec<Completion> {
 /// The [`constructors`] beside their delimiters: `(` for the cell, `[` for
 /// the list and `{` for the record. Raw's holes make one at once when its
 /// delimiter is typed into an empty query.
-pub fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
+fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
     let cell = Completion::new("new cell", move |world| match kind {
         CompletionKind::Value => crate::editing::commit_container(world, new_cell_id().into()),
         CompletionKind::Field => crate::editing::commit_label(

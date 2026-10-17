@@ -1,22 +1,21 @@
-//! Adapt completion offers and pending queries to the editor’s floating card.
+//! A hole and its picker: a missing value, or a new field's label, that while
+//! selected takes a query and lists offers for it on the floating card.
+//! Projections draw one where they want a hole, with their own offers or
+//! Raw's.
 
-use super::{
-    Cx, SharedPath, atom_content, edit_presentation, hover_block, hover_claim, hover_highlight,
-    placeholder_box, primary_highlight, tree_hovered,
-};
-use crate::display::raw;
-use crate::display::widget::offers::{HoleOffers, Offers, ranked};
-use crate::display::{Completion, CompletionKind, CompletionProvider};
+use crate::display::widget::offers::{HoleOffers, Offers};
+use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::placed::{self, HoverPass, before, decorate, on_key};
+use crate::projection::Cx;
 use crate::render::text;
 use crate::selection::{Selection, Stage};
-use gid::Path;
+use gid::Step;
 use kurbo::Insets;
 use measured::{Measured, min_width, pad};
 use puri::Point;
-use puri::edit::{LineEditPointerDown, LineEditState};
+use puri::edit::{LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
@@ -24,65 +23,63 @@ use puri_widgets::text_frame;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
 
-/// What a hole's picker lists for a query, and the keys that choose an offer
-/// at once from an empty query, as Raw's brackets do.
-pub(super) struct Hole {
-    offers: HoleOffers,
-    keys: Vec<(&'static str, Completion)>,
+/// What a hole lists for a query, and how it chooses.
+#[derive(Clone)]
+pub struct Picker {
+    /// A missing value, or a new field's label.
+    pub kind: CompletionKind,
+    pub offers: HoleOffers,
+    /// Typed into an empty query, each chooses its offer at once, as Raw's
+    /// brackets make its constructors. Elsewhere a delimiter is text.
+    pub keys: Vec<(&'static str, Completion)>,
 }
 
-impl Hole {
-    /// Raw's offers, with its brackets as keys.
-    pub(super) fn raw(kind: CompletionKind) -> Self {
+impl Picker {
+    pub fn new(kind: CompletionKind, offers: HoleOffers) -> Self {
         Self {
-            offers: raw::offers(),
-            keys: raw::keys(kind),
-        }
-    }
-
-    /// A document's empty root's: what the libraries start a document as,
-    /// then Raw's offers.
-    pub(super) fn start() -> Self {
-        Self {
-            offers: raw::start(),
-            keys: raw::keys(CompletionKind::Value),
-        }
-    }
-
-    /// A projection's own vocabulary. A delimiter is text there.
-    fn projection(provider: &CompletionProvider) -> Self {
-        Self {
-            offers: ranked(provider.clone()),
+            kind,
+            offers,
             keys: Vec::new(),
         }
     }
+
+    pub fn with_keys(self, keys: Vec<(&'static str, Completion)>) -> Self {
+        Self { keys, ..self }
+    }
 }
 
-pub(crate) fn control(
-    context: &mut crate::display::widget::Context<'_, '_, crate::Editor, Hovered>,
-    kind: CompletionKind,
-    provider: Option<&CompletionProvider>,
+/// A hole where this projection is drawn, choosing from `picker`'s offers.
+pub fn picker(picker: Picker) -> crate::view::Layout {
+    crate::display::Layout::widget(Rc::new(move |context| {
+        #[cfg(all(test, feature = "layout-profile"))]
+        let _profile = crate::display::profile::enter(crate::display::profile::Kind::Completion);
+        hole(context.inputs, context.text, context.path, &picker)
+    }))
+}
+
+/// The hole at `path`, as [`picker`] draws it.
+pub(crate) fn hole(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let hole = provider.map_or_else(|| Hole::raw(kind), Hole::projection);
-    match kind {
-        CompletionKind::Value => {
-            pending_view(context.inputs, context.text, context.path.to_vec(), &hole)
-        }
-        CompletionKind::Field => context
-            .inputs
-            .pending_edge_under(context.path)
-            .map(|query| label_query(context.inputs, context.text, context.path, query, &hole))
-            .unwrap_or_else(|| text(context.text, "…", &context.inputs.styles.dim)),
+    match picker.kind {
+        CompletionKind::Value => pending_view(cx, tcx, path.to_vec(), picker),
+        CompletionKind::Field => cx
+            .pending_edge_under(path)
+            .map(|query| label_query(cx, tcx, path, query, picker))
+            .unwrap_or_else(|| text(tcx, "…", &cx.styles.dim)),
     }
 }
 
 /// A missing value with ordinary selection and navigation behavior.
 /// The active selection replaces its empty frame with a completion query.
-pub(super) fn pending_view(
+fn pending_view(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: Path,
-    hole: &Hole,
+    path: Vec<Step>,
+    picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
     let writable = cx.edits.writable(&cx.sources, &path);
     let selected = cx.selection.filter(|current| {
@@ -94,21 +91,21 @@ pub(super) fn pending_view(
         .filter(|current| current.edit().is_none())
         .map(Selection::initial_query);
     let engaged = selected.and_then(Selection::edit).or(default.as_ref());
-    let content = placeholder(cx, tcx, &path, engaged, false, hole);
+    let content = placeholder(cx, tcx, &path, engaged, picker);
     // Selection draws the same outline as the inactive frame.
     pending_target(cx, path, content)
 }
 
 fn pending_target(
     cx: &Cx,
-    path: Path,
+    path: Vec<Step>,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let path: SharedPath = Rc::from(path);
+    let path: Rc<[Step]> = Rc::from(path);
     let scale = cx.styles.scale;
     let palette = cx.styles.palette;
     let selected = cx.selected(path.as_ref());
-    let select = super::select_handler(path.clone(), cx);
+    let select = crate::projection::select_handler(path.clone(), cx);
     let stop = path.clone();
     let child = crate::display::widget::before_place(child, move |_, output| {
         output.navigation_stop(stop, selected);
@@ -126,15 +123,15 @@ fn pending_target(
         let highlight_path = path.clone();
         p.render(move |cv, hover| {
             if selected {
-                primary_highlight(palette, scale, cv, outline);
+                crate::display::widget::style::primary_highlight(palette, scale, cv, outline);
             } else if matches!(
-                tree_hovered(hover),
-                Some(Hover::Value(hovered)) if hovered == &highlight_path
+                hover.hovered.as_ref(),
+                Some(Hovered::Tree(Hover::Value(hovered))) if hovered == &highlight_path
             ) {
-                hover_highlight(palette, scale, cv, outline);
+                crate::display::widget::style::hover_highlight(palette, scale, cv, outline);
             }
         });
-        hover_claim(p, placement, Hover::Value(path.clone()));
+        p.claim(placement, Hovered::Tree(Hover::Value(path.clone())));
         let select = select.clone();
         p.activate(Hovered::Tree(Hover::Value(path.clone())), move |ctx| {
             select(ctx)
@@ -145,47 +142,40 @@ fn pending_target(
 fn placeholder(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: &[gid::Step],
+    path: &[Step],
     engaged: Option<&LineEditState>,
-    labels: bool,
-    hole: &Hole,
+    picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
     match engaged {
-        Some(query) => query_content(cx, tcx, path, query, labels, hole),
-        None => placeholder_box(tcx, cx.styles),
+        Some(query) => query_content(cx, tcx, path, query, picker),
+        None => crate::display::widget::empty(tcx, cx.styles),
     }
 }
 
 /// A focused completion query: the editor plus an ordinary floating
-/// card. Serves both pending stages — a value and a new field's label
-/// (`labels` narrows the offers there).
+/// card. Serves both pending stages — a value and a new field's label.
 fn query_content(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: &[gid::Step],
+    path: &[Step],
     query: &LineEditState,
-    labels: bool,
-    hole: &Hole,
+    picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
     // This is only reached for an active writable picker. Keep the boundary
     // total if a caller supplies an unmapped occurrence anyway.
     let Some(location) = cx.edits.source(path) else {
-        return placeholder_box(tcx, cx.styles);
+        return crate::display::widget::empty(tcx, cx.styles);
     };
     // The card and keyboard commit must answer from one list, read from
     // where the hole's location starts.
     let start = location.start;
-    let value_at = move |path: &[gid::Step]| cx.sources.read_from(start, path);
+    let value_at = move |path: &[Step]| cx.sources.read_from(start, path);
     let resolve = |cell| cx.sources.definition(cell);
-    let request = crate::display::CompletionRequest {
+    let request = CompletionRequest {
         raw: cx.raw,
         query: query.text(),
-        kind: if labels {
-            CompletionKind::Field
-        } else {
-            CompletionKind::Value
-        },
-        scope: crate::display::CompletionScope::Everything,
+        kind: picker.kind,
+        scope: CompletionScope::Everything,
         path: &location.path,
         value_at: &value_at,
         resolve: &resolve,
@@ -193,17 +183,19 @@ fn query_content(
         name: &|cell| cx.sources.name(cell),
         libraries: cx.completions,
     };
-    let entries = (hole.offers)(&request);
-    let fallback = text(tcx, "…", &cx.styles.dim);
-    let presentation = edit_presentation(&cx.styles.label);
-    let content = atom_content(
-        Some(query),
-        cx.focused,
-        fallback,
-        presentation.clone(),
-        None,
+    let entries = (picker.offers)(&request);
+    let presentation =
+        LineEditPresentation::new(cx.styles.label.size, cx.styles.label.brush.clone());
+    let content = crate::render::text_edit(
+        LineEditDescription {
+            state: query,
+            focused: cx.focused,
+            presentation: presentation.clone(),
+            style: &cx.styles.edit,
+            placeholder: None,
+        },
         tcx,
-        cx.styles,
+        crate::editing::edit_query,
     );
     // Preserve the empty frame's width while the query is short.
     let content = min_width(
@@ -220,7 +212,7 @@ fn query_content(
         // Clicks in the query place the caret, straight through the
         // edit hook — the selection transition is never involved, so
         // clicking what you are typing can't discard it.
-        hover_block(p, placement);
+        p.occlude(placement);
         p.handler().on_pointer_down(move |ctx, event| {
             is_primary_contact(event)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
@@ -270,10 +262,8 @@ fn query_content(
         },
         move |world, view| crate::editing::completion_view(world, &root, view.scroll, view.choice),
     );
-    // A hole's keys make their offer at once when typed into an empty query,
-    // as Raw's brackets make its constructors.
-    let card = if !hole.keys.is_empty() && query.text().is_empty() && !query.is_composing() {
-        let keys = hole.keys.clone();
+    let card = if !picker.keys.is_empty() && query.text().is_empty() && !query.is_composing() {
+        let keys = picker.keys.clone();
         on_key(card, move |world, event| {
             if event.state.is_down()
                 && !(event.modifiers.ctrl() || event.modifiers.meta())
@@ -326,22 +316,27 @@ fn query_content(
 }
 
 /// The new-field label stage engaged, its query wearing the primary
-/// ring explicitly: a pending edge has no path of its own for
-/// [`descend`] to mark, and the ring spans the QUERY frame alone, the
-/// way a value pending's does. Clicks inside belong to the query's
+/// ring explicitly: a pending edge has no path of its own for the
+/// engine's landmark to mark, and the ring spans the QUERY frame alone,
+/// the way a value pending's does. Clicks inside belong to the query's
 /// own caret target; clicks beside fall through like any pending's.
-pub(super) fn label_query(
+fn label_query(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: &[gid::Step],
+    path: &[Step],
     query: &LineEditState,
-    hole: &Hole,
+    picker: &Picker,
 ) -> Measured<HoverPass<crate::Editor>> {
     let scale = cx.styles.scale;
-    let content = placeholder(cx, tcx, path, Some(query), true, hole);
+    let content = placeholder(cx, tcx, path, Some(query), picker);
     let palette = cx.styles.palette;
     let ringed = decorate(content, move |p, rect| {
-        primary_highlight(palette, scale, p, text_frame::outline(scale, rect));
+        crate::display::widget::style::primary_highlight(
+            palette,
+            scale,
+            p,
+            text_frame::outline(scale, rect),
+        );
     });
     // The ring's outset rides inside the node, so glued neighbors —
     // the colon, a flat comma — clear its ink.

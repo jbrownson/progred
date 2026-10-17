@@ -66,9 +66,10 @@ pub(crate) fn completion_entries_with(
 ) -> Vec<Entry<CompletionResult>> {
     use crate::display::{CompletionRequest, CompletionScope};
     let value_at = |path: &[Step]| sources.resolve_path(path);
-    let offers = contextual.map_or_else(crate::display::raw::offers, |provider| {
-        crate::display::widget::offers::ranked(provider.clone())
-    });
+    let offers = contextual.map_or_else(
+        || crate::display::raw::picker(*kind).offers,
+        |provider| crate::display::ranked(provider.clone()),
+    );
     offers(&CompletionRequest {
         raw,
         query,

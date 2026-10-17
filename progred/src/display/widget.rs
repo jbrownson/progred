@@ -28,6 +28,7 @@ pub mod line;
 pub mod list;
 pub mod navigation;
 pub mod offers;
+pub mod picker;
 pub mod popover;
 pub mod project;
 pub mod recorded;

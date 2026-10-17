@@ -153,5 +153,5 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
     for provider in [unspecified, empty] {
         assert!(ranked(provider)(&request).is_empty());
     }
-    assert!(!crate::display::raw::offers()(&request).is_empty());
+    assert!(!(crate::display::raw::picker(CompletionKind::Field).offers)(&request).is_empty());
 }

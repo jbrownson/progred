@@ -81,12 +81,12 @@ pub(crate) fn projection() -> Partial {
 
 /// An empty name, which takes whatever is typed as its text.
 pub(crate) fn hole() -> Layout {
-    crate::display::completion(
+    crate::display::picker(crate::display::Picker::new(
         crate::display::CompletionKind::Value,
-        Some(std::rc::Rc::new(|request| {
+        crate::display::ranked(std::rc::Rc::new(|request| {
             Some(vec![text::completion(text::query_spelling(request.query))])
         })),
-    )
+    ))
 }
 
 #[cfg(test)]

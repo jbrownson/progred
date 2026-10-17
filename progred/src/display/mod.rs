@@ -62,6 +62,9 @@ pub use widget::line::{LineEdit, LineUpdate, layout as line_edit};
 
 pub use widget::delimiter::{bracket, selectable_bracket};
 
+pub use widget::offers::ranked;
+pub use widget::picker::{Picker, picker};
+
 pub use measured::RowAlignment;
 
 /// A coordinate-free action. Interaction combinators decide which input
@@ -532,17 +535,6 @@ pub fn subscript<World: 'static, Hover: 'static>(
         paint: Paint::Face(face),
         script: puri::text::Script::Subscript,
     })
-}
-
-pub fn completion(
-    kind: CompletionKind,
-    provider: Option<CompletionProvider>,
-) -> crate::view::Layout {
-    Layout::widget(Rc::new(move |context| {
-        #[cfg(all(test, feature = "layout-profile"))]
-        let _profile = crate::display::profile::enter(crate::display::profile::Kind::Completion);
-        crate::projection::completion::control(context, kind, provider.as_ref())
-    }))
 }
 
 pub fn slot<World: 'static, Hover: 'static>() -> Layout<World, Hover> {

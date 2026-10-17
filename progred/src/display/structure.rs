@@ -317,7 +317,11 @@ pub(crate) fn pending_field(
         block_hover(on_click(
             row(
                 0.0,
-                [completion(CompletionKind::Field, None), dim(": "), slot()],
+                [
+                    picker(raw::picker(CompletionKind::Field)),
+                    dim(": "),
+                    slot(),
+                ],
             ),
             Rc::new(|_| true),
         ))

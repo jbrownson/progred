@@ -426,14 +426,14 @@ The [projection runtime](../progred/src/projection/mod.rs) resolves document
 locations and supplies borrowed widget inputs. The
 [box interpreter](../progred/src/display/measure.rs) composes measurements without
 interpreting document traversal or control requests. Supporting modules separate
-[structural fallback](../progred/src/projection/structure.rs),
-[Grap event adaptation](../progred/src/libraries/layout/events.rs), and
-[completion](../progred/src/projection/completion.rs). The layout library
+[structural fallback](../progred/src/projection/structure.rs) and
+[Grap event adaptation](../progred/src/libraries/layout/events.rs). Holes are the
+toolkit's [picker](../progred/src/display/widget/picker.rs). The layout library
 [records its drawing programs](../progred/src/libraries/layout/drawing.rs) into
 the toolkit's [recorded-drawing leaf](../progred/src/display/widget/recorded.rs).
 The [native completion card](../progred/src/display/widget/completion.rs) owns its
 row interaction, keyboard navigation, scroll composition, and placement against
-its query. The app adapter only supplies offers, query state, and document
+its query. The picker only supplies it offers, query state, and document
 callbacks.
 The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
 `measured`, independently of those editor adaptations.

@@ -666,10 +666,12 @@ fn only_the_active_empty_requests_completion_offers() {
     };
     // Each of the record's empty fields is a hole the projection supplies.
     let hole = crate::display::partial(move |input| {
-        input
-            .value
-            .is_none()
-            .then(|| crate::display::completion(CompletionKind::Value, Some(provider.clone())))
+        input.value.is_none().then(|| {
+            crate::display::picker(crate::display::Picker::new(
+                CompletionKind::Value,
+                crate::display::ranked(provider.clone()),
+            ))
+        })
     });
     let projection = Projection::new([crate::display::partial(move |input| {
         input.value?.as_record()?;

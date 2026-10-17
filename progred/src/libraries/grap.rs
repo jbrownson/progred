@@ -10,9 +10,9 @@ use gid::{CellId, Cells, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::projection::{group, group_hug};
 use crate::display::{
-    Completion, CompletionKind, Delim, Face, Pending, RecordField, ResolvedCell, activatable,
-    alternatives, at, col, completion, descend_local, descend_path_local, dim, faced, pad,
-    record_fragment_with, row, selectable_bracket, shared,
+    Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
+    activatable, alternatives, at, col, descend_local, descend_path_local, dim, faced, pad, picker,
+    ranked, record_fragment_with, row, selectable_bracket, shared,
 };
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -24,10 +24,10 @@ pub(crate) fn expression(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> O
         Some(_) => shallow_cell(input),
         None => (input.default_projection)(&input.with_value(None::<&::grap::RuntimeValue>))
             .or_else(|| {
-                Some(completion(
+                Some(picker(Picker::new(
                     CompletionKind::Value,
-                    Some(std::rc::Rc::new(suggestions::offers)),
-                ))
+                    ranked(std::rc::Rc::new(suggestions::offers)),
+                )))
             }),
     }
 }
@@ -65,9 +65,9 @@ pub(crate) fn shallow_cell_with(
 fn parameter(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     match input.value {
         Some(_) => declaration_cell(input),
-        None => Some(completion(
+        None => Some(picker(Picker::new(
             CompletionKind::Value,
-            Some(std::rc::Rc::new(|request| {
+            ranked(std::rc::Rc::new(|request| {
                 let spelling = request.query.trim().to_owned();
                 Some(
                     (!spelling.is_empty())
@@ -91,7 +91,7 @@ fn parameter(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout
                         .collect(),
                 )
             })),
-        )),
+        ))),
     }
 }
 

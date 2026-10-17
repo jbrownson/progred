@@ -1,7 +1,6 @@
 //! The editor's projection runtime: resolve locations, supply borrowed widget inputs,
 //! retain source provenance, and fall back to total structural display.
 
-pub(crate) mod completion;
 pub(crate) mod line_control;
 mod location;
 pub(crate) mod source_link;
@@ -20,12 +19,10 @@ use crate::location::{Location, Start};
 #[cfg(test)]
 use crate::navigate::Descend;
 use crate::placed::{self, HoverPass, before, decorate};
-use crate::render;
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
 use crate::styles::Styles;
 use crate::view::{Layout, Partial};
-use completion::pending_view;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use kurbo::Point;
@@ -34,10 +31,9 @@ use measured::Measured;
 use measured::choices::{ChoiceBuild, ChoiceGraph, ChoiceLayout, resolve_choices};
 use peniko::Color;
 use puri::draw::Canvas;
-use puri::edit::{LineEditDescription, LineEditPresentation, LineEditState};
-use puri::geometry::Placement;
+use puri::edit::LineEditState;
 use puri::handler::HasHandler;
-use puri::text::{TextCtx, TextStyle};
+use puri::text::TextCtx;
 use std::collections::HashSet;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
@@ -559,27 +555,6 @@ impl Cx<'_> {
     }
 }
 
-fn edit_presentation(style: &TextStyle) -> LineEditPresentation {
-    LineEditPresentation::new(style.size, style.brush.clone())
-}
-
-fn placeholder_box(tcx: &mut TextCtx, styles: &Styles) -> Measured<HoverPass<crate::Editor>> {
-    crate::display::widget::empty(tcx, styles)
-}
-
-/// The pointer over this settled rect names `key`, with the visible
-/// ink as its footprint. Placement order is precedence: descendants
-/// and overlays contribute later and answer first.
-fn hover_claim(p: &mut placed::Builder<'_, '_, crate::Editor>, placement: Placement, key: Hover) {
-    p.claim(placement, Hovered::Tree(key));
-}
-
-/// An occluder: takes the pointer and names nothing, so targets
-/// beneath an overlay never light.
-fn hover_block(p: &mut placed::Builder<'_, '_, crate::Editor>, placement: Placement) {
-    p.occlude(placement);
-}
-
 /// The explicit-state boundary: everything a projection pass reads.
 /// `width` is the space the projection may fill. `root` and
 /// `root_path` let an editor pane begin at a value occurrence
@@ -942,12 +917,12 @@ fn prepare_value(
         None => {
             // A document's root is where the document starts: outside Raw,
             // its hole leads with what the libraries start one as.
-            let hole = if path.is_empty() && !cx.raw {
-                completion::Hole::start()
+            let picker = if path.is_empty() && !cx.raw {
+                crate::display::raw::start_picker()
             } else {
-                completion::Hole::raw(crate::display::CompletionKind::Value)
+                crate::display::raw::picker(crate::display::CompletionKind::Value)
             };
-            ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), &hole))
+            ChoiceLayout::fixed(crate::display::widget::picker::hole(cx, tcx, path, &picker))
         }
         Some(layout) => {
             let inner = prepare(
@@ -1101,32 +1076,4 @@ fn pick_target_with(
             true
         });
     })
-}
-
-/// An editable atom's content: the selection's focused editor when
-/// this atom is being edited — with `placeholder` as its ghost while
-/// empty — its static text otherwise.
-fn atom_content(
-    editing: Option<&LineEditState>,
-    focused: bool,
-    fallback: Measured<HoverPass<crate::Editor>>,
-    presentation: LineEditPresentation,
-    placeholder: Option<(&str, &TextStyle)>,
-    tcx: &mut TextCtx,
-    styles: &Styles,
-) -> Measured<HoverPass<crate::Editor>> {
-    match editing {
-        Some(line) => render::text_edit(
-            LineEditDescription {
-                state: line,
-                focused,
-                presentation,
-                style: &styles.edit,
-                placeholder,
-            },
-            tcx,
-            crate::editing::edit_query,
-        ),
-        None => fallback,
-    }
 }
