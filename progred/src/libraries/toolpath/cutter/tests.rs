@@ -1,8 +1,7 @@
 use super::super::paths::{Axis, InvalidPath};
 use super::*;
 use crate::libraries::{absent, f64};
-use fidget_engine::context::Tree;
-use fidget_engine::{shape::EzShape, vm::VmShape};
+use fidget_engine::{context::Tree, shape::EzShape, vm::VmShape};
 use gid::Value;
 
 mod encoding;
