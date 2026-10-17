@@ -305,27 +305,12 @@ fn drawing_frame(
     libraries: &Libraries,
     shape_function: CellId,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
-    let annotations = Annotations::default();
-    let cx = Cx {
-        focused: true,
-        edits: Default::default(),
-        computations: None,
-        view: &crate::test_root(),
-        completions: None,
-        sources: Sources { doc, libraries },
-        raw: false,
-        annotations: &annotations,
-        styles: &styles,
-        selection: None,
-        selected_trace: None,
-    };
-    crate::projection::drawing::program_leaf(
-        &cx,
-        &[],
-        40.0,
-        0.0,
-        40.0,
+    let layout = crate::projection::drawing::program(
+        Extent {
+            width: 40.0,
+            ascent: 0.0,
+            descent: 40.0,
+        },
         100,
         grap::call(
             Value::from(layout_data::vocabulary::FILL),
@@ -339,8 +324,16 @@ fn drawing_frame(
                     crate::libraries::color::value(Color::BLACK),
                 ),
             ],
-        ),
-    )
+        )
+        .into(),
+    );
+    let mut build = measured::choices::ChoiceBuild::default();
+    let prepared = crate::display::test_support::with_sources(
+        Sources { doc, libraries },
+        &crate::display::test_support::NoProject,
+        |context| layout.measure(context, &mut build),
+    );
+    measured::choices::resolve_choices(build.finish(prepared), 40.0, false)
 }
 
 #[test]

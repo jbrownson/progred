@@ -30,6 +30,7 @@ pub mod navigation;
 pub mod offers;
 pub mod popover;
 pub mod project;
+pub mod recorded;
 pub mod scroll;
 pub mod source;
 pub mod style;

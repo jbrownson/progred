@@ -1,7 +1,12 @@
 use super::*;
+use crate::display::widget::recorded::Drawing;
+use crate::frame::Hovered;
+use crate::hover::SourceTrace;
 use crate::library::Libraries;
 use crate::location::Location;
+use crate::sources::Sources;
 use gid::{Cells, Resolution, new_cell_id};
+use kurbo::Point;
 
 #[test]
 fn declining_after_drawing_discards_the_whole_recording() {
@@ -50,26 +55,25 @@ fn declining_after_drawing_discards_the_whole_recording() {
         library,
         crate::library::Definitions::from_parts(fallback, Default::default()),
     );
-    let drawing = record_program(
-        sequence(vec![
-            grap::call(draw::PATH.into(), []),
-            point(draw::MOVE_TO, 0.0, 0.0),
-            point(draw::LINE_TO, 10.0, 10.0),
-            grap::call(function.into(), []),
-        ]),
+    let drawing = Drawing::of(
+        &record(
+            sequence(vec![
+                grap::call(draw::PATH.into(), []),
+                point(draw::MOVE_TO, 0.0, 0.0),
+                point(draw::LINE_TO, 10.0, 10.0),
+                grap::call(function.into(), []),
+            ])
+            .into(),
+            200,
+        ),
         &Sources {
             doc: &doc,
             libraries: &stack.libraries,
         },
-        &Faces::new(&crate::styles::editor(
-            crate::styles::Theme::Light.palette(),
-            1.0,
-        )),
-        Some(&SourceTrace::Stored(Rc::from([]))),
-        200,
+        Some(SourceTrace::Stored(Rc::from([]))),
+        &crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
     );
-    assert!(drawing.commands.0.is_empty());
-    assert!(drawing.hits.is_empty());
+    assert!(drawing.is_empty());
 }
 
 #[test]
@@ -117,17 +121,13 @@ fn recorded_hits_keep_the_executing_library_definition() {
             doc: &doc,
             libraries: &libraries,
         };
-        let drawing = record_program(
-            grap::call(Value::from(function), []),
+        let drawing = Drawing::of(
+            &record(grap::call(Value::from(function), []).into(), 100),
             &sources,
-            &Faces::new(&crate::styles::editor(
-                crate::styles::Theme::Light.palette(),
-                1.0,
-            )),
-            Some(&SourceTrace::Stored(Rc::from([]))),
-            100,
+            Some(SourceTrace::Stored(Rc::from([]))),
+            &crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
         );
-        assert_eq!(drawing.hits.len(), 1);
+        assert_eq!(drawing.hits(), 1);
         let selected = SourceTrace::from_location(
             &sources,
             &Location::root(vec![
@@ -135,8 +135,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
                 Step::Key(grap::vocabulary::BODY),
             ]),
         );
-        let Some(Hovered::Tree(hover)) = drawing.target_at(Point::new(5.0, 5.0), Affine::IDENTITY)
-        else {
+        let Some(Hovered::Tree(hover)) = drawing.target_at(Point::new(5.0, 5.0)) else {
             panic!("drawing should have a source");
         };
         assert_eq!(
@@ -150,103 +149,6 @@ fn recorded_hits_keep_the_executing_library_definition() {
                 Step::Key(grap::vocabulary::BODY),
             ]),
         );
-        let mut highlight = DrawList::new();
-        drawing.highlight(
-            &mut highlight,
-            Affine::IDENTITY,
-            &other,
-            &Brush::from(peniko::Color::WHITE),
-        );
-        assert!(highlight.0.is_empty());
+        assert!(!drawing.highlights(&other));
     }
-}
-
-#[test]
-fn recorded_hits_use_paint_order_and_the_current_placement() {
-    let back = SourceTrace::Stored(Rc::from([Step::Key(new_cell_id())]));
-    let front = SourceTrace::Stored(Rc::from([Step::Key(new_cell_id())]));
-    let drawing = Recorded {
-        commands: DrawList::new(),
-        hits: vec![
-            Hit::new(
-                puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
-                Affine::IDENTITY,
-                back,
-            ),
-            Hit::new(
-                puri::Shape::Circle(Circle::new((5.0, 5.0), 4.0)),
-                Affine::IDENTITY,
-                front.clone(),
-            ),
-        ],
-    };
-
-    assert_eq!(
-        drawing.target_at(Point::new(25.0, 35.0), Affine::translate((20.0, 30.0)),),
-        Some(Hovered::Tree(Hover::Source(front))),
-    );
-}
-
-#[test]
-fn a_source_descendant_does_not_highlight_its_operation() {
-    let cell = new_cell_id();
-    let call = new_cell_id();
-    let argument = new_cell_id();
-    let source = SourceTrace::InCell {
-        cell,
-        source: Resolution::Document,
-        path: Rc::from([Step::Key(call)]),
-    };
-    let hovered = SourceTrace::InCell {
-        cell,
-        source: Resolution::Document,
-        path: Rc::from([Step::Key(call), Step::Key(argument)]),
-    };
-    let drawing = Recorded {
-        commands: DrawList::new(),
-        hits: vec![Hit::new(
-            puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
-            Affine::IDENTITY,
-            source,
-        )],
-    };
-    let mut highlighted = DrawList::new();
-
-    drawing.highlight(
-        &mut highlighted,
-        Affine::IDENTITY,
-        &hovered,
-        &Brush::from(peniko::Color::WHITE),
-    );
-
-    assert!(highlighted.0.is_empty());
-}
-
-#[test]
-fn an_exact_source_highlights_its_operation() {
-    let cell = new_cell_id();
-    let call = new_cell_id();
-    let source = SourceTrace::InCell {
-        cell,
-        source: Resolution::Document,
-        path: Rc::from([Step::Key(call)]),
-    };
-    let drawing = Recorded {
-        commands: DrawList::new(),
-        hits: vec![Hit::new(
-            puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
-            Affine::IDENTITY,
-            source.clone(),
-        )],
-    };
-    let mut highlighted = DrawList::new();
-
-    drawing.highlight(
-        &mut highlighted,
-        Affine::IDENTITY,
-        &source,
-        &Brush::from(peniko::Color::WHITE),
-    );
-
-    assert_eq!(highlighted.0.len(), 1);
 }

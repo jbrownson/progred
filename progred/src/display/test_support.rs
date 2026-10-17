@@ -215,14 +215,30 @@ pub fn with_context<W: 'static, H: 'static, R>(
     project: &dyn widget::project::Project<W, H>,
     run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
 ) -> R {
-    let mut fonts = crate::fonts::bundled_font_context();
-    let mut layouts = LayoutContext::new();
-    let mut cache = TextCache::default();
     let document = gid::Document {
         root: None,
         cells: gid::Cells::new(),
     };
     let libraries = crate::library::Libraries::default();
+    with_sources(
+        crate::sources::Sources {
+            doc: &document,
+            libraries: &libraries,
+        },
+        project,
+        run,
+    )
+}
+
+/// [`with_context`] reading through `sources`.
+pub fn with_sources<W: 'static, H: 'static, R>(
+    sources: crate::sources::Sources<'_>,
+    project: &dyn widget::project::Project<W, H>,
+    run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
+) -> R {
+    let mut fonts = crate::fonts::bundled_font_context();
+    let mut layouts = LayoutContext::new();
+    let mut cache = TextCache::default();
     let root = crate::test_root();
     let annotations = crate::annotations::Annotations::default();
     let styles = widget::style::editor(widget::style::Theme::Light.palette(), 1.0);
@@ -232,10 +248,7 @@ pub fn with_context<W: 'static, H: 'static, R>(
         computations: None,
         view: &root,
         completions: None,
-        sources: crate::sources::Sources {
-            doc: &document,
-            libraries: &libraries,
-        },
+        sources,
         raw: false,
         annotations: &annotations,
         styles: &styles,

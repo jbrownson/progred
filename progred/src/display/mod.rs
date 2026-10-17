@@ -1063,17 +1063,7 @@ pub fn drawing_program(
     fuel: usize,
     program: grap::RuntimeValue,
 ) -> crate::view::Layout {
-    Layout::widget(Rc::new(move |context| {
-        crate::projection::drawing::program_leaf(
-            context.inputs,
-            context.path,
-            extent.width,
-            extent.ascent,
-            extent.descent,
-            fuel,
-            program.clone(),
-        )
-    }))
+    crate::projection::drawing::program(extent, fuel, program)
 }
 
 #[cfg(test)]
