@@ -280,6 +280,10 @@ first:
    - **Write side.** It replaces handing handlers the whole editor. It covers
      edits where they are allowed, the selection, per-path state, drags, and
      the picker.
+   - **Text in Grap.** Grap should lower text the way it lowers f64 numbers,
+     and own text's encoding beside f64's. This is the owner's direction from
+     17 October 2026. More number formats will come later, with no rush, so
+     lowering should make a new format straightforward to add.
    - **Library vocabularies.** The core libraries' vocabularies, such as
      text, names and numbers, can stay referenced by the editor, and the
      library interface can grow where that removes a reference. The
