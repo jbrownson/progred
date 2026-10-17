@@ -4,25 +4,25 @@ use super::*;
 #[test]
 #[ignore = "paired full-editor CAM orbit draw/composition timing; no app launch"]
 fn cam_mesh_roundtrip_profile() {
-    use super::super::svg;
     use crate::libraries::{
         controls::vocabulary::STATE, fidget::vocabulary as f, toolpath::vocabulary as t,
     };
+    use crate::test_examples::{cam_controls_path, cam_editor, cam_position, result_path};
     let gpu = gpu::Gpu::new();
     let size = kurbo::Size::new(2400.0, 1800.0);
     let scale = 2.0;
     for progress in [0.02, 0.5] {
-        let mut editor = svg::cam_editor(t::PREVIEW_MESH);
+        let mut editor = cam_editor(t::PREVIEW_MESH);
         editor.model.workspace.left_width = 0.5;
         let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
             .path
             .clone();
-        let controls = svg::cam_controls_path(&path);
-        let camera = svg::result_path(&controls);
+        let controls = cam_controls_path(&path);
+        let camera = result_path(&controls);
         editor.model.workspace.left.panes[0]
             .view
             .annotations
-            .set_field(&controls, STATE, Some(svg::cam_position(progress)));
+            .set_field(&controls, STATE, Some(cam_position(progress)));
         let jobs = Arc::new(Mutex::new(VecDeque::<incremental::background::Job>::new()));
         editor.computations = crate::computations::Computations::new(
             incremental::background::Executor::new({

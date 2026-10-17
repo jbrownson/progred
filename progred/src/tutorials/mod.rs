@@ -12,6 +12,7 @@ use winit::window::CursorIcon;
 
 mod apart;
 mod build;
+mod lessons;
 
 /// The tutorial column's frame less its border, tall enough that no lesson
 /// scrolls.

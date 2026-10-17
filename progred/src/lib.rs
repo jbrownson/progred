@@ -58,6 +58,8 @@ mod spine;
 mod stack;
 mod styles;
 #[cfg(test)]
+mod svg;
+#[cfg(test)]
 mod test_examples;
 #[cfg(test)]
 mod test_support;

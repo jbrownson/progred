@@ -360,10 +360,9 @@ first:
       2026. The harness is the projection runtime's own test support, so it
       times both phases without exposing them. The layout FFI tests moved to
       the layout library and the Fidget render check to the Fidget library.
-      The frame canaries can follow into a perf module of their own once the
-      forest editor they share with the SVG captures moves to test support,
-      and once they add their partials before the view adds its entry,
-      instead of replacing the projection's private partial.
+      The frame canaries can follow into a perf module of their own once they
+      add their partials before the view adds its entry, instead of replacing
+      the projection's private partial.
    5. Give the driver the verbs that end-to-end tests now reach around it
       for, and move the 67 of them onto it:
       - select a path;
@@ -377,9 +376,13 @@ first:
       Many of those tests now re-implement the shell's key routing.
    6. Rewrite 30 tests that drive the whole editor but check one system.
    7. Give the captures and the frame canaries modules of their own, with the
-      SVG writer in test support. The two GPU mesh tests moved to puri-vello
-      on 17 October 2026, with the image round trip they compare against in
-      its `capture` module.
+      SVG writer in test support. On 17 October 2026 the two GPU mesh tests
+      moved to puri-vello, with the image round trip they compare against in
+      its `capture` module, and the SVG writer and its captures to
+      `crate::svg`. The lesson tests went to the tutorials, the failed
+      toolpath preview to the toolpath library, and the example editors they
+      share to `crate::test_examples`. The frame canaries and the full-editor
+      GPU tests remain.
 
    CAM tests took 84% of progred's test time, running Fidget's generic
    meshing and rendering and the cutter geometry at progred's debug level. On

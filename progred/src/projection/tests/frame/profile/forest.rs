@@ -48,7 +48,7 @@ fn measure(label: &str, mut frame: impl FnMut(usize) -> &'static str) {
 #[test]
 #[ignore = "opt-in headless frame profile"]
 fn forest_slider_profile_loop() {
-    let (editor, names) = super::super::svg::website_growing_forest_editor();
+    let (editor, names) = crate::test_examples::website_growing_forest_editor();
     let mut runner = crate::EditorRunner::new(editor);
     measure("forest slider-value frame", |index| {
         runner
@@ -76,7 +76,7 @@ fn forest_slider_profile_loop() {
 #[test]
 #[ignore = "opt-in headless frame profile"]
 fn forest_source_hover_profile_loop() {
-    let (editor, names) = super::super::svg::website_growing_forest_editor();
+    let (editor, names) = crate::test_examples::website_growing_forest_editor();
     let mut runner = crate::EditorRunner::new(editor);
     let modifiers = crate::modifiers::command();
     runner.editor.modifiers = modifiers;

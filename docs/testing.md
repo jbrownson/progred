@@ -63,11 +63,12 @@ visual testing.
 
 ## Pictures
 
-`make test` includes the `svg_bench` tests, which render the sample, the Grap
-demo, and other fixtures to SVG in the build directory, `target/sandbox/build`.
-The ignored `editor_svg_captures` and
-progressive CAM captures paint whole editor frames; see
-[performance checks](performance.md#headless-editor-captures). `make images`
+The SVG writer and the captures that use it live in
+[`progred/src/svg.rs`](../progred/src/svg.rs). `make test` includes the
+`svg_bench` tests, which render the sample, the Grap demo, and other fixtures
+to SVG in the build directory, `target/sandbox/build`. The ignored
+`editor_svg_captures` and progressive CAM captures paint whole editor frames;
+see [performance checks](performance.md#headless-editor-captures). `make images`
 regenerates the README and website screenshots. The `delimiter_bench` example
 of `puri` renders the drawn delimiters against the font's outlines. Convert
 SVGs to PNG with `rsvg-convert` from librsvg.

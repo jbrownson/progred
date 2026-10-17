@@ -2,6 +2,8 @@ use super::*;
 use crate::libraries::{
     controls::vocabulary::STATE, fidget::vocabulary as f, toolpath::vocabulary as t,
 };
+use crate::test_examples::{cam_controls_path, cam_editor, cam_position, result_path};
+use gid::Value;
 use incremental::background::{Executor, Job};
 use std::{
     collections::VecDeque,

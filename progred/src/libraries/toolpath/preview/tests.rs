@@ -20,3 +20,5 @@ fn fits_extents_and_preserves_disconnected_passes() {
     assert!(bounds.x0 >= 15.99 && bounds.y0 >= 15.99);
     assert!(bounds.x1 <= 584.01 && bounds.y1 <= 284.01);
 }
+
+mod frames;

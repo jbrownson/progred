@@ -1,5 +1,5 @@
-use super::svg::write_cmds;
 use super::*;
+use crate::svg::write_cmds;
 
 #[test]
 fn grap_template_preview_evaluates_the_shared_cells_current_call() {

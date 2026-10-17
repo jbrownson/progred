@@ -125,4 +125,3 @@ mod layout;
 mod logical_navigation;
 mod navigation;
 mod profile;
-mod svg;
