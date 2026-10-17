@@ -14,7 +14,11 @@ Puri's still use system fonts. While iterating, run a subset by passing Cargo's
 usual arguments through `./tools/sandbox-cargo test` on macOS or
 `./tools/linux-cargo test` on Linux, for example
 `./tools/linux-cargo test -p progred --lib tutorials`, and leave `make test` for
-before pushing. Nothing here needs a window; the owner does the visual testing.
+before pushing. Each feature set and profile keeps its own build of progred, and
+the builds pile up. On 17 October 2026 they filled a cloud session's disk with
+16 GB. `./tools/linux-cargo clean -p progred` removes them and leaves the
+optimized dependencies in place. Nothing here needs a window; the owner does the
+visual testing.
 
 ## Layers
 
