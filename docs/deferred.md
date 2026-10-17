@@ -329,9 +329,12 @@ first:
    targets act through the session too, which a first `Host` lends; the
    session holds the drag, so starting one, folding and picking need no
    editor; and widgets act on their place through an opaque `Site` instead of
-   carrying its view, path and scope. Landmark arrival and the input's targets
-   still hand out closures rather than sites, and the read side (step 7)
-   still reads the view and scope for memo keys and writability. Also done:
+   carrying its view, path and scope. Landmark arrival still takes the
+   world: the frame that runs it, keyboard navigation included, is generic
+   over its world until display goes generic over `Host` (step 8). The
+   input's targets still hand out closures rather than sites, and the read
+   side (step 7) still reads the view and scope for memo keys and
+   writability. Also done:
    the picker note's first three (the card, its
    placement and the selection ring moved to display, then Raw's offers and
    the ranking of a projection's, then the picker itself as a toolkit widget),
