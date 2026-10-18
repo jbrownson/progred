@@ -156,17 +156,18 @@ pub enum Entry {
 #[derive(Default, Debug, PartialEq)]
 pub struct Recording {
     pub entries: Vec<Entry>,
-    /// Segment boundaries of the program leaves, when recording a grouped program.
-    /// Kept by the playback consumer; ordinary streaming sinks need no hierarchy.
-    parts: Vec<std::ops::Range<usize>>,
+    /// Segment boundaries of the program leaves, when recording a grouped
+    /// program: the segment count at each leaf's end. Kept by the playback
+    /// consumer; ordinary streaming sinks need no hierarchy.
+    parts: Vec<usize>,
     scopes: Vec<(Tool, Vec<Entry>)>,
     started: bool,
 }
 
 impl Recording {
     pub fn append_part(&mut self, part: Recording) {
-        let start = self.parts.last().map_or(0, |range| range.end);
-        self.parts.push(start..start + part.segments().count());
+        let start = self.parts.last().copied().unwrap_or(0);
+        self.parts.push(start + part.segments().count());
         self.entries.extend(part.entries);
         self.end_path();
     }
@@ -182,7 +183,7 @@ impl Recording {
                 Ok(range.start * count..range.end * count)
             }
             Some(range) if range.start <= range.end && range.end <= self.parts.len() => {
-                let boundary = |i: usize| if i == 0 { 0 } else { self.parts[i - 1].end };
+                let boundary = |i: usize| if i == 0 { 0 } else { self.parts[i - 1] };
                 Ok(boundary(range.start)..boundary(range.end))
             }
             _ => Err(InvalidPath::InvalidRange),
