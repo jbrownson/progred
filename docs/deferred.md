@@ -147,6 +147,21 @@ positions fixes that, and a CRDT would need them anyway. Reading could still
 accept a plain `[1, 2, 3]` and mint positions for it, while saving always writes
 them, even if the text gets noisier.
 
+## Names beyond one string
+
+The owner's direction, from 18 October 2026: a name will become more than a
+simple string. A thing may have several names, for different languages and the
+like, maybe even iconic ones, so nothing should build in how a name projects,
+only which field holds it. Searching by name then asks how closely a name
+matches a string, rather than getting a single string from the name.
+
+Today the name library reads a name as one string (`name::of`). Display asks for
+that string twice: its `Env` gives a record's field labels and their order (none
+in Raw's view, which shows ids), and its `Toolkit` gives the picker the text of
+an offer that names a cell, which the query filters and ranks. A field label drawn by
+projecting its name, and a match query in place of the picker's filter, would
+replace both.
+
 ## Completion ranking
 
 Revisit how library-provided offers rank alongside built-in constructors and
@@ -237,7 +252,8 @@ Directions this surfaced:
   - ~~The engine builds the picker around display's card.~~ Since 17 October
     2026 the picker is a toolkit widget a projection draws with its own offers,
     and Raw's picker is one more picker, its brackets the picker's keys.
-  - Choosing an offer receives the whole editor.
+  - ~~Choosing an offer receives the whole editor.~~ Since 17 October 2026 it
+    acts through the session, committing into the open picker's `Picking`.
 - A record combinator taking a spec: expected fields in order, how each field's
   value is drawn and what its hole offers, missing expected fields shown as
   holes, then any other fields. Its "add a field" picker offers the missing
@@ -413,10 +429,11 @@ first:
    - ~~back `editing::Access` with the model and the libraries rather than
      `&mut Editor`, and let the shell set the window title after dispatch;~~
      done on 17 October 2026;
-   - move the hover types and the completion helpers down, and route calls
-     into the projection runtime through `Project`. The per-view bag stays
-     the runtime's: since 17 October 2026 display reads it through
-     `Toolkit`.
+   - ~~move the hover types and the completion helpers down, and route calls
+     into the projection runtime through `Project`.~~ Done by 18 October
+     2026: the hover types and the picker's commit refer only to the core,
+     and display reaches the runtime only through `Project`. The per-view bag
+     stays the runtime's, which display reads through `Toolkit`.
 4. Move projection/tests' frame- and editor-level suites to where they belong,
    leaving only the runtime's own tests; nothing stays anywhere for historical
    reasons, and nothing became visible just for tests. The
@@ -451,7 +468,7 @@ first:
       two groups. Nine write-through tests in projection/tests/editing.rs
       get their editing selection by projecting a frame and pressing End;
       targeted, each would build it from its library's own line editor, as
-      `Selection::from_line` does, before `line_control::commit`. Seven in
+      `Selection::from_line` does, before `editing::commit_line`. Seven in
       frame/layout.rs check the toolkit's placement, hover and dispatch
       through a throwaway projection in a whole frame; targeted, they'd
       measure and place the layout in display's tests, which first needs
@@ -521,15 +538,23 @@ first:
 
    Do this only after item 3 and a `cargo build --timings` baseline. The
    `Host` trait that makes display and the libraries generic over the editor
-   came on 18 October 2026. What still ties core to what would sit above it:
-   Raw's offers read the blob, name and text libraries' codecs, a library
-   names itself through the name library, and the toolkit's navigation
-   geometry and Tab live in the shell's `navigate`, besides item 3's hover
-   types and completion helpers. The
-   saving is in lines, not measured time, and `make test` could get slower for
-   edits to core. The tests that drive the whole editor, frames and driver
-   flows alike, sit beside the display and library code they exercise; the
-   split would move them to the top crate's tests.
+   came on 18 October 2026, and since that day nothing in core or the
+   libraries refers to what would sit above it, outside tests. Raw draws and
+   offers by GID's kinds alone: it asks the libraries what typed text reads
+   as (text, numbers, a new label) and reads blobs in GID's own hex spelling.
+   The name library reads and makes names, and the toolkit asks its
+   `Toolkit` for a cell's name rather than decoding one. Navigation's
+   geometry is display's, leaving only the keys in the shell's `navigate`.
+   The CAM profile loads its document at the top. What's left is mechanical:
+   - the tests that drive the whole editor, frames and driver flows alike,
+     sit beside the display and library code they exercise, and would move to
+     the top crate's tests;
+   - what crosses a crate boundary needs `pub` rather than `pub(crate)`;
+   - the libraries, generic over their host, would be instantiated in the top
+     crate, which the timings baseline should price.
+
+   The saving is in lines, not measured time, and `make test` could get
+   slower for edits to core.
 
 ## Reporting completion failures
 

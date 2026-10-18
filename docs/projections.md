@@ -425,8 +425,9 @@ back to normal projection.
 The [projection runtime](../progred/src/projection/mod.rs) resolves document
 locations and supplies borrowed widget inputs. The
 [box interpreter](../progred/src/display/measure.rs) composes measurements without
-interpreting document traversal or control requests. Supporting modules separate
-[structural fallback](../progred/src/projection/structure.rs) and
+interpreting document traversal or control requests. A value no projection
+accepts falls back to [Raw](../progred/src/display/raw.rs), which draws it by its
+GID kind, and the layout library keeps its
 [Grap event adaptation](../progred/src/libraries/layout/events.rs). Holes are the
 toolkit's [picker](../progred/src/display/widget/picker.rs). The layout library
 [records its drawing programs](../progred/src/libraries/layout/drawing.rs) into
@@ -457,10 +458,11 @@ program without inspecting its props. Placement returns a hover continuation;
 running it contributes native render continuations, handlers, the hover claim,
 and a navigation transition through
 the [widget output interface](../progred/src/display/widget.rs). These are Progred
-widgets, so their handlers receive `&mut Editor` and call ordinary
-[editing helpers](../progred/src/editing.rs); no generic-world callback dictionary
-is installed at each location. The [line adapter](../progred/src/projection/line_control.rs)
-applies editing operations and conversion, with undo grouping owned by Progred. The current
+widgets, generic over the editor that hosts them: a handler opens its
+[site](../progred/src/editing/site.rs) on the host's editing session and calls
+ordinary [editing helpers](../progred/src/editing.rs); no generic-world callback
+dictionary is installed at each location. Editing's `edit_line` applies editing
+operations and conversion, with undo grouping owned by Progred. The current
 handler owns conversion, not the selection payload. The line library adapts
 Grap conversions explicitly; native controls do not round-trip through Grap.
 Completion uses an ordinary native widget factory with explicit kind/provider

@@ -462,8 +462,8 @@ updating a frame never calls the canvas.
 Selection and scrolling are separate operations. Navigation arrival explicitly
 selects and reveals; deletion, pending insertion/cancellation, and Undo/Redo
 explicitly reveal their resulting selection. Native and drawn menus use the same
-commands. `navigate::Geometry` borrows the installed frame's landmarks, view
-regions, and scale; a reveal immediately adjusts the appropriate view's offset.
+commands. Navigation's [`Geometry`](../progred/src/display/widget/navigation/geometry.rs)
+borrows the installed frame's landmarks, view regions, and scale; a reveal immediately adjusts the appropriate view's offset.
 Ordinary pointer selection, completion, and low-level selection/payload setters
 do not implicitly scroll. Widgets that navigate elsewhere can compose selection
 with `reveal_path` or `reveal_selection`, as canvas picking does through `arrive`.

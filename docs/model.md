@@ -203,7 +203,7 @@ callback nor a Grap callable. The line is the stock native widget function
 carried by `Layout::widget`; layout has no line-editor constructor or interpreter
 arm. The editor supplies current state and scoped editing capabilities, then
 incorporates the widget's render closures, handlers, hover claim, and navigation
-transition. Progred's [line control](../progred/src/projection/line_control.rs)
+transition. Progred's [line edit](../progred/src/editing.rs)
 runs an editing operation, then converts only when the accepted operation changed
 the text. The callback receives the live value and spelling; `None` declines a
 write. An equal result does not rewrite the document. Invalid intermediate text
@@ -287,8 +287,9 @@ projection's own offers, ranked against the query, are then the hole's whole
 vocabulary: the picker shows those offers and nothing else. The generic
 structure projection's holes, and the hole the editor draws for a missing value
 no projection draws, take Raw's picker. Raw offers the editor's constructors and what's typed, read as a value: what the
-libraries read the query as, such as a number, then text or bytes, or for a
-field a new label named as typed. It offers no existing cells. An existing cell
+libraries read the query as, such as a number, then text, or for a field the
+name library's new label named as typed, and bytes typed in GID's own `0x`
+spelling. It offers no existing cells. An existing cell
 is reused by pointing at it (Cmd+click) or pasting it; typing makes something
 new. Outside Raw, the hole at a document's root starts the document: it leads
 with what the libraries start one as, such as a Grap program or a Fidget scene,
