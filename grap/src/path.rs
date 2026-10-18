@@ -49,7 +49,7 @@ pub fn step_value(step: &Step) -> Value {
             ELEMENT,
             Value::record([(INDEXABLE, Value::from(position.as_bytes().to_vec()))]),
         ),
-        Step::Follow(source) => (FOLLOW, resolution_value(*source)),
+        Step::Follow(resolution) => (FOLLOW, resolution_value(*resolution)),
     }])
 }
 
@@ -62,7 +62,7 @@ pub fn read_step(value: &Value) -> Option<Step> {
             Position::from_bytes(element.as_record()?.get(&INDEXABLE)?.as_blob()?.to_vec())
                 .map(Step::Element)
         }
-        (None, None, Some(source)) => read_resolution(source).map(Step::Follow),
+        (None, None, Some(resolution)) => read_resolution(resolution).map(Step::Follow),
         _ => None,
     }
 }

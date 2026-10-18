@@ -287,6 +287,8 @@ impl Definition {
 /// on every changing read being a `resolve`, except where `untracked` says
 /// otherwise.
 pub trait Host {
+    /// `cell`'s definition and the resolution it came through, which source
+    /// origins record.
     fn resolve(&self, cell: CellId) -> Option<(Resolution, Definition)>;
     /// A foreign call not declared tracked ran, so the result may depend on
     /// reads the host didn't see.
@@ -453,7 +455,8 @@ impl RuntimeValue {
         Self(kind, OnceCell::new())
     }
 
-    /// Explicit borrowed GID view for consumers that have not adopted runtime values.
+    /// This value as GID data, borrowed: stored data as it is, anything
+    /// else materialized on first request and kept.
     pub fn as_value(&self) -> &Value {
         match &self.0 {
             RuntimeValueKind::Data(value) => value,
@@ -1064,7 +1067,7 @@ enum OverlayCall<'a> {
 
 /// A synchronous, borrowed layer of foreign functions. It lets a host
 /// expose state that is valid only for one evaluation without putting
-/// that state in `'static` closures or rebuilding the permanent table.
+/// that state in `'static` closures.
 pub struct ForeignOverlay<'a> {
     functions: &'a [CellId],
     call: OverlayCall<'a>,
@@ -1160,8 +1163,7 @@ struct Lowered {
 
 /// A lowered node's generated form: per-node decisions — dispatch,
 /// argument lookup, lambda plumbing — made once at generation, then
-/// execution is one call. Fuel and results match the
-/// per-visit interpretation these closures replaced.
+/// execution is one call. Generating it changes neither fuel nor results.
 type Thunk = Rc<dyn Fn(&mut Context, &Environment) -> Result<RuntimeValue, Halt>>;
 
 fn thunk(
@@ -1251,8 +1253,8 @@ enum CellState {
 
 #[derive(Clone)]
 enum ResolvedForeign {
-    Permanent(ForeignFunction),
-    Scoped(CellId),
+    Function(ForeignFunction),
+    Overlay(CellId),
 }
 
 impl<'a> Context<'a> {
@@ -1601,11 +1603,12 @@ impl<'a> Context<'a> {
         self.closure(params, body, environment)
     }
 
-    /// Decode GID bindings into a shared lexical environment.
+    /// An environment with no bindings, over this evaluation's index table.
     pub fn empty_environment(&self) -> Environment {
         Environment::with_indices(self.indices.clone())
     }
 
+    /// Decode GID bindings into a shared lexical environment.
     pub fn environment(&self, value: &Value) -> Option<Environment> {
         let fields = value.as_record()?;
         Some(
@@ -1804,7 +1807,7 @@ impl<'a> Context<'a> {
         };
         self.checked_call(|context| match &target.kind {
             PreparedCallTargetKind::Foreign(function) => context.call_foreign_staged(
-                &ResolvedForeign::Permanent(function.clone()),
+                &ResolvedForeign::Function(function.clone()),
                 call,
                 environment,
                 Some(&target.stages),
@@ -2030,7 +2033,7 @@ impl<'a> Context<'a> {
         self.scoped_foreign_target(cell).or_else(|| {
             self.overlay
                 .is_some_and(|overlay| overlay.handles(cell))
-                .then_some(ResolvedForeign::Scoped(cell))
+                .then_some(ResolvedForeign::Overlay(cell))
         })
     }
 
@@ -2039,7 +2042,7 @@ impl<'a> Context<'a> {
             .iter()
             .rev()
             .find_map(|scope| scope.get(cell))
-            .map(|function| ResolvedForeign::Permanent(function.clone()))
+            .map(|function| ResolvedForeign::Function(function.clone()))
     }
 
     fn call_foreign(
@@ -2059,14 +2062,14 @@ impl<'a> Context<'a> {
         stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
     ) -> Result<RuntimeValue, Halt> {
         let tracked = match foreign {
-            ResolvedForeign::Permanent(function) => function.tracked,
-            ResolvedForeign::Scoped(_) => self.overlay.is_some_and(|overlay| overlay.tracked),
+            ResolvedForeign::Function(function) => function.tracked,
+            ResolvedForeign::Overlay(_) => self.overlay.is_some_and(|overlay| overlay.tracked),
         };
         if !tracked {
             self.host.untracked();
         }
         let value = match foreign {
-            ResolvedForeign::Permanent(function) => match &function.implementation {
+            ResolvedForeign::Function(function) => match &function.implementation {
                 ForeignImplementation::Direct(call_direct) => call_direct(self, call, environment),
                 ForeignImplementation::Staged(prepare) => {
                     let cached = stages.and_then(|slot| {
@@ -2087,10 +2090,10 @@ impl<'a> Context<'a> {
                     stage(self, environment)
                 }
             },
-            ResolvedForeign::Scoped(cell) => {
+            ResolvedForeign::Overlay(cell) => {
                 let function = self
                     .overlay
-                    .expect("a scoped foreign target came from the active overlay")
+                    .expect("an overlay target came from the active overlay")
                     .call;
                 match function {
                     OverlayCall::Runtime(function) => function(*cell, self, call, environment),
@@ -2113,8 +2116,9 @@ impl<'a> Context<'a> {
     }
 
     /// Run synchronously with an additional foreign-function layer.
-    /// Its owned closures may carry state local to this evaluation;
-    /// the layer shadows host and permanent functions.
+    /// Its owned closures may carry state local to this evaluation; it
+    /// takes calls to its functions before the host's definitions, the
+    /// overlay, and the layers it runs within.
     pub fn with_foreign_functions<T>(
         &mut self,
         functions: ForeignFunctions,
@@ -2298,7 +2302,7 @@ impl<'a> Context<'a> {
                         .chain(arguments),
                 ));
                 context.call_foreign(
-                    &ResolvedForeign::Permanent(definition.implementation.clone()),
+                    &ResolvedForeign::Function(definition.implementation.clone()),
                     &call,
                     environment,
                 )
@@ -2563,8 +2567,7 @@ fn context<'a>(
     }
 }
 
-/// The host supplies each definition with its stable source in the current
-/// resolution context. Source origins preserve it independently of load order.
+/// Evaluate syntax read from the input; its source origins are input paths.
 pub fn evaluate(expression: &Value, host: &dyn Host, fuel: usize) -> Evaluation {
     context(host, None, fuel).run(expression)
 }

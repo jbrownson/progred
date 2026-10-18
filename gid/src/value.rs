@@ -434,9 +434,8 @@ pub enum Resolution {
 }
 
 /// A projection path step: into a record field, into a list element,
-/// or through a link to one of the cell's resolved values. A step that no
-/// longer resolves is the stale-path class the editor already
-/// tolerates.
+/// or through a link to one of the cell's resolved values. A step that
+/// doesn't resolve leaves a stale path, which the editor tolerates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Step {
     Key(CellId),
