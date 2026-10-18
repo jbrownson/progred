@@ -75,7 +75,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
         matches: &entry.matches,
         style: face_style(styles, entry.face),
     });
-    let widget = puri_widgets::completion::Completion::new(
+    let widget_rows = puri_widgets::completion::rows(
         tcx,
         widget_entries,
         puri_widgets::completion::Style {
@@ -85,8 +85,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
         },
     );
     let set_view = Rc::new(set_view);
-    let items = widget
-        .rows
+    let items = widget_rows
         .into_iter()
         .zip(entries)
         .enumerate()

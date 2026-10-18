@@ -175,13 +175,9 @@ impl<Key: Clone + Ord> Selection<Key> {
         }
     }
 
-    pub fn select(&self, tree: &Tree<Key>, level: usize, range: Range<usize>) -> Self {
-        self.select_with_current(tree, level, range, None)
-    }
-
     /// Narrowing to the current item preserves finer selections. A wider range
     /// or another item starts fresh, as does selection without a current item.
-    pub fn select_with_current(
+    pub fn select(
         &self,
         tree: &Tree<Key>,
         level: usize,

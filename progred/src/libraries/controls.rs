@@ -228,9 +228,7 @@ fn slider_control<W: Host>(
             },
             move |output, placement| {
                 output.claim(puri::hover::Probe::occludes(placement));
-                output.render(move |canvas, _| {
-                    slider.draw_with_ticks(canvas, placement.rect, scale, &ticks)
-                });
+                output.render(move |canvas, _| slider.draw(canvas, placement.rect, scale, &ticks));
                 output
                     .handler()
                     .on_pointer_down(move |world: &mut W, event| {

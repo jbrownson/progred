@@ -49,13 +49,9 @@ impl Slider {
         self.min + t * (self.max - self.min)
     }
 
-    pub fn draw(self, canvas: &mut dyn puri::draw::CanvasSink, rect: Rect, scale: f64) {
-        self.draw_with_ticks(canvas, rect, scale, &[]);
-    }
-
     /// Omit an entire level if any of its visible boundaries are too close.
     /// Ticks never affect input, and no individual boundaries are thinned.
-    pub fn draw_with_ticks(
+    pub fn draw(
         self,
         canvas: &mut dyn puri::draw::CanvasSink,
         rect: Rect,

@@ -33,7 +33,7 @@ fn ticks_keep_hierarchy_height_and_unequal_group_lengths() {
         ]
     );
     assert_eq!(
-        ticks(&all.select(&tree, 0, 2..5)),
+        ticks(&all.select(&tree, 0, 2..5, None)),
         [
             (vec![2.0, 3.0, 4.0, 5.0], 24.0 / 2.25, 3.0 / 2.25),
             (vec![2.0, 5.0], 16.0, 2.0),
@@ -47,57 +47,54 @@ fn ticks_keep_hierarchy_height_and_unequal_group_lengths() {
 fn coarser_changes_reset_finer_selections_instead_of_reviving_them() {
     let tree = Tree::group(0, [leaves(10, &[11, 12]), leaves(20, &[21, 22])]);
     let all = Selection::new(&tree, &[]);
-    let first = all.select(&tree, 1, 0..1);
+    let first = all.select(&tree, 1, 0..1, None);
     assert_eq!(first.leaves, 0..2);
     assert_eq!(first.intent[0], Intent::All);
     assert_eq!(first.select_all(&tree, 1).leaves, 0..4);
 
-    let chosen = all.select(&tree, 0, 1..3);
+    let chosen = all.select(&tree, 0, 1..3, None);
     assert_eq!(chosen.leaves, 1..3);
-    let first = chosen.select(&tree, 1, 0..1);
+    let first = chosen.select(&tree, 1, 0..1, None);
     assert_eq!(first.leaves, 0..2);
     assert_eq!(first.intent[0], Intent::All);
     assert_eq!(
         chosen.select_all(&tree, 1).intent,
         [Intent::All, Intent::All]
     );
-    let second = first.select(&tree, 1, 1..2);
+    let second = first.select(&tree, 1, 1..2, None);
     assert_eq!(second.leaves, 2..4);
     assert_eq!(second.intent[0], Intent::All);
-    assert_eq!(second.select(&tree, 1, 0..1).leaves, 0..2);
+    assert_eq!(second.select(&tree, 1, 0..1, None).leaves, 0..2);
     assert_eq!(second.select_all(&tree, 1).leaves, 0..4);
 }
 
 #[test]
 fn selecting_the_current_item_preserves_finer_intent() {
     let tree = Tree::group(0, [leaves(10, &[11, 12]), leaves(20, &[21, 22])]);
-    let chosen = Selection::new(&tree, &[]).select(&tree, 0, 1..3);
+    let chosen = Selection::new(&tree, &[]).select(&tree, 0, 1..3, None);
     let current = chosen.current_item(1, 1.5);
     assert_eq!(current, Some(0));
-    let focused = chosen.select_with_current(&tree, 1, 0..1, current);
+    let focused = chosen.select(&tree, 1, 0..1, current);
     assert_eq!(focused.leaves, 1..2);
     assert_eq!(focused.intent[0], chosen.intent[0]);
     assert_eq!(
-        focused.select_with_current(&tree, 1, 0..1, current).intent,
+        focused.select(&tree, 1, 0..1, current).intent,
         focused.intent
     );
     for reset in [
-        focused.select_with_current(&tree, 1, 1..2, current),
-        focused.select_with_current(&tree, 1, 0..2, current),
-        focused.select(&tree, 1, 0..1),
+        focused.select(&tree, 1, 1..2, current),
+        focused.select(&tree, 1, 0..2, current),
+        focused.select(&tree, 1, 0..1, None),
         focused.select_all(&tree, 1),
     ] {
         assert_eq!(reset.intent[0], Intent::All);
     }
     let end = focused.current_item(1, 2.0);
     assert_eq!(end, Some(0));
+    assert_eq!(focused.select(&tree, 1, 0..1, end).leaves, 1..2);
+    let dragged = focused.select(&tree, 1, 0..2, current);
     assert_eq!(
-        focused.select_with_current(&tree, 1, 0..1, end).leaves,
-        1..2
-    );
-    let dragged = focused.select_with_current(&tree, 1, 0..2, current);
-    assert_eq!(
-        dragged.select_with_current(&tree, 1, 0..1, current).intent[0],
+        dragged.select(&tree, 1, 0..1, current).intent[0],
         Intent::All,
         "returning within a drag does not resurrect the old finer filter"
     );
@@ -113,21 +110,21 @@ fn intermediate_changes_clear_only_finer_levels_even_when_the_range_is_unchanged
         ],
     );
     let selected = Selection::new(&tree, &[])
-        .select(&tree, 2, 1..2)
-        .select(&tree, 1, 0..1)
-        .select(&tree, 0, 1..2);
+        .select(&tree, 2, 1..2, None)
+        .select(&tree, 1, 0..1, None)
+        .select(&tree, 0, 1..2, None);
     assert_eq!(selected.leaves, 5..6);
     for adjusted in [
-        selected.select(&tree, 1, 0..1),
+        selected.select(&tree, 1, 0..1, None),
         selected.select_all(&tree, 1),
     ] {
         assert_eq!(adjusted.intent[0], Intent::All);
         assert_eq!(adjusted.intent[2], selected.intent[2]);
     }
-    assert_eq!(selected.select(&tree, 1, 0..1).leaves, 4..6);
+    assert_eq!(selected.select(&tree, 1, 0..1, None).leaves, 4..6);
     assert_eq!(selected.select_all(&tree, 1).leaves, 4..8);
     assert_eq!(
-        selected.select(&tree, 0, 0..1).intent[1..],
+        selected.select(&tree, 0, 0..1, None).intent[1..],
         selected.intent[1..]
     );
 }
@@ -135,7 +132,7 @@ fn intermediate_changes_clear_only_finer_levels_even_when_the_range_is_unchanged
 #[test]
 fn inserted_and_deleted_endpoints_use_ordered_bounds_not_ordinals() {
     let tree = leaves(0, &[10, 30, 50, 70]);
-    let selected = Selection::new(&tree, &[]).select(&tree, 0, 1..3);
+    let selected = Selection::new(&tree, &[]).select(&tree, 0, 1..3, None);
     let edited = leaves(0, &[5, 10, 30, 40, 50, 60, 70]);
     assert_eq!(Selection::new(&edited, &selected.intent).leaves, 2..5);
     let deleted_ends = leaves(0, &[5, 10, 40, 60, 70]);
@@ -151,7 +148,7 @@ fn inserted_and_deleted_endpoints_use_ordered_bounds_not_ordinals() {
 fn manual_full_span_is_bounded_but_all_includes_new_items() {
     let tree = leaves(0, &[10, 20]);
     let all = Selection::new(&tree, &[]);
-    let explicit = all.select(&tree, 0, 0..2);
+    let explicit = all.select(&tree, 0, 0..2, None);
     let larger = leaves(0, &[5, 10, 15, 20, 30]);
     assert_eq!(Selection::new(&larger, &explicit.intent).leaves, 1..4);
     assert_eq!(Selection::new(&larger, &all.intent).leaves, 0..5);
@@ -171,7 +168,7 @@ fn coarser_changes_clear_hidden_finer_levels_and_keep_fine_end_alignment() {
             leaves(30, &[]),
         ],
     );
-    let selected = Selection::new(&tree, &[]).select(&tree, 1, 1..2);
+    let selected = Selection::new(&tree, &[]).select(&tree, 1, 1..2, None);
     assert_eq!(
         selected
             .rows
@@ -180,7 +177,7 @@ fn coarser_changes_clear_hidden_finer_levels_and_keep_fine_end_alignment() {
             .collect::<Vec<_>>(),
         [(3, 2), (2, 2), (1, 2), (0, 2)]
     );
-    let shallow = selected.select(&tree, 3, 0..1);
+    let shallow = selected.select(&tree, 3, 0..1, None);
     assert_eq!(
         shallow.rows.iter().map(|r| r.level).collect::<Vec<_>>(),
         [3, 0]
@@ -218,13 +215,13 @@ fn current_items_follow_playback_through_unequal_and_hidden_levels() {
     assert_eq!(current(&all, 5.0), [(3, 2), (2, 2), (1, 2), (0, 5)]);
     assert_eq!(current(&all, 6.0), current(&all, 5.5));
 
-    let deep = all.select(&tree, 3, 1..2);
+    let deep = all.select(&tree, 3, 1..2, None);
     assert_eq!(current(&deep, 4.5), [(3, 1), (2, 0), (1, 0), (0, 2)]);
     assert_eq!(current(&deep, 5.0), current(&deep, 4.5));
-    let shorter = deep.select(&tree, 0, 0..2);
+    let shorter = deep.select(&tree, 0, 0..2, None);
     assert_eq!(current(&shorter, 4.0), [(3, 1), (2, 0), (1, 0), (0, 1)]);
 
-    let shallow = all.select(&tree, 3, 0..1);
+    let shallow = all.select(&tree, 3, 0..1, None);
     assert_eq!(current(&shallow, 2.0), [(3, 0), (0, 1)]);
     assert_eq!(shallow.current_item(1, 0.5), None);
     assert_eq!(
@@ -253,7 +250,7 @@ fn cursor_tracks_its_leaf_and_fraction_across_insertions() {
         })
     );
     assert_eq!(leaves(0, &[10]).position(&cursor), None);
-    let selection = Selection::new(&tree, &[]).select(&tree, 0, 0..1);
+    let selection = Selection::new(&tree, &[]).select(&tree, 0, 0..1, None);
     assert_eq!(selection.position(1.25), 0.0);
     assert_eq!(
         selection.cursor(&tree, 1.0),

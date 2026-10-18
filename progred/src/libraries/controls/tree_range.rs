@@ -125,22 +125,10 @@ impl Selection {
         Self { tree, selected }
     }
 
-    pub fn select(&self, level: usize, range: Range<usize>) -> Self {
-        self.select_with_current(level, range, None)
-    }
-
-    fn select_with_current(
-        &self,
-        level: usize,
-        range: Range<usize>,
-        current: Option<usize>,
-    ) -> Self {
+    pub fn select(&self, level: usize, range: Range<usize>, current: Option<usize>) -> Self {
         Self {
             tree: self.tree.clone(),
-            selected: Rc::new(
-                self.selected
-                    .select_with_current(&self.tree, level, range, current),
-            ),
+            selected: Rc::new(self.selected.select(&self.tree, level, range, current)),
         }
     }
 
@@ -277,12 +265,7 @@ impl widget::gesture::Gesture for RangeDrag {
             let selected = self
                 .slider
                 .dragged(self.drag, self.rect, self.scale, *point);
-            self.selection = if let Some(current) = self.current {
-                self.selection
-                    .select_with_current(self.level, selected, Some(current))
-            } else {
-                self.selection.select(self.level, selected)
-            };
+            self.selection = self.selection.select(self.level, selected, self.current);
             self.position = self.position.map(|p| self.selection.position(p));
             let value = self.position.map_or_else(
                 || self.selection.state(),

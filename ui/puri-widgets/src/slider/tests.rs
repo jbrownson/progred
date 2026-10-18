@@ -37,7 +37,7 @@ fn ticks_use_the_continuous_rail_and_scale_without_snapping() {
         },
     ];
     let mut drawing = DrawList::new();
-    slider.draw_with_ticks(&mut drawing, rect, 2.0, &ticks);
+    slider.draw(&mut drawing, rect, 2.0, &ticks);
     assert_eq!(
         tick_lines(&drawing),
         [
@@ -95,7 +95,7 @@ fn crowded_levels_are_omitted_whole_and_return_with_more_space() {
     ];
     for scale in [1.0, 2.0] {
         let mut drawing = DrawList::new();
-        slider.draw_with_ticks(
+        slider.draw(
             &mut drawing,
             Rect::new(0.0, 0.0, 112.0 * scale, 28.0 * scale),
             scale,
@@ -109,7 +109,7 @@ fn crowded_levels_are_omitted_whole_and_return_with_more_space() {
         );
     }
     let mut drawing = DrawList::new();
-    slider.draw_with_ticks(&mut drawing, Rect::new(0.0, 0.0, 812.0, 28.0), 1.0, &ticks);
+    slider.draw(&mut drawing, Rect::new(0.0, 0.0, 812.0, 28.0), 1.0, &ticks);
     assert_eq!(
         tick_lines(&drawing)
             .iter()
@@ -129,7 +129,7 @@ fn tick_density_only_considers_the_visible_range() {
         width: 3.0,
     }];
     let mut drawing = DrawList::new();
-    slider.draw_with_ticks(&mut drawing, Rect::new(0.0, 0.0, 112.0, 28.0), 1.0, &ticks);
+    slider.draw(&mut drawing, Rect::new(0.0, 0.0, 112.0, 28.0), 1.0, &ticks);
     assert_eq!(
         tick_lines(&drawing)
             .iter()

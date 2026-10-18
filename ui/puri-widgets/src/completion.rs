@@ -75,7 +75,8 @@ pub struct Row {
 }
 
 impl Row {
-    fn new(display: Line, detail: Option<Line>, padding: f64, style: &Style<'_>) -> Self {
+    fn new(display: Line, detail: Option<Line>, style: &Style<'_>) -> Self {
+        let padding = 2.0 * style.scale;
         Self {
             metrics: TextMetrics {
                 width: display.metrics.width
@@ -119,10 +120,6 @@ impl Row {
     }
 }
 
-pub struct Completion {
-    pub rows: Vec<Row>,
-}
-
 fn highlighted(tcx: &mut TextCtx, text: &str, matches: &[Range<usize>], style: &TextStyle) -> Line {
     if matches.is_empty() {
         return Line::one(puri::text(tcx, text, style));
@@ -146,26 +143,25 @@ fn highlighted(tcx: &mut TextCtx, text: &str, matches: &[Range<usize>], style: &
     Line::from_segments(segments)
 }
 
-impl Completion {
-    pub fn new<'a>(
-        tcx: &mut TextCtx,
-        entries: impl IntoIterator<Item = Entry<'a>>,
-        style: Style<'_>,
-    ) -> Self {
-        let mut rows = entries
-            .into_iter()
-            .map(|entry| {
-                let display = highlighted(tcx, entry.display, entry.matches, entry.style);
-                let detail = entry
-                    .detail
-                    .map(|detail| Line::one(puri::text(tcx, detail, style.detail)));
-                Row::new(display, detail, 2.0 * style.scale, &style)
-            })
-            .collect::<Vec<_>>();
-        let width = rows.iter().map(|row| row.metrics.width).fold(0.0, f64::max);
-        for row in &mut rows {
-            row.metrics.width = width;
-        }
-        Self { rows }
+/// A row for each of `entries`, all as wide as the widest.
+pub fn rows<'a>(
+    tcx: &mut TextCtx,
+    entries: impl IntoIterator<Item = Entry<'a>>,
+    style: Style<'_>,
+) -> Vec<Row> {
+    let mut rows = entries
+        .into_iter()
+        .map(|entry| {
+            let display = highlighted(tcx, entry.display, entry.matches, entry.style);
+            let detail = entry
+                .detail
+                .map(|detail| Line::one(puri::text(tcx, detail, style.detail)));
+            Row::new(display, detail, &style)
+        })
+        .collect::<Vec<_>>();
+    let width = rows.iter().map(|row| row.metrics.width).fold(0.0, f64::max);
+    for row in &mut rows {
+        row.metrics.width = width;
     }
+    rows
 }

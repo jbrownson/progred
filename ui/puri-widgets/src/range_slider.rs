@@ -37,12 +37,6 @@ impl RangeSlider {
         ((point.x - rail.x0) / rail.width()).clamp(0.0, 1.0) * self.count as f64
     }
 
-    pub fn item_at(&self, rect: Rect, scale: f64, point: Point) -> Option<usize> {
-        let rail = Self::rail(rect, scale);
-        (self.count > 0 && rail.width() > 0.0 && rail.contains(point))
-            .then(|| (self.position(rect, scale, point).floor() as usize).min(self.count - 1))
-    }
-
     pub fn item_rect(&self, rect: Rect, scale: f64, item: usize) -> Option<Rect> {
         let rail = Self::rail(rect, scale);
         (item < self.count && rail.width() > 0.0).then(|| {

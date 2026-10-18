@@ -2,24 +2,19 @@ use super::*;
 use puri::draw::{DrawCmd, DrawList};
 
 #[test]
-fn item_hits_and_feedback_use_the_same_notches_at_every_density() {
+fn item_rects_and_span_drags_use_the_same_notches_at_every_density() {
     for scale in [1.0, 2.0] {
         for count in [1, 4, 500] {
             let slider = RangeSlider::new(count, 0..count).unwrap();
             let rect = Rect::new(10.0, 30.0, 410.0, 30.0 + HEIGHT * scale);
             for item in 0..count {
-                let bounds = slider.item_rect(rect, scale, item).unwrap();
-                assert_eq!(slider.item_at(rect, scale, bounds.center()), Some(item));
-                assert!(rect.contains(bounds.center()));
+                let center = slider.item_rect(rect, scale, item).unwrap().center();
+                let drag = slider.begin(rect, scale, center);
+                assert_eq!(slider.dragged(drag, rect, scale, center), item..item + 1);
+                assert!(rect.contains(center));
             }
             assert_eq!(slider.item_rect(rect, scale, count), None);
-            assert_eq!(slider.item_at(rect, scale, Point::new(rect.x0, 35.0)), None);
-            assert_eq!(
-                slider.item_at(rect, scale, Point::new(200.0, rect.y1 + 1.0)),
-                None
-            );
             let empty = Rect::new(0.0, 0.0, 0.0, HEIGHT * scale);
-            assert_eq!(slider.item_at(empty, scale, Point::ZERO), None);
             assert_eq!(slider.item_rect(empty, scale, 0), None);
         }
     }

@@ -15,11 +15,14 @@ fn ranges_follow_occurrences_and_irregular_nested_lists() {
         [2, 3, 5]
     );
     assert_eq!(all.leaves, 0..5);
-    let chosen = all.select(2, 1..2).select(0, 0..1);
+    let chosen = all.select(2, 1..2, None).select(0, 0..1, None);
     assert_eq!(chosen.leaves, 3..4);
     assert_eq!(Selection::new(&tree, Some(&chosen.state())).leaves, 3..4);
     assert_eq!(
-        all.select(2, 0..1).select(1, 0..1).select(0, 1..2).leaves,
+        all.select(2, 0..1, None)
+            .select(1, 0..1, None)
+            .select(0, 1..2, None)
+            .leaves,
         1..2
     );
     assert_eq!(Selection::new(&Value::list([]), None).leaves, 0..0);
@@ -30,12 +33,12 @@ fn coarser_changes_store_all_for_finer_rows() {
     let tree = Value::list([Value::list([leaf(), leaf()]), Value::list([leaf(), leaf()])]);
     let all = Selection::new(&tree, None);
     assert_eq!(all.state(), Value::list([ALL.into(), ALL.into()]));
-    let first = all.select(1, 0..1);
+    let first = all.select(1, 0..1, None);
     let restored = Selection::new(&tree, Some(&first.state())).select_all(1);
     assert_eq!(restored.leaves, 0..4);
     assert_eq!(restored.state(), all.state());
-    let chosen = all.select(0, 1..3);
-    let narrowed = chosen.select(1, 0..1);
+    let chosen = all.select(0, 1..3, None);
+    let narrowed = chosen.select(1, 0..1, None);
     assert_eq!(narrowed.leaves, 0..2);
     assert_eq!(narrowed.intent[0], Intent::All);
     assert_eq!(
@@ -61,8 +64,8 @@ fn stored_paths_track_insertions_and_survive_missing_endpoints() {
     let original = Value::list([leaf(), leaf(), leaf(), leaf()]);
     let positions: Vec<_> = original.as_list().unwrap().keys().cloned().collect();
     let all = Selection::new(&original, None);
-    let chosen = all.select(0, 1..3);
-    let full_span = all.select(0, 0..4);
+    let chosen = all.select(0, 1..3, None);
+    let full_span = all.select(0, 0..4, None);
     let mut edited = original.as_list().unwrap().clone();
     edited.insert(
         gid::position::between(None, positions.first()).unwrap(),
@@ -116,7 +119,7 @@ fn stored_paths_track_insertions_and_survive_missing_endpoints() {
 #[test]
 fn missing_ranges_and_hidden_rows_do_not_destroy_state() {
     let tree = Value::list([Value::list([]), leaf(), leaf()]);
-    let chosen = Selection::new(&tree, None).select(0, 1..2);
+    let chosen = Selection::new(&tree, None).select(0, 1..2, None);
     let position = tree.as_list().unwrap().keys().last().unwrap();
     let edited = Value::List(tree.as_list().unwrap().without(position));
     let stale = Selection::new(&edited, Some(&chosen.state()));
@@ -135,8 +138,8 @@ fn missing_ranges_and_hidden_rows_do_not_destroy_state() {
 fn cursor_keeps_its_leaf_position_only_inside_the_selected_range() {
     let tree = Value::list([Value::list([leaf(), leaf()]), Value::list([leaf(), leaf()])]);
     let all = Selection::new(&tree, None);
-    let first = all.select(1, 0..1);
-    let second = all.select(1, 1..2);
+    let first = all.select(1, 0..1, None);
+    let second = all.select(1, 1..2, None);
     assert_eq!(first.position(1.25), 1.25);
     assert_eq!(second.position(1.25), 2.0);
     let (widgets, value) = cursor::<crate::Editor>(

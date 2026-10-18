@@ -1341,7 +1341,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
         Value::list([A.into(), A.into()]),
         Value::list([A.into(), A.into()]),
     ]);
-    let original_selection = tree_range::Selection::new(&tree, None).select(0, 0..1);
+    let original_selection = tree_range::Selection::new(&tree, None).select(0, 0..1, None);
     let old = original_selection.state();
     let annotation = Value::record([
         (camera, Value::record([])),
@@ -1375,7 +1375,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
     );
     let state = editor.model.workspace.document.annotations.at(&[]);
     let chosen = read_state(state, A).unwrap();
-    assert_eq!(chosen, &original_selection.select(1, 1..2).state());
+    assert_eq!(chosen, &original_selection.select(1, 1..2, None).state());
     assert_eq!(tree_range::Selection::new(&tree, Some(chosen)).leaves, 2..4);
     assert_eq!(
         tree_range::Selection::new(&tree, Some(chosen)).intent[0],
@@ -1387,7 +1387,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
     let state = editor.model.workspace.document.annotations.at(&[]);
     assert_eq!(
         read_state(state, A),
-        Some(&original_selection.select(1, 0..2).state())
+        Some(&original_selection.select(1, 0..2, None).state())
     );
     assert_eq!(
         tree_range::Selection::new(&tree, read_state(state, A)).leaves,
@@ -1412,8 +1412,8 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
                 Value::list([B.into(), B.into()]),
             ]);
             let selection = tree_range::Selection::new(&tree, None)
-                .select(1, 0..1)
-                .select(0, 1..2);
+                .select(1, 0..1, None)
+                .select(0, 1..2, None);
             let ranges = selection.state();
             let old = if cursor {
                 tree_range::cursor_state(&selection, 1.5)
@@ -1502,8 +1502,8 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
             });
             let root = editor.model.workspace.document_root().clone();
             let selection = tree_range::Selection::new(&tree, None)
-                .select(1, 0..1)
-                .select(0, 1..2);
+                .select(1, 0..1, None)
+                .select(0, 1..2, None);
             let old = tree_range::cursor_state(&selection, position);
             let annotation = set_state(None, A, old.clone());
             crate::editing::annotate(&mut editor.session(), &root, &[], annotation.clone());
