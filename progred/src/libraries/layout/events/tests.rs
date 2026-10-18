@@ -4,7 +4,7 @@ use crate::libraries::layout as layout_data;
 use crate::libraries::{f64 as f64_convention, text};
 use crate::projection::Projection;
 use crate::projection::test_support::editing_frame_with_projection;
-use crate::view::{Layout, ProjectionInput};
+use crate::projection::{Layout, ProjectionInput};
 use gid::{CellId, Cells, Document, Record, Value};
 use layout_data::vocabulary as event_fields;
 use puri::handler::{

@@ -956,6 +956,6 @@ fn project_frame(
 }
 
 #[cfg(test)]
-mod frame_tests;
-#[cfg(test)]
 mod placement_tests;
+#[cfg(test)]
+mod tests;

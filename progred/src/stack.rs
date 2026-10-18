@@ -7,8 +7,8 @@ use crate::libraries::{
     selection, sequence, site, text, toolpath, tree, u64, workspace,
 };
 use crate::library::{Libraries, Library};
+use crate::projection::Partial;
 use crate::projection::Projection;
-use crate::view::Partial;
 use std::rc::Rc;
 
 pub struct Stack<World> {

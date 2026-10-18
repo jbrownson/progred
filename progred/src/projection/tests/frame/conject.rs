@@ -1,6 +1,6 @@
 use super::*;
 use crate::display as d;
-use crate::view::Partial;
+use crate::projection::Partial;
 
 fn world(root: Value) -> crate::Editor {
     crate::test_editor(Document {

@@ -22,7 +22,6 @@ use crate::location::{Location, Start};
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
 use crate::styles::Styles;
-use crate::view::{Layout, Partial};
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use kurbo::Point;
@@ -37,6 +36,15 @@ use puri::text::TextCtx;
 use std::collections::HashSet;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
+
+/// The toolkit's types over the editor, which hosts everything the runtime
+/// projects. Display and the libraries stay generic over their host, through
+/// [`crate::display::host`].
+pub(crate) type Layout = crate::display::host::Layout<crate::Editor>;
+pub(crate) type Partial = crate::display::host::Partial<crate::Editor>;
+#[cfg(test)]
+pub(crate) type ProjectionInput<'a, V = Value> =
+    crate::display::host::ProjectionInput<'a, crate::Editor, V>;
 
 type SharedPath = Rc<[Step]>;
 

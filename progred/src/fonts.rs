@@ -51,4 +51,4 @@ pub(crate) fn bundled_font_context() -> FontContext {
 }
 
 #[cfg(test)]
-mod font_tests;
+mod tests;

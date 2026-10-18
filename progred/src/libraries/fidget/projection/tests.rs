@@ -1,5 +1,5 @@
 use super::*;
-use crate::view::{Layout, ProjectionInput};
+use crate::projection::{Layout, ProjectionInput};
 
 fn field(input: &ProjectionInput<'_>) -> Option<Layout> {
     project_runtime(super::field, input)

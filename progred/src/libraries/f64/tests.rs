@@ -1,5 +1,5 @@
 use super::*;
-use crate::view::{Layout, ProjectionInput};
+use crate::projection::{Layout, ProjectionInput};
 
 fn binary_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     crate::libraries::representation::infix_display(vocabulary::F64, &parts().infix, input)

@@ -3,7 +3,7 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
 use crate::display::widget;
 use crate::display::widget::placed::leaf;
-use crate::view::{Layout, ProjectionInput};
+use crate::projection::{Layout, ProjectionInput};
 use crate::{Editor, frame::Hovered};
 use kurbo::Rect;
 use measured::Extent;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::view::Partial;
+use crate::projection::Partial;
 
 fn controls_output(
     controls: &Value,

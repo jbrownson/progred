@@ -1,7 +1,7 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::control::vocabulary as control;
-use crate::view::Layout;
+use crate::projection::Layout;
 
 fn call(function: CellId, args: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     ::grap::call(function.into(), args)

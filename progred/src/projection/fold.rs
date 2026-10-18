@@ -2,10 +2,10 @@
 //! projections alike: its brackets around an ellipsis, which opens it.
 
 use super::Cx;
+use super::Layout;
 use crate::display::{Delim, dim, on_activate, on_hover, selectable_bracket};
 use crate::frame::Hovered;
 use crate::hover::Hover;
-use crate::view::Layout;
 use gid::Step;
 use std::rc::Rc;
 

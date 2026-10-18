@@ -1,5 +1,5 @@
 use super::*;
-use crate::view::{Layout, ProjectionInput};
+use crate::projection::{Layout, ProjectionInput};
 
 #[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {
