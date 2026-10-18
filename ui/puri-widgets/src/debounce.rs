@@ -9,6 +9,7 @@ pub struct Debounce {
 
 impl Debounce {
     pub fn trigger(&mut self, timers: &mut impl Timers, now: Instant, delay: Duration) {
+        // Cancelled first, so the scheduler can let go of it while scheduling the new one.
         self.pending = None;
         self.pending = Some(timers.schedule(now + delay));
     }
