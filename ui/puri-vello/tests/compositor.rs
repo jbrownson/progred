@@ -698,3 +698,49 @@ fn compositor_resource_lifetimes_and_formats() {
             .is_err()
     );
 }
+
+#[test]
+#[ignore = "headless GPU regression; requires explicit GPU access"]
+fn scratch_textures_follow_the_output_size() {
+    let gpu = Gpu::new();
+    let mut compositor = Compositor::new(&gpu.device, &gpu.queue).unwrap();
+    let mut resources = Resources::default();
+    // Nested round clips around images need a mask and a group per depth.
+    let frame = |width: u32, height: u32| {
+        let (w, h) = (f64::from(width), f64::from(height));
+        let mut canvas = SplitCanvas::default();
+        canvas.fill(Rect::new(0.0, 0.0, w, h), Color::WHITE, Affine::IDENTITY);
+        canvas.clip(
+            Circle::new((w / 2.0, h / 2.0), w / 3.0),
+            Affine::IDENTITY,
+            |canvas| {
+                canvas.image(pattern(), Affine::IDENTITY);
+                canvas.clip(
+                    Circle::new((w / 3.0, h / 3.0), w / 5.0),
+                    Affine::IDENTITY,
+                    |canvas| canvas.image(pattern(), Affine::translate((3.0, 4.0))),
+                );
+            },
+        );
+        canvas.finish()
+    };
+    for (width, height) in [(64, 48), (96, 80), (40, 30)] {
+        let layers = frame(width, height);
+        let mut render = |resources: &mut Resources| {
+            let output = compositor
+                .render(
+                    &gpu.device,
+                    &gpu.queue,
+                    &layers,
+                    resources,
+                    &gpu.texture(width, height),
+                    Color::WHITE,
+                )
+                .unwrap();
+            gpu.read(&output.texture)
+        };
+        let reused = render(&mut resources);
+        assert_eq!(reused, render(&mut Resources::default()));
+        assert_eq!(resources.scratch_textures(), 4);
+    }
+}

@@ -155,7 +155,7 @@ pub struct Compositor {
 pub struct Resources {
     output: Option<wgpu::Texture>,
     mask: Option<wgpu::Texture>,
-    groups: Vec<wgpu::Texture>,
+    groups: Vec<Option<wgpu::Texture>>,
     images: HashMap<ImageKey, wgpu::Texture>,
 }
 
@@ -200,14 +200,19 @@ fn image_keys(layers: &[Layer], keys: &mut HashSet<ImageKey>) {
     }
 }
 
+/// The texture in `slot`, first replaced with a new one unless it's `width`
+/// by `height`.
 fn texture_at_size(
     slot: &mut Option<wgpu::Texture>,
     gpu: &Gpu<'_>,
     width: u32,
     height: u32,
 ) -> wgpu::Texture {
-    slot.get_or_insert_with(|| gpu.texture(width, height))
-        .clone()
+    let texture = slot
+        .take()
+        .filter(|texture| texture.width() == width && texture.height() == height)
+        .unwrap_or_else(|| gpu.texture(width, height));
+    slot.insert(texture).clone()
 }
 
 impl Compositor {
@@ -409,15 +414,6 @@ impl Compositor {
                 alpha_type: ImageAlphaType::Alpha,
             })
         } else {
-            if resources
-                .output
-                .as_ref()
-                .is_some_and(|t| t.size() != vector.size())
-            {
-                resources.output = None;
-                resources.mask = None;
-                resources.groups.clear();
-            }
             let target =
                 texture_at_size(&mut resources.output, &gpu, vector.width(), vector.height());
             let [r, g, b, a] = base_color.components.map(f64::from);
@@ -519,11 +515,14 @@ impl Compositor {
                     } else {
                         self.counts.clip_depth = self.counts.clip_depth.max(depth + 1);
                         if resources.groups.len() <= depth {
-                            resources
-                                .groups
-                                .push(gpu.texture(target.width(), target.height()));
+                            resources.groups.push(None);
                         }
-                        let child = resources.groups[depth].clone();
+                        let child = texture_at_size(
+                            &mut resources.groups[depth],
+                            gpu,
+                            target.width(),
+                            target.height(),
+                        );
                         gpu.clear(&child, wgpu::Color::TRANSPARENT);
                         self.render_group(
                             gpu,
