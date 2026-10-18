@@ -5,7 +5,7 @@
 //! When a real string-function library lands here, funnel argument
 //! reads and result construction through shared helpers, the way f64
 //! routes through `binary`/`unary`: read with `RuntimeValue::as_text`
-//! and build with `RuntimeValue::text`.
+//! and build native results the way `RuntimeValue::f64` does.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, line_edit, name};

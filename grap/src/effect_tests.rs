@@ -59,7 +59,9 @@ fn run(
             } else {
                 let argument = context.field(expression, operations.value).unwrap();
                 let callable = context.prepare_callable(argument, environment)?;
-                context.call_prepared_value(&callable, [])
+                context
+                    .call_prepared(&callable, [])
+                    .map(RuntimeValue::into_value)
             }
         };
     let overlay = ForeignOverlay::from_value(&functions, &foreign);
@@ -385,7 +387,7 @@ fn rust_functions_obey_the_same_decline_contract() {
             let operations = Operations::new();
             let function = new_cell_id();
             let implementation = move |context: &mut Context<'_>, _: &Environment| {
-                Ok(RuntimeValue::from_value(if effectful {
+                Ok(RuntimeValue::from(if effectful {
                     context.effect(absent::decline)
                 } else {
                     absent::decline()

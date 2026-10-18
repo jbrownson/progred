@@ -185,10 +185,13 @@ fn environment_materialization_matches_lookup_with_repeated_bindings() {
         (b, RuntimeValue::f64(5.0)),
         (c, RuntimeValue::f64(6.0)),
     ]);
-    assert_eq!(outer.get(a), Some(f64::value(1.0)));
+    assert_eq!(
+        outer.get_runtime(a).map(RuntimeValue::to_value),
+        Some(f64::value(1.0))
+    );
     assert_eq!(
         Value::from(&environment),
-        Value::record([a, b, c].map(|key| (key, environment.get(key).unwrap())))
+        Value::record([a, b, c].map(|key| (key, environment.get_runtime(key).unwrap().to_value())))
     );
     assert_eq!(
         Value::from(&environment),

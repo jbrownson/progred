@@ -320,7 +320,7 @@ fn a_staged_foreign_prepares_once_per_compiled_call_site() {
             staged,
             ForeignFunction::staged(move |_, _| {
                 count.set(count.get() + 1);
-                Rc::new(|_, _| Ok(RuntimeValue::from_value(blob("staged"))))
+                Rc::new(|_, _| Ok(RuntimeValue::from(blob("staged"))))
             }),
         )
         .register(
@@ -358,7 +358,7 @@ fn a_staged_call_reprepares_when_a_scoped_function_changes() {
         staged,
         ForeignFunction::staged(move |_, _| {
             scoped_count.set(scoped_count.get() + 1);
-            Rc::new(|_, _| Ok(RuntimeValue::from_value(blob("scoped"))))
+            Rc::new(|_, _| Ok(RuntimeValue::from(blob("scoped"))))
         }),
     );
     let foreign = ForeignFunctions::default()
@@ -366,7 +366,7 @@ fn a_staged_call_reprepares_when_a_scoped_function_changes() {
             staged,
             ForeignFunction::staged(move |_, _| {
                 base_count.set(base_count.get() + 1);
-                Rc::new(|_, _| Ok(RuntimeValue::from_value(blob("base"))))
+                Rc::new(|_, _| Ok(RuntimeValue::from(blob("base"))))
             }),
         )
         .register(
@@ -1054,7 +1054,9 @@ fn prepared_calls_preserve_explicit_foreign_values() {
             ForeignFunction::from_value(move |context, call, environment| {
                 let callable = context.field(call, callable).unwrap();
                 let callable = context.prepare_callable(callable, environment)?;
-                context.call_prepared_value(&callable, [(argument, blob("passed"))])
+                context
+                    .call_prepared(&callable, [(argument, blob("passed").into())])
+                    .map(RuntimeValue::into_value)
             }),
         );
     let explicit_foreign = Value::record([
@@ -1081,10 +1083,12 @@ fn values_evaluated_from_rust_keep_syntax_children_for_native_functions() {
                   call_expression: &Expression,
                   environment: &Environment| {
         if function == outer {
-            context.eval_value(
-                &call(Value::from(inner), [(argument, Value::list([blob("a")]))]),
-                environment,
-            )
+            context
+                .eval_value_runtime(
+                    &call(Value::from(inner), [(argument, Value::list([blob("a")]))]),
+                    environment,
+                )
+                .map(RuntimeValue::into_value)
         } else {
             let walked = context
                 .field(call_expression, argument)
@@ -1114,7 +1118,9 @@ fn a_scoped_foreign_layer_borrows_state_and_remains_reentrant() {
         |function, context: &mut Context<'_>, _: &Expression, environment: &Environment| {
             calls.set(calls.get() + 1);
             if function == outer {
-                context.eval_value(&call(Value::from(inner), []), environment)
+                context
+                    .eval_value_runtime(&call(Value::from(inner), []), environment)
+                    .map(RuntimeValue::into_value)
             } else {
                 Ok(blob("scoped"))
             }
@@ -1211,7 +1217,9 @@ fn generated_prepared_calls_keep_their_source_callers() {
             ForeignFunction::from_value(move |context, call, environment| {
                 let function = context.field(call, function).unwrap();
                 let function = context.prepare_callable(function, environment)?;
-                context.call_prepared_value(&function, [])
+                context
+                    .call_prepared(&function, [])
+                    .map(RuntimeValue::into_value)
             }),
         )
         .register(
@@ -1220,7 +1228,7 @@ fn generated_prepared_calls_keep_their_source_callers() {
                 let output = output.clone();
                 Rc::new(move |context, _| {
                     *output.borrow_mut() = context.call_trace();
-                    Ok(RuntimeValue::from_value(blob("done")))
+                    Ok(RuntimeValue::from(blob("done")))
                 })
             }),
         );

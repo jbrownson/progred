@@ -133,7 +133,9 @@ fn alternate_consumer_runs_without_collecting_a_tree() {
     with_host(&doc, |host| {
         let emit = |_, context: &mut Context, _: &Expression, _: &Environment| {
             interpret(context, sink.clone(), |context| {
-                context.apply_value(&A.into(), [])
+                context
+                    .apply_expression(&Value::from(A).into(), [])
+                    .map(RuntimeValue::into_value)
             })
         };
         let result = ::grap::evaluate_value_scoped(

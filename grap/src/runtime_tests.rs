@@ -8,6 +8,13 @@ fn lowered(fields: gid::Record) -> RuntimeValue {
     ))
 }
 
+/// Text made natively, with no source record.
+fn native_text(text: &str) -> RuntimeValue {
+    RuntimeValue::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::Text(
+        text.into(),
+    ))))
+}
+
 #[test]
 fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
     let first = new_cell_id();
@@ -198,7 +205,7 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
         RuntimeValue::record([(metadata, closure.clone())]),
         RuntimeValue::f64(3.0),
         lowered(decorated_number),
-        RuntimeValue::text("three"),
+        native_text("three"),
         lowered(decorated_text),
         RuntimeValue::new(RuntimeValueKind::Foreign(metadata)),
         closure,
@@ -363,7 +370,7 @@ fn text_lowers_on_entry_and_keeps_its_source_record() {
     assert!(matches!(&result.0, RuntimeValueKind::Data(_)));
     assert_eq!(result.as_text(), None);
     // Text made natively answers as its record.
-    let native = RuntimeValue::text("hi");
+    let native = native_text("hi");
     assert_eq!(native.as_text(), Some("hi"));
     assert_eq!(native.as_f64(), None);
     assert_eq!(native.to_value(), crate::text::value("hi"));
@@ -373,8 +380,8 @@ fn text_lowers_on_entry_and_keeps_its_source_record() {
             .map(|value| value.to_value()),
         Some(Value::from(b"hi".to_vec()))
     );
-    assert!(native.same_result(&RuntimeValue::text("hi")));
-    assert!(!native.same_result(&RuntimeValue::text("ho")));
+    assert!(native.same_result(&native_text("hi")));
+    assert!(!native.same_result(&native_text("ho")));
     assert!(!native.same_result(&RuntimeValue::f64(1.0)));
 }
 

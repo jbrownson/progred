@@ -75,10 +75,6 @@ pub mod absent {
         value(DECLINED)
     }
 
-    pub fn declines(value: &Value) -> bool {
-        reason(value) == Some(DECLINED)
-    }
-
     pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
         match <[Value; 1]>::try_from(causes.into_iter().collect::<Vec<_>>()) {
             Ok([cause]) => cause,
@@ -307,7 +303,7 @@ impl ForeignFunction {
             tracked: false,
             implementation: ForeignImplementation::Direct(Rc::new(
                 move |context, expression, environment| {
-                    call(context, expression, environment).map(RuntimeValue::from_value)
+                    call(context, expression, environment).map(RuntimeValue::from)
                 },
             )),
             parameters: None,
@@ -465,18 +461,8 @@ impl RuntimeValue {
         }
     }
 
-    pub fn from_value(value: Value) -> Self {
-        Self::new(RuntimeValueKind::Data(value))
-    }
-
     pub fn f64(number: f64) -> Self {
         Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::F64(number))))
-    }
-
-    pub fn text(text: impl Into<Rc<str>>) -> Self {
-        Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::Text(
-            text.into(),
-        ))))
     }
 
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
@@ -543,7 +529,7 @@ impl RuntimeValue {
                 value.as_record()?.get(&field).cloned().map(Self::from)
             }
             RuntimeValueKind::Record(fields) => runtime_field(fields, field).cloned(),
-            RuntimeValueKind::Unboxed(unboxed) => unboxed.field(field).map(Self::from_value),
+            RuntimeValueKind::Unboxed(unboxed) => unboxed.field(field).map(Self::from),
             RuntimeValueKind::Foreign(foreign) => {
                 (field == vocabulary::FFI).then(|| Self::from(Value::from(*foreign)))
             }
@@ -742,13 +728,13 @@ impl RuntimeValue {
 
 impl From<Value> for RuntimeValue {
     fn from(value: Value) -> Self {
-        Self::from_value(value)
+        Self::new(RuntimeValueKind::Data(value))
     }
 }
 
 impl From<&Value> for RuntimeValue {
     fn from(value: &Value) -> Self {
-        Self::from_value(value.clone())
+        Self::from(value.clone())
     }
 }
 
@@ -880,14 +866,6 @@ struct EnvironmentFrame {
     bindings: Vec<(CellIndex, RuntimeValue)>,
 }
 
-impl PartialEq for Environment {
-    fn eq(&self, other: &Self) -> bool {
-        Value::from(self) == Value::from(other)
-    }
-}
-
-impl Eq for Environment {}
-
 impl Environment {
     fn with_indices(indices: CellIndices) -> Self {
         Self {
@@ -896,11 +874,7 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, cell: CellId) -> Option<Value> {
-        self.get_runtime(cell).map(RuntimeValue::to_value)
-    }
-
-    pub fn get_runtime(&self, cell: CellId) -> Option<&RuntimeValue> {
+    fn get_runtime(&self, cell: CellId) -> Option<&RuntimeValue> {
         let index = self.indices.borrow().index(cell)?;
         self.get_index(index)
     }
@@ -936,11 +910,11 @@ impl Environment {
         None
     }
 
-    pub fn extended(&self, bindings: impl IntoIterator<Item = (CellId, Value)>) -> Self {
+    fn extended(&self, bindings: impl IntoIterator<Item = (CellId, Value)>) -> Self {
         self.extended_runtime(
             bindings
                 .into_iter()
-                .map(|(cell, value)| (cell, RuntimeValue::from_value(value))),
+                .map(|(cell, value)| (cell, RuntimeValue::from(value))),
         )
     }
 
@@ -1032,29 +1006,6 @@ impl From<Environment> for Value {
 impl From<&Environment> for Value {
     fn from(environment: &Environment) -> Self {
         reify::environment(environment)
-    }
-}
-
-impl TryFrom<&Value> for Environment {
-    type Error = ();
-
-    fn try_from(value: &Value) -> Result<Self, ()> {
-        let fields = value.as_record().ok_or(())?;
-        let indices = CellIndices::default();
-        Ok(Environment::with_indices(indices)
-            .extended(fields.iter().map(|(cell, value)| (*cell, value.clone()))))
-    }
-}
-
-impl TryFrom<Value> for Environment {
-    type Error = ();
-
-    fn try_from(value: Value) -> Result<Self, ()> {
-        let Value::Record(fields) = value else {
-            return Err(());
-        };
-        let indices = CellIndices::default();
-        Ok(Environment::with_indices(indices).extended(fields))
     }
 }
 
@@ -1595,15 +1546,6 @@ impl<'a> Context<'a> {
             .map(RuntimeValue::into_value)
     }
 
-    pub fn eval_value(
-        &mut self,
-        expression: &Value,
-        environment: &Environment,
-    ) -> Result<Value, Halt> {
-        let expression = self.lower_unattributed_source(expression);
-        self.eval_to_value(expression, environment)
-    }
-
     pub fn eval_value_runtime(
         &mut self,
         expression: &Value,
@@ -1736,8 +1678,8 @@ impl<'a> Context<'a> {
                 if let Some(cached) = context.data_runtime.get(&expression) {
                     return Ok(cached.clone());
                 }
-                let value = context
-                    .lower_runtime(RuntimeValue::from_value(context.value(&expression).clone()));
+                let value =
+                    context.lower_runtime(RuntimeValue::from(context.value(&expression).clone()));
                 context
                     .data_runtime
                     .insert(expression.clone(), value.clone());
@@ -1765,14 +1707,14 @@ impl<'a> Context<'a> {
                     })))
                 }),
                 LambdaParameters::Malformed => thunk(move |_, _| {
-                    Ok(RuntimeValue::from_value(absent::with_detail(
+                    Ok(RuntimeValue::from(absent::with_detail(
                         absent::MALFORMED_LAMBDA,
                         absent::VALUE,
                         Value::record(fields.clone()),
                     )))
                 }),
                 LambdaParameters::Invalid(parameter) => thunk(move |_, _| {
-                    Ok(RuntimeValue::from_value(absent::with_detail(
+                    Ok(RuntimeValue::from(absent::with_detail(
                         absent::INVALID_PARAMETER,
                         absent::VALUE,
                         parameter.clone(),
@@ -1819,7 +1761,7 @@ impl<'a> Context<'a> {
                         Some(&stages),
                     ) {
                         Some(result) => result,
-                        None => Ok(RuntimeValue::from_value(absent::with_detail(
+                        None => Ok(RuntimeValue::from(absent::with_detail(
                             absent::NOT_CALLABLE,
                             absent::VALUE,
                             callable.into_value(),
@@ -1881,7 +1823,7 @@ impl<'a> Context<'a> {
                             Some(&target.stages),
                         )
                         .unwrap_or_else(|| {
-                            Ok(RuntimeValue::from_value(absent::with_detail(
+                            Ok(RuntimeValue::from(absent::with_detail(
                                 absent::NOT_CALLABLE,
                                 absent::VALUE,
                                 callable.into_value(),
@@ -1889,7 +1831,7 @@ impl<'a> Context<'a> {
                         })
                 }
             }
-            PreparedCallTargetKind::Missing => Ok(RuntimeValue::from_value(absent::with_detail(
+            PreparedCallTargetKind::Missing => Ok(RuntimeValue::from(absent::with_detail(
                 absent::MISSING_CELL,
                 absent::CELL,
                 cell.into(),
@@ -1908,7 +1850,7 @@ impl<'a> Context<'a> {
             .iter()
             .position(|candidate| *candidate == cell)
         {
-            Some(stack_index) => Ok(RuntimeValue::from_value(absent::with_detail(
+            Some(stack_index) => Ok(RuntimeValue::from(absent::with_detail(
                 absent::CELL_CYCLE,
                 absent::CYCLE,
                 Value::list(
@@ -1998,10 +1940,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn remaining_fuel(&self) -> usize {
-        self.remaining_fuel
-    }
-
     pub fn field(&self, call: &Expression, label: CellId) -> Option<Expression> {
         lowered_field(call.0.fields.as_ref()?, label)
     }
@@ -2033,7 +1971,7 @@ impl<'a> Context<'a> {
             return Ok(self.lower_runtime(value));
         }
         match self.host.resolve(cell) {
-            None => Ok(RuntimeValue::from_value(absent::with_detail(
+            None => Ok(RuntimeValue::from(absent::with_detail(
                 absent::MISSING_CELL,
                 absent::CELL,
                 Value::from(cell),
@@ -2047,7 +1985,7 @@ impl<'a> Context<'a> {
                         self.eval_resolved_cell(index, cell, expression, environment)
                     }
                     CellState::Evaluating { stack_index } => {
-                        Ok(RuntimeValue::from_value(absent::with_detail(
+                        Ok(RuntimeValue::from(absent::with_detail(
                             absent::CELL_CYCLE,
                             absent::CYCLE,
                             Value::list(
@@ -2165,16 +2103,6 @@ impl<'a> Context<'a> {
         Ok(self.lower_runtime(value))
     }
 
-    /// Apply a callable to already-evaluated argument values inside
-    /// this evaluation — the in-context form of [`apply`].
-    pub fn apply_value(
-        &mut self,
-        function: &Value,
-        arguments: impl IntoIterator<Item = (CellId, Value)>,
-    ) -> Result<Value, Halt> {
-        self.apply_values(function, arguments.into_iter().collect())
-    }
-
     pub fn apply(
         &mut self,
         function: &RuntimeValue,
@@ -2247,23 +2175,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Invoke a prepared callable with argument VALUES. It preserves
-    /// the ordinary call/function/argument fuel steps while avoiding
-    /// a temporary call-shaped Value for Grap closures.
-    pub fn call_prepared_value(
-        &mut self,
-        callable: &PreparedCallable,
-        arguments: impl IntoIterator<Item = (CellId, Value)>,
-    ) -> Result<Value, Halt> {
-        self.call_prepared(
-            callable,
-            arguments
-                .into_iter()
-                .map(|(cell, value)| (cell, RuntimeValue::from_value(value))),
-        )
-        .map(RuntimeValue::into_value)
-    }
-
     pub fn call_prepared(
         &mut self,
         callable: &PreparedCallable,
@@ -2312,7 +2223,7 @@ impl<'a> Context<'a> {
                             let Some(target) =
                                 target.and_then(|cell| context.foreign_target_cell(cell))
                             else {
-                                return Ok(RuntimeValue::from_value(absent::with_detail(
+                                return Ok(RuntimeValue::from(absent::with_detail(
                                     absent::NOT_CALLABLE,
                                     absent::VALUE,
                                     value.to_value(),
@@ -2323,25 +2234,13 @@ impl<'a> Context<'a> {
                         }
                     }
                 }
-                RuntimeValueKind::List(_) => Ok(RuntimeValue::from_value(absent::with_detail(
+                RuntimeValueKind::List(_) => Ok(RuntimeValue::from(absent::with_detail(
                     absent::NOT_CALLABLE,
                     absent::VALUE,
                     callable.value.to_value(),
                 ))),
             }
         })
-    }
-
-    fn apply_values(
-        &mut self,
-        function: &Value,
-        arguments: Vec<(CellId, Value)>,
-    ) -> Result<Value, Halt> {
-        self.apply_expression(
-            &function.into(),
-            arguments.into_iter().map(|(k, v)| (k, v.into())),
-        )
-        .map(RuntimeValue::into_value)
     }
 
     /// Apply runtime-held callable syntax. Grap parameters receive values;
@@ -2374,7 +2273,7 @@ impl<'a> Context<'a> {
             };
             match context.try_apply_callable(callable.clone(), &arguments, &environment) {
                 Some(result) => result,
-                None => Ok(RuntimeValue::from_value(absent::with_detail(
+                None => Ok(RuntimeValue::from(absent::with_detail(
                     absent::NOT_CALLABLE,
                     absent::VALUE,
                     callable.into_value(),
@@ -2414,7 +2313,7 @@ impl<'a> Context<'a> {
                     context
                         .try_apply_callable(callable.clone(), &arguments, environment)
                         .unwrap_or_else(|| {
-                            Ok(RuntimeValue::from_value(absent::with_detail(
+                            Ok(RuntimeValue::from(absent::with_detail(
                                 absent::NOT_CALLABLE,
                                 absent::VALUE,
                                 callable.into_value(),
@@ -2422,7 +2321,7 @@ impl<'a> Context<'a> {
                         })
                 }
             }
-            None => Ok(RuntimeValue::from_value(absent::with_detail(
+            None => Ok(RuntimeValue::from(absent::with_detail(
                 absent::MISSING_CELL,
                 absent::CELL,
                 cell.into(),
@@ -2540,9 +2439,7 @@ impl<'a> Context<'a> {
         let mut arguments = Vec::with_capacity(closure.params.len());
         for (parameter, argument) in closure.params.iter().zip(arguments_plan.iter()) {
             let Some(expression) = argument else {
-                return Ok(RuntimeValue::from_value(
-                    self.missing_argument(parameter.cell),
-                ));
+                return Ok(RuntimeValue::from(self.missing_argument(parameter.cell)));
             };
             arguments.push((
                 parameter.cell,
