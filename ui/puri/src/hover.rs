@@ -86,22 +86,6 @@ impl<H> Probe<H> {
     }
 }
 
-impl<H: PartialEq> Probe<H> {
-    pub fn extended_rect(&self, prior: &H, reach: f64) -> Option<Rect> {
-        match &self.target {
-            Target::Retains(target) if target == prior && !self.placement.clipped_out() => {
-                let rect = self
-                    .placement
-                    .visible_rect()
-                    .inflate(reach, reach)
-                    .intersect(self.placement.clip_rect);
-                (rect.width() > 0.0 && rect.height() > 0.0).then_some(rect)
-            }
-            _ => None,
-        }
-    }
-}
-
 impl<H: Clone + PartialEq> Probe<H> {
     pub fn answer(&self, point: Point, prior: Option<&H>, reach: f64) -> Option<Claim<H>> {
         if self.placement.contains(point) {
@@ -118,6 +102,22 @@ impl<H: Clone + PartialEq> Probe<H> {
                     .filter(|rect| rect.contains(point))
                     .map(|_| Claim::Extended(prior.clone()))
             })
+        }
+    }
+
+    /// Where a probe that retains `prior` keeps it hovered: its visible
+    /// rectangle grown by `reach`, within its clip.
+    fn extended_rect(&self, prior: &H, reach: f64) -> Option<Rect> {
+        match &self.target {
+            Target::Retains(target) if target == prior && !self.placement.clipped_out() => {
+                let rect = self
+                    .placement
+                    .visible_rect()
+                    .inflate(reach, reach)
+                    .intersect(self.placement.clip_rect);
+                (rect.width() > 0.0 && rect.height() > 0.0).then_some(rect)
+            }
+            _ => None,
         }
     }
 }
