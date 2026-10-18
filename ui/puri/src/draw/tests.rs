@@ -154,3 +154,33 @@ fn an_initial_drawing_interprets_through_the_canvas_language() {
             && matches!(children.as_slice(), [DrawCmd::Stroke { shape: Shape::Line(_), .. }])
     ));
 }
+
+#[test]
+fn straight_rgba_swaps_bgra_and_divides_out_premultiplied_alpha() {
+    let image = |format, alpha_type| ImageData {
+        data: vec![16, 32, 64, 128, 0, 0, 0, 0].into(),
+        format,
+        alpha_type,
+        width: 2,
+        height: 1,
+    };
+    let straight = image(ImageFormat::Rgba8, ImageAlphaType::Alpha);
+    assert!(matches!(
+        straight_rgba(&straight),
+        Some(Cow::Borrowed([16, 32, 64, 128, 0, 0, 0, 0]))
+    ));
+    let converted =
+        |format, alpha_type| straight_rgba(&image(format, alpha_type)).map(Cow::into_owned);
+    assert_eq!(
+        converted(ImageFormat::Bgra8, ImageAlphaType::Alpha),
+        Some(vec![64, 32, 16, 128, 0, 0, 0, 0])
+    );
+    assert_eq!(
+        converted(ImageFormat::Rgba8, ImageAlphaType::AlphaPremultiplied),
+        Some(vec![32, 64, 128, 128, 0, 0, 0, 0])
+    );
+    assert_eq!(
+        converted(ImageFormat::Bgra8, ImageAlphaType::AlphaPremultiplied),
+        Some(vec![128, 64, 32, 128, 0, 0, 0, 0])
+    );
+}

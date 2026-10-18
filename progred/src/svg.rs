@@ -22,36 +22,16 @@ mod refined;
 mod tests;
 
 fn image_png(image: &ImageData) -> Vec<u8> {
-    let mut rgba = image.data.as_ref().to_vec();
     assert_eq!(
-        Some(rgba.len()),
+        Some(image.data.as_ref().len()),
         image.format.size_in_bytes(image.width, image.height)
     );
-    for pixel in rgba.chunks_exact_mut(4) {
-        match image.format {
-            ImageFormat::Rgba8 => {}
-            ImageFormat::Bgra8 => pixel.swap(0, 2),
-            _ => panic!("unsupported SVG image format"),
-        }
-        if image.alpha_type == ImageAlphaType::AlphaPremultiplied {
-            let alpha = u32::from(pixel[3]);
-            for channel in &mut pixel[..3] {
-                *channel = if alpha == 0 {
-                    0
-                } else {
-                    ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8
-                };
-            }
-        }
-    }
-    let mut bytes = Vec::new();
-    let mut encoder = png::Encoder::new(&mut bytes, image.width, image.height);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-    let mut writer = encoder.write_header().unwrap();
-    writer.write_image_data(&rgba).unwrap();
-    writer.finish().unwrap();
-    bytes
+    crate::libraries::png::encode(
+        image.width,
+        image.height,
+        &puri::draw::straight_rgba(image).expect("unsupported SVG image format"),
+    )
+    .unwrap()
 }
 
 fn svg_transform(transform: Affine) -> String {

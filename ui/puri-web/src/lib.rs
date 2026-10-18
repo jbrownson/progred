@@ -5,12 +5,11 @@
 use js_sys::Array;
 use kurbo::{Affine, Cap, Join, PathEl, Shape as KurboShape, Stroke};
 use peniko::color::Srgb;
-use peniko::{Brush, GradientKind, ImageAlphaType, ImageData, ImageFormat};
+use peniko::{Brush, GradientKind, ImageData};
 use puri::draw::{GlyphRun, Shape};
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
-use std::borrow::Cow;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{CanvasGradient, CanvasRenderingContext2d, HtmlCanvasElement, Path2d};
 
@@ -210,27 +209,7 @@ impl puri::draw::CanvasSink for WebCanvas {
 }
 
 fn image_canvas(image: &ImageData) -> Option<HtmlCanvasElement> {
-    let rgba = if image.format == ImageFormat::Rgba8 && image.alpha_type == ImageAlphaType::Alpha {
-        Cow::Borrowed(image.data.as_ref())
-    } else {
-        let mut rgba = image.data.as_ref().to_vec();
-        for pixel in rgba.chunks_exact_mut(4) {
-            if image.format == ImageFormat::Bgra8 {
-                pixel.swap(0, 2);
-            }
-            if image.alpha_type == ImageAlphaType::AlphaPremultiplied {
-                let alpha = u16::from(pixel[3]);
-                for channel in &mut pixel[..3] {
-                    *channel = if alpha == 0 {
-                        0
-                    } else {
-                        ((u16::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8
-                    };
-                }
-            }
-        }
-        Cow::Owned(rgba)
-    };
+    let rgba = puri::draw::straight_rgba(image)?;
     // ImageData does not accept SharedArrayBuffer-backed typed arrays. Copy
     // into a JS-owned array at this platform boundary; WASM memory is shared
     // in threaded builds even when this image was produced on the UI thread.

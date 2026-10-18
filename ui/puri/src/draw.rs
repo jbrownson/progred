@@ -8,7 +8,8 @@
 //! recording back into any canvas.
 
 use kurbo::{Affine, BezPath, Circle, Line, Rect, RoundedRect, Stroke};
-use peniko::{Brush, FontData, ImageData};
+use peniko::{Brush, FontData, ImageAlphaType, ImageData, ImageFormat};
+use std::borrow::Cow;
 
 /// A measured Puri leaf. Text asks its consumer to shape one line;
 /// drawing programs carry their own metrics and use leaf-local logical
@@ -282,6 +283,38 @@ pub trait CanvasSink {
         transform: Affine,
         content: Box<dyn FnOnce(&mut dyn CanvasSink) + '_>,
     );
+}
+
+/// `image`'s pixels as straight-alpha RGBA, for a backend that takes only
+/// that layout; None for a format this doesn't know.
+pub fn straight_rgba(image: &ImageData) -> Option<Cow<'_, [u8]>> {
+    let bgra = match image.format {
+        ImageFormat::Rgba8 => Some(false),
+        ImageFormat::Bgra8 => Some(true),
+        _ => None,
+    }?;
+    let premultiplied = image.alpha_type == ImageAlphaType::AlphaPremultiplied;
+    Some(if bgra || premultiplied {
+        let mut rgba = image.data.as_ref().to_vec();
+        for pixel in rgba.chunks_exact_mut(4) {
+            if bgra {
+                pixel.swap(0, 2);
+            }
+            if premultiplied {
+                let alpha = u16::from(pixel[3]);
+                for channel in &mut pixel[..3] {
+                    *channel = if alpha == 0 {
+                        0
+                    } else {
+                        ((u16::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8
+                    };
+                }
+            }
+        }
+        Cow::Owned(rgba)
+    } else {
+        Cow::Borrowed(image.data.as_ref())
+    })
 }
 
 #[derive(Debug, Clone)]
