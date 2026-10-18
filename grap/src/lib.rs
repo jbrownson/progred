@@ -464,14 +464,7 @@ impl RuntimeValue {
     }
 
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
-        let mut fields: Vec<_> = fields.into_iter().collect();
-        if !fields.is_sorted_by(|(a, _), (b, _)| a < b) {
-            // A repeated label keeps its last value, as in a GID record.
-            fields.reverse();
-            fields.sort_by_key(|(field, _)| *field);
-            fields.dedup_by_key(|(field, _)| *field);
-        }
-        Self::new(RuntimeValueKind::Record(fields.into()))
+        Self::new(RuntimeValueKind::Record(record_fields(fields)))
     }
 
     pub fn list(elements: impl IntoIterator<Item = RuntimeValue>) -> Self {
@@ -822,6 +815,20 @@ type CellIndices = Rc<RefCell<CellIndexTable>>;
 
 fn cell_index(indices: &CellIndices, cell: CellId) -> CellIndex {
     indices.borrow_mut().intern(cell)
+}
+
+/// A runtime record's fields, sorted by label; a repeated label keeps its
+/// last value, as in a GID record.
+fn record_fields(
+    fields: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+) -> Rc<[(CellId, RuntimeValue)]> {
+    let mut fields: Vec<_> = fields.into_iter().collect();
+    if !fields.is_sorted_by(|(a, _), (b, _)| a < b) {
+        fields.reverse();
+        fields.sort_by_key(|(field, _)| *field);
+        fields.dedup_by_key(|(field, _)| *field);
+    }
+    fields.into()
 }
 
 /// A runtime record's field, borrowed. Runtime records keep their fields
@@ -1709,7 +1716,7 @@ impl<'a> Context<'a> {
                     && environment.get_at(&context.indices, cell, index).is_none()
                     && context.foreign_target_cell(cell).is_none()
                 {
-                    return context.call_cell(cell, &call, environment, &target);
+                    return context.call_cell(cell, &call, environment, Some(&target));
                 }
                 context.checked_call(|context| {
                     let callable = match function_cell {
@@ -1727,15 +1734,11 @@ impl<'a> Context<'a> {
                         callable.clone(),
                         &call,
                         environment,
-                        Some(&plan),
-                        Some(&stages),
+                        &plan,
+                        &stages,
                     ) {
                         Some(result) => result,
-                        None => Ok(RuntimeValue::from(absent::with_detail(
-                            absent::NOT_CALLABLE,
-                            absent::VALUE,
-                            callable.into_value(),
-                        ))),
+                        None => Ok(not_callable(&callable)),
                     }
                 })
             })
@@ -1747,10 +1750,10 @@ impl<'a> Context<'a> {
         cell: CellId,
         call: &Expression,
         environment: &Environment,
-        cache: &RefCell<Option<Rc<PreparedCallTarget>>>,
+        cache: Option<&RefCell<Option<Rc<PreparedCallTarget>>>>,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
-        let cached = cache.borrow().clone();
+        let cached = cache.and_then(|cache| cache.borrow().clone());
         let target = match cached {
             Some(target) => target,
             None => {
@@ -1768,7 +1771,9 @@ impl<'a> Context<'a> {
                     plan: RefCell::new(None),
                     stages: RefCell::new(None),
                 });
-                *cache.borrow_mut() = Some(target.clone());
+                if let Some(cache) = cache {
+                    *cache.borrow_mut() = Some(target.clone());
+                }
                 target
             }
         };
@@ -1789,23 +1794,13 @@ impl<'a> Context<'a> {
                             callable.clone(),
                             call,
                             environment,
-                            Some(&target.plan),
-                            Some(&target.stages),
+                            &target.plan,
+                            &target.stages,
                         )
-                        .unwrap_or_else(|| {
-                            Ok(RuntimeValue::from(absent::with_detail(
-                                absent::NOT_CALLABLE,
-                                absent::VALUE,
-                                callable.into_value(),
-                            )))
-                        })
+                        .unwrap_or_else(|| Ok(not_callable(&callable)))
                 }
             }
-            PreparedCallTargetKind::Missing => Ok(RuntimeValue::from(absent::with_detail(
-                absent::MISSING_CELL,
-                absent::CELL,
-                cell.into(),
-            ))),
+            PreparedCallTargetKind::Missing => Ok(missing_cell(cell)),
         })
     }
 
@@ -1845,8 +1840,8 @@ impl<'a> Context<'a> {
         callable: RuntimeValue,
         call: &Expression,
         environment: &Environment,
-        plan: Option<&RefCell<Option<CallPlan>>>,
-        stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
+        plan: &RefCell<Option<CallPlan>>,
+        stages: &RefCell<Option<(Prepare, Stage)>>,
     ) -> Option<Result<RuntimeValue, Halt>> {
         match &callable.0 {
             RuntimeValueKind::Closure(closure) => {
@@ -1854,8 +1849,10 @@ impl<'a> Context<'a> {
             }
             RuntimeValueKind::Foreign(cell) => {
                 return Some(match self.foreign_target_cell(*cell) {
-                    Some(foreign) => self.call_foreign_staged(&foreign, call, environment, stages),
-                    None => self.call_cell(*cell, call, environment, &RefCell::new(None)),
+                    Some(foreign) => {
+                        self.call_foreign_staged(&foreign, call, environment, Some(stages))
+                    }
+                    None => self.call_cell(*cell, call, environment, None),
                 });
             }
             _ => {}
@@ -1873,12 +1870,11 @@ impl<'a> Context<'a> {
                     if let Some(cell) = cell
                         && self.foreign_target_cell(cell).is_none()
                     {
-                        let target = RefCell::new(None);
-                        return Some(self.call_cell(cell, call, environment, &target));
+                        return Some(self.call_cell(cell, call, environment, None));
                     }
                     cell.and_then(|cell| self.foreign_target_cell(cell))
                         .map(|foreign| {
-                            self.call_foreign_staged(&foreign, call, environment, stages)
+                            self.call_foreign_staged(&foreign, call, environment, Some(stages))
                         })
                 }
                 _ => None,
@@ -1939,11 +1935,7 @@ impl<'a> Context<'a> {
         match environment.get_at(&self.indices, cell, index) {
             Some(value) => Ok(self.lower_runtime(value.clone())),
             None => match self.host.resolve(cell) {
-                None => Ok(RuntimeValue::from(absent::with_detail(
-                    absent::MISSING_CELL,
-                    absent::CELL,
-                    Value::from(cell),
-                ))),
+                None => Ok(missing_cell(cell)),
                 Some((resolution, definition)) => {
                     while self.cell_states.len() <= index.0 {
                         self.cell_states.push(CellState::Unknown);
@@ -2164,12 +2156,7 @@ impl<'a> Context<'a> {
                         Some(foreign) => {
                             context.call_foreign(&foreign, &call, &callable.environment)
                         }
-                        None => context.call_cell(
-                            *cell,
-                            &call,
-                            &callable.environment,
-                            &RefCell::new(None),
-                        ),
+                        None => context.call_cell(*cell, &call, &callable.environment, None),
                     }
                 }
                 RuntimeValueKind::Data(_)
@@ -2182,33 +2169,20 @@ impl<'a> Context<'a> {
                     match target {
                         Some(cell) if context.foreign_target_cell(cell).is_none() => {
                             let call = runtime_call(callable.value.clone(), arguments);
-                            context.call_cell(
-                                cell,
-                                &call,
-                                &callable.environment,
-                                &RefCell::new(None),
-                            )
+                            context.call_cell(cell, &call, &callable.environment, None)
                         }
                         _ => {
                             let Some(target) =
                                 target.and_then(|cell| context.foreign_target_cell(cell))
                             else {
-                                return Ok(RuntimeValue::from(absent::with_detail(
-                                    absent::NOT_CALLABLE,
-                                    absent::VALUE,
-                                    value.to_value(),
-                                )));
+                                return Ok(not_callable(value));
                             };
                             let call = runtime_call(callable.value.clone(), arguments);
                             context.call_foreign(&target, &call, &callable.environment)
                         }
                     }
                 }
-                RuntimeValueKind::List(_) => Ok(RuntimeValue::from(absent::with_detail(
-                    absent::NOT_CALLABLE,
-                    absent::VALUE,
-                    callable.value.to_value(),
-                ))),
+                RuntimeValueKind::List(_) => Ok(not_callable(&callable.value)),
             }
         })
     }
@@ -2243,11 +2217,7 @@ impl<'a> Context<'a> {
             };
             match context.try_apply_callable(callable.clone(), &arguments, &environment) {
                 Some(result) => result,
-                None => Ok(RuntimeValue::from(absent::with_detail(
-                    absent::NOT_CALLABLE,
-                    absent::VALUE,
-                    callable.into_value(),
-                ))),
+                None => Ok(not_callable(&callable)),
             }
         })
     }
@@ -2282,20 +2252,10 @@ impl<'a> Context<'a> {
                 } else {
                     context
                         .try_apply_callable(callable.clone(), &arguments, environment)
-                        .unwrap_or_else(|| {
-                            Ok(RuntimeValue::from(absent::with_detail(
-                                absent::NOT_CALLABLE,
-                                absent::VALUE,
-                                callable.into_value(),
-                            )))
-                        })
+                        .unwrap_or_else(|| Ok(not_callable(&callable)))
                 }
             }
-            None => Ok(RuntimeValue::from(absent::with_detail(
-                absent::MISSING_CELL,
-                absent::CELL,
-                cell.into(),
-            ))),
+            None => Ok(missing_cell(cell)),
         })
     }
 
@@ -2381,12 +2341,10 @@ impl<'a> Context<'a> {
         closure: Closure,
         call: &Expression,
         calling_environment: &Environment,
-        plan: Option<&RefCell<Option<CallPlan>>>,
+        plan: &RefCell<Option<CallPlan>>,
     ) -> Result<RuntimeValue, Halt> {
-        let arguments_plan = plan.and_then(|slot| {
-            slot.borrow().as_ref().and_then(|cached| {
-                Rc::ptr_eq(&cached.params, &closure.params).then(|| cached.arguments.clone())
-            })
+        let arguments_plan = plan.borrow().as_ref().and_then(|cached| {
+            Rc::ptr_eq(&cached.params, &closure.params).then(|| cached.arguments.clone())
         });
         let arguments_plan = match arguments_plan {
             Some(arguments) => arguments,
@@ -2396,12 +2354,10 @@ impl<'a> Context<'a> {
                     .iter()
                     .map(|&parameter| self.field(call, parameter))
                     .collect();
-                if let Some(slot) = plan {
-                    *slot.borrow_mut() = Some(CallPlan {
-                        params: closure.params.clone(),
-                        arguments: arguments.clone(),
-                    });
-                }
+                *plan.borrow_mut() = Some(CallPlan {
+                    params: closure.params.clone(),
+                    arguments: arguments.clone(),
+                });
                 arguments
             }
         };
@@ -2456,6 +2412,24 @@ impl<'a> Context<'a> {
     }
 }
 
+/// The absence a call answers when `callable` can't be called.
+fn not_callable(callable: &RuntimeValue) -> RuntimeValue {
+    RuntimeValue::from(absent::with_detail(
+        absent::NOT_CALLABLE,
+        absent::VALUE,
+        callable.to_value(),
+    ))
+}
+
+/// The absence a reference answers when `cell` has no definition.
+fn missing_cell(cell: CellId) -> RuntimeValue {
+    RuntimeValue::from(absent::with_detail(
+        absent::MISSING_CELL,
+        absent::CELL,
+        cell.into(),
+    ))
+}
+
 fn runtime_expression(value: RuntimeValue) -> Expression {
     Expression(Rc::new(Lowered {
         source: value.clone(),
@@ -2467,23 +2441,21 @@ fn runtime_expression(value: RuntimeValue) -> Expression {
 }
 
 fn runtime_call(function: RuntimeValue, arguments: Vec<(CellId, RuntimeValue)>) -> Expression {
-    let value = RuntimeValue::record(
+    let fields = record_fields(
         [(vocabulary::FUNCTION, function)]
             .into_iter()
             .chain(arguments),
     );
-    let RuntimeValueKind::Record(fields) = &value.0 else {
-        unreachable!()
-    };
-    let fields = fields
+    let lowered = fields
         .iter()
         .map(|(field, value)| (*field, runtime_expression(value.clone())))
         .collect();
+    let value = RuntimeValue::new(RuntimeValueKind::Record(fields));
     Expression(Rc::new(Lowered {
         source: value.clone(),
         origin: None,
         form: Form::Ready(value),
-        fields: Some(fields),
+        fields: Some(lowered),
         elements: None,
     }))
 }
