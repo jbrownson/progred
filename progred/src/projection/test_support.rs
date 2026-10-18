@@ -185,7 +185,7 @@ pub(crate) fn write_with(
     selected: &mut Selection,
     update: impl Fn(&str, Option<&Value>) -> Option<Value> + 'static,
 ) -> bool {
-    line_control::commit(
+    crate::editing::commit_line(
         doc,
         libraries,
         selected,

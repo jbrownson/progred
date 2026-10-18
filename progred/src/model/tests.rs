@@ -361,7 +361,7 @@ fn saving_and_folding_break_typing_runs() {
         let before = model.snapshot();
         let selection = model.selection.as_mut().unwrap();
         selection.edit_mut().unwrap().set_text(text);
-        if crate::projection::line_control::commit(
+        if crate::editing::commit_line(
             &mut model.doc,
             &libraries,
             selection,

@@ -1,6 +1,6 @@
 use super::*;
 use crate::libraries::{f64, text};
-use crate::projection::line_control;
+
 use crate::selection::Selection;
 use crate::test_support::{core_libraries, src};
 use gid::{Document, new_cell_id};
@@ -162,7 +162,7 @@ fn custom_update_can_bind_an_absent_and_return_a_value() {
         vec![],
         line.clone(),
     );
-    assert!(line_control::commit(
+    assert!(crate::editing::commit_line(
         &mut doc,
         &libraries,
         &mut selected,

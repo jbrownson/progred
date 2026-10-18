@@ -1,7 +1,7 @@
 //! Document-facing widget operations, given the session a dispatch lends.
 
 use crate::display::widget::navigation::Geometry;
-use crate::{projection, selection, sources::Sources, workspace::Root};
+use crate::{selection, sources::Sources, workspace::Root};
 use gid::{Step, Value};
 use puri::edit::EditCtx;
 use puri::keyboard::CommandModifier;
@@ -13,7 +13,7 @@ mod session;
 mod site;
 pub use scope::Read;
 pub(crate) use scope::{Access, Edit, Scope};
-pub(crate) use session::Session;
+pub(crate) use session::{Session, TextTools};
 pub(crate) use site::{Selected, Site};
 
 pub(crate) fn select(session: &mut Session<'_>, root: &Root, path: &[Step]) {
@@ -74,22 +74,71 @@ pub(crate) fn edit_line(
             && selected.writable(&sources)
     });
     let (handled, record) = match selected {
-        Some(selected) => {
-            projection::line_control::edit(&mut model.doc, libraries, selected, line, |state| {
-                operation(EditCtx {
-                    state,
-                    fonts: text.fonts,
-                    layouts: text.layouts,
-                    clipboard: text.clipboard,
-                })
+        Some(selected) => line_edit(&mut model.doc, libraries, selected, line, |state| {
+            operation(EditCtx {
+                state,
+                fonts: text.fonts,
+                layouts: text.layouts,
+                clipboard: text.clipboard,
             })
-        }
+        }),
         None => (false, false),
     };
     if record {
         model.history.record(before);
     }
     handled
+}
+
+/// Apply this line's conversion of what was typed, and report whether it
+/// opens an undo step.
+pub(crate) fn commit_line(
+    doc: &mut std::rc::Rc<gid::Document>,
+    libraries: &crate::library::Libraries,
+    selection: &mut selection::Selection,
+    update: &crate::display::LineUpdate,
+) -> bool {
+    let sources = Sources { doc, libraries };
+    let next = selection
+        .value_edit()
+        .filter(|_| selection.writable(&sources))
+        .and_then(|editor| {
+            let current = selection.value(&sources);
+            update(&sources, editor.text(), current).filter(|next| current != Some(next))
+        });
+    if next.is_some_and(|next| {
+        selection
+            .location()
+            .is_some_and(|location| crate::selection::set_value(doc, libraries, &location, next))
+    }) {
+        let first = !selection.recorded();
+        selection.preserve_recorded(true);
+        first
+    } else {
+        false
+    }
+}
+
+/// Apply `operation` to the line being typed in `selection`, committing what
+/// it typed; whether the line took it, and whether that opens an undo step.
+fn line_edit(
+    doc: &mut std::rc::Rc<gid::Document>,
+    libraries: &crate::library::Libraries,
+    selection: &mut selection::Selection,
+    line: &crate::display::LineEdit,
+    operation: impl FnOnce(&mut puri::edit::LineEditState) -> bool,
+) -> (bool, bool) {
+    let typing = selection.edit().is_some();
+    let state = selection.edit_line_mut(&line.text);
+    let before = state.text().to_owned();
+    let handled = operation(state);
+    let changed = before != state.text();
+    // A key the line didn't take doesn't start typing.
+    if !handled && !typing {
+        selection.clear_editor();
+    }
+    let record = handled && changed && commit_line(doc, libraries, selection, &line.update);
+    (handled, record)
 }
 
 /// What Enter would start from `selection`, leaving it as it is: a peer

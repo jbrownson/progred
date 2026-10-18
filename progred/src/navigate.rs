@@ -104,7 +104,7 @@ pub(crate) fn initial_navigation(
                 && editor.model.selection.is_none()
             {
                 scope
-                    .open(crate::editing::Access::new(editor))
+                    .open(crate::editing::Access::new(editor.session()))
                     .select(&root, &path);
                 puri::handler::EventOutcome::accept()
             } else {

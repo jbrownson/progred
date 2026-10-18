@@ -2,7 +2,6 @@
 //! retain source provenance, and fall back to total structural display.
 
 mod child;
-pub(crate) mod line_control;
 mod structure;
 #[cfg(test)]
 pub(crate) mod test_support;

@@ -345,6 +345,20 @@ pub(crate) fn new_editor(
 }
 
 impl Editor {
+    /// The editor's capabilities for one dispatch.
+    pub(crate) fn session(&mut self) -> crate::editing::Session<'_> {
+        crate::editing::Session {
+            model: &mut self.model,
+            libraries: &self.stack.libraries,
+            gesture: &mut self.gesture,
+            timers: &mut self.timers,
+            text: crate::editing::TextTools {
+                fonts: &mut self.font_cx,
+                layouts: &mut self.layout_cx,
+                clipboard: &mut self.text_clipboard,
+            },
+        }
+    }
     pub(crate) fn window_id(&self) -> Option<WindowId> {
         self.window().map(|window| window.id())
     }

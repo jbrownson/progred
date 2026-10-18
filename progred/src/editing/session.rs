@@ -100,20 +100,3 @@ impl Session<'_> {
         changed
     }
 }
-
-impl crate::Editor {
-    /// The editor's capabilities for one dispatch.
-    pub(crate) fn session(&mut self) -> Session<'_> {
-        Session {
-            model: &mut self.model,
-            libraries: &self.stack.libraries,
-            gesture: &mut self.gesture,
-            timers: &mut self.timers,
-            text: TextTools {
-                fonts: &mut self.font_cx,
-                layouts: &mut self.layout_cx,
-                clipboard: &mut self.text_clipboard,
-            },
-        }
-    }
-}

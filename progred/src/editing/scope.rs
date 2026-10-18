@@ -2,7 +2,6 @@
 //! Scopes own no editor state. Mutable access is lent only during dispatch.
 
 use super::*;
-use crate::Editor;
 use crate::location::Location;
 use gid::{CellId, Path, Resolution};
 use std::rc::Rc;
@@ -175,17 +174,13 @@ pub(crate) struct Access<'a> {
 }
 
 impl<'a> Access<'a> {
-    pub(crate) fn new(editor: &'a mut Editor) -> Self {
-        Self {
-            session: editor.session(),
-        }
+    pub(crate) fn new(session: Session<'a>) -> Self {
+        Self { session }
     }
 
     /// Access through a session already lent, as a gesture has one.
     pub(crate) fn of(session: &'a mut Session<'_>) -> Self {
-        Self {
-            session: session.reborrow(),
-        }
+        Self::new(session.reborrow())
     }
 }
 
