@@ -1358,11 +1358,11 @@ impl<'a> Context<'a> {
 
     fn lower_source(&mut self, value: &Value, root: OriginRoot) -> Expression {
         let origin = OriginId(Rc::new(OriginNode::Root(root)));
-        self.lower_with(value, true, Some(origin))
+        self.lower_with(value, Some(origin))
     }
 
     fn lower_unattributed_source(&mut self, value: &Value) -> Expression {
-        self.lower_with(value, true, None)
+        self.lower_with(value, None)
     }
 
     fn lower_runtime_code(&mut self, value: &RuntimeValue) -> Expression {
@@ -1375,9 +1375,9 @@ impl<'a> Context<'a> {
         origin: Option<OriginId>,
     ) -> Expression {
         match &value.0 {
-            RuntimeValueKind::Data(value) => self.lower_with(value, true, origin),
+            RuntimeValueKind::Data(value) => self.lower_with(value, origin),
             RuntimeValueKind::Unboxed(unboxed) => match unboxed.original() {
-                Some(fields) => self.lower_with(&Value::Record(fields.clone()), true, origin),
+                Some(fields) => self.lower_with(&Value::Record(fields.clone()), origin),
                 None => runtime_expression(value.clone()),
             },
             RuntimeValueKind::Record(record) => {
@@ -1456,20 +1456,13 @@ impl<'a> Context<'a> {
         parent.map(|parent| OriginId(Rc::new(OriginNode::Child { parent, step })))
     }
 
-    fn lower_with(
-        &mut self,
-        value: &Value,
-        descend_data: bool,
-        origin: Option<OriginId>,
-    ) -> Expression {
-        let mut lowered_fields = None;
-        let mut lowered_elements = None;
-        let form = match value {
-            Value::Cell(cell) => Form::Cell(*cell),
+    fn lower_with(&mut self, value: &Value, origin: Option<OriginId>) -> Expression {
+        let (form, fields, elements) = match value {
+            Value::Cell(cell) => (Form::Cell(*cell), None, None),
             Value::Record(fields) => {
                 let lower_field = |this: &mut Self, field: CellId, value: &Value| {
                     let child = this.child_origin(origin.clone(), gid::Step::Key(field));
-                    this.lower_with(value, descend_data, child)
+                    this.lower_with(value, child)
                 };
                 // Lower every field, reusing an already lowered head.
                 let lower_all = |this: &mut Self, head: Option<(CellId, &Expression)>| {
@@ -1490,62 +1483,56 @@ impl<'a> Context<'a> {
                 ) {
                     (Some(function), _, _) => {
                         let function = lower_field(self, vocabulary::FUNCTION, function);
-                        lowered_fields =
-                            Some(lower_all(self, Some((vocabulary::FUNCTION, &function))));
-                        Form::Call { function }
+                        let fields = lower_all(self, Some((vocabulary::FUNCTION, &function)));
+                        (Form::Call { function }, Some(fields), None)
                     }
-                    (None, Some((params, body)), _) => Form::Lambda {
-                        parameters: LambdaParameters::parse(params.as_list().map(|list| {
-                            list.values()
-                                .map(|v| {
-                                    v.as_cell()
-                                        .map(|cell| Parameter { cell })
-                                        .ok_or_else(|| v.clone())
-                                })
-                                .collect()
-                        })),
-                        body: lower_field(self, vocabulary::BODY, body),
-                        fields: fields.clone(),
-                    },
+                    (None, Some((params, body)), _) => (
+                        Form::Lambda {
+                            parameters: LambdaParameters::parse(params.as_list().map(|list| {
+                                list.values()
+                                    .map(|v| {
+                                        v.as_cell()
+                                            .map(|cell| Parameter { cell })
+                                            .ok_or_else(|| v.clone())
+                                    })
+                                    .collect()
+                            })),
+                            body: lower_field(self, vocabulary::BODY, body),
+                            fields: fields.clone(),
+                        },
+                        None,
+                        None,
+                    ),
                     (None, None, Some(value)) => {
                         let value = lower_field(self, vocabulary::VALUE, value);
-                        lowered_fields = Some(lower_all(self, Some((vocabulary::VALUE, &value))));
-                        Form::Value(value)
+                        let fields = lower_all(self, Some((vocabulary::VALUE, &value)));
+                        (Form::Value(value), Some(fields), None)
                     }
-                    // Data records keep their children only when data is descended.
-                    (None, None, None) => {
-                        if descend_data {
-                            lowered_fields = Some(lower_all(self, None));
-                        }
-                        Form::Data
-                    }
+                    (None, None, None) => (Form::Data, Some(lower_all(self, None)), None),
                 }
             }
-            Value::List(elements) => {
-                if descend_data {
-                    lowered_elements = Some(
-                        elements
-                            .iter()
-                            .map(|(position, value)| {
-                                let child = self.child_origin(
-                                    origin.clone(),
-                                    gid::Step::Element(position.clone()),
-                                );
-                                self.lower_with(value, true, child)
-                            })
-                            .collect(),
-                    );
-                }
-                Form::Data
-            }
-            Value::Blob(_) => Form::Data,
+            Value::List(elements) => (
+                Form::Data,
+                None,
+                Some(
+                    elements
+                        .iter()
+                        .map(|(position, value)| {
+                            let child = self
+                                .child_origin(origin.clone(), gid::Step::Element(position.clone()));
+                            self.lower_with(value, child)
+                        })
+                        .collect(),
+                ),
+            ),
+            Value::Blob(_) => (Form::Data, None, None),
         };
         Expression(Rc::new(Lowered {
             source: value.into(),
             origin,
             form,
-            fields: lowered_fields,
-            elements: lowered_elements,
+            fields,
+            elements,
         }))
     }
 
