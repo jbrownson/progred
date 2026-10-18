@@ -703,10 +703,9 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Data(value) => value
                 .as_list()?
-                .values()
+                .iter()
                 .nth(index)
-                .cloned()
-                .map(Self::from),
+                .map(|(_, value)| Self::from(value)),
             RuntimeValueKind::List(elements) => elements.get(index).cloned(),
             RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
