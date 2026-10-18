@@ -1,56 +1,8 @@
 use super::*;
-use crate::draw::{DrawCmd, DrawList, GlyphRun, Shape};
-use crate::handler::Handler;
-use kurbo::Stroke;
-use peniko::ImageData;
+use crate::draw::{DrawCmd, DrawList, Shape};
+use kurbo::Vec2;
 use ui_events::keyboard::{KeyState, Modifiers};
-
-struct DrawFrame {
-    list: DrawList,
-    handler: Handler<()>,
-}
-
-impl crate::draw::CanvasSink for DrawFrame {
-    fn draw_image(&mut self, image: ImageData, transform: Affine) {
-        self.list.image(image, transform);
-    }
-
-    fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
-        self.list.fill(shape, brush, transform);
-    }
-
-    fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
-        self.list.stroke(shape, style, brush, transform);
-    }
-
-    fn draw_glyphs(&mut self, run: GlyphRun) {
-        self.list.glyph_run(run);
-    }
-
-    fn with_clip(
-        &mut self,
-        shape: Shape,
-        transform: Affine,
-        content: Box<dyn FnOnce(&mut dyn crate::draw::CanvasSink) + '_>,
-    ) {
-        let outer = std::mem::take(&mut self.list.0);
-        content(self);
-        let children = std::mem::replace(&mut self.list.0, outer);
-        self.list.0.push(DrawCmd::Clip {
-            shape,
-            transform,
-            children,
-        });
-    }
-}
-
-impl HasHandler<()> for DrawFrame {
-    type Input = ();
-
-    fn handler(&mut self) -> &mut Handler<()> {
-        &mut self.handler
-    }
-}
+use ui_events::pointer::{PointerButton, PointerId, PointerInfo, PointerState, PointerType};
 
 fn contexts() -> (FontContext, LayoutContext<Brush>) {
     (FontContext::new(), LayoutContext::new())
@@ -62,6 +14,39 @@ fn state(text: &str) -> LineEditState {
 
 fn presentation() -> LineEditPresentation {
     LineEditPresentation::new(16.0, Brush::default())
+}
+
+fn affixed(prefix: &str, suffix: &str) -> LineEditPresentation {
+    LineEditPresentation {
+        prefix: prefix.into(),
+        suffix: suffix.into(),
+        ..presentation()
+    }
+}
+
+/// A primary press at `point` in the field's coordinates, the `count`th
+/// in a row.
+fn press_at(point: Point, count: u8) -> PointerButtonEvent {
+    let mut state = PointerState::default();
+    state.position.x = point.x;
+    state.position.y = point.y;
+    state.count = count;
+    PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: PointerInfo {
+            pointer_id: Some(PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        },
+        state,
+    }
+}
+
+/// The field drawn at `placement`, recorded.
+fn drawn(edit: &LineEdit, placement: Placement) -> Vec<DrawCmd> {
+    let mut list = DrawList::new();
+    edit.draw(&mut list, placement);
+    list.0
 }
 
 #[derive(Default)]
@@ -193,11 +178,7 @@ fn typing_moving_and_deleting() {
 fn arrow_modifiers_use_the_hosts_text_navigation_convention() {
     use crate::keyboard::CommandModifier::{Control, Meta};
     let (mut fonts, mut layouts) = contexts();
-    let presentation = LineEditPresentation {
-        prefix: "[".into(),
-        suffix: "]".into(),
-        ..presentation()
-    };
+    let presentation = affixed("[", "]");
     for (command, modifiers, key, start, end) in [
         (Meta, Modifiers::META, NamedKey::ArrowLeft, 13, 0),
         (Meta, Modifiers::META, NamedKey::ArrowRight, 0, 13),
@@ -207,8 +188,7 @@ fn arrow_modifiers_use_the_hosts_text_navigation_convention() {
         (Control, Modifiers::CONTROL, NamedKey::ArrowRight, 0, 3),
     ] {
         for shift in [false, true] {
-            let mut state = state("one two three");
-            state.cursor_to(start);
+            let mut state = LineEditState::from_parts("one two three", start, start, None, None);
             let modifiers = modifiers
                 | if shift {
                     Modifiers::SHIFT
@@ -236,11 +216,7 @@ fn arrow_modifiers_use_the_hosts_text_navigation_convention() {
 fn delete_modifiers_use_the_hosts_text_editing_convention() {
     use crate::keyboard::CommandModifier::{Control, Meta};
     let (mut fonts, mut layouts) = contexts();
-    let presentation = LineEditPresentation {
-        prefix: "[".into(),
-        suffix: "]".into(),
-        ..presentation()
-    };
+    let presentation = affixed("[", "]");
     for (command, modifiers, key, caret, text) in [
         (Meta, Modifiers::META, NamedKey::Backspace, 7, " three"),
         (Meta, Modifiers::META, NamedKey::Delete, 4, "one "),
@@ -268,8 +244,7 @@ fn delete_modifiers_use_the_hosts_text_editing_convention() {
             "one  three",
         ),
     ] {
-        let mut state = state("one two three");
-        state.cursor_to(caret);
+        let mut state = LineEditState::from_parts("one two three", caret, caret, None, None);
         assert!(state.handle_key(
             &presentation,
             &mut fonts,
@@ -283,10 +258,9 @@ fn delete_modifiers_use_the_hosts_text_editing_convention() {
 }
 
 #[test]
-fn cursor_to_floors_to_a_char_boundary() {
+fn decoded_offsets_floor_to_a_char_boundary() {
     let (mut fonts, mut layouts) = contexts();
-    let mut state = state("héllo");
-    state.cursor_to(2);
+    let mut state = LineEditState::from_parts("héllo", 2, 2, None, None);
     assert!(press(
         &mut state,
         &mut fonts,
@@ -363,8 +337,7 @@ fn delete_keys_decline_on_an_empty_buffer() {
 #[test]
 fn presentation_can_change_without_resetting_interaction_state() {
     let (mut fonts, mut layouts) = contexts();
-    let mut state = state("abc");
-    state.cursor_to(1);
+    let mut state = LineEditState::from_parts("abc", 1, 1, None, None);
     let first = presentation();
     let second = LineEditPresentation::new(28.0, Brush::default());
 
@@ -395,7 +368,7 @@ fn affixes_are_armor_not_content() {
     } else {
         Modifiers::CONTROL
     };
-    let presentation = presentation().with_affixes("\"", "\"");
+    let presentation = affixed("\"", "\"");
     let mut state = state("hi").with_cursor_at_end();
 
     // Typing lands between the affixes; the text stays bare.
@@ -502,7 +475,7 @@ fn word_delete_stays_interior_or_declines_whole() {
         Modifiers::CONTROL
     };
     // Word-delete whose boundary lands in the interior works.
-    let presentation = presentation().with_affixes("\"", "\"");
+    let presentation = affixed("\"", "\"");
     let mut words = state("hi there");
     words.anchor = 2;
     words.focus = 2;
@@ -653,33 +626,24 @@ fn recorder_exposes_selection_and_caret_geometry() {
         &mut tcx,
     );
     let metrics = edit.metrics();
-    let mut frame = DrawFrame {
-        list: DrawList::new(),
-        handler: Handler::new(),
-    };
-    edit.place::<(), DrawFrame>(
-        &mut frame,
+    let fills: Vec<Rect> = drawn(
+        &edit,
         Placement::root(Rect::new(
             20.0,
             30.0,
             20.0 + metrics.width,
             30.0 + metrics.ascent + metrics.descent,
         )),
-        crate::keyboard::CommandModifier::Meta,
-        |_, _| false,
-    );
-    let fills: Vec<Rect> = frame
-        .list
-        .0
-        .iter()
-        .filter_map(|command| match command {
-            DrawCmd::Fill {
-                shape: Shape::Rect(rect),
-                ..
-            } => Some(*rect),
-            _ => None,
-        })
-        .collect();
+    )
+    .iter()
+    .filter_map(|command| match command {
+        DrawCmd::Fill {
+            shape: Shape::Rect(rect),
+            ..
+        } => Some(*rect),
+        _ => None,
+    })
+    .collect();
 
     assert_eq!(fills.len(), 2);
     let selection = fills[0];
@@ -700,9 +664,10 @@ fn a_focused_editor_reports_its_caret_for_composition() {
         cache: &mut cache,
     };
     let state = state("abc").with_cursor_at_end();
+    let caret = Brush::from(peniko::Color::from_rgb8(0, 0, 255));
     let style = EditStyle {
         selection: Brush::default(),
-        cursor: Brush::default(),
+        cursor: caret.clone(),
     };
     let [focused, unfocused] = [true, false].map(|focused| {
         text_edit(
@@ -745,12 +710,16 @@ fn a_focused_editor_reports_its_caret_for_composition() {
         },
         &mut tcx,
     );
-    assert!(hidden.geometry().cursor.is_none());
+    assert!(
+        !drawn(&hidden, at(20.0, 30.0))
+            .iter()
+            .any(|command| matches!(command, DrawCmd::Fill { brush, .. } if *brush == caret))
+    );
     assert!(hidden.input_area(at(20.0, 30.0)).is_some());
 }
 
 #[test]
-fn geometry_exposes_the_composed_text_for_plain_text_drawing() {
+fn the_field_draws_its_affixes_and_preedit_around_the_text() {
     let (mut fonts, mut layouts) = contexts();
     let mut cache = crate::text::TextCache::default();
     let mut tcx = TextCtx {
@@ -764,19 +733,31 @@ fn geometry_exposes_the_composed_text_for_plain_text_drawing() {
         selection: Brush::default(),
         cursor: Brush::default(),
     };
-    let geometry = text_edit(
+    let edit = text_edit(
         LineEditDescription {
             state: &state,
             focused: true,
-            presentation: presentation().with_affixes("[", "]"),
+            presentation: affixed("[", "]"),
             style: &style,
             placeholder: None,
         },
         &mut tcx,
-    )
-    .geometry();
-    assert_eq!(geometry.text, "[aXYb]");
-    assert!(geometry.cursor.is_some());
+    );
+    let drawing = drawn(&edit, Placement::root(Rect::new(0.0, 0.0, 100.0, 20.0)));
+    let glyphs: usize = drawing
+        .iter()
+        .map(|command| match command {
+            DrawCmd::GlyphRun(run) => run.glyphs.len(),
+            _ => 0,
+        })
+        .sum();
+    // "[aXYb]": the affixes and the preedit spliced at the caret.
+    assert_eq!(glyphs, 6);
+    assert!(
+        drawing
+            .iter()
+            .any(|command| matches!(command, DrawCmd::Fill { .. }))
+    );
 }
 
 #[test]
@@ -866,11 +847,8 @@ fn cursor_end_is_immediate_and_clicks_still_place() {
         &mut fonts,
         &mut layouts,
         1.0,
-        LineEditPointerDown {
-            point: Point::new(0.0, 5.0),
-            shift: false,
-            count: 1,
-        },
+        &press_at(Point::new(0.0, 5.0), 1),
+        Point::ZERO,
     );
     press(
         &mut clicked,
@@ -908,11 +886,8 @@ fn double_click_drag_extends_by_words() {
         &mut fonts,
         &mut layouts,
         1.0,
-        LineEditPointerDown {
-            point: Point::new(2.0, 5.0),
-            shift: false,
-            count: 2,
-        },
+        &press_at(Point::new(2.0, 5.0), 2),
+        Point::ZERO,
     );
     assert_eq!(selected(&state), "hello");
 
@@ -948,11 +923,8 @@ fn drag_extends_selection_until_released() {
         &mut fonts,
         &mut layouts,
         1.0,
-        LineEditPointerDown {
-            point: Point::new(0.0, 5.0),
-            shift: false,
-            count: 1,
-        },
+        &press_at(Point::new(0.0, 5.0), 1),
+        Point::ZERO,
     );
     assert!(state.pointer_move(
         &presentation,
@@ -978,12 +950,12 @@ fn drag_extends_selection_until_released() {
 fn decoded_preedits_are_normalized_like_ime_events() {
     let (mut fonts, mut layouts) = contexts();
     let empty = LineEditState::from_parts("ab", 1, 1, Some((String::new(), None)), None);
-    assert!(!empty.is_composing());
+    assert!(empty.preedit.is_none());
     let mut state = LineEditState::from_parts("ab", 1, 1, Some(("XY".into(), Some((9, 9)))), None);
-    assert!(state.is_composing());
+    assert!(state.preedit.is_some());
     state.editor(&presentation(), &mut fonts, &mut layouts, 1.0);
     assert!(state.handle_ime(&ImeEvent::Preedit(String::new(), None)));
-    assert!(!state.is_composing());
+    assert!(state.preedit.is_none());
 }
 
 #[test]
@@ -992,7 +964,7 @@ fn ime_compose_then_commit() {
     let mut state = state("");
 
     state.handle_ime(&ImeEvent::Preedit("ni".into(), Some((2, 2))));
-    assert!(state.is_composing());
+    assert!(state.preedit.is_some());
     // The preedit stays out of the base text.
     assert!(state.text() == "");
     // Keys decline while composing.
@@ -1005,7 +977,7 @@ fn ime_compose_then_commit() {
     ));
 
     state.handle_ime(&ImeEvent::Preedit("".into(), None));
-    assert!(!state.is_composing());
+    assert!(state.preedit.is_none());
     state.handle_ime(&ImeEvent::Commit("你".into()));
     assert!(state.text() == "你");
 }

@@ -180,14 +180,23 @@ pub(crate) fn build_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Rc<
 }
 
 fn measured_text(layout: Rc<Layout<Brush>>) -> Text {
-    let first = layout.lines().next().map(|line| *line.metrics());
-    let baseline = first.map(|m| m.baseline as f64).unwrap_or(0.0);
-    let metrics = TextMetrics {
-        width: first.map(|m| m.advance as f64).unwrap_or(0.0),
-        ascent: baseline,
-        descent: layout.height() as f64 - baseline,
-    };
-    Text { layout, metrics }
+    Text {
+        metrics: line_metrics(&layout).unwrap_or_default(),
+        layout,
+    }
+}
+
+/// A one-line layout's metrics, from its first line's advance and
+/// baseline; `None` for a layout without lines, whose height is zero.
+pub(crate) fn line_metrics(layout: &Layout<Brush>) -> Option<TextMetrics> {
+    layout.lines().next().map(|line| {
+        let baseline = f64::from(line.metrics().baseline);
+        TextMetrics {
+            width: f64::from(line.metrics().advance),
+            ascent: baseline,
+            descent: f64::from(layout.height()) - baseline,
+        }
+    })
 }
 
 pub fn draw_layout(

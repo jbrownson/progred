@@ -6,7 +6,7 @@ use super::{Context, Select, extent, leaf};
 use crate::display::{Env, Host, Layout, TextFamily};
 use gid::Value;
 use measured::Measured;
-use puri::edit::{LineEditDescription, LineEditPointerDown};
+use puri::edit::LineEditDescription;
 use puri::handler::HasHandler;
 use puri::text::TextStyle;
 use puri::{Placement, Point};
@@ -151,14 +151,8 @@ pub fn view<W: Host>(
                                 edit.fonts,
                                 edit.layouts,
                                 scale,
-                                LineEditPointerDown {
-                                    point: Point::new(
-                                        event.state.position.x - placement.rect.x0,
-                                        event.state.position.y - placement.rect.y0,
-                                    ),
-                                    shift: event.state.modifiers.shift(),
-                                    count: event.state.count.max(1),
-                                },
+                                event,
+                                placement.rect.origin(),
                             );
                             true
                         }) || !active

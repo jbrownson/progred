@@ -415,7 +415,8 @@ fn focus_loss_ends_ime_composition_without_changing_committed_text() {
             .unwrap()
             .edit()
             .unwrap()
-            .is_composing()
+            .preedit_parts()
+            .is_some()
     };
     assert!(composing(&runner));
     let document = runner.editor.model.doc.clone();

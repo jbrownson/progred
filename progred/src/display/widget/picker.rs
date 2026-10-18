@@ -15,9 +15,7 @@ use gid::Step;
 use kurbo::Insets;
 use measured::{Measured, min_width, pad};
 use puri::Point;
-use puri::edit::{
-    EditOperation, LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState,
-};
+use puri::edit::{EditOperation, LineEditDescription, LineEditPresentation, LineEditState};
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
@@ -233,14 +231,8 @@ fn query_content<W: Host>(
                         edit.fonts,
                         edit.layouts,
                         scale as f32,
-                        LineEditPointerDown {
-                            point: Point::new(
-                                event.state.position.x - rect.x0,
-                                event.state.position.y - rect.y0,
-                            ),
-                            shift: event.state.modifiers.shift(),
-                            count: event.state.count.max(1),
-                        },
+                        event,
+                        rect.origin(),
                     );
                     true
                 })
@@ -275,23 +267,24 @@ fn query_content<W: Host>(
             }
         },
     );
-    let card = if !picker.keys.is_empty() && query.text().is_empty() && !query.is_composing() {
-        let keys = picker.keys.clone();
-        on_key(card, move |world, event| {
-            if event.state.is_down()
-                && !(event.modifiers.ctrl() || event.modifiers.meta())
-                && let Key::Character(key) = &event.key
-                && let Some((_, offer)) = keys.iter().find(|(typed, _)| *typed == key.as_str())
-            {
-                (offer.activate)(&mut world.session());
-                true
-            } else {
-                false
-            }
-        })
-    } else {
-        card
-    };
+    let card =
+        if !picker.keys.is_empty() && query.text().is_empty() && query.preedit_parts().is_none() {
+            let keys = picker.keys.clone();
+            on_key(card, move |world, event| {
+                if event.state.is_down()
+                    && !(event.modifiers.ctrl() || event.modifiers.meta())
+                    && let Key::Character(key) = &event.key
+                    && let Some((_, offer)) = keys.iter().find(|(typed, _)| *typed == key.as_str())
+                {
+                    (offer.activate)(&mut world.session());
+                    true
+                } else {
+                    false
+                }
+            })
+        } else {
+            card
+        };
     // Tab commits what's been typed, as Enter would, then moves on to the
     // next empty slot, unless the commit opened one of its own, such as a new
     // call's first argument. With no slot left it stays on what it committed;

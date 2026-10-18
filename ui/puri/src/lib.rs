@@ -27,8 +27,8 @@ pub use draw::{
     Canvas, Command, DrawCmd, DrawList, Drawing, Glyph, GlyphRun, Leaf, Shape, draw, replay,
 };
 pub use edit::{
-    EditCtx, EditStyle, LineEdit, LineEditDescription, LineEditGeometry, LineEditPointerDown,
-    LineEditPresentation, LineEditState, TextClipboard, text_edit,
+    EditCtx, EditStyle, LineEdit, LineEditDescription, LineEditPresentation, LineEditState,
+    TextClipboard, text_edit,
 };
 pub use geometry::Placement;
 pub use handler::{Handler, HasHandler, ImeEvent, capture};

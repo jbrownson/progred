@@ -14,22 +14,23 @@
 //!
 //! Chrome (frame, padding, focus ring, minimum width) is caller
 //! composition; Progred uses its `pad`/`decorate` box operations.
-//! Pointer policy stays with the wrapping layer through the state's
-//! pointer methods; the widget registers keyboard and IME dispatch
-//! only while focused.
+//! Pointer-down policy stays with the wrapping layer through the
+//! state's pointer methods; while focused, the widget registers
+//! keyboard and IME dispatch and a drag's move, release, and cancel.
 
-use crate::draw::{Canvas, CanvasSink};
+use crate::draw::CanvasSink;
 use crate::geometry::Placement;
 use crate::handler::{HasHandler, ImeEvent};
 use crate::interact::is_primary_contact_move;
-use crate::text::{TextCtx, TextMetrics, TextStyle, build_layout, draw_layout};
-use kurbo::{Affine, Point, Rect, Vec2};
+use crate::text::{TextCtx, TextMetrics, TextStyle, build_layout, draw_layout, line_metrics};
+use kurbo::{Affine, Point, Rect};
 use parley::Layout;
 use parley::style::GenericFamily;
 use parley::{FontContext, LayoutContext, PlainEditor, StyleProperty};
 use peniko::Brush;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
+use ui_events::pointer::PointerButtonEvent;
 
 /// A selection as comparable byte offsets, for did-anything-move
 /// checks around driver operations.
@@ -110,21 +111,6 @@ impl LineEditPresentation {
             suffix: String::new(),
         }
     }
-
-    pub fn with_family(mut self, family: GenericFamily) -> Self {
-        self.family = family;
-        self
-    }
-
-    pub fn with_affixes(mut self, prefix: &str, suffix: &str) -> Self {
-        self.prefix = prefix.to_string();
-        self.suffix = suffix.to_string();
-        self
-    }
-
-    fn dressed(&self) -> bool {
-        !self.prefix.is_empty() || !self.suffix.is_empty()
-    }
 }
 
 /// One frame's complete line-edit description. Only `state` survives
@@ -136,13 +122,6 @@ pub struct LineEditDescription<'a> {
     pub presentation: LineEditPresentation,
     pub style: &'a EditStyle,
     pub placeholder: Option<(&'a str, &'a TextStyle)>,
-}
-
-#[derive(Clone, Copy)]
-pub struct LineEditPointerDown {
-    pub point: Point,
-    pub shift: bool,
-    pub count: u8,
 }
 
 /// The text-only pasteboard capability line editing needs. The
@@ -197,18 +176,6 @@ impl LineEditState {
         self.focus = 0;
     }
 
-    /// Land the caret at a byte index, clamped to the nearest char
-    /// boundary at or before it — for mounts whose caret was
-    /// hit-tested against another projection of the same spelling.
-    pub fn cursor_to(&mut self, index: usize) {
-        let mut index = index.min(self.text.len());
-        while !self.text.is_char_boundary(index) {
-            index -= 1;
-        }
-        self.anchor = index;
-        self.focus = index;
-    }
-
     /// The base text: what edits commit. Excludes any IME preedit and
     /// the affixes, which are display only.
     pub fn text(&self) -> &str {
@@ -244,33 +211,21 @@ impl LineEditState {
         preedit: Option<(String, Option<(usize, usize)>)>,
         drag: Option<(Point, u8)>,
     ) -> Self {
-        let mut state = Self::new(text);
-        state.cursor_to(anchor);
-        let anchor = state.anchor;
-        state.cursor_to(focus);
-        state.anchor = anchor;
-        state.preedit = preedit.and_then(|(text, cursor)| Preedit::new(text, cursor));
-        state.drag = drag.map(|(origin, count)| Drag { origin, count });
-        state
+        Self {
+            text: text.to_string(),
+            anchor: text.floor_char_boundary(anchor),
+            focus: text.floor_char_boundary(focus),
+            preedit: preedit.and_then(|(text, cursor)| Preedit::new(text, cursor)),
+            drag: drag.map(|(origin, count)| Drag { origin, count }),
+        }
     }
 
     /// Replace the text wholesale — the caller's re-mint for external
     /// writes — keeping the selection clamped to char boundaries.
     pub fn set_text(&mut self, text: &str) {
         self.text = text.to_string();
-        let clamp = |mut i: usize| {
-            i = i.min(self.text.len());
-            while !self.text.is_char_boundary(i) {
-                i -= 1;
-            }
-            i
-        };
-        self.anchor = clamp(self.anchor);
-        self.focus = clamp(self.focus);
-    }
-
-    pub fn is_composing(&self) -> bool {
-        self.preedit.is_some()
+        self.anchor = self.text.floor_char_boundary(self.anchor);
+        self.focus = self.text.floor_char_boundary(self.focus);
     }
 
     /// The transient parley editor this state denotes: constructed,
@@ -311,18 +266,17 @@ impl LineEditState {
     /// the span between them.
     fn absorb(&mut self, presentation: &LineEditPresentation, editor: &PlainEditor<Brush>) {
         let composed = editor.text().to_string();
-        let Some(inner) = composed
+        if let Some(inner) = composed
             .strip_prefix(presentation.prefix.as_str())
             .and_then(|t| t.strip_suffix(presentation.suffix.as_str()))
-        else {
-            return;
-        };
-        let p = presentation.prefix.len();
-        let n = inner.len();
-        self.text = inner.to_string();
-        let selection = editor.raw_selection();
-        self.anchor = selection.anchor().index().clamp(p, p + n) - p;
-        self.focus = selection.focus().index().clamp(p, p + n) - p;
+        {
+            let p = presentation.prefix.len();
+            let n = inner.len();
+            self.text = inner.to_string();
+            let selection = editor.raw_selection();
+            self.anchor = selection.anchor().index().clamp(p, p + n) - p;
+            self.focus = selection.focus().index().clamp(p, p + n) - p;
+        }
     }
 
     /// Splice `text` over the selection and collapse the caret after
@@ -347,9 +301,28 @@ impl LineEditState {
         command_modifier: crate::keyboard::CommandModifier,
         event: &KeyboardEvent,
     ) -> bool {
-        if !event.state.is_down() || self.is_composing() {
-            return false;
-        }
+        event.state.is_down()
+            && self.preedit.is_none()
+            && self.edit_key(
+                presentation,
+                fonts,
+                layouts,
+                clipboard,
+                command_modifier,
+                event,
+            )
+    }
+
+    /// [`Self::handle_key`] for a key press outside a composition.
+    fn edit_key(
+        &mut self,
+        presentation: &LineEditPresentation,
+        fonts: &mut FontContext,
+        layouts: &mut LayoutContext<Brush>,
+        clipboard: &mut dyn TextClipboard,
+        command_modifier: crate::keyboard::CommandModifier,
+        event: &KeyboardEvent,
+    ) -> bool {
         let action_mod = command_modifier.pressed(&event.modifiers);
         let (line_mod, word_mod) = match command_modifier {
             crate::keyboard::CommandModifier::Meta => {
@@ -523,42 +496,44 @@ impl LineEditState {
         }
     }
 
-    /// Pointer positioning for the wrapping layer; `point` is in the
-    /// text's local coordinates (layout top-left origin), physical
-    /// pixels, so hit-testing needs the display scale. A double click
-    /// selects the word, a triple the line.
+    /// Pointer positioning for the wrapping layer: `origin` is where the
+    /// text's layout starts, in the event's coordinates, physical pixels,
+    /// so hit-testing needs the display scale. A double click selects the
+    /// word, a triple the line.
     pub fn pointer_down(
         &mut self,
         presentation: &LineEditPresentation,
         fonts: &mut FontContext,
         layouts: &mut LayoutContext<Brush>,
         scale: f32,
-        event: LineEditPointerDown,
+        event: &PointerButtonEvent,
+        origin: Point,
     ) {
-        if self.is_composing() {
-            return;
-        }
-        self.drag = Some(Drag {
-            origin: event.point,
-            count: event.count,
-        });
-        let (x, y) = (event.point.x as f32, event.point.y as f32);
-        let mut editor = self.editor(presentation, fonts, layouts, scale);
-        {
-            let mut drv = editor.driver(fonts, layouts);
-            match event.count {
-                2 => drv.select_word_at_point(x, y),
-                3 => drv.select_hard_line_at_point(x, y),
-                _ => {
-                    if event.shift {
-                        drv.shift_click_extension(x, y);
-                    } else {
-                        drv.move_to_point(x, y);
+        if self.preedit.is_none() {
+            let point = Point::new(event.state.position.x, event.state.position.y) - origin;
+            let count = event.state.count.max(1);
+            self.drag = Some(Drag {
+                origin: point.to_point(),
+                count,
+            });
+            let (x, y) = (point.x as f32, point.y as f32);
+            let mut editor = self.editor(presentation, fonts, layouts, scale);
+            {
+                let mut drv = editor.driver(fonts, layouts);
+                match count {
+                    2 => drv.select_word_at_point(x, y),
+                    3 => drv.select_hard_line_at_point(x, y),
+                    _ => {
+                        if event.state.modifiers.shift() {
+                            drv.shift_click_extension(x, y);
+                        } else {
+                            drv.move_to_point(x, y);
+                        }
                     }
                 }
             }
+            self.absorb(presentation, &editor);
         }
-        self.absorb(presentation, &editor);
     }
 
     /// Drag-extend the selection; `point` in local coordinates. Only
@@ -573,25 +548,24 @@ impl LineEditState {
         scale: f32,
         point: Point,
     ) -> bool {
-        let Some(drag) = self.drag else {
-            return false;
-        };
-        if self.is_composing() {
-            return false;
-        }
-        let mut editor = self.editor(presentation, fonts, layouts, scale);
-        {
-            let mut drv = editor.driver(fonts, layouts);
-            let (x, y) = (drag.origin.x as f32, drag.origin.y as f32);
-            match drag.count {
-                2 => drv.select_word_at_point(x, y),
-                3 => drv.select_hard_line_at_point(x, y),
-                _ => {}
+        match self.drag.filter(|_| self.preedit.is_none()) {
+            Some(drag) => {
+                let mut editor = self.editor(presentation, fonts, layouts, scale);
+                {
+                    let mut drv = editor.driver(fonts, layouts);
+                    let (x, y) = (drag.origin.x as f32, drag.origin.y as f32);
+                    match drag.count {
+                        2 => drv.select_word_at_point(x, y),
+                        3 => drv.select_hard_line_at_point(x, y),
+                        _ => {}
+                    }
+                    drv.extend_selection_to_point(point.x as f32, point.y as f32);
+                }
+                self.absorb(presentation, &editor);
+                true
             }
-            drv.extend_selection_to_point(point.x as f32, point.y as f32);
+            None => false,
         }
-        self.absorb(presentation, &editor);
-        true
     }
 
     /// Ends a drag; returns whether one was in progress.
@@ -601,15 +575,13 @@ impl LineEditState {
 }
 
 /// A measured, ephemeral line-edit description. Its caller chooses a
-/// placement and invokes [`LineEdit::place`]; no layout strategy is
-/// built into Puri.
+/// placement, then draws it and installs its handlers there; no layout
+/// strategy is built into Puri.
 pub struct LineEdit {
-    text: String,
     metrics: TextMetrics,
     scale: f32,
     ghost: Option<Rc<Layout<Brush>>>,
     layout: Option<Layout<Brush>>,
-    layout_baseline: f64,
     editor_baseline: f64,
     selection: Vec<Rect>,
     cursor: Option<Rect>,
@@ -620,36 +592,18 @@ pub struct LineEdit {
     presentation: LineEditPresentation,
 }
 
-/// Drawing inputs for composing an editor from ordinary text and
-/// vector primitives. Rectangles use the line box's top-left origin.
-#[derive(Clone)]
-pub struct LineEditGeometry {
-    pub text: String,
-    pub metrics: TextMetrics,
-    pub selection: Vec<Rect>,
-    pub cursor: Option<Rect>,
-}
-
 impl LineEdit {
     pub fn metrics(&self) -> TextMetrics {
         self.metrics
     }
 
-    pub fn geometry(&self) -> LineEditGeometry {
-        let selection_y = self.metrics.ascent - self.layout_baseline;
-        let cursor_y = self.metrics.ascent - self.editor_baseline;
-        let translate = |rect: Rect, y: f64| Rect::new(rect.x0, rect.y0 + y, rect.x1, rect.y1 + y);
-        LineEditGeometry {
-            text: self.text.clone(),
-            metrics: self.metrics,
-            selection: self
-                .selection
-                .iter()
-                .copied()
-                .map(|rect| translate(rect, selection_y))
-                .collect(),
-            cursor: self.cursor.map(|rect| translate(rect, cursor_y)),
-        }
+    /// Where the editor's layout starts at `placement`: its baseline on
+    /// the field's. The ghost's metrics may size the field while it shows.
+    fn editor_origin(&self, placement: Placement) -> Point {
+        Point::new(
+            placement.rect.x0,
+            placement.rect.y0 + self.metrics.ascent - self.editor_baseline,
+        )
     }
 
     /// While focused, the area at `placement`, in its coordinates, that
@@ -657,34 +611,13 @@ impl LineEdit {
     /// the caret with some context. It exists even while a preedit hides
     /// the caret.
     pub fn input_area(&self, placement: Placement) -> Option<Rect> {
-        self.composition.map(|area| {
-            area + Vec2::new(
-                placement.rect.x0,
-                placement.rect.y0 + self.metrics.ascent - self.editor_baseline,
-            )
-        })
-    }
-
-    /// Draw and register this description at its caller-supplied
-    /// settled placement. Dispatch can outlive the editor represented
-    /// by the frame, so the caller declines when it has gone away.
-    /// `with` runs the editing operation and can process its result
-    /// after the state and platform-service borrows end.
-    pub fn place<C: 'static, P: Canvas + HasHandler<C>>(
-        self,
-        p: &mut P,
-        placement: Placement,
-        command_modifier: crate::keyboard::CommandModifier,
-        with: impl Fn(&mut C, &EditOperation<'_>) -> bool + Clone + 'static,
-    ) {
-        self.draw(p, placement);
-        self.install(p, placement, command_modifier, with);
+        self.composition
+            .map(|area| area + self.editor_origin(placement).to_vec2())
     }
 
     /// The paint half: selection, ghost, content, caret.
     pub fn draw(&self, canvas: &mut (impl CanvasSink + ?Sized), placement: Placement) {
-        let at = Point::new(placement.rect.x0, placement.rect.y0 + self.metrics.ascent);
-        let transform = Affine::translate((at.x, at.y - self.layout_baseline));
+        let transform = Affine::translate(placement.rect.origin().to_vec2());
         for rect in &self.selection {
             canvas.fill_shape((*rect).into(), self.selection_brush.clone(), transform);
         }
@@ -698,14 +631,18 @@ impl LineEdit {
             canvas.fill_shape(
                 cursor.into(),
                 self.cursor_brush.clone(),
-                Affine::translate((at.x, at.y - self.editor_baseline)),
+                Affine::translate(self.editor_origin(placement).to_vec2()),
             );
         }
     }
 
     /// The dispatch half: while focused, register key, drag, release,
     /// and IME against the settled placement. `command_modifier` is the
-    /// platform's command key, for the editing shortcuts.
+    /// platform's command key, for the editing shortcuts. Dispatch can
+    /// outlive the editor represented by the frame, so the caller
+    /// declines when it has gone away. `with` runs the editing operation
+    /// and can process its result after the state and platform-service
+    /// borrows end.
     pub fn install<C: 'static, P: HasHandler<C>>(
         &self,
         p: &mut P,
@@ -715,9 +652,8 @@ impl LineEdit {
     ) {
         let scale = self.scale;
         let presentation = self.presentation.clone();
-        let at = Point::new(placement.rect.x0, placement.rect.y0 + self.metrics.ascent);
         if self.focused {
-            let text_origin = Point::new(at.x, at.y - self.editor_baseline);
+            let text_origin = self.editor_origin(placement);
             let with_key = with.clone();
             let key_presentation = presentation.clone();
             p.handler().on_key(move |ctx, event| {
@@ -774,56 +710,29 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
     } = description;
     let scale = tcx.scale;
     let ghost = placeholder
-        .filter(|_| state.text.is_empty() && !state.is_composing() && !presentation.dressed())
+        .filter(|_| {
+            state.text.is_empty()
+                && state.preedit.is_none()
+                && presentation.prefix.is_empty()
+                && presentation.suffix.is_empty()
+        })
         .map(|(text, style)| build_layout(tcx, text, style));
     let editor = state.editor(&presentation, tcx.fonts, tcx.layouts, scale);
-    let text = match &state.preedit {
-        Some(preedit) => {
-            let (start, end) = (state.anchor.min(state.focus), state.anchor.max(state.focus));
-            format!(
-                "{}{}{}{}{}",
-                presentation.prefix,
-                &state.text[..start],
-                preedit.text,
-                &state.text[end..],
-                presentation.suffix,
-            )
-        }
-        None => format!(
-            "{}{}{}",
-            presentation.prefix, state.text, presentation.suffix
-        ),
-    };
     let layout = editor.try_layout().cloned();
-    let metrics_of = |layout: &Layout<Brush>| {
-        let metrics = *layout.lines().next()?.metrics();
-        let baseline = metrics.baseline as f64;
-        Some((
-            TextMetrics {
-                width: metrics.advance as f64,
-                ascent: baseline,
-                descent: layout.height() as f64 - baseline,
-            },
-            baseline,
-        ))
-    };
-    let editor_baseline = layout
-        .as_ref()
-        .and_then(metrics_of)
-        .map(|(_, baseline)| baseline)
-        .unwrap_or(0.0);
+    let editor_metrics = layout.as_ref().and_then(line_metrics);
     // The ghost's metrics size the field while it shows; both it and
     // the cursor hang from the shared visual baseline.
-    let (metrics, layout_baseline) = ghost
-        .as_ref()
-        .and_then(|layout| metrics_of(layout))
-        .or_else(|| layout.as_ref().and_then(metrics_of))
-        .unwrap_or((TextMetrics::default(), 0.0));
-
-    let selection: Vec<Rect> = if focused {
-        let mut rects = Vec::new();
-        editor.selection_geometry_with(|bb, _| rects.push(Rect::new(bb.x0, bb.y0, bb.x1, bb.y1)));
-        rects
+    let metrics = ghost
+        .as_deref()
+        .and_then(line_metrics)
+        .or(editor_metrics)
+        .unwrap_or_default();
+    let selection = if focused {
+        editor
+            .selection_geometry()
+            .into_iter()
+            .map(|(bb, _)| Rect::new(bb.x0, bb.y0, bb.x1, bb.y1))
+            .collect()
     } else {
         Vec::new()
     };
@@ -850,13 +759,11 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
         Rect::new(area.x0, area.y0, area.x1, area.y1)
     });
     LineEdit {
-        text,
         metrics,
         scale,
         ghost,
         layout,
-        layout_baseline,
-        editor_baseline,
+        editor_baseline: editor_metrics.map_or(0.0, |metrics| metrics.ascent),
         selection,
         cursor,
         composition,

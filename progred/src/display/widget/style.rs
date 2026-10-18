@@ -144,9 +144,12 @@ pub fn editor(palette: Palette, scale: f64) -> Styles {
 
 impl Styles {
     pub fn line_presentation(&self, line: &crate::display::LineEdit) -> LineEditPresentation {
-        LineEditPresentation::new(self.string.size, self.string.brush.clone())
-            .with_family(line_family(line.family))
-            .with_affixes(&line.prefix, &line.suffix)
+        LineEditPresentation {
+            family: line_family(line.family),
+            prefix: line.prefix.to_string(),
+            suffix: line.suffix.to_string(),
+            ..LineEditPresentation::new(self.string.size, self.string.brush.clone())
+        }
     }
 
     pub fn line_style(&self, line: &crate::display::LineEdit) -> TextStyle {
