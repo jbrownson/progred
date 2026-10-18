@@ -2,22 +2,19 @@ use super::*;
 
 impl<T> ObserveLayout for Vec<T> {}
 
-impl Output for Vec<Placement> {
-    fn empty() -> Self {
-        Vec::new()
-    }
+/// Place `layout` into a fresh accumulator.
+pub(crate) fn place<Out: Default>(layout: Measured<Out>, placement: Placement) -> Out {
+    let mut out = Out::default();
+    place_into(layout, placement, &mut out);
+    out
+}
 
-    fn over(mut self, above: Self) -> Self {
-        self.extend(above);
-        self
-    }
+fn place_top_left<Out: Default>(layout: Measured<Out>, at: Point) -> Out {
+    let placement = Placement::root(layout.extent.rect_at(at));
+    place(layout, placement)
 }
 
 fn probe(extent: Extent) -> Measured<Vec<Placement>> {
-    leaf(extent, move |placement| vec![placement])
-}
-
-fn direct_probe(extent: Extent) -> Measured<Vec<Placement>> {
     leaf_into(extent, move |placement, out: &mut Vec<Placement>| {
         out.push(placement)
     })
@@ -229,27 +226,8 @@ fn min_width_pads_narrow_children_and_leaves_wide_ones() {
 }
 
 #[test]
-fn before_contributes_under_the_child_and_after_on_top() {
-    let child = probe(ext(10.0, 8.0, 2.0));
-    let marked = before(child, |placement| {
-        vec![Placement::root(placement.rect.inflate(1.0, 1.0))]
-    });
-    let placed = place_top_left(marked, Point::ZERO);
-    assert_eq!(placed[0].rect, Rect::new(-1.0, -1.0, 11.0, 11.0));
-    assert_eq!(placed[1].rect, Rect::new(0.0, 0.0, 10.0, 10.0));
-
-    let child = probe(ext(10.0, 8.0, 2.0));
-    let covered = after(child, |placement| {
-        vec![Placement::root(placement.rect.inflate(1.0, 1.0))]
-    });
-    let placed = place_top_left(covered, Point::ZERO);
-    assert_eq!(placed[0].rect, Rect::new(0.0, 0.0, 10.0, 10.0));
-    assert_eq!(placed[1].rect, Rect::new(-1.0, -1.0, 11.0, 11.0));
-}
-
-#[test]
 fn direct_leaves_and_decorators_preserve_placement_order() {
-    let child = direct_probe(ext(10.0, 8.0, 2.0));
+    let child = probe(ext(10.0, 8.0, 2.0));
     let marked = before_into(child, |placement, out| {
         out.push(Placement::root(placement.rect.inflate(1.0, 1.0)));
     });
@@ -269,14 +247,15 @@ fn direct_leaves_and_decorators_preserve_placement_order() {
 
 #[test]
 fn around_controls_the_inner_placement_and_sees_the_clip_rect() {
-    let child = leaf(ext(20.0, 10.0, 10.0), |_| vec!["inner"]);
-    let wrapped = around(child, |placement, place_inner| {
+    let child = leaf_into(ext(20.0, 10.0, 10.0), |_, out: &mut Vec<&str>| {
+        out.push("inner")
+    });
+    let wrapped = around_into(child, |placement, inner, out| {
         assert_eq!(placement.rect, Rect::new(0.0, 0.0, 20.0, 20.0));
         assert_eq!(placement.clip_rect, Rect::new(5.0, -5.0, 25.0, 15.0));
-        let mut out = vec!["before"];
-        out.extend(place_inner.place());
+        out.push("before");
+        inner.place_into(out);
         out.push("after");
-        out
     });
     let placed = place(
         wrapped,
@@ -301,7 +280,12 @@ fn around_into_places_its_child_in_the_existing_accumulator() {
     });
     let layout = row(
         0.0,
-        vec![leaf(ext(1.0, 1.0, 0.0), |_| vec!["outer"]), wrapped],
+        vec![
+            leaf_into(ext(1.0, 1.0, 0.0), |_, out: &mut Vec<&str>| {
+                out.push("outer")
+            }),
+            wrapped,
+        ],
     );
     assert_eq!(
         place_top_left(layout, Point::ZERO),
@@ -310,13 +294,12 @@ fn around_into_places_its_child_in_the_existing_accumulator() {
 }
 
 #[test]
-fn overlay_floats_a_layer_positioned_from_the_base_output() {
+fn overlay_floats_a_layer_positioned_from_the_base_placement() {
     let base = probe(ext(10.0, 8.0, 2.0));
     let layer = probe(ext(4.0, 3.0, 1.0));
-    let floated = overlay(base, layer, |placement, extent, out: &Vec<Placement>| {
-        assert_eq!(out[0].rect, placement.rect);
+    let floated = overlay_into(base, layer, |placement, extent| {
         Some(Placement::root(
-            extent.rect_at(Point::new(out[0].rect.x1, out[0].rect.y0)),
+            extent.rect_at(Point::new(placement.rect.x1, placement.rect.y0)),
         ))
     });
     // The layer is overhang: the node charges only the base.
@@ -326,35 +309,12 @@ fn overlay_floats_a_layer_positioned_from_the_base_output() {
     assert_eq!(placed[1].rect, Rect::new(10.0, 0.0, 14.0, 4.0));
 
     let base = probe(ext(10.0, 8.0, 2.0));
-    let declined = overlay(base, probe(ext(4.0, 3.0, 1.0)), |_, _, _| None);
+    let declined = overlay_into(base, probe(ext(4.0, 3.0, 1.0)), |_, _| None);
     assert_eq!(place_top_left(declined, Point::ZERO).len(), 1);
 }
 
 #[test]
 fn around_may_discard_the_inner_placement() {
-    let child = leaf(ext(10.0, 5.0, 5.0), |_| vec![true]);
-    let wrapped = around(child, |_, _| Vec::new());
+    let wrapped = around_into(probe(ext(10.0, 5.0, 5.0)), |_, _, _| {});
     assert!(place_top_left(wrapped, Point::ZERO).is_empty());
-}
-
-impl Output for Vec<&'static str> {
-    fn empty() -> Self {
-        Vec::new()
-    }
-
-    fn over(mut self, above: Self) -> Self {
-        self.extend(above);
-        self
-    }
-}
-
-impl Output for Vec<bool> {
-    fn empty() -> Self {
-        Vec::new()
-    }
-
-    fn over(mut self, above: Self) -> Self {
-        self.extend(above);
-        self
-    }
 }

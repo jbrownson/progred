@@ -5,14 +5,13 @@
 //! Invariants the pretty-printing layer relies on: extents are known
 //! at construction (before placement), construction has no side
 //! effects so alternative layouts can be built and discarded, and
-//! placement is one pure traversal from settled geometry to the
-//! caller's [`Output`].
+//! placement is one pure traversal from settled geometry into the
+//! caller's accumulator.
 //!
-//! The engine is generic in what placement produces. Leaves either
-//! yield an `Out` from their settled [`Placement`] or contribute
-//! directly to the frame's accumulator. Containers visit children in
-//! placement order, so the later-placed contribution is the one on top
-//! — painted last, asked first.
+//! The engine is generic in what placement produces: each leaf
+//! contributes to the caller's `Out` from its settled [`Placement`].
+//! Containers visit children in placement order, so the later-placed
+//! contribution is the one on top — painted last, asked first.
 
 use kurbo::{Insets, Point, Rect, Size};
 use uig::Placement;
@@ -81,13 +80,6 @@ impl Extent {
     }
 }
 
-/// What a placement pass accumulates: a monoid whose combine names its
-/// asymmetry. `base.over(above)` stacks `above` on top of `base`.
-pub trait Output {
-    fn empty() -> Self;
-    fn over(self, above: Self) -> Self;
-}
-
 pub struct Measured<Out> {
     pub extent: Extent,
     place: Box<dyn FnOnce(Placement, &mut Out)>,
@@ -110,16 +102,6 @@ pub fn clipped_placement(placement: Placement, bounds: Rect) -> Placement {
     }
 }
 
-impl<Out: Output> PlaceInner<Out> {
-    pub fn place(self) -> Out {
-        place(self.child, self.placement)
-    }
-
-    pub fn place_at(self, placement: Placement) -> Out {
-        place(self.child, placement)
-    }
-}
-
 impl<Out> PlaceInner<Out> {
     pub fn place_into(self, out: &mut Out) {
         place_into(self.child, self.placement, out)
@@ -132,15 +114,6 @@ impl<Out> PlaceInner<Out> {
     pub fn extent(&self) -> Extent {
         self.child.extent
     }
-}
-
-pub fn leaf<Out: Output>(
-    extent: Extent,
-    place: impl FnOnce(Placement) -> Out + 'static,
-) -> Measured<Out> {
-    leaf_into(extent, move |placement, out| {
-        contribute(out, place(placement))
-    })
 }
 
 pub fn leaf_into<Out>(
@@ -245,15 +218,6 @@ pub fn fill_width<Out: 'static>(child: Measured<Out>) -> Measured<Out> {
 }
 
 /// A wrapper controls when and where its child continuation runs.
-pub fn around<Out: Output + 'static>(
-    child: Measured<Out>,
-    place: impl FnOnce(Placement, PlaceInner<Out>) -> Out + 'static,
-) -> Measured<Out> {
-    around_into(child, move |placement, inner, out| {
-        contribute(out, place(placement, inner))
-    })
-}
-
 pub fn around_into<Out: 'static>(
     child: Measured<Out>,
     place: impl FnOnce(Placement, PlaceInner<Out>, &mut Out) + 'static,
@@ -277,39 +241,6 @@ pub fn overlay_into<Out: 'static>(
     })
 }
 
-pub fn overlay<Out: Output + 'static>(
-    base: Measured<Out>,
-    layer: Measured<Out>,
-    position: impl FnOnce(Placement, Extent, &Out) -> Option<Placement> + 'static,
-) -> Measured<Out> {
-    let extent = layer.extent;
-    around(base, move |placement, inner| {
-        let out = inner.place();
-        match position(placement, extent, &out) {
-            Some(at) => out.over(place(layer, at)),
-            None => out,
-        }
-    })
-}
-
-pub fn before<Out: Output + 'static>(
-    child: Measured<Out>,
-    place_before: impl FnOnce(Placement) -> Out + 'static,
-) -> Measured<Out> {
-    around(child, move |placement, inner| {
-        place_before(placement).over(inner.place())
-    })
-}
-
-pub fn after<Out: Output + 'static>(
-    child: Measured<Out>,
-    place_after: impl FnOnce(Placement) -> Out + 'static,
-) -> Measured<Out> {
-    around(child, move |placement, inner| {
-        inner.place().over(place_after(placement))
-    })
-}
-
 pub fn before_into<Out: 'static>(
     child: Measured<Out>,
     place_before: impl FnOnce(Placement, &mut Out) + 'static,
@@ -330,31 +261,8 @@ pub fn after_into<Out: 'static>(
     })
 }
 
-pub fn decorate<Out: Output + 'static>(
-    child: Measured<Out>,
-    draw: impl FnOnce(Rect) -> Out + 'static,
-) -> Measured<Out> {
-    before(child, move |placement| draw(placement.rect))
-}
-
-pub fn place<Out: Output>(layout: Measured<Out>, placement: Placement) -> Out {
-    let mut out = Out::empty();
-    place_into(layout, placement, &mut out);
-    out
-}
-
-fn contribute<Out: Output>(out: &mut Out, above: Out) {
-    let base = std::mem::replace(out, Out::empty());
-    *out = base.over(above);
-}
-
 pub fn place_into<Out>(layout: Measured<Out>, placement: Placement, out: &mut Out) {
     (layout.place)(placement, out)
-}
-
-pub fn place_top_left<Out: Output>(layout: Measured<Out>, at: Point) -> Out {
-    let placement = Placement::root(layout.extent.rect_at(at));
-    place(layout, placement)
 }
 
 pub(crate) fn row_extent(

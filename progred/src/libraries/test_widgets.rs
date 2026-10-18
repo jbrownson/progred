@@ -355,14 +355,11 @@ pub fn drag_frame(
         &Default::default(),
     );
     if covered {
-        measured::Output::over(
-            placed,
-            crate::display::widget::frame::place(
-                leaf(extent, |p, placement| p.occlude(placement)),
-                placement,
-                &Default::default(),
-            ),
-        )
+        placed.over(crate::display::widget::frame::place(
+            leaf(extent, |p, placement| p.occlude(placement)),
+            placement,
+            &Default::default(),
+        ))
     } else {
         placed
     }

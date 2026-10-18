@@ -9,17 +9,6 @@ struct Recording(Vec<(&'static str, Placement)>);
 
 impl crate::ObserveLayout for Recording {}
 
-impl crate::Output for Recording {
-    fn empty() -> Self {
-        Self::default()
-    }
-
-    fn over(mut self, above: Self) -> Self {
-        self.0.extend(above.0);
-        self
-    }
-}
-
 fn recording(label: &'static str, width: f64) -> ChoiceLayout<Recording> {
     ChoiceLayout::fixed(crate::leaf_into(
         Extent {
@@ -64,7 +53,7 @@ fn top_aligned_row_uses_the_selected_child_heights() {
         assert_eq!(layout.extent.ascent, 3.0);
         let clip = Rect::new(30.0, 40.0, 200.0, 160.0);
         let placement = Placement::new(layout.extent.rect_at(Point::new(20.0, 30.0)), clip);
-        let Recording(out) = crate::place(layout, placement);
+        let Recording(out) = crate::tests::place(layout, placement);
         assert_eq!(out[0].0, "picture");
         assert_eq!(out[1].0, label);
         assert_eq!(out[0].1.rect, Rect::new(20.0, 30.0, 130.0, 210.0));
@@ -104,7 +93,7 @@ fn only_the_selected_form_places_and_wrappers_keep_settled_geometry() {
 
     let clip = Rect::new(26.0, 37.0, 100.0, 100.0);
     let placement = Placement::new(layout.extent.rect_at(Point::new(20.0, 30.0)), clip);
-    let out = crate::place(layout, placement);
+    let out = crate::tests::place(layout, placement);
     let child = Placement::new(Rect::new(25.0, 36.0, 35.0, 40.0), clip);
     assert_eq!(placements.get(), 1);
     assert_eq!(
@@ -137,7 +126,7 @@ fn shared_children_prepare_once_and_place_in_the_chosen_form() {
             layout.extent.rect_at(Point::ORIGIN),
             Rect::new(0.0, 0.0, 200.0, 200.0),
         );
-        let Recording(out) = crate::place(layout, placement);
+        let Recording(out) = crate::tests::place(layout, placement);
         assert_eq!(
             out.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
             ["prefix", "shared"]
@@ -177,7 +166,7 @@ fn a_preferred_form_chosen_after_exploring_the_fallback_keeps_its_natural_childr
         layout.extent.rect_at(Point::ORIGIN),
         Rect::new(0.0, 0.0, 200.0, 200.0),
     );
-    let Recording(out) = crate::place(layout, placement);
+    let Recording(out) = crate::tests::place(layout, placement);
     assert_eq!(
         out.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
         ["prefix", "wide"]
@@ -191,7 +180,7 @@ fn attached_content_is_settled_but_its_placement_remains_the_consumers_choice() 
         let attached =
             build.alternatives(vec![recording("wide", 100.0), recording("narrow", 20.0)]);
         let root = ChoiceLayout::attach(recording("base", 10.0), attached, move |base, layer| {
-            crate::overlay(base, layer, move |p, extent, _| {
+            crate::overlay_into(base, layer, move |p, extent| {
                 show.then(|| {
                     Placement::new(
                         extent.rect_at(Point::new(p.rect.x0, p.rect.y1)),
@@ -207,7 +196,7 @@ fn attached_content_is_settled_but_its_placement_remains_the_consumers_choice() 
             layout.extent.rect_at(Point::ORIGIN),
             Rect::new(0.0, 0.0, 200.0, 200.0),
         );
-        let Recording(out) = crate::place(layout, placement);
+        let Recording(out) = crate::tests::place(layout, placement);
         assert_eq!(
             out.iter().map(|(name, _)| *name).collect::<Vec<_>>(),
             if show {
@@ -224,24 +213,14 @@ struct Output;
 
 impl crate::ObserveLayout for Output {}
 
-impl crate::Output for Output {
-    fn empty() -> Self {
-        Self
-    }
-
-    fn over(self, _: Self) -> Self {
-        self
-    }
-}
-
 fn fixed(width: f64) -> ChoiceLayout<Output> {
-    ChoiceLayout::fixed(crate::leaf(
+    ChoiceLayout::fixed(crate::leaf_into(
         Extent {
             width,
             ascent: 1.0,
             descent: 0.0,
         },
-        |_| Output,
+        |_, _| {},
     ))
 }
 

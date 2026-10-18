@@ -6,7 +6,7 @@ use super::{
     source::{Secondary, SourceTrace},
     view::Root,
 };
-use measured::{Measured, Output};
+use measured::Measured;
 use puri::draw::{Canvas, CanvasSink};
 use puri::frame::AfterHover;
 pub use puri::frame::Render;
@@ -203,7 +203,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             prior: input.prior.cloned(),
             reach_px: input.reach_px,
             root: None,
-            output: HoverOutput::empty(),
+            output: HoverOutput::default(),
             floaters: Vec::new(),
             navigation: Construction::default(),
         }
@@ -551,8 +551,8 @@ fn append<T>(base: &mut Vec<T>, mut above: Vec<T>) {
     }
 }
 
-impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
-    fn empty() -> Self {
+impl<C: 'static, Hover: 'static> Default for HoverOutput<C, Hover> {
+    fn default() -> Self {
         Self {
             scroll_probes: Vec::new(),
             claim: None,
@@ -567,8 +567,12 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
             after_hover: AfterHover::default(),
         }
     }
+}
 
-    fn over(mut self, above: Self) -> Self {
+impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
+    /// Stack `above` on top of this output, as a later placement lands
+    /// over an earlier one.
+    pub fn over(mut self, above: Self) -> Self {
         append(&mut self.scroll_probes, above.scroll_probes);
         self.claim = claim_over(self.claim, above.claim);
         append(&mut self.hover_geometry.probes, above.hover_geometry.probes);
@@ -668,11 +672,6 @@ impl<H> Default for Attribution<H> {
             selected_secondary: None,
             hovered_trace: None,
         }
-    }
-}
-impl<C: 'static, H: 'static> Default for HoverOutput<C, H> {
-    fn default() -> Self {
-        Self::empty()
     }
 }
 impl<C: 'static, H: 'static> HasHandler<C> for HoverOutput<C, H> {
