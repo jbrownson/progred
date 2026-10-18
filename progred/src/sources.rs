@@ -2,7 +2,6 @@
 //! libraries. Ordinary lookup selects the document, then the first
 //! library definition. A stored Follow step still names its source.
 
-use crate::libraries::name;
 use crate::library::Libraries;
 use crate::location::{Location, Start};
 use gid::{CellId, Document, Resolution, Step, Value};
@@ -144,10 +143,6 @@ impl crate::display::Env for Sources<'_> {
         grap::apply_value(function, arguments.iter().cloned(), self, fuel).result
     }
 
-    fn name(&self, cell: CellId) -> Option<&str> {
-        Sources::name(self, cell)
-    }
-
     fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
         self.definition(cell)
     }
@@ -188,10 +183,6 @@ impl<'a> Sources<'a> {
         self.values(cell)
             .find(|value| &value.resolution == resolution)
             .map(|value| value.value)
-    }
-
-    pub fn name(&self, cell: CellId) -> Option<&'a str> {
-        self.resolve(cell).and_then(|value| name::read(value.value))
     }
 
     pub fn values(&self, cell: CellId) -> impl Iterator<Item = LocatedValue<'a>> {

@@ -110,7 +110,7 @@ pub fn library<W: Host>() -> Library<W> {
     );
     cells.set_value(vocabulary::UTF8, name::record("utf8", []));
     cells.set_value(vocabulary::UPDATE, name::record("text update", []));
-    Library::named(
+    name::named_library(
         ID,
         "text",
         crate::libraries::Definitions::from_parts(cells, functions()),

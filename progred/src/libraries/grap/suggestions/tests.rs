@@ -20,7 +20,7 @@ fn visible(root: Value, path: &[Step]) -> BTreeSet<CellId> {
         value_at: &|path| sources.resolve_path(path),
         resolve: &|cell| sources.definition(cell),
         cells: &Vec::new,
-        name: &|cell| sources.name(cell),
+        name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: None,
     })
     .into_keys()
@@ -61,7 +61,7 @@ fn completion_bindings_sort_nearest_scope_first_then_by_current_name() {
             value_at: &|path| sources.resolve_path(path),
             resolve: &|cell| sources.definition(cell),
             cells: &Vec::new,
-            name: &|cell| sources.name(cell),
+            name: &|cell| crate::libraries::name::of(&sources, cell),
             libraries: None,
         };
         let offers = offers(&request).unwrap();
@@ -89,7 +89,7 @@ fn completion_bindings_sort_nearest_scope_first_then_by_current_name() {
         value_at: &|path| sources.resolve_path(path),
         resolve: &|cell| sources.definition(cell),
         cells: &Vec::new,
-        name: &|cell| sources.name(cell),
+        name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: None,
     });
     assert_eq!(

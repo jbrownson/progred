@@ -1,10 +1,11 @@
 use super::*;
+use crate::libraries::name;
 use gid::{Cells, new_cell_id};
 
 fn libraries(id: CellId, cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         id,
-        crate::library::Library::<(), ()>::named(
+        crate::libraries::name::named_library::<crate::Editor>(
             id,
             "test",
             crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
@@ -92,7 +93,7 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
             cells.set_value(function, definition(Value::from(id)));
             (
                 id,
-                crate::library::Library::<(), ()>::named(
+                crate::libraries::name::named_library::<crate::Editor>(
                     id,
                     "source",
                     crate::library::Definitions::from_parts(
@@ -187,7 +188,7 @@ fn values_are_resolved_by_their_stable_sources() {
             .and_then(name::read),
         Some("mine")
     );
-    assert_eq!(sources.name(cell), Some("mine"));
+    assert_eq!(crate::libraries::name::of(&sources, cell), Some("mine"));
     assert_eq!(
         sources
             .value(cell, &Resolution::Document)
@@ -219,7 +220,10 @@ fn plural_lookup_keeps_document_first_and_names_library_origins() {
             .collect::<Vec<_>>(),
         [Resolution::Document, Resolution::Library(library_id)]
     );
-    assert_eq!(sources.name(library_id), Some("test"));
+    assert_eq!(
+        crate::libraries::name::of(&sources, library_id),
+        Some("test")
+    );
 }
 
 #[test]
@@ -230,7 +234,7 @@ fn follow_names_a_library_source_not_its_load_order() {
     let library = |id, name| {
         let mut cells = Cells::new();
         cells.set_value(cell, crate::test_values::text(name));
-        crate::library::Library::<(), ()>::named(
+        crate::libraries::name::named_library::<crate::Editor>(
             id,
             name,
             crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),

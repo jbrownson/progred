@@ -442,7 +442,7 @@ pub fn library<W: Host>() -> Library<W> {
         name::record("invalid color input", []),
     );
     named::insert(&mut cells);
-    Library::named(
+    name::named_library(
         ID,
         "color",
         crate::libraries::Definitions::from_parts(cells, functions()),

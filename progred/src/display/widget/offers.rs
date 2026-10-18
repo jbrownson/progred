@@ -83,7 +83,10 @@ pub(crate) fn rank<W: Host>(
 
 /// `offer` as listed, if it fits the hole: labels can only be cells, so an
 /// offer advertising another value is not one.
-fn fitting<W: Host>(request: &CompletionRequest<'_>, offer: Completion) -> Option<Entry<W>> {
+pub(crate) fn fitting<W: Host>(
+    request: &CompletionRequest<'_>,
+    offer: Completion,
+) -> Option<Entry<W>> {
     (request.kind == CompletionKind::Value
         || offer
             .preview

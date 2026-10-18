@@ -227,6 +227,10 @@ impl crate::display::Toolkit for Occurrence<'_> {
         self.cx.completions
     }
 
+    fn name(&self, cell: CellId) -> Option<&str> {
+        crate::libraries::name::of(&self.cx.sources, cell)
+    }
+
     fn selected_trace(&self) -> Option<&SourceTrace> {
         self.cx.selected_trace.as_ref()
     }
@@ -583,7 +587,9 @@ impl Cx<'_> {
     /// The display name at this projection. Raw interprets no naming
     /// convention and therefore falls back to the short id.
     fn name(&self, cell: CellId) -> Option<&str> {
-        (!self.raw).then(|| self.sources.name(cell)).flatten()
+        (!self.raw)
+            .then(|| crate::libraries::name::of(&self.sources, cell))
+            .flatten()
     }
 
     /// Whether `path` carries the primary highlight. A label-stage

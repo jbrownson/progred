@@ -87,7 +87,7 @@ pub(super) fn library<W: crate::display::Host>(session: &Rc<RefCell<Session>>) -
     for (cell, spelling) in NAMES {
         cells.set_value(cell, name::record(spelling, []));
     }
-    Library::named(
+    name::named_library(
         ID,
         "computer",
         crate::library::Definitions::from_parts(cells, functions(session)),

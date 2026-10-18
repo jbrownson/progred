@@ -169,7 +169,7 @@ pub fn library<W: Host>() -> Library<W> {
     ] {
         cells.set_value(cell, absent::named_reason(reason));
     }
-    Library::named(
+    name::named_library(
         ID,
         "png",
         crate::libraries::Definitions::from_parts(cells, functions()),

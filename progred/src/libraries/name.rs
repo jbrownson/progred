@@ -2,7 +2,10 @@
 //! editor assumes the library; other hosts need not.
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-use crate::libraries::{Library, text};
+use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face};
+use crate::libraries::{Definitions, Library, text};
+use crate::library::Libraries;
+use crate::sources::Sources;
 use gid::{CellId, Cells, Value};
 
 pub const ID: CellId = CellId::from_u128(0x3209ad5d23a0c8513f6bd76324a5cf60);
@@ -26,6 +29,28 @@ pub fn read(value: &Value) -> Option<&str> {
         .as_record()?
         .get(&vocabulary::NAME)
         .and_then(text::read)
+}
+
+/// The name `cell`'s definition gives it.
+pub fn of<'a>(sources: &Sources<'a>, cell: CellId) -> Option<&'a str> {
+    sources.resolve(cell).and_then(|value| read(value.value))
+}
+
+/// `definitions` as a library that names itself `name` at its identity `id`.
+pub fn named_library<W: Host>(
+    id: CellId,
+    name: impl Into<String>,
+    mut definitions: Definitions,
+) -> Library<W> {
+    definitions.insert(id, ::grap::Definition::Value(record(name, [])));
+    Library::new(definitions)
+}
+
+/// Each loaded library and the name it gives itself, in load order.
+pub fn library_names(libraries: &Libraries) -> impl Iterator<Item = (CellId, &str)> + '_ {
+    libraries
+        .iter()
+        .filter_map(|(id, definitions)| definitions.value(id).and_then(read).map(|name| (id, name)))
 }
 
 /// An editable name uses the ordinary text editor, without literal quotes.
@@ -63,11 +88,40 @@ pub(crate) fn with_name<W: Host>(
 pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::NAME, record("name", []));
-    Library::named(
+    named_library(
         ID,
         "name",
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        Definitions::from_parts(cells, Default::default()),
     )
+    .with_completions(completions)
+}
+
+/// What's typed as a new field's label reads as a new cell named that, once
+/// anything has been.
+fn completions(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
+    (request.scope == CompletionScope::Literal
+        && request.kind == CompletionKind::Field
+        && !request.query.trim().is_empty())
+    .then(|| vec![new_label(text::query_spelling(request.query))])
+}
+
+/// A fresh cell named `spelling`, as the new field's label, its value to be
+/// filled in next.
+fn new_label(spelling: &str) -> Completion {
+    let name = spelling.to_string();
+    Completion {
+        face: Face::Dim,
+        ..Completion::new(spelling, move |session| {
+            if let Some(picking) = session.pending() {
+                picking.commit_label(
+                    gid::new_cell_id(),
+                    Some(record(&name, [])),
+                    Some(crate::selection::pending_at(&[])),
+                );
+            }
+        })
+        .with_detail("new label")
+    }
 }
 
 /// A name as its line editor or, missing, a hole for one. A projection

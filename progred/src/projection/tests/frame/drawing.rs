@@ -336,7 +336,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         cells.set_value(shape_function, name::record("shape", []));
         Libraries::from_contributions([(
             library_id,
-            crate::library::Library::<(), ()>::named(
+            crate::libraries::name::named_library::<crate::Editor>(
                 library_id,
                 "shape",
                 crate::library::Definitions::from_parts(

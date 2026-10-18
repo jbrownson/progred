@@ -37,7 +37,7 @@ pub fn library<W: Host>() -> Library<W> {
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    Library::named(
+    name::named_library(
         ID,
         "number",
         crate::libraries::Definitions::from_parts(cells, Default::default()),
@@ -173,7 +173,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         } = parts;
         let infix: Rc<[(CellId, Precedence)]> = infix.into();
         let symbols: Rc<[(&'static str, CellId)]> = symbols.into();
-        Library::named(
+        name::named_library(
             id,
             self.name,
             crate::libraries::Definitions::from_parts(cells, functions),

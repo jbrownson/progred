@@ -86,7 +86,7 @@ pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::CURRENT, name::record("current", []));
     cells.set_value(vocabulary::INPUT, name::record("input", []));
-    Library::named(
+    name::named_library(
         ID,
         "line edit",
         crate::libraries::Definitions::from_parts(cells, Default::default()),

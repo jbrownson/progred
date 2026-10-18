@@ -28,7 +28,7 @@ pub fn library<W: Host>() -> Library<W> {
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    Library::named(
+    name::named_library(
         ID,
         "site",
         crate::libraries::Definitions::from_parts(cells, Default::default()),

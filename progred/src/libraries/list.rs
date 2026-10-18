@@ -297,7 +297,7 @@ pub fn library<W: Host>() -> Library<W> {
     ] {
         cells.set_value(cell, absent::named_reason(spelling));
     }
-    Library::named(
+    name::named_library(
         ID,
         "list",
         crate::libraries::Definitions::from_parts(cells, functions()),

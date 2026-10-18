@@ -8,7 +8,7 @@ use gid::{Cells, new_cell_id};
 fn libraries(cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         CellId::from_u128(1),
-        crate::library::Library::<(), ()>::named(
+        crate::libraries::name::named_library::<crate::Editor>(
             CellId::from_u128(1),
             "test",
             crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),

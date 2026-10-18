@@ -62,7 +62,7 @@ pub fn library<W: Host>() -> Library<W> {
         vocabulary::INVALID_RADIUS,
         absent::named_reason("invalid radius"),
     );
-    Library::named(
+    name::named_library(
         ID,
         "geometry",
         crate::libraries::Definitions::from_parts(cells, functions()),

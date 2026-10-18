@@ -28,7 +28,7 @@ pub fn library<W: Host>() -> Library<W> {
         cells.set_value(cell, name::record(spelling, []));
     }
     cells.set_value(INVALID_PATH, absent::named_reason("invalid path"));
-    Library::named(
+    name::named_library(
         ID,
         "path",
         crate::libraries::Definitions::from_parts(cells, Default::default()),

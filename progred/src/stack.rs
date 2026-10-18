@@ -38,8 +38,7 @@ impl<World> Stack<World> {
     /// are tried: each library that brings a projection, then the libraries
     /// the document declares, which stand together under their root key.
     pub fn projections(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
-        self.libraries
-            .named()
+        crate::libraries::name::library_names(&self.libraries)
             .filter(|(library, _)| self.partials.iter().any(|(id, _)| id == library))
             .chain([(workspace::vocabulary::LIBRARIES, "document libraries")])
     }

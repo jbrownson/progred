@@ -56,7 +56,7 @@ fn definitions_have_distinct_source_traces_and_secondary_marks() {
         crate::library::Libraries::from_contributions(order.map(|id| {
             (
                 id,
-                crate::library::Library::<(), ()>::named(
+                crate::libraries::name::named_library::<crate::Editor>(
                     id,
                     "source",
                     crate::library::Definitions::from_parts(

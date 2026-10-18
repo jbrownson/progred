@@ -237,7 +237,10 @@ fn peeling_switches_projections_off_and_names_last() {
     assert!(!shown(&drawn), "f64 draws the number");
     let (world, stored) = peel(&[name::ID, text::ID], true);
     assert!(shown(&stored), "without f64's projection, its bytes show");
-    assert_eq!(world.sources().name(f64::vocabulary::F64), Some("f64"));
+    assert_eq!(
+        crate::libraries::name::of(&world.sources(), f64::vocabulary::F64),
+        Some("f64")
+    );
     // Only the key's label changes: its name gives way to its identity.
     let (_, unnamed) = peel(&[name::ID, text::ID], false);
     assert!(shown(&unnamed));

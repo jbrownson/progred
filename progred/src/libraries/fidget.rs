@@ -1192,7 +1192,7 @@ pub fn library<W: Host>() -> Library<W> {
         .into_iter()
         .filter_map(|(cell, symbol)| Some((cell, representation::Precedence::of_symbol(symbol)?)))
         .collect();
-    Library::named(
+    name::named_library(
         ID,
         "fidget",
         crate::libraries::Definitions::from_parts(cells, functions()),

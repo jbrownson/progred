@@ -3,7 +3,6 @@
 //! [`crate::libraries`] are contributions like any other.
 
 use crate::display::{Completion, CompletionProvider, CompletionRequest, Partial};
-use crate::libraries::name;
 use ::grap::{Definition, ForeignFunctions};
 use gid::Cells;
 use std::rc::Rc;
@@ -111,11 +110,6 @@ impl<World, Hover> Library<World, Hover> {
         }
     }
 
-    pub fn named(id: gid::CellId, name: impl Into<String>, mut definitions: Definitions) -> Self {
-        definitions.insert(id, Definition::Value(name::record(name, [])));
-        Self::new(definitions)
-    }
-
     pub fn with_projection(mut self, projection: Partial<World, Hover>) -> Self {
         self.projection = Some(projection);
         self
@@ -199,27 +193,10 @@ impl Libraries {
             .map(|(_, definitions)| definitions)
     }
 
-    #[cfg(test)]
     pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definitions)> {
         self.entries
             .iter()
             .map(|(id, definitions)| (*id, definitions))
-    }
-
-    /// The names libraries give themselves, in load order.
-    #[cfg(any(test, target_arch = "wasm32"))]
-    pub fn names(&self) -> impl Iterator<Item = &str> + '_ {
-        self.named().map(|(_, name)| name)
-    }
-
-    /// Each library and the name it gives itself, in load order.
-    pub fn named(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
-        self.entries.iter().filter_map(|(id, definitions)| {
-            definitions
-                .value(*id)
-                .and_then(name::read)
-                .map(|name| (*id, name))
-        })
     }
 
     /// Each loaded library's definition of `cell`, in load order.

@@ -899,7 +899,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
     };
     let libraries = crate::library::Libraries::from_contributions([(
         library_id,
-        crate::library::Library::<(), ()>::named(
+        crate::libraries::name::named_library::<crate::Editor>(
             library_id,
             "source",
             crate::library::Definitions::from_parts(

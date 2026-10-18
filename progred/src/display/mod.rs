@@ -154,9 +154,9 @@ pub enum CompletionScope {
     /// projection that wants them among its own, as Grap's slots do.
     Everything,
     /// What was typed, read as one of a library's values, like a number or a
-    /// string. Raw asks on every request for a value, so a provider answers it
-    /// cheaply; the picker lists it where a typed value goes instead of ranking
-    /// it.
+    /// string, or as a field's label, like a new cell with that name. Raw asks
+    /// on every request, so a provider answers it cheaply; the picker lists it
+    /// where a typed value goes instead of ranking it.
     Literal,
     /// What a new document can start as, such as a Grap program, for the
     /// hole of a document's empty root.

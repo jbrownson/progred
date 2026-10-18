@@ -109,7 +109,7 @@ pub fn library<W: Host>() -> Library<W> {
     cells.set_value(vocabulary::DECLINED, named_reason("not applicable"));
     cells.set_value(vocabulary::OR_DEFAULT, name::record("or default", []));
     cells.set_value(vocabulary::DEFAULT, name::record("default", []));
-    Library::named(
+    name::named_library(
         ID,
         "absent",
         crate::libraries::Definitions::from_parts(cells, functions()),

@@ -83,7 +83,7 @@ pub fn library<W: Host>() -> Library<W> {
         vocabulary::INVALID_INPUT,
         name::record("invalid hex input", []),
     );
-    Library::named(
+    name::named_library(
         ID,
         "blob",
         crate::libraries::Definitions::from_parts(cells, functions()),

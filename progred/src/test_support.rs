@@ -37,7 +37,7 @@ pub(crate) fn root_completions<World>(
         value_at: &|_| None,
         resolve: &|cell| sources.definition(cell),
         cells: &|| sources.cells().collect(),
-        name: &|cell| sources.name(cell),
+        name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: None,
     })
     .unwrap_or_default()
@@ -79,7 +79,7 @@ pub(crate) fn completion_entries_with(
         value_at: &value_at,
         resolve: &|cell| sources.definition(cell),
         cells: &|| sources.cells().collect(),
-        name: &|cell| sources.name(cell),
+        name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: providers,
     })
     .into_iter()

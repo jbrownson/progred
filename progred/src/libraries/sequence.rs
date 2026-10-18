@@ -199,7 +199,7 @@ pub fn library<W: Host>() -> Library<W> {
     }
     cells.set_value(INVALID, absent::named_reason("invalid sequence"));
     cells.set_value(FINISHED, absent::named_reason("iteration finished"));
-    Library::named(ID, "sequence", Definitions::from_parts(cells, functions()))
+    name::named_library(ID, "sequence", Definitions::from_parts(cells, functions()))
 }
 
 #[cfg(test)]

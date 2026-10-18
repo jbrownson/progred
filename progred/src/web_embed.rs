@@ -86,7 +86,9 @@ impl Level {
         };
         match self {
             Level::Full => {
-                let names = libraries.names().collect::<Vec<_>>();
+                let names = crate::libraries::name::library_names(libraries)
+                    .map(|(_, name)| name)
+                    .collect::<Vec<_>>();
                 match names.as_slice() {
                     [] => format!("{drawn} with no libraries"),
                     [name] => format!("{drawn} with the {name} library"),

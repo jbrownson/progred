@@ -484,7 +484,7 @@ pub fn library<W: Host>() -> Library<W> {
     for (id, spelling) in cutter::names() {
         cells.set_value(id, name::record(spelling, []));
     }
-    Library::named(
+    name::named_library(
         ID,
         "toolpaths",
         Definitions::from_parts(cells, cutter::functions(functions())),

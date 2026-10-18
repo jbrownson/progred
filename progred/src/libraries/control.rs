@@ -875,7 +875,7 @@ pub fn library<W: Host>() -> Library<W> {
     ] {
         cells.set_value(cell, absent::named_reason(name));
     }
-    Library::named(
+    name::named_library(
         ID,
         "control",
         crate::libraries::Definitions::from_parts(cells, functions()),

@@ -51,7 +51,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                 value_at: &|_| None,
                 resolve: &|cell| sources.definition(cell),
                 cells: &|| sources.cells().collect(),
-                name: &|cell| sources.name(cell),
+                name: &|cell| crate::libraries::name::of(&sources, cell),
                 libraries: None,
             });
             if query.is_empty() || query == display {
@@ -136,7 +136,7 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
         value_at: &value_at,
         resolve: &|cell| sources.definition(cell),
         cells: &|| sources.cells().collect(),
-        name: &|cell| sources.name(cell),
+        name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: None,
     };
     let entries = ranked(provider)(&request);
@@ -153,8 +153,14 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
     for provider in [unspecified, empty] {
         assert!(ranked::<crate::Editor>(provider)(&request).is_empty());
     }
+    let libraries = crate::stack::load().completions;
     assert!(
-        !(crate::display::raw::picker::<crate::Editor>(CompletionKind::Field).offers)(&request)
-            .is_empty()
+        !(crate::display::raw::picker::<crate::Editor>(CompletionKind::Field).offers)(
+            &CompletionRequest {
+                libraries: Some(&libraries),
+                ..request
+            }
+        )
+        .is_empty()
     );
 }

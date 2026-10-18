@@ -685,6 +685,6 @@ pub fn library<W: Host>() -> Library<W> {
                 .parameters([KEY, tree::vocabulary::PROGRAM])
                 .tracked(),
         );
-    Library::named(ID, "controls", Definitions::from_parts(cells, functions))
+    name::named_library(ID, "controls", Definitions::from_parts(cells, functions))
         .with_projection(display::runtime_partial(display))
 }

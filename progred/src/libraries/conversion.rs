@@ -23,7 +23,7 @@ fn functions() -> ForeignFunctions {
 pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::F32_FROM_F64, name::record("f32 from f64", []));
-    Library::named(
+    name::named_library(
         ID,
         "conversion",
         crate::libraries::Definitions::from_parts(cells, functions()),

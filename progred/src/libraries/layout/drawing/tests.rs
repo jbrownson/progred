@@ -105,7 +105,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
             cells.set_value(function, definition.clone());
             (
                 id,
-                crate::library::Library::<(), ()>::named(
+                crate::libraries::name::named_library::<crate::Editor>(
                     id,
                     "drawing",
                     crate::library::Definitions::from_parts(

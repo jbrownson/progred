@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
+use crate::libraries::name;
 use crate::view::{Layout, ProjectionInput};
 
 use crate::display::test_support::NoEval;
@@ -40,7 +41,7 @@ fn library_definitions_and_projections_compose_in_order() {
     let (libraries, projections, _) = Libraries::from_contributions([
         (
             LEFT_LIBRARY,
-            Library::named(
+            crate::libraries::name::named_library::<crate::Editor>(
                 LEFT_LIBRARY,
                 "left",
                 Definitions::from_parts(
@@ -53,7 +54,7 @@ fn library_definitions_and_projections_compose_in_order() {
         ),
         (
             RIGHT_LIBRARY,
-            Library::named(
+            crate::libraries::name::named_library::<crate::Editor>(
                 RIGHT_LIBRARY,
                 "right",
                 Definitions::from_parts(
@@ -118,7 +119,7 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
     );
     let (libraries, _, _) = Libraries::from_contributions([(
         LEFT_LIBRARY,
-        Library::<crate::Editor, crate::frame::Hovered>::named(LEFT_LIBRARY, "test", definitions),
+        crate::libraries::name::named_library::<crate::Editor>(LEFT_LIBRARY, "test", definitions),
     )]);
     assert_eq!(
         libraries
@@ -199,21 +200,33 @@ fn definitions_are_sorted_unique_and_copy_on_write() {
 #[test]
 fn replacing_a_library_replaces_every_contribution_in_place() {
     let old: Library<crate::Editor, crate::frame::Hovered> =
-        Library::named(LEFT_LIBRARY, "old", Definitions::default())
-            .with_projection(crate::display::partial(|_| panic!("replaced projection")))
-            .with_completions(|_| panic!("replaced completion provider"));
+        crate::libraries::name::named_library::<crate::Editor>(
+            LEFT_LIBRARY,
+            "old",
+            Definitions::default(),
+        )
+        .with_projection(crate::display::partial(|_| panic!("replaced projection")))
+        .with_completions(|_| panic!("replaced completion provider"));
     let replacement_projection = crate::display::partial(left_projection);
     let right_projection = crate::display::partial(right_projection);
-    let replacement = Library::named(LEFT_LIBRARY, "replacement", Definitions::default())
-        .with_projection(replacement_projection.clone())
-        .with_completions(|request| {
-            Some(vec![crate::libraries::completion::select(
-                request.query,
-                SHARED_FUNCTION.into(),
-            )])
-        });
-    let right = Library::named(RIGHT_LIBRARY, "right", Definitions::default())
-        .with_projection(right_projection.clone());
+    let replacement = crate::libraries::name::named_library::<crate::Editor>(
+        LEFT_LIBRARY,
+        "replacement",
+        Definitions::default(),
+    )
+    .with_projection(replacement_projection.clone())
+    .with_completions(|request| {
+        Some(vec![crate::libraries::completion::select(
+            request.query,
+            SHARED_FUNCTION.into(),
+        )])
+    });
+    let right = crate::libraries::name::named_library::<crate::Editor>(
+        RIGHT_LIBRARY,
+        "right",
+        Definitions::default(),
+    )
+    .with_projection(right_projection.clone());
     let (libraries, projections, providers) = Libraries::from_contributions([
         (LEFT_LIBRARY, old),
         (RIGHT_LIBRARY, right),
@@ -260,7 +273,7 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
 fn library_descriptions_are_ordinary_cells() {
     let (libraries, _, _) = Libraries::from_contributions([(
         LEFT_LIBRARY,
-        Library::<crate::Editor, crate::frame::Hovered>::named(
+        crate::libraries::name::named_library::<crate::Editor>(
             LEFT_LIBRARY,
             "library",
             Definitions::default(),
@@ -299,7 +312,7 @@ fn unnamed_native_definitions_have_an_empty_description() {
 fn libraries_are_an_ordered_unique_map_without_hashing() {
     let mut left_cells = Cells::new();
     left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
-    let left = Library::<crate::Editor, crate::frame::Hovered>::named(
+    let left = crate::libraries::name::named_library::<crate::Editor>(
         LEFT_LIBRARY,
         "left",
         Definitions::from_parts(
@@ -310,7 +323,7 @@ fn libraries_are_an_ordered_unique_map_without_hashing() {
     );
     let mut right_cells = Cells::new();
     right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
-    let right = Library::<crate::Editor, crate::frame::Hovered>::named(
+    let right = crate::libraries::name::named_library::<crate::Editor>(
         RIGHT_LIBRARY,
         "right",
         Definitions::from_parts(right_cells, ForeignFunctions::default()),

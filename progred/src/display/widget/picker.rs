@@ -192,7 +192,7 @@ fn query_content<W: Host>(
         value_at: &value_at,
         resolve: &resolve,
         cells: &|| sources.cells().collect(),
-        name: &|cell| sources.name(cell),
+        name: &|cell| toolkit.name(cell),
         libraries: toolkit.completions(),
     };
     let entries = (picker.offers)(&request);

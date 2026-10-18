@@ -2,10 +2,10 @@
 //! Raw's holes list them, and a projection can offer them among its own, as
 //! Grap's slots do.
 
-use crate::display::widget::offers::{Entry, HoleOffers, entry, rank};
+use crate::display::widget::offers::{Entry, HoleOffers, entry, fitting, rank};
 use crate::display::widget::picker::Picker;
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face, Host};
-use crate::libraries::{blob, name, text};
+use crate::libraries::blob;
 use gid::{Value, new_cell_id};
 use std::rc::Rc;
 
@@ -20,12 +20,12 @@ pub fn start_picker<W: Host>() -> Picker<W> {
     Picker::new(CompletionKind::Value, start()).with_keys(keys(CompletionKind::Value))
 }
 
-/// Raw's offers: the editor's constructors, and what's typed read as a value,
-/// or for a field's label a new cell named as typed. An empty query reads as
-/// nothing; a projection that expects a value can offer one for it. Quoted
-/// text and bytes lead; otherwise a reading that spells the query exactly
-/// comes first, then the constructors the query names, then the other
-/// readings and the text.
+/// Raw's offers: the editor's constructors, and what the libraries read the
+/// query as, a value or a field's label, such as the name library's new cell
+/// named as typed. An empty query reads as nothing; a projection that expects
+/// a value can offer one for it. Quoted text and bytes lead; otherwise a
+/// reading that spells the query exactly comes first, then the constructors
+/// the query names, then the other readings and the text or new label.
 fn offers<W: Host>() -> HoleOffers<W> {
     Rc::new(entries)
 }
@@ -132,28 +132,15 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
         .flatten();
     let atom_leads = trimmed.starts_with('"') || blob.is_some();
     let (readings, atoms): (Vec<_>, Vec<_>) = match kind {
+        // A new label is what's typed taken as a label, so it goes where
+        // text does.
         CompletionKind::Field => {
-            let spelling = text::query_spelling(query).to_string();
-            let label = Entry {
-                display: spelling.clone(),
-                detail: Some("new label".to_string()),
-                matches: Vec::new(),
-                face: Face::Dim,
-                source: None,
-                activate: Rc::new(move |world: &mut W| {
-                    if let Some(picking) = world.session().pending() {
-                        picking.commit_label(
-                            new_cell_id(),
-                            Some(name::record(&spelling, [])),
-                            Some(crate::selection::pending_at(&[])),
-                        );
-                    }
-                }),
-            };
-            (
-                Vec::new(),
-                (!trimmed.is_empty()).then_some(label).into_iter().collect(),
-            )
+            let (readings, _) = literals(request);
+            let labels = readings
+                .into_iter()
+                .filter_map(|offer| fitting(request, offer))
+                .collect();
+            (Vec::new(), labels)
         }
         CompletionKind::Value => {
             let (readings, strings) = literals(request);
