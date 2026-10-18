@@ -1,6 +1,5 @@
 use super::{cutter::Tool, paths::*, stock::Stock, vocabulary::*};
 use crate::libraries::{f64, fidget};
-use cam::field::coordinate;
 use gid::Value;
 
 pub(super) trait Draw: Sink<Error = InvalidPath> {
@@ -55,15 +54,11 @@ impl Settings {
             }
             None => None,
         };
-        if !profile_tolerance.is_finite()
-            || profile_tolerance <= 0.0
-            || !(0..3).all(|i| stock_min[i] < stock_max[i])
-        {
-            return None;
-        }
-        coordinate(stock_min).ok()?;
-        coordinate(stock_max).ok()?;
-        Some(Self {
+        // The bounds are valid when they make the block that's cut.
+        (profile_tolerance.is_finite()
+            && profile_tolerance > 0.0
+            && Stock::block(stock_min, stock_max).is_some())
+        .then_some(Self {
             cursor,
             focus,
             profile_tolerance,

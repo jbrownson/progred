@@ -135,6 +135,16 @@ pub struct SurfacePoint {
     pub normal: [f64; 2],
 }
 
+/// A chord tolerance the public entry points have checked: finite and positive.
+#[derive(Clone, Copy)]
+struct Tolerance(f64);
+
+impl Tolerance {
+    fn new(tolerance: f64) -> Option<Self> {
+        (tolerance.is_finite() && tolerance > 0.0).then_some(Self(tolerance))
+    }
+}
+
 impl Section {
     pub fn taper(start: Point, end: Point, kind: SectionKind) -> Self {
         Self {
@@ -199,11 +209,12 @@ impl Section {
     /// Sample only the circular profile edges. Motion is never sampled.
     /// The tolerance bounds chord error in the tool's radius/axial plane.
     pub fn outline(&self, tolerance: f64) -> Option<Vec<Point>> {
-        Some(self.sample(tolerance)?.points)
+        Some(self.sample(Tolerance::new(tolerance)?)?.points)
     }
 
     /// Duplicate segment junctions so caps and corners need not share normals.
     pub fn shaded_outline(&self, tolerance: f64) -> Option<Vec<SurfacePoint>> {
+        let tolerance = Tolerance::new(tolerance)?;
         let mut surface = Vec::new();
         self.sample_with(tolerance, |points, arc| {
             let start = points[0];
@@ -229,18 +240,15 @@ impl Section {
         Some(surface)
     }
 
-    fn sample(&self, tolerance: f64) -> Option<Sampled> {
+    fn sample(&self, tolerance: Tolerance) -> Option<Sampled> {
         self.sample_with(tolerance, |_, _| {})
     }
 
     fn sample_with(
         &self,
-        tolerance: f64,
+        Tolerance(tolerance): Tolerance,
         mut segment_points: impl FnMut(&[Point], Option<&ArcGeometry>),
     ) -> Option<Sampled> {
-        if !tolerance.is_finite() || tolerance <= 0.0 {
-            return None;
-        }
         self.bounds()?;
         let mut points = vec![self.start];
         let mut shoulders = Vec::new();
@@ -305,9 +313,22 @@ impl Section {
         b: Point3,
         axis: Axis,
     ) -> Result<Tree, InvalidPath> {
-        if !tolerance.is_finite() || tolerance <= 0.0 {
-            return Err(InvalidPath::CoordinateRange);
-        }
+        self.lower(
+            Tolerance::new(tolerance).ok_or(InvalidPath::CoordinateRange)?,
+            a,
+            b,
+            axis,
+        )
+    }
+
+    /// `sweep`, for a tolerance already checked.
+    fn lower(
+        &self,
+        tolerance: Tolerance,
+        a: Point3,
+        b: Point3,
+        axis: Axis,
+    ) -> Result<Tree, InvalidPath> {
         // Exact lowering of the familiar hemisphere followed by a cylinder.
         // This inspects the actual profile, never its name or constructor.
         if let [
@@ -436,9 +457,7 @@ impl Tool {
         axis: Axis,
         tolerance: f64,
     ) -> Result<Option<Tree>, InvalidPath> {
-        if !tolerance.is_finite() || tolerance <= 0.0 {
-            return Err(InvalidPath::CoordinateRange);
-        }
+        let tolerance = Tolerance::new(tolerance).ok_or(InvalidPath::CoordinateRange)?;
         union(
             self.sections
                 .iter()
@@ -449,7 +468,7 @@ impl Tool {
                     Some(match section.profile.last() {
                         Some(Segment::Line(end) | Segment::Arc { end, .. }) if distinct => {
                             *previous_end = Some(end.axial as f32);
-                            section.sweep(tolerance, a, b, axis)
+                            section.lower(tolerance, a, b, axis)
                         }
                         _ => Err(InvalidPath::CoordinateRange),
                     })

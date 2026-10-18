@@ -25,6 +25,22 @@ fn accuracy_belongs_to_playback_and_is_required_and_validated() {
     );
 }
 
+#[test]
+fn stock_bounds_are_read_only_when_they_make_the_block_that_is_cut() {
+    let read = |min, max| {
+        Settings::read(&Value::record([
+            (PROGRESS, f64::value(0.35)),
+            (PROFILE_TOLERANCE, f64::value(0.001)),
+            (STOCK_MIN, super::super::point_value(min)),
+            (STOCK_MAX, super::super::point_value(max)),
+        ]))
+    };
+    assert!(read([-0.5; 3], [0.5; 3]).is_some());
+    // Ordered as f64, but not once the block rounds them to f32.
+    assert!(read([0.0; 3], [1e-50, 1.0, 1.0]).is_none());
+    assert!(read([1.0; 3], [1.0 + 1e-10, 2.0, 2.0]).is_none());
+}
+
 #[derive(Default)]
 struct Drawing {
     path: Recording,
