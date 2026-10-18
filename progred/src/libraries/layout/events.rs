@@ -18,7 +18,7 @@ pub fn on_event<W: Host>(child: Layout<W>, function: impl Into<::grap::RuntimeVa
             let scale = context.viewing().scale();
             let function = function.clone();
             Box::new(move |output, placement| {
-                let command = output.input.command_modifier.predicate();
+                let command = output.input.command_modifier;
                 output.handler().on(move |world, event, _| {
                     if let Event::Scroll(events) = event {
                         return puri::scroll::filter(

@@ -10,6 +10,7 @@ use puri::handler::{
     PointerGesture, PointerGestureEvent, PointerInfo, PointerScrollEvent, PointerState,
     PointerType, PointerUpdate, ScrollDelta,
 };
+use puri::keyboard::CommandModifier;
 use vocabulary::*;
 
 #[cfg(test)]
@@ -69,13 +70,13 @@ pub mod vocabulary {
 }
 
 /// `event` as the record a Grap handler drawn at `placement` receives, its
-/// positions local to the placement; `command` reads the platform's command
+/// positions local to the placement; `command` is the platform's command
 /// modifier. Scroll and gesture events arrive in batches, each one record.
 pub(crate) fn value(
     event: &Event,
     placement: Placement,
     scale: f64,
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Value {
     match event {
         Event::PointerDown(event) => {
@@ -103,7 +104,7 @@ pub(crate) fn scroll(
     placement: Placement,
     scale: f64,
     events: &[PointerScrollEvent],
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Value {
     event_value(
         SCROLL,
@@ -123,7 +124,7 @@ pub(crate) fn gesture(
     placement: Placement,
     scale: f64,
     events: &[PointerGestureEvent],
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Value {
     event_value(
         GESTURE,
@@ -162,13 +163,13 @@ fn marker() -> Value {
     Value::record([])
 }
 
-fn modifier_field(modifiers: &Modifiers, command: fn(&Modifiers) -> bool) -> (CellId, Value) {
+fn modifier_field(modifiers: &Modifiers, command: CommandModifier) -> (CellId, Value) {
     (
         MODIFIERS,
         Value::list(
             [
                 modifiers.shift().then_some(Value::Cell(SHIFT)),
-                command(modifiers).then_some(Value::Cell(COMMAND)),
+                command.pressed(modifiers).then_some(Value::Cell(COMMAND)),
             ]
             .into_iter()
             .flatten(),
@@ -180,7 +181,7 @@ fn pointer_fields(
     placement: Placement,
     scale: f64,
     state: &PointerState,
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Vec<(CellId, Value)> {
     let mut fields = vec![
         (X, grap::f64::value(state.position.x - placement.rect.x0)),
@@ -198,7 +199,7 @@ fn pointer_button_value(
     placement: Placement,
     scale: f64,
     event: &PointerButtonEvent,
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Value {
     let mut fields = pointer_fields(placement, scale, &event.state, command);
     let touch = event.pointer.pointer_type == PointerType::Touch;
@@ -213,7 +214,7 @@ fn pointer_motion_fields(
     scale: f64,
     touch: bool,
     state: &PointerState,
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Vec<(CellId, Value)> {
     let mut fields = pointer_fields(placement, scale, state, command);
     if !touch && state.buttons.contains(PointerButton::Primary) {
@@ -226,7 +227,7 @@ fn pointer_move_value(
     placement: Placement,
     scale: f64,
     event: &PointerUpdate,
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Value {
     let touch = event.pointer.pointer_type == PointerType::Touch;
     let mut fields = pointer_motion_fields(placement, scale, touch, &event.current, command);
@@ -256,7 +257,7 @@ fn scroll_value(
     placement: Placement,
     scale: f64,
     event: &PointerScrollEvent,
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Value {
     let mut fields = pointer_fields(placement, scale, &event.state, command);
     let (x, y) = match event.delta {
@@ -274,7 +275,7 @@ fn gesture_value(
     placement: Placement,
     scale: f64,
     event: &PointerGestureEvent,
-    command: fn(&Modifiers) -> bool,
+    command: CommandModifier,
 ) -> Value {
     let mut fields = pointer_fields(placement, scale, &event.state, command);
     let (kind, delta) = match event.gesture {
@@ -285,7 +286,7 @@ fn gesture_value(
     event_value(kind, fields)
 }
 
-fn key_value(event: &KeyboardEvent, command: fn(&Modifiers) -> bool) -> Value {
+fn key_value(event: &KeyboardEvent, command: CommandModifier) -> Value {
     let mut fields = vec![
         (
             EVENT_STATE,

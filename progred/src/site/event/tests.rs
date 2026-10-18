@@ -27,7 +27,7 @@ fn grap_pinch_delta_is_dimensionless_and_position_is_local() {
     };
     let placement = Placement::root(puri::Rect::new(10.0, 20.0, 110.0, 120.0));
     for scale in [1.0, 2.0] {
-        let value = gesture_value(placement, scale, &event, |m| m.meta());
+        let value = gesture_value(placement, scale, &event, CommandModifier::Meta);
         let fields = value.as_record().unwrap();
         assert_eq!(fields.get(&EVENT_KIND), Some(&Value::Cell(PINCH)));
         assert_eq!(fields.get(&DELTA).and_then(grap::f64::read), Some(0.25));
@@ -60,13 +60,14 @@ fn grap_motion_preserves_the_batch_in_local_coordinates() {
         (PointerType::Touch, TOUCH_MOVE),
     ] {
         event.pointer.pointer_type = pointer_type;
-        let value = pointer_move_value(placement, 2.0, &event, |m| m.ctrl());
+        let value = pointer_move_value(placement, 2.0, &event, CommandModifier::Control);
         let fields = value.as_record().unwrap();
         assert_eq!(fields.get(&EVENT_KIND), Some(&Value::Cell(kind)));
         assert_eq!(fields.get(&X), Some(&grap::f64::value(30.0)));
         let earlier = fields.get(&COALESCED).unwrap();
         let expected = [10.0, 20.0].map(|x| {
-            let mut fields = pointer_fields(placement, 2.0, &sample(x + 10.0), |m| m.ctrl());
+            let mut fields =
+                pointer_fields(placement, 2.0, &sample(x + 10.0), CommandModifier::Control);
             if pointer_type == PointerType::Mouse {
                 fields.push((BUTTON, Value::Cell(PRIMARY)));
             }

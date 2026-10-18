@@ -9,13 +9,9 @@ pub enum CommandModifier {
 
 impl CommandModifier {
     pub fn pressed(self, modifiers: &Modifiers) -> bool {
-        self.predicate()(modifiers)
-    }
-
-    pub fn predicate(self) -> fn(&Modifiers) -> bool {
         match self {
-            Self::Control => Modifiers::ctrl,
-            Self::Meta => Modifiers::meta,
+            Self::Control => modifiers.ctrl(),
+            Self::Meta => modifiers.meta(),
         }
     }
 }
