@@ -1,4 +1,4 @@
-use super::{Delim, DelimStyle, close_with_width, open_with_width};
+use super::{Delim, DelimStyle, close, open};
 use crate::{Affine, Brush, Canvas, draw::CanvasSink};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,10 +45,9 @@ pub fn draw_stretched(
         ),
     };
     let bearing = SIDE_BEARING_EM * text_size;
-    let bow = style.bow(delim);
     let path = match side {
-        Side::Open => open_with_width(delim, &style, top, bottom, bow),
-        Side::Close => close_with_width(delim, &style, top, bottom, bow),
+        Side::Open => open(delim, &style, top, bottom),
+        Side::Close => close(delim, &style, top, bottom),
     };
     canvas.fill(
         path,

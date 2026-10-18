@@ -239,7 +239,7 @@ fn main() {
             let mut x = 0.0;
             for lines in [1.0, 1.5, 2.0, 3.0, 5.0, 8.0] {
                 let height = lines * 17.0;
-                let bow = style.bow_for(*delim, height);
+                let bow = style.bow(*delim);
                 svg.rect(
                     Rect::new(x + bow + 2.0, y, x + bow + 26.0, y + height),
                     "#EEF0F3",

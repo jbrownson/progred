@@ -5,10 +5,10 @@
 //! bracket square. The curved strokes are MODULATED as Latin Modern's
 //! are, thick at the paren's belly and the brace's arms and thinning to
 //! `TIP` of that at the paren's ends, the brace's hook tips and its
-//! point. A tall delimiter grows wider and gains weight (TeX's \big
+//! point. A tall delimiter keeps its width and gains weight (TeX's \big
 //! through \Bigg grow in both dimensions); the one-line form is drawn
 //! the same way at glyph height and the base weight. Ink spans exactly
-//! x in [0, bow-for-height] and y in [top, bottom].
+//! x in [0, bow] and y in [top, bottom].
 
 mod widget;
 pub use widget::{Side, advance, draw_stretched, minimum_span};
@@ -23,13 +23,11 @@ pub enum Delim {
     Brace,
 }
 
-/// Width ramps with the square root of the height in lines, capped
-/// here; contrast (belly weight over the base stem) ramps the same
-/// way to its own cap. The contrast cap is deliberately modest: the
-/// surrounding text is a near-monoline UI face, and the mathy
-/// quality comes from the modulation being PRESENT, not from
+/// Contrast (belly weight over the base stem) ramps with the square
+/// root of the height in lines, capped here. The cap is deliberately
+/// modest: the surrounding text is a near-monoline UI face, and the
+/// mathy quality comes from the modulation being PRESENT, not from
 /// absolute weight — a display-grade 2.5x read heavy against it.
-pub const MAX_GROWTH: f64 = 2.0;
 pub const MAX_CONTRAST: f64 = 1.6;
 
 /// How thin a curved stroke's ends are, as a fraction of its belly:
@@ -50,7 +48,7 @@ const END: f64 = 45.0 * PI / 180.0;
 /// half as much again, LaTeX's proportion to its parens, so their hooks
 /// read at text size. All span -0.704..+0.171 em around the baseline
 /// with 0.05 em side bearings; `line` is the one-line reference height
-/// the growth and contrast ramps measure against.
+/// the contrast ramp measures against.
 #[derive(Debug, Clone, Copy)]
 pub struct DelimStyle {
     pub stem: f64,
@@ -76,12 +74,6 @@ impl DelimStyle {
         }
     }
 
-    /// The ink width at `height`: the base bow grown by the height
-    /// ramp.
-    pub fn bow_for(&self, delim: Delim, height: f64) -> f64 {
-        self.bow(delim) * (height / self.line).sqrt().clamp(1.0, MAX_GROWTH)
-    }
-
     /// The modulated weights at `height`: the belly thickens with the
     /// contrast ramp, and the ends thin to [`TIP`] of it.
     fn weights(&self, height: f64) -> (f64, f64) {
@@ -90,33 +82,9 @@ impl DelimStyle {
     }
 }
 
+/// The opening delimiter from `top` to `bottom`, at its style's bow.
 pub fn open(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    open_with_width(
-        delim,
-        style,
-        top,
-        bottom,
-        style.bow_for(delim, bottom - top),
-    )
-}
-
-/// The same height-sensitive stroke as [`open`], constrained to the
-/// delimiter's base advance. Useful when a layout leaf promises that
-/// its rectangle contains all of its ink.
-pub fn open_fitted(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    open_with_width(delim, style, top, bottom, style.bow(delim))
-}
-
-/// Draw a delimiter at an explicitly allocated width. This separates
-/// vertical trimming from width growth when a layout box, rather than
-/// the ink span within it, determines the width.
-pub fn open_with_width(
-    delim: Delim,
-    style: &DelimStyle,
-    top: f64,
-    bottom: f64,
-    bow: f64,
-) -> BezPath {
+    let bow = style.bow(delim);
     let bottom = bottom.max(top + style.stem);
     let (belly, tip) = style.weights(bottom - top);
     match delim {
@@ -126,26 +94,10 @@ pub fn open_with_width(
     }
 }
 
+/// Mirrored [`open`].
 pub fn close(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    let width = style.bow_for(delim, bottom.max(top + style.stem) - top);
-    close_with_width(delim, style, top, bottom, width)
-}
-
-/// Mirrored [`open_fitted`].
-pub fn close_fitted(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    close_with_width(delim, style, top, bottom, style.bow(delim))
-}
-
-/// Mirrored [`open_with_width`].
-pub fn close_with_width(
-    delim: Delim,
-    style: &DelimStyle,
-    top: f64,
-    bottom: f64,
-    width: f64,
-) -> BezPath {
-    let mut path = open_with_width(delim, style, top, bottom, width);
-    path.apply_affine(Affine::new([-1.0, 0.0, 0.0, 1.0, width, 0.0]));
+    let mut path = open(delim, style, top, bottom);
+    path.apply_affine(Affine::new([-1.0, 0.0, 0.0, 1.0, style.bow(delim), 0.0]));
     path
 }
 
@@ -265,31 +217,28 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
         let point_center = (0.0, y(mid - point));
         let mut half = BezPath::new();
         half.move_to((end, y(top)));
-        arc_dir(
+        arc(
             &mut half,
             hook_center,
             hook_radii,
-            -FRAC_PI_2,
-            -FRAC_PI_2,
-            sign,
+            -sign * FRAC_PI_2,
+            -sign * FRAC_PI_2,
         );
         half.line_to((arm - half_weight, y(mid - point)));
-        arc_dir(
+        arc(
             &mut half,
             point_center,
             Vec2::new(arm - half_weight, point - tip / 2.0),
             0.0,
-            FRAC_PI_2,
-            sign,
+            sign * FRAC_PI_2,
         );
         half.line_to((0.0, y(mid + tip / 2.0)));
-        arc_dir(
+        arc(
             &mut half,
             point_center,
             Vec2::new(arm + half_weight, point + tip / 2.0),
-            FRAC_PI_2,
-            -FRAC_PI_2,
-            sign,
+            sign * FRAC_PI_2,
+            -sign * FRAC_PI_2,
         );
         half.line_to((arm + half_weight, y(hook_y)));
         tapered(
@@ -300,13 +249,12 @@ fn brace(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
             sign * PI,
             sign * FRAC_PI_2,
         );
-        arc_dir(
+        arc(
             &mut half,
             (end, y(top + tip / 2.0)),
             Vec2::new(tip / 2.0, tip / 2.0),
-            FRAC_PI_2,
-            -PI,
-            sign,
+            sign * FRAC_PI_2,
+            -sign * PI,
         );
         half.close_path();
         path.extend(if sign < 0.0 {
@@ -367,16 +315,6 @@ fn tapered(
             to,
         );
         (from, from_slope) = (to, to_slope);
-    }
-}
-
-/// An arc mirrored vertically about its center when `sign` is
-/// negative — the lower brace half reuses the upper half's angles.
-fn arc_dir(path: &mut BezPath, center: (f64, f64), radii: Vec2, start: f64, sweep: f64, sign: f64) {
-    if sign >= 0.0 {
-        arc(path, center, radii, start, sweep);
-    } else {
-        arc(path, center, radii, -start, -sweep);
     }
 }
 
