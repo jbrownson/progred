@@ -1,8 +1,8 @@
 use super::*;
 use gid::new_cell_id;
 use grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignOverlay, call, evaluate_value,
-    evaluate_value_scoped,
+    Context, Environment, Expression, ForeignFunction, ForeignOverlay, RuntimeValue, call,
+    evaluate_runtime_scoped, evaluate_value,
 };
 use incremental::{Input, Memo, Runtime};
 use std::cell::Cell;
@@ -181,7 +181,13 @@ fn effects_are_repeated_unless_the_boundary_owns_the_recording() {
                 let cells = [cell];
                 let overlay = ForeignOverlay::from_value(&cells, &emit).tracked();
                 let eval = |host: &dyn Host| {
-                    evaluate_value_scoped(&call(cell.into(), []), host, &overlay, 100)
+                    evaluate_runtime_scoped(
+                        &RuntimeValue::from(call(cell.into(), [])),
+                        host,
+                        &overlay,
+                        100,
+                    )
+                    .into_value()
                 };
                 let evaluation = if recorded {
                     with_recorded_effects(&source, read, eval)

@@ -66,11 +66,11 @@ pub fn grap(
     let function = function.into();
     handler(move |sources, path, annotation, selection| {
         evaluate_with(path, annotation, selection, |overlay| {
-            grap::apply_expression_scoped(
+            grap::apply_expression(
                 &function,
                 arguments.clone().into_iter().map(|(k, v)| (k, v.into())),
                 sources,
-                overlay,
+                Some(overlay),
                 grap::DEFAULT_FUEL,
             )
         })
@@ -212,7 +212,7 @@ fn evaluate(
     fuel: usize,
 ) -> Option<PendingChanges> {
     evaluate_with(path, annotation, selection, |overlay| {
-        let result = grap::apply_value_scoped(function, arguments, sources, overlay, fuel);
+        let result = grap::apply_value(function, arguments, sources, Some(overlay), fuel);
         grap::Evaluation {
             result: result.result.into(),
             remaining_fuel: result.remaining_fuel,

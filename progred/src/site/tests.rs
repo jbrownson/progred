@@ -39,8 +39,14 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
         let capabilities = [get, set];
         let scope = grap::ForeignOverlay::from_value(&capabilities, &foreign);
         let read = || {
-            grap::evaluate_value_scoped(&grap::call(get.into(), []), &stack.libraries, &scope, 100)
-                .result
+            grap::evaluate_runtime_scoped(
+                &grap::RuntimeValue::from(grap::call(get.into(), [])),
+                &stack.libraries,
+                &scope,
+                100,
+            )
+            .into_value()
+            .result
         };
         assert_eq!(read(), absent::value(reason));
         for payload in [Value::from(vec![42]), absent::value(gid::new_cell_id())] {
@@ -54,8 +60,13 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
                     (site::vocabulary::VALUE, payload.clone()),
                 ],
             );
-            let evaluation =
-                grap::evaluate_value_scoped(&expression, &stack.libraries, &scope, 100);
+            let evaluation = grap::evaluate_runtime_scoped(
+                &grap::RuntimeValue::from(&expression),
+                &stack.libraries,
+                &scope,
+                100,
+            )
+            .into_value();
             assert!(evaluation.completed);
             assert_eq!(evaluation.result, Value::record([]));
             assert_eq!(

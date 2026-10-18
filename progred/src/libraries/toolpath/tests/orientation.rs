@@ -23,8 +23,8 @@ fn axes_are_normalized_and_invalid_axes_do_not_emit() {
     for vector in [[3.0, 0.0, 4.0], [0.0; 3], [f64::NAN, 0.0, 1.0]] {
         let mut recording = Recording::default();
         let result = run(&mut recording, |scope| {
-            ::grap::evaluate_value_scoped(
-                &call(
+            ::grap::evaluate_runtime_scoped(
+                &::grap::RuntimeValue::from(call(
                     START_AT,
                     [
                         (X, f64::value(0.0)),
@@ -32,11 +32,12 @@ fn axes_are_normalized_and_invalid_axes_do_not_emit() {
                         (Z, f64::value(0.0)),
                         (TOOL_AXIS, point_value(vector)),
                     ],
-                ),
+                )),
                 &sources,
                 scope,
                 1000,
             )
+            .into_value()
         });
         if vector[0] == 3.0 {
             assert_eq!(recording.commands(), [Command::StartAt([0.0; 3], axis)]);
@@ -103,7 +104,7 @@ fn example_program(name: &str) -> Recording {
     };
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_value_scoped(&names[name].into(), [], &sources, scope, 3_000_000)
+        ::grap::apply_value(&names[name].into(), [], &sources, Some(scope), 3_000_000)
     });
     assert!(
         result.completed && !absent::is_absent(&result.result),
@@ -139,7 +140,13 @@ fn tilt_accepts_finite_angles_without_a_machining_policy_range() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_value_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+            ::grap::apply_value(
+                &names["ball_path"].into(),
+                [],
+                &sources,
+                Some(scope),
+                500_000,
+            )
         });
         assert!(result.completed);
         if angle.is_finite() {
@@ -185,11 +192,11 @@ fn zero_tilt_runs_both_operations_without_changing_ball_center_paths() {
         };
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
-            ::grap::apply_value_scoped(
+            ::grap::apply_value(
                 &names["preview_operations"].into(),
                 [],
                 &sources,
-                scope,
+                Some(scope),
                 3_000_000,
             )
         });

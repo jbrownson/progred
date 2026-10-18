@@ -92,7 +92,13 @@ pub(crate) fn test_apply(
     foreign: &ForeignFunctions,
     fuel: usize,
 ) -> ::grap::Evaluation<gid::Value> {
-    ::grap::apply_value(function, arguments, &test_host(resolve, foreign), fuel)
+    ::grap::apply_value(
+        function,
+        arguments,
+        &test_host(resolve, foreign),
+        None,
+        fuel,
+    )
 }
 
 #[cfg(test)]

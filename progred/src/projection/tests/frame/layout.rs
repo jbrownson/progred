@@ -14,8 +14,8 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
         doc: &world.model.doc,
         libraries: &world.stack.libraries,
     };
-    let closure = ::grap::evaluate_at(
-        &::grap::lambda([], Value::record([])),
+    let closure = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
         Some(::grap::SourceOrigin::Stored(vec![Step::Key(
             gid::new_cell_id(),
         )])),

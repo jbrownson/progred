@@ -43,14 +43,14 @@ fn computed_clauses_preserve_closure_code_captures_and_origins() {
     );
     let foreign = functions();
     let host = crate::libraries::test_host(|_| None, &foreign);
-    let closure = ::grap::evaluate_at(
-        &::grap::call(
+    let closure = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::call(
             ::grap::lambda(
                 [captured],
                 ::grap::lambda([], ::grap::call(sink.into(), [(captured, captured.into())])),
             ),
             [(captured, crate::libraries::f64::value(7.0))],
-        ),
+        )),
         Some(::grap::SourceOrigin::Stored(vec![Step::Key(origin)])),
         &host,
         100,
@@ -98,7 +98,7 @@ fn computed_clauses_preserve_closure_code_captures_and_origins() {
                     result.result.same_result(&closure),
                     "computed clauses must retain the actual closure"
                 );
-                ::grap::apply(&result.result, [], &host, 100)
+                ::grap::apply(&result.result, [], &host, None, 100)
             };
             assert!(result.completed);
             assert_eq!(result.result.as_f64(), Some(7.0));

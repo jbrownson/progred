@@ -302,6 +302,7 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
             function,
             arguments.iter().cloned(),
             &self.cx.sources,
+            None,
             grap::DEFAULT_FUEL,
         )
         .result

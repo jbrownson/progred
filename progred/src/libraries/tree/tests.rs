@@ -138,12 +138,13 @@ fn alternate_consumer_runs_without_collecting_a_tree() {
                     .map(RuntimeValue::into_value)
             })
         };
-        let result = ::grap::evaluate_value_scoped(
-            &call(B, []),
+        let result = ::grap::evaluate_runtime_scoped(
+            &::grap::RuntimeValue::from(call(B, [])),
             host,
             &::grap::ForeignOverlay::from_value(&[B], &emit).tracked(),
             1000,
-        );
+        )
+        .into_value();
         assert!(result.completed && !absent::is_absent(&result.result));
     });
     let count = sink.borrow();

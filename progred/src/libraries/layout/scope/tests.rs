@@ -34,8 +34,8 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
             .into_iter()
             .collect()
     });
-    let callback = ::grap::evaluate_at(
-        &::grap::lambda([], Value::record([])),
+    let callback = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
         Some(::grap::SourceOrigin::Stored(vec![Step::Key(
             gid::new_cell_id(),
         )])),
@@ -111,7 +111,7 @@ fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
             .collect()
     });
     run::<crate::Editor>(site, |scope| {
-        ::grap::evaluate_scoped(program, &host, scope, fuel)
+        ::grap::evaluate_runtime_scoped(&::grap::RuntimeValue::from(program), &host, scope, fuel)
     })
 }
 
@@ -322,6 +322,7 @@ fn scope_does_not_reinterpret_plain_values_or_escape_into_returned_closures() {
         &result.result,
         [],
         &crate::libraries::TestHost(|_| vec![]),
+        None,
         10000,
     );
     assert!(unscoped.result.is_absent());
@@ -352,11 +353,11 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
     let function = result.result.field(LAYOUT_PROGRAM).unwrap();
     assert!(function.contains_field(::grap::vocabulary::CLOSURE));
     let (result, layout) = run::<crate::Editor>(site, |scope| {
-        ::grap::apply_scoped(
+        ::grap::apply(
             &function,
             [],
             &crate::libraries::TestHost(|_| vec![]),
-            scope,
+            Some(scope),
             10000,
         )
     });

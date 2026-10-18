@@ -139,12 +139,16 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                 Ok(cursor.clone())
             }
         };
-        let parameters = ::grap::evaluate_value_scoped(
-            &::grap::call(fields.get(&ui::CONTROLS).unwrap().clone(), []),
+        let parameters = ::grap::evaluate_runtime_scoped(
+            &::grap::RuntimeValue::from(::grap::call(
+                fields.get(&ui::CONTROLS).unwrap().clone(),
+                [],
+            )),
             &sources,
             &::grap::ForeignOverlay::from_value(&[ui::RADIO, ui::TREE_PROGRAM_CURSOR], &emit),
             300_000,
-        );
+        )
+        .into_value();
         assert!(
             parameters.completed && !absent::is_absent(&parameters.result),
             "{:?}",
@@ -165,6 +169,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
                 (ui::PARAMETERS, parameters.result),
             ],
             &sources,
+            None,
             10_000,
         );
         assert!(preview.completed, "{:?}", preview.result);
@@ -243,7 +248,13 @@ fn evaluate(expression: &Value, fuel: usize) -> (Evaluation<gid::Value>, Recordi
     let stack = crate::stack::load();
     let mut recording = Recording::default();
     let evaluation = run(&mut recording, |scope| {
-        ::grap::evaluate_value_scoped(expression, &stack.libraries, scope, fuel)
+        ::grap::evaluate_runtime_scoped(
+            &::grap::RuntimeValue::from(expression),
+            &stack.libraries,
+            scope,
+            fuel,
+        )
+        .into_value()
     });
     (evaluation, recording)
 }
@@ -265,20 +276,21 @@ fn apply_groups(
     scope: &::grap::ForeignOverlay<'_>,
     fuel: usize,
 ) -> Evaluation<gid::Value> {
-    let generated = ::grap::evaluate_value_scoped(
-        &collect_groups(::grap::call(function.clone(), arguments)),
+    let generated = ::grap::evaluate_runtime_scoped(
+        &::grap::RuntimeValue::from(collect_groups(::grap::call(function.clone(), arguments))),
         host,
         scope,
         fuel,
-    );
+    )
+    .into_value();
     if !generated.completed || absent::is_absent(&generated.result) {
         return generated;
     }
-    ::grap::apply_value_scoped(
+    ::grap::apply_value(
         &SEQUENCE.into(),
         [(PROGRAM, generated.result)],
         host,
-        scope,
+        Some(scope),
         generated.remaining_fuel,
     )
 }
@@ -296,7 +308,7 @@ fn diagonals(
         libraries: &stack.libraries,
     };
     run(sink, |scope| {
-        ::grap::apply_value_scoped(
+        ::grap::apply_value(
             &names["diagonals"].into(),
             [
                 (names["rows"], f64::value(rows)),
@@ -306,7 +318,7 @@ fn diagonals(
                 (TOOL_AXIS, point_value(Axis::Z.vector())),
             ],
             &sources,
-            scope,
+            Some(scope),
             fuel,
         )
     })
@@ -658,7 +670,13 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
     });
     let mut centers = Recording::default();
     let b = run(&mut centers, |scope| {
-        ::grap::apply_value_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+        ::grap::apply_value(
+            &names["ball_path"].into(),
+            [],
+            &sources,
+            Some(scope),
+            500_000,
+        )
     });
     assert!(
         a.completed && b.completed,
@@ -768,7 +786,13 @@ fn example_ball_path() -> (Recording, f64) {
     };
     let mut recording = Recording::default();
     let result = run(&mut recording, |scope| {
-        ::grap::apply_value_scoped(&names["ball_path"].into(), [], &sources, scope, 500_000)
+        ::grap::apply_value(
+            &names["ball_path"].into(),
+            [],
+            &sources,
+            Some(scope),
+            500_000,
+        )
     });
     assert!(result.completed && !absent::is_absent(&result.result));
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;

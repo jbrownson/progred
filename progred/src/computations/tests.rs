@@ -170,8 +170,8 @@ fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
         libraries: &libraries,
     };
     let make = |field| {
-        grap::evaluate_at(
-            &grap::lambda([], Value::record([])),
+        grap::evaluate_runtime_at(
+            &grap::RuntimeValue::from(grap::lambda([], Value::record([]))),
             Some(SourceOrigin::Stored(vec![Step::Key(field)])),
             &sources,
             100,

@@ -58,8 +58,8 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     let sink = new_cell_id();
     let creation = new_cell_id();
     let invocation = new_cell_id();
-    let closure = evaluate_at(
-        &lambda([], call(sink.into(), [])),
+    let closure = evaluate_runtime_at(
+        &RuntimeValue::from(lambda([], call(sink.into(), []))),
         Some(SourceOrigin::Stored(vec![gid::Step::Key(creation)])),
         &host(vec![]),
         100,
@@ -170,7 +170,12 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
     ] {
         for fuel in [0, 1, 100] {
             traces.borrow_mut().clear();
-            let a = evaluate_at(&stored, origin.clone(), &receiver, fuel);
+            let a = evaluate_runtime_at(
+                &RuntimeValue::from(&stored),
+                origin.clone(),
+                &receiver,
+                fuel,
+            );
             let b = evaluate_runtime_at(&runtime, origin.clone(), &receiver, fuel);
             assert_eq!(a.completed, b.completed);
             assert_eq!(a.remaining_fuel, b.remaining_fuel);
@@ -450,8 +455,8 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
     let second = new_cell_id();
     let empty = host(vec![]);
     let make = |field| {
-        evaluate_at(
-            &lambda([], call(sink.into(), [])),
+        evaluate_runtime_at(
+            &RuntimeValue::from(lambda([], call(sink.into(), []))),
             Some(SourceOrigin::Stored(vec![gid::Step::Key(field)])),
             &empty,
             100,
@@ -524,6 +529,7 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
         &Value::from(identity).into(),
         [(argument, source_argument.clone())],
         &receiver,
+        None,
         100,
     );
     assert_eq!(result.result.as_f64(), Some(9.0));
@@ -531,6 +537,7 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
         &ffi(identity).into(),
         [(argument, source_argument)],
         &receiver,
+        None,
         100,
     );
     assert_eq!(
@@ -544,6 +551,7 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
         &Value::from(identity).into(),
         [(argument, closure.clone())],
         &receiver,
+        None,
         100,
     );
     assert!(
@@ -593,6 +601,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
             &function.to_value(),
             [(argument, f64::value(8.0))],
             &receiver,
+            None,
             100,
         );
         assert_eq!(expected.result, f64::value(8.0));
@@ -600,6 +609,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
             &function,
             [(argument, RuntimeValue::f64(8.0))],
             &receiver,
+            None,
             100,
         );
         assert_eq!(actual.result.to_value(), expected.result);
@@ -656,13 +666,13 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
         for function in [RuntimeValue::from(Value::Record(record)), unboxed] {
             let arguments = || [(argument, RuntimeValue::f64(8.0))];
             assert_eq!(
-                apply(&function, arguments(), &receiver, 100)
+                apply(&function, arguments(), &receiver, None, 100)
                     .result
                     .as_f64(),
                 Some(8.0)
             );
             assert_eq!(
-                apply_expression(&function, arguments(), &receiver, 100)
+                apply_expression(&function, arguments(), &receiver, None, 100)
                     .result
                     .as_f64(),
                 Some(8.0)
@@ -738,6 +748,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
                 (captured, RuntimeValue::f64(999.0)),
             ],
             &receiver,
+            None,
             100,
         );
         assert!(result.completed);
@@ -789,8 +800,8 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
         }),
         None,
     ] {
-        let native = evaluate_at(
-            &lambda([], call(sink.into(), [])),
+        let native = evaluate_runtime_at(
+            &RuntimeValue::from(lambda([], call(sink.into(), []))),
             origin.clone(),
             &empty,
             100,
@@ -867,8 +878,8 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
         vocabulary::CLOSURE,
         Value::Record(fields.update(source::vocabulary::BODY_ORIGIN, f64::value(3.0))),
     )]);
-    let driver = evaluate_at(
-        &lambda([callback], call(callback.into(), [])),
+    let driver = evaluate_runtime_at(
+        &RuntimeValue::from(lambda([callback], call(callback.into(), []))),
         Some(SourceOrigin::Stored(vec![gid::Step::Key(caller)])),
         &empty,
         100,
@@ -882,7 +893,7 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
     let ids = [sink];
     let overlay = ForeignOverlay::new(&ids, &capture);
     for value in [generated, serialized.into(), malformed.into()] {
-        let result = apply_scoped(&driver, [(callback, value)], &empty, &overlay, 100);
+        let result = apply(&driver, [(callback, value)], &empty, Some(&overlay), 100);
         assert!(result.completed);
         assert_eq!(result.result.as_f64(), Some(7.0));
         assert_eq!(
@@ -952,8 +963,8 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
 fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() {
     let (sink, location, binding) = (new_cell_id(), new_cell_id(), new_cell_id());
     let empty = host(vec![]);
-    let inner = evaluate_at(
-        &lambda([], call(sink.into(), [])),
+    let inner = evaluate_runtime_at(
+        &RuntimeValue::from(lambda([], call(sink.into(), []))),
         Some(SourceOrigin::Stored(vec![gid::Step::Key(location)])),
         &empty,
         100,
@@ -973,7 +984,7 @@ fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() 
     let overlay = ForeignOverlay::new(&ids, &capture);
     for closure in [captured, embedded] {
         for value in [closure.clone(), closure.to_value().into()] {
-            let result = apply_scoped(&value, [], &empty, &overlay, 100);
+            let result = apply(&value, [], &empty, Some(&overlay), 100);
             assert!(result.completed);
             assert_eq!(result.result.as_f64(), Some(7.0));
             assert_eq!(
@@ -1015,6 +1026,7 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
         &ffi(identity).into(),
         [(argument, original.clone())],
         &receiver,
+        None,
         100,
     );
     assert!(result.completed);
@@ -1023,7 +1035,9 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
     };
     assert_eq!(before.body, after.body);
     assert_eq!(
-        apply(&result.result, [], &receiver, 100).result.as_f64(),
+        apply(&result.result, [], &receiver, None, 100)
+            .result
+            .as_f64(),
         Some(7.0)
     );
 }
@@ -1072,10 +1086,14 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
         ),
     )]);
     assert_eq!(
-        apply(&callable, [], &receiver, 100).result.as_f64(),
+        apply(&callable, [], &receiver, None, 100).result.as_f64(),
         Some(2.0)
     );
-    assert!(apply(&callable, [], &host(vec![]), 100).result.is_absent());
+    assert!(
+        apply(&callable, [], &host(vec![]), None, 100)
+            .result
+            .is_absent()
+    );
 }
 
 #[test]
@@ -1095,8 +1113,8 @@ fn retained_callables_use_the_receiving_scoped_capability() {
         let original = RuntimeValue::f64(1.0);
         let capability =
             |_, _: &mut Context<'_>, _: &Expression, _: &Environment| Ok(original.clone());
-        evaluate_scoped(
-            &call(capture.into(), [(argument, target.into())]),
+        evaluate_runtime_scoped(
+            &RuntimeValue::from(call(capture.into(), [(argument, target.into())])),
             &host,
             &ForeignOverlay::new(&[target], &capability),
             100,
@@ -1106,16 +1124,16 @@ fn retained_callables_use_the_receiving_scoped_capability() {
     let replacement = RuntimeValue::f64(2.0);
     let capability =
         |_, _: &mut Context<'_>, _: &Expression, _: &Environment| Ok(replacement.clone());
-    let result = apply_scoped(
+    let result = apply(
         &callable,
         [],
         &host,
-        &ForeignOverlay::new(&[target], &capability),
+        Some(&ForeignOverlay::new(&[target], &capability)),
         100,
     );
     assert!(result.completed);
     assert_eq!(result.result.as_f64(), Some(2.0));
-    assert!(apply(&callable, [], &host, 100).result.is_absent());
+    assert!(apply(&callable, [], &host, None, 100).result.is_absent());
 }
 
 #[test]
@@ -1150,7 +1168,7 @@ fn every_call_path_binds_the_callee_and_charges_the_same_steps() {
     let results = [
         evaluate_runtime_at(&expression, None, &receiver, 100),
         context(&receiver, None, 100).conclude(|context| context.apply(&closure, seven())),
-        apply_expression(&closure, seven(), &receiver, 100),
+        apply_expression(&closure, seven(), &receiver, None, 100),
     ];
     for result in &results {
         assert!(result.completed);
@@ -1192,8 +1210,8 @@ fn every_entry_point_binds_in_its_context_index_table() {
         evaluate(&call(probe.into(), []), &receiver, 100),
         evaluate_runtime_at(&lambda_call, None, &receiver, 100),
         evaluate_runtime_scoped(&lambda_call, &receiver, &overlay, 100),
-        apply(&ffi(probe).into(), [], &receiver, 100),
-        apply_expression(&Value::from(probe).into(), [], &receiver, 100),
+        apply(&ffi(probe).into(), [], &receiver, None, 100),
+        apply_expression(&Value::from(probe).into(), [], &receiver, None, 100),
     ];
     for result in &results {
         assert_eq!(result.result.as_f64(), Some(1.0));

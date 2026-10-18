@@ -1,8 +1,8 @@
 use super::*;
 
 fn retained(body: Value, source: CellId, host: &dyn ::grap::Host) -> RuntimeValue {
-    let result = ::grap::evaluate_at(
-        &body,
+    let result = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(&body),
         Some(SourceOrigin::Stored(vec![gid::Step::Key(source)])),
         host,
         1000,
@@ -35,7 +35,7 @@ fn collection_and_mapping_retain_callbacks_and_positions() {
         B,
         &host,
     );
-    let program = ::grap::apply(&maker, [(VALUE, callback.clone())], &host, 1000).result;
+    let program = ::grap::apply(&maker, [(VALUE, callback.clone())], &host, None, 1000).result;
     let built = build(&program, &host, 1000).unwrap();
     let positions = built.items.list_positions().unwrap();
     assert!(
@@ -80,6 +80,7 @@ fn collection_and_mapping_retain_callbacks_and_positions() {
         &Value::from(COLLECT).into(),
         [(PROGRAM, program)],
         &host,
+        None,
         1000,
     );
     assert!(collected.completed && collected.result.same_result(&built.items));
@@ -129,7 +130,7 @@ fn memo_keeps_runtime_input_output_and_absence_origins_distinct() {
         });
         let programs = payloads
             .clone()
-            .map(|value| ::grap::apply(&maker, [(VALUE, value)], &host, 1000).result);
+            .map(|value| ::grap::apply(&maker, [(VALUE, value)], &host, None, 1000).result);
         assert_ne!(programs[0].to_value(), programs[1].to_value());
         let first = prepared(&computations, &site(&root), programs[0].clone(), 1000);
         assert!(Rc::ptr_eq(

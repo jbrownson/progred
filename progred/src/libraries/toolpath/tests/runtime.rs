@@ -46,14 +46,14 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
         }
     });
     let make = |body, marker, value| {
-        let maker = ::grap::evaluate_at(
-            &::grap::lambda([captured], ::grap::lambda([], body)),
+        let maker = ::grap::evaluate_runtime_at(
+            &::grap::RuntimeValue::from(::grap::lambda([captured], ::grap::lambda([], body))),
             Some(SourceOrigin::Stored(vec![gid::Step::Key(marker)])),
             &host,
             1000,
         )
         .result;
-        ::grap::apply(&maker, [(captured, value)], &host, 1000).result
+        ::grap::apply(&maker, [(captured, value)], &host, None, 1000).result
     };
     let mapper_origin = gid::new_cell_id();
     let mapper = make(
@@ -163,8 +163,8 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
 #[test]
 fn scopes_and_failures_keep_runtime_payloads() {
     let host = crate::stack::load().libraries;
-    let callback = ::grap::evaluate_at(
-        &::grap::lambda([], f64::value(7.0)),
+    let callback = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
         Some(SourceOrigin::Stored(vec![gid::Step::Key(
             gid::new_cell_id(),
         )])),
@@ -204,7 +204,7 @@ fn scopes_and_failures_keep_runtime_payloads() {
         100,
     )
     .result;
-    let failing = ::grap::apply(&maker, [(parameter, failure.clone())], &host, 100).result;
+    let failing = ::grap::apply(&maker, [(parameter, failure.clone())], &host, None, 100).result;
     for expression in [
         runtime_call(
             MAP_POINTS,
@@ -233,8 +233,8 @@ fn scopes_and_failures_keep_runtime_payloads() {
 #[test]
 fn preview_constructor_preserves_its_runtime_program() {
     let host = crate::stack::load().libraries;
-    let program = ::grap::evaluate_at(
-        &::grap::lambda([], point_call(START_AT, [0.0; 3])),
+    let program = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda([], point_call(START_AT, [0.0; 3]))),
         Some(SourceOrigin::Stored(vec![gid::Step::Key(
             gid::new_cell_id(),
         )])),
@@ -250,6 +250,7 @@ fn preview_constructor_preserves_its_runtime_program() {
             (layout::vocabulary::HEIGHT, RuntimeValue::f64(150.0)),
         ],
         &host,
+        None,
         100,
     );
     assert!(result.completed);
@@ -283,6 +284,7 @@ fn preview_constructor_preserves_its_runtime_program() {
                 ),
             ],
             &host,
+            None,
             1000,
         );
         assert!(
@@ -334,7 +336,14 @@ fn runtime_mapping_profile() {
         1000,
     )
     .result;
-    let mapper = ::grap::apply(&maker, [(offset, RuntimeValue::f64(0.5))], &host, 1000).result;
+    let mapper = ::grap::apply(
+        &maker,
+        [(offset, RuntimeValue::f64(0.5))],
+        &host,
+        None,
+        1000,
+    )
+    .result;
     let body: RuntimeValue = sequence(
         (0..=256)
             .map(|i| {

@@ -207,8 +207,8 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
         }
     }
     let host = crate::libraries::TestHost(|_| vec![]);
-    let callback = ::grap::evaluate_at(
-        &::grap::lambda([], f64::value(7.0)),
+    let callback = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
         Some(::grap::SourceOrigin::Stored(vec![Step::Key(LEFT_VALUE)])),
         &host,
         100,

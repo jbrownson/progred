@@ -66,16 +66,21 @@ fn run(
         };
     let overlay = ForeignOverlay::from_value(&functions, &foreign);
     let result = match invocation {
-        Invocation::Expression => {
-            evaluate_value_scoped(&call(function, []), &definitions, &overlay, fuel)
-        }
-        Invocation::Applied => apply_value_scoped(&function, [], &definitions, &overlay, fuel),
-        Invocation::Prepared => evaluate_value_scoped(
-            &call(invoke.into(), [(operations.value, function)]),
+        Invocation::Expression => evaluate_runtime_scoped(
+            &RuntimeValue::from(call(function, [])),
             &definitions,
             &overlay,
             fuel,
-        ),
+        )
+        .into_value(),
+        Invocation::Applied => apply_value(&function, [], &definitions, Some(&overlay), fuel),
+        Invocation::Prepared => evaluate_runtime_scoped(
+            &RuntimeValue::from(call(invoke.into(), [(operations.value, function)])),
+            &definitions,
+            &overlay,
+            fuel,
+        )
+        .into_value(),
     };
     (result, effects.into_inner())
 }

@@ -232,8 +232,8 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
     assert_eq!(pose.tip, [5.5, 0.0, 0.0]);
     let mut direct = Recording::default();
     let evaluation = run(&mut direct, |scope| {
-        ::grap::evaluate_scoped(
-            &::grap::call(SEQUENCE.into(), [(PROGRAM, tree.clone())]),
+        ::grap::evaluate_runtime_scoped(
+            &::grap::RuntimeValue::from(::grap::call(SEQUENCE.into(), [(PROGRAM, tree.clone())])),
             &libraries,
             scope,
             10000,
@@ -268,8 +268,8 @@ fn recording_memo_retains_runtime_results_and_source_distinctions() {
         libraries: &host,
     });
     let callbacks = [X, Y].map(|source| {
-        ::grap::evaluate_at(
-            &::grap::lambda([], f64::value(7.0)),
+        ::grap::evaluate_runtime_at(
+            &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
             Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(source)])),
             &host,
             100,
@@ -298,6 +298,7 @@ fn recording_memo_retains_runtime_results_and_source_distinctions() {
                 &maker,
                 [(X, payload)],
                 &host,
+                None,
                 100,
             )
             .result])])
@@ -381,11 +382,11 @@ fn cube_grouping_records_the_same_cuts_as_the_complete_program() {
     );
     let mut direct = Recording::default();
     let evaluation = run(&mut direct, |scope| {
-        ::grap::apply_expression_scoped(
+        ::grap::apply_expression(
             &Value::from(names["preview_operations"]).into(),
             [],
             &sources,
-            scope,
+            Some(scope),
             3_000_000,
         )
     });

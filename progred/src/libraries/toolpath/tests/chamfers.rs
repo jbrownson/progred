@@ -213,6 +213,7 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
                         (names["end"], point_value(end)),
                     ],
                     &sources,
+                    None,
                     10_000,
                 );
                 assert!(
@@ -270,14 +271,14 @@ fn extending_a_zero_length_stroke_fails_without_emitting_a_path() {
     assert!(configured.completed && !absent::is_absent(&configured.result));
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::apply_value_scoped(
+        ::grap::apply_value(
             &configured.result,
             [
                 (names["start"], point_value([1.0, 2.0, 3.0])),
                 (names["end"], point_value([1.0, 2.0, 3.0])),
             ],
             &sources,
-            scope,
+            Some(scope),
             10_000,
         )
     });
@@ -316,12 +317,16 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_value_scoped(
-            &call(SEQUENCE, [(PROGRAM, collect_groups(expression.clone()))]),
+        ::grap::evaluate_runtime_scoped(
+            &::grap::RuntimeValue::from(call(
+                SEQUENCE,
+                [(PROGRAM, collect_groups(expression.clone()))],
+            )),
             &sources,
             scope,
             10_000,
         )
+        .into_value()
     });
     assert!(result.completed && !absent::is_absent(&result.result));
     assert_eq!(
@@ -357,12 +362,16 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
     );
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
-        ::grap::evaluate_value_scoped(
-            &call(SEQUENCE, [(PROGRAM, collect_groups(expression.clone()))]),
+        ::grap::evaluate_runtime_scoped(
+            &::grap::RuntimeValue::from(call(
+                SEQUENCE,
+                [(PROGRAM, collect_groups(expression.clone()))],
+            )),
             &sources,
             scope,
             10_000,
         )
+        .into_value()
     });
     assert!(result.completed && !absent::is_absent(&result.result));
     let actual: Vec<_> = path

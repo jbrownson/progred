@@ -145,6 +145,7 @@ fn custom_update_can_bind_an_absent_and_return_a_value() {
             (l::CURRENT, doc.root.clone().unwrap()),
         ],
         &src(&doc, &libraries),
+        None,
         1000,
     );
     assert_eq!(text::read(&evaluated.result), Some("after"));

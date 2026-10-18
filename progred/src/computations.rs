@@ -187,6 +187,7 @@ impl Computations {
                                 &function.into(),
                                 arguments.iter().map(|(k, v)| (*k, v.into())),
                                 host,
+                                None,
                                 *fuel,
                             )
                         }))

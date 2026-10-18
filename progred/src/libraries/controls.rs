@@ -126,7 +126,7 @@ fn apply_change(
             Value::record([])
         }))
     };
-    let result = ::grap::apply_scoped(
+    let result = ::grap::apply(
         handler,
         [
             (VALUE, value.into()),
@@ -134,7 +134,7 @@ fn apply_change(
             (UPDATE, update_function().into()),
         ],
         &session.sources(),
-        &ForeignOverlay::from_value(&[UPDATE], &update),
+        Some(&ForeignOverlay::from_value(&[UPDATE], &update)),
         ::grap::DEFAULT_FUEL,
     );
     if result.completed
@@ -358,6 +358,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
                 (HEIGHT, ::grap::RuntimeValue::f64(height)),
             ],
             context.viewing().host(),
+            None,
             ::grap::DEFAULT_FUEL,
         );
         let content = display::at(
@@ -572,17 +573,17 @@ fn controls_output<W: Host>(
         }
         Ok(absent::with_reason(INVALID_INPUT).into())
     };
-    let evaluation = ::grap::apply_scoped(
+    let evaluation = ::grap::apply(
         controls,
         [
             (STATE, current_state(state).into()),
             (UPDATE, update_function().into()),
         ],
         frame.viewing().host(),
-        &ForeignOverlay::new(
+        Some(&ForeignOverlay::new(
             &[SLIDER, RADIO, TREE_RANGE, TREE_CURSOR, TREE_PROGRAM_CURSOR],
             &emit,
-        ),
+        )),
         ::grap::DEFAULT_FUEL,
     );
     if !evaluation.completed || evaluation.result.is_absent() {

@@ -47,7 +47,13 @@ pub(super) fn set_parameter(doc: &mut Document, names: &Binders, name: &str, num
 fn path(sources: &Sources<'_>, names: &Binders) -> Recording {
     let mut recording = Recording::default();
     let result = run(&mut recording, |scope| {
-        ::grap::apply_value_scoped(&names["ball_path"].into(), [], sources, scope, 500_000)
+        ::grap::apply_value(
+            &names["ball_path"].into(),
+            [],
+            sources,
+            Some(scope),
+            500_000,
+        )
     });
     assert!(
         result.completed && !absent::is_absent(&result.result),
@@ -74,7 +80,7 @@ fn cube_edits_change_paths_and_cached_results_match_fresh_evaluation() {
             let result =
                 crate::computations::memo::with_recorded_effects(&definitions, read, |host| {
                     run(&mut recording, |scope| {
-                        ::grap::apply_value_scoped(&program, [], host, scope, 500_000)
+                        ::grap::apply_value(&program, [], host, Some(scope), 500_000)
                     })
                 });
             assert!(
@@ -140,8 +146,13 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
         };
         let geometry = cube_geometry(&sources, &names);
         let geometry = geometry.as_record().unwrap();
-        let solid =
-            ::grap::apply_value(geometry.get(&names["field"]).unwrap(), [], &sources, 10_000);
+        let solid = ::grap::apply_value(
+            geometry.get(&names["field"]).unwrap(),
+            [],
+            &sources,
+            None,
+            10_000,
+        );
         assert!(solid.completed && !absent::is_absent(&solid.result));
         let preview = ::grap::apply_value(
             &Value::from(fidget::vocabulary::PREVIEW_MESH),
@@ -150,6 +161,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                 solid.result,
             )],
             &sources,
+            None,
             10_000,
         );
         let model = fidget::mesh::read(&preview.result).unwrap().0;
@@ -167,6 +179,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                     geometry.get(&names["face"]).unwrap(),
                     [X, Y, Z].into_iter().zip([u, v, 0.0].map(f64::value)),
                     &sources,
+                    None,
                     10_000,
                 );
                 let contact = read_point(&contact.result).unwrap();
@@ -178,6 +191,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                     geometry.get(&names["normal"]).unwrap(),
                     [X, Y, Z].into_iter().zip(contact.map(f64::value)),
                     &sources,
+                    None,
                     10_000,
                 );
                 let normal = read_point(&normal.result).unwrap();
@@ -206,6 +220,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
                         ),
                     ],
                     &sources,
+                    None,
                     10_000,
                 );
                 let center = read_point(&center.result).unwrap();

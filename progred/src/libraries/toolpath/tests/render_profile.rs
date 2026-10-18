@@ -23,11 +23,11 @@ fn record_example() -> (Recording, ::grap::Evaluation) {
     };
     let mut recording = Recording::default();
     let eval = run(&mut recording, |scope| {
-        ::grap::apply_expression_scoped(
+        ::grap::apply_expression(
             &Value::from(names["preview_operations"]).into(),
             [],
             &sources,
-            scope,
+            Some(scope),
             3_000_000,
         )
     });

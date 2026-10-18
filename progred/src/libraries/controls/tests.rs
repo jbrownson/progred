@@ -377,15 +377,15 @@ fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
 fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization() {
     use tree::vocabulary as t;
     let libraries = crate::stack::load().libraries;
-    let callback = ::grap::evaluate_at(
-        &::grap::lambda([], f64::value(7.0)),
+    let callback = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
         Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(A)])),
         &libraries,
         1000,
     )
     .result;
-    let maker = ::grap::evaluate_at(
-        &::grap::lambda(
+    let maker = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda(
             [VALUE],
             ::grap::lambda(
                 [],
@@ -397,13 +397,13 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
                     )],
                 ),
             ),
-        ),
+        )),
         Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(B)])),
         &libraries,
         1000,
     )
     .result;
-    let program = ::grap::apply(&maker, [(VALUE, callback.clone())], &libraries, 1000).result;
+    let program = ::grap::apply(&maker, [(VALUE, callback.clone())], &libraries, None, 1000).result;
     let controls = ::grap::evaluate_runtime_at(
         &RuntimeValue::record([
             (::grap::vocabulary::PARAMS, RuntimeValue::list([])),
@@ -1078,11 +1078,11 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         captured.replace(stored_tree_items(context, expression.clone()));
         context.eval_to_value(expression, environment)
     };
-    let result = ::grap::apply_value_scoped(
+    let result = ::grap::apply_value(
         &owner.into(),
         [],
         &libraries,
-        &ForeignOverlay::from_value(&[probe], &emit),
+        Some(&ForeignOverlay::from_value(&[probe], &emit)),
         1000,
     );
     assert!(result.completed);
@@ -1240,11 +1240,11 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
         context.eval_to_value(expression, environment)
     };
     assert_eq!(
-        ::grap::apply_value_scoped(
+        ::grap::apply_value(
             &owner.into(),
             [],
             &libraries,
-            &ForeignOverlay::from_value(&[probe], &emit),
+            Some(&ForeignOverlay::from_value(&[probe], &emit)),
             1000
         )
         .result,

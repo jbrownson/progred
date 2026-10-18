@@ -41,6 +41,7 @@ fn apply(
         function,
         arguments,
         &definitions_from_parts(resolve, foreign),
+        None,
         fuel,
     )
 }
@@ -133,6 +134,7 @@ fn host_apply_returns_the_selected_definitions_decline() {
                 ),
             ]
         }),
+        None,
         20,
     );
 
@@ -277,15 +279,16 @@ fn value_wrappers_preserve_the_inner_expression_source() {
         Ok(blob("result"))
     };
     let wrapper = Value::record([(vocabulary::VALUE, call(function.into(), []))]);
-    let evaluation = super::evaluate_value_scoped(
-        &cell.into(),
+    let evaluation = super::evaluate_runtime_scoped(
+        &RuntimeValue::from(Value::from(cell)),
         &definitions_from_parts(
             |queried| (queried == cell).then(|| wrapper.clone()),
             &ForeignFunctions::default(),
         ),
         &ForeignOverlay::from_value(&functions, &scoped),
         20,
-    );
+    )
+    .into_value();
     assert_eq!(evaluation.result, blob("result"));
     assert_eq!(
         origin.into_inner(),
@@ -531,8 +534,13 @@ fn cell_reads_use_descriptions_without_invoking_native_code_or_scoped_capabiliti
         (vec![second.clone()], second.1.value().clone()),
         (vec![first.clone(), second], first.1.value().clone()),
     ] {
-        let result =
-            super::evaluate_value_scoped(&cell.into(), &DataHost(cell, values), &overlay, 20);
+        let result = super::evaluate_runtime_scoped(
+            &RuntimeValue::from(Value::from(cell)),
+            &DataHost(cell, values),
+            &overlay,
+            20,
+        )
+        .into_value();
         assert!(result.completed);
         assert_eq!(result.result, expected);
     }
@@ -1098,11 +1106,11 @@ fn values_evaluated_from_rust_keep_syntax_children_for_native_functions() {
     };
     let overlay = ForeignOverlay::from_value(&functions, &scoped);
     let foreign = ForeignFunctions::default();
-    let applied = super::apply_value_scoped(
+    let applied = super::apply_value(
         &Value::from(outer),
         [],
         &definitions_from_parts(|_| None, &foreign),
-        &overlay,
+        Some(&overlay),
         20,
     );
     assert_eq!(applied.result, blob("walked"));
@@ -1127,11 +1135,11 @@ fn a_scoped_foreign_layer_borrows_state_and_remains_reentrant() {
         };
     let overlay = ForeignOverlay::from_value(&functions, &scoped);
     let foreign = ForeignFunctions::default();
-    let applied = super::apply_value_scoped(
+    let applied = super::apply_value(
         &Value::from(outer),
         [],
         &definitions_from_parts(|_| None, &foreign),
-        &overlay,
+        Some(&overlay),
         20,
     );
     assert_eq!(applied.result, blob("scoped"));
@@ -1149,12 +1157,13 @@ fn a_scoped_foreign_layer_can_evaluate_a_source_call() {
     };
     let overlay = ForeignOverlay::from_value(&functions, &scoped);
     let foreign = ForeignFunctions::default();
-    let evaluation = super::evaluate_value_scoped(
-        &call(Value::from(function), []),
+    let evaluation = super::evaluate_runtime_scoped(
+        &RuntimeValue::from(call(Value::from(function), [])),
         &definitions_from_parts(|_| None, &foreign),
         &overlay,
         10,
-    );
+    )
+    .into_value();
     assert_eq!(evaluation.result, blob("drawn"));
     assert_eq!(calls.get(), 1);
 }
@@ -1270,15 +1279,16 @@ fn a_foreign_call_retains_its_cell_relative_source_origin() {
     let stored = lambda([], call(Value::from(foreign), []));
     let foreign_functions = ForeignFunctions::default();
 
-    let evaluation = super::evaluate_value_scoped(
-        &call(Value::from(function), []),
+    let evaluation = super::evaluate_runtime_scoped(
+        &RuntimeValue::from(call(Value::from(function), [])),
         &definitions_from_parts(
             |cell| (cell == function).then(|| stored.clone()),
             &foreign_functions,
         ),
         &overlay,
         20,
-    );
+    )
+    .into_value();
 
     assert_eq!(evaluation.result, blob("drawn"));
     assert_eq!(
@@ -1303,8 +1313,8 @@ fn a_single_value_definition_retains_its_resolution() {
             Ok(blob("drawn"))
         };
         let overlay = ForeignOverlay::from_value(&functions, &scoped);
-        let evaluation = super::evaluate_value_scoped(
-            &Value::from(cell),
+        let evaluation = super::evaluate_runtime_scoped(
+            &RuntimeValue::from(Value::from(cell)),
             &TestHost(|queried| {
                 assert_eq!(queried, cell);
                 vec![(
@@ -1314,7 +1324,8 @@ fn a_single_value_definition_retains_its_resolution() {
             }),
             &overlay,
             20,
-        );
+        )
+        .into_value();
         assert_eq!(evaluation.result, blob("drawn"));
         assert_eq!(
             origin.into_inner(),

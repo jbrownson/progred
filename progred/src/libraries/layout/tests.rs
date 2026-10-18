@@ -70,11 +70,11 @@ fn drawing_constructor_keeps_native_program_code_and_captures() {
             .collect()
     });
     let captured = gid::new_cell_id();
-    let program = ::grap::evaluate_at(
-        &::grap::call(
+    let program = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::call(
             ::grap::lambda([captured], ::grap::lambda([], captured.into())),
             [(captured, number(7.0))],
-        ),
+        )),
         Some(::grap::SourceOrigin::Stored(vec![Step::Key(
             gid::new_cell_id(),
         )])),
@@ -90,6 +90,7 @@ fn drawing_constructor_keeps_native_program_code_and_captures() {
         &Value::from(vocabulary::DRAWING).into(),
         [(presentation::vocabulary::VALUE, configuration.clone())],
         &host,
+        None,
         100,
     );
     assert!(result.completed);
@@ -98,7 +99,9 @@ fn drawing_constructor_keeps_native_program_code_and_captures() {
     let retained = drawn.field(vocabulary::PROGRAM).unwrap();
     assert!(retained.same_result(&program));
     assert_eq!(
-        ::grap::apply(&retained, [], &host, 100).result.as_f64(),
+        ::grap::apply(&retained, [], &host, None, 100)
+            .result
+            .as_f64(),
         Some(7.0)
     );
 }
@@ -148,31 +151,32 @@ fn border_retains_native_callbacks_and_their_call_origins() {
             .into_iter()
             .collect()
     });
-    let callback = ::grap::evaluate_at(
-        &::grap::lambda([], number(7.0)),
+    let callback = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda([], number(7.0))),
         Some(SourceOrigin::Stored(vec![Step::Key(gid::new_cell_id())])),
         &host,
         100,
     )
     .result;
-    let maker = ::grap::evaluate_at(
-        &::grap::lambda(
+    let maker = ::grap::evaluate_runtime_at(
+        &::grap::RuntimeValue::from(::grap::lambda(
             [captured],
             ::grap::lambda(
                 [presentation::vocabulary::VALUE],
                 ::grap::call(sink.into(), [(captured, captured.into())]),
             ),
-        ),
+        )),
         Some(SourceOrigin::Stored(vec![Step::Key(origin)])),
         &host,
         100,
     )
     .result;
-    let projection = ::grap::apply(&maker, [(captured, callback.clone())], &host, 100).result;
+    let projection = ::grap::apply(&maker, [(captured, callback.clone())], &host, None, 100).result;
     let bordered = ::grap::apply(
         &Value::from(vocabulary::BORDER).into(),
         [(presentation::vocabulary::PROJECTION, projection)],
         &host,
+        None,
         100,
     );
     assert!(bordered.completed);
@@ -186,6 +190,7 @@ fn border_retains_native_callbacks_and_their_call_origins() {
             &bordered.result,
             [(presentation::vocabulary::VALUE, RuntimeValue::record([]))],
             &host,
+            None,
             100,
         );
         assert!(result.completed);
@@ -199,7 +204,9 @@ fn border_retains_native_callbacks_and_their_call_origins() {
             .unwrap();
         assert!(retained.same_result(&callback));
         assert_eq!(
-            ::grap::apply(&retained, [], &host, 100).result.as_f64(),
+            ::grap::apply(&retained, [], &host, None, 100)
+                .result
+                .as_f64(),
             Some(7.0)
         );
     }
@@ -256,6 +263,7 @@ fn border_preserves_expression_facing_foreign_arguments() {
             &wrapper.result,
             [(presentation::vocabulary::VALUE, Value::from(data).into())],
             &host,
+            None,
             100,
         );
         assert!(result.completed);
@@ -323,6 +331,7 @@ fn border_interprets_captured_projection_syntax_only_when_invoked() {
                 ::grap::RuntimeValue::f64(12.0),
             )],
             &host,
+            None,
             100,
         );
         assert!(result.completed);

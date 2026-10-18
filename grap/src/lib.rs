@@ -2509,22 +2509,6 @@ pub fn evaluate(expression: &Value, host: &dyn Host, fuel: usize) -> Evaluation 
     context(host, None, fuel).run(expression)
 }
 
-pub fn evaluate_at(
-    expression: &Value,
-    origin: Option<SourceOrigin>,
-    host: &dyn Host,
-    fuel: usize,
-) -> Evaluation {
-    context(host, None, fuel).conclude(|context| {
-        let expression = match origin {
-            Some(origin) => context.lower_source(expression, OriginRoot::Located(origin)),
-            None => context.lower_unattributed_source(expression),
-        };
-        let environment = context.empty_environment();
-        context.eval(expression, &environment)
-    })
-}
-
 /// Interpret runtime-held syntax at an optional source location. Embedded
 /// native callables retain their own code origins and lexical captures.
 pub fn evaluate_runtime_at(
@@ -2542,41 +2526,19 @@ pub fn evaluate_runtime_at(
     })
 }
 
-/// Apply a callable expression at the existing host boundary: Grap parameters
-/// receive values, while foreign functions receive argument syntax to interpret.
-/// Use `apply` when the callable and all arguments have already been evaluated.
+/// Apply a callable expression at the host boundary: Grap parameters
+/// receive values, while foreign functions receive argument syntax to
+/// interpret. An `overlay` lends foreign functions for this synchronous
+/// evaluation only. Use `apply` when the callable and all arguments have
+/// already been evaluated.
 pub fn apply_expression(
     function: &RuntimeValue,
     arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
     host: &dyn Host,
+    overlay: Option<&ForeignOverlay<'_>>,
     fuel: usize,
 ) -> Evaluation {
-    context(host, None, fuel).conclude(|context| context.apply_expression(function, arguments))
-}
-
-/// Apply runtime-held callable syntax at an expression-facing host boundary.
-/// Grap parameters receive values; foreign functions receive argument syntax,
-/// just as in the GID-facing `apply_value_scoped` adapter.
-pub fn apply_expression_scoped(
-    function: &RuntimeValue,
-    arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
-    host: &dyn Host,
-    overlay: &ForeignOverlay<'_>,
-    fuel: usize,
-) -> Evaluation {
-    context(host, Some(overlay), fuel)
-        .conclude(|context| context.apply_expression(function, arguments))
-}
-
-/// Evaluate with a borrowed foreign-function layer that exists only for
-/// this synchronous evaluation.
-pub fn evaluate_scoped<'a>(
-    expression: &Value,
-    host: &dyn Host,
-    overlay: &'a ForeignOverlay<'a>,
-    fuel: usize,
-) -> Evaluation {
-    context(host, Some(overlay), fuel).run(expression)
+    context(host, overlay, fuel).conclude(|context| context.apply_expression(function, arguments))
 }
 
 /// Apply a callable to already-evaluated argument VALUES. This is the
@@ -2584,33 +2546,16 @@ pub fn evaluate_scoped<'a>(
 /// record) binds as data, where `call` + [`evaluate`] would evaluate
 /// it as an expression. A foreign target still receives the
 /// arguments as call fields and evaluates them itself; every value
-/// but a code-shaped one self-quotes through that.
+/// but a code-shaped one self-quotes through that. An `overlay` lends
+/// foreign functions for this synchronous evaluation only.
 pub fn apply_value(
     function: &Value,
     arguments: impl IntoIterator<Item = (CellId, Value)>,
     host: &dyn Host,
+    overlay: Option<&ForeignOverlay<'_>>,
     fuel: usize,
 ) -> Evaluation<Value> {
-    context(host, None, fuel)
-        .conclude(|context| {
-            context.apply_expression(
-                &function.into(),
-                arguments.into_iter().map(|(k, v)| (k, v.into())),
-            )
-        })
-        .into_value()
-}
-
-/// Apply with a borrowed foreign-function layer that exists only for
-/// this synchronous evaluation.
-pub fn apply_value_scoped<'a>(
-    function: &Value,
-    arguments: impl IntoIterator<Item = (CellId, Value)>,
-    host: &dyn Host,
-    overlay: &'a ForeignOverlay<'a>,
-    fuel: usize,
-) -> Evaluation<Value> {
-    context(host, Some(overlay), fuel)
+    context(host, overlay, fuel)
         .conclude(|context| {
             context.apply_expression(
                 &function.into(),
@@ -2640,40 +2585,16 @@ pub fn evaluate_runtime_scoped<'a>(
     }
 }
 
-pub fn evaluate_value_scoped<'a>(
-    expression: &Value,
-    host: &dyn Host,
-    overlay: &'a ForeignOverlay<'a>,
-    fuel: usize,
-) -> Evaluation<Value> {
-    evaluate_scoped(expression, host, overlay, fuel).into_value()
-}
-
+/// Apply an evaluated callable to evaluated arguments. An `overlay`
+/// lends foreign functions for this synchronous evaluation only.
 pub fn apply(
     function: &RuntimeValue,
     arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
     host: &dyn Host,
+    overlay: Option<&ForeignOverlay<'_>>,
     fuel: usize,
 ) -> Evaluation {
-    apply_in(context(host, None, fuel), function, arguments)
-}
-
-pub fn apply_scoped<'a>(
-    function: &RuntimeValue,
-    arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
-    host: &dyn Host,
-    overlay: &'a ForeignOverlay<'a>,
-    fuel: usize,
-) -> Evaluation {
-    apply_in(context(host, Some(overlay), fuel), function, arguments)
-}
-
-fn apply_in(
-    context: Context<'_>,
-    function: &RuntimeValue,
-    arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
-) -> Evaluation {
-    context.conclude(|context| context.apply(function, arguments))
+    context(host, overlay, fuel).conclude(|context| context.apply(function, arguments))
 }
 
 #[cfg(test)]

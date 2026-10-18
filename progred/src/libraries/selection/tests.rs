@@ -97,7 +97,7 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
         &[crate::libraries::site::vocabulary::PATH, vocabulary::SET],
         &interpret,
     );
-    let result = ::grap::apply_value_scoped(
+    let result = ::grap::apply_value(
         &grap_at(
             std::slice::from_ref(&child),
             crate::selection::payload::empty_pending(),
@@ -116,7 +116,7 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
                 .into_iter()
                 .collect()
         }),
-        &overlay,
+        Some(&overlay),
         100,
     );
     assert_eq!(result.result, Value::record([]));

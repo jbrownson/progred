@@ -65,7 +65,7 @@ fn record_program(
 ) -> ::grap::Evaluation {
     if program.list_len().is_none() {
         return run(output, |scope| {
-            ::grap::apply_expression_scoped(program, [], host, scope, fuel)
+            ::grap::apply_expression(program, [], host, Some(scope), fuel)
         });
     }
     let mut evaluation = ::grap::Evaluation {
@@ -80,13 +80,7 @@ fn record_program(
         } else {
             let mut part = Recording::default();
             evaluation = run(&mut part, |scope| {
-                ::grap::apply_expression_scoped(
-                    &program,
-                    [],
-                    host,
-                    scope,
-                    evaluation.remaining_fuel,
-                )
+                ::grap::apply_expression(&program, [], host, Some(scope), evaluation.remaining_fuel)
             });
             if !evaluation.completed || evaluation.result.is_absent() {
                 return evaluation;

@@ -150,7 +150,7 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
         Value::from(b"left".to_vec())
     );
     assert_eq!(
-        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, 20).result,
+        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20).result,
         Value::from(b"left".to_vec())
     );
 }
@@ -303,7 +303,7 @@ fn unnamed_native_definitions_have_an_empty_description() {
         Value::record([])
     );
     assert_eq!(
-        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, 20).result,
+        ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20).result,
         Value::from(b"left".to_vec())
     );
 }

@@ -170,6 +170,7 @@ fn returned_layout_program_uses_its_own_evaluation_allowance() {
         &function.into(),
         [(presentation::vocabulary::VALUE, Value::record([]).into())],
         &sources,
+        None,
         100_000,
     );
     assert!(prepared.completed);
@@ -177,7 +178,7 @@ fn returned_layout_program_uses_its_own_evaluation_allowance() {
     for fuel in [grap::DEFAULT_FUEL, 100_000] {
         let (evaluation, layout) = layout::scope::run::<crate::Editor>(
             || panic!("text-only layout needs no editing site"),
-            |scope| grap::apply_scoped(&function, [], &sources, scope, fuel),
+            |scope| grap::apply(&function, [], &sources, Some(scope), fuel),
         );
         if fuel == grap::DEFAULT_FUEL {
             assert!(!evaluation.completed);

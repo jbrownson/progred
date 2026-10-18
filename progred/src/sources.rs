@@ -45,6 +45,7 @@ impl crate::display::Env for Sources<'_> {
             function,
             arguments.iter().cloned(),
             self,
+            None,
             grap::DEFAULT_FUEL,
         )
         .result
@@ -77,21 +78,13 @@ impl crate::display::Env for Sources<'_> {
         arguments: &[(CellId, grap::RuntimeValue)],
         scope: Option<&grap::ForeignOverlay<'_>>,
     ) -> grap::Evaluation {
-        match scope {
-            Some(scope) => grap::apply_scoped(
-                function,
-                arguments.iter().cloned(),
-                self,
-                scope,
-                grap::DEFAULT_FUEL,
-            ),
-            None => grap::apply(
-                function,
-                arguments.iter().cloned(),
-                self,
-                grap::DEFAULT_FUEL,
-            ),
-        }
+        grap::apply(
+            function,
+            arguments.iter().cloned(),
+            self,
+            scope,
+            grap::DEFAULT_FUEL,
+        )
     }
     fn apply_runtime_memo(
         &self,
@@ -103,6 +96,7 @@ impl crate::display::Env for Sources<'_> {
             &function.into(),
             arguments.iter().map(|(k, v)| (*k, v.into())),
             self,
+            None,
             fuel,
         )
         .result
@@ -114,21 +108,13 @@ impl crate::display::Env for Sources<'_> {
         arguments: &[(CellId, Value)],
         scope: Option<&grap::ForeignOverlay<'_>>,
     ) -> grap::Evaluation<gid::Value> {
-        match scope {
-            Some(scope) => grap::apply_value_scoped(
-                function,
-                arguments.iter().cloned(),
-                self,
-                scope,
-                grap::DEFAULT_FUEL,
-            ),
-            None => grap::apply_value(
-                function,
-                arguments.iter().cloned(),
-                self,
-                grap::DEFAULT_FUEL,
-            ),
-        }
+        grap::apply_value(
+            function,
+            arguments.iter().cloned(),
+            self,
+            scope,
+            grap::DEFAULT_FUEL,
+        )
     }
 
     fn evaluate(&self, expression: &Value) -> Value {
@@ -140,7 +126,7 @@ impl crate::display::Env for Sources<'_> {
     }
 
     fn apply_memo(&self, function: &Value, arguments: &[(CellId, Value)], fuel: usize) -> Value {
-        grap::apply_value(function, arguments.iter().cloned(), self, fuel).result
+        grap::apply_value(function, arguments.iter().cloned(), self, None, fuel).result
     }
 
     fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
