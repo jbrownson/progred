@@ -5,26 +5,26 @@ use gid::Step;
 use measured::{Composition, RowAlignment};
 use std::rc::Rc;
 
-/// A stop names its occurrence; arriving there is the occurrence's landmark's
-/// job, resolved when an arrow key is pressed.
-type Occurrence = Rc<[Step]>;
+/// A stop names its occurrence by path; arriving there is the occurrence's
+/// landmark's job, resolved when an arrow key is pressed.
+type OccurrencePath = Rc<[Step]>;
 
 struct Stop {
-    path: Occurrence,
+    path: OccurrencePath,
     selected: bool,
 }
 
 struct Neighbors {
-    left: Option<Occurrence>,
-    right: Option<Occurrence>,
+    left: Option<OccurrencePath>,
+    right: Option<OccurrencePath>,
 }
 
 /// Concatenation needs only endpoints and the neighbors of a selected stop.
 /// Everything in between is dropped as soon as it is passed.
 #[derive(Default)]
 struct Line {
-    first: Option<Occurrence>,
-    last: Option<Occurrence>,
+    first: Option<OccurrencePath>,
+    last: Option<OccurrencePath>,
     selected: Option<Neighbors>,
 }
 
@@ -187,9 +187,9 @@ impl Lines {
         }
     }
 
-    fn destinations(self) -> Option<[Option<Occurrence>; 4]> {
+    fn destinations(self) -> Option<[Option<OccurrencePath>; 4]> {
         let (mut previous_first, mut previous_last) = (None, None);
-        let mut result: Option<[Option<Occurrence>; 4]> = None;
+        let mut result: Option<[Option<OccurrencePath>; 4]> = None;
         for line in self
             .rows
             .into_iter()
@@ -306,7 +306,7 @@ impl Construction {
         }
     }
 
-    pub fn stop(&mut self, path: Occurrence, selected: bool) {
+    pub fn stop(&mut self, path: OccurrencePath, selected: bool) {
         if let Some(stop) = self.refine(Stop { path, selected }) {
             self.current.push(Lines::stop(stop));
         }
@@ -332,7 +332,7 @@ impl Construction {
         self.current.push(lines);
     }
 
-    pub fn begin_container(&mut self, path: Occurrence, selected: bool) {
+    pub fn begin_container(&mut self, path: OccurrencePath, selected: bool) {
         let stop = self.refine(Stop { path, selected });
         self.containers.push(stop);
         self.begin(Composition::Row(RowAlignment::Baseline));
