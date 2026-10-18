@@ -24,12 +24,6 @@ pub struct DepthImage {
     pub partial: bool,
 }
 
-impl DepthImage {
-    pub fn is_partial(&self) -> bool {
-        self.partial
-    }
-}
-
 /// Replace the draft triangles starting at `mesh_start` with completed raster
 /// pixels, then depth-test the preceding triangles against that surface.
 #[derive(Clone, Debug)]
@@ -58,27 +52,36 @@ impl Scene {
     }
 }
 
-/// Select the required triangle prefix, checking the optional image/split contract.
-pub fn visible_indices<'a>(geometry: &'a Geometry, surface: Option<&Surface>) -> Option<&'a [u32]> {
-    if let Some(surface) = surface {
+/// `surface` when it keeps the image/split contract with `geometry`. A
+/// malformed surface is left out, so the whole mesh draws without it.
+pub fn usable_surface<'a>(
+    geometry: &Geometry,
+    surface: Option<&'a Surface>,
+) -> Option<&'a Surface> {
+    surface.filter(|surface| {
         let image = &surface.frame.image;
-        let pixels = (image.width as usize).checked_mul(image.height as usize)?;
-        if image.width == 0
-            || image.height == 0
-            || image.format != ImageFormat::Rgba8
-            || image.alpha_type != ImageAlphaType::Alpha
-            || image.data.data().len() < pixels.checked_mul(4)?
-            || surface.frame.depth.len() != pixels
-            || surface.mesh_start % 3 != 0
-            || surface.mesh_start > geometry.indices.len()
-        {
-            return None;
-        }
-        if !surface.frame.is_partial() {
-            return geometry.indices.get(..surface.mesh_start);
-        }
-    }
-    Some(&geometry.indices)
+        (image.width as usize)
+            .checked_mul(image.height as usize)
+            .and_then(|pixels| Some((pixels, pixels.checked_mul(4)?)))
+            .is_some_and(|(pixels, bytes)| {
+                pixels > 0
+                    && image.format == ImageFormat::Rgba8
+                    && image.alpha_type == ImageAlphaType::Alpha
+                    && image.data.data().len() >= bytes
+                    && surface.frame.depth.len() == pixels
+                    && surface.mesh_start % 3 == 0
+                    && surface.mesh_start <= geometry.indices.len()
+            })
+    })
+}
+
+/// The triangles to rasterize beside a usable `surface`: all of them, or,
+/// when the surface is complete, the prefix before the ones it replaces.
+pub fn visible_indices<'a>(geometry: &'a Geometry, surface: Option<&Surface>) -> &'a [u32] {
+    surface
+        .filter(|surface| !surface.frame.partial)
+        .and_then(|surface| geometry.indices.get(..surface.mesh_start))
+        .unwrap_or(&geometry.indices)
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -404,7 +404,8 @@ impl Renderer {
         {
             return None;
         }
-        let visible = puri::mesh::visible_indices(geometry, surface)?;
+        let surface = puri::mesh::usable_surface(geometry, surface);
+        let visible = puri::mesh::visible_indices(geometry, surface);
         let index_count = u32::try_from(visible.len()).ok()?;
         if let Some(surface) = surface {
             self.upload_surface(&surface.frame)?;
@@ -458,7 +459,7 @@ impl Renderer {
                 pass.set_index_buffer(self.indices.buffer.slice(..), wgpu::IndexFormat::Uint32);
             }
             if let Some(surface) = surface {
-                if index_count > surface.mesh_start as u32 && surface.frame.is_partial() {
+                if index_count > surface.mesh_start as u32 && surface.frame.partial {
                     pass.draw_indexed(surface.mesh_start as u32..index_count, 0, 0..1);
                 }
                 pass.set_pipeline(&self.surface_pipeline);

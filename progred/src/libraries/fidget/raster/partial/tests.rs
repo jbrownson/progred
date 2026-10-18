@@ -35,7 +35,7 @@ fn finished_empty_pixels_are_distinct_from_unfinished_pixels() {
         &[],
     );
     let frame = assembly.snapshot();
-    assert!(frame.is_partial());
+    assert!(frame.partial);
     assert_eq!(&*frame.depth, &[-1.0, 1.0, -1.0, -1.0, 1.0, -1.0]);
     assert!(frame.image.data.data().iter().all(|v| *v == 0));
 }
@@ -48,7 +48,7 @@ fn finer_pass_preserves_previous_pixels_until_replaced_including_empty_pixels() 
         partial: false,
     };
     let mut assembly = Assembly::new(4, 2, 64, Some(&previous));
-    assert!(!assembly.snapshot().is_partial());
+    assert!(!assembly.snapshot().partial);
     assembly.put(
         SceneTile {
             origin: [1, 0],
@@ -93,7 +93,7 @@ fn tiled_progression_matches_whole_pass_reference_and_propagates_cancellation() 
         )
         .unwrap()
         .unwrap();
-    assert!(!result.is_partial());
+    assert!(!result.partial);
     assert_eq!(result.image.data.data(), reference.data.data());
     let mut count = 0;
     let result = request.render_software_tiles(
@@ -136,7 +136,7 @@ fn final_only_tiles_keep_final_quality_with_one_progress_interval() {
             4,
             &cancel,
             &mut |frame| {
-                assert!(frame.is_partial(), "no intermediate whole-image passes");
+                assert!(frame.partial, "no intermediate whole-image passes");
                 assert_eq!((frame.image.width, frame.image.height), (81, 53));
                 Ok(())
             },
@@ -144,7 +144,7 @@ fn final_only_tiles_keep_final_quality_with_one_progress_interval() {
         )
         .unwrap()
         .unwrap();
-    assert!(!result.is_partial());
+    assert!(!result.partial);
     assert_eq!((result.image.width, result.image.height), (81, 53));
     assert_eq!(result.image.data.data(), reference.data.data());
     let reports = reports.into_inner().unwrap();

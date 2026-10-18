@@ -13,7 +13,8 @@ pub(super) fn render_surface(
     let count = (view.width as usize).checked_mul(view.height as usize)?;
     let mut rgba = vec![0; count.checked_mul(4)?];
     let mut depth = vec![1.0; count];
-    let visible = super::visible_indices(geometry, surface)?;
+    let surface = super::usable_surface(geometry, surface);
+    let visible = super::visible_indices(geometry, surface);
     let vertex_count = visible.iter().max().map_or(0, |i| *i as usize + 1);
     let vertices: Vec<_> = geometry
         .vertices
@@ -99,7 +100,7 @@ pub(super) fn render_surface(
         }
     };
     if let Some(surface) = surface {
-        if surface.frame.is_partial() {
+        if surface.frame.partial {
             draw(
                 &geometry.indices[surface.mesh_start..],
                 &mut rgba,

@@ -51,12 +51,13 @@ fn recording_and_replay_retain_geometry_without_rasterizing() {
 }
 
 #[test]
-fn invalid_geometry_and_surface_decline_without_panicking() {
-    let mut scene = scene();
-    std::sync::Arc::make_mut(&mut scene.geometry).indices[0] = 100;
-    assert!(scene.rasterize().is_none());
-    scene.geometry = Mesh::default();
-    scene.surface = Some(Surface {
+fn invalid_geometry_declines_and_a_malformed_surface_is_left_out() {
+    let mut broken = scene();
+    std::sync::Arc::make_mut(&mut broken.geometry).indices[0] = 100;
+    assert!(broken.rasterize().is_none());
+
+    let plain = scene().rasterize().unwrap();
+    let surface = Surface {
         frame: DepthImage {
             image: ImageData {
                 data: vec![0; 4].into(),
@@ -68,11 +69,31 @@ fn invalid_geometry_and_surface_decline_without_panicking() {
             depth: vec![1.0].into(),
             partial: false,
         },
-        mesh_start: 3,
-    });
-    assert!(scene.rasterize().is_none());
-    scene.surface.as_mut().unwrap().mesh_start = 0;
+        mesh_start: 0,
+    };
+    let unsized_depth = DepthImage {
+        depth: vec![].into(),
+        ..surface.frame.clone()
+    };
+    for malformed in [
+        Surface {
+            mesh_start: 6,
+            ..surface.clone()
+        },
+        Surface {
+            mesh_start: 1,
+            ..surface.clone()
+        },
+        Surface {
+            frame: unsized_depth,
+            ..surface.clone()
+        },
+    ] {
+        let mut scene = scene();
+        scene.surface = Some(malformed);
+        assert_eq!(scene.rasterize().unwrap().data.data(), plain.data.data());
+    }
+    let mut scene = scene();
+    scene.surface = Some(surface);
     assert!(scene.rasterize().is_some());
-    scene.surface.as_mut().unwrap().frame.depth = vec![].into();
-    assert!(scene.rasterize().is_none());
 }
