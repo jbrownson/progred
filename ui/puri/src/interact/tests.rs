@@ -18,12 +18,6 @@ fn down_at(x: f64, y: f64) -> PointerButtonEvent {
     }
 }
 
-fn down_at_count(x: f64, y: f64, count: u8) -> PointerButtonEvent {
-    let mut event = down_at(x, y);
-    event.state.count = count;
-    event
-}
-
 fn touch_at(x: f64, y: f64) -> PointerButtonEvent {
     let mut event = down_at(x, y);
     event.button = None;
@@ -149,51 +143,4 @@ fn press_in_the_clipped_part_falls_through() {
     assert_eq!(selected, 0);
     assert!(frame.dispatch_pointer_down(&mut selected, &down_at(3.0, 5.0)));
     assert_eq!(selected, 7);
-}
-
-#[test]
-fn double_click_overrides_the_ordinary_click() {
-    let mut frame = Frame {
-        handler: Handler::new(),
-    };
-    let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
-    clickable(&mut frame, placement, |value| *value += 1);
-    double_clickable(&mut frame, placement, |value| *value += 10);
-
-    let mut value = 0;
-    assert!(
-        frame
-            .handler
-            .dispatch_pointer_down(&mut value, &down_at_count(5.0, 5.0, 2))
-    );
-    assert_eq!(value, 10);
-}
-
-#[test]
-fn placed_predicate_can_subdivide_the_clip_rect() {
-    let mut frame = Frame {
-        handler: Handler::new(),
-    };
-    on_primary_pointer_down_where(
-        &mut frame,
-        Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
-        |placement, event| event.state.position.x >= placement.rect.center().x,
-        |value, _, _| {
-            *value = 7;
-            true
-        },
-    );
-
-    let mut value = 0;
-    assert!(
-        !frame
-            .handler
-            .dispatch_pointer_down(&mut value, &down_at(4.0, 5.0))
-    );
-    assert!(
-        frame
-            .handler
-            .dispatch_pointer_down(&mut value, &down_at(6.0, 5.0))
-    );
-    assert_eq!(value, 7);
 }

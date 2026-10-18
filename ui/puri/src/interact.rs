@@ -52,87 +52,20 @@ pub fn is_primary_contact_move(event: &PointerUpdate) -> bool {
         || event.pointer.pointer_type == PointerType::Touch
 }
 
-/// Attach a primary-button press whose predicate and action both see
-/// the settled placement. A false action declines to the handler
-/// composed behind this registration.
-pub fn on_primary_pointer_down_where<C: 'static, P: HasHandler<C>>(
-    p: &mut P,
-    placement: Placement,
-    accepts: impl Fn(Placement, &PointerButtonEvent) -> bool + 'static,
-    action: impl Fn(&mut C, Placement, &PointerButtonEvent) -> bool + 'static,
-) {
-    p.handler().on_pointer_down(move |ctx, event| {
-        is_primary_contact(event)
-            && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-            && accepts(placement, event)
-            && action(ctx, placement, event)
-    });
-}
-
-/// Attach a primary-button press whose policy needs the pointer event
-/// but not the settled placement.
-pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
-    p: &mut P,
-    placement: Placement,
-    accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,
-    action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-) {
-    on_primary_pointer_down_where(
-        p,
-        placement,
-        move |_, event| accepts(event),
-        move |ctx, _, event| action(ctx, event),
-    )
-}
-
-/// Attach a primary click selected by click count.
-pub fn on_primary_click<C: 'static, P: HasHandler<C>>(
-    p: &mut P,
-    placement: Placement,
-    accepts: impl Fn(u8) -> bool + 'static,
-    action: impl Fn(&mut C) -> bool + 'static,
-) {
-    on_primary_pointer_down(
-        p,
-        placement,
-        move |event| accepts(event.state.count.max(1)),
-        move |ctx, _| action(ctx),
-    )
-}
-
 /// Register an ordinary primary click at `placement`.
 pub fn clickable<C: 'static, P: HasHandler<C>>(
     p: &mut P,
     placement: Placement,
     on_click: impl Fn(&mut C) + 'static,
 ) {
-    on_primary_click(
-        p,
-        placement,
-        |_| true,
-        move |ctx| {
-            on_click(ctx);
-            true
-        },
-    )
-}
-
-/// The double-click specialization. Register it after [`clickable`] so
-/// newest-first composition gives it the second press.
-pub fn double_clickable<C: 'static, P: HasHandler<C>>(
-    p: &mut P,
-    placement: Placement,
-    on_double_click: impl Fn(&mut C) + 'static,
-) {
-    on_primary_click(
-        p,
-        placement,
-        |count| count == 2,
-        move |ctx| {
-            on_double_click(ctx);
-            true
-        },
-    )
+    p.handler().on_pointer_down(move |ctx, event| {
+        is_primary_contact(event)
+            && placement.contains(Point::new(event.state.position.x, event.state.position.y))
+            && {
+                on_click(ctx);
+                true
+            }
+    });
 }
 
 #[cfg(test)]

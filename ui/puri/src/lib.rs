@@ -32,10 +32,6 @@ pub use edit::{
 };
 pub use geometry::Placement;
 pub use handler::{Handler, HasHandler, ImeEvent, capture};
-pub use interact::{
-    clickable, double_clickable, is_primary_contact, is_primary_contact_move, on_primary_click,
-    on_primary_pointer_down, on_primary_pointer_down_where,
-};
 pub use kurbo::{
     Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Size, Stroke, Vec2,
 };
