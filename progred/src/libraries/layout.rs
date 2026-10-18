@@ -35,6 +35,10 @@ pub mod scope;
 pub mod vocabulary {
     use gid::CellId;
 
+    /// The editor's event records, which `on event` hands a drawing's
+    /// handler. Drawings share their point and text fields.
+    pub use crate::site::event::vocabulary::*;
+
     // Boxes and walk.
     pub const ROW: CellId = CellId::from_u128(0x1af52c96e380b7d40c9e1f6a2d5b83e7);
     pub const COL: CellId = CellId::from_u128(0x9d04b6e1783f2ca5f17d09c4e6a2358b);
@@ -72,28 +76,6 @@ pub mod vocabulary {
     pub const HOVER_BLOCK: CellId = CellId::from_u128(0x83f0d5b7264a19ce4c07f3921ea6b85d);
     pub const HANDLER: CellId = CellId::from_u128(0x3e5d38e4658b1895e38307ad12862061);
 
-    // Event kinds and the handler call's argument.
-    pub const EVENT: CellId = CellId::from_u128(0xbd232b5fb4450b52e088470776ed2a01);
-    pub const EVENT_KIND: CellId = CellId::from_u128(0x9cacae824e9661b167f3ed2b8e187ee0);
-    pub const POINTER_DOWN: CellId = CellId::from_u128(0x67a9a626caff2f3568224eafcb338428);
-    pub const POINTER_MOVE: CellId = CellId::from_u128(0xbf54bd5b9cd29a7c32fc496d6d59e4ca);
-    pub const POINTER_UP: CellId = CellId::from_u128(0x5c2173cf26dfc305ebd89e3cf1d62890);
-    pub const POINTER_CANCEL: CellId = CellId::from_u128(0x594eeff3b32941fea937818d89ca2002);
-    pub const TOUCH_START: CellId = CellId::from_u128(0x87a2ba9cac6a4805b4e3baf9e9218dd5);
-    pub const TOUCH_MOVE: CellId = CellId::from_u128(0x5359b767cb744fb881c8a92b95664c20);
-    pub const TOUCH_END: CellId = CellId::from_u128(0x32b27cf0994b45208502d133d0da4eb2);
-    pub const TOUCH_CANCEL: CellId = CellId::from_u128(0xf96ee39a16f748cc85b6ea8c99b46394);
-    pub const SCROLL: CellId = CellId::from_u128(0x7b0de6ea9b052da4b40e5f97438d537c);
-    pub const GESTURE: CellId = CellId::from_u128(0x6043e90ba2b0030ddb6a395929256aa3);
-    pub const PINCH: CellId = CellId::from_u128(0xfb30e7915daec8c48748e26b55614cc1);
-    pub const ROTATION: CellId = CellId::from_u128(0x77267c709bca4d455769bad3abf39e26);
-    pub const DELTA: CellId = CellId::from_u128(0x913ddf518aeb0dd706ec0cbee6a03164);
-    pub const KEY: CellId = CellId::from_u128(0xbabfda8d94c4a003ae22faf4a4a2fd01);
-    pub const IME: CellId = CellId::from_u128(0x33b7ee93c08863b54d3106802a28d110);
-    pub const HOVER_CHANGED: CellId = CellId::from_u128(0xc0776db8cfd8e86b29d854f629717d17);
-    pub const NAVIGATE: CellId = CellId::from_u128(0x43699c7ed5d154c4c80e3dfb5353eef0);
-    pub const MODIFIERS_CHANGED: CellId = CellId::from_u128(0x5310f0fe0e1d13eddb21c96b61dfb9ac);
-
     // Fields.
     pub const GAP: CellId = CellId::from_u128(0xa4917e2c60d3f8b5310b6d8f2c74ae95);
     pub const BASELINE: CellId = CellId::from_u128(0x6cd28a4f91e057b3c2941e6a07f5d3b8);
@@ -104,7 +86,6 @@ pub mod vocabulary {
     pub const RIGHT: CellId = CellId::from_u128(0x28f4a0b3d17c95e6e7c62b04a9f358d1);
     pub const BOTTOM: CellId = CellId::from_u128(0x94d1e75b3f28c6a02b85d4c7e6013f9a);
     pub const DELIM: CellId = CellId::from_u128(0x71c35a9e04b8d2f6f9401c7b3e685da2);
-    pub const CONTENT: CellId = CellId::from_u128(0x3e6b91d4a25f70c8815d29f6c4a30e7b);
     pub const PAINT: CellId = CellId::from_u128(0xcb04728f5e6a1d93a6790238b5f1ce4d);
     pub const STEP: CellId = CellId::from_u128(0x67a2d5e0b93c48f14e28b671d0a5c39f);
     pub const STEPS: CellId = CellId::from_u128(0x1298c6f4a7053edb09b64d2e8371fa5c);
@@ -115,28 +96,6 @@ pub mod vocabulary {
     pub const ASCENT: CellId = CellId::from_u128(0x7e1d0997f09e8231cabdd246ec1888f9);
     pub const DESCENT: CellId = CellId::from_u128(0x2ed0b9294782093c08695dd5137df21a);
     pub const COMMANDS: CellId = CellId::from_u128(0xb3604c47bef05aa4c7ef0b2d5794da14);
-    pub const X: CellId = CellId::from_u128(0x415def0fa0a9ac40dfba5fca4d0f8876);
-    pub const Y: CellId = CellId::from_u128(0x4e2dcde5b1ab1480a2f126176dd148c7);
-    pub const BUTTON: CellId = CellId::from_u128(0x0ec32df180178e9fbc958d3d061481d7);
-    pub const PRIMARY: CellId = CellId::from_u128(0x09f73c1a02464b762ae34adc9ec17baa);
-    pub const SHIFT: CellId = CellId::from_u128(0x3766462666e33f13096d6afd581de3be);
-    pub const COMMAND: CellId = CellId::from_u128(0xfaf6451fbf89c75cf7b6a906f27590e2);
-    pub const MODIFIERS: CellId = CellId::from_u128(0x36dc2e12ccce7f3cd48713123170714a);
-    pub const COUNT: CellId = CellId::from_u128(0xc6b90219f3e63bbbc14b7ebefd1bd443);
-    pub const SCALE: CellId = CellId::from_u128(0xa370331d2ba2325f05fe6d621b885bef);
-    pub const DELTA_X: CellId = CellId::from_u128(0x798ade16a1f9f7beeb7009c1e183b3c7);
-    pub const DELTA_Y: CellId = CellId::from_u128(0x1336f899599217d2535819a51a4c981c);
-    pub const COALESCED: CellId = CellId::from_u128(0x5ac14439cfe0120df29ae87604adf300);
-    pub const EVENT_STATE: CellId = CellId::from_u128(0x15ab408f66b4286b33f35d95a651b20a);
-    pub const DOWN: CellId = CellId::from_u128(0x96a441425ba7048c7fbb1722922e5ffb);
-    pub const UP: CellId = CellId::from_u128(0xe47d794f06d1f6fc6166c401aeb17c82);
-    pub const REPEAT: CellId = CellId::from_u128(0x5636109fec98530f178de15f65b07372);
-    pub const IME_ENABLED: CellId = CellId::from_u128(0xb773d2a984a80a30dec3d0877ff05895);
-    pub const IME_DISABLED: CellId = CellId::from_u128(0xa6122f0fea5b0bda9f9a20b44a3e12db);
-    pub const IME_PREEDIT: CellId = CellId::from_u128(0xa8dd99527060e9d38b0637fbe842abe4);
-    pub const IME_COMMIT: CellId = CellId::from_u128(0xff48152d0c492add92f179b2d719f745);
-    pub const START: CellId = CellId::from_u128(0xc68a36ea81944cdbc8e7897ffda5a36c);
-    pub const END: CellId = CellId::from_u128(0xabbfd273a978cb520a145eb65568f224);
     pub const RADIUS: CellId = CellId::from_u128(0x6423c35e07d7a4ff536127d1f1d8eb53);
     pub const LINE_WIDTH: CellId = CellId::from_u128(0xa8e4d1cb2cd9f070eb428e013fecc5ef);
     pub const FILL: CellId = CellId::from_u128(0x1624dc973ec7790203eb8fd22c9d6d05);

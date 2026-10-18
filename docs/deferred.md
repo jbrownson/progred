@@ -353,10 +353,10 @@ first:
          occurrence as it registers an arrow stop. The picker marks every
          empty, writable hole, so an unnamed value's name is one, while an
          unnamed lambda's `λ`, a marker to click, isn't;
-       - the cells that label Grap handlers' event records, which are the
-         layout library's. Grap handlers need values, so the records stay;
-         the cells are the editor's input vocabulary, so they move to the
-         core, with layout re-exporting them as the selection stages did.
+       - ~~the cells that label Grap handlers' event records~~. Done on 18
+         October 2026: the records stay, since Grap handlers need values, and
+         the core's `site::event` owns their cells and encoding, which the
+         layout library re-exports.
 
        Plain was one of these. The owner decided on 17 October 2026 that Plain
        is a list of libraries, not something each library provides. One list

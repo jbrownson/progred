@@ -1,7 +1,6 @@
 //! Interpret site and selection effects while applying a Grap callable.
 //! Reads observe staged writes; a declined handler commits neither.
 
-use crate::libraries::layout;
 use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::workspace::Root;
@@ -9,6 +8,8 @@ use gid::{Path, Value};
 use grap::absent;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+pub(crate) mod event;
 
 /// The functions an event handler calls at its projection site, which this
 /// module implements; the site and selection libraries name them.
@@ -138,7 +139,7 @@ pub(crate) fn apply_scoped_event(
         selection: current,
         selection_changed: false,
     };
-    let handled = grap(function, [(layout::vocabulary::EVENT, event)])(
+    let handled = grap(function, [(event::vocabulary::EVENT, event)])(
         &scope.view(session.sources()),
         &path,
         &mut staged,

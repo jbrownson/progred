@@ -8,11 +8,8 @@ fn grap_navigation_events_express_direction_without_a_physical_key() {
         assert_eq!(
             navigation_value(direction),
             Value::record([
-                (
-                    layout_data::vocabulary::EVENT_KIND,
-                    Value::Cell(layout_data::vocabulary::NAVIGATE)
-                ),
-                (layout_data::vocabulary::CONTENT, text::value(spelling)),
+                (EVENT_KIND, Value::Cell(NAVIGATE)),
+                (CONTENT, grap::text::value(spelling)),
             ])
         );
     }
@@ -32,22 +29,9 @@ fn grap_pinch_delta_is_dimensionless_and_position_is_local() {
     for scale in [1.0, 2.0] {
         let value = gesture_value(placement, scale, &event, |m| m.meta());
         let fields = value.as_record().unwrap();
-        assert_eq!(
-            fields.get(&layout_data::vocabulary::EVENT_KIND),
-            Some(&Value::Cell(layout_data::vocabulary::PINCH))
-        );
-        assert_eq!(
-            fields
-                .get(&layout_data::vocabulary::DELTA)
-                .and_then(f64_convention::read),
-            Some(0.25)
-        );
-        assert_eq!(
-            fields
-                .get(&layout_data::vocabulary::X)
-                .and_then(f64_convention::read),
-            Some(15.0)
-        );
+        assert_eq!(fields.get(&EVENT_KIND), Some(&Value::Cell(PINCH)));
+        assert_eq!(fields.get(&DELTA).and_then(grap::f64::read), Some(0.25));
+        assert_eq!(fields.get(&X).and_then(grap::f64::read), Some(15.0));
     }
 }
 
@@ -72,28 +56,19 @@ fn grap_motion_preserves_the_batch_in_local_coordinates() {
         predicted: vec![sample(50.0)],
     };
     for (pointer_type, kind) in [
-        (PointerType::Mouse, layout_data::vocabulary::POINTER_MOVE),
-        (PointerType::Touch, layout_data::vocabulary::TOUCH_MOVE),
+        (PointerType::Mouse, POINTER_MOVE),
+        (PointerType::Touch, TOUCH_MOVE),
     ] {
         event.pointer.pointer_type = pointer_type;
         let value = pointer_move_value(placement, 2.0, &event, |m| m.ctrl());
         let fields = value.as_record().unwrap();
-        assert_eq!(
-            fields.get(&layout_data::vocabulary::EVENT_KIND),
-            Some(&Value::Cell(kind))
-        );
-        assert_eq!(
-            fields.get(&layout_data::vocabulary::X),
-            Some(&f64_convention::value(30.0))
-        );
-        let earlier = fields.get(&layout_data::vocabulary::COALESCED).unwrap();
+        assert_eq!(fields.get(&EVENT_KIND), Some(&Value::Cell(kind)));
+        assert_eq!(fields.get(&X), Some(&grap::f64::value(30.0)));
+        let earlier = fields.get(&COALESCED).unwrap();
         let expected = [10.0, 20.0].map(|x| {
             let mut fields = pointer_fields(placement, 2.0, &sample(x + 10.0), |m| m.ctrl());
             if pointer_type == PointerType::Mouse {
-                fields.push((
-                    layout_data::vocabulary::BUTTON,
-                    Value::Cell(layout_data::vocabulary::PRIMARY),
-                ));
+                fields.push((BUTTON, Value::Cell(PRIMARY)));
             }
             Value::record(fields)
         });

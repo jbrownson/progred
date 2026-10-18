@@ -1,16 +1,12 @@
-//! Grap's ordinary event adapter. Native widgets use Puri handlers directly.
+//! Grap's ordinary event adapter: when a drawing's handler gets an event.
+//! What it gets is the core's [`crate::site::event`] record. Native widgets
+//! use Puri handlers directly.
 
-use super as layout_data;
 use crate::display::widget;
-use crate::libraries::{f64 as f64_convention, text};
+use crate::site::event as grap_event;
 use crate::view::Layout;
-use gid::{CellId, Value};
-use puri::handler::{
-    Event, EventOutcome, HasHandler, ImeEvent, KeyState, KeyboardEvent, Modifiers, PointerButton,
-    PointerButtonEvent, PointerGesture, PointerGestureEvent, PointerInfo, PointerScrollEvent,
-    PointerState, PointerType, PointerUpdate, ScrollDelta,
-};
-use puri::{Placement, Point};
+use puri::Point;
+use puri::handler::{Event, EventOutcome, HasHandler};
 use std::rc::Rc;
 
 pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Layout {
@@ -34,15 +30,7 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
                                 ))
                             },
                             |events| {
-                                let value = event_value(
-                                    layout_data::vocabulary::SCROLL,
-                                    [(
-                                        layout_data::vocabulary::CONTENT,
-                                        Value::list(events.iter().map(|event| {
-                                            scroll_value(placement, scale, event, command)
-                                        })),
-                                    )],
-                                );
+                                let value = grap_event::scroll(placement, scale, &events, command);
                                 let handled = site
                                     .open(&mut world.session())
                                     .run_handler(function.clone(), value);
@@ -60,15 +48,7 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
                                 ))
                             },
                             |events| {
-                                let value = event_value(
-                                    layout_data::vocabulary::GESTURE,
-                                    [(
-                                        layout_data::vocabulary::CONTENT,
-                                        Value::list(events.iter().map(|event| {
-                                            gesture_value(placement, scale, event, command)
-                                        })),
-                                    )],
-                                );
+                                let value = grap_event::gesture(placement, scale, &events, command);
                                 let handled = site
                                     .open(&mut world.session())
                                     .run_handler(function.clone(), value);
@@ -85,39 +65,7 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
                     {
                         false
                     } else {
-                        let value = match &event {
-                            Event::PointerDown(event) => pointer_button_value(
-                                layout_data::vocabulary::POINTER_DOWN,
-                                layout_data::vocabulary::TOUCH_START,
-                                placement,
-                                scale,
-                                event,
-                                command,
-                            ),
-                            Event::PointerMove(event) => {
-                                pointer_move_value(placement, scale, event, command)
-                            }
-                            Event::PointerUp(event) => pointer_button_value(
-                                layout_data::vocabulary::POINTER_UP,
-                                layout_data::vocabulary::TOUCH_END,
-                                placement,
-                                scale,
-                                event,
-                                command,
-                            ),
-                            Event::PointerCancel(event) => pointer_cancel_value(event),
-                            Event::Scroll(_) | Event::Gesture(_) => unreachable!(),
-                            Event::Key(event) => key_value(event, command),
-                            Event::Navigate(direction) => navigation_value(*direction),
-                            Event::Ime(event) => ime_value(event),
-                            Event::HoverChanged => {
-                                event_value(layout_data::vocabulary::HOVER_CHANGED, [])
-                            }
-                            Event::ModifiersChanged(modifiers) => event_value(
-                                layout_data::vocabulary::MODIFIERS_CHANGED,
-                                [modifier_field(modifiers, command)],
-                            ),
-                        };
+                        let value = grap_event::value(&event, placement, scale, command);
                         site.open(&mut world.session())
                             .run_handler(function.clone(), value)
                     };
@@ -128,236 +76,5 @@ pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Lay
     )
 }
 
-fn event_value(kind: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    Value::record(
-        [(layout_data::vocabulary::EVENT_KIND, Value::Cell(kind))]
-            .into_iter()
-            .chain(fields),
-    )
-}
-
-fn navigation_value(direction: puri::handler::NavigationDirection) -> Value {
-    use puri::handler::NavigationDirection::*;
-    event_value(
-        layout_data::vocabulary::NAVIGATE,
-        [(
-            layout_data::vocabulary::CONTENT,
-            text::value(match direction {
-                Left => "left",
-                Right => "right",
-                Up => "up",
-                Down => "down",
-            }),
-        )],
-    )
-}
-
-fn marker() -> Value {
-    Value::record([])
-}
-
-fn modifier_field(modifiers: &Modifiers, command: fn(&Modifiers) -> bool) -> (CellId, Value) {
-    (
-        layout_data::vocabulary::MODIFIERS,
-        Value::list(
-            [
-                modifiers
-                    .shift()
-                    .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
-                command(modifiers).then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
-            ]
-            .into_iter()
-            .flatten(),
-        ),
-    )
-}
-
-fn pointer_fields(
-    placement: Placement,
-    scale: f64,
-    state: &PointerState,
-    command: fn(&Modifiers) -> bool,
-) -> Vec<(CellId, Value)> {
-    let mut fields = vec![
-        (
-            layout_data::vocabulary::X,
-            f64_convention::value(state.position.x - placement.rect.x0),
-        ),
-        (
-            layout_data::vocabulary::Y,
-            f64_convention::value(state.position.y - placement.rect.y0),
-        ),
-        (
-            layout_data::vocabulary::COUNT,
-            f64_convention::value(f64::from(state.count)),
-        ),
-        (layout_data::vocabulary::SCALE, f64_convention::value(scale)),
-    ];
-    fields.push(modifier_field(&state.modifiers, command));
-    fields
-}
-
-fn pointer_button_value(
-    pointer_kind: CellId,
-    touch_kind: CellId,
-    placement: Placement,
-    scale: f64,
-    event: &PointerButtonEvent,
-    command: fn(&Modifiers) -> bool,
-) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.state, command);
-    let touch = event.pointer.pointer_type == PointerType::Touch;
-    if !touch && event.button == Some(PointerButton::Primary) {
-        fields.push((
-            layout_data::vocabulary::BUTTON,
-            Value::Cell(layout_data::vocabulary::PRIMARY),
-        ));
-    }
-    event_value(if touch { touch_kind } else { pointer_kind }, fields)
-}
-
-fn pointer_motion_fields(
-    placement: Placement,
-    scale: f64,
-    touch: bool,
-    state: &PointerState,
-    command: fn(&Modifiers) -> bool,
-) -> Vec<(CellId, Value)> {
-    let mut fields = pointer_fields(placement, scale, state, command);
-    if !touch && state.buttons.contains(PointerButton::Primary) {
-        fields.push((
-            layout_data::vocabulary::BUTTON,
-            Value::Cell(layout_data::vocabulary::PRIMARY),
-        ));
-    }
-    fields
-}
-
-fn pointer_move_value(
-    placement: Placement,
-    scale: f64,
-    event: &PointerUpdate,
-    command: fn(&Modifiers) -> bool,
-) -> Value {
-    let touch = event.pointer.pointer_type == PointerType::Touch;
-    let mut fields = pointer_motion_fields(placement, scale, touch, &event.current, command);
-    fields.push((
-        layout_data::vocabulary::COALESCED,
-        Value::list(event.coalesced.iter().map(|sample| {
-            Value::record(pointer_motion_fields(
-                placement, scale, touch, sample, command,
-            ))
-        })),
-    ));
-    event_value(
-        if touch {
-            layout_data::vocabulary::TOUCH_MOVE
-        } else {
-            layout_data::vocabulary::POINTER_MOVE
-        },
-        fields,
-    )
-}
-
-fn pointer_cancel_value(event: &PointerInfo) -> Value {
-    event_value(
-        if event.pointer_type == PointerType::Touch {
-            layout_data::vocabulary::TOUCH_CANCEL
-        } else {
-            layout_data::vocabulary::POINTER_CANCEL
-        },
-        [],
-    )
-}
-
-fn scroll_value(
-    placement: Placement,
-    scale: f64,
-    event: &PointerScrollEvent,
-    command: fn(&Modifiers) -> bool,
-) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.state, command);
-    let (x, y) = match event.delta {
-        ScrollDelta::PageDelta(x, y) | ScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
-        ScrollDelta::PixelDelta(delta) => (delta.x, delta.y),
-    };
-    fields.extend([
-        (layout_data::vocabulary::DELTA_X, f64_convention::value(x)),
-        (layout_data::vocabulary::DELTA_Y, f64_convention::value(y)),
-    ]);
-    event_value(layout_data::vocabulary::SCROLL, fields)
-}
-
-fn gesture_value(
-    placement: Placement,
-    scale: f64,
-    event: &PointerGestureEvent,
-    command: fn(&Modifiers) -> bool,
-) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.state, command);
-    let (kind, delta) = match event.gesture {
-        PointerGesture::Pinch(delta) => (layout_data::vocabulary::PINCH, delta),
-        PointerGesture::Rotate(delta) => (layout_data::vocabulary::ROTATION, delta),
-    };
-    fields.push((
-        layout_data::vocabulary::DELTA,
-        f64_convention::value(f64::from(delta)),
-    ));
-    event_value(kind, fields)
-}
-
-fn key_value(event: &KeyboardEvent, command: fn(&Modifiers) -> bool) -> Value {
-    let mut fields = vec![
-        (
-            layout_data::vocabulary::EVENT_STATE,
-            Value::Cell(match event.state {
-                KeyState::Down => layout_data::vocabulary::DOWN,
-                KeyState::Up => layout_data::vocabulary::UP,
-            }),
-        ),
-        (
-            layout_data::vocabulary::CONTENT,
-            text::value(event.key.to_string()),
-        ),
-    ];
-    if event.repeat {
-        fields.push((layout_data::vocabulary::REPEAT, marker()));
-    }
-    fields.push(modifier_field(&event.modifiers, command));
-    event_value(layout_data::vocabulary::KEY, fields)
-}
-
-fn ime_value(event: &ImeEvent) -> Value {
-    let mut fields = Vec::new();
-    let state = match event {
-        ImeEvent::Enabled => layout_data::vocabulary::IME_ENABLED,
-        ImeEvent::Disabled => layout_data::vocabulary::IME_DISABLED,
-        ImeEvent::Preedit(content, cursor) => {
-            fields.push((layout_data::vocabulary::CONTENT, text::value(content)));
-            if let Some((start, end)) = cursor {
-                fields.extend([
-                    (
-                        layout_data::vocabulary::START,
-                        f64_convention::value(*start as f64),
-                    ),
-                    (
-                        layout_data::vocabulary::END,
-                        f64_convention::value(*end as f64),
-                    ),
-                ]);
-            }
-            layout_data::vocabulary::IME_PREEDIT
-        }
-        ImeEvent::Commit(content) => {
-            fields.push((layout_data::vocabulary::CONTENT, text::value(content)));
-            layout_data::vocabulary::IME_COMMIT
-        }
-    };
-    fields.push((layout_data::vocabulary::EVENT_STATE, Value::Cell(state)));
-    event_value(layout_data::vocabulary::IME, fields)
-}
-
 #[cfg(test)]
 mod encoding_tests;
-#[cfg(test)]
-mod motion_tests;

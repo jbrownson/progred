@@ -502,9 +502,11 @@ callback, not one deferred allocation per canvas operation. Empty outlines also
 use a native widget rather than an interpreter case.
 
 Grap's `on_event` adapter belongs to the layout library and builds an ordinary
-`before` decorator too; there is no `Layout::OnEvent`. One handler encodes the
-incoming Puri event and calls the supplied site-scoped interpreter. The adapter
-owns the event vocabulary; the app owns staging and committing effects. Native
+`before` decorator too; there is no `Layout::OnEvent`. One handler decides when
+a drawing's handler gets an event, and calls the supplied site-scoped
+interpreter with the event as [`site::event`](../progred/src/site/event.rs)
+encodes it. The core owns that record and its vocabulary, which the layout
+library re-exports, and the app owns staging and committing effects. Native
 widgets bypass that interpretation and use their callbacks directly.
 
 Scrolling uses an ordinary native placement handler too. Fidget's handler

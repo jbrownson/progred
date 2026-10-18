@@ -295,9 +295,10 @@ combinators keep their semantics. For example, `border` can wrap a returned
 layout program just as it wraps another projected value. It does not inspect
 or intercept the builder's effects. Native widgets do not take either GID path,
 and neither path encodes every drawing operation as GID before painting.
-`libraries::layout::on_event` is the Grap adapter for handlers: it encodes
-events and installs one native handler that calls the site-scoped interpreter
-directly. Layout has no Grap-event constructor or interpretation arm.
+`libraries::layout::on_event` is the Grap adapter for handlers: it installs one
+native handler that encodes each event as the core's `site::event` record and
+calls the site-scoped interpreter directly. Layout has no Grap-event
+constructor or interpretation arm.
 
 Line editing, delimiters, pointer actions, hover feedback, scrubbing, state
 scrolling, borders, and popovers are native widget functions and combinators.
