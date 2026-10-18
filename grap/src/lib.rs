@@ -97,7 +97,7 @@ pub mod f64 {
     pub const F64: CellId = CellId::from_u128(0xed11fde03b7c2c1ba2fccc3cdba5d561);
 
     pub fn value(number: f64) -> Value {
-        Value::record([(F64, Value::from(number.to_le_bytes().to_vec()))])
+        Value::record([(F64, encode(number))])
     }
 
     pub fn read(value: &Value) -> Option<f64> {
@@ -105,11 +105,17 @@ pub mod f64 {
     }
 
     pub fn read_record(fields: &Record) -> Option<f64> {
-        fields
-            .get(&F64)
-            .and_then(Value::as_blob)
-            .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
-            .map(f64::from_le_bytes)
+        fields.get(&F64).and_then(Value::as_blob).and_then(decode)
+    }
+
+    /// The `f64` field holding `number`.
+    pub(crate) fn encode(number: f64) -> Value {
+        Value::from(number.to_le_bytes().to_vec())
+    }
+
+    /// The number an `f64` field's bytes hold.
+    pub(crate) fn decode(bytes: &[u8]) -> Option<f64> {
+        <[u8; 8]>::try_from(bytes).ok().map(f64::from_le_bytes)
     }
 }
 
@@ -123,7 +129,7 @@ pub mod text {
     pub const UTF8: CellId = CellId::from_u128(0x332529b8ea83a7ba10fd7f6d942e5016);
 
     pub fn value(text: impl Into<String>) -> Value {
-        Value::record([(UTF8, Value::from(text.into().into_bytes()))])
+        Value::record([(UTF8, encode(text))])
     }
 
     pub fn read(value: &Value) -> Option<&str> {
@@ -131,10 +137,17 @@ pub mod text {
     }
 
     pub fn read_record(fields: &Record) -> Option<&str> {
-        fields
-            .get(&UTF8)?
-            .as_blob()
-            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+        fields.get(&UTF8)?.as_blob().and_then(decode)
+    }
+
+    /// The `utf8` field holding `text`.
+    pub(crate) fn encode(text: impl Into<String>) -> Value {
+        Value::from(text.into().into_bytes())
+    }
+
+    /// The text a `utf8` field's bytes hold.
+    pub(crate) fn decode(bytes: &[u8]) -> Option<&str> {
+        std::str::from_utf8(bytes).ok()
     }
 }
 
@@ -478,10 +491,9 @@ impl RuntimeValue {
                 Native::Text(_) => crate::f64::read_record(unboxed.original()?),
             },
             RuntimeValueKind::Data(value) => crate::f64::read(value),
-            RuntimeValueKind::Record(_) => {
-                let bytes = self.field(crate::f64::F64)?;
-                Some(f64::from_le_bytes(bytes.as_blob()?.try_into().ok()?))
-            }
+            RuntimeValueKind::Record(fields) => runtime_field(fields, crate::f64::F64)?
+                .as_blob()
+                .and_then(crate::f64::decode),
             RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
@@ -499,7 +511,7 @@ impl RuntimeValue {
             RuntimeValueKind::Data(value) => crate::text::read(value),
             RuntimeValueKind::Record(fields) => runtime_field(fields, crate::text::UTF8)?
                 .as_blob()
-                .and_then(|bytes| std::str::from_utf8(bytes).ok()),
+                .and_then(crate::text::decode),
             RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,

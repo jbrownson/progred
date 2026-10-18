@@ -44,8 +44,8 @@ impl Native {
     /// That field's value.
     fn encoded(&self) -> Value {
         match self {
-            Self::F64(number) => Value::from(number.to_le_bytes().to_vec()),
-            Self::Text(text) => Value::from(text.as_bytes().to_vec()),
+            Self::F64(number) => crate::f64::encode(*number),
+            Self::Text(text) => crate::text::encode(text.as_ref()),
         }
     }
 
