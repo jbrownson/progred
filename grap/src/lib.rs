@@ -410,14 +410,9 @@ pub struct PreparedCallable {
 #[derive(Clone)]
 struct Closure {
     fields: Record,
-    params: Rc<[Parameter]>,
+    params: Rc<[CellId]>,
     body: Expression,
     environment: Environment,
-}
-
-#[derive(Clone, Copy)]
-struct Parameter {
-    cell: CellId,
 }
 
 impl RuntimeValue {
@@ -592,13 +587,7 @@ impl RuntimeValue {
     /// native closure's code and captured environment.
     pub fn callable_parameters(&self) -> Option<Vec<CellId>> {
         if let RuntimeValueKind::Closure(closure) = &self.0 {
-            return Some(
-                closure
-                    .params
-                    .iter()
-                    .map(|parameter| parameter.cell)
-                    .collect(),
-            );
+            return Some(closure.params.to_vec());
         }
         let fields = self.field(vocabulary::CLOSURE);
         let fields = fields.as_ref().unwrap_or(self);
@@ -1176,7 +1165,7 @@ fn thunk(
 /// so its identity stays valid) and the argument expression this call
 /// supplies for each parameter, in declaration order.
 struct CallPlan {
-    params: Rc<[Parameter]>,
+    params: Rc<[CellId]>,
     arguments: Rc<[Option<Expression>]>,
 }
 
@@ -1227,7 +1216,7 @@ enum Form {
 
 #[derive(Clone)]
 enum LambdaParameters {
-    Valid(Rc<[Parameter]>),
+    Valid(Rc<[CellId]>),
     Malformed,
     Invalid(Value),
 }
@@ -1235,7 +1224,7 @@ enum LambdaParameters {
 impl LambdaParameters {
     /// `None` when the parameters are not a list; otherwise the parameter
     /// cells, or the first entry that is not one.
-    fn parse(parameters: Option<Result<Vec<Parameter>, Value>>) -> Self {
+    fn parse(parameters: Option<Result<Vec<CellId>, Value>>) -> Self {
         match parameters {
             None => Self::Malformed,
             Some(Ok(parameters)) => Self::Valid(parameters.into()),
@@ -1350,11 +1339,7 @@ impl<'a> Context<'a> {
                     Form::Lambda {
                         parameters: LambdaParameters::parse(params.list_values().map(|values| {
                             values
-                                .map(|v| {
-                                    v.as_cell()
-                                        .map(|cell| Parameter { cell })
-                                        .ok_or_else(|| v.to_value())
-                                })
+                                .map(|v| v.as_cell().ok_or_else(|| v.to_value()))
                                 .collect()
                         })),
                         body,
@@ -1443,11 +1428,7 @@ impl<'a> Context<'a> {
                         Form::Lambda {
                             parameters: LambdaParameters::parse(params.as_list().map(|list| {
                                 list.values()
-                                    .map(|v| {
-                                        v.as_cell()
-                                            .map(|cell| Parameter { cell })
-                                            .ok_or_else(|| v.clone())
-                                    })
+                                    .map(|v| v.as_cell().ok_or_else(|| v.clone()))
                                     .collect()
                             })),
                             body: lower_field(self, vocabulary::BODY, body),
@@ -1574,7 +1555,7 @@ impl<'a> Context<'a> {
         body: Expression,
         environment: &Environment,
     ) -> RuntimeValue {
-        let params: Vec<_> = params.into_iter().collect();
+        let params: Rc<[CellId]> = params.into_iter().collect();
         let fields = [
             (
                 vocabulary::PARAMS,
@@ -1584,7 +1565,6 @@ impl<'a> Context<'a> {
         ]
         .into_iter()
         .collect();
-        let params = params.into_iter().map(|cell| Parameter { cell }).collect();
         RuntimeValue::new(RuntimeValueKind::Closure(Closure {
             fields,
             params,
@@ -2343,18 +2323,17 @@ impl<'a> Context<'a> {
         arguments: &[(CellId, RuntimeValue)],
     ) -> Result<RuntimeValue, Halt> {
         let mut bound = Vec::with_capacity(closure.params.len());
-        for parameter in closure.params.iter() {
-            let value = if parameter.cell == vocabulary::FUNCTION {
+        for &parameter in closure.params.iter() {
+            let value = if parameter == vocabulary::FUNCTION {
                 callable.clone()
             } else {
-                let Some((_, value)) = arguments.iter().find(|(cell, _)| *cell == parameter.cell)
-                else {
-                    return Ok(self.missing_runtime_argument(parameter.cell));
+                let Some((_, value)) = arguments.iter().find(|(cell, _)| *cell == parameter) else {
+                    return Ok(self.missing_runtime_argument(parameter));
                 };
                 self.lower_runtime(value.clone())
             };
             self.burn()?;
-            bound.push((parameter.cell, value));
+            bound.push((parameter, value));
         }
         self.eval(closure.body, &closure.environment.extended_runtime(bound))
     }
@@ -2429,7 +2408,7 @@ impl<'a> Context<'a> {
                 let arguments: Rc<[Option<Expression>]> = closure
                     .params
                     .iter()
-                    .map(|parameter| self.field(call, parameter.cell))
+                    .map(|&parameter| self.field(call, parameter))
                     .collect();
                 if let Some(slot) = plan {
                     *slot.borrow_mut() = Some(CallPlan {
@@ -2441,12 +2420,12 @@ impl<'a> Context<'a> {
             }
         };
         let mut arguments = Vec::with_capacity(closure.params.len());
-        for (parameter, argument) in closure.params.iter().zip(arguments_plan.iter()) {
+        for (&parameter, argument) in closure.params.iter().zip(arguments_plan.iter()) {
             let Some(expression) = argument else {
-                return Ok(RuntimeValue::from(self.missing_argument(parameter.cell)));
+                return Ok(RuntimeValue::from(self.missing_argument(parameter)));
             };
             arguments.push((
-                parameter.cell,
+                parameter,
                 self.eval(expression.clone(), calling_environment)?,
             ));
         }
@@ -2464,8 +2443,8 @@ impl<'a> Context<'a> {
                 let params = fields
                     .field(vocabulary::PARAMS)?
                     .list_values()?
-                    .map(|value| value.as_cell().map(|cell| Parameter { cell }))
-                    .collect::<Option<Vec<_>>>()?;
+                    .map(|value| value.as_cell())
+                    .collect::<Option<Rc<[_]>>>()?;
                 let origin = fields
                     .field(source::vocabulary::BODY_ORIGIN)
                     .and_then(|value| source::read(value.as_value()))
@@ -2480,7 +2459,7 @@ impl<'a> Context<'a> {
                     _ => return None,
                 };
                 Some(Closure {
-                    params: params.into(),
+                    params,
                     body,
                     environment,
                     fields: fields.as_value().as_record()?.clone(),
