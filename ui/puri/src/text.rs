@@ -55,17 +55,17 @@ pub struct TextKey {
 
 /// Only solid brushes key — anything fancier shapes uncached.
 fn text_key(s: &str, style: &TextStyle, scale: f32) -> Option<TextKey> {
-    let Brush::Solid(color) = &style.brush else {
-        return None;
-    };
-    Some(TextKey {
-        text: s.to_owned(),
-        size: style.size.to_bits(),
-        weight: style.weight.map(f32::to_bits),
-        family: style.family,
-        color: color.components.map(f32::to_bits),
-        scale: scale.to_bits(),
-    })
+    match &style.brush {
+        Brush::Solid(color) => Some(TextKey {
+            text: s.to_owned(),
+            size: style.size.to_bits(),
+            weight: style.weight.map(f32::to_bits),
+            family: style.family,
+            color: color.components.map(f32::to_bits),
+            scale: scale.to_bits(),
+        }),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -112,7 +112,7 @@ impl Text {
 /// Single line, no wrapping; width includes trailing whitespace so
 /// inline fragments compose without collapsing.
 pub fn text(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Text {
-    measured_text(build_layout(ctx, s, style))
+    measured_text(line_layout(ctx, s, style))
 }
 
 /// Script glyphs retain the surrounding baseline for alignment; their
@@ -142,21 +142,30 @@ pub fn scripted_text(ctx: &mut TextCtx, s: &str, style: &TextStyle, script: Scri
     }
 }
 
-/// The single-line layout [`text`] draws for `s`, shared through the
-/// cache — for callers that hit-test a text leaf after the fact.
+/// `s` shaped as one line, shared through the cache: the layout [`text`]
+/// measures and draws.
 pub fn line_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Rc<Layout<Brush>> {
-    build_layout(ctx, s, style)
+    match text_key(s, style, ctx.scale) {
+        Some(key) => {
+            let entry = ctx.cache.0.entry(key).or_insert_with(|| CacheEntry {
+                layout: shape(ctx.fonts, ctx.layouts, ctx.scale, s, style),
+                used: true,
+            });
+            entry.used = true;
+            Rc::clone(&entry.layout)
+        }
+        None => shape(ctx.fonts, ctx.layouts, ctx.scale, s, style),
+    }
 }
 
-pub(crate) fn build_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Rc<Layout<Brush>> {
-    let key = text_key(s, style, ctx.scale);
-    if let Some(key) = &key
-        && let Some(hit) = ctx.cache.0.get_mut(key)
-    {
-        hit.used = true;
-        return Rc::clone(&hit.layout);
-    }
-    let mut builder = ctx.layouts.ranged_builder(ctx.fonts, s, ctx.scale, true);
+fn shape(
+    fonts: &mut FontContext,
+    layouts: &mut LayoutContext<Brush>,
+    scale: f32,
+    s: &str,
+    style: &TextStyle,
+) -> Rc<Layout<Brush>> {
+    let mut builder = layouts.ranged_builder(fonts, s, scale, true);
     builder.push_default(StyleProperty::Brush(style.brush.clone()));
     builder.push_default(style.family);
     builder.push_default(StyleProperty::FontSize(style.size));
@@ -166,17 +175,7 @@ pub(crate) fn build_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Rc<
     let mut layout: Layout<Brush> = builder.build(s);
     layout.break_all_lines(None);
     layout.align(Alignment::Start, AlignmentOptions::default());
-    let layout = Rc::new(layout);
-    if let Some(key) = key {
-        ctx.cache.0.insert(
-            key,
-            CacheEntry {
-                layout: Rc::clone(&layout),
-                used: true,
-            },
-        );
-    }
-    layout
+    Rc::new(layout)
 }
 
 fn measured_text(layout: Rc<Layout<Brush>>) -> Text {
@@ -204,58 +203,58 @@ pub fn draw_layout(
     layout: &Layout<Brush>,
     transform: Affine,
 ) {
-    for line in layout.lines() {
-        for item in line.items() {
-            let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
-                continue;
-            };
-            let style = glyph_run.style();
-            if let Some(underline) = &style.underline {
-                let run_metrics = glyph_run.run().metrics();
-                let offset = underline.offset.unwrap_or(run_metrics.underline_offset);
-                let width = underline.size.unwrap_or(run_metrics.underline_size);
-                let y = glyph_run.baseline() - offset + width / 2.0;
-                canvas.stroke_shape(
-                    Line::new(
-                        (glyph_run.offset() as f64, y as f64),
-                        ((glyph_run.offset() + glyph_run.advance()) as f64, y as f64),
-                    )
-                    .into(),
-                    Stroke::new(width.into()),
-                    underline.brush.clone(),
-                    transform,
-                );
-            }
-            let mut x = glyph_run.offset();
-            let y = glyph_run.baseline();
-            let run = glyph_run.run();
-            let glyph_xform = run
-                .synthesis()
-                .skew()
-                .map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0));
-            canvas.draw_glyphs(GlyphRun {
-                font: run.font().clone(),
-                size: run.font_size(),
-                glyphs: glyph_run
-                    .glyphs()
-                    .map(|glyph| {
-                        let gx = x + glyph.x;
-                        let gy = y + glyph.y;
-                        x += glyph.advance;
-                        Glyph {
-                            id: glyph.id,
-                            x: gx,
-                            y: gy,
-                        }
-                    })
-                    .collect(),
-                normalized_coords: run.normalized_coords().to_vec(),
-                brush: style.brush.clone(),
-                hint: true,
+    let runs = layout
+        .lines()
+        .flat_map(|line| line.items())
+        .filter_map(|item| match item {
+            PositionedLayoutItem::GlyphRun(glyph_run) => Some(glyph_run),
+            PositionedLayoutItem::InlineBox(_) => None,
+        });
+    for glyph_run in runs {
+        let style = glyph_run.style();
+        if let Some(underline) = &style.underline {
+            let run_metrics = glyph_run.run().metrics();
+            let offset = underline.offset.unwrap_or(run_metrics.underline_offset);
+            let width = underline.size.unwrap_or(run_metrics.underline_size);
+            let y = glyph_run.baseline() - offset + width / 2.0;
+            canvas.stroke_shape(
+                Line::new(
+                    (glyph_run.offset() as f64, y as f64),
+                    ((glyph_run.offset() + glyph_run.advance()) as f64, y as f64),
+                )
+                .into(),
+                Stroke::new(width.into()),
+                underline.brush.clone(),
                 transform,
-                glyph_transform: glyph_xform,
-            });
+            );
         }
+        let y = glyph_run.baseline();
+        let run = glyph_run.run();
+        let glyph_xform = run
+            .synthesis()
+            .skew()
+            .map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0));
+        canvas.draw_glyphs(GlyphRun {
+            font: run.font().clone(),
+            size: run.font_size(),
+            glyphs: glyph_run
+                .glyphs()
+                .scan(glyph_run.offset(), |pen, glyph| {
+                    let placed = Glyph {
+                        id: glyph.id,
+                        x: *pen + glyph.x,
+                        y: y + glyph.y,
+                    };
+                    *pen += glyph.advance;
+                    Some(placed)
+                })
+                .collect(),
+            normalized_coords: run.normalized_coords().to_vec(),
+            brush: style.brush.clone(),
+            hint: true,
+            transform,
+            glyph_transform: glyph_xform,
+        });
     }
 }
 

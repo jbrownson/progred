@@ -22,7 +22,7 @@ use crate::draw::CanvasSink;
 use crate::geometry::Placement;
 use crate::handler::{HasHandler, ImeEvent};
 use crate::interact::is_primary_contact_move;
-use crate::text::{TextCtx, TextMetrics, TextStyle, build_layout, draw_layout, line_metrics};
+use crate::text::{TextCtx, TextMetrics, TextStyle, draw_layout, line_layout, line_metrics};
 use kurbo::{Affine, Point, Rect};
 use parley::Layout;
 use parley::style::GenericFamily;
@@ -716,7 +716,7 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
                 && presentation.prefix.is_empty()
                 && presentation.suffix.is_empty()
         })
-        .map(|(text, style)| build_layout(tcx, text, style));
+        .map(|(text, style)| line_layout(tcx, text, style));
     let editor = state.editor(&presentation, tcx.fonts, tcx.layouts, scale);
     let layout = editor.try_layout().cloned();
     let editor_metrics = layout.as_ref().and_then(line_metrics);
