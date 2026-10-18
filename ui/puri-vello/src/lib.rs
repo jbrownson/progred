@@ -69,9 +69,9 @@ impl puri::draw::CanvasSink for VelloCanvas<'_> {
 }
 
 impl VelloCanvas<'_> {
-    /// Raw clip bracket, for wrapper canvases that interleave their own
-    /// state around `Canvas::clip`.
-    pub fn push_clip(&mut self, shape: &Shape, transform: Affine) {
+    /// Raw clip bracket, which `SplitCanvas` also puts around the scenes it
+    /// appends.
+    pub(crate) fn push_clip(&mut self, shape: &Shape, transform: Affine) {
         match shape {
             Shape::Rect(s) => self.0.push_clip_layer(Fill::NonZero, transform, s),
             Shape::RoundedRect(s) => self.0.push_clip_layer(Fill::NonZero, transform, s),
@@ -81,7 +81,7 @@ impl VelloCanvas<'_> {
         }
     }
 
-    pub fn pop_clip(&mut self) {
+    pub(crate) fn pop_clip(&mut self) {
         self.0.pop_layer();
     }
 }

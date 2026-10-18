@@ -53,46 +53,46 @@ impl WebCanvas {
     fn style(&self, brush: &Brush) -> Style {
         match brush {
             Brush::Solid(color) => Style::Color(css(color.components)),
-            Brush::Gradient(gradient) => {
-                // A deterministic rendering for gradients Canvas cannot draw.
-                let first_stop = || {
-                    Style::Color(
-                        gradient
-                            .stops
-                            .first()
-                            .map(|stop| css(stop.color.to_alpha_color::<Srgb>().components))
-                            .unwrap_or_else(|| "rgba(0,0,0,0)".to_string()),
-                    )
-                };
-                let canvas = match gradient.kind {
-                    GradientKind::Linear(linear) => self.0.create_linear_gradient(
-                        linear.start.x,
-                        linear.start.y,
-                        linear.end.x,
-                        linear.end.y,
-                    ),
-                    // Canvas rejects negative radii.
-                    GradientKind::Radial(radial) => match self.0.create_radial_gradient(
+            Brush::Gradient(gradient) => match gradient.kind {
+                GradientKind::Linear(linear) => Some(self.0.create_linear_gradient(
+                    linear.start.x,
+                    linear.start.y,
+                    linear.end.x,
+                    linear.end.y,
+                )),
+                // Canvas rejects negative radii.
+                GradientKind::Radial(radial) => self
+                    .0
+                    .create_radial_gradient(
                         radial.start_center.x,
                         radial.start_center.y,
                         radial.start_radius.into(),
                         radial.end_center.x,
                         radial.end_center.y,
                         radial.end_radius.into(),
-                    ) {
-                        Ok(canvas) => canvas,
-                        Err(_) => return first_stop(),
-                    },
-                    // Sweep gradients are not yet part of Progred's display
-                    // vocabulary, but may arrive through Rust directly.
-                    GradientKind::Sweep(_) => return first_stop(),
-                };
+                    )
+                    .ok(),
+                // Sweep gradients are not yet part of Progred's display
+                // vocabulary, but may arrive through Rust directly.
+                GradientKind::Sweep(_) => None,
+            }
+            .map(|canvas| {
                 for stop in gradient.stops.iter() {
                     let color = css(stop.color.to_alpha_color::<Srgb>().components);
                     let _ = canvas.add_color_stop(stop.offset, &color);
                 }
                 Style::Gradient(canvas)
-            }
+            })
+            // A deterministic rendering for gradients Canvas cannot draw.
+            .unwrap_or_else(|| {
+                Style::Color(
+                    gradient
+                        .stops
+                        .first()
+                        .map(|stop| css(stop.color.to_alpha_color::<Srgb>().components))
+                        .unwrap_or_else(|| "rgba(0,0,0,0)".to_string()),
+                )
+            }),
             // Images are likewise absent from the current display language.
             Brush::Image(_) => Style::Color("rgba(255,0,255,1)".to_string()),
         }
@@ -119,19 +119,6 @@ impl WebCanvas {
             dashes.push(&JsValue::from_f64(*dash));
         }
         let _ = self.0.set_line_dash(&dashes);
-    }
-
-    /// Raw clip bracket for wrapper canvases that interleave their own
-    /// state around `Canvas::clip`.
-    pub fn push_clip(&self, shape: &Shape, transform: Affine) {
-        let path = path(shape);
-        self.0.save();
-        self.set_transform(transform);
-        self.0.clip_with_path_2d(&path);
-    }
-
-    pub fn pop_clip(&self) {
-        self.0.restore();
     }
 }
 
@@ -164,35 +151,32 @@ impl puri::draw::CanvasSink for WebCanvas {
     }
 
     fn draw_glyphs(&mut self, run: GlyphRun) {
-        let Ok(font) = FontRef::from_index(run.font.data.as_ref(), run.font.index) else {
-            return;
-        };
-        let outlines = font.outline_glyphs();
-        let coords: Vec<NormalizedCoord> = run
-            .normalized_coords
-            .iter()
-            .map(|bits| NormalizedCoord::from_bits(*bits))
-            .collect();
-        for glyph in &run.glyphs {
-            let Some(outline) = outlines.get(GlyphId::new(glyph.id)) else {
-                continue;
-            };
-            let Ok(glyph_path) = Path2d::new() else {
-                continue;
-            };
-            let mut pen = CanvasPen(&glyph_path);
-            let settings = DrawSettings::unhinted(Size::new(run.size), LocationRef::new(&coords));
-            if outline.draw(settings, &mut pen).is_err() {
-                continue;
-            }
-            let transform = run.transform
-                * Affine::translate((glyph.x as f64, glyph.y as f64))
-                * Affine::scale_non_uniform(1.0, -1.0)
-                * run.glyph_transform.unwrap_or(Affine::IDENTITY);
-            self.with_transform(transform, |canvas| {
-                canvas.set_fill_style(&run.brush);
-                canvas.0.fill_with_path_2d(&glyph_path);
+        if let Ok(font) = FontRef::from_index(run.font.data.as_ref(), run.font.index) {
+            let outlines = font.outline_glyphs();
+            let coords: Vec<NormalizedCoord> = run
+                .normalized_coords
+                .iter()
+                .map(|bits| NormalizedCoord::from_bits(*bits))
+                .collect();
+            // Glyphs without an outline Canvas can draw are skipped.
+            let paths = run.glyphs.iter().filter_map(|glyph| {
+                let outline = outlines.get(GlyphId::new(glyph.id))?;
+                let path = Path2d::new().ok()?;
+                let settings =
+                    DrawSettings::unhinted(Size::new(run.size), LocationRef::new(&coords));
+                outline.draw(settings, &mut CanvasPen(&path)).ok()?;
+                Some((glyph, path))
             });
+            for (glyph, path) in paths {
+                let transform = run.transform
+                    * Affine::translate((glyph.x as f64, glyph.y as f64))
+                    * Affine::scale_non_uniform(1.0, -1.0)
+                    * run.glyph_transform.unwrap_or(Affine::IDENTITY);
+                self.with_transform(transform, |canvas| {
+                    canvas.set_fill_style(&run.brush);
+                    canvas.0.fill_with_path_2d(&path);
+                });
+            }
         }
     }
 
@@ -202,9 +186,12 @@ impl puri::draw::CanvasSink for WebCanvas {
         transform: Affine,
         content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
-        self.push_clip(&shape, transform);
+        let path = path(&shape);
+        self.0.save();
+        self.set_transform(transform);
+        self.0.clip_with_path_2d(&path);
         content(self);
-        self.pop_clip();
+        self.0.restore();
     }
 }
 
