@@ -2,7 +2,7 @@ use crate::display::Env;
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
 use crate::display::widget;
-use crate::placed::{self, leaf};
+use crate::display::widget::placed::leaf;
 use crate::view::{Layout, ProjectionInput};
 use crate::{Editor, frame::Hovered};
 use kurbo::Rect;
@@ -335,7 +335,7 @@ pub fn gesture_place(
 pub fn drag_frame(
     place: crate::display::widget::HoverCallback<crate::Editor, Hovered>,
     covered: bool,
-) -> crate::placed::HoverOutput<crate::Editor> {
+) -> crate::frame::HoverOutput<crate::Editor> {
     let extent = Extent {
         width: 20.0,
         ascent: 0.0,
@@ -350,7 +350,7 @@ pub fn drag_frame(
         Rect::new(0.0, 0.0, 10.0, 20.0),
     );
     let placed = crate::display::widget::frame::place(
-        placed::in_view(node, crate::test_root()),
+        crate::display::widget::view::in_view(node, crate::test_root()),
         placement,
         &Default::default(),
     );

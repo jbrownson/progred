@@ -248,7 +248,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         let placed = crate::display::widget::frame::place(
             drawing_frame(&doc, &libraries, shape_function),
             Placement::root(bounds),
-            &placed::HoverInput {
+            &crate::display::widget::HoverInput {
                 pointer: Some(Point::new(5.0, 5.0)),
                 ..Default::default()
             },
@@ -271,7 +271,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             panic!("expected a drawing call trace")
         };
         assert_eq!(trace.sources().next(), Some(source.clone()));
-        let mut pointer = placed::DispatchContext::new(None, Some(target));
+        let mut pointer = crate::frame::DispatchContext::new(None, Some(target));
         pointer.landmarks = Rc::from([crate::display::widget::navigation::Landmark {
             scope: Default::default(),
             root: Some(crate::test_root()),
@@ -403,7 +403,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     let drawing_view = crate::workspace::Root::document();
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
     let output = crate::display::widget::frame::place(
-        placed::in_view(
+        crate::display::widget::view::in_view(
             drawing_frame(&editor.model.doc, &editor.stack.libraries, new_cell_id()),
             drawing_view.clone(),
         ),
@@ -413,7 +413,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     .bind(Default::default());
     let handler = output.handler.unwrap();
     let path: Rc<[Step]> = Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]);
-    let mut input = placed::DispatchContext::new(
+    let mut input = crate::frame::DispatchContext::new(
         Some(drawing_view.clone()),
         Some(Hovered::Tree(Hover::Source(SourceTrace::Stored(
             path.clone(),
@@ -436,7 +436,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         selected: false,
         tab_stop: false,
     }]);
-    input.view_regions = Rc::from([placed::ViewRegion {
+    input.view_regions = Rc::from([crate::display::widget::frame::ViewRegion {
         root: source_view.clone(),
         rect: Rect::new(0.0, 0.0, 200.0, 100.0),
         maximum: kurbo::Vec2::new(0.0, 1_000.0),

@@ -5,7 +5,6 @@ use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::libraries::control::vocabulary as control;
 use crate::libraries::{f64, text};
-use crate::placed;
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_into};
 use gid::Path;
@@ -228,7 +227,7 @@ fn anonymous_lambda_marker_still_opens_name_completion_when_clicked() {
         panic!("lambda marker hover");
     };
     let mut dispatch =
-        placed::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
+        crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
     let event = PointerButtonEvent {
         button: Some(PointerButton::Primary),
         pointer: PointerInfo {
@@ -659,7 +658,7 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
             panic!("backtick hover");
         };
         let mut dispatch =
-            placed::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
+            crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
         let event = PointerButtonEvent {
             button: Some(PointerButton::Primary),
             pointer: PointerInfo {
@@ -702,7 +701,7 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
                     .update(extra, text::value("metadata")),
             )),
         });
-        let has_metadata = |frame: &crate::placed::HoverOutput<crate::Editor>| {
+        let has_metadata = |frame: &crate::frame::HoverOutput<crate::Editor>| {
             frame
                 .landmarks
                 .iter()

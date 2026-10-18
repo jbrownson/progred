@@ -1,8 +1,8 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
+use crate::display::widget::placed::leaf;
 use crate::libraries::f64 as f64_convention;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, press, target};
-use crate::placed::{self, leaf};
 use crate::selection::{Stage, pending_value};
 use gid::{Cells, Document, Step, new_cell_id};
 use measured::Extent;
@@ -45,7 +45,10 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press(x, pick),
-            &mut placed::DispatchContext::new(owns_view.then(crate::test_root), Some(target())),
+            &mut crate::frame::DispatchContext::new(
+                owns_view.then(crate::test_root),
+                Some(target()),
+            ),
         );
         assert_eq!(handled, covered || expected);
         assert_eq!(world.gesture.is_some(), expected);
@@ -119,14 +122,14 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             move |placement, output| pick(output, placement),
         );
         let frame = crate::display::widget::frame::place(
-            placed::in_view(node, crate::test_root()),
+            crate::display::widget::view::in_view(node, crate::test_root()),
             Placement::root(extent.rect_at(Point::ZERO)),
             &Default::default(),
         );
         assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press(5.0, true),
-            &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target())),
+            &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target())),
         ));
         assert_eq!(raw_contacts.get(), usize::from(raw));
         assert_eq!(world.gesture.is_some(), !pending && !raw);

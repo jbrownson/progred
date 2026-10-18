@@ -2,12 +2,13 @@
 //! Paint stays latent in the returned frame; rendering it is the
 //! caller's choice, so a silent mint never draws.
 
+use crate::display::widget::frame::{Cursor, ViewRegion};
+use crate::display::widget::{container, placed, view};
 use crate::hover;
 use crate::input::PendingPaint;
 use crate::menu;
 use crate::model::Model;
 use crate::navigate;
-use crate::placed::{self, HoverPass};
 use crate::projection;
 use crate::sources;
 use crate::stack;
@@ -17,6 +18,7 @@ use kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 use parley::{FontContext, LayoutContext};
 use peniko::Brush;
 use puri::draw::Canvas;
+use puri::frame::Render;
 use puri::geometry::Placement;
 use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
@@ -28,10 +30,10 @@ pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 
 #[derive(Default)]
 pub(crate) struct Dispatch {
-    pub(crate) handler: Rc<Handler<Editor, placed::DispatchContext<Editor>>>,
+    pub(crate) handler: Rc<Handler<Editor, DispatchContext<Editor>>>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
     pub(crate) landmarks: Rc<[navigate::Landmark<Editor>]>,
-    pub(crate) view_regions: Rc<[placed::ViewRegion]>,
+    pub(crate) view_regions: Rc<[ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
 }
 
@@ -41,7 +43,7 @@ pub(crate) struct Frame {
     pub(crate) scroll_probes: Vec<crate::display::widget::scroll::Probe>,
     pub(crate) hover: Option<Hovered>,
     pub(crate) dispatch: Dispatch,
-    pub(crate) renders: Vec<placed::Render>,
+    pub(crate) renders: Vec<Render>,
     pub(crate) input_area: Option<Rect>,
 }
 
@@ -73,7 +75,7 @@ impl Dispatch {
     }
 
     /// The handler is shared only while a dispatch context is alive.
-    pub(crate) fn handler_mut(&mut self) -> &mut Handler<Editor, placed::DispatchContext<Editor>> {
+    pub(crate) fn handler_mut(&mut self) -> &mut Handler<Editor, DispatchContext<Editor>> {
         Rc::get_mut(&mut self.handler).expect("no dispatch is in progress")
     }
 
@@ -83,15 +85,15 @@ impl Dispatch {
         &self,
         editor: &Editor,
         hover: Option<Hovered>,
-    ) -> placed::DispatchContext<Editor> {
-        placed::DispatchContext {
+    ) -> DispatchContext<Editor> {
+        DispatchContext {
             handler: self.handler.clone(),
             landmarks: self.landmarks.clone(),
             view_regions: self.view_regions.clone(),
             pointer: editor.pointer,
             modifiers: editor.modifiers,
             pressed: editor.pressed,
-            ..placed::DispatchContext::new(self.pointer_root.clone(), hover)
+            ..DispatchContext::new(self.pointer_root.clone(), hover)
         }
     }
 }
@@ -114,6 +116,18 @@ impl From<hover::Hover> for Hovered {
         Self::Tree(hover)
     }
 }
+
+/// The toolkit's frame types over what the editor's pointer rests on.
+pub(crate) type HoverPass<C> = crate::display::widget::HoverPass<C, Hovered>;
+pub(crate) type DispatchContext<C> = crate::display::widget::frame::DispatchContext<C, Hovered>;
+pub(crate) type Attribution = crate::display::widget::frame::Attribution<Hovered>;
+#[cfg(test)]
+pub(crate) type HoverOutput<C> = crate::display::widget::HoverOutput<C, Hovered>;
+#[cfg(test)]
+pub(crate) type Probe = crate::display::widget::frame::Probe<Hovered>;
+#[cfg(test)]
+pub(crate) type Builder<'a, 'input, C> =
+    crate::display::widget::placed::Builder<'a, 'input, C, Hovered>;
 
 /// The editor hosts the toolkit: its pointer rests on what the frame draws,
 /// trees and chrome alike, and its dispatches act through its session.
@@ -141,7 +155,7 @@ fn attribute(
     completion: Option<&crate::display::widget::offers::Offers<Editor>>,
     hovered: Option<Hovered>,
     link: bool,
-) -> placed::Attribution {
+) -> Attribution {
     // Keep the probe's call chain for subsequent input, but use the selected
     // source for this frame's ordinary source/secondary decoration.
     let hovered = match hovered {
@@ -171,7 +185,7 @@ fn attribute(
         Some(Hovered::Tree(hover::Hover::Source(source))) if visible => Some(source.clone()),
         _ => None,
     };
-    placed::Attribution {
+    Attribution {
         hovered,
         hovered_secondary,
         selected_secondary: crate::display::widget::navigation::selected_secondary(landmarks),
@@ -264,7 +278,7 @@ fn prepare_frame(
     *frame.dispatch.handler_mut() = crate::input::structural_keys(description.scale)
         .over(placed)
         .over(Handler::from_function(
-            |editor: &mut Editor, event, _: &mut placed::DispatchContext<Editor>| {
+            |editor: &mut Editor, event, _: &mut DispatchContext<Editor>| {
                 let handled = match &event {
                     Event::Key(key) => editor.pending_paste_key(key),
                     _ => false,
@@ -284,7 +298,7 @@ fn compute_hover(
     let mut output = crate::display::widget::frame::place(
         layout,
         Placement::root(Rect::from_origin_size(Point::ZERO, description.viewport)),
-        &placed::HoverInput {
+        &crate::display::widget::HoverInput {
             command_modifier: description.command_modifier,
             picking: pointer.link_sources,
             pointer: if pointer.pressed {
@@ -642,7 +656,7 @@ fn project_workspace_view(
     let content = measured::pad(Insets::uniform(margin), projected);
     let root = view.root.clone();
     let content = if viewport.is_some() {
-        placed::viewport(content, root.clone())
+        view::viewport(content, root.clone())
     } else {
         let maximum = Vec2::new(
             ((content.extent.width - size.width) / scale).max(0.0),
@@ -653,7 +667,7 @@ fn project_workspace_view(
             view.scroll.y.clamp(0.0, maximum.y) * scale,
         );
         let scroll_root = root.clone();
-        placed::scrolled_at(
+        view::scrolled_at(
             content,
             offset,
             Some((root.clone(), scale)),
@@ -669,7 +683,7 @@ fn project_workspace_view(
             },
         )
     };
-    let content = placed::in_view(content, root);
+    let content = view::in_view(content, root);
     let frame = placed::leaf(
         measured::Extent {
             width: size.width,
@@ -758,9 +772,9 @@ fn project_workspace(
                 p.cursor(
                     Hovered::Divider(cursor_divider),
                     if vertical {
-                        placed::Cursor::ColumnResize
+                        Cursor::ColumnResize
                     } else {
-                        placed::Cursor::RowResize
+                        Cursor::RowResize
                     },
                 );
                 p.handler().on_pointer_down(move |app: &mut Editor, event| {
@@ -805,7 +819,7 @@ fn project_frame(
     resources: FrameResources<'_>,
 ) -> (
     measured::Measured<HoverPass<Editor>>,
-    Handler<Editor, placed::DispatchContext<Editor>>,
+    Handler<Editor, DispatchContext<Editor>>,
 ) {
     let FrameDescription {
         palette,
@@ -928,7 +942,7 @@ fn project_frame(
                 }
             });
         });
-        stage = placed::floating(stage, popup, move |placement, extent| {
+        stage = container::floating(stage, popup, move |placement, extent| {
             let x = x
                 .min(placement.clip_rect.x1 - extent.width)
                 .max(placement.clip_rect.x0);
@@ -943,3 +957,5 @@ fn project_frame(
 
 #[cfg(test)]
 mod frame_tests;
+#[cfg(test)]
+mod placement_tests;

@@ -891,7 +891,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
             },
             state,
         },
-        &mut placed::DispatchContext::new(None, Some(target)),
+        &mut crate::frame::DispatchContext::new(None, Some(target)),
     ));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
     assert_eq!(

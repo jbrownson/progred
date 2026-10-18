@@ -25,12 +25,12 @@ pub fn shortcut(
 /// History belongs to editing, independently of whether a menu is installed.
 pub(crate) fn history_handler(
     scale: f64,
-) -> puri::handler::Handler<crate::Editor, crate::placed::DispatchContext<crate::Editor>> {
+) -> puri::handler::Handler<crate::Editor, crate::frame::DispatchContext<crate::Editor>> {
     use puri::handler::{Event, EventOutcome, Handler};
     Handler::from_function(
         move |editor: &mut crate::Editor,
               event,
-              input: &mut crate::placed::DispatchContext<crate::Editor>| {
+              input: &mut crate::frame::DispatchContext<crate::Editor>| {
             let Event::Key(key) = &event else {
                 return EventOutcome::decline(event);
             };

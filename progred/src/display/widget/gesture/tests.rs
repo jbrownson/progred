@@ -1,7 +1,6 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, press, target};
-use crate::placed;
 use gid::{Cells, Document};
 use ui_events::pointer::{PointerButton, PointerType};
 
@@ -39,7 +38,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press(5.0, false),
-            &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target())),
+            &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target())),
         );
         assert_eq!(handled, covered || accepts);
         assert_eq!(world.gesture.is_some(), accepts && !covered);
@@ -119,7 +118,10 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &event,
-            &mut placed::DispatchContext::new(owns_view.then(crate::test_root), Some(target())),
+            &mut crate::frame::DispatchContext::new(
+                owns_view.then(crate::test_root),
+                Some(target()),
+            ),
         );
         assert_eq!(handled, expected);
         assert_eq!(world.gesture.is_some(), expected);
@@ -150,7 +152,10 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
                 .is_some_and(|handler| handler.dispatch_pointer_down_with(
                     &mut world,
                     &press(5.0, true),
-                    &mut placed::DispatchContext::new(Some(crate::test_root()), Some(target()))
+                    &mut crate::frame::DispatchContext::new(
+                        Some(crate::test_root()),
+                        Some(target())
+                    )
                 ))
         );
         assert!(world.gesture.is_none());

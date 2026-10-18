@@ -78,7 +78,10 @@ pub fn set_projections(projections: &str, names: bool) -> Result<(), wasm_bindge
 
 /// Tells an embedding page how tall the document view's content is, from the
 /// top of the editor, whenever that changes, so the page can fit its frame.
-pub(crate) fn report_content_height(regions: &[crate::placed::ViewRegion], scale: f64) {
+pub(crate) fn report_content_height(
+    regions: &[crate::display::widget::frame::ViewRegion],
+    scale: f64,
+) {
     thread_local! {
         static REPORTED: std::cell::Cell<Option<f64>> = const { std::cell::Cell::new(None) };
     }

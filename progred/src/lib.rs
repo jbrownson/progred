@@ -45,7 +45,6 @@ mod navigate;
 pub mod orbit_profile;
 #[cfg(test)]
 mod perf;
-mod placed;
 mod platform;
 mod projection;
 #[cfg(test)]

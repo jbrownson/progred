@@ -466,7 +466,7 @@ fn a_projection_defined_as_data_realizes() {
         puri::geometry::Placement::root(measured_rect(500.0)),
         &Default::default(),
     );
-    let mut pointer = crate::placed::DispatchContext::new(
+    let mut pointer = crate::frame::DispatchContext::new(
         None,
         Some(crate::frame::Hovered::Tree(Hover::Value(Rc::from([])))),
     );

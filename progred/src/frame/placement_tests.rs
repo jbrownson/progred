@@ -1,13 +1,17 @@
 use super::*;
+use crate::display::widget::container::floating;
+use crate::display::widget::placed::leaf;
+use crate::display::widget::view::{in_view, scrolled_at};
+use crate::display::widget::{HoverContext, HoverInput};
 use kurbo::{Affine, Point, Rect, Stroke};
-use measured::Extent;
+use measured::{Extent, Measured};
 use peniko::{Brush, Color, ImageData};
 use puri::draw::{Canvas, DrawCmd, DrawList, GlyphRun, Shape};
 use puri::handler::HasHandler;
 use ui_events::ScrollDelta;
 use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-    PointerUpdate,
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
+    PointerType, PointerUpdate,
 };
 use uig::Placement;
 

@@ -5,7 +5,6 @@ use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::identity::short_id;
 use crate::libraries::{f64, name, text};
-use crate::placed;
 use crate::projection::test_support::{Bench, editing_frame, settle};
 use crate::selection::pending_value;
 use crate::test_support::{EMPTY_SLOTS, positions, set_tutorial_slots};
@@ -16,13 +15,13 @@ use puri::hover::Claim;
 use ui_events::keyboard::NamedKey;
 
 fn stop<'a>(
-    frame: &'a placed::HoverOutput<crate::Editor>,
+    frame: &'a crate::frame::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Landmark<crate::Editor> {
     frame.landmarks.landmark(path).expect("tutorial slot")
 }
 
-fn top_slots(frame: &placed::HoverOutput<crate::Editor>) -> Vec<CellId> {
+fn top_slots(frame: &crate::frame::HoverOutput<crate::Editor>) -> Vec<CellId> {
     frame
         .landmarks
         .iter()

@@ -14,7 +14,7 @@ fn projection(world: &crate::Editor, rule: Partial) -> Projection<crate::Editor>
 }
 
 fn stop<'a>(
-    frame: &'a placed::HoverOutput<crate::Editor>,
+    frame: &'a crate::frame::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Landmark<crate::Editor> {
     frame
@@ -356,7 +356,7 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
                 ..Default::default()
             },
         },
-        &mut placed::DispatchContext::new(Some(root.clone()), Some(target)),
+        &mut crate::frame::DispatchContext::new(Some(root.clone()), Some(target)),
     ));
     assert!(!crate::annotations::collapsed(
         &world.model.workspace.view(&root).unwrap().annotations,

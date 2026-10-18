@@ -93,7 +93,7 @@ pub(crate) fn tab(
 pub(crate) fn initial_navigation(
     root: &Root,
     landmarks: &[Landmark<crate::Editor>],
-) -> Option<puri::handler::Handler<crate::Editor, crate::placed::DispatchContext<crate::Editor>>> {
+) -> Option<puri::handler::Handler<crate::Editor, crate::frame::DispatchContext<crate::Editor>>> {
     let target = root_target(landmarks, Some(root))?;
     let root = root.clone();
     let path = target.path.clone();

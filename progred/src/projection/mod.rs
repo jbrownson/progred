@@ -12,13 +12,13 @@ pub(crate) mod viewport;
 use crate::annotations::Annotations;
 #[cfg(test)]
 use crate::display::widget::navigation::Landmark;
+use crate::display::widget::placed::{before, decorate};
 use crate::display::widget::style::{
     highlight_outline, hover_highlight, primary_highlight, secondary_highlight,
 };
-use crate::frame::Hovered;
+use crate::frame::{Attribution, HoverPass, Hovered};
 use crate::hover::{Hover, Secondary, SourceTrace};
 use crate::location::{Location, Start};
-use crate::placed::{self, HoverPass, before, decorate};
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
 use crate::styles::Styles;
@@ -565,7 +565,7 @@ fn prepare_at(
 
 /// The resolved hover's tree identity, for ink that lights its own
 /// claim.
-fn tree_hovered(hover: &placed::Attribution) -> Option<&Hover> {
+fn tree_hovered(hover: &Attribution) -> Option<&Hover> {
     match hover.hovered.as_ref() {
         Some(Hovered::Tree(hover)) => Some(hover),
         _ => None,

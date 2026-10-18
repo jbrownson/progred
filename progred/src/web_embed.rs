@@ -56,7 +56,10 @@ pub(crate) fn peeled(
 /// The document view's content height in CSS pixels from the top of the
 /// editor. The first frame is built before winit has measured the canvas, in
 /// an empty window, so its layout says nothing and reports none.
-pub(crate) fn content_height(regions: &[crate::placed::ViewRegion], scale: f64) -> Option<f64> {
+pub(crate) fn content_height(
+    regions: &[crate::display::widget::frame::ViewRegion],
+    scale: f64,
+) -> Option<f64> {
     regions.iter().find_map(|region| {
         let content = region.content?;
         (matches!(region.root.target(), workspace::Target::Document) && region.rect.area() > 0.0)

@@ -3,6 +3,7 @@
 use crate::UserEvent;
 use crate::clipboard::Clipboard;
 use crate::command::{Command, DocCommand};
+use crate::display::widget::frame::Cursor;
 use crate::frame::FrameState;
 use crate::input::{PendingGesture, PendingPointer, PendingScroll, continuous_input};
 #[cfg(target_os = "macos")]
@@ -10,7 +11,6 @@ use crate::macos_window;
 use crate::model::Model;
 #[cfg(test)]
 use crate::modifiers;
-use crate::placed::Cursor;
 #[cfg(target_arch = "wasm32")]
 use crate::web_worker;
 #[cfg(any(target_os = "macos", target_os = "linux"))]

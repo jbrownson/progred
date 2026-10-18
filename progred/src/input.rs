@@ -1,7 +1,7 @@
-use crate::frame::frame_disposition;
+use crate::frame::{DispatchContext, frame_disposition};
 #[cfg(test)]
 use crate::selection;
-use crate::{Editor, EditorRunner, navigate, placed};
+use crate::{Editor, EditorRunner, navigate};
 use kurbo::{Point, Rect, Size};
 use puri::handler::{Event, Handler, ImeEvent, NavigationDirection};
 use std::borrow::Cow;
@@ -15,7 +15,7 @@ use winit::event::WindowEvent;
 pub(crate) struct PendingPaint {
     pub(crate) scale: f64,
     pub(crate) viewport: Size,
-    pub(crate) renders: Vec<placed::Render>,
+    pub(crate) renders: Vec<puri::frame::Render>,
 }
 
 pub(crate) type PendingScroll = PendingBatch<PointerScrollEvent>;
@@ -106,8 +106,8 @@ pub(super) fn window_pointer(position: Point, size: Size) -> Option<Point> {
 
 /// The editor's structural keys, beneath every placed handler. An arrow
 /// nothing claimed is lowered into navigation the whole frame sees.
-pub(crate) fn structural_keys(scale: f64) -> Handler<Editor, placed::DispatchContext<Editor>> {
-    let mut handler = Handler::<Editor, placed::DispatchContext<Editor>>::new();
+pub(crate) fn structural_keys(scale: f64) -> Handler<Editor, DispatchContext<Editor>> {
+    let mut handler = Handler::<Editor, DispatchContext<Editor>>::new();
     handler.on_key_with(move |editor, event, input| {
         let geometry = input.geometry(scale);
         editor.paste_key(event)
@@ -125,7 +125,7 @@ pub(crate) fn structural_keys(scale: f64) -> Handler<Editor, placed::DispatchCon
 fn navigate_frame(
     editor: &mut Editor,
     direction: NavigationDirection,
-    input: &mut placed::DispatchContext<Editor>,
+    input: &mut DispatchContext<Editor>,
     scale: f64,
 ) -> bool {
     let handled = input

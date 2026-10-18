@@ -34,7 +34,7 @@ pub(crate) fn editing_world(doc: &Document, libraries: &Libraries) -> EditingWor
 pub(crate) fn editing_frame(
     world: &mut EditingWorld,
     raw: bool,
-) -> crate::placed::HoverOutput<EditingWorld> {
+) -> crate::frame::HoverOutput<EditingWorld> {
     editing_frame_with_projection(world, raw, None)
 }
 
@@ -42,7 +42,7 @@ pub(crate) fn editing_frame_with_projection(
     world: &mut EditingWorld,
     raw: bool,
     projection: Option<&Projection<EditingWorld>>,
-) -> crate::placed::HoverOutput<EditingWorld> {
+) -> crate::frame::HoverOutput<EditingWorld> {
     editing_frame_at(world, raw, projection, None)
 }
 
@@ -51,7 +51,7 @@ pub(crate) fn editing_frame_at(
     raw: bool,
     projection: Option<&Projection<EditingWorld>>,
     pointer: Option<Point>,
-) -> crate::placed::HoverOutput<EditingWorld> {
+) -> crate::frame::HoverOutput<EditingWorld> {
     editing_frame_with_annotations(world, raw, projection, pointer, &Annotations::default())
 }
 
@@ -61,7 +61,7 @@ pub(crate) fn editing_frame_with_annotations(
     projection: Option<&Projection<EditingWorld>>,
     pointer: Option<Point>,
     annotations: &Annotations,
-) -> crate::placed::HoverOutput<EditingWorld> {
+) -> crate::frame::HoverOutput<EditingWorld> {
     let stack = &world.stack;
     let styles = crate::styles::editor(world.palette, 1.0);
     world
@@ -104,7 +104,7 @@ pub(crate) fn editing_frame_with_annotations(
             Rect::new(0.0, 0.0, 500.0, height),
             Rect::new(0.0, 0.0, 500.0, height.max(500.0)),
         ),
-        &placed::HoverInput {
+        &crate::display::widget::HoverInput {
             command_modifier: world.command_modifier,
             pointer,
             ..Default::default()
@@ -121,7 +121,7 @@ pub(crate) fn click_at(world: &mut EditingWorld, point: Point) -> Option<Hovered
         return None;
     };
     let mut input =
-        crate::placed::DispatchContext::new(Some(crate::test_root()), Some(target.clone()));
+        crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target.clone()));
     frame.resolve_for_dispatch().dispatch_pointer_down_with(
         world,
         &PointerButtonEvent {
@@ -203,7 +203,7 @@ pub(crate) struct FrameTimes {
 }
 
 pub(crate) struct Bench {
-    pub(crate) handler: puri::handler::Handler<World, crate::placed::DispatchContext<World>>,
+    pub(crate) handler: puri::handler::Handler<World, crate::frame::DispatchContext<World>>,
     pub(crate) list: DrawList,
     pub(crate) landmarks: Vec<Landmark<World>>,
     /// What the probe answered for the pass's pointer input.
@@ -213,7 +213,7 @@ pub(crate) struct Bench {
 }
 
 /// Paint and unpack the output of the completed hover pass.
-pub(crate) fn settle(mut placed: crate::placed::HoverOutput<World>) -> Bench {
+pub(crate) fn settle(mut placed: crate::frame::HoverOutput<World>) -> Bench {
     let binding = std::time::Instant::now();
     #[cfg(feature = "layout-profile")]
     let profile = crate::display::profile::enter(crate::display::profile::Kind::Hover);
@@ -236,7 +236,7 @@ pub(crate) fn settle(mut placed: crate::placed::HoverOutput<World>) -> Bench {
     };
     let selected_secondary =
         crate::display::widget::navigation::selected_secondary(&placed.landmarks);
-    let frame = placed.bind(crate::placed::Attribution {
+    let frame = placed.bind(crate::frame::Attribution {
         hovered,
         hovered_secondary,
         selected_secondary,

@@ -101,7 +101,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
     let captured = observed.clone();
     let child = crate::display::widget::leaf(
         measured::Extent::default(),
-        move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
+        move |output: &mut crate::display::widget::HoverContext<'_, Editor, Hovered>, _| {
             output.after_hover(move |hover, _| {
                 *captured.borrow_mut() =
                     Some((hover.hovered_trace.clone(), hover.hovered_secondary.clone()));
@@ -118,7 +118,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
     );
     let frame = hover_frame(
         &editor,
-        placed::in_view(layout, root.clone()),
+        crate::display::widget::view::in_view(layout, root.clone()),
         None,
         Some((Some(&root), hover.as_ref().unwrap())),
         true,
@@ -182,7 +182,7 @@ fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {
                         } else {
                             hover::Hover::Toggle(Rc::from([]))
                         });
-                        output.claim(placed::Probe::exact(placement, target));
+                        output.claim(Probe::exact(placement, target));
                         output.after_hover(move |_, effects| {
                             effects.handler().on({
                                 let log = log.clone();
@@ -1266,7 +1266,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
                     scale,
                 ),
                 Placement::root(Rect::from_origin_size(Point::new(30.0, 40.0), size)),
-                &placed::HoverInput {
+                &crate::display::widget::HoverInput {
                     pointer,
                     ..Default::default()
                 },
@@ -1437,17 +1437,17 @@ fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
     ] {
         let layout = crate::display::widget::leaf(
             measured::Extent::default(),
-            move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
-                output.claim(placed::Probe::retaining(
+            move |output: &mut crate::display::widget::HoverContext<'_, Editor, Hovered>, _| {
+                output.claim(Probe::retaining(
                     Placement::new(Rect::new(0.0, 0.0, 10.0, 10.0), viewport),
                     target(0),
                 ));
-                output.claim(placed::Probe::retaining(
+                output.claim(Probe::retaining(
                     Placement::new(Rect::new(14.0, 0.0, 24.0, 10.0), viewport),
                     target(1),
                 ));
                 if covered {
-                    output.claim(placed::Probe::occludes(Placement::new(
+                    output.claim(Probe::occludes(Placement::new(
                         Rect::new(0.0, 0.0, 40.0, 40.0),
                         viewport,
                     )));
@@ -1483,8 +1483,8 @@ fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
         let claimed = target.clone();
         let layout = crate::display::widget::leaf(
             measured::Extent::default(),
-            move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
-                output.claim(placed::Probe::exact(
+            move |output: &mut crate::display::widget::HoverContext<'_, Editor, Hovered>, _| {
+                output.claim(Probe::exact(
                     Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
                     claimed,
                 ));
@@ -1518,12 +1518,12 @@ fn a_hovered_target_shows_the_cursor_it_asked_for() {
         let claimed = target.clone();
         let layout = crate::display::widget::leaf(
             measured::Extent::default(),
-            move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
-                output.claim(placed::Probe::exact(
+            move |output: &mut crate::display::widget::HoverContext<'_, Editor, Hovered>, _| {
+                output.claim(Probe::exact(
                     Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
                     claimed.clone(),
                 ));
-                output.cursor(claimed, placed::Cursor::ColumnResize);
+                output.cursor(claimed, crate::display::widget::frame::Cursor::ColumnResize);
             },
         );
         let frame = hover_frame(
@@ -1610,11 +1610,11 @@ fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
     for pressed in [true, false] {
         let calls = Rc::new(std::cell::Cell::new(0));
         let counted = calls.clone();
-        let layout = placed::in_view(
+        let layout = crate::display::widget::view::in_view(
             crate::display::widget::leaf(
                 measured::Extent::default(),
-                move |output: &mut placed::HoverContext<'_, Editor, Hovered>, _| {
-                    output.claim(placed::Probe::dynamic(
+                move |output: &mut crate::display::widget::HoverContext<'_, Editor, Hovered>, _| {
+                    output.claim(Probe::dynamic(
                         Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
                         move |_| {
                             counted.set(counted.get() + 1);

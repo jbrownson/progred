@@ -548,7 +548,7 @@ fn every_input_receives_the_installed_dispatch_context() {
         let calls = Rc::new(std::cell::Cell::new(0));
         *runner.frame.dispatch.handler_mut() = puri::handler::Handler::from_function({
             let calls = calls.clone();
-            move |_, event, input: &mut crate::placed::DispatchContext<Editor>| {
+            move |_, event, input: &mut crate::frame::DispatchContext<Editor>| {
                 if matches!(event, Event::HoverChanged) {
                     return EventOutcome::decline(event);
                 }

@@ -59,7 +59,7 @@ impl Fixture {
                 .dispatch(
                     &mut self.world,
                     puri::handler::Event::Navigate(direction),
-                    &mut crate::placed::DispatchContext {
+                    &mut crate::frame::DispatchContext {
                         landmarks: frame.landmarks.clone().into(),
                         ..Default::default()
                     }

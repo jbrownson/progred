@@ -3,7 +3,6 @@ use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::libraries::{f32, f64, text, u64};
-use crate::placed;
 use crate::projection::test_support::*;
 use crate::selection::pending_value;
 use crate::test_values::numeric_calls;
@@ -100,7 +99,7 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 Hovered::Tree(Hover::Value(Rc::from(path.clone())))
             );
             let mut dispatch =
-                placed::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
+                crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
             frame.resolve_for_dispatch().dispatch_pointer_down_with(
                 &mut world,
                 &PointerButtonEvent {

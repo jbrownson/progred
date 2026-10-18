@@ -869,7 +869,7 @@ fn list_navigation_follows_the_selected_layout_alternative() {
         let (bench, _) = place(&doc, Some(&selection), width);
         let mut world = crate::test_editor(doc.clone());
         world.model.selection = Some(selection);
-        let mut input = crate::placed::DispatchContext {
+        let mut input = crate::frame::DispatchContext {
             landmarks: bench.landmarks.clone().into(),
             ..Default::default()
         };
@@ -1156,7 +1156,8 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                 })
                 .expect("the plain separator gets its insertion target from the list combinator");
             let before = world.model.doc.clone();
-            let mut input = placed::DispatchContext::new(Some(crate::test_root()), Some(target));
+            let mut input =
+                crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
             assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
                 &mut world,
                 &PointerButtonEvent {
@@ -1227,16 +1228,17 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         }));
     let project =
         |world: &mut crate::Editor| editing_frame_with_projection(world, false, Some(&projection));
-    let between = |frame: &placed::HoverOutput<crate::Editor>, left: &[Step], right: &[Step]| {
-        let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
-        let (left, right) = (rect(left), rect(right));
-        Point::new((left.x1 + right.x0) / 2.0, left.center().y)
-    };
+    let between =
+        |frame: &crate::frame::HoverOutput<crate::Editor>, left: &[Step], right: &[Step]| {
+            let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
+            let (left, right) = (rect(left), rect(right));
+            Point::new((left.x1 + right.x0) / 2.0, left.center().y)
+        };
     let click = |world: &mut crate::Editor,
-                 frame: placed::HoverOutput<crate::Editor>,
+                 frame: crate::frame::HoverOutput<crate::Editor>,
                  point: Point,
                  target: &[Step]| {
-        let mut input = placed::DispatchContext::new(
+        let mut input = crate::frame::DispatchContext::new(
             Some(crate::test_root()),
             Some(Hovered::Tree(Hover::Value(Rc::from(target)))),
         );
@@ -1346,7 +1348,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         assert!(matches!(frame.hover_geometry.probe(Some(point), None, 0.0),
             Some((_, Claim::Direct(ref hover))) if *hover == target));
         let before = world.model.doc.clone();
-        let mut input = placed::DispatchContext::new(Some(crate::test_root()), Some(target));
+        let mut input = crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
         assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &PointerButtonEvent {

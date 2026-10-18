@@ -1161,7 +1161,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         cells: Cells::new(),
     });
     let root = editor.model.workspace.document_root().clone();
-    let mut input = crate::placed::DispatchContext::new(
+    let mut input = crate::frame::DispatchContext::new(
         None,
         Some(crate::frame::Hovered::Tree(Hover::Source(
             sources[0].clone(),

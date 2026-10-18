@@ -6,7 +6,6 @@ use crate::hover::Hover;
 use crate::libraries::presentation::vocabulary::{OUTLINE, RESULT};
 use crate::libraries::{f64, name};
 use crate::location::Location;
-use crate::placed;
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_value};
 use crate::test_support::make_selection;
@@ -42,13 +41,13 @@ fn document() -> (Document, CellId, CellId, CellId) {
     )
 }
 
-fn frame(world: &mut crate::Editor) -> placed::HoverOutput<crate::Editor> {
+fn frame(world: &mut crate::Editor) -> crate::frame::HoverOutput<crate::Editor> {
     let annotations = world.model.workspace.document.annotations.clone();
     editing_frame_with_annotations(world, false, None, None, &annotations)
 }
 
 fn stop<'a>(
-    frame: &'a placed::HoverOutput<crate::Editor>,
+    frame: &'a crate::frame::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Landmark<crate::Editor> {
     frame.landmarks.landmark(path).expect("outline occurrence")
@@ -103,7 +102,7 @@ fn click_heading(world: &mut crate::Editor, path: &[Step], modifiers: Modifiers)
 
 fn click_frame(
     world: &mut crate::Editor,
-    frame: placed::HoverOutput<crate::Editor>,
+    frame: crate::frame::HoverOutput<crate::Editor>,
     point: Point,
     path: &[Step],
     modifiers: Modifiers,
@@ -111,7 +110,7 @@ fn click_frame(
     let target = Hovered::Tree(Hover::Value(Rc::from(path)));
     assert!(matches!(frame.hover_geometry.probe(Some(point), None, 0.0),
         Some((_, Claim::Direct(ref found))) if *found == target));
-    let mut input = placed::DispatchContext::new(Some(crate::test_root()), Some(target));
+    let mut input = crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
     assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
         world,
         &PointerButtonEvent {

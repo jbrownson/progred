@@ -4,7 +4,7 @@ use gid::{Step, Value};
 
 #[test]
 fn content_height_waits_for_a_measured_window() {
-    let region = |rect| crate::placed::ViewRegion {
+    let region = |rect| crate::display::widget::frame::ViewRegion {
         root: workspace::Root::document(),
         rect,
         maximum: kurbo::Vec2::ZERO,

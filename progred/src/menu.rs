@@ -320,8 +320,8 @@ mod view {
     use super::{Entry, Hover, State, definition, drawn_label};
     use crate::Editor;
     use crate::command::{Availability, Command, Toggles, spec};
-    use crate::frame::Hovered;
-    use crate::placed::{self, HoverPass};
+    use crate::display::widget::placed;
+    use crate::frame::{DispatchContext, HoverPass, Hovered};
     use kurbo::{Affine, BezPath, Insets, Rect, Stroke};
     use measured::{self, Extent, Measured};
     use peniko::Brush;
@@ -348,7 +348,7 @@ mod view {
 
     pub struct View<P> {
         pub bar: Measured<P>,
-        pub keyboard: puri::handler::Handler<Editor, placed::DispatchContext<Editor>>,
+        pub keyboard: puri::handler::Handler<Editor, DispatchContext<Editor>>,
         pub heading_width: f64,
         pub popup: Option<(f64, Measured<P>)>,
     }
@@ -381,7 +381,7 @@ mod view {
         hover: Hover,
         content: Measured<HoverPass<Editor>>,
         point: impl Fn(&mut State) + 'static,
-        press: impl Fn(&mut Editor, &placed::DispatchContext<Editor>) -> bool + 'static,
+        press: impl Fn(&mut Editor, &DispatchContext<Editor>) -> bool + 'static,
     ) -> Measured<HoverPass<Editor>> {
         placed::before(content, move |p, placement| {
             let target = Hovered::Menu(hover);
@@ -417,7 +417,7 @@ mod view {
         active: bool,
         scale: f64,
     ) -> Measured<HoverPass<Editor>> {
-        let text = crate::placed::text(tcx, label, style);
+        let text = placed::text(tcx, label, style);
         let vertical = ((bar_height(scale) - text.extent.height()) / 2.0).max(0.0);
         let content = measured::pad(
             Insets::new(10.0 * scale, vertical, 10.0 * scale, vertical),
@@ -510,8 +510,8 @@ mod view {
                 .map(|(_, name)| name.as_str()),
             _ => None,
         };
-        let label = crate::placed::text(tcx, name.unwrap_or(spec.label), style);
-        let shortcut = crate::placed::text(
+        let label = placed::text(tcx, name.unwrap_or(spec.label), style);
+        let shortcut = placed::text(
             tcx,
             &spec
                 .shortcut
@@ -689,7 +689,7 @@ mod view {
         let heading_width = x;
         // How finished Progred is, at the bar's far end: a note, not a menu.
         let stage = {
-            let text = crate::placed::text(tcx, &crate::editor::stage(), &styles.dim);
+            let text = placed::text(tcx, &crate::editor::stage(), &styles.dim);
             let vertical = ((bar_height(description.scale) - text.extent.height()) / 2.0).max(0.0);
             let horizontal = 10.0 * description.scale;
             measured::pad(
@@ -726,7 +726,7 @@ mod view {
         );
         let scale = description.scale;
         let keyboard = puri::handler::Handler::from_function(
-            move |editor: &mut Editor, event, input: &mut placed::DispatchContext<Editor>| {
+            move |editor: &mut Editor, event, input: &mut DispatchContext<Editor>| {
                 let handled = match &event {
                     Event::Key(key) => editor.menu_key(key, input.geometry(scale)),
                     Event::PointerDown(_) | Event::Scroll(_) | Event::Gesture(_) => {
