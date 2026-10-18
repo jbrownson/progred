@@ -2,6 +2,7 @@
 //! spellings. All 128 bits are identity; there are no UUID version or
 //! variant bits.
 
+use crate::value::{hex_string, read_hex};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::str::FromStr;
@@ -32,10 +33,7 @@ impl CellId {
 
 impl fmt::Display for CellId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0 {
-            write!(f, "{byte:02x}")?;
-        }
-        Ok(())
+        f.write_str(&hex_string(&self.0))
     }
 }
 
@@ -57,28 +55,10 @@ impl FromStr for CellId {
     type Err = ParseCellIdError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let bytes = input.as_bytes();
-        if bytes.len() == 32 {
-            let mut digits = bytes.iter().copied();
-            let mut id = [0_u8; 16];
-            for out in &mut id {
-                let high = digits.next().ok_or(ParseCellIdError)?;
-                let low = digits.next().ok_or(ParseCellIdError)?;
-                *out = hex_digit(high)? << 4 | hex_digit(low)?;
-            }
-            Ok(Self(id))
-        } else {
-            Err(ParseCellIdError)
-        }
-    }
-}
-
-fn hex_digit(byte: u8) -> Result<u8, ParseCellIdError> {
-    match byte {
-        b'0'..=b'9' => Ok(byte - b'0'),
-        b'a'..=b'f' => Ok(byte - b'a' + 10),
-        b'A'..=b'F' => Ok(byte - b'A' + 10),
-        _ => Err(ParseCellIdError),
+        read_hex(input)
+            .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
+            .map(Self)
+            .ok_or(ParseCellIdError)
     }
 }
 

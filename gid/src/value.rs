@@ -379,21 +379,10 @@ pub fn read_hex(hex: &str) -> Option<Vec<u8>> {
 /// Strict reads: lowercase pairs only, so every blob has exactly one
 /// spelled form.
 fn hex_bytes(s: &str) -> Result<Vec<u8>, String> {
-    let digit = |c: u8| match c {
-        b'0'..=b'9' => Ok(c - b'0'),
-        b'a'..=b'f' => Ok(c - b'a' + 10),
-        _ => Err(format!(
-            "blob hex must be lowercase hex, got {:?}",
-            c as char
-        )),
-    };
-    if !s.len().is_multiple_of(2) {
-        return Err("blob hex must have even length".to_string());
+    match s.chars().find(|c| !matches!(c, '0'..='9' | 'a'..='f')) {
+        Some(c) => Err(format!("blob hex must be lowercase hex, got {c:?}")),
+        None => read_hex(s).ok_or_else(|| "blob hex must have even length".to_string()),
     }
-    s.as_bytes()
-        .chunks(2)
-        .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?))
-        .collect()
 }
 
 impl fmt::Display for Value {
