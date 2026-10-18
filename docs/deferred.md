@@ -423,7 +423,8 @@ first:
    The crate split analysis's first four steps start on this, and each pays
    off on its own:
    - ~~alias the concrete `<Editor, Hovered>` pair, written out 332 times;~~
-     done on 17 October 2026, as `crate::view`'s aliases;
+     done on 17 October 2026, as aliases the projection runtime keeps for
+     the editor, and frame.rs for its hover;
    - ~~let the model own the vocabularies and codecs it interprets, as grap
      owns f64's convention;~~ done on 17 October 2026;
    - ~~back `editing::Access` with the model and the libraries rather than
@@ -536,25 +537,28 @@ first:
    - top: the projection runtime, the shell and the app. The shell and the app
      stay together, since the editor is specific to its platforms.
 
-   Do this only after item 3 and a `cargo build --timings` baseline. The
-   `Host` trait that makes display and the libraries generic over the editor
-   came on 18 October 2026, and since that day nothing in core or the
+   The `Host` trait that makes display and the libraries generic over the
+   editor came on 18 October 2026, and since that day nothing in core or the
    libraries refers to what would sit above it, outside tests. Raw draws and
    offers by GID's kinds alone: it asks the libraries what typed text reads
    as (text, numbers, a new label) and reads blobs in GID's own hex spelling.
    The name library reads and makes names, and the toolkit asks its
    `Toolkit` for a cell's name rather than decoding one. Navigation's
    geometry is display's, leaving only the keys in the shell's `navigate`.
-   The CAM profile loads its document at the top. What's left is mechanical:
-   - the tests that drive the whole editor, frames and driver flows alike,
-     sit beside the display and library code they exercise, and would move to
-     the top crate's tests;
-   - what crosses a crate boundary needs `pub` rather than `pub(crate)`;
-   - the libraries, generic over their host, would be instantiated in the top
-     crate, which the timings baseline should price.
+   The CAM profile loads its document at the top.
 
-   The saving is in lines, not measured time, and `make test` could get
-   slower for edits to core.
+   The tests are what's left, and they are why the split waits. On 18 October
+   2026, 27k of the 33k lines of core and library tests named something that
+   would sit above them: the editor as their host, its library stack, the
+   projection runtime, frames or the driver. A crate's unit tests can't reach
+   a crate that depends on it, so the split would either move those tests
+   into the top crate, away from the code they check, against item 4's aim,
+   or wait until they're targeted, testing through display's own hosts as
+   item 4's step 6 starts to. Do it then, after a `cargo build --timings`
+   baseline: items crossing a crate boundary would need `pub` rather than
+   `pub(crate)`, and the libraries, generic over their host, would be
+   instantiated in the top crate. The saving is in lines, not measured time,
+   and `make test` could get slower for edits to core.
 
 ## Reporting completion failures
 
