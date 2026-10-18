@@ -91,7 +91,9 @@ None of this is planned, but the fidget library should stay separable:
   library's scene, raster, mesh and viewport code, so the two would leave
   together unless that 3D preview code becomes the editor's.
 - Library handlers reach the editor only through the session, and background
-  jobs own their inputs.
+  jobs own their inputs. Since 18 October 2026 the libraries are generic over
+  the editor, which holds them to it; a plugin's FFIs would cross as data, so
+  no generic crosses a plugin's boundary.
 - FFIs evaluate their named arguments and return data. Toolpath's path
   commands, which apply Grap functions to each point and emit effects, would
   need the host to record commands as data, or calls back into the evaluator.
@@ -374,10 +376,8 @@ first:
    targets act through the session too, which a first `Host` lends; the
    session holds the drag, so starting one, folding and picking need no
    editor; and widgets act on their place through an opaque `Site` instead of
-   carrying its view, path and scope. Landmark arrival still takes the
-   world: the frame that runs it, keyboard navigation included, is generic
-   over its world until display goes generic over `Host` (step 8). The
-   input's targets still hand out closures rather than sites. The seventh is
+   carrying its view, path and scope; since 18 October 2026 a projection's
+   input lends its occurrence's site too, rather than closures. The seventh is
    done too: computations are always supplied; a library's widget reads its
    view through `Viewing` (the scale, writability, a Grap host, the
    computations, and the state and selection below it), keeps memoized work
@@ -393,13 +393,16 @@ first:
    toolkit's. The picker note's fifth, typed picker state, is dropped: the
    owner decided on 17 October 2026 that the picker's choice and scroll stay
    in the selection's payload, since nothing should hard-code the picker,
-   which a Grap library should be able to recreate. The recorded leaf going
-   generic waits on the session note's `Host::Hover`. A site's edit says whether it's selected and what's typed
-   there, as the session note's `Edit::selected` does, so number's operator
-   keys read the selection through it. One handler still reaches past what
-   a widget is lent: the picker's Tab moves on through the editor's
-   navigation once it has committed, since landmark arrival takes the world
-   until step 8.
+   which a Grap library should be able to recreate. A site's edit says
+   whether it's selected and what's typed there, as the session note's
+   `Edit::selected` does, so number's operator keys read the selection
+   through it. The eighth is done since 18 October 2026: `Host` names what its
+   world's pointer rests on, and display and the libraries are generic over
+   it, the recorded leaf included, so none of them names the editor or the
+   shell's `Hovered`. What handlers reached past the session for now goes
+   through it: landmark arrival, the picker's Tab and the source links reveal
+   through the model, Enter's authoring is a session function, and the
+   source links read the pointer and modifiers from the dispatch context.
 
    The crate split analysis's first four steps start on this, and each pays
    off on its own:
@@ -516,8 +519,13 @@ first:
    - top: the projection runtime, the shell and the app. The shell and the app
      stay together, since the editor is specific to its platforms.
 
-   Do this only after item 3, a `cargo build --timings` baseline, and a `Host`
-   trait that makes display and the libraries generic over the editor. The
+   Do this only after item 3 and a `cargo build --timings` baseline. The
+   `Host` trait that makes display and the libraries generic over the editor
+   came on 18 October 2026. What still ties core to what would sit above it:
+   Raw's offers read the blob, name and text libraries' codecs, a library
+   names itself through the name library, and the toolkit's navigation
+   geometry and Tab live in the shell's `navigate`, besides item 3's hover
+   types and completion helpers. The
    saving is in lines, not measured time, and `make test` could get slower for
    edits to core. The tests that drive the whole editor, frames and driver
    flows alike, sit beside the display and library code they exercise; the

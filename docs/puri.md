@@ -340,8 +340,9 @@ Widgets test their own geometry; Puri does not infer acceptance from state chang
 
 Progred activation, picking, and raw pointer-down handlers use that same
 front-to-back chain, not separate dispatch phases. The dispatch context
-supplies the settled hover target, its owning view, and reveal geometry
-explicitly for every event, including motion, scroll, release, and IME. View
+supplies the settled hover target, its owning view, reveal geometry, and the
+pointer, modifiers and button state as the event finds them, explicitly for
+every event, including motion, scroll, release, and IME. View
 wrappers hide another view's hover without blocking input needed by active
 gestures. Event acceptance controls
 propagation; it does not tell the shell to infer a domain action or gesture.
@@ -511,7 +512,7 @@ The drawing widget handles hover changes by explicitly revealing the winning
 source in the navigation geometry. Its ordinary `ModifiersChanged` handler
 does the same when Cmd is pressed over a stationary pointer. Both require the
 link modifier, the owning view, and a pointer inside the drawing's clipped
-placement. The frame runner contains no canvas-specific reveal operation.
+placement, as the dispatch context reports them. The frame runner contains no canvas-specific reveal operation.
 
 ### Input batching and gestures
 
