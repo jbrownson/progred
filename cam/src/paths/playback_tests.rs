@@ -1,5 +1,10 @@
 use super::*;
 
+/// An emitter that draws nothing.
+fn ignore(_: Point3, _: Point3, _: Axis, _: Option<&Tool>, _: bool) -> Result<(), InvalidPath> {
+    Ok(())
+}
+
 #[test]
 fn absolute_leaf_position_survives_refocusing_and_handles_disconnected_boundaries() {
     let mut program = Recording::default();
@@ -50,15 +55,19 @@ fn focusing_uses_selected_distance_and_keeps_the_completed_prefix() {
         let mut complete = 0.0;
         let mut upcoming = 0.0;
         let pose = program
-            .playback_parts::<InvalidPath>(progress, Some(1..2), |a, b, _, _, done| {
-                assert!(b[0] <= 14.0, "later groups are not visited");
-                if done {
-                    complete += distance(a, b);
-                } else {
-                    upcoming += distance(a, b);
-                }
-                Ok(())
-            })
+            .playback_cursor::<InvalidPath>(
+                Cursor::Progress(progress),
+                Some(1..2),
+                |a, b, _, _, done| {
+                    assert!(b[0] <= 14.0, "later groups are not visited");
+                    if done {
+                        complete += distance(a, b);
+                    } else {
+                        upcoming += distance(a, b);
+                    }
+                    Ok(())
+                },
+            )
             .unwrap()
             .unwrap()
             .0;
@@ -68,12 +77,12 @@ fn focusing_uses_selected_distance_and_keeps_the_completed_prefix() {
     }
     assert!(
         program
-            .playback_parts::<InvalidPath>(0.0, Some(3..4), |_, _, _, _, _| Ok(()))
+            .playback_cursor(Cursor::Progress(0.0), Some(3..4), ignore)
             .is_err()
     );
     assert_eq!(
         program
-            .playback_parts::<InvalidPath>(0.0, Some(1..1), |_, _, _, _, _| Ok(()))
+            .playback_cursor(Cursor::Progress(0.0), Some(1..1), ignore)
             .unwrap(),
         None
     );
@@ -86,11 +95,14 @@ fn seeking_is_by_distance_and_never_draws_across_path_breaks() {
     path.line_to([1.0, 0.0, 0.0]).unwrap();
     path.start_at([10.0, 0.0, 0.0], Axis::Z).unwrap();
     path.line_to([13.0, 0.0, 0.0]).unwrap();
-    assert_eq!(path.length().unwrap(), 4.0);
+    assert_eq!(
+        path.segments().map(|(a, b, _)| distance(a, b)).sum::<f64>(),
+        4.0
+    );
     for (progress, expected) in [(0.0, 0.0), (0.25, 1.0), (0.5, 11.0), (1.0, 13.0)] {
         let mut completed = 0.0;
         let position = path
-            .playback::<InvalidPath>(progress, |a, b, _, _, done| {
+            .playback_cursor::<InvalidPath>(Cursor::Progress(progress), None, |a, b, _, _, done| {
                 assert!(distance(a, b) <= 3.0);
                 if done {
                     completed += distance(a, b);
@@ -127,14 +139,14 @@ fn playback_preserves_consumer_errors_and_stops_emitting() {
     path.line_to([1.0; 3]).unwrap();
     path.line_to([2.0; 3]).unwrap();
     let mut calls = 0;
-    let result = path.playback(1.0, |_, _, _, _, _| {
+    let result = path.playback_cursor(Cursor::Progress(1.0), None, |_, _, _, _, _| {
         calls += 1;
         Err(Error::Consumer)
     });
     assert_eq!(result, Err(Error::Consumer));
     assert_eq!(calls, 1);
     assert_eq!(
-        path.playback::<Error>(f64::NAN, |_, _, _, _, _| panic!(
+        path.playback_cursor::<Error>(Cursor::Progress(f64::NAN), None, |_, _, _, _, _| panic!(
             "invalid progress must not emit"
         )),
         Err(Error::Path(InvalidPath::NonFinitePoint)),
@@ -145,14 +157,14 @@ fn playback_preserves_consumer_errors_and_stops_emitting() {
 fn empty_zero_length_and_overflow_are_explicit() {
     let mut path = Recording::default();
     assert_eq!(
-        path.playback::<InvalidPath>(0.5, |_, _, _, _, _| Ok(()))
+        path.playback_cursor(Cursor::Progress(0.5), None, ignore)
             .unwrap(),
         None
     );
     path.start_at([2.0; 3], Axis::Z).unwrap();
     path.line_to([2.0; 3]).unwrap();
     assert_eq!(
-        path.playback::<InvalidPath>(0.5, |_, _, _, _, _| Ok(()))
+        path.playback_cursor(Cursor::Progress(0.5), None, ignore)
             .unwrap(),
         Some((
             Pose {
@@ -164,5 +176,8 @@ fn empty_zero_length_and_overflow_are_explicit() {
     );
     path.start_at([-f64::MAX; 3], Axis::Z).unwrap();
     path.line_to([f64::MAX; 3]).unwrap();
-    assert!(path.length().is_err());
+    assert_eq!(
+        path.playback_cursor(Cursor::Progress(0.5), None, ignore),
+        Err(InvalidPath::CoordinateRange)
+    );
 }

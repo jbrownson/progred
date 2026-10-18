@@ -229,38 +229,11 @@ impl Recording {
             })
     }
 
-    /// Cutting distance only: starts carry no implicit rapid or linking motion.
-    #[cfg(test)]
-    pub fn length(&self) -> Result<f64, InvalidPath> {
-        let length = self.segments().map(|(a, b, _)| distance(a, b)).sum::<f64>();
-        length
-            .is_finite()
-            .then_some(length)
-            .ok_or(InvalidPath::CoordinateRange)
-    }
-
-    /// Emit complete and upcoming segments, splitting the segment at the cursor.
-    #[cfg(test)]
-    pub fn playback<E: From<InvalidPath>>(
-        &self,
-        progress: f64,
-        emit: impl FnMut(Point3, Point3, Axis, Option<&Tool>, bool) -> Result<(), E>,
-    ) -> Result<Option<(Pose, Option<&Tool>)>, E> {
-        self.playback_parts(progress, None, emit)
-    }
-
-    /// Earlier parts are complete, selected parts follow the cursor, and later
-    /// parts aren't visited. Thus focusing doesn't reset the workpiece history.
-    #[cfg(test)]
-    pub fn playback_parts<E: From<InvalidPath>>(
-        &self,
-        progress: f64,
-        parts: Option<std::ops::Range<usize>>,
-        emit: impl FnMut(Point3, Point3, Axis, Option<&Tool>, bool) -> Result<(), E>,
-    ) -> Result<Option<(Pose, Option<&Tool>)>, E> {
-        self.playback_cursor(Cursor::Progress(progress), parts, emit)
-    }
-
+    /// Emit complete and upcoming segments, splitting the segment at the
+    /// cursor. The cursor measures cutting distance only: starts carry no
+    /// rapid or linking move. Earlier parts are complete, selected parts
+    /// follow the cursor, and later parts aren't visited, so focusing doesn't
+    /// reset the workpiece history.
     pub fn playback_cursor<E: From<InvalidPath>>(
         &self,
         cursor: Cursor,
@@ -351,7 +324,8 @@ impl Recording {
     }
 }
 
-fn distance(a: Point3, b: Point3) -> f64 {
+/// The straight distance between two points, as playback measures it.
+pub fn distance(a: Point3, b: Point3) -> f64 {
     (b[0] - a[0]).hypot(b[1] - a[1]).hypot(b[2] - a[2])
 }
 
