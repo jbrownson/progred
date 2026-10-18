@@ -1,12 +1,64 @@
-//! Raw's offers: the editor's constructors, and what's typed read as a value.
-//! Raw's holes list them, and a projection can offer them among its own, as
-//! Grap's slots do.
+//! Raw: GID's own kinds drawn as they are, and Raw's offers, the editor's
+//! constructors and what's typed read as a value. Raw's holes list the
+//! offers, and a projection can offer them among its own, as Grap's slots do.
 
+use crate::display::host::{Layout, ProjectionInput};
 use crate::display::widget::offers::{Entry, HoleOffers, entry, fitting, rank};
 use crate::display::widget::picker::Picker;
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face, Host};
 use gid::{Value, new_cell_id};
 use std::rc::Rc;
+
+/// Raw's view of the value at `input`, GID's own kinds and nothing else: a
+/// blob reads as its hex, a cell as its definition followed between
+/// parentheses, and lists and records as their structure.
+pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    let value = input.value?;
+    Some(match value.shape() {
+        ::grap::Shape::Blob(bytes) => crate::display::selectable_value(
+            crate::display::id(blob_text(bytes)),
+            &input.site(),
+            value,
+        ),
+        ::grap::Shape::Cell(cell) => cell_view(input, cell),
+        ::grap::Shape::List(positions) => {
+            crate::display::structure::list_layout_at(input, positions, None)
+        }
+        ::grap::Shape::Record(keys) => {
+            crate::display::structure::record_layout_at(input, keys, |_| None)
+        }
+    })
+}
+
+/// A blob's hex, its first eight bytes and its length when it's long.
+fn blob_text(bytes: &[u8]) -> String {
+    if bytes.len() <= 16 {
+        format!("0x{}", gid::hex_string(bytes))
+    } else {
+        format!(
+            "0x{}… ({} bytes)",
+            gid::hex_string(&bytes[..8]),
+            bytes.len()
+        )
+    }
+}
+
+/// A cell as its definition, followed where it resolves, between parentheses.
+fn cell_view<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    cell: gid::CellId,
+) -> Layout<W> {
+    let resolution = input
+        .env
+        .resolve(cell)
+        .map_or(gid::Resolution::Document, |cell| cell.resolution);
+    crate::display::structure::authoring(crate::display::projection::group(
+        crate::display::selectable_bracket(
+            crate::display::Delim::Paren,
+            crate::display::descend(gid::Step::Follow(resolution), None, None),
+        ),
+    ))
+}
 
 /// Raw's picker for a hole of `kind`, its brackets making its constructors.
 pub fn picker<W: Host>(kind: CompletionKind) -> Picker<W> {

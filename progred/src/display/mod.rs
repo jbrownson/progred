@@ -539,6 +539,20 @@ pub(crate) fn activatable<W: Host>(
     on_hover(on_activate(child, target.clone(), select), target)
 }
 
+/// `child` drawn for the whole `value` at `site`: a navigation stop that a
+/// click selects and a Cmd+click picks.
+pub(crate) fn selectable_value<W: Host>(
+    child: host::Layout<W>,
+    site: &crate::editing::Site,
+    value: &grap::RuntimeValue,
+) -> host::Layout<W> {
+    let child = projection::target(child);
+    activatable(
+        pickable_runtime(child, W::Hover::from(site.hover()), value.clone()),
+        site,
+    )
+}
+
 pub use widget::gesture::{drag_outlined, on_point, on_state_drag};
 
 pub fn row<World: 'static, Hover: 'static>(

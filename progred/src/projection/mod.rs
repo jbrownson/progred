@@ -2,7 +2,7 @@
 //! retain source provenance, and fall back to total structural display.
 
 mod child;
-mod structure;
+mod fold;
 #[cfg(test)]
 pub(crate) mod test_support;
 #[cfg(test)]
@@ -1104,7 +1104,7 @@ fn value_layout(
     if let Some(value) = value
         && let Some(default) = fold_default
         && crate::annotations::collapsed(cx.annotations, path, default)
-        && let Some(collapsed) = structure::collapsed_layout(cx, path, value, default)
+        && let Some(collapsed) = fold::collapsed_layout(cx, path, value, default)
     {
         return Some(collapsed);
     }
@@ -1135,7 +1135,7 @@ fn value_layout(
         Some(current) => current(&input),
         None => projection.apply(&input),
     }
-    .or_else(|| value.map(|value| structure::of(cx, path, value, &input)))
+    .or_else(|| crate::display::raw::view(&input))
 }
 
 /// Every projected value's Pick backstop: pick the value into an open

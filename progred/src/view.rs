@@ -6,5 +6,6 @@
 use crate::Editor;
 
 pub type Layout = crate::display::host::Layout<Editor>;
+#[cfg(test)]
 pub type ProjectionInput<'a, V = gid::Value> = crate::display::host::ProjectionInput<'a, Editor, V>;
 pub type Partial = crate::display::host::Partial<Editor>;
