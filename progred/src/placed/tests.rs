@@ -746,7 +746,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     let output = pass.finish();
     let (root, claim) = output.claim.clone().unwrap();
     let output = output.bind(Default::default());
-    let [landmark] = output.descends.as_slice() else {
+    let [landmark] = output.landmarks.as_slice() else {
         panic!("native popup must contribute exactly one landmark");
     };
     assert_eq!(landmark.root, Some(owner.clone()));
@@ -851,7 +851,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
             _ => panic!("hit"),
         };
         let mut pointer = DispatchContext::new(None, Some(hovered));
-        pointer.descends = std::rc::Rc::from([crate::navigate::Descend {
+        pointer.landmarks = std::rc::Rc::from([crate::display::widget::navigation::Landmark {
             root: Some(editor.model.workspace.document_root().clone()),
             scope: Default::default(),
             path: std::rc::Rc::from([]),

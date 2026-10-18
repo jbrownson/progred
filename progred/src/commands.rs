@@ -17,7 +17,7 @@ impl Editor {
         path: gid::Path,
     ) {
         if let Some(target) = geometry
-            .descends
+            .landmarks
             .iter()
             .find(|target| target.root.as_ref() == Some(root) && target.path.as_ref() == path)
         {
@@ -322,7 +322,7 @@ impl Editor {
         let back = match stage {
             selection::Stage::Label => current.path().to_vec(),
             _ => navigate::selection_after_removing(
-                geometry.descends,
+                geometry.landmarks,
                 Some(&root),
                 current.path(),
                 forward,

@@ -13,7 +13,7 @@ use kurbo::{Rect, Vec2};
 
 /// Borrowed geometry from the installed frame, used by explicit navigation actions.
 pub(crate) struct Geometry<'a, W> {
-    pub descends: &'a [Landmark<W>],
+    pub landmarks: &'a [Landmark<W>],
     pub view_regions: &'a [ViewRegion],
     pub scale: f64,
 }
@@ -29,7 +29,7 @@ impl<W> Copy for Geometry<'_, W> {}
 impl<W> Default for Geometry<'_, W> {
     fn default() -> Self {
         Self {
-            descends: &[],
+            landmarks: &[],
             view_regions: &[],
             scale: 1.0,
         }
@@ -40,7 +40,7 @@ impl<W> Geometry<'_, W> {
     /// Missing paths do nothing; new geometry does not retry the request.
     pub fn reveal_path(self, model: &mut Model, root: &Root, path: &[Step]) {
         if let Some(target) = self
-            .descends
+            .landmarks
             .iter()
             .find(|target| target.root.as_ref() == Some(root) && target.path.as_ref() == path)
         {
@@ -138,15 +138,15 @@ pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: b
             .clone();
         let anchor = selection.and_then(|selection| {
             geometry
-                .descends
+                .landmarks
                 .iter()
-                .find(|descend| {
-                    descend.root.as_ref() == Some(&root)
-                        && descend.path.as_ref() == selection.path()
+                .find(|landmark| {
+                    landmark.root.as_ref() == Some(&root)
+                        && landmark.path.as_ref() == selection.path()
                 })
-                .map(|descend| descend.rect)
+                .map(|landmark| landmark.rect)
         });
-        let stops = tab_stops(geometry.descends, &root);
+        let stops = tab_stops(geometry.landmarks, &root);
         match (anchor, back) {
             (None, false) => stops.first(),
             (None, true) => stops.last(),
@@ -161,10 +161,10 @@ pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: b
 /// The view's tab stops, the places to fill in that its widgets marked, in
 /// reading order: line by line, where a line is what overlaps vertically,
 /// then left to right.
-fn tab_stops<'a, W>(descends: &'a [Landmark<W>], root: &Root) -> Vec<&'a Landmark<W>> {
-    let mut stops: Vec<_> = descends
+fn tab_stops<'a, W>(landmarks: &'a [Landmark<W>], root: &Root) -> Vec<&'a Landmark<W>> {
+    let mut stops: Vec<_> = landmarks
         .iter()
-        .filter(|descend| descend.tab_stop && descend.root.as_ref() == Some(root))
+        .filter(|landmark| landmark.tab_stop && landmark.root.as_ref() == Some(root))
         .collect();
     stops.sort_by(|a, b| a.rect.y0.total_cmp(&b.rect.y0));
     let mut lines: Vec<(f64, Vec<&Landmark<W>>)> = Vec::new();

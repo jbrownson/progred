@@ -1,10 +1,10 @@
 use crate::display::test_support::Landmarks;
+use crate::display::widget::navigation::Landmark;
 use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::identity::short_id;
 use crate::libraries::{f64, name, text};
-use crate::navigate::Descend;
 use crate::placed;
 use crate::projection::test_support::{Bench, editing_frame, settle};
 use crate::selection::pending_value;
@@ -18,13 +18,13 @@ use ui_events::keyboard::NamedKey;
 fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
     path: &[Step],
-) -> &'a Descend<crate::Editor> {
-    frame.descends.landmark(path).expect("tutorial slot")
+) -> &'a Landmark<crate::Editor> {
+    frame.landmarks.landmark(path).expect("tutorial slot")
 }
 
 fn top_slots(frame: &placed::HoverOutput<crate::Editor>) -> Vec<CellId> {
     frame
-        .descends
+        .landmarks
         .iter()
         .filter_map(|target| match target.path.as_ref() {
             [Step::Key(key)] => Some(*key),
@@ -107,7 +107,7 @@ fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
     let path = [Step::Key(slots[1])];
     assert!((stop(&frame, &path).select)(&mut world, None));
     assert!(world.delete_selected_edge(crate::navigate::Geometry {
-        descends: &frame.descends,
+        landmarks: &frame.landmarks,
         ..Default::default()
     }));
     assert!(world.sources().resolve_path(&path).is_none());
@@ -221,7 +221,7 @@ fn peeling_switches_projections_off_and_names_last() {
         (world, frame)
     };
     let bytes = [Step::Key(slot), Step::Key(f64::vocabulary::F64)];
-    let shown = |frame: &Bench| frame.descends.iter().any(|d| d.path.as_ref() == bytes);
+    let shown = |frame: &Bench| frame.landmarks.iter().any(|d| d.path.as_ref() == bytes);
     let glyphs = |frame: &Bench| {
         frame
             .list
@@ -329,10 +329,10 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
         ),
     );
     let frame = editing_frame(&mut world, false);
-    let placed = |path: &[Step]| frame.descends.iter().any(|d| d.path.as_ref() == path);
+    let placed = |path: &[Step]| frame.landmarks.iter().any(|d| d.path.as_ref() == path);
     let opened = |path: &[Step]| {
         frame
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.len() > path.len() && d.path.starts_with(path))
     };
@@ -373,10 +373,10 @@ fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
         Step::Key(::grap::vocabulary::EVALUATE),
         Step::Key(FUNCTION),
     ];
-    assert!(frame.descends.iter().any(|d| d.path.as_ref() == callee));
+    assert!(frame.landmarks.iter().any(|d| d.path.as_ref() == callee));
     assert!(
         !frame
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.len() > callee.len() && d.path.starts_with(&callee)),
         "the call shows (scale), not scale's whole definition"

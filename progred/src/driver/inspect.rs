@@ -210,8 +210,11 @@ impl<P> Driver<P> {
         self.landmark(path).is_some()
     }
 
-    fn landmark(&self, path: &[Step]) -> Option<&crate::navigate::Descend<crate::Editor>> {
-        self.runner.frame.dispatch.descends.landmark(path)
+    fn landmark(
+        &self,
+        path: &[Step],
+    ) -> Option<&crate::display::widget::navigation::Landmark<crate::Editor>> {
+        self.runner.frame.dispatch.landmarks.landmark(path)
     }
 
     /// Where `path` is drawn.
@@ -224,7 +227,7 @@ impl<P> Driver<P> {
                     self.runner
                         .frame
                         .dispatch
-                        .descends
+                        .landmarks
                         .iter()
                         .map(|landmark| landmark.path.clone())
                         .collect::<Vec<_>>()
@@ -266,7 +269,7 @@ impl<P> Driver<P> {
         self.runner
             .frame
             .dispatch
-            .descends
+            .landmarks
             .iter()
             .filter(|landmark| landmark.path.starts_with(prefix))
             .map(|landmark| (landmark.path.clone(), landmark.rect))

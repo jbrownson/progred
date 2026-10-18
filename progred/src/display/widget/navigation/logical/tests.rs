@@ -390,7 +390,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
             for (index, path) in paths.iter().enumerate() {
                 pass.visit(|output| {
                     output.navigation_stop(path.clone(), view == 0 && index == 0);
-                    output.output.descends.push(Landmark {
+                    output.output.landmarks.push(Landmark {
                         root: None,
                         path: path.clone(),
                         rect: Default::default(),
@@ -411,7 +411,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
     let handler = frame.handler.unwrap();
     let mut visits = vec![];
     let mut dispatch = crate::display::widget::frame::DispatchContext {
-        descends: frame.descends.into(),
+        landmarks: frame.landmarks.into(),
         ..Default::default()
     };
     assert!(

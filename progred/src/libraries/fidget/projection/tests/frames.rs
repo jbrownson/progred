@@ -25,12 +25,12 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
     let coordinate = [Step::Key(SUM), Step::Key(LEFT), Step::Key(AXIS)];
     let number = vec![Step::Key(SUM), Step::Key(RIGHT)];
     let (bench, _) = place(&doc, None, 400.0);
-    let rect = |path: &[Step]| bench.descends.landmark(path).unwrap().rect;
+    let rect = |path: &[Step]| bench.landmarks.landmark(path).unwrap().rect;
     let coordinate_rect = rect(&coordinate);
     let number_rect = rect(&number);
     assert!(
         !bench
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.iter().any(|s| matches!(s, Step::Follow(_))))
     );
@@ -78,7 +78,7 @@ fn fidget_alternatives_wrap_without_changing_operand_locations() {
     assert!(narrow_size.width <= 200.0 - 48.0);
     let paths = |bench: Bench| {
         bench
-            .descends
+            .landmarks
             .into_iter()
             .map(|d| d.path)
             .collect::<Vec<_>>()

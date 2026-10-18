@@ -21,10 +21,10 @@ fn website_forest_hover_finds_the_available_call() {
     let expected = runner
         .frame
         .dispatch
-        .descends
+        .landmarks
         .iter()
-        .find_map(|descend| {
-            let location = descend.scope.location(&descend.path)?;
+        .find_map(|landmark| {
+            let location = landmark.scope.location(&landmark.path)?;
             let value = sources.read(&location)?;
             (value
                 .as_record()?
@@ -47,7 +47,7 @@ fn website_forest_hover_finds_the_available_call() {
     assert_eq!(
         crate::display::widget::source_link::hover_source(
             &sources,
-            &runner.frame.dispatch.descends,
+            &runner.frame.dispatch.landmarks,
             &hovered
         ),
         Some(expected),

@@ -1,10 +1,10 @@
 use super::*;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::widget::navigation::Landmark;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::libraries::control::vocabulary as control;
 use crate::libraries::{f64, text};
-use crate::navigate::Descend;
 use crate::placed;
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_into};
@@ -67,13 +67,13 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
                 .collect::<Path>();
             assert!(
                 frame
-                    .descends
+                    .landmarks
                     .iter()
                     .any(|target| target.path.as_ref() == path)
             );
             assert_eq!(
                 frame
-                    .descends
+                    .landmarks
                     .iter()
                     .any(|target| target.path.as_ref() == followed),
                 !(expression && named),
@@ -104,7 +104,7 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
         Step::Follow(gid::Resolution::Document),
     ];
     let frame = editing_frame(&mut world, false);
-    let target = frame.descends.landmark(&path).unwrap();
+    let target = frame.landmarks.landmark(&path).unwrap();
     assert!((target.select)(&mut world, None));
     assert!(
         editing_frame(&mut world, false)
@@ -152,11 +152,11 @@ fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
         // Unrelated metadata does not disqualify the wrapper projection.
         assert!(
             !frame
-                .descends
+                .landmarks
                 .iter()
                 .any(|d| d.path.last() == Some(&Step::Key(metadata)))
         );
-        let target = frame.descends.landmark(path).unwrap();
+        let target = frame.landmarks.landmark(path).unwrap();
         assert!((target.select)(&mut world, None));
         let frame = editing_frame(&mut world, false);
         assert!(frame.resolve_for_dispatch().dispatch_key(
@@ -194,8 +194,8 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
     });
     let frame = editing_frame(&mut world, false);
     let name_path = [Step::Key(name::vocabulary::NAME)];
-    let name_slot = frame.descends.landmark(&name_path).unwrap();
-    assert!(!frame.descends.iter().any(|d| d.path.as_ref()
+    let name_slot = frame.landmarks.landmark(&name_path).unwrap();
+    assert!(!frame.landmarks.iter().any(|d| d.path.as_ref()
         == [
             Step::Key(grap::vocabulary::VALUE),
             Step::Follow(gid::Resolution::Document)
@@ -218,7 +218,7 @@ fn anonymous_lambda_marker_still_opens_name_completion_when_clicked() {
     let before = world.model.doc.clone();
     let name_path = [Step::Key(name::vocabulary::NAME)];
     let marker = editing_frame(&mut world, false)
-        .descends
+        .landmarks
         .landmark(&name_path)
         .unwrap()
         .rect
@@ -333,7 +333,7 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
             ])
             .collect::<Path>();
         let (bench, _) = place(&doc, None, 1200.0);
-        let rect = |path: &[Step]| bench.descends.landmark(path).unwrap().rect;
+        let rect = |path: &[Step]| bench.landmarks.landmark(path).unwrap().rect;
         let cell_rect = rect(&binder_path);
         let name_rect = rect(&name_path);
         let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(name_rect.center()));
@@ -381,13 +381,13 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
     let mut world = editing_world(&doc, &libraries);
     assert!(
         !editing_frame(&mut world, false)
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.as_ref() == extra_path)
     );
     assert!(
         editing_frame(&mut world, true)
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.as_ref() == extra_path)
     );
@@ -423,7 +423,7 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
         assert!(frame.completion.is_some());
         assert!(
             frame
-                .descends
+                .landmarks
                 .iter()
                 .any(|d| d.path.as_ref() == missing_path)
         );
@@ -482,7 +482,7 @@ fn use_site_overrides_do_not_hide_definitions_inside_inert_arguments() {
         cells,
     };
     let (bench, _) = place(&doc, None, 1200.0);
-    let has = |path: &[Step]| bench.descends.iter().any(|d| d.path.as_ref() == path);
+    let has = |path: &[Step]| bench.landmarks.iter().any(|d| d.path.as_ref() == path);
     let body = Step::Key(grap::vocabulary::BODY);
     let follow = Step::Follow(gid::Resolution::Document);
     assert!(!has(&[body.clone(), Step::Key(direct), follow.clone()]));
@@ -582,10 +582,10 @@ fn recursive_patterns_keep_text_and_number_facets() {
             .cloned()
             .chain([Step::Element(position.clone())])
             .collect::<Path>();
-        assert!(bench.descends.iter().any(|d| d.path.as_ref() == path));
+        assert!(bench.landmarks.iter().any(|d| d.path.as_ref() == path));
         assert!(
             !bench
-                .descends
+                .landmarks
                 .iter()
                 .any(|d| d.path.starts_with(&path) && d.path.len() > path.len())
         );
@@ -599,7 +599,7 @@ fn recursive_patterns_keep_text_and_number_facets() {
             Step::Key(name::vocabulary::NAME),
         ])
         .collect::<Path>();
-    assert!(bench.descends.iter().any(|d| d.path.as_ref() == name_path));
+    assert!(bench.landmarks.iter().any(|d| d.path.as_ref() == name_path));
 }
 
 #[test]
@@ -625,7 +625,7 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
             cells: cells.clone(),
         };
         let (bench, _) = place(&doc, None, 1200.0);
-        let has = |path: &[Step]| bench.descends.iter().any(|d| d.path.as_ref() == path);
+        let has = |path: &[Step]| bench.landmarks.iter().any(|d| d.path.as_ref() == path);
         assert!(has(&expression_path));
         let mut followed = expression_path.clone();
         if !direct_reference {
@@ -634,26 +634,26 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
         followed.push(Step::Follow(gid::Resolution::Document));
         assert_eq!(has(&followed), !direct_reference);
 
-        let marker_position = |descends: &[Descend<crate::Editor>]| {
-            let wrapper = descends
+        let marker_position = |landmarks: &[Landmark<crate::Editor>]| {
+            let wrapper = landmarks
                 .iter()
                 .find(|d| d.path.as_ref() == &expression_path[..1])
                 .unwrap()
                 .rect;
-            let body = descends
+            let body = landmarks
                 .iter()
                 .find(|d| d.path.as_ref() == expression_path)
                 .unwrap()
                 .rect;
             Point::new((wrapper.x0 + body.x0) / 2.0, wrapper.center().y)
         };
-        let marker = marker_position(&bench.descends);
+        let marker = marker_position(&bench.landmarks);
         let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(marker));
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found.as_ref() == &expression_path[..1]));
 
         let mut world = crate::test_editor(doc);
-        let marker = marker_position(&editing_frame(&mut world, false).descends);
+        let marker = marker_position(&editing_frame(&mut world, false).landmarks);
         let frame = editing_frame_at(&mut world, false, None, Some(marker));
         let (_, Claim::Direct(hovered)) = frame.claim.as_ref().unwrap() else {
             panic!("backtick hover");
@@ -704,7 +704,7 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
         });
         let has_metadata = |frame: &crate::placed::HoverOutput<crate::Editor>| {
             frame
-                .descends
+                .landmarks
                 .iter()
                 .any(|d| d.path.as_ref() == [Step::Key(extra)])
         };
@@ -744,7 +744,7 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     let mut world = editing_world(&doc, &libraries);
     assert!(
         editing_frame(&mut world, false)
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.as_ref() == [Step::Key(extra)])
     );
@@ -763,7 +763,7 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     assert!(frame.completion.is_some());
     assert!(
         frame
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.as_ref() == [Step::Key(f64::vocabulary::RIGHT)])
     );
@@ -803,13 +803,13 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
         let mut world = editing_world(&doc, &libraries);
         assert!(
             !editing_frame(&mut world, false)
-                .descends
+                .landmarks
                 .iter()
                 .any(|d| d.path.as_ref() == [Step::Key(extra)])
         );
         assert!(
             editing_frame(&mut world, true)
-                .descends
+                .landmarks
                 .iter()
                 .any(|d| d.path.as_ref() == [Step::Key(extra)])
         );

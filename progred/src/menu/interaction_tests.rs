@@ -321,7 +321,7 @@ fn the_document_libraries_entry_switches_the_documents_own_projections() {
                 .runner
                 .frame
                 .dispatch
-                .descends
+                .landmarks
                 .iter()
                 .find(|landmark| {
                     landmark.path.first() == Some(&gid::Step::Key(names["fractions"]))

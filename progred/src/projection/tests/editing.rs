@@ -343,7 +343,7 @@ fn directional_line_arrival_is_distinct_from_ordinary_selection() {
         let mut world = editing_world(&doc, &libraries);
         let frame = editing_frame(&mut world, false);
         let target = frame
-            .descends
+            .landmarks
             .iter()
             .find(|target| target.path.is_empty())
             .unwrap();
@@ -387,7 +387,7 @@ fn deletion_and_history_landings_need_no_line_initialization() {
         &libraries,
         &crate::location::Location::root(&first)
     ));
-    let next = crate::navigate::selection_after_removing(&frame.descends, None, &first, true);
+    let next = crate::navigate::selection_after_removing(&frame.landmarks, None, &first, true);
     assert_eq!(next, second);
     model.selection = Some(Selection::edge(&root, next));
     for (undo, expected) in [(false, "survivor!"), (true, "first!")] {
@@ -868,7 +868,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
     let mut world = editing_world(&doc, &lib);
     let idle = editing_frame(&mut world, false);
     let original = world.model.doc.clone();
-    let marker = idle.descends.landmark(&path).unwrap();
+    let marker = idle.landmarks.landmark(&path).unwrap();
     let point = marker.rect.center();
     let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
     assert_eq!(

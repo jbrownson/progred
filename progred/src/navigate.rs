@@ -23,18 +23,18 @@ pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
     .filter(|_| event.state.is_down())
 }
 
-pub use crate::display::widget::navigation::Landmark as Descend;
+pub use crate::display::widget::navigation::Landmark;
 
 /// Where the selection lands after removing `path`: the sibling after it
 /// (before it, moving backward), else the other one, else the parent.
 pub fn selection_after_removing<World>(
-    descends: &[Descend<World>],
+    landmarks: &[Landmark<World>],
     root: Option<&Root>,
     path: &[Step],
     forward: bool,
 ) -> Path {
-    sibling(descends, root, path, forward)
-        .or_else(|| sibling(descends, root, path, !forward))
+    sibling(landmarks, root, path, forward)
+        .or_else(|| sibling(landmarks, root, path, !forward))
         .unwrap_or_else(|| {
             path.split_last()
                 .map(|(_, parent)| parent.to_vec())
@@ -57,7 +57,7 @@ pub(crate) fn keyboard(
         .unwrap_or_else(|| editor.model.workspace.document_root());
     if let Some(target) = select_all(
         editor.command_modifier,
-        geometry.descends,
+        geometry.landmarks,
         Some(root),
         event,
     ) {
@@ -92,9 +92,9 @@ pub(crate) fn tab(
 
 pub(crate) fn initial_navigation(
     root: &Root,
-    descends: &[Descend<crate::Editor>],
+    landmarks: &[Landmark<crate::Editor>],
 ) -> Option<puri::handler::Handler<crate::Editor, crate::placed::DispatchContext<crate::Editor>>> {
-    let target = root_target(descends, Some(root))?;
+    let target = root_target(landmarks, Some(root))?;
     let root = root.clone();
     let path = target.path.clone();
     let scope = target.scope.clone();
@@ -116,28 +116,29 @@ pub(crate) fn initial_navigation(
 
 pub fn select_all<'a, World>(
     command: puri::keyboard::CommandModifier,
-    descends: &'a [Descend<World>],
+    landmarks: &'a [Landmark<World>],
     root: Option<&Root>,
     event: &KeyboardEvent,
-) -> Option<&'a Descend<World>> {
+) -> Option<&'a Landmark<World>> {
     (event.state.is_down()
         && command.pressed(&event.modifiers)
         && !(event.modifiers.shift() || event.modifiers.alt())
         && matches!(&event.key, Key::Character(key) if key.eq_ignore_ascii_case("a")))
-    .then(|| root_target(descends, root))
+    .then(|| root_target(landmarks, root))
     .flatten()
 }
 
 fn root_target<'a, World>(
-    descends: &'a [Descend<World>],
+    landmarks: &'a [Landmark<World>],
     root: Option<&Root>,
-) -> Option<&'a Descend<World>> {
+) -> Option<&'a Landmark<World>> {
     let path = match root.map(Root::target) {
         Some(Target::Pane { path }) => path.as_slice(),
         _ => &[],
     };
-    descends.iter().find(|descend| {
-        root.is_none_or(|root| descend.root.as_ref() == Some(root)) && descend.path.as_ref() == path
+    landmarks.iter().find(|landmark| {
+        root.is_none_or(|root| landmark.root.as_ref() == Some(root))
+            && landmark.path.as_ref() == path
     })
 }
 
@@ -145,7 +146,7 @@ fn root_target<'a, World>(
 /// ancestors at the ends — where the selection lands after a removal,
 /// via [`selection_after_removing`].
 fn sibling<World>(
-    descends: &[Descend<World>],
+    landmarks: &[Landmark<World>],
     root: Option<&Root>,
     path: &[Step],
     next: bool,
@@ -153,10 +154,10 @@ fn sibling<World>(
     let mut path = path.to_vec();
     loop {
         let (_, parent) = path.split_last()?;
-        let siblings: Vec<&[Step]> = descends
+        let siblings: Vec<&[Step]> = landmarks
             .iter()
-            .filter(|descend| root.is_none_or(|root| descend.root.as_ref() == Some(root)))
-            .map(|descend| descend.path.as_ref())
+            .filter(|landmark| root.is_none_or(|root| landmark.root.as_ref() == Some(root)))
+            .map(|landmark| landmark.path.as_ref())
             .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
             .collect();
         let index = siblings.iter().position(|p| *p == path)?;

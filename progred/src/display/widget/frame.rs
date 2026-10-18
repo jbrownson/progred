@@ -393,7 +393,7 @@ pub struct DispatchContext<C, Hover> {
     /// The frame's whole handler, so a handler can lower its input into
     /// another event that every handler sees in the usual order.
     pub handler: Rc<Handler<C, DispatchContext<C, Hover>>>,
-    pub descends: std::rc::Rc<[Landmark<C>]>,
+    pub landmarks: std::rc::Rc<[Landmark<C>]>,
     pub view_regions: std::rc::Rc<[ViewRegion]>,
     pub root: Option<Root>,
     pub hovered: Option<Hover>,
@@ -410,7 +410,7 @@ impl<C, Hover> Default for DispatchContext<C, Hover> {
     fn default() -> Self {
         Self {
             handler: Default::default(),
-            descends: Default::default(),
+            landmarks: Default::default(),
             view_regions: Default::default(),
             root: None,
             hovered: None,
@@ -448,7 +448,7 @@ impl<C, Hover> DispatchContext<C, Hover> {
     /// The geometry of the frame this dispatch runs in, at `scale`.
     pub(crate) fn geometry(&self, scale: f64) -> super::navigation::Geometry<'_, C> {
         super::navigation::Geometry {
-            descends: &self.descends,
+            landmarks: &self.landmarks,
             view_regions: &self.view_regions,
             scale,
         }
@@ -492,7 +492,7 @@ pub struct FrameOutput<C, H> {
     pub scroll_probes: Vec<super::scroll::Probe>,
     pub renders: Vec<Render>,
     pub handler: Option<Handler<C, DispatchContext<C, H>>>,
-    pub descends: Vec<Landmark<C>>,
+    pub landmarks: Vec<Landmark<C>>,
     pub view_regions: Vec<ViewRegion>,
     pub hover_geometry: HoverGeometry<H>,
     pub input_area: Option<Rect>,
@@ -521,7 +521,7 @@ pub struct HoverOutput<C, Hover> {
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C, DispatchContext<C, Hover>>>,
-    pub descends: Vec<Landmark<C>>,
+    pub landmarks: Vec<Landmark<C>>,
     pub view_regions: Vec<ViewRegion>,
     /// A projected control may override how its occurrence's landmark is
     /// selected. The nearest enclosing landmark consumes this while
@@ -558,7 +558,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
             claim: None,
             hover_geometry: HoverGeometry::default(),
             handler: None,
-            descends: Vec::new(),
+            landmarks: Vec::new(),
             view_regions: Vec::new(),
             landmark_select: None,
             tab_stop: None,
@@ -581,7 +581,7 @@ impl<C: 'static, Hover: 'static> Output for HoverOutput<C, Hover> {
             (None, above) => above,
             (Some(base), Some(above)) => Some(base.over(above)),
         };
-        append(&mut self.descends, above.descends);
+        append(&mut self.landmarks, above.landmarks);
         append(&mut self.view_regions, above.view_regions);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
         self.tab_stop = above.tab_stop.or(self.tab_stop);
@@ -603,8 +603,8 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         for (owner, _, _) in &mut self.hover_geometry.cursors {
             *owner = Some(root.clone());
         }
-        for descend in &mut self.descends {
-            descend.root = Some(root.clone());
+        for landmark in &mut self.landmarks {
+            landmark.root = Some(root.clone());
         }
         self.handler = self
             .handler
@@ -639,7 +639,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             scroll_probes: self.scroll_probes,
             renders: effects.renders,
             handler: effects.handler,
-            descends: self.descends,
+            landmarks: self.landmarks,
             view_regions: self.view_regions,
             hover_geometry: self.hover_geometry,
             input_area: self.input_area,

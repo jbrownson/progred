@@ -149,7 +149,7 @@ pub(crate) fn make_projected_selection(
 ) -> Selection {
     let mut world = editing_world(doc, libraries);
     let placed = editing_frame(&mut world, false);
-    if let Some(target) = placed.descends.landmark(&path) {
+    if let Some(target) = placed.landmarks.landmark(&path) {
         (target.select)(&mut world, None);
     }
     world
@@ -205,7 +205,7 @@ pub(crate) struct FrameTimes {
 pub(crate) struct Bench {
     pub(crate) handler: puri::handler::Handler<World, crate::placed::DispatchContext<World>>,
     pub(crate) list: DrawList,
-    pub(crate) descends: Vec<Descend<World>>,
+    pub(crate) landmarks: Vec<Landmark<World>>,
     /// What the probe answered for the pass's pointer input.
     pub(crate) hit: Option<Claim<Hovered>>,
     pub(crate) times: FrameTimes,
@@ -224,9 +224,10 @@ pub(crate) fn settle(mut placed: crate::placed::HoverOutput<World>) -> Bench {
         _ => None,
     };
     let landmark = match &hovered {
-        Some(Hovered::Tree(Hover::Value(path))) => {
-            placed.descends.iter().find(|descend| descend.path == *path)
-        }
+        Some(Hovered::Tree(Hover::Value(path))) => placed
+            .landmarks
+            .iter()
+            .find(|landmark| landmark.path == *path),
         _ => None,
     };
     let hovered_secondary = match &hovered {
@@ -234,7 +235,7 @@ pub(crate) fn settle(mut placed: crate::placed::HoverOutput<World>) -> Bench {
         _ => None,
     };
     let selected_secondary =
-        crate::display::widget::navigation::selected_secondary(&placed.descends);
+        crate::display::widget::navigation::selected_secondary(&placed.landmarks);
     let frame = placed.bind(crate::placed::Attribution {
         hovered,
         hovered_secondary,
@@ -247,7 +248,7 @@ pub(crate) fn settle(mut placed: crate::placed::HoverOutput<World>) -> Bench {
     let mut bench = Bench {
         handler: frame.handler.unwrap_or_default(),
         list: DrawList::new(),
-        descends: frame.descends,
+        landmarks: frame.landmarks,
         hit,
         times: FrameTimes {
             hover,

@@ -30,7 +30,7 @@ pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 pub(crate) struct Dispatch {
     pub(crate) handler: Rc<Handler<Editor, placed::DispatchContext<Editor>>>,
     pub(crate) pointer_root: Option<crate::workspace::Root>,
-    pub(crate) descends: Rc<[navigate::Descend<Editor>]>,
+    pub(crate) landmarks: Rc<[navigate::Landmark<Editor>]>,
     pub(crate) view_regions: Rc<[placed::ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
 }
@@ -66,7 +66,7 @@ impl FrameState {
 impl Dispatch {
     pub(crate) fn geometry(&self, scale: f64) -> navigate::Geometry<'_, Editor> {
         navigate::Geometry {
-            descends: &self.descends,
+            landmarks: &self.landmarks,
             view_regions: &self.view_regions,
             scale,
         }
@@ -86,7 +86,7 @@ impl Dispatch {
     ) -> placed::DispatchContext<Editor> {
         placed::DispatchContext {
             handler: self.handler.clone(),
-            descends: self.descends.clone(),
+            landmarks: self.landmarks.clone(),
             view_regions: self.view_regions.clone(),
             pointer: editor.pointer,
             modifiers: editor.modifiers,
@@ -136,7 +136,7 @@ impl crate::display::Host for Editor {
 /// continuations. Resolve each once here, not in each painted occurrence.
 fn attribute(
     sources: &sources::Sources<'_>,
-    descends: &[navigate::Descend<Editor>],
+    landmarks: &[navigate::Landmark<Editor>],
     root: Option<&workspace::Root>,
     completion: Option<&crate::display::widget::offers::Offers<Editor>>,
     hovered: Option<Hovered>,
@@ -146,14 +146,14 @@ fn attribute(
     // source for this frame's ordinary source/secondary decoration.
     let hovered = match hovered {
         Some(Hovered::Tree(ref calls @ hover::Hover::Calls(_))) => {
-            crate::display::widget::source_link::hover_source(sources, descends, calls)
+            crate::display::widget::source_link::hover_source(sources, landmarks, calls)
                 .map(|source| Hovered::Tree(hover::Hover::Source(source)))
         }
         other => other,
     };
     let visible = source_hover_visible(hovered.as_ref(), link);
     let landmark = match &hovered {
-        Some(Hovered::Tree(hover::Hover::Value(path))) => descends
+        Some(Hovered::Tree(hover::Hover::Value(path))) => landmarks
             .iter()
             .find(|d| d.root.as_ref() == root && d.path == *path),
         _ => None,
@@ -174,7 +174,7 @@ fn attribute(
     placed::Attribution {
         hovered,
         hovered_secondary,
-        selected_secondary: crate::display::widget::navigation::selected_secondary(descends),
+        selected_secondary: crate::display::widget::navigation::selected_secondary(landmarks),
         hovered_trace,
     }
 }
@@ -308,7 +308,7 @@ fn compute_hover(
             doc: &description.model.doc,
             libraries: &description.stack.libraries,
         },
-        &output.descends,
+        &output.landmarks,
         pointer_root.as_ref(),
         output.completion.as_ref(),
         hover.clone(),
@@ -321,7 +321,7 @@ fn compute_hover(
     if description.model.selection.is_none()
         && let Some(handler) = navigate::initial_navigation(
             description.model.workspace.document_root(),
-            &output.descends,
+            &output.landmarks,
         )
     {
         *output.handler_mut() = std::mem::take(output.handler_mut()).over(handler);
@@ -330,7 +330,7 @@ fn compute_hover(
         scroll_probes,
         renders,
         handler,
-        descends,
+        landmarks,
         view_regions,
         hover_geometry,
         input_area,
@@ -341,7 +341,7 @@ fn compute_hover(
         dispatch: Dispatch {
             handler: Rc::new(handler.unwrap_or_else(Handler::new)),
             pointer_root,
-            descends: descends.into(),
+            landmarks: landmarks.into(),
             view_regions: view_regions.into(),
             hover_geometry,
         },

@@ -272,7 +272,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         };
         assert_eq!(trace.sources().next(), Some(source.clone()));
         let mut pointer = placed::DispatchContext::new(None, Some(target));
-        pointer.descends = Rc::from([crate::navigate::Descend {
+        pointer.landmarks = Rc::from([crate::display::widget::navigation::Landmark {
             scope: Default::default(),
             root: Some(crate::test_root()),
             path: Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]),
@@ -419,7 +419,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
             path.clone(),
         )))),
     );
-    input.descends = Rc::from([crate::navigate::Descend {
+    input.landmarks = Rc::from([crate::display::widget::navigation::Landmark {
         scope: Default::default(),
         root: Some(source_view.clone()),
         path: path.clone(),

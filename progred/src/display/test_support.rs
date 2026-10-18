@@ -40,7 +40,7 @@ impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::HoverO
         (
             frame.handler.expect("resolved frame handler"),
             widget::frame::DispatchContext {
-                descends: frame.descends.into(),
+                landmarks: frame.landmarks.into(),
                 ..Default::default()
             },
         )

@@ -134,7 +134,7 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     }
                     None => false,
                 };
-                output.descends.push(Landmark {
+                output.landmarks.push(Landmark {
                     root: None,
                     path,
                     rect: placement.rect,

@@ -1,11 +1,11 @@
 use super::*;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::widget::navigation::Landmark;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::libraries::presentation::vocabulary::{OUTLINE, RESULT};
 use crate::libraries::{f64, name};
 use crate::location::Location;
-use crate::navigate::Descend;
 use crate::placed;
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_value};
@@ -50,8 +50,8 @@ fn frame(world: &mut crate::Editor) -> placed::HoverOutput<crate::Editor> {
 fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
     path: &[Step],
-) -> &'a Descend<crate::Editor> {
-    frame.descends.landmark(path).expect("outline occurrence")
+) -> &'a Landmark<crate::Editor> {
+    frame.landmarks.landmark(path).expect("outline occurrence")
 }
 
 fn entry_paths(value: &Value, parent: &[Step], key: CellId) -> Vec<Path> {
@@ -202,7 +202,7 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
     }
     stop(&f, &path);
     assert!(
-        !f.descends
+        !f.landmarks
             .iter()
             .any(|d| d.path.starts_with(&path) && d.path.len() > path.len())
     );
@@ -359,7 +359,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     };
     let target = crate::navigate::select_all(
         crate::modifiers::native(),
-        &f.descends,
+        &f.landmarks,
         None, // This fixture places one projection without the pane wrapper.
         &select_all,
     )
@@ -370,7 +370,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     // Removing the outline field exposes the remaining data structurally.
     assert!((stop(&f, &[Step::Key(OUTLINE)]).select)(&mut world, None));
     assert!(world.delete_selected_edge(crate::navigate::Geometry {
-        descends: &f.descends,
+        landmarks: &f.landmarks,
         ..Default::default()
     }));
     assert!(
@@ -477,7 +477,7 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
     assert!(hidden(&world, &bodies[0]));
     assert!(!hidden(&world, &bodies[1]));
     let f = frame(&mut world);
-    assert!(!f.descends.iter().any(|d| d.path.as_ref() == bodies[0]));
+    assert!(!f.landmarks.iter().any(|d| d.path.as_ref() == bodies[0]));
     stop(&f, &bodies[1]);
     assert!(Rc::ptr_eq(&before, &world.model.doc));
     assert!(!world.model.dirty());
@@ -547,7 +547,7 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
     assert_eq!(world.clipboard_structure(), Some(expected));
     click_heading(&mut world, &e, Modifiers::empty());
     let f = frame(&mut world);
-    assert!(!f.descends.iter().any(|d| d.path.as_ref() == result_body));
+    assert!(!f.landmarks.iter().any(|d| d.path.as_ref() == result_body));
     stop(&f, &source_body);
     assert!(Rc::ptr_eq(&before, &world.model.doc));
 }
@@ -772,7 +772,7 @@ fn outline_headings_delete_and_pick_references_not_bodies() {
         .clone();
     let f = frame(&mut world);
     assert!(world.delete_selected_edge(crate::navigate::Geometry {
-        descends: &f.descends,
+        landmarks: &f.landmarks,
         ..Default::default()
     }));
     assert!(world.sources().resolve_path(&e).is_none());

@@ -60,7 +60,7 @@ impl Fixture {
                     &mut self.world,
                     puri::handler::Event::Navigate(direction),
                     &mut crate::placed::DispatchContext {
-                        descends: frame.descends.clone().into(),
+                        landmarks: frame.landmarks.clone().into(),
                         ..Default::default()
                     }
                 )

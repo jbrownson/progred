@@ -10,14 +10,14 @@ mod tests;
 pub(crate) mod viewport;
 
 use crate::annotations::Annotations;
+#[cfg(test)]
+use crate::display::widget::navigation::Landmark;
 use crate::display::widget::style::{
     highlight_outline, hover_highlight, primary_highlight, secondary_highlight,
 };
 use crate::frame::Hovered;
 use crate::hover::{Hover, Secondary, SourceTrace};
 use crate::location::{Location, Start};
-#[cfg(test)]
-use crate::navigate::Descend;
 use crate::placed::{self, HoverPass, before, decorate};
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;

@@ -364,7 +364,7 @@ impl Construction {
                         .and_then(|index| destinations[index].as_ref())
                         .and_then(|path| {
                             let landmark = input
-                                .descends
+                                .landmarks
                                 .iter()
                                 .find(|landmark| landmark.root == view && landmark.path == *path);
                             debug_assert!(landmark.is_some(), "navigation stop without a landmark");

@@ -81,7 +81,7 @@ fn fidget_example_shows_each_preview_beside_its_code() {
     let figures = figures(&doc, &names);
     let mut world = crate::test_editor(doc);
     let frame = settle(editing_frame(&mut world, false));
-    let landmark = |path: &[Step]| frame.descends.landmark(path).map(|landmark| landmark.rect);
+    let landmark = |path: &[Step]| frame.landmarks.landmark(path).map(|landmark| landmark.rect);
     let figure =
         |position: &Position| vec![Step::Key(names["figures"]), Step::Element(position.clone())];
     let picture = |position: &Position| {
@@ -104,7 +104,7 @@ fn fidget_example_shows_each_preview_beside_its_code() {
     // Only the figures are pictured: the views' own patterns carry the keys
     // they own, and must decline rather than picture an absent.
     let pictured = frame
-        .descends
+        .landmarks
         .iter()
         .filter(|landmark| {
             landmark.path.last() == Some(&Step::Key(presentation::vocabulary::RESULT))

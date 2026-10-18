@@ -66,11 +66,11 @@ pub(crate) fn handlers<W: Host>(
                             let target = {
                                 let session = world.session();
                                 let sources = session.sources();
-                                let Some(source) = hover_source(&sources, &input.descends, hover)
+                                let Some(source) = hover_source(&sources, &input.landmarks, hover)
                                 else {
                                     return true;
                                 };
-                                source_descend(&sources, &input.descends, &source)
+                                source_landmark(&sources, &input.landmarks, &source)
                             };
                             if let Some(target) = target {
                                 input.geometry(scale).arrive(world, target, None);
@@ -89,10 +89,10 @@ pub(crate) fn handlers<W: Host>(
                     Some(hover @ (Hover::Source(_) | Hover::Calls(_))) => {
                         let session = world.session();
                         let sources = session.sources();
-                        let target = hover_source(&sources, &input.descends, hover)
-                            .and_then(|source| source_descend(&sources, &input.descends, &source))
-                            .and_then(|descend| {
-                                descend.root.clone().map(|root| (root, descend.rect))
+                        let target = hover_source(&sources, &input.landmarks, hover)
+                            .and_then(|source| source_landmark(&sources, &input.landmarks, &source))
+                            .and_then(|landmark| {
+                                landmark.root.clone().map(|root| (root, landmark.rect))
                             });
                         if let Some((root, rect)) = target {
                             input
@@ -112,29 +112,29 @@ pub(crate) fn handlers<W: Host>(
 /// viewport clipping. Preserve leaf attribution if no call has an occurrence.
 pub(crate) fn hover_source<World>(
     sources: &Sources<'_>,
-    descends: &[super::navigation::Landmark<World>],
+    landmarks: &[super::navigation::Landmark<World>],
     hover: &Hover,
 ) -> Option<SourceTrace> {
     match hover {
         Hover::Source(source) => Some(source.clone()),
         Hover::Calls(calls) => calls
             .sources()
-            .find(|source| source_descend(sources, descends, source).is_some())
+            .find(|source| source_landmark(sources, landmarks, source).is_some())
             .or_else(|| calls.sources().next()),
         _ => None,
     }
 }
 
-pub(crate) fn source_descend<'a, World>(
+pub(crate) fn source_landmark<'a, World>(
     sources: &Sources<'_>,
-    descends: &'a [super::navigation::Landmark<World>],
+    landmarks: &'a [super::navigation::Landmark<World>],
     source: &SourceTrace,
 ) -> Option<&'a super::navigation::Landmark<World>> {
-    descends.iter().find(|descend| {
-        descend.root.is_some()
-            && descend
+    landmarks.iter().find(|landmark| {
+        landmark.root.is_some()
+            && landmark
                 .scope
-                .location(&descend.path)
+                .location(&landmark.path)
                 .is_some_and(|location| SourceTrace::from_location(sources, &location) == *source)
     })
 }

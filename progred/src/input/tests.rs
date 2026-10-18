@@ -475,7 +475,7 @@ fn no_op_dispatch_declines_without_building_a_frame() {
     assert!(!runner.ime_event(&ImeEvent::Commit("x".into()), 1.0, VIEWPORT));
     assert!(log.borrow().is_empty());
     assert!(runner.frame.pending_paint.is_none());
-    assert!(runner.frame.dispatch.descends.is_empty());
+    assert!(runner.frame.dispatch.landmarks.is_empty());
     assert!(runner.frame.dispatch.view_regions.is_empty());
     assert!(runner.frame.dispatch.pointer_root.is_none());
 }
@@ -543,7 +543,7 @@ fn every_input_receives_the_installed_dispatch_context() {
             pass.finish().bind(Default::default()).hover_geometry;
         runner.frame.hover = Some(hover.clone());
         runner.frame.dispatch.pointer_root = Some(root.clone());
-        let descends = runner.frame.dispatch.descends.clone();
+        let landmarks = runner.frame.dispatch.landmarks.clone();
         let regions = runner.frame.dispatch.view_regions.clone();
         let calls = Rc::new(std::cell::Cell::new(0));
         *runner.frame.dispatch.handler_mut() = puri::handler::Handler::from_function({
@@ -554,7 +554,7 @@ fn every_input_receives_the_installed_dispatch_context() {
                 }
                 assert_eq!(input.hovered(), Some(&hover), "{kind}");
                 assert_eq!(input.root.as_ref(), Some(&root), "{kind}");
-                assert!(Rc::ptr_eq(&input.descends, &descends), "{kind}");
+                assert!(Rc::ptr_eq(&input.landmarks, &landmarks), "{kind}");
                 assert!(Rc::ptr_eq(&input.view_regions, &regions), "{kind}");
                 calls.set(calls.get() + 1);
                 EventOutcome::accept()
@@ -766,7 +766,7 @@ fn replacing_a_document_drops_the_old_dispatch_before_building_its_successor() {
     assert!(!runner.keyboard_event(&key(), 1.0, VIEWPORT));
     assert!(log.borrow().is_empty());
     assert!(runner.frame.pending_paint.is_none());
-    assert!(runner.frame.dispatch.descends.is_empty());
+    assert!(runner.frame.dispatch.landmarks.is_empty());
     assert!(
         runner
             .frame

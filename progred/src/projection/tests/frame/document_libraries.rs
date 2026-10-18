@@ -3,7 +3,7 @@ use crate::sample::{PLANET_VIEW, planets};
 
 fn drawn(world: &mut crate::Editor, path: &[Step]) -> bool {
     editing_frame(world, false)
-        .descends
+        .landmarks
         .iter()
         .any(|landmark| landmark.path.as_ref() == path)
 }
@@ -115,7 +115,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
                 Step::Follow(gid::Resolution::Document),
                 key(name),
             ];
-            frame.descends.landmark(&path).unwrap().rect
+            frame.landmarks.landmark(&path).unwrap().rect
         };
         let (over, under) = (part("over"), part("under"));
         assert!(
@@ -188,7 +188,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
     };
     for (position, degrees) in elements(&world, "angles").into_iter().zip([45.0, 120.0]) {
         let angle = frame
-            .descends
+            .landmarks
             .iter()
             .find(|landmark| {
                 landmark.path.as_ref() == [key("angles"), Step::Element(position.clone())]
@@ -225,7 +225,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
             ];
             assert!(
                 frame
-                    .descends
+                    .landmarks
                     .iter()
                     .any(|landmark| landmark.path.as_ref() == body),
                 "{body:?}"
@@ -260,7 +260,7 @@ fn the_example_views_select_what_they_draw() {
     let under = [fraction.clone(), vec![key("under")]].concat();
     let angle = vec![key("angles"), Step::Element(first(&world, "angles"))];
     let frame = settle(editing_frame(&mut world, false));
-    let rect = |path: &[Step]| frame.descends.landmark(path).unwrap().rect;
+    let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
     let (over_rect, under_rect, angle_rect) = (rect(&over), rect(&under), rect(&angle));
     let selected = |world: &crate::Editor| world.model.selection.as_ref().unwrap().path().to_vec();
 

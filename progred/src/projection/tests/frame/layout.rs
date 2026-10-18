@@ -113,7 +113,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
     let path = vec![Step::Key(result), Step::Key(field), Step::Element(position)];
     assert!(
         frame
-            .descends
+            .landmarks
             .iter()
             .any(|item| item.path.as_ref() == path.as_slice())
     );
@@ -552,9 +552,9 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         let selected = Selection::edge(&crate::test_root(), path(0, source));
         let (bench, _) = place(&doc, Some(&selected), 900.0);
         let target = bench
-            .descends
+            .landmarks
             .iter()
-            .find(|descend| descend.path.as_ref() == path(1, gid::Resolution::Document))
+            .find(|landmark| landmark.path.as_ref() == path(1, gid::Resolution::Document))
             .unwrap();
         let marks: Vec<_> = bench
             .list
@@ -655,9 +655,9 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         let (unmarked, _) = context.place(&doc, None, &annotations, 1200.0, None, None, None);
         let rects = paths.each_ref().map(|path| {
             unmarked
-                .descends
+                .landmarks
                 .iter()
-                .find(|descend| descend.path.as_ref() == path.as_slice())
+                .find(|landmark| landmark.path.as_ref() == path.as_slice())
                 .unwrap()
                 .rect
         });
@@ -716,7 +716,11 @@ fn sample_text_line_claims_its_own_hover() {
         Step::Key(sample_vocabulary::COLOR),
     ];
     let (bench, _) = place(&doc, None, 900.0);
-    let rect = bench.descends.landmark(&path).expect("color descend").rect;
+    let rect = bench
+        .landmarks
+        .landmark(&path)
+        .expect("color landmark")
+        .rect;
     let (bench, _) = place_with_pointer(&doc, None, 900.0, Some(rect.center()));
     assert_eq!(
         bench.hit,
@@ -756,7 +760,7 @@ fn custom_match_projection_uses_the_editor_fold() {
     let (folded, folded_extent) =
         place_with_annotations(&doc, None, &annotations, 900.0, None, None, None);
 
-    assert!(folded.descends.len() < expanded.descends.len());
+    assert!(folded.landmarks.len() < expanded.landmarks.len());
     assert!(folded_extent.width < expanded_extent.width);
 }
 
@@ -781,12 +785,12 @@ fn named_fields_display_alphabetically_before_unnamed_fields() {
     let (bench, _) = place(&doc, None, 320.0);
     let y = |field| {
         bench
-            .descends
+            .landmarks
             .iter()
-            .filter(|descend| descend.path.as_ref() == [Step::Key(field)])
-            .map(|descend| descend.rect.y0)
+            .filter(|landmark| landmark.path.as_ref() == [Step::Key(field)])
+            .map(|landmark| landmark.rect.y0)
             .reduce(f64::min)
-            .expect("field descend")
+            .expect("field landmark")
     };
     assert!(y(alpha) < y(beta));
     assert!(y(beta) < y(unnamed_low));
@@ -822,21 +826,21 @@ fn expression_children_are_real() {
     let (bench, _) = place(&doc, None, 560.0);
     assert!(
         bench
-            .descends
+            .landmarks
             .iter()
-            .any(|descend| descend.path.as_ref() == record)
+            .any(|landmark| landmark.path.as_ref() == record)
     );
     assert!(
         bench
-            .descends
+            .landmarks
             .iter()
-            .any(|descend| descend.path.as_ref() == result)
+            .any(|landmark| landmark.path.as_ref() == result)
     );
     assert!(
         bench
-            .descends
+            .landmarks
             .iter()
-            .any(|descend| descend.path.as_ref() == source_note)
+            .any(|landmark| landmark.path.as_ref() == source_note)
     );
 }
 
@@ -866,7 +870,7 @@ fn list_navigation_follows_the_selected_layout_alternative() {
         let mut world = crate::test_editor(doc.clone());
         world.model.selection = Some(selection);
         let mut input = crate::placed::DispatchContext {
-            descends: bench.descends.clone().into(),
+            landmarks: bench.landmarks.clone().into(),
             ..Default::default()
         };
         assert_eq!(
@@ -914,13 +918,13 @@ fn placement_claims_the_hover_innermost_last() {
     // itself, not its containers — and replaces the earlier
     // candidates in the real pass resolver.
     let string = bench
-        .descends
+        .landmarks
         .iter()
-        .find(|descend| {
+        .find(|landmark| {
             sources
-                .resolve_path(&descend.path)
+                .resolve_path(&landmark.path)
                 .is_some_and(|value| text::read(value).is_some())
-                && !matches!(descend.path.last(), Some(Step::Key(label)) if *label == name::vocabulary::NAME)
+                && !matches!(landmark.path.last(), Some(Step::Key(label)) if *label == name::vocabulary::NAME)
         })
         .expect("the sample has a string leaf");
     let string_rect = string.rect;
@@ -959,9 +963,9 @@ fn hovering_a_field_label_targets_its_value() {
     };
     let (cold, _) = place(&doc, None, 400.0);
     let value = cold
-        .descends
+        .landmarks
         .iter()
-        .find(|descend| descend.path.last() == Some(&Step::Key(key)))
+        .find(|landmark| landmark.path.last() == Some(&Step::Key(key)))
         .expect("the field value");
     let y = value.rect.y0 + value.rect.height() / 2.0;
     let mut x = value.rect.x0;
@@ -1020,12 +1024,12 @@ fn gap_document() -> Document {
     }
 }
 
-/// The two descends under `field`, in the given axis order.
-fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Descend<World>, Descend<World>) {
-    let mut found: Vec<&Descend<World>> = bench
-        .descends
+/// The two landmarks under `field`, in the given axis order.
+fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Landmark<World>, Landmark<World>) {
+    let mut found: Vec<&Landmark<World>> = bench
+        .landmarks
         .iter()
-        .filter(|descend| descend.path.len() == 2 && descend.path.first() == Some(&key(field)))
+        .filter(|landmark| landmark.path.len() == 2 && landmark.path.first() == Some(&key(field)))
         .collect();
     found.sort_by(|a, b| {
         let (a, b) = if by_y {
@@ -1139,7 +1143,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
             assert_eq!(visits.get(), count, "alternatives share projected children");
             let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
             let rect = frame
-                .descends
+                .landmarks
                 .iter()
                 .find(|d| d.path.is_empty())
                 .unwrap()
@@ -1224,7 +1228,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     let project =
         |world: &mut crate::Editor| editing_frame_with_projection(world, false, Some(&projection));
     let between = |frame: &placed::HoverOutput<crate::Editor>, left: &[Step], right: &[Step]| {
-        let rect = |path: &[Step]| frame.descends.landmark(path).unwrap().rect;
+        let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
         let (left, right) = (rect(left), rect(right));
         Point::new((left.x1 + right.x0) / 2.0, left.center().y)
     };
@@ -1325,7 +1329,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         )];
         let mut world = crate::test_editor(doc);
         let frame = editing_frame(&mut world, false);
-        let rect = |path: &[Step]| frame.descends.landmark(path).unwrap().rect;
+        let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
         let items: Vec<_> = positions
             .iter()
             .map(|p| rect(&[Step::Element(p.clone())]))
@@ -1366,14 +1370,14 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         let Step::Element(inserted) = &path[0] else {
             unreachable!()
         };
-        let pending = pending_frame.descends.landmark(&path).unwrap().rect;
+        let pending = pending_frame.landmarks.landmark(&path).unwrap().rect;
         for (neighbor, before) in [
             (boundary.checked_sub(1).and_then(|i| positions.get(i)), true),
             (positions.get(boundary), false),
         ] {
             if let Some(neighbor) = neighbor {
                 let neighbor_rect = pending_frame
-                    .descends
+                    .landmarks
                     .iter()
                     .find(|d| d.path.as_ref() == [Step::Element(neighbor.clone())])
                     .unwrap()
@@ -1423,7 +1427,7 @@ fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
     // Just inside the bracket's absorbed gap, the bracket claims
     // the container outright — the widened handle.
     let list = bench
-        .descends
+        .landmarks
         .landmark(&parent)
         .expect("the list has a landmark");
     let (claimed, _) = place_with_pointer(
@@ -1461,10 +1465,10 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
     let (bench, _) = place(&doc, None, width);
     let field = |key| {
         bench
-            .descends
+            .landmarks
             .iter()
-            .find(|descend| {
-                descend.path.as_ref() == [Step::Follow(gid::Resolution::Document), Step::Key(key)]
+            .find(|landmark| {
+                landmark.path.as_ref() == [Step::Follow(gid::Resolution::Document), Step::Key(key)]
             })
             .expect("the cell's record field has a landmark")
     };
@@ -1494,9 +1498,9 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
     assert!(air.hit.is_none());
 
     let cell_rect = bench
-        .descends
+        .landmarks
         .iter()
-        .find(|descend| descend.path.is_empty())
+        .find(|landmark| landmark.path.is_empty())
         .expect("the root cell has a landmark")
         .rect;
     let (paren, _) = place_with_pointer(

@@ -34,7 +34,7 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
         });
         for (path, typed) in [(&name_path[..], " angle"), (&number_path[..], "5")] {
             let frame = editing_frame(&mut world, false);
-            let target = frame.descends.landmark(path).unwrap();
+            let target = frame.landmarks.landmark(path).unwrap();
             assert!((target.select)(&mut world, None));
             let frame = editing_frame(&mut world, false);
             assert!(frame.resolve_for_dispatch().dispatch_key(
@@ -84,8 +84,8 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
             } else {
                 number_path.clone()
             };
-            let rect = frame.descends.landmark(&name_path).unwrap().rect;
-            let number_rect = frame.descends.landmark(&number_path).unwrap().rect;
+            let rect = frame.landmarks.landmark(&name_path).unwrap().rect;
+            let number_rect = frame.landmarks.landmark(&number_path).unwrap().rect;
             let point = match contact {
                 "name" => rect.center(),
                 "digits" => Point::new(rect.x1 + 8.0, rect.center().y),
@@ -150,7 +150,7 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
             cells: Cells::new(),
         });
         let plain = editing_frame(&mut world, false);
-        assert!(!plain.descends.iter().any(|d| d.path.as_ref() == path));
+        assert!(!plain.landmarks.iter().any(|d| d.path.as_ref() == path));
         world.model.selection = Some(pending_value(&crate::test_root(), path.to_vec()));
         assert!(editing_frame(&mut world, false).completion.is_some());
         world.model.selection = None;
@@ -160,7 +160,7 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
                 Value::record([(name::vocabulary::NAME, name)]),
             ));
             let frame = editing_frame(&mut world, false);
-            assert!(frame.descends.iter().any(|d| d.path.as_ref() == path));
+            assert!(frame.landmarks.iter().any(|d| d.path.as_ref() == path));
         }
     }
 }
@@ -174,10 +174,10 @@ fn numeric_operation_labels_preserve_function_hover_and_selection() {
             cells: Cells::new(),
         };
         let (bench, _) = place(&doc, None, 900.0);
-        let head = bench.descends.landmark(&function_path).unwrap();
+        let head = bench.landmarks.landmark(&function_path).unwrap();
         assert!(
             !bench
-                .descends
+                .landmarks
                 .iter()
                 .any(|d| d.path.iter().any(|s| matches!(s, Step::Follow(_))))
         );
@@ -209,7 +209,7 @@ fn numeric_operation_labels_read_both_names_from_the_graph() {
         let width = |doc: &Document| {
             let (bench, _) = place(doc, None, 900.0);
             bench
-                .descends
+                .landmarks
                 .landmark(&function_path)
                 .unwrap()
                 .rect
@@ -249,13 +249,13 @@ fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
             if *field != extra {
                 assert!(
                     bench
-                        .descends
+                        .landmarks
                         .iter()
                         .any(|d| d.path.as_ref() == [Step::Key(*field)])
                 );
             }
             assert!(
-                raw.descends
+                raw.landmarks
                     .iter()
                     .any(|d| d.path.as_ref() == [Step::Key(*field)])
             );

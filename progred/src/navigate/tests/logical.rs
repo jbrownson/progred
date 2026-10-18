@@ -42,7 +42,7 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
     for name in ["a", "b", "c", "d", "e"] {
         assert!(
             frame
-                .descends
+                .landmarks
                 .iter()
                 .any(|d| d.path.as_ref() == field(name))
         );
@@ -99,7 +99,7 @@ fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
     let frame = editing_frame(&mut world, false);
     let rect = |name: &str| {
         frame
-            .descends
+            .landmarks
             .iter()
             .find(|d| d.path.as_ref() == field(name))
             .unwrap()

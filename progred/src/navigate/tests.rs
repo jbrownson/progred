@@ -5,8 +5,8 @@ use kurbo::Rect;
 use std::rc::Rc;
 use ui_events::keyboard::{KeyState, Modifiers};
 
-fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
-    Descend {
+fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Landmark<()> {
+    Landmark {
         scope: Default::default(),
         root: None,
         path: Rc::from(path),
@@ -70,7 +70,7 @@ fn command_a_selects_the_current_views_root() {
     let pane = crate::workspace::Root::pane(pane_path.clone());
     let other_pane = crate::workspace::Root::pane(pane_path.clone());
     let child_path = vec![key("pane"), key("child")];
-    let descends: Vec<_> = [
+    let landmarks: Vec<_> = [
         (&document, child_path.clone()),
         (&document, pane_path.clone()),
         (&document, vec![]),
@@ -79,7 +79,7 @@ fn command_a_selects_the_current_views_root() {
         (&pane, pane_path.clone()),
     ]
     .into_iter()
-    .map(|(root, path)| Descend {
+    .map(|(root, path)| Landmark {
         scope: Default::default(),
         root: Some(root.clone()),
         ..stop(path, 0.0, 0.0, 100.0, 20.0)
@@ -91,7 +91,7 @@ fn command_a_selects_the_current_views_root() {
         ..arrow(NamedKey::ArrowDown)
     };
     for (root, path) in [(&document, vec![]), (&pane, pane_path)] {
-        let target = select_all(crate::modifiers::native(), &descends, Some(root), &event)
+        let target = select_all(crate::modifiers::native(), &landmarks, Some(root), &event)
             .expect("Select All reaches the view root");
         assert_eq!(target.root.as_ref(), Some(root));
         assert_eq!(target.path.as_ref(), path);
@@ -117,7 +117,7 @@ fn command_a_selects_the_current_views_root() {
         assert!(
             select_all(
                 crate::modifiers::native(),
-                &descends,
+                &landmarks,
                 Some(&document),
                 &event
             )

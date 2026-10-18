@@ -23,7 +23,7 @@ fn frame(world: &mut crate::Editor) -> placed::HoverOutput<crate::Editor> {
 fn press(world: &mut crate::Editor, path: &[Step], key: KeyboardEvent) -> Annotations {
     let selected = frame(world);
     let occurrence = selected
-        .descends
+        .landmarks
         .landmark(path)
         .expect("projected occurrence");
     assert!((occurrence.select)(world, None));
@@ -144,7 +144,7 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
     let frame = editing_frame(&mut world, true);
     let drawn = |path: &[Step]| {
         frame
-            .descends
+            .landmarks
             .iter()
             .any(|landmark| landmark.path.as_ref() == path)
     };

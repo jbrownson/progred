@@ -16,8 +16,11 @@ fn projection(world: &crate::Editor, rule: Partial) -> Projection<crate::Editor>
 fn stop<'a>(
     frame: &'a placed::HoverOutput<crate::Editor>,
     path: &[Step],
-) -> &'a Descend<crate::Editor> {
-    frame.descends.landmark(path).expect("projected occurrence")
+) -> &'a Landmark<crate::Editor> {
+    frame
+        .landmarks
+        .landmark(path)
+        .expect("projected occurrence")
 }
 
 fn command(key: Key) -> KeyboardEvent {
@@ -127,7 +130,12 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
     );
     let annotations = world.model.workspace.document.annotations.clone();
     let frame = editing_frame_with_annotations(&mut world, false, None, None, &annotations);
-    assert!(!frame.descends.iter().any(|d| d.path.as_ref() == child_path));
+    assert!(
+        !frame
+            .landmarks
+            .iter()
+            .any(|d| d.path.as_ref() == child_path)
+    );
     // The stored expression remains projected, not folded with its result.
     stop(&frame, &[Step::Key(grap::vocabulary::EVALUATE)]);
     assert!(Rc::ptr_eq(&before, &world.model.doc));
@@ -322,13 +330,13 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
         editing_frame_with_annotations(&mut world, false, Some(&projection), None, &annotations);
     assert!(
         !folded
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.as_ref() == [Step::Key(first), Step::Key(child)])
     );
     assert!(
         folded
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.as_ref() == [Step::Key(second), Step::Key(child)])
     );
@@ -747,7 +755,7 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     assert!(
         !frame
-            .descends
+            .landmarks
             .iter()
             .any(|d| d.path.as_ref() == [Step::Key(source)])
     );

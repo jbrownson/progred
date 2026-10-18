@@ -73,7 +73,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
     );
     // What the projection draws a conjected occurrence sharing.
     let secondary = hover::Secondary::Stored(Rc::from(source.as_slice()));
-    let mut landmarks = [navigate::Descend::<Editor> {
+    let mut landmarks = [navigate::Landmark::<Editor> {
         path: occurrence.clone(),
         root: Some(root.clone()),
         rect: Rect::new(0.0, 0.0, 10.0, 10.0),
@@ -481,7 +481,7 @@ fn selection_reveal_uses_installed_geometry_before_one_successor_build() {
             .unwrap()
             .clone(),
     )];
-    let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
+    let target = runner.frame.dispatch.landmarks.landmark(&path).unwrap();
     assert!(target.rect.y0 > viewport.height);
     let target = target.clone();
     assert!(runner.update_frame(1.0, viewport, |editor, dispatch, _| {
@@ -489,7 +489,7 @@ fn selection_reveal_uses_installed_geometry_before_one_successor_build() {
     }));
     assert_eq!(projected.replace(0), per_frame);
     assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
-    let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
+    let target = runner.frame.dispatch.landmarks.landmark(&path).unwrap();
     assert!((0.0..viewport.height).contains(&target.rect.y0));
 
     // Scrolling away from an unchanged selection must not reveal it again.
@@ -548,11 +548,11 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
         .find(|region| region.root == root)
         .unwrap()
         .rect;
-    let target = runner.frame.dispatch.descends.landmark(path).unwrap();
+    let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
     crate::editing::select(&mut runner.editor.session(), &root, previous);
     runner.refresh_frame(1.0, viewport);
-    let target = runner.frame.dispatch.descends.landmark(path).unwrap();
+    let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
 
     assert!(runner.keyboard_event(
@@ -565,7 +565,7 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
         viewport,
     ));
     assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
-    let target = runner.frame.dispatch.descends.landmark(path).unwrap();
+    let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     assert!(target.rect.y0 >= region.y0 && target.rect.y1 <= region.y1);
 }
 
@@ -578,7 +578,7 @@ fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
     let path = runner
         .frame
         .dispatch
-        .descends
+        .landmarks
         .iter()
         .find(|target| target.rect.y0 > viewport.height)
         .unwrap()
@@ -604,7 +604,7 @@ fn selection_changes_do_not_implicitly_request_reveal() {
     let path = runner
         .frame
         .dispatch
-        .descends
+        .landmarks
         .iter()
         .find(|target| target.rect.y0 > viewport.height)
         .unwrap()
@@ -631,7 +631,7 @@ fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> gid::Path {
     let target = runner
         .frame
         .dispatch
-        .descends
+        .landmarks
         .iter()
         .find(|target| target.rect.y0 > viewport.height)
         .unwrap();
@@ -840,7 +840,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
         !runner
             .frame
             .dispatch
-            .descends
+            .landmarks
             .iter()
             .any(|stop| stop.path.as_ref() == path)
     );
@@ -855,7 +855,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
     });
     assert_eq!(projected.replace(0), 41);
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
-    let target = runner.frame.dispatch.descends.landmark(&path).unwrap();
+    let target = runner.frame.dispatch.landmarks.landmark(&path).unwrap();
     assert!(target.rect.y0 > viewport.height);
 
     runner.refresh_frame(1.0, viewport);
@@ -921,8 +921,8 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
             Rect::new(10.0, 50.0, 30.0, 70.0),
         ),
     ];
-    let descends = targets.map(
-        |(resolution, rect)| navigate::Descend::<Option<gid::Resolution>> {
+    let landmarks = targets.map(
+        |(resolution, rect)| navigate::Landmark::<Option<gid::Resolution>> {
             scope: Default::default(),
             root: Some(root.clone()),
             path: Rc::from([Step::Follow(resolution), Step::Key(call)]),
@@ -942,13 +942,13 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
             resolution,
             path: Rc::from([Step::Key(call)]),
         };
-        let descend =
-            crate::display::widget::source_link::source_descend(&sources, &descends, &trace)
+        let landmark =
+            crate::display::widget::source_link::source_landmark(&sources, &landmarks, &trace)
                 .unwrap();
-        assert_eq!(descend.root, Some(root.clone()));
-        assert_eq!(descend.rect, rect);
+        assert_eq!(landmark.root, Some(root.clone()));
+        assert_eq!(landmark.rect, rect);
         let mut selected = None;
-        assert!((descend.select)(&mut selected, None));
+        assert!((landmark.select)(&mut selected, None));
         assert_eq!(selected, Some(resolution));
     }
 }
@@ -1109,14 +1109,14 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             field_path.push(Step::Key(field));
             assert!(
                 shown
-                    .descends
+                    .landmarks
                     .iter()
                     .any(|target| target.root.as_ref() == Some(document)
                         && target.path.as_ref() == field_path)
             );
             assert!(
                 !shown
-                    .descends
+                    .landmarks
                     .iter()
                     .any(|target| target.root.as_ref() == Some(pane)
                         && target.path.as_ref() == field_path)
@@ -1136,7 +1136,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             let mut field_path = path.clone();
             field_path.push(Step::Key(field));
             assert!(
-                raw.descends
+                raw.landmarks
                     .iter()
                     .any(|target| target.root.as_ref() == Some(pane)
                         && target.path.as_ref() == field_path)
@@ -1152,7 +1152,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     for (pane, path) in &sources {
         let mut source_path = path.clone();
         source_path.push(Step::Key(presentation::vocabulary::VALUE));
-        assert!(absent.descends.iter().any(
+        assert!(absent.landmarks.iter().any(
             |target| target.root.as_ref() == Some(pane) && target.path.as_ref() == source_path
         ));
     }
@@ -1279,7 +1279,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         assert_eq!(placed.view_regions[0].maximum, Vec2::ZERO);
         assert!(
             placed
-                .descends
+                .landmarks
                 .iter()
                 .any(|node| node.path.as_ref() == path && node.rect == rect)
         );
@@ -1310,7 +1310,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
             .collect();
         assert!(
             placed
-                .descends
+                .landmarks
                 .iter()
                 .any(|node| node.path.as_ref() == field_path)
         );
@@ -1402,12 +1402,17 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
     assert_eq!(upper_region.rect.x0, lower_region.rect.x0);
     assert_eq!(upper_region.rect.x1, lower_region.rect.x1);
     assert_eq!(lower_region.rect.y0 - upper_region.rect.y1, 1.0);
-    assert!(placed.descends.iter().all(|descend| descend.root.is_some()));
+    assert!(
+        placed
+            .landmarks
+            .iter()
+            .all(|landmark| landmark.root.is_some())
+    );
     let workspace::Target::Pane { path } = upper.target() else {
         panic!("pane root")
     };
-    assert!(placed.descends.iter().any(|descend| {
-        descend.root.as_ref() == Some(&upper) && descend.path.as_ref() == path.as_slice()
+    assert!(placed.landmarks.iter().any(|landmark| {
+        landmark.root.as_ref() == Some(&upper) && landmark.path.as_ref() == path.as_slice()
     }));
 }
 
@@ -1582,14 +1587,14 @@ fn building_a_frame_leaves_installed_hover_and_dispatch_unchanged() {
             .build_frame(1.0, Size::new(300.0, 200.0), runner.frame.hover_location());
     assert_eq!(runner.frame.hover, Some(prior));
     assert_eq!(runner.frame.dispatch.pointer_root, Some(prior_root));
-    assert!(runner.frame.dispatch.descends.is_empty());
+    assert!(runner.frame.dispatch.landmarks.is_empty());
     assert_eq!(frame.hover, None);
     let pointer_root = frame.dispatch.pointer_root.clone();
-    let descends = frame.dispatch.descends.clone();
+    let landmarks = frame.dispatch.landmarks.clone();
     let paint = runner.install_frame(frame, 1.0, Size::new(300.0, 200.0));
     assert_eq!(runner.frame.hover, None);
     assert_eq!(runner.frame.dispatch.pointer_root, pointer_root);
-    assert!(Rc::ptr_eq(&runner.frame.dispatch.descends, &descends));
+    assert!(Rc::ptr_eq(&runner.frame.dispatch.landmarks, &landmarks));
     drop(paint);
 }
 

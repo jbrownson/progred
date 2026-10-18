@@ -182,7 +182,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                     ordinary,
                 ]);
                 let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-                let rect = |path: &Path| frame.descends.landmark(path).unwrap().rect;
+                let rect = |path: &Path| frame.landmarks.landmark(path).unwrap().rect;
                 assert_eq!(rect(&children[1]).y0 > rect(&children[0]).y1, vertical);
                 let (forward, backward, across) = if vertical {
                     (Down, Up, Left)

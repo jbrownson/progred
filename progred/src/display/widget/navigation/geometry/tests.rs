@@ -57,7 +57,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
     });
     let root = editor.model.workspace.document_root().clone();
     let other = Root::document();
-    let descends: [Landmark<()>; 2] = [
+    let landmarks: [Landmark<()>; 2] = [
         Landmark {
             scope: Default::default(),
             root: Some(other.clone()),
@@ -86,7 +86,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
         content: None,
     }];
     let geometry = Geometry {
-        descends: &descends,
+        landmarks: &landmarks,
         view_regions: &regions,
         scale: 2.0,
     };
