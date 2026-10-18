@@ -15,141 +15,14 @@ mod effect_tests;
 #[cfg(test)]
 mod runtime_tests;
 
+pub mod absent;
+pub mod f64;
 pub mod path;
 mod reify;
 pub mod source;
+pub mod text;
 mod unboxed;
-
-pub mod vocabulary {
-    use gid::CellId;
-
-    pub const FUNCTION: CellId = CellId::from_u128(0x751fca4373debdd0b7e6eb73e08d684b);
-    pub const PARAMS: CellId = CellId::from_u128(0x195b378d0d31d90ab0d7366c15346b70);
-    pub const BODY: CellId = CellId::from_u128(0x986143866eda2e2fbf9ab8484357a0c9);
-    pub const VALUE: CellId = CellId::from_u128(0x5adde9ececa6ad57c81a3b2907e75e08);
-    pub const CLOSURE: CellId = CellId::from_u128(0xdb39600f3ed07398c77ac120deb108a8);
-    pub const ENVIRONMENT: CellId = CellId::from_u128(0xe910025c710c25c43d0a5b296378f374);
-    pub const FFI: CellId = CellId::from_u128(0x912adb7252d689659b6de9eeeb827658);
-    pub const EVALUATE: CellId = CellId::from_u128(0xacfc5e50881292518dab3cec77cf43ee);
-    pub const EXPRESSION: CellId = CellId::from_u128(0xccc55b0eb63b9f564ea74436094d4014);
-}
-
-pub mod absent {
-    use gid::{CellId, Value};
-
-    pub const ABSENT: CellId = CellId::from_u128(0xd9c0a7145a38859a245640d3469cbcd4);
-    pub const FUEL_EXHAUSTED: CellId = CellId::from_u128(0x513628d759c04b3e7088b575e555a80e);
-    pub const MISSING_CELL: CellId = CellId::from_u128(0xa5a1b4e3d0df96bd11af00f0780136ff);
-    pub const CELL_CYCLE: CellId = CellId::from_u128(0x150e0fc7e38d1670f41283c3d23a9b8d);
-    pub const MALFORMED_LAMBDA: CellId = CellId::from_u128(0xfbf5894d7f62b6d0048d17d26851b415);
-    pub const INVALID_PARAMETER: CellId = CellId::from_u128(0x93ca0e9199372c46ee24bd4c508e178c);
-    pub const NOT_CALLABLE: CellId = CellId::from_u128(0x8624488c2d10d2a4b84560dfa99a38e6);
-    pub const MISSING_ARGUMENT: CellId = CellId::from_u128(0x8b2f0db36e5c3d35595eb5666cc89c78);
-    pub const INVALID_ENVIRONMENT: CellId = CellId::from_u128(0x152f2cac01f072317ab5746c5befdf9c);
-    pub const NO_ALTERNATIVE: CellId = CellId::from_u128(0x3bf0543fa73a0cee9036317cdb5cacd9);
-    pub const EFFECTFUL_DECLINE: CellId = CellId::from_u128(0xdc2651b863aa8aaf2df25ccb0c1fef03);
-    pub const DECLINED: CellId = CellId::from_u128(0x1cab38a2c8cffe5c077adc29f74c2ddf);
-    pub const CAUSES: CellId = CellId::from_u128(0x2f34365ec4dce76324f482c08afe6aba);
-
-    pub const CELL: CellId = CellId::from_u128(0x7ba69298ef92cf954456784b66e86032);
-    pub const VALUE: CellId = CellId::from_u128(0xcfeaf191b71e06afef86c27ee43eb936);
-    pub const CYCLE: CellId = CellId::from_u128(0x2776d28585d66ef8a747a8bc6dad7381);
-
-    pub fn with_detail(reason: CellId, field: CellId, detail: Value) -> Value {
-        Value::record([(ABSENT, Value::from(reason)), (field, detail)])
-    }
-
-    pub fn value(reason: CellId) -> Value {
-        Value::record([(ABSENT, Value::from(reason))])
-    }
-
-    pub fn reason(value: &Value) -> Option<CellId> {
-        value.as_record()?.get(&ABSENT).and_then(Value::as_cell)
-    }
-
-    pub fn is_absent(value: &Value) -> bool {
-        reason(value).is_some()
-    }
-
-    pub fn decline() -> Value {
-        value(DECLINED)
-    }
-
-    pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
-        match <[Value; 1]>::try_from(causes.into_iter().collect::<Vec<_>>()) {
-            Ok([cause]) => cause,
-            Err(causes) => Value::record([
-                (ABSENT, Value::from(NO_ALTERNATIVE)),
-                (CAUSES, Value::list(causes)),
-            ]),
-        }
-    }
-}
-
-/// The f64 number convention, privileged so native numbers stay
-/// unboxed through calls, containers, and environments. Privileged
-/// knowledge is an accelerator only: the convention must remain
-/// expressible as an ordinary external library, which would evaluate
-/// correctly and merely lose the fast paths.
-pub mod f64 {
-    use gid::{CellId, Record, Value};
-
-    pub const F64: CellId = CellId::from_u128(0xed11fde03b7c2c1ba2fccc3cdba5d561);
-
-    pub fn value(number: f64) -> Value {
-        Value::record([(F64, encode(number))])
-    }
-
-    pub fn read(value: &Value) -> Option<f64> {
-        read_record(value.as_record()?)
-    }
-
-    pub fn read_record(fields: &Record) -> Option<f64> {
-        fields.get(&F64).and_then(Value::as_blob).and_then(decode)
-    }
-
-    /// The `f64` field holding `number`.
-    pub(crate) fn encode(number: f64) -> Value {
-        Value::from(number.to_le_bytes().to_vec())
-    }
-
-    /// The number an `f64` field's bytes hold.
-    pub(crate) fn decode(bytes: &[u8]) -> Option<f64> {
-        <[u8; 8]>::try_from(bytes).ok().map(f64::from_le_bytes)
-    }
-}
-
-/// The UTF-8 text convention: a record whose `utf8` field holds the text's
-/// bytes. Privileged like f64's, so text stays unboxed through calls,
-/// containers, and environments, and readers borrow it without decoding;
-/// it remains an ordinary convention an external library could own.
-pub mod text {
-    use gid::{CellId, Record, Value};
-
-    pub const UTF8: CellId = CellId::from_u128(0x332529b8ea83a7ba10fd7f6d942e5016);
-
-    pub fn value(text: impl Into<String>) -> Value {
-        Value::record([(UTF8, encode(text))])
-    }
-
-    pub fn read(value: &Value) -> Option<&str> {
-        read_record(value.as_record()?)
-    }
-
-    pub fn read_record(fields: &Record) -> Option<&str> {
-        fields.get(&UTF8)?.as_blob().and_then(decode)
-    }
-
-    /// The `utf8` field holding `text`.
-    pub(crate) fn encode(text: impl Into<String>) -> Value {
-        Value::from(text.into().into_bytes())
-    }
-
-    /// The text a `utf8` field's bytes hold.
-    pub(crate) fn decode(bytes: &[u8]) -> Option<&str> {
-        std::str::from_utf8(bytes).ok()
-    }
-}
+pub mod vocabulary;
 
 pub const DEFAULT_FUEL: usize = 1_024;
 
