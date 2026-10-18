@@ -54,14 +54,6 @@ impl<Paint> Drawing<Paint> {
 
 #[derive(Debug, Clone)]
 pub enum Command<Paint> {
-    Mesh {
-        scene: crate::mesh::Scene,
-        transform: Affine,
-    },
-    Image {
-        image: ImageData,
-        transform: Affine,
-    },
     Fill {
         shape: Shape,
         paint: Paint,
@@ -83,8 +75,6 @@ pub enum Command<Paint> {
 impl<Paint> Command<Paint> {
     fn map_paint<Mapped>(self, map: &impl Fn(Paint) -> Mapped) -> Command<Mapped> {
         match self {
-            Self::Mesh { scene, transform } => Command::Mesh { scene, transform },
-            Self::Image { image, transform } => Command::Image { image, transform },
             Self::Fill {
                 shape,
                 paint,
@@ -121,38 +111,30 @@ impl<Paint> Command<Paint> {
     }
 }
 
-/// Interpret an initially encoded drawing into any Puri canvas. `outer`
-/// places the leaf; command transforms remain local to it.
-pub fn draw<Paint, C: CanvasSink + ?Sized>(
-    drawing: Drawing<Paint>,
-    canvas: &mut C,
-    outer: Affine,
-    resolve: impl Fn(&Paint) -> Brush,
-) {
-    draw_commands(drawing.commands, canvas, outer, &resolve);
+/// Interpret a drawing, its paint resolved to brushes, into any Puri
+/// canvas. `outer` places the leaf; command transforms remain local to it.
+pub fn draw<C: CanvasSink + ?Sized>(drawing: Drawing<Brush>, canvas: &mut C, outer: Affine) {
+    draw_commands(drawing.commands, canvas, outer);
 }
 
-fn draw_commands<Paint, C: CanvasSink + ?Sized>(
-    commands: Vec<Command<Paint>>,
+fn draw_commands<C: CanvasSink + ?Sized>(
+    commands: Vec<Command<Brush>>,
     canvas: &mut C,
     outer: Affine,
-    resolve: &impl Fn(&Paint) -> Brush,
 ) {
     for command in commands {
         match command {
-            Command::Mesh { scene, transform } => canvas.draw_mesh(scene, outer * transform),
-            Command::Image { image, transform } => canvas.draw_image(image, outer * transform),
             Command::Fill {
                 shape,
                 paint,
                 transform,
-            } => canvas.fill_shape(shape, resolve(&paint), outer * transform),
+            } => canvas.fill_shape(shape, paint, outer * transform),
             Command::Stroke {
                 shape,
                 style,
                 paint,
                 transform,
-            } => canvas.stroke_shape(shape, style, resolve(&paint), outer * transform),
+            } => canvas.stroke_shape(shape, style, paint, outer * transform),
             Command::Clip {
                 shape,
                 transform,
@@ -160,7 +142,7 @@ fn draw_commands<Paint, C: CanvasSink + ?Sized>(
             } => canvas.with_clip(
                 shape,
                 outer * transform,
-                Box::new(|canvas| draw_commands(children, canvas, outer, resolve)),
+                Box::new(|canvas| draw_commands(children, canvas, outer)),
             ),
         }
     }

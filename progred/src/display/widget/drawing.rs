@@ -54,7 +54,7 @@ pub fn prepare<W: 'static, H: 'static>(
                     output.render(move |canvas, _| {
                         let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
                             * Affine::scale(scale);
-                        puri::draw::draw(drawing, canvas, transform, Clone::clone);
+                        puri::draw::draw(drawing, canvas, transform);
                     })
                 },
             )

@@ -136,10 +136,9 @@ fn an_initial_drawing_interprets_through_the_canvas_language() {
     };
     let mut recorded = DrawList::new();
     draw(
-        drawing,
+        drawing.map_paint(Brush::from),
         &mut recorded,
         Affine::translate((20.0, 30.0)),
-        |paint| Brush::from(*paint),
     );
     assert!(matches!(
         &recorded.0[..],
