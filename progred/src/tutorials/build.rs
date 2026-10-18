@@ -18,7 +18,7 @@ fn dots(embed: &Embed) -> Vec<(Point, f64)> {
 /// The outlines drawn around numbers that drag, on screen.
 fn outlined(embed: &Embed) -> Vec<kurbo::Rect> {
     use puri::draw::{DrawCmd, Shape};
-    let ink = puri::Brush::from(
+    let ink = peniko::Brush::from(
         crate::styles::Theme::Light
             .palette()
             .literal

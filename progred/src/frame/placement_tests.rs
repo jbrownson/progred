@@ -90,7 +90,7 @@ fn native_delimiter(
 ) -> Measured<HoverPass<crate::Editor>> {
     use crate::display::widget;
     let value = gid::Value::record([]);
-    let side = widget::delimiter::side(puri::Delim::Bracket, side);
+    let side = widget::delimiter::side(puri::delim::Delim::Bracket, side);
     let side = if interactive {
         widget::selectable_widget(side)
     } else {
@@ -350,7 +350,7 @@ fn direct_placement_preserves_handler_precedence() {
     });
     let placed = {
         let layout = measured::layers(vec![lower, upper]);
-        let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
+        let placement = uig::Placement::root(layout.extent.rect_at(Point::ZERO));
         crate::display::widget::frame::place(layout, placement, &Default::default())
     };
     let placed = placed.bind(Default::default());

@@ -107,7 +107,7 @@ fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures
             let mut rendered = rendered.lock().unwrap();
             rendered.push((scene, view));
             Ok(Ok(fidget::raster::Frame {
-                image: puri::ImageData {
+                image: peniko::ImageData {
                     data: vec![rendered.len() as u8, 0, 0, 255].into(),
                     format: peniko::ImageFormat::Rgba8,
                     alpha_type: peniko::ImageAlphaType::Alpha,
@@ -291,7 +291,7 @@ fn current_refinements_are_not_dimmed_like_stale_images() {
         10000,
         settings(0.0),
         move |_, _, _, publish, progress| {
-            let image = puri::ImageData {
+            let image = peniko::ImageData {
                 data: vec![10, 20, 30, 255].into(),
                 format: peniko::ImageFormat::Rgba8,
                 alpha_type: peniko::ImageAlphaType::Alpha,

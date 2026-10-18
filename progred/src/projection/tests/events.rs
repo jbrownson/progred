@@ -36,7 +36,7 @@ fn native_annotation_handler_retains_the_projected_site() {
     })]);
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::TextCache::default();
+    let mut cache = puri::text::TextCache::default();
     let computations = crate::computations::Computations::from_sources(Sources {
         doc: &doc,
         libraries: &libraries,

@@ -278,7 +278,7 @@ impl<P> Driver<P> {
 
     /// The circles the last frame painted: where on screen, the circle in
     /// its drawing's own coordinates, and its paint.
-    pub(crate) fn circles(&self) -> Vec<(Point, kurbo::Circle, puri::Brush)> {
+    pub(crate) fn circles(&self) -> Vec<(Point, kurbo::Circle, peniko::Brush)> {
         crate::display::test_support::painted(&self.painted.0)
             .filter_map(|command| match command {
                 DrawCmd::Fill {

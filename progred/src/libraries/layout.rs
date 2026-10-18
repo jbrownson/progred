@@ -19,10 +19,9 @@ use crate::display::{
     descend, leaf, overlay as layout_overlay, pickable_runtime, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
-use puri::{
-    Affine, BezPath, Brush, Circle, ColorStop, Command, Drawing, Gradient, Leaf, Line, Point, Rect,
-    RoundedRect, Shape, Stroke,
-};
+use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Stroke};
+use peniko::{Brush, ColorStop, Gradient};
+use puri::draw::{Command, Drawing, Leaf, Shape};
 
 const APPLY_BORDER_PROJECTION: CellId = CellId::from_u128(0x9803fe7e085a661271b4339db22db136);
 const CAPTURED_BORDER_PROJECTION: CellId = CellId::from_u128(0x79e405aaf432422ca572617eb6d98fa3);

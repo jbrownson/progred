@@ -44,13 +44,13 @@ fn swatch_keeps_its_metrics_fill_and_inset_border() {
         }
     );
     let [
-        puri::DrawCmd::Fill {
-            shape: puri::Shape::RoundedRect(fill),
+        puri::draw::DrawCmd::Fill {
+            shape: puri::draw::Shape::RoundedRect(fill),
             brush,
             ..
         },
-        puri::DrawCmd::Stroke {
-            shape: puri::Shape::RoundedRect(border),
+        puri::draw::DrawCmd::Stroke {
+            shape: puri::draw::Shape::RoundedRect(border),
             style,
             ..
         },

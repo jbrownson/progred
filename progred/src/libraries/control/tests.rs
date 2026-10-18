@@ -362,7 +362,7 @@ fn quote_projects_a_selectable_marker_and_its_expression() {
     let Recorded::Before { child, .. } = *child else {
         panic!("the marker remains selectable");
     };
-    let Recorded::Leaf(puri::Leaf::Text {
+    let Recorded::Leaf(puri::draw::Leaf::Text {
         text, paint: face, ..
     }) = *child
     else {

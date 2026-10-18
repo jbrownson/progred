@@ -10,12 +10,12 @@ fn recorded_hits_use_paint_order_and_the_current_placement() {
         commands: DrawList::new(),
         hits: vec![
             Hit::new(
-                puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                puri::draw::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
                 Affine::IDENTITY,
                 back,
             ),
             Hit::new(
-                puri::Shape::Circle(Circle::new((5.0, 5.0), 4.0)),
+                puri::draw::Shape::Circle(Circle::new((5.0, 5.0), 4.0)),
                 Affine::IDENTITY,
                 front.clone(),
             ),
@@ -46,7 +46,7 @@ fn a_source_descendant_does_not_highlight_its_operation() {
     let drawing = Recorded {
         commands: DrawList::new(),
         hits: vec![Hit::new(
-            puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
+            puri::draw::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
             Affine::IDENTITY,
             source,
         )],
@@ -75,7 +75,7 @@ fn an_exact_source_highlights_its_operation() {
     let drawing = Recorded {
         commands: DrawList::new(),
         hits: vec![Hit::new(
-            puri::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
+            puri::draw::Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
             Affine::IDENTITY,
             source.clone(),
         )],

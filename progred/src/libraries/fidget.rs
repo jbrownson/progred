@@ -32,8 +32,9 @@ pub(crate) mod raster;
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
 use crate::display::{on_hover, on_state_drag, widget};
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use kurbo::{Affine, Size, Vec2};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
-use puri::{Affine, ImageAlphaType, ImageData, ImageFormat, Size, Vec2};
+use peniko::{ImageAlphaType, ImageData, ImageFormat};
 use std::{cell::RefCell, rc::Rc};
 
 #[cfg(not(target_arch = "wasm32"))]

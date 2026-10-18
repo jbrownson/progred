@@ -4,13 +4,15 @@
 //! this is what it gets, in the editor's own vocabulary.
 
 use gid::{CellId, Value};
-use puri::Placement;
-use puri::handler::{
-    Event, ImeEvent, KeyState, KeyboardEvent, Modifiers, PointerButton, PointerButtonEvent,
-    PointerGesture, PointerGestureEvent, PointerInfo, PointerScrollEvent, PointerState,
-    PointerType, PointerUpdate, ScrollDelta,
-};
+use puri::handler::{Event, ImeEvent};
 use puri::keyboard::CommandModifier;
+use ui_events::ScrollDelta;
+use ui_events::keyboard::{KeyState, KeyboardEvent, Modifiers};
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerGesture, PointerGestureEvent, PointerInfo,
+    PointerScrollEvent, PointerState, PointerType, PointerUpdate,
+};
+use uig::Placement;
 use vocabulary::*;
 
 #[cfg(test)]

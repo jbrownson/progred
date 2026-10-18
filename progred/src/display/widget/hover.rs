@@ -3,7 +3,7 @@
 use super::frame::Probe;
 use super::{before, style};
 use crate::display::Layout;
-use puri::Point;
+use kurbo::Point;
 use puri::handler::HasHandler;
 use std::rc::Rc;
 

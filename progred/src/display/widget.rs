@@ -10,10 +10,10 @@ pub use frame::{HoverContext, HoverInput, HoverPass, Probe};
 use gid::Value;
 pub use measured::Extent;
 use measured::Measured;
-use puri::Placement;
 use puri::handler::HasHandler;
 use puri::text::{TextCtx, TextMetrics};
 use std::rc::Rc;
+use uig::Placement;
 
 pub mod completion;
 pub mod container;
@@ -87,7 +87,7 @@ impl<World, Hover> Context<'_, '_, World, Hover> {
     }
 
     /// The paint of the theme's `face`.
-    pub fn face_brush(&self, face: crate::display::Face) -> puri::Brush {
+    pub fn face_brush(&self, face: crate::display::Face) -> peniko::Brush {
         style::face_style(self.toolkit.styles(), face).brush.clone()
     }
 }
@@ -138,7 +138,7 @@ pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     after(
         child,
         Rc::new(|context| {
-            let stroke = puri::Stroke::new(context.toolkit.styles().scale);
+            let stroke = kurbo::Stroke::new(context.toolkit.styles().scale);
             let brush = context.toolkit.styles().dim.brush.clone();
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {
@@ -147,7 +147,7 @@ pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
                             placement.rect.inset(-stroke.width / 2.0).into(),
                             stroke,
                             brush,
-                            puri::Affine::IDENTITY,
+                            kurbo::Affine::IDENTITY,
                         );
                     });
                 }
@@ -170,9 +170,9 @@ pub fn ground<World: 'static, Hover: 'static>(
                 if !placement.clipped_out() {
                     output.render(move |canvas, _| {
                         canvas.fill_shape(
-                            puri::RoundedRect::from_rect(placement.rect, 4.0 * scale).into(),
+                            kurbo::RoundedRect::from_rect(placement.rect, 4.0 * scale).into(),
                             color.into(),
-                            puri::Affine::IDENTITY,
+                            kurbo::Affine::IDENTITY,
                         );
                     });
                 }
@@ -238,7 +238,7 @@ pub fn fill_width<W: 'static, H: 'static>(child: Layout<W, H>) -> Layout<W, H> {
             measured::around_into(child, |placement, inner, output| {
                 inner.place_at_into(
                     Placement {
-                        rect: puri::Rect::new(
+                        rect: kurbo::Rect::new(
                             placement.available_rect.x0,
                             placement.rect.y0,
                             placement.available_rect.x1,

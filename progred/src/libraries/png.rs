@@ -5,7 +5,8 @@ use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, absent, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{CellId, Cells, Value};
-use puri::{ImageAlphaType, ImageData, ImageFormat, Size};
+use kurbo::Size;
+use peniko::{ImageAlphaType, ImageData, ImageFormat};
 
 pub const ID: CellId = CellId::from_u128(0x40322c0867ad9170420d563b8b15aa55);
 

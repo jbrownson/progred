@@ -2,10 +2,10 @@ use super::{Annotate, HoverCallback, before};
 use crate::display::host::Layout;
 use crate::display::{Action, Host};
 use gid::Value;
+use kurbo::{Point, Rect};
 use puri::drag::Drag;
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
-use puri::{Point, Rect};
 use std::rc::Rc;
 
 /// Displacement from the drag's origin, in logical display units.

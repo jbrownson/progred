@@ -209,7 +209,7 @@ pub(crate) fn tutorial_slots(
                                     1,
                                     4.0,
                                     [
-                                        crate::display::leaf(puri::Leaf::Text {
+                                        crate::display::leaf(puri::draw::Leaf::Text {
                                             text: captions[same as usize][*level as usize].clone(),
                                             paint: crate::display::Paint::Face(
                                                 crate::display::Face::Dim,

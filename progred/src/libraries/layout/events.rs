@@ -5,7 +5,7 @@
 use crate::display::host::{Host, Layout};
 use crate::display::widget;
 use crate::site::event as grap_event;
-use puri::Point;
+use kurbo::Point;
 use puri::handler::{Event, EventOutcome, HasHandler};
 use std::rc::Rc;
 

@@ -5,8 +5,8 @@ use crate::display::widget::frame::{Attribution, DispatchContext, HoverInput, Ho
 use crate::display::widget::style::{Theme, editor, primary_highlight};
 use crate::frame::Hovered;
 use gid::Value;
+use kurbo::Rect;
 use peniko::Brush;
-use puri::Rect;
 use puri::draw::{DrawCmd, DrawList, Shape};
 use puri::hover::Claim;
 use puri::text::TextCache;
@@ -170,7 +170,7 @@ fn completion_details_share_the_cards_right_edge() {
             activate: Rc::new(|_: &mut ()| {}),
         });
         let detail_widths = entries.each_ref().map(|entry| {
-            puri::text(&mut tcx, entry.detail.as_deref().unwrap(), &styles.detail)
+            puri::text::text(&mut tcx, entry.detail.as_deref().unwrap(), &styles.detail)
                 .metrics()
                 .width
         });

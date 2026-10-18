@@ -1,8 +1,9 @@
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{RowAlignment, activatable, aligned_row, structure, widget};
+use kurbo::{Affine, BezPath, Stroke};
+use peniko::Color;
 use puri::draw::Canvas;
-use puri::{Affine, BezPath, Color, Stroke};
 use std::rc::Rc;
 
 /// A picture alongside, not instead of, the editable profile data.

@@ -14,12 +14,12 @@ use kurbo::{Rect, Stroke};
 use measured::Extent;
 use peniko::{Brush, ImageData};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
-use puri::geometry::Placement;
 use puri::hover::Claim;
 use ui_events::keyboard::NamedKey;
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
 };
+use uig::Placement;
 
 type World = crate::Editor;
 

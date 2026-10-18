@@ -1,6 +1,9 @@
 use super::*;
-use puri::handler::{Event, PointerScrollEvent, PointerState, ScrollDelta};
-use puri::{Placement, Rect};
+use kurbo::Rect;
+use puri::handler::Event;
+use ui_events::ScrollDelta;
+use ui_events::pointer::{PointerScrollEvent, PointerState};
+use uig::Placement;
 
 fn event(delta: ScrollDelta) -> PointerScrollEvent {
     PointerScrollEvent {

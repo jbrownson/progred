@@ -2,10 +2,11 @@
 
 use super::{before, hover::block_hover};
 use crate::display::{Layout, floating};
+use kurbo::{Point, Rect, Size, Stroke};
 use measured::Extent;
-use puri::{Placement, Point, Rect, Size, Stroke};
 use puri_widgets::panel::Panel;
 use std::rc::Rc;
+use uig::Placement;
 
 pub fn popover<World: 'static, Hover: Clone + PartialEq + 'static>(
     trigger: Layout<World, Hover>,

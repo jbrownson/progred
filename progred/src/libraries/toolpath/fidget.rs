@@ -32,12 +32,12 @@ pub(super) fn progress_bar<W: Host>(
             let height = 3.0 * context.viewing().scale();
             let bar = puri_widgets::progress::ProgressBar {
                 fraction: progress.map_or(0.0, |p| p.fraction()),
-                track: puri::Color::from_rgba8(196, 204, 214, 220),
-                fill: puri::Color::from_rgb8(48, 126, 210),
+                track: peniko::Color::from_rgba8(196, 204, 214, 220),
+                fill: peniko::Color::from_rgb8(48, 126, 210),
             };
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {
-                    let rect = puri::Rect::new(
+                    let rect = kurbo::Rect::new(
                         placement.rect.x0,
                         placement.rect.y0,
                         placement.rect.x1,

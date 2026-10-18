@@ -6,8 +6,11 @@ use crate::{
 };
 use gid::{Cells, Document, Step, Value};
 use kurbo::Size;
-use puri::handler::{PointerInfo, PointerState, ScrollDelta};
-use ui_events::pointer::{PointerEvent, PointerGesture, PointerGestureEvent, PointerScrollEvent};
+use ui_events::ScrollDelta;
+use ui_events::pointer::{
+    PointerEvent, PointerGesture, PointerGestureEvent, PointerInfo, PointerScrollEvent,
+    PointerState,
+};
 
 const VIEWPORT: Size = Size::new(500.0, 400.0);
 

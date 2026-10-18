@@ -1,5 +1,5 @@
 use super::*;
-use puri::handler::PointerId;
+use ui_events::pointer::PointerId;
 
 #[test]
 fn grap_navigation_events_express_direction_without_a_physical_key() {
@@ -25,7 +25,7 @@ fn grap_pinch_delta_is_dimensionless_and_position_is_local() {
         },
         gesture: PointerGesture::Pinch(0.25),
     };
-    let placement = Placement::root(puri::Rect::new(10.0, 20.0, 110.0, 120.0));
+    let placement = Placement::root(kurbo::Rect::new(10.0, 20.0, 110.0, 120.0));
     for scale in [1.0, 2.0] {
         let value = gesture_value(placement, scale, &event, CommandModifier::Meta);
         let fields = value.as_record().unwrap();
@@ -37,7 +37,7 @@ fn grap_pinch_delta_is_dimensionless_and_position_is_local() {
 
 #[test]
 fn grap_motion_preserves_the_batch_in_local_coordinates() {
-    let placement = Placement::root(puri::Rect::new(10.0, 20.0, 110.0, 120.0));
+    let placement = Placement::root(kurbo::Rect::new(10.0, 20.0, 110.0, 120.0));
     let sample = |x: f64| {
         let mut state = PointerState::default();
         state.position.x = x;

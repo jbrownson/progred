@@ -463,7 +463,7 @@ fn a_projection_defined_as_data_realizes() {
     assert!(measured.extent.width > 0.0);
     let placed = crate::display::widget::frame::place(
         measured,
-        puri::geometry::Placement::root(measured_rect(500.0)),
+        uig::Placement::root(measured_rect(500.0)),
         &Default::default(),
     );
     let mut pointer = crate::frame::DispatchContext::new(

@@ -196,7 +196,7 @@ impl Capture {
         })
     }
 
-    fn picture(&mut self, painted: &DrawList, paper: puri::Color) -> Result<Vec<u8>, String> {
+    fn picture(&mut self, painted: &DrawList, paper: peniko::Color) -> Result<Vec<u8>, String> {
         let mut canvas = SplitCanvas::default();
         puri::draw::replay(painted, &mut canvas);
         let output = self

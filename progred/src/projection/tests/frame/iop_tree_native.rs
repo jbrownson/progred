@@ -1,4 +1,6 @@
-use puri::{Affine, BezPath, Canvas, Circle, Color, ColorStop, Gradient, Rect};
+use kurbo::{Affine, BezPath, Circle, Rect};
+use peniko::{Color, ColorStop, Gradient};
+use puri::draw::Canvas;
 
 pub(super) struct Stats {
     pub branches: usize,

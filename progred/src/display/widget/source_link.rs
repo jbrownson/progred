@@ -3,9 +3,10 @@ use super::frame::DispatchContext;
 use crate::display::Host;
 use crate::hover::{Hover, SourceTrace};
 use crate::sources::Sources;
+use kurbo::Point;
 use puri::handler::{Event, EventOutcome, HasHandler};
-use puri::{Placement, Point};
 use std::rc::Rc;
+use uig::Placement;
 
 pub(crate) fn decoration<W: Host>(
     source: SourceTrace,
@@ -37,7 +38,7 @@ pub(crate) fn decoration<W: Host>(
                     canvas.fill(
                         placement.rect.intersect(placement.clip_rect),
                         brush,
-                        puri::Affine::IDENTITY,
+                        kurbo::Affine::IDENTITY,
                     );
                 }
             });

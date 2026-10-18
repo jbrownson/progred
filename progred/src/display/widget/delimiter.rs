@@ -1,7 +1,8 @@
 use super::{Widget, fill_height, paint, selectable_widget};
 use crate::display::{Delim, Host, Layout};
+use kurbo::Affine;
 use measured::Extent;
-use puri::{Affine, delim};
+use puri::delim;
 use std::rc::Rc;
 
 pub fn side<World: 'static, Hover: 'static>(

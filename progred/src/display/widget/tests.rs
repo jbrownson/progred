@@ -2,8 +2,9 @@ use super::*;
 use crate::display::recording::{Recorded, record};
 use crate::frame::Hovered;
 use gid::{Cells, Document};
-use puri::draw::Shape;
-use puri::{Affine, Color, DrawCmd, DrawList, Point, Rect, Stroke};
+use kurbo::{Affine, Point, Rect, Stroke};
+use peniko::Color;
+use puri::draw::{DrawCmd, DrawList, Shape};
 use ui_events::keyboard::KeyboardEvent;
 
 #[test]
@@ -165,7 +166,7 @@ fn placement_hover_render_and_dispatch_are_distinct_stages() {
         output
             .handler
             .unwrap()
-            .dispatch_key(&mut state, &puri::handler::KeyboardEvent::default())
+            .dispatch_key(&mut state, &ui_events::keyboard::KeyboardEvent::default())
     );
     assert!(select(&mut state, Some(Direction::Left)));
     assert_eq!(state, ["key", "select"]);
@@ -389,7 +390,7 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     assert_eq!(decorated.extent, extent);
     let output = {
         let layout = decorated;
-        let placement = puri::Placement::root(layout.extent.rect_at(Point::ZERO));
+        let placement = uig::Placement::root(layout.extent.rect_at(Point::ZERO));
         crate::display::widget::frame::place(layout, placement, &Default::default())
     };
     let output = output.bind(Default::default());

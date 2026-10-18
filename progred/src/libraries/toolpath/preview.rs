@@ -7,8 +7,9 @@ use super::{
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::widget;
 use crate::libraries::{absent, layout};
+use kurbo::{Affine, BezPath, Point, Rect, Size, Stroke};
+use peniko::Color;
 use puri::draw::Canvas;
-use puri::{Affine, BezPath, Color, Point, Rect, Size, Stroke};
 use std::rc::Rc;
 
 fn isometric([x, y, z]: Point3) -> Point {

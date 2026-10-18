@@ -4,7 +4,8 @@ use std::{cell::RefCell, rc::Rc};
 
 #[test]
 fn view_scope_hides_other_views_hover_without_hiding_input() {
-    use puri::handler::{Event, EventOutcome, PointerState, PointerUpdate};
+    use puri::handler::{Event, EventOutcome};
+    use ui_events::pointer::{PointerState, PointerUpdate};
     let own = Root::document();
     let other = Root::document();
     let mut pass: HoverPass<Vec<(u8, Option<u8>)>, u8> = HoverPass::new(&Default::default());
@@ -89,7 +90,7 @@ fn hover_runs_in_paint_order_and_handlers_run_front_to_back() {
         ..Default::default()
     });
     assert_eq!(&*calls.borrow(), &[1, 11, 2, 12, 21, 22]);
-    puri::frame::render(output.renders, &mut puri::DrawList::new());
+    puri::frame::render(output.renders, &mut puri::draw::DrawList::new());
     assert_eq!(&*calls.borrow(), &[1, 11, 2, 12, 21, 22, 31, 32]);
     let mut log = Vec::new();
     output

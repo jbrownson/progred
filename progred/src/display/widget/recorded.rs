@@ -43,7 +43,7 @@ impl Recorder {
     /// source.
     pub fn fill(
         &mut self,
-        shape: puri::Shape,
+        shape: puri::draw::Shape,
         paint: crate::display::Paint,
         transform: Affine,
         calls: Option<grap::CallTrace>,
@@ -221,7 +221,7 @@ struct Recorded {
 }
 
 struct Hit {
-    shape: puri::Shape,
+    shape: puri::draw::Shape,
     transform: Affine,
     inverse: Affine,
     bounds: Rect,
@@ -246,7 +246,7 @@ impl From<SourceCalls> for HitSource {
 }
 
 impl Hit {
-    fn new(shape: puri::Shape, transform: Affine, source: impl Into<HitSource>) -> Self {
+    fn new(shape: puri::draw::Shape, transform: Affine, source: impl Into<HitSource>) -> Self {
         let bounds = transform.transform_rect_bbox(shape_bounds(&shape));
         Self {
             shape,
@@ -291,23 +291,23 @@ impl Recorded {
     }
 }
 
-fn shape_bounds(shape: &puri::Shape) -> Rect {
+fn shape_bounds(shape: &puri::draw::Shape) -> Rect {
     match shape {
-        puri::Shape::Rect(shape) => shape.bounding_box(),
-        puri::Shape::RoundedRect(shape) => shape.bounding_box(),
-        puri::Shape::Circle(shape) => shape.bounding_box(),
-        puri::Shape::Line(shape) => shape.bounding_box(),
-        puri::Shape::Path(shape) => shape.bounding_box(),
+        puri::draw::Shape::Rect(shape) => shape.bounding_box(),
+        puri::draw::Shape::RoundedRect(shape) => shape.bounding_box(),
+        puri::draw::Shape::Circle(shape) => shape.bounding_box(),
+        puri::draw::Shape::Line(shape) => shape.bounding_box(),
+        puri::draw::Shape::Path(shape) => shape.bounding_box(),
     }
 }
 
-fn shape_contains(shape: &puri::Shape, point: Point) -> bool {
+fn shape_contains(shape: &puri::draw::Shape, point: Point) -> bool {
     match shape {
-        puri::Shape::Rect(shape) => shape.contains(point),
-        puri::Shape::RoundedRect(shape) => shape.contains(point),
-        puri::Shape::Circle(shape) => shape.contains(point),
-        puri::Shape::Line(shape) => shape.contains(point),
-        puri::Shape::Path(shape) => shape.contains(point),
+        puri::draw::Shape::Rect(shape) => shape.contains(point),
+        puri::draw::Shape::RoundedRect(shape) => shape.contains(point),
+        puri::draw::Shape::Circle(shape) => shape.contains(point),
+        puri::draw::Shape::Line(shape) => shape.contains(point),
+        puri::draw::Shape::Path(shape) => shape.contains(point),
     }
 }
 

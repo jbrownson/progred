@@ -3,10 +3,10 @@
 
 use gid::{CellId, Resolution, Step, Value};
 use peniko::Brush;
-use puri::Leaf;
 pub use puri::delim::Delim;
 #[cfg(test)]
 pub use puri::delim::Side;
+use puri::draw::Leaf;
 use std::cmp::Ordering;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
@@ -604,12 +604,12 @@ pub fn overlay<World: 'static, Hover: 'static>(
 }
 
 pub type FloatingPosition =
-    Rc<dyn Fn(f64, puri::Placement, measured::Extent) -> Option<puri::Placement>>;
+    Rc<dyn Fn(f64, uig::Placement, measured::Extent) -> Option<uig::Placement>>;
 
 pub fn floating<World: 'static, Hover: 'static>(
     base: Layout<World, Hover>,
     content: Layout<World, Hover>,
-    position: impl Fn(f64, puri::Placement, measured::Extent) -> Option<puri::Placement> + 'static,
+    position: impl Fn(f64, uig::Placement, measured::Extent) -> Option<uig::Placement> + 'static,
 ) -> Layout<World, Hover> {
     let position: FloatingPosition = Rc::new(position);
     Layout::new(move |builder| {
@@ -622,7 +622,7 @@ pub fn floating<World: 'static, Hover: 'static>(
 pub use widget::popover::popover;
 
 pub fn padding<World: 'static, Hover: 'static>(
-    insets: peniko::kurbo::Insets,
+    insets: kurbo::Insets,
     child: Layout<World, Hover>,
 ) -> Layout<World, Hover> {
     Layout::new(move |builder| {
@@ -642,7 +642,7 @@ pub fn center<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
                     measured::around_into(child, move |placement, inner, out| {
                         let offered = placement.available_rect;
                         let x = offered.x0 + ((offered.width() - extent.width) / 2.0).max(0.0);
-                        let rect = extent.rect_at(puri::Point::new(x, placement.rect.y0));
+                        let rect = extent.rect_at(kurbo::Point::new(x, placement.rect.y0));
                         inner.place_at_into(
                             measured::child_placement(placement, rect).with_available_rect(offered),
                             out,
@@ -680,11 +680,11 @@ pub fn arrow<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
                 path.line_to((tip - head, axis + 0.85 * head));
                 canvas.stroke_shape(
                     puri::draw::Shape::Path(path),
-                    puri::Stroke::new(0.075 * em)
+                    kurbo::Stroke::new(0.075 * em)
                         .with_caps(kurbo::Cap::Round)
                         .with_join(kurbo::Join::Round),
                     ink,
-                    puri::Affine::IDENTITY,
+                    kurbo::Affine::IDENTITY,
                 );
             },
         )
@@ -710,14 +710,14 @@ pub fn rule<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
             move |canvas, placement| {
                 let top = placement.rect.y0 + RULE_SPACE * scale;
                 canvas.fill_shape(
-                    puri::draw::Shape::Rect(puri::Rect::new(
+                    puri::draw::Shape::Rect(kurbo::Rect::new(
                         placement.rect.x0,
                         top,
                         placement.rect.x1,
                         top + RULE_THICKNESS * scale,
                     )),
                     ink,
-                    puri::Affine::IDENTITY,
+                    kurbo::Affine::IDENTITY,
                 );
             },
         ))

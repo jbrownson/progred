@@ -167,7 +167,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
     // Each dial: a gray zero line, and a dark line turned by its angle.
     let frame = settle(editing_frame(&mut world, false));
     let lines = |within: Rect, [r, g, b]: [u8; 3]| {
-        let brush = Brush::from(puri::Color::from_rgb8(r, g, b));
+        let brush = Brush::from(peniko::Color::from_rgb8(r, g, b));
         frame
             .list
             .0

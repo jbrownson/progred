@@ -1,7 +1,7 @@
 use super::*;
+use kurbo::Rect;
 use measured::Extent;
-use puri::Rect;
-use puri::handler::{PointerButton, PointerButtonEvent, PointerState};
+use ui_events::pointer::{PointerButton, PointerButtonEvent, PointerState};
 
 fn press(x: f64) -> PointerButtonEvent {
     PointerButtonEvent {

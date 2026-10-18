@@ -396,7 +396,7 @@ fn preview_is_an_ordinary_projected_value() {
     .expect("preview projection");
 
     let (extent, drawing) = crate::libraries::test_widgets::paint(&layout);
-    let [puri::DrawCmd::Image { image, transform }] = drawing.0.as_slice() else {
+    let [puri::draw::DrawCmd::Image { image, transform }] = drawing.0.as_slice() else {
         panic!("preview drawing is one raster image");
     };
     assert_eq!((extent.ascent, extent.descent), (128.0, 128.0));
@@ -463,7 +463,7 @@ fn rectangular_previews_preserve_pixel_scale_and_render_at_native_resolution() {
                 crate::libraries::test_widgets::paint(&image_layout(size, raster, rgba));
             assert_eq!(extent.width, size.width);
             assert_eq!(extent.ascent + extent.descent, size.height);
-            let [puri::DrawCmd::Image { image, transform }] = drawing.0.as_slice() else {
+            let [puri::draw::DrawCmd::Image { image, transform }] = drawing.0.as_slice() else {
                 panic!("one image")
             };
             assert_eq!(
@@ -471,8 +471,8 @@ fn rectangular_previews_preserve_pixel_scale_and_render_at_native_resolution() {
                 ((size.width * scale) as u32, (size.height * scale) as u32)
             );
             assert_eq!(
-                *transform * puri::Point::new(image.width.into(), image.height.into()),
-                puri::Point::new(size.width, size.height)
+                *transform * kurbo::Point::new(image.width.into(), image.height.into()),
+                kurbo::Point::new(size.width, size.height)
             );
         }
     }

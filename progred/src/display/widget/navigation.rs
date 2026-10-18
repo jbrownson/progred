@@ -1,8 +1,8 @@
 //! Layout collects selectable stops; only the current selection's destinations survive.
 use super::{HoverPass, frame::DispatchContext, source::Secondary};
 use gid::Step;
+use kurbo::Rect;
 use measured::Measured;
-use puri::Rect;
 use puri::handler::{Event, EventOutcome, Handler};
 use std::rc::Rc;
 

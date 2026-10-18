@@ -1,9 +1,9 @@
 //! Production interpretation of layout calls into one choice graph.
 use crate::display::builder::{Builder, Node};
 use crate::display::{FloatingPosition, Layout, Paint, RowAlignment, widget};
+use kurbo::Insets;
 use measured::choices::{ChoiceBuild, ChoiceLayout};
-use peniko::kurbo::Insets;
-use puri::Leaf;
+use puri::draw::Leaf;
 use widget::{Context, HoverPass};
 
 struct Prepare<'a, 'cx, 'fonts, W, H> {

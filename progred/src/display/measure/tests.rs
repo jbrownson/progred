@@ -1,10 +1,11 @@
 use super::*;
 use crate::display::test_support::{NoProject, with_context};
 use crate::display::widget::HoverContext;
+use kurbo::Rect;
 use measured::Extent;
 use measured::choices::resolve_choices;
-use puri::{Placement, Rect};
 use std::{cell::Cell, rc::Rc};
+use uig::Placement;
 
 #[test]
 fn shared_program_prepares_once_per_frame_and_places_only_the_chosen_use() {

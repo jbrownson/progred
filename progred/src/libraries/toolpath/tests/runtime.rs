@@ -279,7 +279,7 @@ fn preview_constructor_preserves_its_runtime_program() {
                 (LINE_RADIUS, RuntimeValue::f64(0.01)),
                 (
                     crate::libraries::fidget::vocabulary::COLOR,
-                    crate::libraries::color::value(puri::Color::WHITE).into(),
+                    crate::libraries::color::value(peniko::Color::WHITE).into(),
                 ),
             ],
             &host,

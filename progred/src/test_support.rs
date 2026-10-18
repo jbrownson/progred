@@ -11,10 +11,10 @@ use crate::selection::{Selection, pending_edge};
 use crate::sources::Sources;
 use gid::{CellId, Cells, Document, Path, Position, Step, Value, new_cell_id};
 use kurbo::{Point, Rect};
-use puri::geometry::Placement;
 use puri::text::TextCtx;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
+use uig::Placement;
 
 pub(crate) fn core_libraries() -> Libraries {
     crate::stack::load().libraries

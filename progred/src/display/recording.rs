@@ -1,7 +1,7 @@
 //! Structural recording of the ordinary builder calls, used only by tests.
 use crate::display::builder::{Builder, Node};
 use crate::display::{FloatingPosition, Layout, Paint, RowAlignment, widget};
-use puri::Leaf;
+use puri::draw::Leaf;
 use std::{collections::HashMap, rc::Rc};
 
 pub enum Recorded<World, Hover> {
@@ -240,7 +240,7 @@ impl<W: 'static, H: 'static> Builder<W, H> for Recording<W, H> {
         let children = self.children(children);
         self.push(Recorded::Overlay { children })
     }
-    fn pad(&mut self, insets: peniko::kurbo::Insets, child: Node) -> Node {
+    fn pad(&mut self, insets: kurbo::Insets, child: Node) -> Node {
         let child = Box::new(self.take(child));
         self.push(Recorded::Pad {
             left: insets.x0,

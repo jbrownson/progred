@@ -19,12 +19,12 @@ use parley::{FontContext, LayoutContext};
 use peniko::Brush;
 use puri::draw::Canvas;
 use puri::frame::Render;
-use puri::geometry::Placement;
 use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
 use std::rc::Rc;
+use uig::Placement;
 
 pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 

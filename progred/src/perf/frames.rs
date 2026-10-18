@@ -129,7 +129,7 @@ fn color_picker_fixture() -> (Document, Value) {
     use crate::libraries::{color, f64};
     (
         Document {
-            root: Some(color::value(puri::Color::from_rgba8(
+            root: Some(color::value(peniko::Color::from_rgba8(
                 0xb4, 0xe0, 0xfe, 0x99,
             ))),
             cells: gid::Cells::new(),

@@ -1,9 +1,11 @@
 use super::*;
 use crate::display::widget::{HoverContext, leaf};
+use kurbo::{Affine, Rect};
+use peniko::Color;
 use puri::draw::{DrawCmd, DrawList, Shape};
-use puri::handler::{PointerButtonEvent, PointerState, ScrollDelta};
-use puri::{Affine, Color, Rect};
 use std::{cell::RefCell, rc::Rc};
+use ui_events::ScrollDelta;
+use ui_events::pointer::{PointerButtonEvent, PointerState};
 
 type Frame<'a> = HoverContext<'a, Vec<&'static str>, u8>;
 

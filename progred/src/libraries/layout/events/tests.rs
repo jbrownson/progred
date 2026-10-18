@@ -7,9 +7,12 @@ use crate::projection::test_support::editing_frame_with_projection;
 use crate::projection::{Layout, ProjectionInput};
 use gid::{CellId, Cells, Document, Record, Value};
 use layout_data::vocabulary as event_fields;
-use puri::handler::{
-    ImeEvent, KeyboardEvent, PointerButton, PointerButtonEvent, PointerId, PointerInfo,
-    PointerScrollEvent, PointerState, PointerType, PointerUpdate, ScrollDelta,
+use puri::handler::ImeEvent;
+use ui_events::ScrollDelta;
+use ui_events::keyboard::KeyboardEvent;
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
+    PointerType, PointerUpdate,
 };
 
 /// The event a handler last stored at the root.

@@ -6,8 +6,8 @@ use crate::libraries::test_widgets::{drag_frame, gesture_place, press, target};
 use crate::selection::{Stage, pending_value};
 use gid::{Cells, Document, Step, new_cell_id};
 use measured::Extent;
-use puri::Placement;
 use puri::handler::HasHandler;
+use uig::Placement;
 
 #[test]
 fn scrub_start_respects_pending_selection_and_visible_view_geometry() {

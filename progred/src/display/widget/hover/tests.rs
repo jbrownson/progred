@@ -2,9 +2,11 @@ use super::*;
 use crate::display::recording::{Recorded, record};
 use crate::display::widget::HoverOutput;
 use crate::display::widget::{HoverContext, HoverInput};
-use puri::handler::{PointerButtonEvent, PointerInfo, PointerState, PointerType};
+use kurbo::Rect;
+use puri::draw::DrawList;
 use puri::hover::Claim;
-use puri::{DrawList, Placement, Rect};
+use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerState, PointerType};
+use uig::Placement;
 
 fn place(layout: Layout<(), u32>, placement: Placement) -> HoverOutput<(), u32> {
     place_at(layout, placement, HoverInput::default())
@@ -43,7 +45,7 @@ fn a_border_uses_settled_geometry_without_requesting_site_or_event_capabilities(
     let mut drawing = DrawList::new();
     puri::frame::render(output.bind(Default::default()).renders, &mut drawing);
     assert!(
-        matches!(&drawing.0[..], [puri::DrawCmd::Stroke { shape: puri::Shape::Rect(rect), style, .. }]
+        matches!(&drawing.0[..], [puri::draw::DrawCmd::Stroke { shape: puri::draw::Shape::Rect(rect), style, .. }]
         if *rect == placement.rect.inset(-0.5) && style.width == 1.0)
     );
     let clipped = Placement::new(placement.rect, Rect::new(80.0, 80.0, 90.0, 90.0));

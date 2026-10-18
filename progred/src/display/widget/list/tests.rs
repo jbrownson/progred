@@ -1,7 +1,9 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
 use crate::display::widget::{Attribution, HoverInput, HoverOutput};
-use puri::{DrawCmd, DrawList, Placement, Point, Rect, Shape};
+use kurbo::{Point, Rect};
+use puri::draw::{DrawCmd, DrawList, Shape};
+use uig::Placement;
 
 fn gap(active: bool) -> HoverOutput<(), u32> {
     let layout = insertion_gap(16.0, active.then_some(7));

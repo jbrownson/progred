@@ -29,8 +29,10 @@ use crate::display::test_support::{
 use crate::display::widget::project::Project;
 use crate::libraries::control::vocabulary as c;
 use crate::libraries::test_widgets::{project_runtime, projection_input};
+use kurbo::Affine;
 use measured::choices::{ChoiceBuild, resolve_choices};
-use puri::{Affine, DrawCmd, DrawList, Placement, Shape};
+use puri::draw::{DrawCmd, DrawList, Shape};
+use uig::Placement;
 
 const A: CellId = CellId::from_u128(1);
 const B: CellId = CellId::from_u128(2);
@@ -80,7 +82,7 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
             |canvas, placement| {
                 canvas.fill_shape(
                     placement.rect.into(),
-                    puri::Color::from_rgb8(80, 140, 100).into(),
+                    peniko::Color::from_rgb8(80, 140, 100).into(),
                     Affine::IDENTITY,
                 );
             },
@@ -515,10 +517,10 @@ fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
         Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
         &Default::default(),
     );
-    let event = puri::handler::PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
-        state: puri::handler::PointerState {
+        state: ui_events::pointer::PointerState {
             position: (100.0, height / 2.0).into(),
             ..Default::default()
         },
@@ -829,10 +831,10 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
         root: None,
         cells: Cells::new(),
     });
-    let mut event = puri::handler::PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+    let mut event = ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
-        state: puri::handler::PointerState {
+        state: ui_events::pointer::PointerState {
             position: (5.0, 1.0).into(),
             ..Default::default()
         },
@@ -915,10 +917,10 @@ fn radio_dispatch_updates_value_without_touching_playback_camera_or_document() {
         &Default::default(),
     );
     let dispatch = placed.resolve_for_dispatch();
-    let mut event = puri::handler::PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+    let mut event = ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
-        state: puri::handler::PointerState {
+        state: ui_events::pointer::PointerState {
             position: (extent.width + 10.0, extent.height() / 2.0).into(),
             ..Default::default()
         },
@@ -965,10 +967,10 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
         Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
         &Default::default(),
     );
-    let event = puri::handler::PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
-        state: puri::handler::PointerState {
+        state: ui_events::pointer::PointerState {
             position: (100.0, height - 18.0).into(),
             ..Default::default()
         },
@@ -1053,8 +1055,9 @@ fn range_stack_uses_row_hit_height_without_extra_vertical_padding() {
 fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     use crate::hover::{Hover, SourceTrace};
     use gid::Step;
-    use puri::handler::{Event, Modifiers};
+    use puri::handler::Event;
     use puri::hover::Claim;
+    use ui_events::keyboard::Modifiers;
 
     let (owner, library, probe) = (gid::new_cell_id(), gid::new_cell_id(), gid::new_cell_id());
     let items = Value::list([A.into(), A.into()]);
@@ -1168,10 +1171,10 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         ))),
     );
     // No visible source: Cmd-click still belongs to the source link and must not move the range.
-    let mut event = puri::handler::PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+    let mut event = ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
-        state: puri::handler::PointerState {
+        state: ui_events::pointer::PointerState {
             position: (point.x, point.y).into(),
             modifiers: Modifiers::META | Modifiers::CONTROL,
             ..Default::default()
@@ -1299,10 +1302,10 @@ fn tree_cursor_stacks_disjoint_rows_without_extra_frame_padding() {
         root: None,
         cells: Cells::new(),
     });
-    let event = puri::handler::PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
-        state: puri::handler::PointerState {
+        state: ui_events::pointer::PointerState {
             position: (100.0, 66.0).into(),
             ..Default::default()
         },
@@ -1360,10 +1363,10 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
         Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
         &Default::default(),
     );
-    let event = puri::handler::PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
-        state: puri::handler::PointerState {
+        state: ui_events::pointer::PointerState {
             position: (150.0, height / 2.0).into(),
             ..Default::default()
         },
@@ -1452,10 +1455,10 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
                 &Default::default(),
             )
             .resolve_for_dispatch();
-            let mut event = puri::handler::PointerButtonEvent {
-                button: Some(puri::handler::PointerButton::Primary),
+            let mut event = ui_events::pointer::PointerButtonEvent {
+                button: Some(ui_events::pointer::PointerButton::Primary),
                 pointer: crate::display::test_support::mouse(),
-                state: puri::handler::PointerState {
+                state: ui_events::pointer::PointerState {
                     position: (201.0, height / 2.0).into(),
                     count: 2,
                     ..Default::default()
@@ -1463,9 +1466,9 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
             };
             assert!(!dispatch.dispatch_pointer_down(&mut editor, &event));
             event.state.position = (100.0, height / 2.0).into();
-            event.button = Some(puri::handler::PointerButton::Secondary);
+            event.button = Some(ui_events::pointer::PointerButton::Secondary);
             assert!(!dispatch.dispatch_pointer_down(&mut editor, &event));
-            event.button = Some(puri::handler::PointerButton::Primary);
+            event.button = Some(ui_events::pointer::PointerButton::Primary);
             assert!(dispatch.dispatch_pointer_down(&mut editor, &event));
             assert!(!editor.advance_gesture(&[Point::new(-100.0, -100.0)]));
             let expected = selection.select_all(if finest { 0 } else { 1 });
@@ -1518,10 +1521,10 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
                 &Default::default(),
             )
             .resolve_for_dispatch();
-            let event = puri::handler::PointerButtonEvent {
-                button: Some(puri::handler::PointerButton::Primary),
+            let event = ui_events::pointer::PointerButtonEvent {
+                button: Some(ui_events::pointer::PointerButton::Primary),
                 pointer: crate::display::test_support::mouse(),
-                state: puri::handler::PointerState {
+                state: ui_events::pointer::PointerState {
                     position: (x, height / 2.0).into(),
                     count,
                     ..Default::default()
@@ -1581,10 +1584,10 @@ fn tree_cursor_updates_range_and_position_together() {
             Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
             &Default::default(),
         );
-        let event = puri::handler::PointerButtonEvent {
-            button: Some(puri::handler::PointerButton::Primary),
+        let event = ui_events::pointer::PointerButtonEvent {
+            button: Some(ui_events::pointer::PointerButton::Primary),
             pointer: crate::display::test_support::mouse(),
-            state: puri::handler::PointerState {
+            state: ui_events::pointer::PointerState {
                 position: (x, height / 2.0).into(),
                 count,
                 ..Default::default()

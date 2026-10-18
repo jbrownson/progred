@@ -2,9 +2,11 @@
 
 use super::HoverPass;
 
+use kurbo::{Point, Vec2};
 use measured::{Extent, Measured};
-use puri::handler::{Event, EventOutcome, Handler, HasHandler, PointerScrollEvent, ScrollOutcome};
-use puri::{Placement, Point, Vec2};
+use puri::handler::{Event, EventOutcome, Handler, HasHandler, ScrollOutcome};
+use ui_events::pointer::PointerScrollEvent;
+use uig::Placement;
 
 pub trait Layers {
     fn clipped(&mut self, placement: Placement, content: impl FnOnce(&mut Self));

@@ -244,7 +244,7 @@ pub fn text<C: 'static, H: 'static>(
     shaped_text(puri::text::text(ctx, s, style))
 }
 
-pub fn shaped_text<C: 'static, H: 'static>(text: puri::Text) -> Measured<HoverPass<C, H>> {
+pub fn shaped_text<C: 'static, H: 'static>(text: puri::text::Text) -> Measured<HoverPass<C, H>> {
     leaf(extent(text.metrics()), move |canvas, placement| {
         text.place(canvas, placement)
     })

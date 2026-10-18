@@ -8,7 +8,7 @@ use crate::display::text as text_layout;
 use crate::libraries::test_widgets::projection_input;
 use ::grap::{Environment, Expression, ForeignFunction, Halt};
 use gid::{CellId, Value};
-use puri::Leaf;
+use puri::draw::Leaf;
 use std::rc::Rc;
 
 const SHARED_CELL: CellId = CellId::from_u128(1);

@@ -6,6 +6,7 @@ use super::{
     source::{Secondary, SourceTrace},
     view::Root,
 };
+use kurbo::{Affine, Point, Rect, Vec2};
 use measured::Measured;
 use puri::draw::{Canvas, CanvasSink};
 use puri::frame::AfterHover;
@@ -13,8 +14,8 @@ pub use puri::frame::Render;
 use puri::handler::{Handler, HasHandler};
 use puri::hover::Claim;
 pub use puri::hover::Probe;
-use puri::{Affine, Placement, Point, Rect, Vec2};
 use std::rc::Rc;
+use uig::Placement;
 
 pub struct HoverInput<'a, H> {
     pub command_modifier: puri::keyboard::CommandModifier,

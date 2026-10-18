@@ -1,7 +1,8 @@
 //! A raster image drawn over a logical size.
 
 use crate::display::{Layout, widget};
-use puri::{Affine, ImageData, Size};
+use kurbo::{Affine, Size};
+use peniko::ImageData;
 use std::rc::Rc;
 
 /// `image` stretched over `size`, which is in logical units.

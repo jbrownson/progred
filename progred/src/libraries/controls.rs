@@ -7,9 +7,9 @@ use ::grap::{
     RuntimeValue,
 };
 use gid::{CellId, Cells, Value};
+use kurbo::{Point, Rect};
 use measured::{Extent, choices::ChoiceLayout};
 use puri::handler::HasHandler;
-use puri::{Point, Rect};
 use puri_widgets::slider::Slider;
 use std::{cell::RefCell, rc::Rc};
 
@@ -380,7 +380,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
             });
         ChoiceLayout::attach(content, ChoiceLayout::fixed(controls), |view, controls| {
             measured::overlay_into(view, controls, |placement, extent| {
-                Some(puri::Placement::new(
+                Some(uig::Placement::new(
                     Rect::from_origin_size(
                         (placement.rect.x0, placement.rect.y1 - extent.height()),
                         extent.size(),

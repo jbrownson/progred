@@ -3,9 +3,10 @@
 use crate::display::Paint;
 use crate::display::widget::HoverPass;
 use crate::display::widget::{self, Context};
+use kurbo::Affine;
 use measured::{Extent, Measured};
+use puri::draw::Leaf;
 use puri::text::TextStyle;
-use puri::{Affine, Leaf};
 
 pub fn prepare<W: 'static, H: 'static>(
     context: &mut Context<'_, '_, W, H>,

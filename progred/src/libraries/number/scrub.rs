@@ -4,7 +4,8 @@ use crate::display::widget::frame::Cursor;
 use crate::display::widget::gesture::Gesture;
 use crate::gesture::EditRun;
 use gid::Value;
-use puri::{Point, drag::Drag};
+use kurbo::Point;
+use puri::drag::Drag;
 use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

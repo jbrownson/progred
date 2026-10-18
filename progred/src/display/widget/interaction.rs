@@ -2,9 +2,10 @@ use super::{HoverCallback, before};
 use crate::display::widget::HoverContext;
 use crate::display::{Action, Host, Layout};
 use gid::Value;
+use kurbo::Point;
 use puri::handler::HasHandler;
-use puri::{Placement, Point};
 use std::rc::Rc;
+use uig::Placement;
 
 /// What a press runs on the world it's dispatched to.
 pub type WorldHandler<World> = Rc<dyn Fn(&mut World) -> bool>;

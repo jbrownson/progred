@@ -7,14 +7,16 @@ use super::frame::Probe;
 use super::offers::Entry;
 use super::style::{Styles, face_style, primary_highlight_stroke};
 use super::{container, extent, leaf, popover, scroll};
+use kurbo::{Insets, Point, Size, Stroke, Vec2};
 use measured::{Extent, Measured, col, pad};
-use peniko::kurbo::Insets;
-use puri::handler::{HasHandler, Key, NamedKey, PointerType};
+use puri::handler::HasHandler;
 use puri::text::TextCtx;
-use puri::{Placement, Point, Size, Stroke, Vec2};
 use puri_widgets::panel::Panel;
 use puri_widgets::text_frame;
 use std::rc::Rc;
+use ui_events::keyboard::{Key, NamedKey};
+use ui_events::pointer::PointerType;
+use uig::Placement;
 
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct State {

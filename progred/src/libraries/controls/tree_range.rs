@@ -360,7 +360,7 @@ fn range_widget<W: Host>(
                     if let Some(decorate) = decorate
                         && let Some(rect) = painted_slider.item_rect(placement.rect, scale, item)
                     {
-                        decorate(output, puri::Placement::new(rect, placement.clip_rect));
+                        decorate(output, uig::Placement::new(rect, placement.clip_rect));
                     }
                 }
             },

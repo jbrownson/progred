@@ -1,6 +1,7 @@
 //! Synchronous browser admission uses only the latest installed frame's geometry.
 use crate::display::widget::scroll::Probe;
-use puri::handler::{PointerInfo, PointerScrollEvent, PointerState, PointerType, ScrollDelta};
+use ui_events::ScrollDelta;
+use ui_events::pointer::{PointerInfo, PointerScrollEvent, PointerState, PointerType};
 
 #[cfg(target_arch = "wasm32")]
 thread_local! {

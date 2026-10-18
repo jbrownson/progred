@@ -1,7 +1,7 @@
 //! The layout operation interface. Interpreters may prepare boxes or record calls.
 use crate::display::{FloatingPosition, Layout, Paint, RowAlignment, widget};
-use peniko::kurbo::Insets;
-use puri::Leaf;
+use kurbo::Insets;
+use puri::draw::Leaf;
 
 /// An interpreter-local result, consumed once by a parent operation.
 #[derive(Clone, Copy)]

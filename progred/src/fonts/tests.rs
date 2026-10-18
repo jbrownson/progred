@@ -1,6 +1,7 @@
 use super::*;
 use parley::LayoutContext;
-use puri::text::{GenericFamily, TextCache, TextCtx, TextStyle, line_layout};
+use parley::style::GenericFamily;
+use puri::text::{TextCache, TextCtx, TextStyle, line_layout};
 
 /// Asserts that every family shapes every text with real glyphs.
 fn shapes_all(mut fonts: FontContext, texts: &[&str]) {

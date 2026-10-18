@@ -7,11 +7,11 @@ use crate::projection::{Layout, ProjectionInput};
 use crate::{Editor, frame::Hovered};
 use kurbo::Rect;
 use measured::Extent;
-use puri::Placement;
 use ui_events::keyboard::Modifiers;
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
 };
+use uig::Placement;
 
 /// Exercise an offer's actual handler, including its selection effects.
 pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
@@ -34,7 +34,7 @@ impl crate::display::Completion {
             .expect("offer inserts a value")
     }
 }
-pub fn paint(layout: &impl Recordable<Editor, Hovered>) -> (widget::Extent, puri::DrawList) {
+pub fn paint(layout: &impl Recordable<Editor, Hovered>) -> (widget::Extent, puri::draw::DrawList) {
     let Recorded::Widget(widget) = layout.record() else {
         panic!("expected a native widget");
     };
@@ -44,10 +44,10 @@ pub fn paint(layout: &impl Recordable<Editor, Hovered>) -> (widget::Extent, puri
     let extent = measured.extent;
     let fragment = crate::display::widget::frame::place(
         measured,
-        puri::Placement::root(extent.rect_at(puri::Point::ZERO)),
+        uig::Placement::root(extent.rect_at(kurbo::Point::ZERO)),
         &Default::default(),
     );
-    let mut canvas = puri::DrawList::new();
+    let mut canvas = puri::draw::DrawList::new();
     for render in fragment.bind(Default::default()).renders {
         render(&mut canvas);
     }
@@ -58,7 +58,7 @@ pub fn point_update(
     layout: &impl Recordable<Editor, Hovered>,
     point: crate::display::PointEvent,
 ) -> crate::display::PointUpdate {
-    use puri::handler::{PointerButton, PointerButtonEvent};
+    use ui_events::pointer::{PointerButton, PointerButtonEvent};
     let Recorded::Before { before, .. } = layout.record() else {
         panic!("expected a point-control wrapper");
     };
@@ -76,7 +76,7 @@ pub fn point_update(
     let mut output = widget::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
-        puri::Placement::root(puri::Rect::new(0.0, 0.0, 100.0, 100.0)),
+        uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 100.0, 100.0)),
     );
     let mut event = PointerButtonEvent {
         button: Some(PointerButton::Primary),
@@ -90,7 +90,7 @@ pub fn point_update(
             .unwrap()
             .dispatch_pointer_down(&mut world, &event)
     );
-    world.advance_gesture(&[puri::Point::new(point.x * 100.0, point.y * 100.0)]);
+    world.advance_gesture(&[kurbo::Point::new(point.x * 100.0, point.y * 100.0)]);
     crate::display::PointUpdate {
         value: world.model.doc.root.clone().expect("contact writes"),
         selection: world
@@ -110,7 +110,7 @@ pub fn claim(layout: &impl Recordable<Editor, Hovered>) -> Option<puri::hover::C
         before(context)
     });
     let mut output = widget::HoverOutput::default();
-    let placement = puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0));
+    let placement = uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0));
     place(
         &mut widget::HoverContext::new(
             widget::HoverInput {
@@ -130,7 +130,9 @@ pub fn assert_delimiter(
     delim: puri::delim::Delim,
     side: puri::delim::Side,
 ) {
-    use puri::{Affine, DrawCmd, DrawList, Placement, Point};
+    use kurbo::{Affine, Point};
+    use puri::draw::{DrawCmd, DrawList};
+    use uig::Placement;
     let measured = with_context(&crate::display::test_support::NoProject, |context| {
         widget(context)
     });
@@ -163,14 +165,14 @@ pub fn assert_delimiter(
     let (
         [
             DrawCmd::Fill {
-                shape: puri::Shape::Path(shape),
+                shape: puri::draw::Shape::Path(shape),
                 transform,
                 ..
             },
         ],
         [
             DrawCmd::Fill {
-                shape: puri::Shape::Path(wanted),
+                shape: puri::draw::Shape::Path(wanted),
                 transform: wanted_transform,
                 ..
             },
@@ -233,18 +235,19 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
     let mut output = widget::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
-        puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),
+        uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
     let mut world = crate::test_editor(gid::Document {
         root: None,
         cells: gid::Cells::new(),
     });
     world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
-    let event = puri::handler::PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
-        state: puri::handler::PointerState {
-            modifiers: puri::handler::Modifiers::META | puri::handler::Modifiers::CONTROL,
+        state: ui_events::pointer::PointerState {
+            modifiers: ui_events::keyboard::Modifiers::META
+                | ui_events::keyboard::Modifiers::CONTROL,
             ..Default::default()
         },
     };
@@ -266,7 +269,7 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
     let mut output = widget::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
-        puri::Placement::root(puri::Rect::new(0.0, 0.0, 20.0, 20.0)),
+        uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
     let mut world = crate::test_editor(gid::Document {
         root: None,
@@ -274,7 +277,7 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
     });
     output.handler?.dispatch_key(
         &mut world,
-        &puri::handler::KeyboardEvent {
+        &ui_events::keyboard::KeyboardEvent {
             state: ui_events::keyboard::KeyState::Down,
             ..Default::default()
         },

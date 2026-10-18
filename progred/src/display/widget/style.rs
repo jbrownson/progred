@@ -1,11 +1,11 @@
 //! Editor faces and highlight styling.
 
+use kurbo::{Affine, Rect, RoundedRect, Stroke};
+use parley::style::GenericFamily;
 use peniko::{Brush, Color};
 use puri::draw::Canvas;
 use puri::edit::{EditStyle, LineEditPresentation};
-use puri::text::GenericFamily;
 use puri::text::TextStyle;
-use puri::{Affine, Rect, RoundedRect, Stroke};
 
 mod palette;
 pub use palette::{Palette, Theme};

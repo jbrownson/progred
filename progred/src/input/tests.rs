@@ -3,11 +3,11 @@ use crate::display::{Layout, partial, widget};
 use crate::libraries::{f64, text};
 use crate::projection::Projection;
 use gid::{Cells, Document};
-use puri::handler::{HasHandler, PointerButtonEvent, PointerInfo, PointerState, ScrollOutcome};
+use puri::handler::{HasHandler, ScrollOutcome};
 use std::cell::RefCell;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState};
-use ui_events::pointer::PointerUpdate;
+use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerState, PointerUpdate};
 
 const VIEWPORT: Size = Size::new(500.0, 400.0);
 type Log = Rc<RefCell<Vec<(&'static str, f64)>>>;
@@ -535,7 +535,7 @@ fn every_input_receives_the_installed_dispatch_context() {
         pass.in_view(root.clone(), |pass| {
             pass.visit(|output| {
                 output.claim(crate::display::widget::frame::Probe::exact(
-                    puri::Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0)),
+                    uig::Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0)),
                     hover.clone(),
                 ));
             })
@@ -562,7 +562,7 @@ fn every_input_receives_the_installed_dispatch_context() {
             }
         });
         let button = PointerButtonEvent {
-            button: Some(puri::handler::PointerButton::Primary),
+            button: Some(ui_events::pointer::PointerButton::Primary),
             pointer: crate::display::test_support::mouse(),
             state: PointerState {
                 position: (20.0, 20.0).into(),
@@ -609,7 +609,8 @@ fn every_input_receives_the_installed_dispatch_context() {
 
 #[test]
 fn pinch_packets_keep_their_context_and_build_one_successor() {
-    use puri::handler::{EventOutcome, PointerGesture};
+    use puri::handler::EventOutcome;
+    use ui_events::pointer::PointerGesture;
     use winit::event::{DeviceId, TouchPhase, WindowEvent};
     let log = Log::default();
     let mut runner = instrumented_runner(&log);
@@ -931,7 +932,7 @@ fn pointer_release_and_cancellation_update_the_computation_input() {
         move |read| Ok(*pressed.read(read))
     });
     let button = PointerButtonEvent {
-        button: Some(puri::handler::PointerButton::Primary),
+        button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
         state: PointerState::default(),
     };

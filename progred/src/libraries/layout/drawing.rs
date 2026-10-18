@@ -86,7 +86,7 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     };
                     let shape = match context.field(call, vocabulary::SHAPE) {
                         Some(shape) => evaluated_shape(&context.eval(shape, environment)?),
-                        None => Some(puri::Shape::Path(path.borrow().clone())),
+                        None => Some(puri::draw::Shape::Path(path.borrow().clone())),
                     };
                     let transform = match context.field(call, vocabulary::TRANSFORM) {
                         Some(transform) => {
@@ -142,7 +142,7 @@ fn number(
 
 /// The common shapes read straight from evaluated values, sparing each
 /// coordinate a round trip through stored bytes; others read as stored data.
-fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::Shape> {
+fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::draw::Shape> {
     use vocabulary::{CIRCLE, HEIGHT, RADIUS, RECT, ROUNDED_RECT, WIDTH, X, Y};
     if let Some(rect) = value.field(RECT) {
         let (x, y, width, height) = (
@@ -152,7 +152,7 @@ fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::Shape> {
             coordinate(&rect, HEIGHT)?,
         );
         return (width >= 0.0 && height >= 0.0)
-            .then(|| puri::Shape::Rect(Rect::new(x, y, x + width, y + height)));
+            .then(|| puri::draw::Shape::Rect(Rect::new(x, y, x + width, y + height)));
     }
     if !value.contains_field(ROUNDED_RECT)
         && let Some(circle) = value.field(CIRCLE)
@@ -162,7 +162,7 @@ fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::Shape> {
             coordinate(&circle, Y)?,
             coordinate(&circle, RADIUS)?,
         );
-        return (radius >= 0.0).then(|| puri::Shape::Circle(Circle::new((x, y), radius)));
+        return (radius >= 0.0).then(|| puri::draw::Shape::Circle(Circle::new((x, y), radius)));
     }
     read_shape(&value.to_value())
 }

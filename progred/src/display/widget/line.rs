@@ -5,12 +5,13 @@ use crate::display::widget::HoverPass;
 use super::{Context, Select, extent, leaf};
 use crate::display::{Env, Host, Layout, TextFamily};
 use gid::Value;
+use kurbo::Point;
 use measured::Measured;
 use puri::edit::LineEditDescription;
 use puri::handler::HasHandler;
 use puri::text::TextStyle;
-use puri::{Placement, Point};
 use std::rc::Rc;
+use uig::Placement;
 
 /// Current props, captured by this frame's handlers; never persistent state.
 #[derive(Clone)]

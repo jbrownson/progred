@@ -2,7 +2,7 @@
 
 use super::{Extent, leaf};
 use crate::display::Layout;
-use puri::{Affine, Stroke};
+use kurbo::{Affine, Stroke};
 use std::rc::Rc;
 
 /// Reserve spacing and draw an insertion line only for the supplied hover.

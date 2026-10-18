@@ -441,7 +441,7 @@ fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling(
 #[test]
 fn named_color_name_and_spelling_form_one_horizontal_row() {
     use Direction::*;
-    let color = crate::libraries::color::value(puri::Color::new([0.7, 0.3, 0.1, 1.0]));
+    let color = crate::libraries::color::value(peniko::Color::new([0.7, 0.3, 0.1, 1.0]));
     let color = Value::record(
         color
             .as_record()

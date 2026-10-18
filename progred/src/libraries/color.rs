@@ -10,8 +10,9 @@ use crate::display::{
     on_point, popover, widget,
 };
 use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
-use puri::draw::CanvasSink;
-use puri::{Affine, Canvas, Color, Rect, RoundedRect, Stroke};
+use kurbo::{Affine, Rect, RoundedRect, Stroke};
+use peniko::Color;
+use puri::draw::{Canvas, CanvasSink};
 use puri_widgets::color_picker::{self, Hsva};
 use std::rc::Rc;
 

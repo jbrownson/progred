@@ -16,7 +16,6 @@ use gid::{Cells, Document, new_cell_id};
 use kurbo::Rect;
 use measured::Extent;
 use peniko::Brush;
-use puri::geometry::Placement;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::KeyState;
 use ui_events::keyboard::KeyboardEvent;
@@ -24,6 +23,7 @@ use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
     PointerType,
 };
+use uig::Placement;
 
 mod completion;
 mod display;

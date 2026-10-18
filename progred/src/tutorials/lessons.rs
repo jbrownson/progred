@@ -62,7 +62,7 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
         crate::display::test_support::painted(commands)
             .filter_map(|command| match command {
                 DrawCmd::Fill {
-                    shape: puri::Shape::Circle(circle),
+                    shape: puri::draw::Shape::Circle(circle),
                     brush,
                     ..
                 } if *brush == peniko::Brush::from(Color::from_rgb8(57, 155, 117))
@@ -245,7 +245,7 @@ fn website_growing_forest_all_keeps_drawing_after_incomplete_clouds() {
         crate::display::test_support::painted(commands)
             .filter_map(|command| match command {
                 DrawCmd::Fill {
-                    shape: puri::Shape::Circle(circle),
+                    shape: puri::draw::Shape::Circle(circle),
                     brush,
                     ..
                 } => Some((*circle, brush.clone())),
@@ -280,7 +280,7 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
         crate::display::test_support::painted(commands)
             .filter_map(|command| match command {
                 DrawCmd::Fill {
-                    shape: puri::Shape::Circle(circle),
+                    shape: puri::draw::Shape::Circle(circle),
                     brush,
                     ..
                 } if *brush == peniko::Brush::from(Color::WHITE) => Some(*circle),

@@ -1,5 +1,6 @@
 use super::*;
-use puri::{Placement, Rect, Vec2};
+use kurbo::{Rect, Vec2};
+use uig::Placement;
 
 fn probe(offset: f64, maximum: f64) -> Probe {
     Probe {
