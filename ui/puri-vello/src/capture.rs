@@ -1,12 +1,11 @@
-//! Headless GPU textures and readback for tests that compare rendered pixels.
+//! Headless rendering and readback, for pixel tests and for screenshots
+//! taken without a window, as progred's control session takes them.
 
-use crate::compositor::{Compositor, Resources, SplitCanvas};
+use crate::compositor::{self, Compositor, Resources, SplitCanvas};
 use crate::mesh::Renderer;
 use puri::draw::{DrawCmd, DrawList};
 use vello::peniko::{Color, ImageAlphaType, ImageData, ImageFormat};
 use vello::wgpu;
-
-pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 pub struct Gpu {
     pub device: wgpu::Device,
@@ -17,7 +16,6 @@ impl Gpu {
     pub fn new() -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         let adapter = pollster::block_on(instance.request_adapter(&Default::default())).unwrap();
-        eprintln!("adapter: {:?}", adapter.get_info());
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             required_features: adapter.features()
                 & (wgpu::Features::CLEAR_TEXTURE | wgpu::Features::PIPELINE_CACHE),
@@ -28,44 +26,20 @@ impl Gpu {
         Self { device, queue }
     }
 
+    fn borrowed(&self) -> compositor::Gpu<'_> {
+        compositor::Gpu {
+            device: &self.device,
+            queue: &self.queue,
+        }
+    }
+
+    /// A texture like the compositor's own targets.
     pub fn texture(&self, width: u32, height: u32) -> wgpu::Texture {
-        self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("capture"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        })
+        self.borrowed().texture(width, height)
     }
 
     pub fn clear(&self, texture: &wgpu::Texture, color: wgpu::Color) {
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
-            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &texture.create_view(&Default::default()),
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-        }
-        self.queue.submit([encoder.finish()]);
+        self.borrowed().clear(texture, color);
     }
 
     pub fn wait(&self) {
@@ -74,47 +48,16 @@ impl Gpu {
             .unwrap();
     }
 
+    /// `texture`'s pixels, read through a new buffer; a `Readback` keeps
+    /// one from one read to the next.
     pub fn read(&self, texture: &wgpu::Texture) -> Vec<u8> {
-        let stride = (texture.width() * 4).div_ceil(256) * 256;
-        let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("diagnostic readback only"),
-            size: u64::from(stride) * u64::from(texture.height()),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        encoder.copy_texture_to_buffer(
-            texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(stride),
-                    rows_per_image: Some(texture.height()),
-                },
-            },
-            texture.size(),
-        );
-        self.queue.submit([encoder.finish()]);
-        let (send, receive) = std::sync::mpsc::channel();
-        buffer
-            .slice(..)
-            .map_async(wgpu::MapMode::Read, move |result| {
-                send.send(result).unwrap()
-            });
-        self.wait();
-        receive.recv().unwrap().unwrap();
-        let mapped = buffer.slice(..).get_mapped_range().unwrap();
-        mapped
-            .chunks_exact(stride as usize)
-            .flat_map(|row| row[..texture.width() as usize * 4].iter().copied())
-            .collect()
+        Readback::default().read(self, texture)
     }
 }
 
-/// A readback buffer kept from one read to the next, as meshes' image round
-/// trip kept one, with rows copied in bulk. Timing that round trip against
-/// direct composition needs those optimizations, not a naive readback.
+/// A readback buffer kept from one read to the next, with rows copied in
+/// bulk, so that `mesh_images`' round trip is timed as a fair baseline for
+/// direct composition.
 #[derive(Default)]
 pub struct Readback(Option<wgpu::Buffer>);
 
@@ -125,7 +68,7 @@ impl Readback {
         let size = u64::from(stride) * u64::from(texture.height());
         if self.0.as_ref().is_none_or(|buffer| buffer.size() != size) {
             self.0 = Some(gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("retained diagnostic readback"),
+                label: Some("capture readback"),
                 size,
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
@@ -165,8 +108,8 @@ impl Readback {
     }
 }
 
-/// `list` with each mesh rendered and read back into an image: how meshes
-/// reached the compositor before it drew them directly.
+/// `list` with each mesh rendered and read back into an image: the baseline
+/// that drawing meshes directly in the compositor is measured against.
 pub fn mesh_images(
     gpu: &Gpu,
     renderer: &mut Renderer,

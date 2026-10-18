@@ -13,13 +13,13 @@ use vello::{
 
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-struct Gpu<'a> {
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
+pub(crate) struct Gpu<'a> {
+    pub(crate) device: &'a wgpu::Device,
+    pub(crate) queue: &'a wgpu::Queue,
 }
 
 impl Gpu<'_> {
-    pub fn texture(&self, width: u32, height: u32) -> wgpu::Texture {
+    pub(crate) fn texture(&self, width: u32, height: u32) -> wgpu::Texture {
         self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Puri image compositor"),
             size: wgpu::Extent3d {
@@ -85,7 +85,7 @@ impl Gpu<'_> {
         Ok(texture)
     }
 
-    pub fn clear(&self, texture: &wgpu::Texture, color: wgpu::Color) {
+    pub(crate) fn clear(&self, texture: &wgpu::Texture, color: wgpu::Color) {
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
             let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

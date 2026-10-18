@@ -5,7 +5,8 @@ edition = "2024"
 license.workspace = true
 
 [features]
-# Headless GPU readback for pixel tests here and in dependent crates.
+# Headless rendering and readback, for pixel tests here and in dependent
+# crates and for progred's control session.
 capture = ["dep:pollster"]
 
 [dependencies]
