@@ -3,6 +3,8 @@
 
 mod annotations;
 mod app;
+#[cfg(feature = "cam-profile")]
+mod cam_profile;
 mod clipboard;
 mod command;
 mod commands;
@@ -83,10 +85,10 @@ mod web_scroll;
 pub mod web_worker;
 mod workspace;
 
+#[cfg(feature = "cam-profile")]
+pub use cam_profile::profile_cam;
 #[cfg(all(feature = "cam-profile", target_arch = "wasm32"))]
 pub use libraries::fidget::mesh::performance::take_profile_mesh;
-#[cfg(feature = "cam-profile")]
-pub use libraries::toolpath::performance::profile_cam;
 
 use crate::command::Command;
 use app::App;

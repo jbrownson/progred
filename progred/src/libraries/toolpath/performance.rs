@@ -1,30 +1,25 @@
-//! Opt-in, headless native/browser comparison over the same CAM document.
+//! The CAM work a profile times, from the program tree to its render.
 use super::*;
 use crate::libraries::{fidget as implicit, tree};
 use serde_json::json;
 use web_time::Instant;
 
-/// Runs uncached work, not an editor frame. `controls` adds Fidget's own voxel
-/// render of the same view, serial and parallel, for comparison.
-pub fn profile_cam(progress: f64, width: u32, height: u32, controls: bool) -> String {
+/// Times uncached work, not an editor frame, for the toolpath program
+/// `program_tree` names, read through `sources`. `controls` adds Fidget's own
+/// voxel render of the same view, serial and parallel, for comparison.
+pub(crate) fn profile(
+    sources: &crate::sources::Sources<'_>,
+    program_tree: Value,
+    progress: f64,
+    width: u32,
+    height: u32,
+    controls: bool,
+) -> serde_json::Value {
     let start = Instant::now();
-    let (doc, names) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    let stack = crate::stack::load();
-    let sources = crate::sources::Sources {
-        doc: &doc,
-        libraries: &stack.libraries,
-    };
-    let setup_ms = start.elapsed().as_secs_f64() * 1000.0;
-    let start = Instant::now();
-    let program = tree::build(
-        &Value::from(names["program_tree"]).into(),
-        &sources,
-        3_000_000,
-    )
-    .unwrap();
+    let program = tree::build(&program_tree.into(), sources, 3_000_000).unwrap();
     let program = program.items;
     let tree_ms = start.elapsed().as_secs_f64() * 1000.0;
-    let computations = crate::computations::Computations::from_sources(sources);
+    let computations = crate::computations::Computations::from_sources(*sources);
     let recording = computation::recording(
         &computations,
         computations.runtime.input(program),
@@ -46,10 +41,9 @@ pub fn profile_cam(progress: f64, width: u32, height: u32, controls: bool) -> St
         implicit::raster::performance::profile(stock, paths.clone(), width, height, controls);
     json!({
         "progress":progress, "width":width, "height":height,
-        "segments":path.segments().count(), "setup_ms":setup_ms,
+        "segments":path.segments().count(),
         "tree_ms":tree_ms, "recording_ms":recording_ms,
         "stock_ms":stock_ms, "path_mesh_ms":paths_ms,
         "path_triangles":paths.indices.len()/3, "render":render,
     })
-    .to_string()
 }
