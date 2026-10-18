@@ -318,7 +318,11 @@ fn query_content<W: Host>(
                     .is_some_and(|selected| selected.stage(&session.sources()) == Stage::Edge)
             };
             if committed {
-                crate::navigate::advance(world, input.geometry(scale), event.modifiers.shift());
+                crate::display::widget::navigation::advance(
+                    world,
+                    input.geometry(scale),
+                    event.modifiers.shift(),
+                );
             }
             true
         });

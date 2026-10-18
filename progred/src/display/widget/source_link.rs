@@ -112,7 +112,7 @@ pub(crate) fn handlers<W: Host>(
 /// viewport clipping. Preserve leaf attribution if no call has an occurrence.
 pub(crate) fn hover_source<World>(
     sources: &Sources<'_>,
-    descends: &[crate::navigate::Descend<World>],
+    descends: &[super::navigation::Landmark<World>],
     hover: &Hover,
 ) -> Option<SourceTrace> {
     match hover {
@@ -127,9 +127,9 @@ pub(crate) fn hover_source<World>(
 
 pub(crate) fn source_descend<'a, World>(
     sources: &Sources<'_>,
-    descends: &'a [crate::navigate::Descend<World>],
+    descends: &'a [super::navigation::Landmark<World>],
     source: &SourceTrace,
-) -> Option<&'a crate::navigate::Descend<World>> {
+) -> Option<&'a super::navigation::Landmark<World>> {
     descends.iter().find(|descend| {
         descend.root.is_some()
             && descend

@@ -445,6 +445,14 @@ impl<C, Hover> DispatchContext<C, Hover> {
     {
         !self.outside_view && self.hovered.as_ref() == Some(target)
     }
+    /// The geometry of the frame this dispatch runs in, at `scale`.
+    pub(crate) fn geometry(&self, scale: f64) -> super::navigation::Geometry<'_, C> {
+        super::navigation::Geometry {
+            descends: &self.descends,
+            view_regions: &self.view_regions,
+            scale,
+        }
+    }
 }
 
 /// An editor view's settled geometry. Fixed viewports have zero scroll

@@ -1,6 +1,7 @@
 //! Document-facing widget operations, given the session a dispatch lends.
 
-use crate::{navigate::Geometry, projection, selection, sources::Sources, workspace::Root};
+use crate::display::widget::navigation::Geometry;
+use crate::{projection, selection, sources::Sources, workspace::Root};
 use gid::{Step, Value};
 use puri::edit::EditCtx;
 use puri::keyboard::CommandModifier;

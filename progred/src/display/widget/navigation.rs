@@ -6,7 +6,9 @@ use puri::Rect;
 use puri::handler::{Event, EventOutcome, Handler};
 use std::rc::Rc;
 
+mod geometry;
 mod logical;
+pub(crate) use geometry::{Geometry, advance};
 pub(crate) use logical::Construction;
 
 pub use puri::handler::NavigationDirection as Direction;
