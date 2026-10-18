@@ -29,25 +29,16 @@ pub fn append(
         ..Default::default()
     };
     let result = objects.iter().try_for_each(|object| {
-        if cancellation.check().is_err() {
-            return None;
-        }
+        cancellation.check().ok()?;
         let shape = VmShape::from(object.tree.clone()).try_into().ok()?;
         let octree = Octree::build(&shape, &settings)?;
-        if cancellation.check().is_err() {
-            return None;
-        }
+        cancellation.check().ok()?;
         let mesh = octree.walk_dual();
-        if cancellation.check().is_err() {
-            return None;
-        }
-        if !mesh
-            .vertices
+        cancellation.check().ok()?;
+        mesh.vertices
             .iter()
             .all(|v| v.iter().all(|x| x.is_finite()))
-        {
-            return None;
-        }
+            .then_some(())?;
         let offset = u32::try_from(out.vertices.len()).ok()?;
         u32::try_from(out.vertices.len().checked_add(mesh.vertices.len())?).ok()?;
         out.vertices
