@@ -1351,7 +1351,7 @@ impl<'a> Context<'a> {
     fn run(self, expression: &Value) -> Evaluation {
         self.conclude(|context| {
             let expression = context.lower_source(expression, OriginRoot::Input);
-            let environment = Environment::with_indices(context.indices.clone());
+            let environment = context.empty_environment();
             context.eval(expression, &environment)
         })
     }
@@ -1680,7 +1680,7 @@ impl<'a> Context<'a> {
     pub fn environment(&self, value: &Value) -> Option<Environment> {
         let fields = value.as_record()?;
         Some(
-            Environment::with_indices(self.indices.clone())
+            self.empty_environment()
                 .extended(fields.iter().map(|(cell, value)| (*cell, value.clone()))),
         )
     }
@@ -2193,7 +2193,7 @@ impl<'a> Context<'a> {
         function: &RuntimeValue,
         arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
     ) -> Result<RuntimeValue, Halt> {
-        let callable = self.prepare_runtime_callable(function.clone(), &Environment::default());
+        let callable = self.prepare_runtime_callable(function.clone(), &self.empty_environment());
         self.call_prepared(&callable, arguments)
     }
 
@@ -2368,7 +2368,7 @@ impl<'a> Context<'a> {
         // The call itself, as a call expression would charge it.
         self.burn()?;
         let arguments = arguments.into_iter().collect();
-        let environment = Environment::with_indices(self.indices.clone());
+        let environment = self.empty_environment();
         if let Some(cell) = function.as_cell()
             && self.foreign_target_cell(cell).is_none()
         {
@@ -2586,10 +2586,9 @@ impl<'a> Context<'a> {
                 let captured = fields.field(vocabulary::ENVIRONMENT)?;
                 let environment = match &captured.0 {
                     RuntimeValueKind::Data(value) => self.environment(value)?,
-                    RuntimeValueKind::Record(fields) => {
-                        Environment::with_indices(self.indices.clone())
-                            .extended_runtime(fields.iter().cloned())
-                    }
+                    RuntimeValueKind::Record(fields) => self
+                        .empty_environment()
+                        .extended_runtime(fields.iter().cloned()),
                     _ => return None,
                 };
                 Some(Closure {
@@ -2697,7 +2696,8 @@ pub fn evaluate_at(
             Some(origin) => context.lower_source(expression, OriginRoot::Located(origin)),
             None => context.lower_unattributed_source(expression),
         };
-        context.eval(expression, &Environment::default())
+        let environment = context.empty_environment();
+        context.eval(expression, &environment)
     })
 }
 
@@ -2713,7 +2713,8 @@ pub fn evaluate_runtime_at(
         let origin =
             origin.map(|origin| OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(origin)))));
         let expression = context.lower_runtime_code_at(expression, origin);
-        context.eval(expression, &Environment::default())
+        let environment = context.empty_environment();
+        context.eval(expression, &environment)
     })
 }
 
@@ -2808,8 +2809,10 @@ pub fn evaluate_runtime_scoped<'a>(
 ) -> Evaluation {
     match &expression.0 {
         RuntimeValueKind::Data(value) => context(host, Some(overlay), fuel).run(value),
-        _ => context(host, Some(overlay), fuel)
-            .conclude(|context| context.eval_runtime_code(expression, &Environment::default())),
+        _ => context(host, Some(overlay), fuel).conclude(|context| {
+            let environment = context.empty_environment();
+            context.eval_runtime_code(expression, &environment)
+        }),
     }
 }
 

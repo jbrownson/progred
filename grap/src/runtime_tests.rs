@@ -1151,3 +1151,45 @@ fn every_call_path_binds_the_callee_and_charges_the_same_steps() {
         assert_eq!(result.remaining_fuel, results[0].remaining_fuel);
     }
 }
+
+#[test]
+fn every_entry_point_binds_in_its_context_index_table() {
+    let (probe, argument) = (new_cell_id(), new_cell_id());
+    let shared = Rc::new(std::cell::Cell::new(true));
+    let seen = shared.clone();
+    let receiver = host(vec![(
+        probe,
+        Definition::foreign(
+            Value::record([]),
+            ForeignFunction::new(move |context, _, environment| {
+                seen.set(seen.get() && Rc::ptr_eq(&environment.indices, &context.indices));
+                Ok(RuntimeValue::f64(1.0))
+            }),
+        ),
+    )]);
+    // An inline lambda calls the probe, which sees the environment its
+    // parameter's binding made.
+    let lambda_call = RuntimeValue::record([
+        (
+            vocabulary::FUNCTION,
+            lambda([argument], call(probe.into(), [])).into(),
+        ),
+        (argument, RuntimeValue::f64(2.0)),
+    ]);
+    let none: [CellId; 0] = [];
+    let unused = |_: CellId, _: &mut Context<'_>, _: &Expression, _: &Environment| {
+        Ok(RuntimeValue::f64(0.0))
+    };
+    let overlay = ForeignOverlay::new(&none, &unused);
+    let results = [
+        evaluate(&call(probe.into(), []), &receiver, 100),
+        evaluate_runtime_at(&lambda_call, None, &receiver, 100),
+        evaluate_runtime_scoped(&lambda_call, &receiver, &overlay, 100),
+        apply(&ffi(probe).into(), [], &receiver, 100),
+        apply_expression(&Value::from(probe).into(), [], &receiver, 100),
+    ];
+    for result in &results {
+        assert_eq!(result.result.as_f64(), Some(1.0));
+    }
+    assert!(shared.get());
+}
