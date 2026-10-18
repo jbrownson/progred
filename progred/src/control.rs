@@ -365,15 +365,7 @@ pub fn main() {
         .document
         .as_deref()
         .map_or_else(
-            || {
-                Ok((
-                    Document {
-                        root: None,
-                        cells: Cells::new(),
-                    },
-                    Binders::new(),
-                ))
-            },
+            || Ok((Document::default(), Binders::new())),
             crate::text_store::load,
         )
         .unwrap_or_else(|message| fail(message));

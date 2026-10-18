@@ -213,13 +213,7 @@ pub fn run() {
         }),
         // No path starts EMPTY — the sample lives in examples/sample.gid now,
         // opened like any document.
-        _ => (
-            gid::Document {
-                root: None,
-                cells: gid::Cells::new(),
-            },
-            gid_text::Binders::new(),
-        ),
+        _ => (gid::Document::default(), gid_text::Binders::new()),
     };
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]

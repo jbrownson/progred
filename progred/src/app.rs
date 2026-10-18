@@ -745,19 +745,13 @@ impl App {
         match command {
             AppCommand::New => self.new_document(
                 event_loop,
-                gid::Document {
-                    root: None,
-                    cells: gid::Cells::new(),
-                },
+                gid::Document::default(),
                 gid_text::Binders::new(),
             ),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             AppCommand::NewWindow => self.open_editor(
                 event_loop,
-                gid::Document {
-                    root: None,
-                    cells: gid::Cells::new(),
-                },
+                gid::Document::default(),
                 None,
                 gid_text::Binders::new(),
             ),

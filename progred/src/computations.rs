@@ -41,10 +41,7 @@ impl Computations {
 
     fn with_tasks(runtime: Runtime, tasks: Tasks) -> Self {
         let snapshot = runtime.input(Snapshot {
-            doc: Rc::new(Document {
-                root: None,
-                cells: gid::Cells::new(),
-            }),
+            doc: Rc::new(Document::default()),
             libraries: Libraries::default(),
         });
         let definitions = Source::new(snapshot.clone(), |snapshot: &Snapshot, cell| {
