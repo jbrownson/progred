@@ -1149,7 +1149,6 @@ pub struct Context<'a> {
     remaining_fuel: usize,
     resolving: Vec<CellId>,
     compiled: ByNode<Thunk>,
-    data_runtime: ByNode<RuntimeValue>,
     calls: Vec<ActiveCall>,
     call_origins: ByNode<Option<Rc<SourceOrigin>>>,
     cell_states: Vec<CellState>,
@@ -1623,17 +1622,19 @@ impl<'a> Context<'a> {
     ) -> Result<Option<f64>, Halt> {
         self.burn()?;
         let unboxed = match &expression.0.form {
-            Form::Data => self.data_runtime.get(&expression),
-            Form::Cell(cell) => environment.get_runtime(*cell),
+            // Data unboxes as a number exactly when it reads as one.
+            Form::Data => crate::f64::read(expression.value()),
+            Form::Cell(cell) => environment
+                .get_runtime(*cell)
+                .and_then(|value| match &value.0 {
+                    RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
+                        Native::F64(number) => Some(*number),
+                        Native::Text(_) => None,
+                    },
+                    _ => None,
+                }),
             _ => None,
-        }
-        .and_then(|value| match &value.0 {
-            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
-                Native::F64(number) => Some(*number),
-                Native::Text(_) => None,
-            },
-            _ => None,
-        });
+        };
         match unboxed {
             Some(number) => Ok(Some(number)),
             None => self
@@ -1661,19 +1662,10 @@ impl<'a> Context<'a> {
     fn compile(&mut self, expression: Expression) -> Thunk {
         match expression.0.form.clone() {
             Form::Ready(value) => thunk(move |_, _| Ok(value.clone())),
-            Form::Data => thunk(move |context, _| {
-                Ok(match context.data_runtime.get(&expression) {
-                    Some(cached) => cached.clone(),
-                    None => {
-                        let value =
-                            context.unbox(RuntimeValue::from(context.value(&expression).clone()));
-                        context
-                            .data_runtime
-                            .insert(expression.clone(), value.clone());
-                        value
-                    }
-                })
-            }),
+            Form::Data => {
+                let value = self.unbox(RuntimeValue::from(expression.value().clone()));
+                thunk(move |_, _| Ok(value.clone()))
+            }
             Form::Cell(cell) => {
                 let index = cell_index(&self.indices, cell);
                 thunk(move |context, environment| context.eval_cell_at(cell, index, environment))
@@ -2508,7 +2500,6 @@ fn context<'a>(
         remaining_fuel: fuel,
         resolving: Vec::new(),
         compiled: Default::default(),
-        data_runtime: Default::default(),
         calls: Vec::new(),
         call_origins: Default::default(),
         cell_states: Vec::new(),
