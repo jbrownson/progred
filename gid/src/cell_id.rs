@@ -25,10 +25,6 @@ impl CellId {
     pub const fn as_bytes(&self) -> &[u8; 16] {
         &self.0
     }
-
-    pub fn parse_str(input: &str) -> Result<Self, ParseCellIdError> {
-        input.parse()
-    }
 }
 
 impl fmt::Display for CellId {
@@ -64,26 +60,15 @@ impl FromStr for CellId {
 
 impl Serialize for CellId {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        if serializer.is_human_readable() {
-            serializer.collect_str(self)
-        } else {
-            serializer.serialize_bytes(&self.0)
-        }
+        serializer.collect_str(self)
     }
 }
 
 impl<'de> Deserialize<'de> for CellId {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        if deserializer.is_human_readable() {
-            String::deserialize(deserializer)?
-                .parse()
-                .map_err(serde::de::Error::custom)
-        } else {
-            let bytes = Vec::<u8>::deserialize(deserializer)?;
-            <[u8; 16]>::try_from(bytes)
-                .map(Self)
-                .map_err(|_| serde::de::Error::custom("cell id must contain exactly 16 bytes"))
-        }
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
     }
 }
 

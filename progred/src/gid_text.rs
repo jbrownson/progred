@@ -38,7 +38,7 @@ enum Token {
 }
 
 fn as_cell_id(token: &str) -> Option<CellId> {
-    CellId::parse_str(token).ok()
+    token.parse().ok()
 }
 
 fn valid_binder(token: &str) -> bool {

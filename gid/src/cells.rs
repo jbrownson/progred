@@ -25,16 +25,9 @@ impl Cells {
         self.data.insert(cell, value);
     }
 
-    /// Makes the cell bare. Removing an already-bare cell is a no-op,
-    /// preserving `ptr_eq` as an honest changed-state signal.
+    /// Makes the cell bare.
     pub fn clear_value(&mut self, cell: CellId) {
-        if self.data.contains_key(&cell) {
-            self.data = self.data.without(&cell);
-        }
-    }
-
-    pub fn remove(&mut self, cell: CellId) {
-        self.clear_value(cell);
+        self.data = self.data.without(&cell);
     }
 
     pub fn cells(&self) -> impl Iterator<Item = &CellId> {
@@ -43,20 +36,6 @@ impl Cells {
 
     pub fn iter(&self) -> impl Iterator<Item = (&CellId, &Value)> {
         self.data.iter()
-    }
-
-    /// Left-biased per cell: existing values are kept and only cells
-    /// absent here are added. Not how definitions resolve; see `Host::resolve`.
-    pub fn merge(&mut self, other: Cells) {
-        for (cell, value) in other.data {
-            if !self.data.contains_key(&cell) {
-                self.data.insert(cell, value);
-            }
-        }
-    }
-
-    pub fn ptr_eq(&self, other: &Self) -> bool {
-        self.data.ptr_eq(&other.data)
     }
 }
 

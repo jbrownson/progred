@@ -25,17 +25,16 @@ convention over a blob. Grap keeps its encoding beside f64's, in `grap::text`,
 and the text library owns its names, functions and projections.
 
 A `CellId` is not an RFC 4122 UUID: all 128 bits are random, with no version
-or variant fields. Every textual spelling, including `Display` and
-human-readable Serde, is 32 lowercase hex digits with no hyphenated form;
-binary Serde uses the 16 bytes. Well-known library cell IDs are once-minted
-random identities, never names or hashes of names; their readable names are
-ordinary `libraries::name` facts. Mint a fixed identity from 16 unmodified
-OS-CSPRNG bytes (`new_cell_id`, or `openssl rand -hex 16` for a source
-literal), never from a UUID generator.
+or variant fields. Every textual spelling, including `Display` and Serde, is
+32 lowercase hex digits with no hyphenated form. Well-known library cell IDs
+are once-minted random identities, never names or hashes of names; their
+readable names are ordinary `libraries::name` facts. Mint a fixed identity
+from 16 unmodified OS-CSPRNG bytes (`new_cell_id`, or `openssl rand -hex 16`
+for a source literal), never from a UUID generator.
 
 The Rust implementation shares record, list, and blob storage across clones.
 Blobs wrap `Arc<Vec<u8>>`: construction takes ownership of the existing byte
-buffer without copying it, and `make_mut` copies shared bytes only when edited.
+buffer without copying it, and clones share it.
 There is no size cutoff, interning, or storage identity in value equality,
 hashing, or serialization. See [the storage measurements](performance.md).
 

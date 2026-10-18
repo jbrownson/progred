@@ -21,30 +21,6 @@ fn values_are_the_whole_cell_statement() {
 }
 
 #[test]
-fn noop_removal_keeps_ptr_eq_honest() {
-    let mut cells = Cells::new();
-    cells.set_value(new_cell_id(), blob("x"));
-    let before = cells.clone();
-    cells.remove(new_cell_id());
-    assert!(cells.ptr_eq(&before));
-}
-
-#[test]
-fn merge_is_left_biased_per_cell() {
-    let shared = new_cell_id();
-    let fresh = new_cell_id();
-    let mut mine = Cells::new();
-    mine.set_value(shared, blob("mine"));
-    let mut other = Cells::new();
-    other.set_value(shared, blob("theirs"));
-    other.set_value(fresh, blob("new"));
-
-    mine.merge(other);
-    assert_eq!(mine.value(shared), Some(&blob("mine")));
-    assert_eq!(mine.value(fresh), Some(&blob("new")));
-}
-
-#[test]
 fn the_table_serializes_as_cell_to_value() {
     let mut cells = Cells::new();
     let first = new_cell_id();
