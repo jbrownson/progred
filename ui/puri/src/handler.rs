@@ -22,6 +22,10 @@ pub type ScrollOutcome<Delta = ScrollDelta> = Outcome<Delta>;
 pub type EventOutcome<'a> = Outcome<Option<Event<'a>>>;
 
 impl<Remainder> Outcome<Remainder> {
+    pub fn new(remaining: Remainder, handled: bool) -> Self {
+        Self { remaining, handled }
+    }
+
     pub fn with_remainder(remaining: Remainder) -> Self {
         Self {
             remaining,

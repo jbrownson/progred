@@ -23,16 +23,10 @@ pub fn each<'a>(
         }
     }
     let remaining = remaining.map(Cow::Owned).unwrap_or(events);
-    outcome(remaining, handled)
-}
-
-fn outcome(events: Cow<'_, [PointerScrollEvent]>, handled: bool) -> EventOutcome<'_> {
-    let remaining = (!events.is_empty()).then_some(Event::Scroll(events));
-    if handled {
-        EventOutcome::with_remainder(remaining)
-    } else {
-        EventOutcome::unhandled(remaining)
-    }
+    EventOutcome::new(
+        (!remaining.is_empty()).then_some(Event::Scroll(remaining)),
+        handled,
+    )
 }
 
 /// A clip preserves batches within its bounds. Crossings divide the batch into
