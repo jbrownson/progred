@@ -96,7 +96,7 @@ fn images_record_and_replay_with_placement() {
         height: 1,
     };
     let mut original = DrawList::new();
-    original.image(image.clone(), Affine::scale(2.0));
+    original.draw_image(image.clone(), Affine::scale(2.0));
     let mut replayed = DrawList::new();
     replay_at(&original, &mut replayed, Affine::translate((20.0, 30.0)));
 

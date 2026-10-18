@@ -141,12 +141,14 @@ impl<C: 'static, H: Clone + PartialEq + 'static> Builder<'_, '_, C, H> {
 impl<C: 'static, H: 'static> puri::draw::CanvasSink for Builder<'_, '_, C, H> {
     fn draw_mesh(&mut self, scene: puri::mesh::Scene, transform: Affine) {
         if self.visible {
-            self.placed.render(move |cv, _| cv.mesh(scene, transform));
+            self.placed
+                .render(move |cv, _| cv.draw_mesh(scene, transform));
         }
     }
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
         if self.visible {
-            self.placed.render(move |cv, _| cv.image(image, transform));
+            self.placed
+                .render(move |cv, _| cv.draw_image(image, transform));
         }
     }
 
@@ -166,7 +168,7 @@ impl<C: 'static, H: 'static> puri::draw::CanvasSink for Builder<'_, '_, C, H> {
 
     fn draw_glyphs(&mut self, run: GlyphRun) {
         if self.visible {
-            self.placed.render(move |cv, _| cv.glyph_run(run));
+            self.placed.render(move |cv, _| cv.draw_glyphs(run));
         }
     }
 

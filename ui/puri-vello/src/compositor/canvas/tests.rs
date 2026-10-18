@@ -18,14 +18,14 @@ fn image() -> ImageData {
 #[test]
 fn images_split_only_nonempty_vector_runs() {
     let mut canvas = SplitCanvas::default();
-    canvas.image(image(), Affine::IDENTITY);
-    canvas.image(image(), Affine::IDENTITY);
+    canvas.draw_image(image(), Affine::IDENTITY);
+    canvas.draw_image(image(), Affine::IDENTITY);
     canvas.fill(
         Rect::new(0.0, 0.0, 1.0, 1.0),
         Color::WHITE,
         Affine::IDENTITY,
     );
-    canvas.image(image(), Affine::IDENTITY);
+    canvas.draw_image(image(), Affine::IDENTITY);
     assert!(matches!(
         canvas.finish().as_slice(),
         [
@@ -64,7 +64,7 @@ fn mixed_clips_preserve_the_scope_and_paint_order() {
             Color::WHITE,
             Affine::IDENTITY,
         );
-        canvas.image(image(), Affine::IDENTITY);
+        canvas.draw_image(image(), Affine::IDENTITY);
     });
     let layers = canvas.finish();
     assert!(matches!(layers.as_slice(), [Layer::Clip(_, _, children)]

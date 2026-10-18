@@ -58,7 +58,7 @@ fn mesh_layers_match_roundtrip_with_clips_and_reused_target() {
             Rect::new(8.0, 8.0, 55.0, 65.0),
             Affine::IDENTITY,
             |canvas| {
-                canvas.mesh(red.clone(), Affine::translate((5.0, 5.0)));
+                canvas.draw_mesh(red.clone(), Affine::translate((5.0, 5.0)));
                 canvas.fill(
                     Rect::new(25.0, 30.0, 35.0, 40.0),
                     Color::BLACK,
@@ -70,7 +70,7 @@ fn mesh_layers_match_roundtrip_with_clips_and_reused_target() {
             kurbo::Circle::new((115.0, 40.0), 26.3),
             Affine::IDENTITY,
             |canvas| {
-                canvas.mesh(triangle([0.0, 0.0, 1.0]), Affine::translate((80.0, 8.0)));
+                canvas.draw_mesh(triangle([0.0, 0.0, 1.0]), Affine::translate((80.0, 8.0)));
             },
         );
         let reference = mesh_images(&gpu, &mut renderer, &mut readback, &list);

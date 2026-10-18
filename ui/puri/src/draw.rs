@@ -3,9 +3,8 @@
 //! peniko provides the styling vocabulary and kurbo the geometry. The
 //! `Shape` and `GlyphRun` types stay concrete in the trait so recordings
 //! keep their identity (a rect records as a rect, not a bezier soup).
-//! `DrawList` is the recording interpreter — tests, goldens, and future
-//! fragment caching consume frames as data — and `replay` plays a
-//! recording back into any canvas.
+//! `DrawList` is the recording interpreter — tests and goldens consume
+//! frames as data — and `replay` plays a recording back into any canvas.
 
 use kurbo::{Affine, BezPath, Circle, Line, Rect, RoundedRect, Stroke};
 use peniko::{Brush, FontData, ImageAlphaType, ImageData, ImageFormat};
@@ -212,12 +211,6 @@ pub struct GlyphRun {
 /// stream (puri-vello), recorders capture (`DrawList`), tests interpret
 /// however the assertion wants.
 pub trait Canvas: CanvasSink {
-    fn mesh(&mut self, scene: crate::mesh::Scene, transform: Affine) {
-        self.draw_mesh(scene, transform);
-    }
-    fn image(&mut self, image: ImageData, transform: Affine) {
-        self.draw_image(image, transform);
-    }
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         self.fill_shape(shape.into(), brush.into(), transform);
     }
@@ -229,9 +222,6 @@ pub trait Canvas: CanvasSink {
         transform: Affine,
     ) {
         self.stroke_shape(shape.into(), style, brush.into(), transform);
-    }
-    fn glyph_run(&mut self, run: GlyphRun) {
-        self.draw_glyphs(run);
     }
     fn clip(
         &mut self,
@@ -397,8 +387,12 @@ pub fn replay_at(list: &DrawList, canvas: &mut (impl Canvas + ?Sized), outer: Af
 fn replay_cmds<C: Canvas + ?Sized>(cmds: &[DrawCmd], canvas: &mut C, outer: Affine) {
     for cmd in cmds {
         match cmd {
-            DrawCmd::Mesh { scene, transform } => canvas.mesh(scene.clone(), outer * *transform),
-            DrawCmd::Image { image, transform } => canvas.image(image.clone(), outer * *transform),
+            DrawCmd::Mesh { scene, transform } => {
+                canvas.draw_mesh(scene.clone(), outer * *transform)
+            }
+            DrawCmd::Image { image, transform } => {
+                canvas.draw_image(image.clone(), outer * *transform)
+            }
             DrawCmd::Fill {
                 shape,
                 brush,
@@ -418,7 +412,7 @@ fn replay_cmds<C: Canvas + ?Sized>(cmds: &[DrawCmd], canvas: &mut C, outer: Affi
             DrawCmd::GlyphRun(run) => {
                 let mut run = run.clone();
                 run.transform = outer * run.transform;
-                canvas.glyph_run(run);
+                canvas.draw_glyphs(run);
             }
             DrawCmd::Clip {
                 shape,

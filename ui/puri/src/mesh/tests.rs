@@ -1,5 +1,5 @@
 use super::*;
-use crate::draw::{Canvas, DrawCmd, DrawList};
+use crate::draw::{CanvasSink, DrawCmd, DrawList};
 use kurbo::Affine;
 
 fn scene() -> Scene {
@@ -31,7 +31,7 @@ fn recording_and_replay_retain_geometry_without_rasterizing() {
     let inner = Affine::scale(0.5);
     let outer = Affine::translate((10.0, 20.0));
     let mut list = DrawList::new();
-    list.mesh(scene, inner);
+    list.draw_mesh(scene, inner);
     let mut replay = DrawList::new();
     crate::draw::replay_at(&list, &mut replay, outer);
     let [DrawCmd::Mesh { scene, transform }] = replay.0.as_slice() else {

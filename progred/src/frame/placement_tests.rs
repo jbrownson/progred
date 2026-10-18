@@ -19,7 +19,7 @@ struct TestCanvas(DrawList);
 
 impl puri::draw::CanvasSink for TestCanvas {
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
-        self.0.image(image, transform);
+        self.0.draw_image(image, transform);
     }
 
     fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
@@ -31,7 +31,7 @@ impl puri::draw::CanvasSink for TestCanvas {
     }
 
     fn draw_glyphs(&mut self, run: GlyphRun) {
-        self.0.glyph_run(run);
+        self.0.draw_glyphs(run);
     }
 
     fn with_clip(

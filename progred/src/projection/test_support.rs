@@ -262,10 +262,10 @@ pub(crate) fn settle(mut placed: crate::frame::HoverOutput<World>) -> Bench {
 
 impl puri::draw::CanvasSink for Bench {
     fn draw_mesh(&mut self, scene: puri::mesh::Scene, transform: Affine) {
-        self.list.mesh(scene, transform);
+        self.list.draw_mesh(scene, transform);
     }
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
-        self.list.image(image, transform);
+        self.list.draw_image(image, transform);
     }
 
     fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
@@ -275,7 +275,7 @@ impl puri::draw::CanvasSink for Bench {
         self.list.stroke(shape, style, brush, transform);
     }
     fn draw_glyphs(&mut self, run: GlyphRun) {
-        self.list.glyph_run(run);
+        self.list.draw_glyphs(run);
     }
     fn with_clip(
         &mut self,

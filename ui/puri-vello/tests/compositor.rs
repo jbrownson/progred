@@ -46,7 +46,7 @@ fn scene(canvas: &mut dyn CanvasSink, pattern: &ImageData, complex: bool) {
         Color::from_rgb8(32, 55, 70),
         Affine::IDENTITY,
     );
-    canvas.image(
+    canvas.draw_image(
         pattern.clone(),
         Affine::translate((12.0, 9.0)) * Affine::scale(2.0),
     );
@@ -59,7 +59,7 @@ fn scene(canvas: &mut dyn CanvasSink, pattern: &ImageData, complex: bool) {
                 Color::new([0.9, 0.2, 0.1, 0.5]),
                 Affine::IDENTITY,
             );
-            canvas.image(
+            canvas.draw_image(
                 pattern.clone(),
                 Affine::translate((130.0, 35.0)) * Affine::scale(1.4),
             );
@@ -82,7 +82,7 @@ fn scene(canvas: &mut dyn CanvasSink, pattern: &ImageData, complex: bool) {
                             RoundedRect::new(58.2, 56.6, 162.8, 163.1, 17.4),
                             Affine::IDENTITY,
                             |canvas| {
-                                canvas.image(
+                                canvas.draw_image(
                                     pattern.clone(),
                                     Affine::translate((67.3, 48.1))
                                         * Affine::rotate(0.22)
@@ -265,7 +265,7 @@ fn preview(canvas: &mut dyn CanvasSink, image: &ImageData, width: u32, height: u
         Rect::new(0.0, 0.0, width as f64, height as f64),
         Affine::IDENTITY,
         |canvas| {
-            canvas.image(image.clone(), Affine::IDENTITY);
+            canvas.draw_image(image.clone(), Affine::IDENTITY);
             canvas.fill(
                 RoundedRect::new(
                     20.0,
@@ -411,7 +411,7 @@ fn panes(canvas: &mut dyn CanvasSink, images: &[ImageData], width: u32, height: 
         let y = (i / columns) as f64 * (height / images.len().div_ceil(columns) as u32) as f64;
         let rect = Rect::new(x, y, x + image.width as f64, y + image.height as f64);
         canvas.clip(rect, Affine::IDENTITY, |canvas| {
-            canvas.image(image.clone(), Affine::translate((x, y)));
+            canvas.draw_image(image.clone(), Affine::translate((x, y)));
             canvas.fill(
                 Rect::new(x + 20.0, rect.y1 - 70.0, rect.x1 - 20.0, rect.y1 - 20.0),
                 Color::new([0.2, 0.25, 0.3, 0.7]),
@@ -583,7 +583,7 @@ fn compositor_resource_lifetimes_and_formats() {
     clipped.clip(
         Circle::new((16.0, 16.0), 10.0),
         Affine::IDENTITY,
-        |canvas| canvas.image(a.clone(), Affine::IDENTITY),
+        |canvas| canvas.draw_image(a.clone(), Affine::IDENTITY),
     );
     compositor
         .render(
@@ -653,7 +653,7 @@ fn compositor_resource_lifetimes_and_formats() {
         Color::new([1.0, 0.0, 0.0, 0.5]),
         Affine::IDENTITY,
     );
-    drawing.image(image(16, 16, |_, _| [0, 64, 128, 128]), Affine::IDENTITY);
+    drawing.draw_image(image(16, 16, |_, _| [0, 64, 128, 128]), Affine::IDENTITY);
     let mut split = SplitCanvas::default();
     puri::draw::replay(&drawing, &mut split);
     let output = compositor
@@ -714,11 +714,11 @@ fn scratch_textures_follow_the_output_size() {
             Circle::new((w / 2.0, h / 2.0), w / 3.0),
             Affine::IDENTITY,
             |canvas| {
-                canvas.image(pattern(), Affine::IDENTITY);
+                canvas.draw_image(pattern(), Affine::IDENTITY);
                 canvas.clip(
                     Circle::new((w / 3.0, h / 3.0), w / 5.0),
                     Affine::IDENTITY,
-                    |canvas| canvas.image(pattern(), Affine::translate((3.0, 4.0))),
+                    |canvas| canvas.draw_image(pattern(), Affine::translate((3.0, 4.0))),
                 );
             },
         );

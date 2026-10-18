@@ -61,7 +61,7 @@ mod web {
                         Rect::new(8.0, 8.0, 55.0, 65.0),
                         Affine::IDENTITY,
                         |canvas| {
-                            canvas.mesh(
+                            canvas.draw_mesh(
                                 triangle(if stage == 0 {
                                     [1.0, 0.0, 0.0]
                                 } else {
@@ -80,7 +80,10 @@ mod web {
                         Circle::new((110.0, 35.0), 24.3),
                         Affine::IDENTITY,
                         |canvas| {
-                            canvas.mesh(triangle([0.0, 0.0, 1.0]), Affine::translate((78.0, 3.0)));
+                            canvas.draw_mesh(
+                                triangle([0.0, 0.0, 1.0]),
+                                Affine::translate((78.0, 3.0)),
+                            );
                         },
                     );
                     // A completed depth image hides a triangle behind it; a partial
@@ -103,9 +106,9 @@ mod web {
                         },
                         mesh_start: 0,
                     });
-                    canvas.mesh(scene, Affine::translate((145.0, 3.0)));
+                    canvas.draw_mesh(scene, Affine::translate((145.0, 3.0)));
                     // Standalone CPU image upload remains in the same ordered stream.
-                    canvas.image(
+                    canvas.draw_image(
                         ImageData {
                             data: vec![255, 128, 0, 255].repeat(16).into(),
                             format: ImageFormat::Rgba8,
