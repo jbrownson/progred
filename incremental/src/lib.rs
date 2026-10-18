@@ -1,7 +1,7 @@
 //! Caller-owned inputs and demand-driven computations. No global graph or
 //! reconciliation: cloning a handle shares the computation it already names.
 
-use std::any::{Any, TypeId};
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::sync::{
@@ -283,20 +283,14 @@ impl<T: 'static> MemoNode<T> {
                 _ => None,
             }
         };
-        if let Some(dependencies) = dependencies {
-            let mut unchanged = true;
-            for dependency in dependencies {
-                if dependency.node.version(parent) != Ok(dependency.version)
-                    || !dependency.node.reusable()
-                {
-                    unchanged = false;
-                    break;
-                }
-            }
-            if unchanged {
-                self.state.borrow_mut().as_mut().unwrap().verified = parent.revision;
-                return Ok(());
-            }
+        if let Some(dependencies) = dependencies
+            && dependencies.iter().all(|dependency| {
+                dependency.node.version(parent) == Ok(dependency.version)
+                    && dependency.node.reusable()
+            })
+        {
+            self.state.borrow_mut().as_mut().unwrap().verified = parent.revision;
+            return Ok(());
         }
         parent.check()?;
         let mut read = Read::new(&self.runtime, &parent.cancellation);
@@ -424,7 +418,7 @@ impl<S, K, V: PartialEq> Dependency for Selected<S, K, V> {
 /// Caller-keyed roots. A pass keeps the roots it demands; unused roots are
 /// released at the next pass. Dependency ownership retains reachable children.
 pub struct Roots<K> {
-    entries: RefCell<Vec<(K, TypeId, Rc<dyn Any>, bool)>>,
+    entries: RefCell<Vec<(K, Rc<dyn Any>, bool)>>,
 }
 
 impl<K> Default for Roots<K> {
@@ -437,7 +431,7 @@ impl<K> Default for Roots<K> {
 
 impl<K: Eq> Roots<K> {
     pub fn begin(&self) {
-        self.entries.borrow_mut().retain_mut(|(_, _, _, used)| {
+        self.entries.borrow_mut().retain_mut(|(_, _, used)| {
             let keep = *used;
             *used = false;
             keep
@@ -446,21 +440,17 @@ impl<K: Eq> Roots<K> {
 
     pub fn get<T: 'static>(&self, key: K, create: impl FnOnce() -> T) -> Rc<T> {
         let mut entries = self.entries.borrow_mut();
-        if let Some((_, _, value, used)) = entries
+        if let Some((value, used)) = entries
             .iter_mut()
-            .find(|(k, ty, _, _)| k == &key && *ty == TypeId::of::<T>())
+            .filter(|(k, _, _)| k == &key)
+            .find_map(|(_, value, used)| Some((value.clone().downcast::<T>().ok()?, used)))
         {
             *used = true;
             value
-                .clone()
-                .downcast()
-                .expect("the stored type matches its key")
         } else {
             drop(entries);
             let value = Rc::new(create());
-            self.entries
-                .borrow_mut()
-                .push((key, TypeId::of::<T>(), value.clone(), true));
+            self.entries.borrow_mut().push((key, value.clone(), true));
             value
         }
     }
