@@ -14,31 +14,6 @@ pub mod vocabulary {
         gid::CellId::from_u128(0xce1d043c5c2b81b1e5b9f8bc35bf54fb);
 }
 
-pub fn parse(text: &str) -> Option<Vec<u8>> {
-    parse_hex(text.strip_prefix("0x")?)
-}
-
-pub fn completion(bytes: Vec<u8>) -> crate::display::Completion {
-    let spelling = gid::hex_string(&bytes);
-    crate::libraries::completion::select(format!("0x{spelling}"), Value::from(bytes))
-}
-
-fn parse_hex(hex: &str) -> Option<Vec<u8>> {
-    let digit = |c: u8| match c {
-        b'0'..=b'9' => Some(c - b'0'),
-        b'a'..=b'f' => Some(c - b'a' + 10),
-        b'A'..=b'F' => Some(c - b'A' + 10),
-        _ => None,
-    };
-    hex.as_bytes()
-        .chunks(2)
-        .map(|pair| match pair {
-            [high, low] => Some(digit(*high)? << 4 | digit(*low)?),
-            _ => None,
-        })
-        .collect()
-}
-
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
@@ -63,7 +38,7 @@ pub fn functions() -> ForeignFunctions {
 }
 
 pub fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
-    parse_hex(spelling.trim()).map(Value::from)
+    gid::read_hex(spelling.trim()).map(Value::from)
 }
 
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {

@@ -1,7 +1,6 @@
 //! Selection, collapse, and the writes they drive. Selection paths name
 //! projected occurrences; their conject locates document data for mutations.
 
-use crate::libraries::blob;
 use crate::library::Libraries;
 use crate::location::{Location, Start};
 use crate::sources::Sources;
@@ -667,7 +666,9 @@ pub fn resolve_query(text: &str) -> Value {
     let trimmed = text.trim();
     match trimmed.strip_prefix('"') {
         Some(inner) => text::value(inner.strip_suffix('"').unwrap_or(inner)),
-        None => blob::parse(trimmed)
+        None => trimmed
+            .strip_prefix("0x")
+            .and_then(gid::read_hex)
             .map(Value::from)
             .unwrap_or_else(|| text::value(text)),
     }

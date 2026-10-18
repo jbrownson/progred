@@ -5,7 +5,6 @@
 use crate::display::widget::offers::{Entry, HoleOffers, entry, fitting, rank};
 use crate::display::widget::picker::Picker;
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face, Host};
-use crate::libraries::blob;
 use gid::{Value, new_cell_id};
 use std::rc::Rc;
 
@@ -95,6 +94,24 @@ fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
         .collect()
 }
 
+/// The blob typed as `0x` and its hex, inserted and selected.
+fn typed_blob(bytes: Vec<u8>) -> Completion {
+    let value = Value::from(bytes);
+    let committed = value.clone();
+    Completion {
+        face: Face::Id,
+        preview: Some(value.clone()),
+        ..Completion::new(value.to_string(), move |session| {
+            if let Some(picking) = session.pending() {
+                picking.commit(
+                    committed.clone(),
+                    Some(crate::selection::at(&[], crate::selection::payload::edge())),
+                );
+            }
+        })
+    }
+}
+
 /// What the libraries read the query as, such as a number. Text, which any
 /// nonempty query reads as, comes after the readings particular to it.
 pub fn typed(request: &CompletionRequest<'_>) -> Vec<Completion> {
@@ -128,7 +145,7 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
     let query = request.query;
     let trimmed = query.trim();
     let blob = (kind == CompletionKind::Value)
-        .then(|| blob::parse(trimmed))
+        .then(|| trimmed.strip_prefix("0x").and_then(gid::read_hex))
         .flatten();
     let atom_leads = trimmed.starts_with('"') || blob.is_some();
     let (readings, atoms): (Vec<_>, Vec<_>) = match kind {
@@ -151,7 +168,7 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
                     .collect::<Vec<_>>()
             };
             let atoms = blob
-                .map(|blob| entry(request, blob::completion(blob)))
+                .map(|blob| entry(request, typed_blob(blob)))
                 .into_iter()
                 .chain(entries(strings))
                 .collect();
