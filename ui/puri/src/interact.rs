@@ -2,12 +2,12 @@
 //! geometry; Puri registers transient behavior without depending on
 //! the layout strategy that produced it.
 
-use crate::geometry::Placement;
 use crate::handler::HasHandler;
 use kurbo::Point;
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerGesture, PointerState, PointerType, PointerUpdate,
 };
+use uig::Placement;
 
 /// Pinch deltas are fractions of the current scale, independent of pixel density.
 /// The caller owns the zoom policy. Other gestures and out-of-bounds samples pass on.

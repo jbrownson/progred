@@ -1,8 +1,7 @@
 use super::*;
-use crate::{
-    DrawList,
-    handler::{Handler, KeyboardEvent},
-};
+use crate::draw::DrawList;
+use crate::handler::Handler;
+use ui_events::keyboard::KeyboardEvent;
 
 #[test]
 fn binding_can_build_handlers_without_painting_or_a_layout_system() {

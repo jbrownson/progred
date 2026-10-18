@@ -3,7 +3,6 @@
 //! via the context's display scale.
 
 use crate::draw::{CanvasSink, Glyph, GlyphRun};
-use crate::geometry::Placement;
 use kurbo::{Affine, Line, Stroke};
 use parley::layout::{Alignment, Layout, PositionedLayoutItem};
 use parley::style::FontWeight;
@@ -13,6 +12,7 @@ pub use parley::{FontContext, LayoutContext};
 use peniko::Brush;
 use std::collections::HashMap;
 use std::rc::Rc;
+use uig::Placement;
 
 pub struct TextCtx<'a> {
     pub fonts: &'a mut FontContext,

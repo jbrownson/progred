@@ -1,7 +1,8 @@
 //! Native pointer gestures, kept as samples rather than reduced to one delta.
 
-use crate::handler::{Event, EventOutcome, PointerGestureEvent};
+use crate::handler::{Event, EventOutcome};
 use std::borrow::Cow;
+use ui_events::pointer::PointerGestureEvent;
 
 /// Adapt a sample-wise control. Rejected samples continue to the next handler.
 pub fn each<'a>(

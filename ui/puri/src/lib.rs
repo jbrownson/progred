@@ -11,7 +11,6 @@ pub mod drag;
 pub mod draw;
 pub mod edit;
 pub mod frame;
-pub mod geometry;
 pub mod gesture;
 pub mod handler;
 pub mod hover;
@@ -22,18 +21,8 @@ pub mod scroll;
 pub mod text;
 pub mod timer;
 
-pub use delim::{Delim, DelimStyle};
-pub use draw::{
-    Canvas, Command, DrawCmd, DrawList, Drawing, Glyph, GlyphRun, Leaf, Shape, draw, replay,
-};
-pub use edit::{
-    EditCtx, EditStyle, LineEdit, LineEditDescription, LineEditPresentation, LineEditState,
-    TextClipboard, text_edit,
-};
-pub use geometry::Placement;
-pub use handler::{Handler, HasHandler, ImeEvent};
-pub use kurbo::{
-    Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Size, Stroke, Vec2,
-};
-pub use peniko::{Brush, Color, ColorStop, Gradient, ImageAlphaType, ImageData, ImageFormat};
-pub use text::{Text, TextCache, TextCtx, TextMetrics, TextStyle, text};
+pub use draw::{Canvas, DrawCmd, DrawList, Shape};
+pub use kurbo::{Affine, Circle, Line, Point, Rect, RoundedRect, Stroke};
+pub use peniko::{Brush, Color, ColorStop, Gradient};
+pub use text::{Text, TextCtx, TextMetrics, TextStyle, text};
+pub use uig::Placement;

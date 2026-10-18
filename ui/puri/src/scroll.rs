@@ -1,8 +1,10 @@
 //! Convert scroll input and its unconsumed remainder through the same units.
 
-use crate::handler::{Event, EventOutcome, PointerScrollEvent, ScrollDelta, ScrollOutcome};
+use crate::handler::{Event, EventOutcome, ScrollOutcome};
 use kurbo::{Size, Vec2};
 use std::borrow::Cow;
+use ui_events::ScrollDelta;
+use ui_events::pointer::PointerScrollEvent;
 
 /// Adapt a sample-wise control without choosing this policy for every handler.
 pub fn each<'a>(

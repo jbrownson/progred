@@ -1,5 +1,6 @@
 use super::*;
-use crate::handler::{Handler, PointerGesture, PointerInfo, PointerState, PointerType};
+use crate::handler::Handler;
+use ui_events::pointer::{PointerGesture, PointerInfo, PointerState, PointerType};
 
 fn sample(x: f64, gesture: PointerGesture) -> PointerGestureEvent {
     PointerGestureEvent {

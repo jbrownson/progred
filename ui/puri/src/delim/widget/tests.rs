@@ -1,6 +1,8 @@
 use super::*;
-use crate::{Color, DrawCmd, DrawList, Rect, Shape};
+use crate::draw::{DrawCmd, DrawList, Shape};
+use kurbo::Rect;
 use kurbo::Shape as _;
+use peniko::Color;
 
 #[test]
 fn stretched_delimiters_fill_their_advance_and_contain_their_ink() {

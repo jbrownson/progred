@@ -39,7 +39,8 @@ impl HasHandler<u32> for Frame {
 
 #[test]
 fn pinch_is_bounded_by_both_widget_and_clip() {
-    use crate::handler::{Event, PointerGestureEvent};
+    use crate::handler::Event;
+    use ui_events::pointer::PointerGestureEvent;
     let mut frame = Frame {
         handler: Handler::new(),
     };

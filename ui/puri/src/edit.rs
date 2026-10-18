@@ -19,7 +19,6 @@
 //! keyboard and IME dispatch and a drag's move, release, and cancel.
 
 use crate::draw::CanvasSink;
-use crate::geometry::Placement;
 use crate::handler::{HasHandler, ImeEvent};
 use crate::interact::is_primary_contact_move;
 use crate::text::{TextCtx, TextMetrics, TextStyle, draw_layout, line_layout, line_metrics};
@@ -31,6 +30,7 @@ use peniko::Brush;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButtonEvent;
+use uig::Placement;
 
 /// A selection as comparable byte offsets, for did-anything-move
 /// checks around driver operations.

@@ -24,7 +24,8 @@ impl<H> Claim<H> {
     }
 }
 
-use crate::{Placement, Point, Rect};
+use kurbo::{Point, Rect};
+use uig::Placement;
 
 enum Target<H> {
     Retains(H),

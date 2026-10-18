@@ -1,5 +1,5 @@
 use super::*;
-use crate::handler::{PointerInfo, PointerState, PointerType};
+use ui_events::pointer::{PointerInfo, PointerState, PointerType};
 
 fn packet(x: f64, y: f32, time: u64) -> PointerScrollEvent {
     PointerScrollEvent {

@@ -3,11 +3,10 @@
 //! description and receive caller-owned state and dispatch inputs explicitly.
 
 use std::borrow::Cow;
-pub use ui_events::ScrollDelta;
-pub use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
-pub use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerGesture, PointerGestureEvent, PointerId, PointerInfo,
-    PointerScrollEvent, PointerState, PointerType, PointerUpdate,
+use ui_events::ScrollDelta;
+use ui_events::keyboard::{KeyboardEvent, Modifiers};
+use ui_events::pointer::{
+    PointerButtonEvent, PointerGestureEvent, PointerInfo, PointerScrollEvent, PointerUpdate,
 };
 
 /// Acceptance is independent of whether state changed. The remainder can

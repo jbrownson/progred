@@ -1,5 +1,7 @@
 use super::{Delim, DelimStyle, close, open};
-use crate::{Affine, Brush, Canvas, draw::CanvasSink};
+use crate::draw::{Canvas, CanvasSink};
+use kurbo::Affine;
+use peniko::Brush;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
