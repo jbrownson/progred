@@ -1,10 +1,10 @@
 use super::*;
 use gid::new_cell_id;
 
-/// A record's lowered form, as the evaluator makes it on entry.
-fn lowered(fields: gid::Record) -> RuntimeValue {
+/// A record's unboxed form, as the evaluator makes it on entry.
+fn unboxed(fields: gid::Record) -> RuntimeValue {
     RuntimeValue::new(RuntimeValueKind::Unboxed(
-        Unboxed::lowered(&fields).expect("the record follows a privileged convention"),
+        Unboxed::recognize(&fields).expect("the record follows a privileged convention"),
     ))
 }
 
@@ -209,9 +209,9 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
         RuntimeValue::from(Value::record([(metadata, Value::record([]))])),
         RuntimeValue::record([(metadata, closure.clone())]),
         RuntimeValue::f64(3.0),
-        lowered(decorated_number),
+        unboxed(decorated_number),
         native_text("three"),
-        lowered(decorated_text),
+        unboxed(decorated_text),
         RuntimeValue::new(RuntimeValueKind::Foreign(metadata)),
         closure,
         RuntimeValue::list([]),
@@ -299,7 +299,7 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
         (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
         (vocabulary::VALUE, f64::value(9.0)),
     ]);
-    let value = lowered(source);
+    let value = unboxed(source);
     let receiver = host(vec![(
         interpret,
         Definition::foreign(
@@ -347,14 +347,14 @@ fn runtime_atom_inspection_matches_gid_without_materializing_containers() {
 }
 
 #[test]
-fn text_lowers_on_entry_and_keeps_its_source_record() {
+fn text_unboxes_on_entry_and_keeps_its_source_record() {
     let (metadata, parameter) = (new_cell_id(), new_cell_id());
     let decorated = Value::record([
         (crate::text::UTF8, Value::from(b"hello".to_vec())),
         (metadata, Value::from(vec![9])),
     ]);
     // A literal, and the same text passed through a closure's parameter,
-    // lower to native text and materialize as their exact source.
+    // unbox to native text and materialize as their exact source.
     let echo = lambda([parameter], Value::from(parameter));
     for expression in [
         decorated.clone(),
@@ -391,13 +391,13 @@ fn text_lowers_on_entry_and_keeps_its_source_record() {
 }
 
 #[test]
-fn interpreting_lowered_text_as_code_preserves_syntax_precedence() {
+fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
     let interpret = new_cell_id();
     let source = gid::Record::from_iter([
         (crate::text::UTF8, Value::from(b"three".to_vec())),
         (vocabulary::VALUE, f64::value(9.0)),
     ]);
-    let value = lowered(source);
+    let value = unboxed(source);
     assert_eq!(value.as_text(), Some("three"));
     let receiver = host(vec![(
         interpret,
@@ -432,7 +432,7 @@ fn runtime_text_inspection_matches_gid_without_materializing_containers() {
         assert_eq!(data.as_text(), std::str::from_utf8(&bytes).ok());
     }
     // A number whose record also carries text answers as both.
-    let both = lowered(gid::Record::from_iter([
+    let both = unboxed(gid::Record::from_iter([
         (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
         (crate::text::UTF8, Value::from(b"three".to_vec())),
     ]));
@@ -660,7 +660,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
     let noop = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| unreachable!();
     let overlay = ForeignOverlay::new(&[], &noop);
     for record in [foreign, closure] {
-        let unboxed = lowered(record.clone());
+        let unboxed = unboxed(record.clone());
         assert_eq!(unboxed.as_f64(), Some(3.0));
         // The number answers each call as its record form does.
         for function in [RuntimeValue::from(Value::Record(record)), unboxed] {

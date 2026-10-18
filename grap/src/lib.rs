@@ -356,7 +356,7 @@ impl ForeignFunction {
 pub struct Halt(Value);
 
 /// An owned evaluated value. Closures retain shared code and lexical captures;
-/// containers retain lowered children. No creating Context or host is retained.
+/// containers retain their children as runtime values. No creating Context or host is retained.
 /// [`Self::into_value`] explicitly materializes the equivalent GID data.
 #[derive(Clone)]
 pub struct RuntimeValue(RuntimeValueKind, OnceCell<Rc<Value>>);
@@ -1653,8 +1653,8 @@ impl<'a> Context<'a> {
                 Ok(match context.data_runtime.get(&expression) {
                     Some(cached) => cached.clone(),
                     None => {
-                        let value = context
-                            .lower_runtime(RuntimeValue::from(context.value(&expression).clone()));
+                        let value =
+                            context.unbox(RuntimeValue::from(context.value(&expression).clone()));
                         context
                             .data_runtime
                             .insert(expression.clone(), value.clone());
@@ -1723,7 +1723,7 @@ impl<'a> Context<'a> {
                         Some((cell, index)) => {
                             context.burn()?;
                             match environment.get_at(&context.indices, cell, index) {
-                                Some(value) => context.lower_runtime(value.clone()),
+                                Some(value) => context.unbox(value.clone()),
                                 // Ordinary cells took the direct path above.
                                 None => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
                             }
@@ -1882,9 +1882,9 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn lower_runtime(&self, value: RuntimeValue) -> RuntimeValue {
+    fn unbox(&self, value: RuntimeValue) -> RuntimeValue {
         match &value.0 {
-            RuntimeValueKind::Data(Value::Record(fields)) => match Unboxed::lowered(fields) {
+            RuntimeValueKind::Data(Value::Record(fields)) => match Unboxed::recognize(fields) {
                 Some(unboxed) => RuntimeValue::new(RuntimeValueKind::Unboxed(unboxed)),
                 None => value,
             },
@@ -1933,7 +1933,7 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         match environment.get_at(&self.indices, cell, index) {
-            Some(value) => Ok(self.lower_runtime(value.clone())),
+            Some(value) => Ok(self.unbox(value.clone())),
             None => match self.host.resolve(cell) {
                 None => Ok(missing_cell(cell)),
                 Some((resolution, definition)) => {
@@ -2061,7 +2061,7 @@ impl<'a> Context<'a> {
                 }
             }
         }?;
-        Ok(self.lower_runtime(value))
+        Ok(self.unbox(value))
     }
 
     pub fn apply(
@@ -2276,7 +2276,7 @@ impl<'a> Context<'a> {
                 let Some((_, value)) = arguments.iter().find(|(cell, _)| *cell == parameter) else {
                     return Ok(self.missing_runtime_argument(parameter));
                 };
-                self.lower_runtime(value.clone())
+                self.unbox(value.clone())
             };
             self.burn()?;
             bound.push((parameter, value));

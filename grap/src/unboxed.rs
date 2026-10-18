@@ -1,8 +1,8 @@
 //! Values of Grap's privileged conventions held natively. An unboxed value
 //! answers every record question exactly as its record form would: the
-//! acceleration must not change what a value is. Lowered values come only
-//! from [`Unboxed::lowered`], so the native value always agrees with the
-//! record it came from.
+//! acceleration must not change what a value is. A record unboxes only
+//! through [`Unboxed::recognize`], so the native value always agrees with
+//! the record it came from.
 
 use gid::{CellId, Record, Value};
 use std::rc::Rc;
@@ -25,7 +25,7 @@ pub(crate) enum Native {
 
 impl Native {
     /// The convention a record follows, if any. A record following both
-    /// lowers as its number; a reader of its text finds it in the source
+    /// unboxes as its number; a reader of its text finds it in the source
     /// record.
     fn recognize(fields: &Record) -> Option<Self> {
         crate::f64::read_record(fields)
@@ -73,7 +73,7 @@ impl Unboxed {
     }
 
     /// The native form of a record following a privileged convention.
-    pub(crate) fn lowered(fields: &Record) -> Option<Self> {
+    pub(crate) fn recognize(fields: &Record) -> Option<Self> {
         Native::recognize(fields).map(|native| Self {
             native,
             original: Some(fields.clone()),
