@@ -225,7 +225,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         step(&mut context);
         if let Some(handler) = self.output.handler.take() {
             self.output.after_hover.push(move |_, output| {
-                *output.handler() = std::mem::take(output.handler()).over(handler);
+                output.handler().stack(handler);
             });
         }
     }
@@ -251,7 +251,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
                     std::mem::take(&mut pass.navigation).finish(Some(root.clone()))
                 {
                     pass.visit(|output| {
-                        *output.handler() = std::mem::take(output.handler()).over(handlers);
+                        output.handler().stack(handlers);
                     });
                 }
             },
@@ -274,7 +274,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
     pub fn finish(mut self) -> HoverOutput<C, H> {
         self.run_floaters();
         if let Some(handlers) = std::mem::take(&mut self.navigation).finish(self.root.clone()) {
-            *self.output.handler_mut() = std::mem::take(self.output.handler_mut()).over(handlers);
+            self.output.handler_mut().stack(handlers);
         }
         self.output
     }
@@ -624,7 +624,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
                 *handler = view_handler(std::mem::take(handler), root.clone());
             }
             if let Some(handler) = child.handler {
-                *output.handler() = std::mem::take(output.handler()).over(handler);
+                output.handler().stack(handler);
             }
         });
     }
@@ -699,8 +699,9 @@ impl<C: 'static, H: 'static> HoverOutput<C, H> {
                 })
             }));
             if let Some(handler) = child.handler {
-                *output.handler() = std::mem::take(output.handler())
-                    .over(container::gate_starts(handler, placement));
+                output
+                    .handler()
+                    .stack(container::gate_starts(handler, placement));
             }
         });
         self.handler = self

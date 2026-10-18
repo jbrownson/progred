@@ -407,29 +407,22 @@ fn handler_dispatch_profile() {
 }
 
 #[test]
-fn captured_children_dispatch_through_their_wrapper() {
+fn a_stacked_handler_runs_before_the_one_beneath() {
     let mut handler: Handler<Vec<&'static str>> = Handler::new();
     handler.on_pointer_down(gated(Rect::new(0.0, 0.0, 200.0, 200.0), |log| {
-        log.push("outer");
+        log.push("beneath");
     }));
-
-    let inner = capture(&mut handler, |h| {
-        h.on_pointer_down(gated(Rect::new(0.0, 0.0, 50.0, 50.0), |log| {
-            log.push("child");
-        }));
-    });
-    handler.on_pointer_down(move |log, event| {
-        log.push("before");
-        let handled = inner.dispatch_pointer_down(log, event);
-        log.push("after");
-        handled
-    });
+    let mut above = Handler::new();
+    above.on_pointer_down(gated(Rect::new(0.0, 0.0, 50.0, 50.0), |log| {
+        log.push("above");
+    }));
+    handler.stack(above);
 
     let mut log = Vec::new();
     assert!(handler.dispatch_pointer_down(&mut log, &down_at(25.0, 25.0)));
-    assert_eq!(log, vec!["before", "child", "after"]);
+    assert_eq!(log, vec!["above"]);
 
     log.clear();
     assert!(handler.dispatch_pointer_down(&mut log, &down_at(150.0, 150.0)));
-    assert_eq!(log, vec!["before", "after", "outer"]);
+    assert_eq!(log, vec!["beneath"]);
 }

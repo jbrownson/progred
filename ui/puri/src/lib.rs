@@ -31,7 +31,7 @@ pub use edit::{
     TextClipboard, text_edit,
 };
 pub use geometry::Placement;
-pub use handler::{Handler, HasHandler, ImeEvent, capture};
+pub use handler::{Handler, HasHandler, ImeEvent};
 pub use kurbo::{
     Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Size, Stroke, Vec2,
 };

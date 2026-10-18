@@ -338,7 +338,7 @@ fn compute_hover(
             &output.landmarks,
         )
     {
-        *output.handler_mut() = std::mem::take(output.handler_mut()).over(handler);
+        output.handler_mut().stack(handler);
     }
     let crate::display::widget::frame::FrameOutput {
         scroll_probes,

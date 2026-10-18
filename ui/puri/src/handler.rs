@@ -255,11 +255,16 @@ impl<C: 'static, P: 'static> Handler<C, P> {
         }
     }
 
+    /// Stack `above` on this handler in place, as [`Self::over`] does.
+    pub fn stack(&mut self, above: Self) {
+        *self = std::mem::take(self).over(above);
+    }
+
     pub fn on(
         &mut self,
         dispatch: impl for<'a> Fn(&mut C, Event<'a>, &mut P) -> EventOutcome<'a> + 'static,
     ) {
-        *self = std::mem::take(self).over(Self::from_function(dispatch));
+        self.stack(Self::from_function(dispatch));
     }
 
     pub fn on_pointer_down(
@@ -386,16 +391,6 @@ impl<C, P: 'static> HasHandler<C> for Handler<C, P> {
     fn handler(&mut self) -> &mut Handler<C, P> {
         self
     }
-}
-
-/// Capture child handlers as an ordinary value which a wrapper can transform.
-pub fn capture<C, P: HasHandler<C> + ?Sized>(
-    p: &mut P,
-    place_children: impl FnOnce(&mut P),
-) -> Handler<C, P::Input> {
-    let saved = std::mem::take(p.handler());
-    place_children(p);
-    std::mem::replace(p.handler(), saved)
 }
 
 #[cfg(test)]
