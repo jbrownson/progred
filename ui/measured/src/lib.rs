@@ -37,7 +37,7 @@ pub enum RowAlignment {
 pub enum Composition {
     Row(RowAlignment),
     Column { baseline: usize },
-    Overlay,
+    Layers,
 }
 
 /// Observe the structure that actually places, without recording another tree.
@@ -127,20 +127,20 @@ pub fn leaf_into<Out>(
 }
 
 pub fn row<Out: ObserveLayout + 'static>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
-    row_aligned(gap, children, RowAlignment::Baseline)
+    aligned_row(RowAlignment::Baseline, gap, children)
 }
 
 pub fn centered_row<Out: ObserveLayout + 'static>(
     gap: f64,
     children: Vec<Measured<Out>>,
 ) -> Measured<Out> {
-    row_aligned(gap, children, RowAlignment::Center)
+    aligned_row(RowAlignment::Center, gap, children)
 }
 
-fn row_aligned<Out: ObserveLayout + 'static>(
+fn aligned_row<Out: ObserveLayout + 'static>(
+    alignment: RowAlignment,
     gap: f64,
     children: Vec<Measured<Out>>,
-    alignment: RowAlignment,
 ) -> Measured<Out> {
     let extent = row_extent(gap, alignment, children.iter().map(|child| child.extent));
     leaf_into(extent, move |placement, out: &mut Out| {
@@ -178,9 +178,9 @@ pub fn col<Out: ObserveLayout + 'static>(
 }
 
 pub fn layers<Out: ObserveLayout + 'static>(children: Vec<Measured<Out>>) -> Measured<Out> {
-    let extent = overlay_extent(children.iter().map(|child| child.extent));
+    let extent = layers_extent(children.iter().map(|child| child.extent));
     leaf_into(extent, move |placement, out: &mut Out| {
-        out.layout(Composition::Overlay, |out| {
+        out.layout(Composition::Layers, |out| {
             place_layers(
                 extent,
                 placement,
@@ -324,7 +324,7 @@ pub(crate) fn col_extent(
     extent
 }
 
-pub(crate) fn overlay_extent(children: impl Iterator<Item = Extent>) -> Extent {
+pub(crate) fn layers_extent(children: impl Iterator<Item = Extent>) -> Extent {
     children.fold(Extent::default(), |extent, child| Extent {
         width: extent.width.max(child.width),
         ascent: extent.ascent.max(child.ascent),

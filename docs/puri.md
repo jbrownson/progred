@@ -109,7 +109,7 @@ per-frame sharing and choice bookkeeping; `resolve_choices` returns a
 `Measured<Out>`: an extent and placement callback. The selected choice graph
 places directly, without building a second measured container tree. Plain
 measured combinators compose callbacks using the same geometry helpers, not a
-`Kind` enum. `ObserveLayout` exposes the chosen row/column/overlay and direct-child
+`Kind` enum. `ObserveLayout` exposes the chosen row/column/layers and direct-child
 boundaries during that placement, for consumers that need structural traversal.
 It does not expose discarded alternatives or require another tree. Wrappers do
 not interpret their output. Out-of-flow

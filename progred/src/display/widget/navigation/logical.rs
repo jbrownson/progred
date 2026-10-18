@@ -246,7 +246,7 @@ impl Accumulator {
                 self.composition,
                 Composition::Row(RowAlignment::Baseline | RowAlignment::Top { baseline: 0 })
                     | Composition::Column { baseline: 0 }
-                    | Composition::Overlay
+                    | Composition::Layers
             ) {
                 self.lines.baseline = 0;
             }
@@ -254,7 +254,7 @@ impl Accumulator {
             return;
         }
         match self.composition {
-            Composition::Row(RowAlignment::Baseline) | Composition::Overlay => {
+            Composition::Row(RowAlignment::Baseline) | Composition::Layers => {
                 let baseline = self.lines.baseline.max(child.baseline);
                 if baseline > self.lines.baseline && !self.lines.rows.is_empty() {
                     let offset = baseline - self.lines.baseline;

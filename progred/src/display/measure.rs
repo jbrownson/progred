@@ -99,7 +99,7 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         #[cfg(all(test, feature = "layout-profile"))]
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Overlay);
         let children = self.children(children);
-        self.push(ChoiceLayout::overlay(children))
+        self.push(ChoiceLayout::layers(children))
     }
     fn pad(&mut self, insets: Insets, child: Node) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]

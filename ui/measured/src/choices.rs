@@ -55,7 +55,7 @@ enum ChoiceKind<Out> {
         gap: f64,
         children: Vec<ChoiceLayout<Out>>,
     },
-    Overlay {
+    Layers {
         children: Vec<ChoiceLayout<Out>>,
     },
     Attached {
@@ -236,7 +236,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    pub fn overlay(children: Vec<Self>) -> Self {
+    pub fn layers(children: Vec<Self>) -> Self {
         let widths = Widths {
             preferred: children
                 .iter()
@@ -250,7 +250,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
         Self {
             widths,
             extent: Extent::default(),
-            kind: ChoiceKind::Overlay { children },
+            kind: ChoiceKind::Layers { children },
         }
     }
 
@@ -327,7 +327,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                     .sum::<f64>()
                     + gaps
             }
-            ChoiceKind::Col { children, .. } | ChoiceKind::Overlay { children } => children
+            ChoiceKind::Col { children, .. } | ChoiceKind::Layers { children } => children
                 .iter()
                 .map(|child| child.select(choices, shared, available))
                 .fold(0.0_f64, f64::max),
@@ -400,7 +400,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
             }
             ChoiceKind::Row { children, .. }
             | ChoiceKind::Col { children, .. }
-            | ChoiceKind::Overlay { children } => {
+            | ChoiceKind::Layers { children } => {
                 for child in children {
                     child.prefer(choices, shared);
                 }
@@ -469,7 +469,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                 gap,
                 children: settle_all(children, choices, shared),
             }),
-            ChoiceKind::Overlay { children } => settled(ChoiceKind::Overlay {
+            ChoiceKind::Layers { children } => settled(ChoiceKind::Layers {
                 children: settle_all(children, choices, shared),
             }),
             ChoiceKind::Pad { insets, child } => settled(ChoiceKind::Pad {
@@ -526,7 +526,7 @@ impl<Out: 'static> ChoiceLayout<Out> {
                     |child, placement| out.layout_child(|out| child.place(placement, out)),
                 )
             }),
-            ChoiceKind::Overlay { children } => out.layout(crate::Composition::Overlay, |out| {
+            ChoiceKind::Layers { children } => out.layout(crate::Composition::Layers, |out| {
                 crate::place_layers(
                     self.extent,
                     placement,
@@ -558,8 +558,8 @@ fn settled_extent<Out>(kind: &ChoiceKind<Out>) -> Extent {
             gap,
             children,
         } => crate::col_extent(*baseline, *gap, children.iter().map(|child| child.extent)),
-        ChoiceKind::Overlay { children } => {
-            crate::overlay_extent(children.iter().map(|child| child.extent))
+        ChoiceKind::Layers { children } => {
+            crate::layers_extent(children.iter().map(|child| child.extent))
         }
         ChoiceKind::Pad { insets, child } => crate::padded_extent(*insets, child.extent),
         _ => unreachable!("choices and measurement wrappers have been settled"),

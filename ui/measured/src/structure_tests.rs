@@ -12,7 +12,7 @@ impl ObserveLayout for Trace {
         self.events.push(match composition {
             Composition::Row(_) => "row",
             Composition::Column { .. } => "column",
-            Composition::Overlay => "overlay",
+            Composition::Layers => "layers",
         });
         children(self);
         self.events.push("end");

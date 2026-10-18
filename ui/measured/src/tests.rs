@@ -130,13 +130,13 @@ fn columns_and_padding_offer_space_without_changing_the_clip() {
 #[test]
 fn top_aligned_row_exposes_the_chosen_baseline_to_its_parent() {
     for fields_height in [10.0, 240.0] {
-        let tool = row_aligned(
+        let tool = aligned_row(
+            RowAlignment::Top { baseline: 1 },
             12.0,
             vec![
                 probe(ext(110.0, 90.0, 90.0)),
                 probe(ext(200.0, 8.0, fields_height - 8.0)),
             ],
-            RowAlignment::Top { baseline: 1 },
         );
         let layout = row(6.0, vec![probe(ext(10.0, 8.0, 2.0)), tool]);
         let output = place_top_left(layout, Point::new(20.0, 30.0));
