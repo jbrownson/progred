@@ -1,6 +1,6 @@
 //! Optional code origins as ordinary GID annotations, not execution history.
 
-use crate::{Expression, OriginNode, OriginRoot, SourceOrigin, path};
+use crate::{Expression, OriginId, OriginNode, OriginRoot, SourceOrigin, path};
 use gid::Value;
 
 pub mod vocabulary {
@@ -47,34 +47,34 @@ pub fn read(value: &Value) -> Option<SourceOrigin> {
 }
 
 pub(crate) fn origin(expression: &Expression) -> Option<SourceOrigin> {
-    let mut origin = expression.0.origin.as_ref()?;
-    let mut path = Vec::new();
-    loop {
-        match origin.0.as_ref() {
-            OriginNode::Root(root) => {
-                path.reverse();
-                return Some(match root {
-                    OriginRoot::Input => SourceOrigin::Input(path),
-                    OriginRoot::Located(base) => {
-                        let mut base = base.clone();
-                        let prefix = match &mut base {
-                            SourceOrigin::Input(path) | SourceOrigin::Stored(path) => path,
-                            SourceOrigin::Cell { path, .. } => path,
-                        };
-                        prefix.extend(path);
-                        base
-                    }
-                    OriginRoot::Cell { cell, resolution } => SourceOrigin::Cell {
-                        cell: *cell,
-                        resolution: *resolution,
-                        path,
-                    },
-                });
-            }
-            OriginNode::Child { parent, step } => {
-                path.push(step.clone());
-                origin = parent;
-            }
+    let (root, path) = route(expression.0.origin.as_ref()?);
+    Some(match root {
+        OriginRoot::Input => SourceOrigin::Input(path),
+        OriginRoot::Located(base) => {
+            let mut base = base.clone();
+            let prefix = match &mut base {
+                SourceOrigin::Input(path) | SourceOrigin::Stored(path) => path,
+                SourceOrigin::Cell { path, .. } => path,
+            };
+            prefix.extend(path);
+            base
+        }
+        OriginRoot::Cell { cell, resolution } => SourceOrigin::Cell {
+            cell: *cell,
+            resolution: *resolution,
+            path,
+        },
+    })
+}
+
+/// `origin`'s root and the steps from it down to `origin`.
+fn route(origin: &OriginId) -> (&OriginRoot, Vec<gid::Step>) {
+    match origin.0.as_ref() {
+        OriginNode::Root(root) => (root, Vec::new()),
+        OriginNode::Child { parent, step } => {
+            let (root, mut path) = route(parent);
+            path.push(step.clone());
+            (root, path)
         }
     }
 }

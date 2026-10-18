@@ -1200,3 +1200,25 @@ fn every_entry_point_binds_in_its_context_index_table() {
     }
     assert!(shared.get());
 }
+
+#[test]
+fn runtime_records_order_and_repeat_labels_as_gid_records_do() {
+    let mut labels = [new_cell_id(), new_cell_id(), new_cell_id()];
+    labels.sort();
+    let [a, b, c] = labels;
+    let fields = [(c, 1.0), (a, 2.0), (c, 3.0), (b, 4.0), (a, 5.0)];
+    let runtime = RuntimeValue::record(
+        fields
+            .iter()
+            .map(|&(label, number)| (label, RuntimeValue::f64(number))),
+    );
+    let stored = Value::record(
+        fields
+            .iter()
+            .map(|&(label, number)| (label, f64::value(number))),
+    );
+    assert_eq!(runtime.record_keys(), Some(vec![a, b, c]));
+    assert_eq!(runtime.to_value(), stored);
+    assert_eq!(runtime.field(a).and_then(|value| value.as_f64()), Some(5.0));
+    assert_eq!(runtime.field(c).and_then(|value| value.as_f64()), Some(3.0));
+}

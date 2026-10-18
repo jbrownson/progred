@@ -465,20 +465,12 @@ impl RuntimeValue {
 
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
         let mut fields: Vec<_> = fields.into_iter().collect();
-        if fields.windows(2).all(|pair| pair[0].0 < pair[1].0) {
-            return Self::new(RuntimeValueKind::Record(fields.into()));
+        if !fields.is_sorted_by(|(a, _), (b, _)| a < b) {
+            // A repeated label keeps its last value, as in a GID record.
+            fields.reverse();
+            fields.sort_by_key(|(field, _)| *field);
+            fields.dedup_by_key(|(field, _)| *field);
         }
-        fields.sort_by_key(|(field, _)| *field);
-        let fields = fields.into_iter().fold(Vec::new(), |mut unique, field| {
-            if unique
-                .last()
-                .is_some_and(|(last, _): &(CellId, RuntimeValue)| *last == field.0)
-            {
-                unique.pop();
-            }
-            unique.push(field);
-            unique
-        });
         Self::new(RuntimeValueKind::Record(fields.into()))
     }
 
@@ -586,17 +578,19 @@ impl RuntimeValue {
     /// Declared parameter order, without evaluating syntax or materializing a
     /// native closure's code and captured environment.
     pub fn callable_parameters(&self) -> Option<Vec<CellId>> {
-        if let RuntimeValueKind::Closure(closure) = &self.0 {
-            return Some(closure.params.to_vec());
+        match &self.0 {
+            RuntimeValueKind::Closure(closure) => Some(closure.params.to_vec()),
+            _ => {
+                let fields = self.field(vocabulary::CLOSURE);
+                let fields = fields.as_ref().unwrap_or(self);
+                fields.field(vocabulary::BODY)?;
+                fields
+                    .field(vocabulary::PARAMS)?
+                    .list_values()?
+                    .map(|parameter| parameter.as_cell())
+                    .collect()
+            }
         }
-        let fields = self.field(vocabulary::CLOSURE);
-        let fields = fields.as_ref().unwrap_or(self);
-        fields.field(vocabulary::BODY)?;
-        fields
-            .field(vocabulary::PARAMS)?
-            .list_values()?
-            .map(|parameter| parameter.as_cell())
-            .collect()
     }
 
     pub fn list_len(&self) -> Option<usize> {
@@ -634,14 +628,14 @@ impl RuntimeValue {
 
     /// The same labels as the GID representation, without materializing values.
     pub fn record_keys(&self) -> Option<Vec<CellId>> {
-        Some(match &self.0 {
-            RuntimeValueKind::Data(value) => value.as_record()?.keys().copied().collect(),
-            RuntimeValueKind::Record(fields) => fields.iter().map(|(key, _)| *key).collect(),
-            RuntimeValueKind::Unboxed(unboxed) => unboxed.keys(),
-            RuntimeValueKind::Foreign(_) => vec![vocabulary::FFI],
-            RuntimeValueKind::Closure(_) => vec![vocabulary::CLOSURE],
-            RuntimeValueKind::List(_) => return None,
-        })
+        match &self.0 {
+            RuntimeValueKind::Data(value) => Some(value.as_record()?.keys().copied().collect()),
+            RuntimeValueKind::Record(fields) => Some(fields.iter().map(|(key, _)| *key).collect()),
+            RuntimeValueKind::Unboxed(unboxed) => Some(unboxed.keys()),
+            RuntimeValueKind::Foreign(_) => Some(vec![vocabulary::FFI]),
+            RuntimeValueKind::Closure(_) => Some(vec![vocabulary::CLOSURE]),
+            RuntimeValueKind::List(_) => None,
+        }
     }
 
     /// Which of GID's four structural shapes this value has, with its labels
@@ -858,6 +852,13 @@ struct EnvironmentFrame {
     bindings: Vec<(CellIndex, RuntimeValue)>,
 }
 
+/// An environment's frames, innermost first.
+fn frames(environment: &Environment) -> impl Iterator<Item = &EnvironmentFrame> {
+    std::iter::successors(environment.frame.as_deref(), |frame| {
+        frame.parent.as_deref()
+    })
+}
+
 impl Environment {
     fn with_indices(indices: CellIndices) -> Self {
         Self {
@@ -887,19 +888,13 @@ impl Environment {
     }
 
     fn get_index(&self, index: CellIndex) -> Option<&RuntimeValue> {
-        let mut frame = self.frame.as_deref();
-        while let Some(current) = frame {
-            if let Some((_, value)) = current
+        frames(self).find_map(|frame| {
+            frame
                 .bindings
                 .iter()
                 .rev()
-                .find(|(binding, _)| *binding == index)
-            {
-                return Some(value);
-            }
-            frame = current.parent.as_deref();
-        }
-        None
+                .find_map(|(binding, value)| (*binding == index).then_some(value))
+        })
     }
 
     fn extended(&self, bindings: impl IntoIterator<Item = (CellId, Value)>) -> Self {
@@ -977,14 +972,15 @@ impl Environment {
     ) -> Self {
         let bindings: Vec<_> = bindings.into_iter().collect();
         if bindings.is_empty() {
-            return self.clone();
-        }
-        Self {
-            indices: self.indices.clone(),
-            frame: Some(Rc::new(EnvironmentFrame {
-                parent: self.frame.clone(),
-                bindings,
-            })),
+            self.clone()
+        } else {
+            Self {
+                indices: self.indices.clone(),
+                frame: Some(Rc::new(EnvironmentFrame {
+                    parent: self.frame.clone(),
+                    bindings,
+                })),
+            }
         }
     }
 }
@@ -1607,26 +1603,24 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<Option<f64>, Halt> {
         self.burn()?;
-        match &expression.0.form {
-            Form::Data => {
-                if let Some(RuntimeValue(RuntimeValueKind::Unboxed(cached), _)) =
-                    self.data_runtime.get(&expression)
-                    && let Native::F64(number) = cached.native()
-                {
-                    return Ok(Some(*number));
-                }
-            }
-            Form::Cell(cell) => {
-                if let Some(RuntimeValue(RuntimeValueKind::Unboxed(value), _)) =
-                    environment.get_runtime(*cell)
-                    && let Native::F64(number) = value.native()
-                {
-                    return Ok(Some(*number));
-                }
-            }
-            _ => {}
+        let unboxed = match &expression.0.form {
+            Form::Data => self.data_runtime.get(&expression),
+            Form::Cell(cell) => environment.get_runtime(*cell),
+            _ => None,
         }
-        Ok(self.eval_burned(expression, environment)?.as_f64())
+        .and_then(|value| match &value.0 {
+            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
+                Native::F64(number) => Some(*number),
+                Native::Text(_) => None,
+            },
+            _ => None,
+        });
+        match unboxed {
+            Some(number) => Ok(Some(number)),
+            None => self
+                .eval_burned(expression, environment)
+                .map(|value| value.as_f64()),
+        }
     }
 
     fn eval_burned(
@@ -1649,15 +1643,17 @@ impl<'a> Context<'a> {
         match expression.0.form.clone() {
             Form::Ready(value) => thunk(move |_, _| Ok(value.clone())),
             Form::Data => thunk(move |context, _| {
-                if let Some(cached) = context.data_runtime.get(&expression) {
-                    return Ok(cached.clone());
-                }
-                let value =
-                    context.lower_runtime(RuntimeValue::from(context.value(&expression).clone()));
-                context
-                    .data_runtime
-                    .insert(expression.clone(), value.clone());
-                Ok(value)
+                Ok(match context.data_runtime.get(&expression) {
+                    Some(cached) => cached.clone(),
+                    None => {
+                        let value = context
+                            .lower_runtime(RuntimeValue::from(context.value(&expression).clone()));
+                        context
+                            .data_runtime
+                            .insert(expression.clone(), value.clone());
+                        value
+                    }
+                })
             }),
             Form::Cell(cell) => {
                 let index = cell_index(&self.indices, cell);
@@ -1940,47 +1936,46 @@ impl<'a> Context<'a> {
         index: CellIndex,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
-        if let Some(value) = environment.get_at(&self.indices, cell, index) {
-            let value = value.clone();
-            return Ok(self.lower_runtime(value));
-        }
-        match self.host.resolve(cell) {
-            None => Ok(RuntimeValue::from(absent::with_detail(
-                absent::MISSING_CELL,
-                absent::CELL,
-                Value::from(cell),
-            ))),
-            Some((resolution, definition)) => {
-                while self.cell_states.len() <= index.0 {
-                    self.cell_states.push(CellState::Unknown);
+        match environment.get_at(&self.indices, cell, index) {
+            Some(value) => Ok(self.lower_runtime(value.clone())),
+            None => match self.host.resolve(cell) {
+                None => Ok(RuntimeValue::from(absent::with_detail(
+                    absent::MISSING_CELL,
+                    absent::CELL,
+                    Value::from(cell),
+                ))),
+                Some((resolution, definition)) => {
+                    while self.cell_states.len() <= index.0 {
+                        self.cell_states.push(CellState::Unknown);
+                    }
+                    match self.cell_states[index.0].clone() {
+                        CellState::Ready(expression) => {
+                            self.eval_resolved_cell(index, cell, expression, environment)
+                        }
+                        CellState::Evaluating { stack_index } => {
+                            Ok(RuntimeValue::from(absent::with_detail(
+                                absent::CELL_CYCLE,
+                                absent::CYCLE,
+                                Value::list(
+                                    self.resolving[stack_index..]
+                                        .iter()
+                                        .copied()
+                                        .chain([cell])
+                                        .map(Value::from),
+                                ),
+                            )))
+                        }
+                        CellState::Unknown => {
+                            let expression = self.lower_source(
+                                definition.value(),
+                                OriginRoot::Cell { cell, resolution },
+                            );
+                            self.cell_states[index.0] = CellState::Ready(expression.clone());
+                            self.eval_resolved_cell(index, cell, expression, environment)
+                        }
+                    }
                 }
-                match self.cell_states[index.0].clone() {
-                    CellState::Ready(expression) => {
-                        self.eval_resolved_cell(index, cell, expression, environment)
-                    }
-                    CellState::Evaluating { stack_index } => {
-                        Ok(RuntimeValue::from(absent::with_detail(
-                            absent::CELL_CYCLE,
-                            absent::CYCLE,
-                            Value::list(
-                                self.resolving[stack_index..]
-                                    .iter()
-                                    .copied()
-                                    .chain([cell])
-                                    .map(Value::from),
-                            ),
-                        )))
-                    }
-                    CellState::Unknown => {
-                        let expression = self.lower_source(
-                            definition.value(),
-                            OriginRoot::Cell { cell, resolution },
-                        );
-                        self.cell_states[index.0] = CellState::Ready(expression.clone());
-                        self.eval_resolved_cell(index, cell, expression, environment)
-                    }
-                }
-            }
+            },
         }
     }
 

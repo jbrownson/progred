@@ -33,15 +33,13 @@ impl Position {
 /// for the first position in an empty list). `None` when the pair is
 /// not strictly ordered.
 pub fn between(low: Option<&Position>, high: Option<&Position>) -> Option<Position> {
-    if let (Some(low), Some(high)) = (low, high)
-        && low >= high
-    {
-        return None;
+    match (low, high) {
+        (Some(low), Some(high)) if low >= high => None,
+        _ => Position::from_bytes(between_bytes(
+            low.map(Position::as_bytes).unwrap_or(&[]),
+            high.map(Position::as_bytes),
+        )),
     }
-    Position::from_bytes(between_bytes(
-        low.map(Position::as_bytes).unwrap_or(&[]),
-        high.map(Position::as_bytes),
-    ))
 }
 
 /// `n` canonical positions in increasing order, spread evenly across

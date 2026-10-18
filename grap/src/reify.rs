@@ -75,18 +75,13 @@ impl Reify {
             |this| {
                 let indices = environment.indices.borrow();
                 let mut seen = HashSet::new();
-                let mut fields = Vec::new();
-                let mut frame = environment.frame.as_deref();
-                while let Some(current) = frame {
-                    // Match lookup order; do not materialize shadowed values.
-                    for (index, value) in current.bindings.iter().rev() {
-                        if seen.insert(*index) {
-                            fields.push((indices.cell(*index), this.value(value)));
-                        }
-                    }
-                    frame = current.parent.as_deref();
-                }
-                Value::record(fields)
+                // Match lookup order; do not materialize shadowed values.
+                Value::record(
+                    frames(environment)
+                        .flat_map(|frame| frame.bindings.iter().rev())
+                        .filter(|(index, _)| seen.insert(*index))
+                        .map(|(index, value)| (indices.cell(*index), this.value(value))),
+                )
             },
         )
     }
