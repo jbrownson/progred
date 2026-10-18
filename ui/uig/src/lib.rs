@@ -64,8 +64,10 @@ impl Placement {
         visible.width() <= 0.0 || visible.height() <= 0.0
     }
 
+    /// A point in both half-open rectangles is in their intersection, so a
+    /// clipped-out placement contains none.
     pub fn contains(self, point: Point) -> bool {
-        !self.clipped_out() && self.rect.contains(point) && self.clip_rect.contains(point)
+        self.rect.contains(point) && self.clip_rect.contains(point)
     }
 }
 
