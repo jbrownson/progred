@@ -335,21 +335,17 @@ impl Section {
         }
         let Sampled { points, shoulders } =
             self.sample(tolerance).ok_or(InvalidPath::CoordinateRange)?;
-        let mut field: Option<Tree> = None;
-        let mut start = 0;
-        for end in shoulders
+        let starts = std::iter::once(0).chain(shoulders.iter().map(|i| i + 1));
+        let ends = shoulders
             .iter()
             .copied()
-            .chain(std::iter::once(points.len() - 1))
-        {
-            let next = sweep_outline(&points[start..=end], a, b, axis)?;
-            field = Some(match field {
-                Some(f) => f.min(next),
-                None => next,
-            });
-            start = end + 1;
-        }
-        let mut field = field.ok_or(InvalidPath::CoordinateRange)?;
+            .chain(std::iter::once(points.len() - 1));
+        let mut field = union(
+            starts
+                .zip(ends)
+                .map(|(start, end)| sweep_outline(&points[start..=end], a, b, axis)),
+        )?
+        .ok_or(InvalidPath::CoordinateRange)?;
         for i in shoulders {
             let radius = points[i].radius.min(points[i + 1].radius);
             if radius == 0.0 {
@@ -443,30 +439,40 @@ impl Tool {
         if !tolerance.is_finite() || tolerance <= 0.0 {
             return Err(InvalidPath::CoordinateRange);
         }
-        let mut field: Option<Tree> = None;
-        let mut previous_end = None;
-        for section in self
-            .sections
-            .iter()
-            .filter(|s| s.kind == SectionKind::Cutting)
-        {
-            let end = match section.profile.last() {
-                Some(Segment::Line(end) | Segment::Arc { end, .. }) => end,
-                _ => return Err(InvalidPath::CoordinateRange),
-            };
-            // Distinct cutting bands must stay distinct in the Fidget field.
-            if previous_end.is_some_and(|end| section.start.axial as f32 <= end) {
-                return Err(InvalidPath::CoordinateRange);
-            }
-            let next = section.sweep(tolerance, a, b, axis)?;
-            previous_end = Some(end.axial as f32);
-            field = Some(match field {
-                Some(f) => f.min(next),
-                None => next,
-            });
-        }
-        Ok(field)
+        union(
+            self.sections
+                .iter()
+                .filter(|s| s.kind == SectionKind::Cutting)
+                .scan(None, |previous_end, section| {
+                    // Distinct cutting bands must stay distinct in the Fidget field.
+                    let distinct = previous_end.is_none_or(|end| end < section.start.axial as f32);
+                    Some(match section.profile.last() {
+                        Some(Segment::Line(end) | Segment::Arc { end, .. }) if distinct => {
+                            *previous_end = Some(end.axial as f32);
+                            section.sweep(tolerance, a, b, axis)
+                        }
+                        _ => Err(InvalidPath::CoordinateRange),
+                    })
+                }),
+        )
     }
+}
+
+/// The union of `fields`, or the first error among them. Each min takes the
+/// union so far as its left operand, in the fields' order: that order shapes
+/// the tape Fidget builds.
+fn union(
+    fields: impl IntoIterator<Item = Result<Tree, InvalidPath>>,
+) -> Result<Option<Tree>, InvalidPath> {
+    fields
+        .into_iter()
+        .try_fold(None, |so_far: Option<Tree>, field| {
+            let field = field?;
+            Ok(Some(match so_far {
+                Some(so_far) => so_far.min(field),
+                None => field,
+            }))
+        })
 }
 
 /// Sweep a continuous-radius polyline, capping only its two outer ends.
@@ -474,15 +480,12 @@ fn sweep_outline(points: &[Point], a: Point3, b: Point3, axis: Axis) -> Result<T
     let (Some(first), Some(last)) = (points.first(), points.last()) else {
         return Err(InvalidPath::CoordinateRange);
     };
-    let mut field: Option<Tree> = None;
-    for pair in points.windows(2) {
-        let next = frustum(pair[0], pair[1], a, b, axis)?;
-        field = Some(match field {
-            Some(f) => f.min(next),
-            None => next,
-        });
-    }
-    let field = field.ok_or(InvalidPath::CoordinateRange)?;
+    let field = union(
+        points
+            .windows(2)
+            .map(|pair| frustum(pair[0], pair[1], a, b, axis)),
+    )?
+    .ok_or(InvalidPath::CoordinateRange)?;
     let a = coordinate(a)?;
     let b = coordinate(b)?;
     let z = axis.basis()[2];
