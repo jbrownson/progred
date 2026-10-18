@@ -1249,19 +1249,10 @@ enum ResolvedForeign {
 impl<'a> Context<'a> {
     fn conclude(mut self, run: impl FnOnce(&mut Self) -> Result<RuntimeValue, Halt>) -> Evaluation {
         let outcome = self.checked_call(run);
-        if let Err(Halt(result)) = &outcome
-            && absent::reason(result) == Some(absent::EFFECTFUL_DECLINE)
-        {
-            eprintln!(
-                "Grap: cannot decline after performing an effect; evaluation stopped: {result:?}"
-            );
-        }
-        let completed = outcome.is_ok();
-        let result = outcome.unwrap_or_else(|Halt(result)| RuntimeValue::from(result));
         Evaluation {
-            result,
+            completed: outcome.is_ok(),
+            result: outcome.unwrap_or_else(|Halt(result)| RuntimeValue::from(result)),
             remaining_fuel: self.remaining_fuel,
-            completed,
         }
     }
 
