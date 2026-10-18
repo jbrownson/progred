@@ -30,7 +30,6 @@ fn last_kind(world: &crate::Editor) -> Option<CellId> {
 fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
     fn probe(input: &ProjectionInput<'_>) -> Option<Layout> {
         input.value?.as_blob()?;
-        let target = input.targets.current();
         layout_data::decode(
             &layout_data::on(
                 layout_data::text_leaf("go", event_fields::NAME_FACE),
@@ -45,8 +44,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
                     ),
                 ),
             ),
-            &target.select,
-            &target.hover,
+            &input.site(),
         )
     }
     let mut events = crate::test_editor(Document {

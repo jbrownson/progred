@@ -81,7 +81,7 @@ impl Output {
 /// Exactly one emitted root is a layout; no emission leaves the ordinary
 /// value result alone. A halt or final absent drops the entire output.
 pub fn run(
-    target: impl Fn() -> ProjectionTarget<crate::frame::Hovered>,
+    site: impl Fn() -> crate::editing::Site,
     evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
 ) -> (Evaluation, Option<Layout>) {
     let output = Output {
@@ -90,7 +90,7 @@ pub fn run(
     let unit = RuntimeValue::record([]);
     let emit =
         |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
-            match operation(function, context, call, environment, &output, &target) {
+            match operation(function, context, call, environment, &output, &site) {
                 Ok(layout) => Ok(context.effect(|| {
                     output.children.borrow_mut().push(layout);
                     unit.clone()
@@ -115,7 +115,7 @@ pub fn run(
 pub(super) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let function = input.value?.field(LAYOUT_PROGRAM)?;
     let (evaluation, layout) = run(
-        || input.targets.current(),
+        || input.site(),
         |scope| input.env.apply_runtime_scoped(&function, &[], Some(scope)),
     );
     Some(layout.unwrap_or_else(|| {
@@ -179,7 +179,7 @@ fn operation(
     call: &Expression,
     environment: &Environment,
     output: &Output,
-    target: &impl Fn() -> ProjectionTarget<crate::frame::Hovered>,
+    site: &impl Fn() -> crate::editing::Site,
 ) -> Result<Layout, BuildError> {
     macro_rules! need {
         ($value:expr) => {
@@ -352,12 +352,13 @@ fn operation(
             let children = children!(body);
             let child = need!(single(children));
             match function {
-                SELECTABLE => {
-                    let target = target();
-                    activatable(child, target.hover, target.select)
-                }
+                SELECTABLE => activatable(child, &site()),
                 HOVER_BLOCK => block_hover(child),
-                PICKABLE => pickable_runtime(child, target().hover, need!(value)),
+                PICKABLE => pickable_runtime(
+                    child,
+                    crate::frame::Hovered::from(site().hover()),
+                    need!(value),
+                ),
                 ON_EVENT => on_event(child, need!(handler)),
                 _ => unreachable!(),
             }

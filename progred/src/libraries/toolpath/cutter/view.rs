@@ -11,8 +11,8 @@ pub(crate) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Opti
     value.field(vocabulary::TOOL)?;
     let tool = Tool::read(value.as_value())?;
     let fields = structure::record_layout(input, |_| None)?;
-    let target = input.targets.current();
-    let picture = activatable(picture(&tool)?, target.hover, target.select);
+    let site = input.site();
+    let picture = activatable(picture(&tool)?, &site);
     Some(aligned_row(
         RowAlignment::Top { baseline: 1 },
         12.0,

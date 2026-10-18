@@ -173,7 +173,7 @@ pub(crate) fn document_libraries(loaded: Partial) -> Partial {
             }
             let projection = library.projection;
             let (evaluation, layout) = layout::scope::run(
-                || input.targets.current(),
+                || input.site(),
                 |scope| {
                     input.env.apply_runtime_scoped(
                         &projection,

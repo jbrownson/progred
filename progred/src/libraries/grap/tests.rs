@@ -4,9 +4,7 @@ use crate::view::ProjectionInput;
 
 use crate::display::Env;
 use crate::display::test_support::{EvaluatesTo, ProjectionCall, inspect, unshared};
-use crate::libraries::test_widgets::{
-    project_runtime, projection_input, relative_projection_input,
-};
+use crate::libraries::test_widgets::{project_runtime, projection_input};
 use crate::library::Libraries;
 use crate::test_support::{
     activated, completion_entries_with, core_libraries, library_offers, src,
@@ -523,7 +521,7 @@ fn a_call_argument_label_targets_its_value() {
     let function = new_cell_id();
     let argument = new_cell_id();
     let call = ::grap::call(Value::from(function), [(argument, Value::from(vec![1]))]);
-    let layout = project_runtime(call_display, &relative_projection_input(&env(), &call)).unwrap();
+    let layout = project_runtime(call_display, &projection_input(&env(), &call)).unwrap();
     let Recorded::Alternatives(call_options) = layout.record().content().clone() else {
         panic!("call has responsive forms");
     };
@@ -723,11 +721,7 @@ fn a_call_uses_an_inline_lambdas_parameter_order() {
 fn a_lambda_targets_its_syntax_and_projects_its_body_as_grap() {
     let parameter = new_cell_id();
     let definition = ::grap::lambda([parameter], Value::from(parameter));
-    let layout = project_runtime(
-        lambda_display,
-        &relative_projection_input(&env(), &definition),
-    )
-    .unwrap();
+    let layout = project_runtime(lambda_display, &projection_input(&env(), &definition)).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("lambda has responsive forms");
     };
@@ -778,7 +772,7 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
         (PARAMS, Value::list([])),
         (new_cell_id(), Value::record([])),
     ]);
-    let mut input = relative_projection_input(&env, &definition);
+    let mut input = projection_input(&env, &definition);
     assert!(project_runtime(lambda_display, &input).is_some());
     input.pending = Some(Pending::Child(Step::Key(BODY)));
     assert!(project_runtime(lambda_display, &input).is_some());
@@ -793,9 +787,7 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
             Value::list([crate::libraries::text::value("not a cell")]),
         )]),
     ] {
-        assert!(
-            project_runtime(lambda_display, &relative_projection_input(&env, &malformed)).is_none()
-        );
+        assert!(project_runtime(lambda_display, &projection_input(&env, &malformed)).is_none());
     }
 }
 
@@ -809,11 +801,7 @@ fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
             (new_cell_id(), Value::record([])),
         ],
     );
-    let layout = project_runtime(
-        lambda_display,
-        &relative_projection_input(&env(), &definition),
-    )
-    .unwrap();
+    let layout = project_runtime(lambda_display, &projection_input(&env(), &definition)).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("lambda has responsive forms");
     };
@@ -837,10 +825,7 @@ fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
         .unwrap()
         .get(&name::vocabulary::NAME)
         .unwrap();
-    assert!(
-        projection(&relative_projection_input(&env(), value).with_value(Some(&value.into())))
-            .is_some()
-    );
+    assert!(projection(&projection_input(&env(), value).with_value(Some(&value.into()))).is_some());
     let line = name::editor(value).unwrap();
     assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
 }
@@ -872,11 +857,7 @@ fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
         "",
         [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
     );
-    let layout = project_runtime(
-        lambda_display,
-        &relative_projection_input(&env(), &definition),
-    )
-    .unwrap();
+    let layout = project_runtime(lambda_display, &projection_input(&env(), &definition)).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("lambda has responsive forms");
     };
@@ -898,10 +879,7 @@ fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
         .unwrap()
         .get(&name::vocabulary::NAME)
         .unwrap();
-    assert!(
-        projection(&relative_projection_input(&env(), value).with_value(Some(&value.into())))
-            .is_some()
-    );
+    assert!(projection(&projection_input(&env(), value).with_value(Some(&value.into()))).is_some());
     let line = name::editor(value).unwrap();
     assert_eq!(line.text, "");
     assert_eq!(line.placeholder, None);

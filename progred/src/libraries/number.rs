@@ -429,14 +429,14 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
         "",
     );
     let line = tagged(input, digits, representation);
-    let target = input.targets.current();
-    let line = activatable(line, target.hover.clone(), target.select);
+    let site = input.site();
+    let line = activatable(line, &site);
     let line = if number.scrubbable() {
         let original = original.clone();
         // Outlined where it drags: the whole number, its tag too.
         on_scrub(
             crate::display::drag_outlined(line),
-            target.hover,
+            crate::frame::Hovered::from(site.hover()),
             Rc::new(move || {
                 let original = original.to_value();
                 let mut scrub = NumberScrub::new(number);

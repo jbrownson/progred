@@ -601,15 +601,14 @@ fn pattern_binder(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
         [(vocabulary::BIND, binder)],
         CellId::cmp,
         |key, _| {
-            let target = input.targets.at([Step::Key(key)]);
+            let site = input.site().below(&[Step::Key(key)]);
             RecordField {
                 label: activatable(
                     match input.env.name(key) {
                         Some(name) => faced(name, Face::Label),
                         None => faced(crate::identity::short_id(key), Face::Id),
                     },
-                    target.hover,
-                    target.select,
+                    &site,
                 ),
                 value: crate::libraries::grap::declaration_path(
                     [Step::Key(key)],
@@ -625,14 +624,10 @@ fn case_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     input.pending.is_none().then_some(())?;
     input.value?.field(vocabulary::PATTERN)?;
     input.value?.field(::grap::vocabulary::EXPRESSION)?;
-    let expression_target = input
-        .targets
-        .at([Step::Key(::grap::vocabulary::EXPRESSION)]);
-    let arrow = activatable(
-        crate::display::arrow(),
-        expression_target.hover,
-        expression_target.select,
-    );
+    let expression_site = input
+        .site()
+        .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
+    let arrow = activatable(crate::display::arrow(), &expression_site);
     Some(group_hug(
         crate::display::centered_row(
             6.0,
@@ -686,14 +681,10 @@ pub fn bindings_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Lay
     ));
     match form {
         BindingForm::Let => {
-            let expression_target = input
-                .targets
-                .at([Step::Key(::grap::vocabulary::EXPRESSION)]);
-            let in_marker = shared(activatable(
-                dim("in"),
-                expression_target.hover,
-                expression_target.select,
-            ));
+            let expression_site = input
+                .site()
+                .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
+            let in_marker = shared(activatable(dim("in"), &expression_site));
             Some(group(alternatives([
                 row(
                     4.0,
@@ -744,8 +735,8 @@ fn binding_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> 
         _ => return None,
     };
     fields.field(vocabulary::VALUE)?;
-    let value_target = input.targets.at([Step::Key(vocabulary::VALUE)]);
-    let equals = activatable(dim("="), value_target.hover, value_target.select);
+    let value_site = input.site().below(&[Step::Key(vocabulary::VALUE)]);
+    let equals = activatable(dim("="), &value_site);
     Some(group_hug(
         crate::display::centered_row(6.0, [left, equals]),
         crate::libraries::grap::expression_path(
@@ -759,8 +750,8 @@ fn binding_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> 
 
 fn quote_marker(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
-        let target = input.targets.current();
-        crate::display::projection::target(activatable(dim("\""), target.hover, target.select))
+        let site = input.site();
+        crate::display::projection::target(activatable(dim("\""), &site))
     })
 }
 
@@ -801,11 +792,11 @@ pub fn unquote_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layo
             if *field == vocabulary::UNQUOTE && fields.record_len() == Some(0) => {}
         _ => return None,
     }
-    let target = input.targets.current();
+    let site = input.site();
     Some(group(row(
         2.0,
         [
-            activatable(dim("`"), target.hover, target.select),
+            activatable(dim("`"), &site),
             crate::libraries::grap::expression_path(
                 [Step::Key(vocabulary::UNQUOTE)],
                 &input.default_projection,

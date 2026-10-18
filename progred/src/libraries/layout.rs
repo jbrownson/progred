@@ -9,16 +9,14 @@
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
 //!
-#[cfg(test)]
-use crate::display::Action;
 use crate::libraries::{Library, color, f64 as f64_convention, name, presentation};
 use crate::view::{Layout, ProjectionInput};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
-    Delim, Face, Paint, ProjectionTarget, RowAlignment, activatable, alternatives, block_hover,
-    border, bracket, descend, leaf, overlay as layout_overlay, pickable_runtime, slot,
+    Delim, Face, Paint, RowAlignment, activatable, alternatives, block_hover, border, bracket,
+    descend, leaf, overlay as layout_overlay, pickable_runtime, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use puri::{
@@ -540,15 +538,8 @@ pub fn bordered(child: Value) -> Value {
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
 #[cfg(test)]
-pub fn decode(value: &Value, select: &Action, hover: &crate::frame::Hovered) -> Option<Layout> {
-    decode_with(&value.into(), &|| ProjectionTarget {
-        select: select.clone(),
-        select_with: {
-            let select = select.clone();
-            std::rc::Rc::new(move |session, _| select(session))
-        },
-        hover: hover.clone(),
-    })
+pub(crate) fn decode(value: &Value, site: &crate::editing::Site) -> Option<Layout> {
+    decode_with(&value.into(), &|| site.clone())
 }
 
 /// Which child's baseline a column, or a row aligning tops, keeps. A
@@ -560,13 +551,13 @@ fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
 
 fn decode_with(
     value: &::grap::RuntimeValue,
-    target: &impl Fn() -> ProjectionTarget<crate::frame::Hovered>,
+    site: &impl Fn() -> crate::editing::Site,
 ) -> Option<Layout> {
     value.record_len()?;
     if let Some(content) = value.field(vocabulary::ROW) {
         content.record_len()?;
         let gap = read_number(content.field(vocabulary::GAP)?.as_value())?;
-        let children = children(&content.field(vocabulary::CHILDREN)?, target)?;
+        let children = children(&content.field(vocabulary::CHILDREN)?, site)?;
         return Some(match content.field(vocabulary::BASELINE) {
             None => crate::display::row(gap, children),
             Some(baseline) => crate::display::aligned_row(
@@ -581,7 +572,7 @@ fn decode_with(
     if let Some(content) = value.field(vocabulary::COL) {
         content.record_len()?;
         let baseline = read_number(content.field(vocabulary::BASELINE)?.as_value())?;
-        let children = children(&content.field(vocabulary::CHILDREN)?, target)?;
+        let children = children(&content.field(vocabulary::CHILDREN)?, site)?;
         return Some(crate::display::col(
             baseline_index(baseline, children.len())?,
             read_number(content.field(vocabulary::GAP)?.as_value())?,
@@ -589,7 +580,7 @@ fn decode_with(
         ));
     }
     if let Some(content) = value.field(vocabulary::OVERLAY) {
-        return Some(layout_overlay(children(&content, target)?));
+        return Some(layout_overlay(children(&content, site)?));
     }
     if let Some(content) = value.field(vocabulary::PAD) {
         content.record_len()?;
@@ -601,11 +592,11 @@ fn decode_with(
                 read_number(content.field(vocabulary::BOTTOM)?.as_value())?,
             )
                 .into(),
-            decode_with(&content.field(vocabulary::CHILD)?, target)?,
+            decode_with(&content.field(vocabulary::CHILD)?, site)?,
         ));
     }
     if let Some(content) = value.field(vocabulary::BORDER) {
-        return Some(border(decode_with(&content, target)?));
+        return Some(border(decode_with(&content, site)?));
     }
     if let Some(content) = value.field(vocabulary::BRACKET) {
         content.record_len()?;
@@ -617,11 +608,11 @@ fn decode_with(
         };
         return Some(bracket(
             delim,
-            decode_with(&content.field(vocabulary::CHILD)?, target)?,
+            decode_with(&content.field(vocabulary::CHILD)?, site)?,
         ));
     }
     if let Some(content) = value.field(vocabulary::ALTERNATIVES) {
-        return Some(alternatives(children(&content, target)?));
+        return Some(alternatives(children(&content, site)?));
     }
     if let Some(content) = value.field(vocabulary::DESCEND) {
         let step = crate::libraries::path::read_step(content.field(vocabulary::STEP)?.as_value())?;
@@ -695,27 +686,25 @@ fn decode_with(
         return Some(slot());
     }
     if let Some(content) = value.field(vocabulary::SELECTABLE) {
-        let child = decode_with(&content, target)?;
-        let interaction = target();
-        return Some(activatable(child, interaction.hover, interaction.select));
+        let child = decode_with(&content, site)?;
+        return Some(activatable(child, &site()));
     }
     if let Some(content) = value.field(vocabulary::PICKABLE) {
         content.record_len()?;
-        let child = decode_with(&content.field(vocabulary::CHILD)?, target)?;
-        let interaction = target();
+        let child = decode_with(&content.field(vocabulary::CHILD)?, site)?;
         return Some(pickable_runtime(
             child,
-            interaction.hover,
+            crate::frame::Hovered::from(site().hover()),
             content.field(vocabulary::VALUE)?,
         ));
     }
     if let Some(content) = value.field(vocabulary::HOVER_BLOCK) {
-        return Some(block_hover(decode_with(&content, target)?));
+        return Some(block_hover(decode_with(&content, site)?));
     }
     if let Some(content) = value.field(vocabulary::ON_EVENT) {
         content.record_len()?;
         return Some(on_event(
-            decode_with(&content.field(vocabulary::CHILD)?, target)?,
+            decode_with(&content.field(vocabulary::CHILD)?, site)?,
             content.field(vocabulary::HANDLER)?,
         ));
     }
@@ -724,10 +713,10 @@ fn decode_with(
 
 fn children(
     list: &::grap::RuntimeValue,
-    target: &impl Fn() -> ProjectionTarget<crate::frame::Hovered>,
+    site: &impl Fn() -> crate::editing::Site,
 ) -> Option<Vec<Layout>> {
     list.list_values()?
-        .map(|child| decode_with(&child, target))
+        .map(|child| decode_with(&child, site))
         .collect()
 }
 
@@ -951,7 +940,7 @@ fn read_point(value: &Value) -> Option<Point> {
 }
 
 pub fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
-    scope::display(input).or_else(|| decode_with(input.value?, &|| input.targets.current()))
+    scope::display(input).or_else(|| decode_with(input.value?, &|| input.site()))
 }
 
 pub fn library() -> Library {

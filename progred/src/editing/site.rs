@@ -9,6 +9,9 @@ use gid::{Step, Value};
 use puri::edit::LineEditState;
 use std::rc::Rc;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Clone)]
 pub(crate) struct Site {
     root: Root,

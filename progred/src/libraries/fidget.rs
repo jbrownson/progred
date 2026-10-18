@@ -1050,13 +1050,13 @@ fn display(
 }
 
 pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_, V>) -> Layout {
-    let target = input.targets.current();
-    let hover = target.hover;
+    let site = input.site();
+    let hover = crate::frame::Hovered::from(site.hover());
     crate::display::widget::before(
         on_state_drag(
             on_hover(drawing, hover.clone()),
             hover,
-            target.select,
+            crate::display::widget::navigation::selecting(site),
             orbit_handler(input.state),
         ),
         Rc::new(move |context| {

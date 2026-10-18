@@ -97,13 +97,16 @@ where
                 Some(Pending::Child(Step::Element(position)))
                     if before == Some(position) || after == Some(position)
             );
-            let target = (input.writable && !beside_pending)
+            let site = (input.writable && !beside_pending)
                 .then(|| gid::position::between(before, after))
                 .flatten()
-                .map(|position| input.targets.at([Step::Element(position)]));
-            let content = render(target.as_ref().map(|t| t.hover.clone()));
-            let content = match target {
-                Some(target) => activatable(content, target.hover, target.select),
+                .map(|position| input.site().below(&[Step::Element(position)]));
+            let content = render(
+                site.as_ref()
+                    .map(|site| crate::frame::Hovered::from(site.hover())),
+            );
+            let content = match site {
+                Some(site) => activatable(content, &site),
                 None => content,
             };
             separated.push(widget::fill_width(content));
@@ -247,12 +250,12 @@ pub(crate) fn record_label(
         Some(name) => faced(name, Face::Label),
         None => faced(crate::identity::short_id(key), Face::Id),
     };
-    let target = input.targets.at([Step::Key(key)]);
+    let site = input.site().below(&[Step::Key(key)]);
     let head = row(0.0, [label, dim(":")]);
     if input.value.is_some_and(|value| value.contains_field(key)) {
-        activatable(head, target.hover, target.select)
+        activatable(head, &site)
     } else {
-        pickable(head, target.hover, key.into())
+        pickable(head, crate::frame::Hovered::from(site.hover()), key.into())
     }
 }
 

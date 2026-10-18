@@ -6,8 +6,8 @@ use gid::{Cells, Step, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
 use crate::display::{
-    PointEvent, PointUpdate, TextFamily, activatable, centered_row, col, descend, on_point,
-    popover, widget,
+    PointEvent, PointUpdate, TextFamily, centered_row, col, descend, on_activate, on_hover,
+    on_point, popover, widget,
 };
 use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
 use puri::draw::CanvasSink;
@@ -168,14 +168,14 @@ fn missing_picker(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     input.writable.then_some(())?;
     let hue = picker_hue(input.selection)?;
     let seed = Encoded::Rgb([255, 0, 0]);
-    let close = input.targets.current().select_with;
+    let site = input.site();
     Some(widget::before(
         popover(
             crate::display::dim("color"),
             picker(&encoded_value(seed), seed, hue),
         ),
         Rc::new(move |_| {
-            let close = close.clone();
+            let site = site.clone();
             Box::new(move |output, _| {
                 use puri::handler::HasHandler;
                 output.handler().on_key(move |world, event| {
@@ -185,10 +185,8 @@ fn missing_picker(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
                                 ui_events::keyboard::NamedKey::Escape,
                             )
                     {
-                        close(
-                            &mut world.session(),
-                            crate::selection::payload::empty_pending(),
-                        );
+                        site.open(&mut world.session())
+                            .select_with(crate::selection::payload::empty_pending());
                         true
                     } else {
                         false
@@ -374,15 +372,19 @@ pub fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     } else {
         picker_selection(initial_hue)
     };
-    let target = input.targets.current();
+    let site = input.site();
     // Read-only colors still select; only a writable one opens the picker.
     let activate: crate::display::Action = if input.writable {
-        let select_picker = target.select_with;
-        Rc::new(move |session| select_picker(session, next_selection.clone()))
+        let site = site.clone();
+        Rc::new(move |session| {
+            site.open(session).select_with(next_selection.clone());
+            true
+        })
     } else {
-        target.select
+        crate::display::widget::navigation::selecting(site.clone())
     };
-    let swatch = activatable(swatch(color), target.hover, activate);
+    let hover = crate::frame::Hovered::from(site.hover());
+    let swatch = on_hover(on_activate(swatch(color), hover.clone(), activate), hover);
     let swatch = if input.writable
         && let Some(hue) = selected_hue
     {

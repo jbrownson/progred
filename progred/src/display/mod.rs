@@ -220,39 +220,6 @@ pub enum Pending {
     Child(Step),
 }
 
-/// Selection and hover behavior for a location relative to the value
-/// currently being projected. The host resolves the relative steps;
-/// libraries never receive its absolute document path.
-pub struct ProjectionTarget<Hover> {
-    pub select: Action,
-    /// Select this location with an explicit data payload. Controls use
-    /// it for transient modes without exposing the host's path.
-    pub select_with: Rc<dyn Fn(&mut crate::editing::Session<'_>, Value) -> bool>,
-    pub hover: Hover,
-}
-
-/// A borrowed resolver for the current projection target and relative
-/// targets beneath it. Resolving owns the returned interaction data;
-/// merely trying a partial projection allocates nothing.
-#[derive(Clone, Copy)]
-pub struct ProjectionTargets<'a, Hover> {
-    at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<Hover>,
-}
-
-impl<'a, Hover> ProjectionTargets<'a, Hover> {
-    pub fn new(at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<Hover>) -> Self {
-        Self { at }
-    }
-
-    pub fn at(&self, steps: impl Into<Vec<Step>>) -> ProjectionTarget<Hover> {
-        (self.at)(steps.into())
-    }
-
-    pub fn current(&self) -> ProjectionTarget<Hover> {
-        (self.at)(Vec::new())
-    }
-}
-
 /// A reusable layout program. Running it calls a builder directly; the
 /// production builder retains only the graph needed for alternative selection.
 pub struct Layout<World, Hover>(
@@ -443,10 +410,9 @@ pub struct ProjectionInput<'a, World, Hover, V = Value> {
     pub pending: Option<Pending>,
     /// This path's annotation record (fold state and whatever joins it).
     pub state: Option<&'a Value>,
-    /// Derive this value's interaction target, or one below it,
-    /// without exposing the host's full path. The host work is lazy:
-    /// a declining projection need never construct either target.
-    pub targets: ProjectionTargets<'a, Hover>,
+    /// Builds this occurrence's site, which [`ProjectionInput::site`] lends.
+    /// The host work is lazy: a declining projection need never build it.
+    pub(crate) occurrence: &'a dyn Fn() -> crate::editing::Site,
 }
 
 /// A partial borrows the shared projection input. Ordered composition
@@ -483,8 +449,14 @@ impl<'a, World, Hover, V> ProjectionInput<'a, World, Hover, V> {
             selection: self.selection,
             pending: self.pending.clone(),
             state: self.state,
-            targets: ProjectionTargets::new(self.targets.at),
+            occurrence: self.occurrence,
         }
+    }
+
+    /// This occurrence, as a site to act on; [`crate::editing::Site::below`]
+    /// gives one beneath it.
+    pub(crate) fn site(&self) -> crate::editing::Site {
+        (self.occurrence)()
     }
 }
 
@@ -557,12 +529,17 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, on_click, pickable, pickable_runtime};
 
-pub fn activatable<World: Host, Hover: Clone + PartialEq + 'static>(
+/// `child`, which hovers `site` and selects it when activated.
+pub(crate) fn activatable<
+    World: Host,
+    Hover: Clone + PartialEq + From<crate::hover::Hover> + 'static,
+>(
     child: Layout<World, Hover>,
-    target: Hover,
-    action: Action,
+    site: &crate::editing::Site,
 ) -> Layout<World, Hover> {
-    on_hover(on_activate(child, target.clone(), action), target)
+    let target = Hover::from(site.hover());
+    let select = widget::navigation::selecting(site.clone());
+    on_hover(on_activate(child, target.clone(), select), target)
 }
 
 pub use widget::gesture::{drag_outlined, on_point, on_state_drag};

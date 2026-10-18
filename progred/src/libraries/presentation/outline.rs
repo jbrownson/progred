@@ -116,21 +116,21 @@ const CLOSED: bool = false;
 
 fn heading(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
     let key = input.value?.as_cell()?;
-    let target = input.targets.current();
+    let site = input.site();
     crate::libraries::grap::shallow_cell_with(input, move |label| {
         Layout::program(Rc::new(move |context, build| {
             let visible = open(context.viewing(), &[Step::Key(key)]);
             let section = context.site().below(&[Step::Key(key)]);
-            let select = target.select.clone();
+            let heading = site.clone();
             d::on_activate(
                 d::row(
                     6.0,
                     [d::dim(if visible { "▾" } else { "▸" }), label.clone()],
                 ),
-                target.hover.clone(),
+                crate::frame::Hovered::from(site.hover()),
                 Rc::new(move |session| {
                     section.open(session).fold(CLOSED, Some(visible));
-                    select(session);
+                    heading.open(session).select();
                     true
                 }),
             )

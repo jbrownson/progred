@@ -323,8 +323,7 @@ fn fidget_orbit_profile(name: &str, source: &str) {
                     .iter()
                     .any(|key| fields.contains_key(key))
             {
-                let Hovered::Tree(crate::hover::Hover::Value(path)) = input.targets.current().hover
-                else {
+                let crate::hover::Hover::Value(path) = input.site().hover() else {
                     panic!("preview must have an occurrence");
                 };
                 *observed.borrow_mut() = Some(path);

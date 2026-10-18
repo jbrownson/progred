@@ -209,13 +209,8 @@ fn drawing_frame(
             ],
         ),
     );
-    let select: crate::display::Action = Rc::new(|_| false);
-    let layout = layout_data::decode(
-        &drawing,
-        &select,
-        &crate::libraries::test_widgets::hover(vec![]),
-    )
-    .expect("a program drawing decodes");
+    let layout = layout_data::decode(&drawing, &crate::libraries::test_widgets::test_site())
+        .expect("a program drawing decodes");
     let mut build = measured::choices::ChoiceBuild::default();
     let prepared = crate::display::test_support::with_sources(
         Sources { doc, libraries },

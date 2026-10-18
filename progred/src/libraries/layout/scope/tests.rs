@@ -2,7 +2,6 @@ use super::*;
 use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::control::vocabulary as control;
 use crate::view::Layout;
-use std::rc::Rc;
 
 fn call(function: CellId, args: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     ::grap::call(function.into(), args)
@@ -19,12 +18,8 @@ fn quote(value: Value) -> Value {
     call(control::QUOTE, [(::grap::vocabulary::EXPRESSION, value)])
 }
 
-fn target() -> ProjectionTarget<crate::frame::Hovered> {
-    ProjectionTarget {
-        select: Rc::new(|_| true),
-        select_with: Rc::new(|_, _| true),
-        hover: crate::libraries::test_widgets::hover(vec![]),
-    }
+fn site() -> crate::editing::Site {
+    crate::libraries::test_widgets::test_site()
 }
 
 #[test]
@@ -49,7 +44,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     )
     .result;
     let returned = RuntimeValue::record([(::grap::vocabulary::VALUE, callback.clone())]);
-    let (evaluation, layout) = run(target, |scope| {
+    let (evaluation, layout) = run(site, |scope| {
         ::grap::evaluate_runtime_scoped(&returned, &host, scope, 100)
     });
     assert!(evaluation.completed);
@@ -76,7 +71,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
             ]),
         ),
     ]);
-    let (evaluation, layout) = run(target, |scope| {
+    let (evaluation, layout) = run(site, |scope| {
         ::grap::evaluate_runtime_scoped(&program, &host, scope, 1000)
     });
     assert!(evaluation.completed);
@@ -115,7 +110,7 @@ fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
             })
             .collect()
     });
-    run(target, |scope| {
+    run(site, |scope| {
         ::grap::evaluate_scoped(program, &host, scope, fuel)
     })
 }
@@ -356,7 +351,7 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
     assert!(layout.is_none());
     let function = result.result.field(LAYOUT_PROGRAM).unwrap();
     assert!(function.contains_field(::grap::vocabulary::CLOSURE));
-    let (result, layout) = run(target, |scope| {
+    let (result, layout) = run(site, |scope| {
         ::grap::apply_scoped(
             &function,
             [],

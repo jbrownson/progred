@@ -53,11 +53,10 @@ pub(crate) fn shallow_cell_with(
 ) -> Option<Layout> {
     let cell = input.value?.as_cell()?;
     let name = input.env.name(cell)?;
-    let target = input.targets.current();
+    let site = input.site();
     Some(crate::display::projection::target(activatable(
         decorate(faced(name, Face::Name)),
-        target.hover,
-        target.select,
+        &site,
     )))
 }
 
@@ -127,8 +126,8 @@ fn lambda_name(input: &ProjectionInput<'_>) -> Option<Layout> {
         // stop; selected, it's an empty name to type into.
         None if input.selection.is_some() => name::hole(),
         None => {
-            let target = input.targets.current();
-            activatable(faced("λ", Face::Name), target.hover, target.select)
+            let site = input.site();
+            activatable(faced("λ", Face::Name), &site)
         }
     })
 }
@@ -277,9 +276,9 @@ pub(crate) fn call_with_function(
             if !fields.contains_field(*field) && !parameter_positions.contains_key(field) =>
         {
             let (spelling, face) = field_spelling(input.env, *field);
-            let target = input.targets.at([Step::Key(*field)]);
+            let site = input.site().below(&[Step::Key(*field)]);
             vec![RecordField {
-                label: activatable(faced(spelling, face), target.hover, target.select),
+                label: activatable(faced(spelling, face), &site),
                 value: expression_path([Step::Key(*field)], &input.default_projection),
             }]
         }
@@ -313,9 +312,9 @@ pub(crate) fn call_with_function(
         },
         |field, _| {
             let (spelling, face) = field_spelling(input.env, field);
-            let target = input.targets.at([Step::Key(field)]);
+            let site = input.site().below(&[Step::Key(field)]);
             RecordField {
-                label: activatable(faced(spelling, face), target.hover, target.select),
+                label: activatable(faced(spelling, face), &site),
                 value: expression_path([Step::Key(field)], &input.default_projection),
             }
         },
@@ -342,17 +341,13 @@ pub fn lambda_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Opti
         crate::display::structure::list(Some(crate::display::runtime_partial(parameter))),
         &input.default_projection,
     );
-    let body_target = input.targets.at([Step::Key(BODY)]);
+    let body_site = input.site().below(&[Step::Key(BODY)]);
     let lambda = descend_local(
         Step::Key(name::vocabulary::NAME),
         crate::display::partial(lambda_name),
         &input.default_projection,
     );
-    let arrow = activatable(
-        crate::display::arrow(),
-        body_target.hover,
-        body_target.select,
-    );
+    let arrow = activatable(crate::display::arrow(), &body_site);
     let head = row(3.0, [lambda, params, arrow]);
     Some(group_hug(
         head,
@@ -376,12 +371,9 @@ pub fn value_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Optio
         crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
         &input.default_projection,
     );
-    let target = input.targets.at([Step::Key(VALUE)]);
+    let site = input.site().below(&[Step::Key(VALUE)]);
     Some(group_hug(
-        row(
-            3.0,
-            [name, activatable(dim("="), target.hover, target.select)],
-        ),
+        row(3.0, [name, activatable(dim("="), &site)]),
         expression_descend(Step::Key(VALUE), &input.default_projection),
         6.0,
         20.0,
@@ -409,12 +401,8 @@ pub fn evaluate_display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Op
         [Step::Key(EVALUATE)],
         &input.default_projection,
     ));
-    let shaft_target = input.targets.current();
-    let shaft = shared(activatable(
-        crate::display::arrow(),
-        shaft_target.hover,
-        shaft_target.select,
-    ));
+    let shaft_site = input.site();
+    let shaft = shared(activatable(crate::display::arrow(), &shaft_site));
     let result = shared(at(
         [Step::Key(
             crate::libraries::presentation::vocabulary::RESULT,

@@ -12,7 +12,7 @@ fn fill_width_expands_ink_and_interaction_together_without_changing_measurement(
     use measured::choices::{ChoiceBuild, resolve_choices};
     use puri::hover::Claim;
 
-    let layout = fill_width(crate::display::activatable::<crate::Editor, u32>(
+    let activated = crate::display::on_activate::<crate::Editor, u32>(
         Layout::widget(Rc::new(|_| {
             paint(
                 Extent {
@@ -27,7 +27,8 @@ fn fill_width_expands_ink_and_interaction_together_without_changing_measurement(
         })),
         7_u32,
         Rc::new(|_| true),
-    ));
+    );
+    let layout = fill_width(crate::display::on_hover(activated, 7_u32));
     let mut build = ChoiceBuild::default();
     let prepared = with_context(&NoProject, |context| layout.measure(context, &mut build));
     let measured = resolve_choices(build.finish(prepared), 100.0, false);

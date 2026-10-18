@@ -4,8 +4,7 @@
 
 use super::{Cx, select_handler};
 use crate::display::{
-    Delim, activatable, descend, dim, id, on_activate, on_hover, pickable_runtime,
-    selectable_bracket,
+    Delim, descend, dim, id, on_activate, on_hover, pickable_runtime, selectable_bracket,
 };
 use crate::frame::Hovered;
 use crate::hover::Hover;
@@ -106,14 +105,16 @@ fn selectable(cx: &Cx, child: View, path: &[Step], value: &grap::RuntimeValue) -
 fn toggle(child: View, path: &[Step], cx: &Cx, default: bool) -> View {
     let target: Rc<[Step]> = Rc::from(path);
     let site = cx.site(target.clone());
-    activatable(
-        crate::display::hover_highlight(child, Hovered::Tree(Hover::Toggle(target.clone()))),
-        Hovered::Tree(Hover::Toggle(target)),
+    let hover = Hovered::Tree(Hover::Toggle(target));
+    let toggled = on_activate(
+        crate::display::hover_highlight(child, hover.clone()),
+        hover.clone(),
         Rc::new(move |session| {
             let mut edit = site.open(session);
             edit.select();
             edit.fold(default, None);
             true
         }),
-    )
+    );
+    on_hover(toggled, hover)
 }

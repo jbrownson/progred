@@ -574,23 +574,6 @@ pub(crate) fn select_handler(path: SharedPath, cx: &Cx) -> crate::display::Actio
     crate::display::widget::navigation::selecting(cx.site(path))
 }
 
-fn projection_target(
-    cx: &Cx,
-    path: &[Step],
-    steps: Vec<Step>,
-) -> crate::display::ProjectionTarget<Hovered> {
-    let path: SharedPath = Rc::from(path.iter().cloned().chain(steps).collect::<Path>());
-    let site = cx.site(path.clone());
-    crate::display::ProjectionTarget {
-        select: select_handler(path.clone(), cx),
-        select_with: Rc::new(move |session, payload| {
-            site.open(session).select_with(payload);
-            true
-        }),
-        hover: Hovered::Tree(Hover::Value(path)),
-    }
-}
-
 impl Cx<'_> {
     /// The occurrence at `path` in this view, as a place to act.
     pub(crate) fn site(&self, path: SharedPath) -> crate::editing::Site {
@@ -1131,7 +1114,7 @@ fn value_layout(
             .map(crate::display::Pending::Child)
     };
     let state = cx.annotations.at(path);
-    let target = |steps| projection_target(cx, path, steps);
+    let occurrence = || cx.site(Rc::from(path));
     let input = crate::display::ProjectionInput {
         env: &ProjectEnv { cx, path },
         default_projection: default_projection.clone(),
@@ -1141,7 +1124,7 @@ fn value_layout(
         selection: selection.as_ref(),
         pending,
         state,
-        targets: crate::display::ProjectionTargets::new(&target),
+        occurrence: &occurrence,
     };
     match current_projection {
         Some(current) => current(&input),

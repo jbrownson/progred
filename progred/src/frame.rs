@@ -100,6 +100,12 @@ pub(crate) enum Hovered {
     Blocked,
 }
 
+impl From<hover::Hover> for Hovered {
+    fn from(hover: hover::Hover) -> Self {
+        Self::Tree(hover)
+    }
+}
+
 /// What this frame's hover winner and selection refer to, shared by its
 /// continuations. Resolve each once here, not in each painted occurrence.
 fn attribute(

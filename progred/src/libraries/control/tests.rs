@@ -2,7 +2,7 @@ use super::*;
 use crate::display::recording::{Recordable, Recorded};
 
 use crate::display::test_support::{NoEval, ProjectionCall, inspect};
-use crate::libraries::test_widgets::{projection_input, relative_projection_input};
+use crate::libraries::test_widgets::projection_input;
 use gid::new_cell_id;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -181,7 +181,7 @@ fn ordinary_bindings_may_contain_absents_without_short_circuiting() {
 fn do_projects_its_expression_list_despite_unrelated_fields() {
     let expression = do_call([blob("first"), blob("second")]);
     let Recorded::Row { children, .. } =
-        do_display(&relative_projection_input(&NoEval, &(&expression).into()))
+        do_display(&projection_input(&NoEval, &(&expression).into()))
             .expect("coherent do projection")
             .record()
             .content()
@@ -195,13 +195,7 @@ fn do_projects_its_expression_list_despite_unrelated_fields() {
         .as_record()
         .unwrap()
         .update(new_cell_id(), blob("extra"));
-    assert!(
-        do_display(&relative_projection_input(
-            &NoEval,
-            &Value::record(decorated).into()
-        ))
-        .is_some()
-    );
+    assert!(do_display(&projection_input(&NoEval, &Value::record(decorated).into())).is_some());
 }
 
 #[test]
@@ -787,8 +781,7 @@ fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
     let let_call = bindings_call(vocabulary::LET, clauses(), body.clone());
     let where_call = bindings_call(vocabulary::WHERE, clauses(), body.clone());
 
-    let let_layout =
-        bindings_display(&relative_projection_input(&NoEval, &(&let_call).into())).unwrap();
+    let let_layout = bindings_display(&projection_input(&NoEval, &(&let_call).into())).unwrap();
     let Recorded::Alternatives(let_options) = let_layout.record().content().clone() else {
         panic!("let has responsive forms");
     };
@@ -826,8 +819,7 @@ fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
     };
     assert_eq!(step, &Step::Key(vocabulary::BINDINGS));
 
-    let where_layout =
-        bindings_display(&relative_projection_input(&NoEval, &(&where_call).into())).unwrap();
+    let where_layout = bindings_display(&projection_input(&NoEval, &(&where_call).into())).unwrap();
     let Recorded::Alternatives(where_options) = where_layout.record().content().clone() else {
         panic!("where has responsive forms");
     };
@@ -847,7 +839,7 @@ fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
 fn direct_binding_is_deep_and_centered_beside_its_equals() {
     let binder = new_cell_id();
     let binding = bind_clause(binder, blob("value"));
-    let layout = binding_display(&relative_projection_input(&NoEval, &(&binding).into())).unwrap();
+    let layout = binding_display(&projection_input(&NoEval, &(&binding).into())).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("a binding has responsive forms");
     };
@@ -910,12 +902,12 @@ fn match_augments_its_standard_cases_list_with_the_case_projection() {
         .get(&vocabulary::CASES)
         .unwrap();
 
-    assert!(case_display(&relative_projection_input(&NoEval, &cases.into())).is_none());
+    assert!(case_display(&projection_input(&NoEval, &cases.into())).is_none());
     let case = cases
         .as_list()
         .and_then(|cases| cases.values().next())
         .expect("the standard list contains its cases");
-    let case = case_display(&relative_projection_input(&NoEval, &case.into())).unwrap();
+    let case = case_display(&projection_input(&NoEval, &case.into())).unwrap();
     let Recorded::Alternatives(options) = case.record().content().clone() else {
         panic!("a case has responsive forms");
     };

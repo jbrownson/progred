@@ -3,16 +3,9 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::text;
 
 use crate::display::test_support::{ProjectionCall, inspect};
-use std::rc::Rc;
 
 fn decoded(value: &Value) -> Option<Recorded<crate::Editor, crate::frame::Hovered>> {
-    let select: crate::display::Action = Rc::new(|_| false);
-    decode(
-        value,
-        &select,
-        &crate::libraries::test_widgets::hover(vec![]),
-    )
-    .map(|layout| layout.record())
+    decode(value, &crate::libraries::test_widgets::test_site()).map(|layout| layout.record())
 }
 
 #[test]

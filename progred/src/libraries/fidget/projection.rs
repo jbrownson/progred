@@ -107,12 +107,12 @@ pub(super) fn field(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option
     let body = if marker == AXIS {
         crate::libraries::grap::shallow_path([Step::Key(AXIS)], &input.default_projection)
     } else {
-        let target = input.targets.current();
+        let site = input.site();
         let (spelling, face) = match input.env.name(marker) {
             Some(name) => (name.to_owned(), Face::Label),
             None => (crate::identity::short_id(marker), Face::Id),
         };
-        let operator = activatable(faced(spelling, face), target.hover, target.select);
+        let operator = activatable(faced(spelling, face), &site);
         let fields = content.as_record()?;
         if precedence(marker).is_some() {
             infix(marker, fields.get(&LEFT)?, fields.get(&RIGHT)?, operator)

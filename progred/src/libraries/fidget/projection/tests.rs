@@ -8,7 +8,7 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::{ProjectionCall, inspect, unshared};
 use crate::display::{Env, Pending};
 use crate::libraries::fidget::{binary, node, unary};
-use crate::libraries::test_widgets::{project_runtime, relative_projection_input};
+use crate::libraries::test_widgets::{project_runtime, projection_input};
 
 struct Names;
 
@@ -38,7 +38,7 @@ fn number(n: f32) -> Value {
 #[test]
 fn operands_keep_their_paths_and_operator_targets_the_expression() {
     let sum = binary(SUM, number(1.0), number(2.0));
-    let Recorded::Alternatives(options) = field(&relative_projection_input(&Names, &sum))
+    let Recorded::Alternatives(options) = field(&projection_input(&Names, &sum))
         .unwrap()
         .record()
         .content()
@@ -101,7 +101,7 @@ fn unrelated_fields_do_not_block_notation_or_change_grouping() {
             ]),
         ),
     ] {
-        assert!(field(&relative_projection_input(&Names, &value)).is_some());
+        assert!(field(&projection_input(&Names, &value)).is_some());
         for (parent, key, grouped) in [
             (MULTIPLY, LEFT, true),
             (SUM, LEFT, false),
@@ -115,7 +115,7 @@ fn unrelated_fields_do_not_block_notation_or_change_grouping() {
     }
     for value in [unary(SIN, number(1.0)), node(AXIS, X.into())] {
         let enriched = Value::record(value.as_record().unwrap().update(extra, number(3.0)));
-        assert!(field(&relative_projection_input(&Names, &enriched)).is_some());
+        assert!(field(&projection_input(&Names, &enriched)).is_some());
     }
 }
 
@@ -131,14 +131,14 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
             (SIN, Value::record([(OPERAND, number(1.0))])),
         ]),
     ] {
-        assert!(field(&relative_projection_input(&Names, &value)).is_none());
+        assert!(field(&projection_input(&Names, &value)).is_none());
     }
     let complete = unary(SIN, number(1.0));
     assert!(
         field(&ProjectionInput {
             default_projection: crate::display::runtime_partial(|_| None),
             pending: Some(Pending::Field),
-            ..relative_projection_input(&Names, &complete)
+            ..projection_input(&Names, &complete)
         })
         .is_none()
     );
@@ -148,11 +148,11 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
 fn coordinates_are_shallow_and_names_remain_editable_data() {
     let axis = node(AXIS, X.into());
     assert!(
-        matches!(inspect(&field(&relative_projection_input(&Names, &axis)).unwrap()), ProjectionCall::Descend { step, projection: Some(_), .. }
+        matches!(inspect(&field(&projection_input(&Names, &axis)).unwrap()), ProjectionCall::Descend { step, projection: Some(_), .. }
         if step == Step::Key(AXIS))
     );
     let named = name::record("torus", [(SQUARE, Value::record([(OPERAND, number(1.0))]))]);
-    let Recorded::Alternatives(options) = field(&relative_projection_input(&Names, &named))
+    let Recorded::Alternatives(options) = field(&projection_input(&Names, &named))
         .unwrap()
         .record()
         .content()
@@ -181,7 +181,7 @@ fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
         );
         let runtime = ::grap::RuntimeValue::from(&call);
         (library.projection.as_ref().unwrap())(
-            &relative_projection_input(&Names, &call).with_value(Some(&runtime)),
+            &projection_input(&Names, &call).with_value(Some(&runtime)),
         )
         .is_some_and(|layout| {
             let Recorded::Alternatives(options) = layout.record().content().clone() else {

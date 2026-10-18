@@ -55,11 +55,10 @@ fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> 
         .name(reason)
         .map(str::to_owned)
         .unwrap_or_else(|| crate::identity::short_id(reason));
-    let target = input.targets.current();
+    let site = input.site();
     let head = crate::display::projection::target(crate::display::activatable(
         crate::display::faced(name, crate::display::Face::Ink),
-        target.hover,
-        target.select,
+        &site,
     ));
     Some(crate::display::ground(
         crate::display::padding(

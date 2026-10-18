@@ -2,35 +2,6 @@ use super::*;
 use crate::view::{Layout, ProjectionInput};
 
 #[test]
-fn projection_target_appends_relative_steps() {
-    let parent = gid::new_cell_id();
-    let field = gid::new_cell_id();
-
-    crate::display::test_support::with_empty_view::<crate::Editor, Hovered, _>(
-        &crate::display::test_support::NoProject,
-        |cx, _, _| {
-            let target = projection_target(cx, &[Step::Key(parent)], vec![Step::Key(field)]);
-            let expected = vec![Step::Key(parent), Step::Key(field)];
-            assert_eq!(
-                target.hover,
-                Hovered::Tree(Hover::Value(Rc::from(expected.clone())))
-            );
-            let mut world = crate::test_editor(Document {
-                root: Some(Value::record([])),
-                cells: Cells::new(),
-            });
-            assert!((target.select)(&mut world.session()));
-            assert_eq!(world.model.selection.as_ref().unwrap().path(), expected);
-            assert!((target.select_with)(
-                &mut world.session(),
-                Value::record([])
-            ));
-            assert_eq!(world.model.selection.as_ref().unwrap().path(), expected);
-        },
-    );
-}
-
-#[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {
     use crate::display::{
         at_with_projection, compose_partials, descend, descend_local, partial, row,
@@ -434,7 +405,6 @@ fn a_projection_defined_as_data_realizes() {
     fn probe(input: &ProjectionInput<'_>) -> Option<Layout> {
         use crate::libraries::layout as data;
         input.value?.as_blob()?;
-        let target = input.targets.current();
         data::decode(
             &data::selectable(data::row(
                 4.0,
@@ -443,8 +413,7 @@ fn a_projection_defined_as_data_realizes() {
                     data::text_leaf("data", data::vocabulary::DIM_FACE),
                 ],
             )),
-            &target.select,
-            &target.hover,
+            &input.site(),
         )
     }
     let doc = Document {

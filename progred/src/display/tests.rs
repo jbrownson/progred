@@ -56,7 +56,7 @@ fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {
         selection: None,
         pending: None,
         state: None,
-        targets: ProjectionTargets::new(&|_| panic!("unexpected target lookup")),
+        occurrence: &|| panic!("unexpected site lookup"),
     })
 }
 

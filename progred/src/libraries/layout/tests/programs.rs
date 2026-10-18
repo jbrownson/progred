@@ -176,7 +176,7 @@ fn returned_layout_program_uses_its_own_evaluation_allowance() {
     let function = prepared.result.field(l::LAYOUT_PROGRAM).unwrap();
     for fuel in [grap::DEFAULT_FUEL, 100_000] {
         let (evaluation, layout) = layout::scope::run(
-            || panic!("text-only layout needs no editing target"),
+            || panic!("text-only layout needs no editing site"),
             |scope| grap::apply_scoped(&function, [], &sources, scope, fuel),
         );
         if fuel == grap::DEFAULT_FUEL {
