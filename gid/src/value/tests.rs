@@ -234,3 +234,31 @@ fn typed_hex_reads_every_byte_in_either_case_and_only_whole_bytes() {
         assert_eq!(read_hex(malformed), None);
     }
 }
+
+#[test]
+fn entries_sort_by_key_and_a_repeated_key_keeps_its_last_value() {
+    let (a, b) = (relation("a"), relation("b"));
+    let (low, high) = (a.min(b), a.max(b));
+    let record = Value::record([(high, blob("1")), (low, blob("2")), (high, blob("3"))]);
+    assert_eq!(
+        record
+            .as_record()
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>(),
+        [(low, blob("2")), (high, blob("3"))]
+    );
+    let [first, second] = <[Position; 2]>::try_from(spread(2)).unwrap();
+    let list: List = [
+        (second.clone(), blob("x")),
+        (first.clone(), blob("y")),
+        (second.clone(), blob("z")),
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        list.iter().cloned().collect::<Vec<_>>(),
+        [(first, blob("y")), (second, blob("z"))]
+    );
+}

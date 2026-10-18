@@ -88,20 +88,17 @@ impl Record {
 
 impl FromIterator<(CellId, Value)> for Record {
     fn from_iter<T: IntoIterator<Item = (CellId, Value)>>(iter: T) -> Self {
-        let mut fields: Vec<_> = iter.into_iter().collect();
-        fields.sort_by_key(|(field, _)| *field);
-        let mut unique = Vec::with_capacity(fields.len());
-        for (field, value) in fields {
-            if let Some((last, stored)) = unique.last_mut()
-                && *last == field
-            {
-                *stored = value;
-            } else {
-                unique.push((field, value));
-            }
-        }
-        Self(Arc::new(unique))
+        Self(Arc::new(sorted_entries(iter)))
     }
+}
+
+/// Entries sorted by key; a repeated key keeps its last value.
+fn sorted_entries<K: Ord, V>(entries: impl IntoIterator<Item = (K, V)>) -> Vec<(K, V)> {
+    let mut entries: Vec<_> = entries.into_iter().collect();
+    entries.reverse();
+    entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+    entries.dedup_by(|(a, _), (b, _)| a == b);
+    entries
 }
 
 impl IntoIterator for Record {
@@ -202,19 +199,7 @@ impl List {
 
 impl FromIterator<(Position, Value)> for List {
     fn from_iter<T: IntoIterator<Item = (Position, Value)>>(iter: T) -> Self {
-        let mut elements: Vec<_> = iter.into_iter().collect();
-        elements.sort_by(|(left, _), (right, _)| left.cmp(right));
-        let mut unique = Vec::with_capacity(elements.len());
-        for (position, value) in elements {
-            if let Some((last, stored)) = unique.last_mut()
-                && *last == position
-            {
-                *stored = value;
-            } else {
-                unique.push((position, value));
-            }
-        }
-        Self(Arc::new(unique))
+        Self(Arc::new(sorted_entries(iter)))
     }
 }
 
