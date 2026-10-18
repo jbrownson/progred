@@ -2,8 +2,8 @@
 
 use super::{paths::*, playback, vocabulary::*};
 use crate::computations::memo;
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{absent, f64, fidget, layout, presentation};
-use crate::view::{Layout, ProjectionInput};
 use ::grap::RuntimeValue;
 use cam::field::{coordinate, read_radius};
 use fidget::mesh::{Geometry, Mesh, Normal, Vertex};
@@ -31,7 +31,7 @@ pub(super) fn preview(
     )
 }
 
-pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?.field(PREVIEW_MESH)?;
     let (model, depth) =
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;

@@ -1028,7 +1028,7 @@ fn malformed_let_data_returns_library_absents() {
 
 #[test]
 fn library_describes_control_forms_and_absence_reasons() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(
         library.value(vocabulary::QUOTE).and_then(name::read),
         Some("quote")

@@ -4,6 +4,7 @@
 //! hit-testing and painting.
 
 use super::{read_paint, read_shape, read_transform, vocabulary};
+use crate::display::Host;
 use crate::display::widget::recorded::{Record, Recorder};
 use gid::{CellId, Step, Value};
 use kurbo::{Affine, BezPath, Circle, Rect};
@@ -12,11 +13,11 @@ use std::rc::Rc;
 
 /// A drawing's program, drawn into a recorded leaf `extent` logical units
 /// big. The program is the occurrence's `program` field.
-pub(super) fn program(
+pub(super) fn program<W: Host>(
     extent: measured::Extent,
     fuel: usize,
     program: grap::RuntimeValue,
-) -> crate::view::Layout {
+) -> crate::display::host::Layout<W> {
     crate::display::widget::recorded::recorded(
         extent,
         vec![Step::Key(vocabulary::PROGRAM)],

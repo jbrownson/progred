@@ -2,8 +2,8 @@
 //! A library supplies spelling, affixes, and a conversion callback;
 //! the native widget composes Puri text, painting, and handlers directly.
 
+use crate::display::host::{Host, Layout};
 use crate::libraries::{Library, name};
-use crate::view::Layout;
 use gid::{Cells, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x26b5394bf7beb5dce00140f9e03bc465);
@@ -38,22 +38,22 @@ pub mod vocabulary {
     pub const INPUT: CellId = CellId::from_u128(0xd58c17f3402b96ea6f0e4a2b91c738d5);
 }
 
-pub fn layout(
+pub fn layout<W: Host>(
     text: impl Into<String>,
     update: LineUpdate,
     prefix: impl Into<String>,
     suffix: impl Into<String>,
-) -> Layout {
+) -> Layout<W> {
     layout_with_family(text, update, prefix, suffix, TextFamily::SystemUi)
 }
 
-pub fn layout_with_family(
+pub fn layout_with_family<W: Host>(
     text: impl Into<String>,
     update: LineUpdate,
     prefix: impl Into<String>,
     suffix: impl Into<String>,
     family: TextFamily,
-) -> Layout {
+) -> Layout<W> {
     line_edit(description(
         text,
         None::<String>,
@@ -82,7 +82,7 @@ pub fn description(
     }
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::CURRENT, name::record("current", []));
     cells.set_value(vocabulary::INPUT, name::record("input", []));

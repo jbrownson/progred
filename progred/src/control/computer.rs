@@ -82,7 +82,7 @@ const NAMES: [(CellId, &str); 24] = {
     ]
 };
 
-pub(super) fn library(session: &Rc<RefCell<Session>>) -> Library {
+pub(super) fn library<W: crate::display::Host>(session: &Rc<RefCell<Session>>) -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in NAMES {
         cells.set_value(cell, name::record(spelling, []));

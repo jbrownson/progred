@@ -4,6 +4,7 @@
 //! stages beside the code that interprets them, and supplies the
 //! implementation while dispatching; this library names them.
 
+use crate::display::Host;
 use crate::libraries::{Library, name};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xbd9a8ecaa53276087806022499c6a61e);
@@ -15,7 +16,7 @@ pub mod vocabulary {
     };
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::GET, "selection get"),

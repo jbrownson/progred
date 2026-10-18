@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
-    let library = library();
+    let library = library::<crate::Editor>();
     for expected in [true, false] {
         let extra = gid::new_cell_id();
         let boolean = Value::record(

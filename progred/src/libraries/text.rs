@@ -7,8 +7,8 @@
 //! routes through `binary`/`unary`: read with `RuntimeValue::as_text`
 //! and build with `RuntimeValue::text`.
 
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, line_edit, name};
-use crate::view::{Layout, ProjectionInput};
 use gid::{Cells, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xeaaf309c36a65d2811083944da29aec9);
@@ -78,7 +78,7 @@ pub fn functions() -> ForeignFunctions {
 
 /// Text reads as its characters, then any other fields, including one
 /// being added.
-pub fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let text = input.value?.as_text()?;
     Some(crate::display::structure::with_extra_fields(
         input,
@@ -102,7 +102,7 @@ fn editor_for_text(text: &str) -> crate::display::LineEdit {
     )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(
         vocabulary::INVALID_INPUT,

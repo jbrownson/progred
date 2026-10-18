@@ -145,7 +145,7 @@ fn operands_of_other_representations_decline() {
 
 #[test]
 fn library_names_are_ordinary_facts_for_random_identities() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(
         library.value(vocabulary::SUM).and_then(name::read),
         Some("+")

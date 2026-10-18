@@ -24,7 +24,7 @@ fn site() -> crate::editing::Site {
 
 #[test]
 fn layout_results_and_nested_absent_details_keep_native_callbacks() {
-    let control = crate::libraries::control::library();
+    let control = crate::libraries::control::library::<crate::Editor>();
     let host = crate::libraries::TestHost(|cell| {
         control
             .definitions
@@ -44,7 +44,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     )
     .result;
     let returned = RuntimeValue::record([(::grap::vocabulary::VALUE, callback.clone())]);
-    let (evaluation, layout) = run(site, |scope| {
+    let (evaluation, layout) = run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_runtime_scoped(&returned, &host, scope, 100)
     });
     assert!(evaluation.completed);
@@ -71,7 +71,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
             ]),
         ),
     ]);
-    let (evaluation, layout) = run(site, |scope| {
+    let (evaluation, layout) = run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_runtime_scoped(&program, &host, scope, 1000)
     });
     assert!(evaluation.completed);
@@ -95,8 +95,8 @@ fn text(value: &str) -> Value {
 
 fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
     let libraries = [
-        crate::libraries::control::library(),
-        super::super::library(),
+        crate::libraries::control::library::<crate::Editor>(),
+        super::super::library::<crate::Editor>(),
     ];
     let host = crate::libraries::TestHost(|cell| {
         libraries
@@ -110,7 +110,7 @@ fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
             })
             .collect()
     });
-    run(site, |scope| {
+    run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_scoped(program, &host, scope, fuel)
     })
 }
@@ -351,7 +351,7 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
     assert!(layout.is_none());
     let function = result.result.field(LAYOUT_PROGRAM).unwrap();
     assert!(function.contains_field(::grap::vocabulary::CLOSURE));
-    let (result, layout) = run(site, |scope| {
+    let (result, layout) = run::<crate::Editor>(site, |scope| {
         ::grap::apply_scoped(
             &function,
             [],

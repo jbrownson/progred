@@ -1,5 +1,6 @@
 //! Deterministic random sampling inside an explicit Grap evaluation scope.
 
+use crate::display::Host;
 use crate::libraries::{Library, absent, f64, name, u64};
 use gid::{Cells, Value};
 
@@ -95,7 +96,7 @@ fn functions() -> ForeignFunctions {
         )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::BETWEEN, "random between"),

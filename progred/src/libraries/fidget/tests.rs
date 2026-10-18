@@ -10,7 +10,7 @@ fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) 
 }
 
 fn evaluate(expression: &Value) -> Value {
-    let library = library();
+    let library = library::<crate::Editor>();
     crate::libraries::test_evaluate(
         expression,
         |cell| library.value(cell).cloned(),
@@ -290,7 +290,7 @@ fn trigonometry_is_fidget_data_and_ordinary_grap_construction() {
 
 #[test]
 fn radial_shapes_are_grap_functions_returning_fidget_arithmetic() {
-    let library = library();
+    let library = library::<crate::Editor>();
     for (shape, spelling, at_z) in [
         (vocabulary::CIRCLE, "circle", -10.0),
         (vocabulary::SPHERE, "sphere", 10.0),

@@ -2,14 +2,14 @@
 //! What it gets is the core's [`crate::site::event`] record. Native widgets
 //! use Puri handlers directly.
 
+use crate::display::host::{Host, Layout};
 use crate::display::widget;
 use crate::site::event as grap_event;
-use crate::view::Layout;
 use puri::Point;
 use puri::handler::{Event, EventOutcome, HasHandler};
 use std::rc::Rc;
 
-pub fn on_event(child: Layout, function: impl Into<::grap::RuntimeValue>) -> Layout {
+pub fn on_event<W: Host>(child: Layout<W>, function: impl Into<::grap::RuntimeValue>) -> Layout<W> {
     let function = function.into();
     widget::before(
         child,

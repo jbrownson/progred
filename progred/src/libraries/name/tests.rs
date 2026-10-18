@@ -22,6 +22,6 @@ fn names_are_extensible_ordinary_record_data() {
 
 #[test]
 fn the_name_relation_describes_itself_without_core_support() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(library.value(vocabulary::NAME).and_then(read), Some("name"));
 }

@@ -1,8 +1,8 @@
+use crate::display::host::{Host, Layout};
 use crate::display::widget;
+use crate::display::widget::frame::Cursor;
 use crate::display::widget::gesture::Gesture;
 use crate::gesture::EditRun;
-use crate::placed::Cursor;
-use crate::view::Layout;
 use gid::Value;
 use puri::{Point, drag::Drag};
 use std::rc::Rc;
@@ -21,11 +21,11 @@ pub(crate) struct ScrubUpdate {
 pub(crate) type ScrubGesture = Box<dyn FnMut(ScrubEvent) -> ScrubUpdate>;
 pub(crate) type ScrubHandler = Rc<dyn Fn() -> ScrubGesture>;
 
-pub(crate) fn on_scrub(
-    child: Layout,
-    target: crate::frame::Hovered,
+pub(crate) fn on_scrub<W: Host>(
+    child: Layout<W>,
+    target: W::Hover,
     handler: ScrubHandler,
-) -> Layout {
+) -> Layout<W> {
     widget::before(
         child,
         Rc::new(move |context| {
@@ -38,7 +38,7 @@ pub(crate) fn on_scrub(
                     target.clone(),
                     true,
                     PartialEq::eq,
-                    move |world: &mut crate::Editor, point| {
+                    move |world: &mut W, point| {
                         let edit = site.edit_run();
                         let mut session = world.session();
                         if edit.select(&mut session) {

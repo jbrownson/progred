@@ -2,6 +2,7 @@
 //! `next` is its successor callable, or the list library's finished absent.
 //! Calling the same pure sequence again does not advance it.
 
+use crate::display::Host;
 use crate::libraries::{Definitions, Library, absent, f64, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
@@ -180,7 +181,7 @@ fn functions() -> ForeignFunctions {
         )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (RANGE, "range"),

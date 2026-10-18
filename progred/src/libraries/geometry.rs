@@ -1,6 +1,7 @@
 //! The first geometry Grap library: a circle value and a Rust-backed
 //! constructor consuming the f64 library's representation.
 
+use crate::display::Host;
 use crate::libraries::{Library, absent, f64, name};
 use gid::{Cells, Value};
 
@@ -53,7 +54,7 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::CIRCLE, name::record("circle", []));
     cells.set_value(vocabulary::RADIUS, name::record("radius", []));

@@ -4,7 +4,7 @@ use gid::Value;
 
 #[test]
 fn without_an_overlay_they_are_not_callable() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(
         crate::libraries::test_evaluate(
             &grap::call(Value::from(vocabulary::GET), []),

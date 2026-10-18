@@ -7,8 +7,8 @@ use super::playback;
 use super::playback::Draw;
 use super::{Error, argument, invalid, number, paths::*, runtime_result, vocabulary::*};
 use crate::computations::memo;
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{absent, color, f64, fidget, layout, presentation};
-use crate::view::{Layout, ProjectionInput};
 use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 use cam::field::read_radius;
 #[cfg(test)]
@@ -22,10 +22,10 @@ use std::sync::Arc;
 pub(super) mod computation;
 
 /// Overlay only: progress never changes the viewport's size or input handling.
-pub(super) fn progress_bar(
-    drawing: Layout,
+pub(super) fn progress_bar<W: Host>(
+    drawing: Layout<W>,
     progress: Option<incremental::background::Progress>,
-) -> Layout {
+) -> Layout<W> {
     crate::display::widget::after(
         drawing,
         Rc::new(move |context| {
@@ -224,7 +224,7 @@ pub(super) fn preview_with(
     })())
 }
 
-pub(super) fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?.field(PREVIEW_3D)?;
     let model = fidget::volume_preview(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
     let program = fields.field(PROGRAM)?;

@@ -59,7 +59,7 @@ fn traversal_uses_the_path_library_for_every_step() {
 
 #[test]
 fn drawing_constructor_keeps_native_program_code_and_captures() {
-    let library = library();
+    let library = library::<crate::Editor>();
     let host = crate::libraries::TestHost(|cell| {
         library
             .definitions
@@ -105,7 +105,7 @@ fn drawing_constructor_keeps_native_program_code_and_captures() {
 
 #[test]
 fn drawing_is_an_ordinary_projection_function() {
-    let library = library();
+    let library = library::<crate::Editor>();
     let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
     let evaluation = crate::libraries::test_apply(
         &Value::from(vocabulary::DRAWING),
@@ -125,7 +125,7 @@ fn border_retains_native_callbacks_and_their_call_origins() {
     use ::grap::{RuntimeValue, SourceOrigin};
     use std::{cell::RefCell, rc::Rc};
 
-    let library = library();
+    let library = library::<crate::Editor>();
     let sink = gid::new_cell_id();
     let captured = gid::new_cell_id();
     let origin = gid::new_cell_id();
@@ -217,7 +217,7 @@ fn border_retains_native_callbacks_and_their_call_origins() {
 
 #[test]
 fn border_preserves_expression_facing_foreign_arguments() {
-    let library = library();
+    let library = library::<crate::Editor>();
     let data = gid::new_cell_id();
     let value = number(12.0);
     let host = crate::libraries::TestHost(|cell: CellId| {
@@ -275,7 +275,7 @@ fn border_preserves_expression_facing_foreign_arguments() {
 fn border_interprets_captured_projection_syntax_only_when_invoked() {
     use std::{cell::Cell, rc::Rc};
 
-    let library = library();
+    let library = library::<crate::Editor>();
     let syntax = gid::new_cell_id();
     let resolve = gid::new_cell_id();
     let runs = Rc::new(Cell::new(0));
@@ -346,7 +346,7 @@ fn border_interprets_captured_projection_syntax_only_when_invoked() {
 
 #[test]
 fn border_composes_with_an_ordinary_projection() {
-    let library = library();
+    let library = library::<crate::Editor>();
     let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
     let composition = crate::libraries::test_evaluate(
         &::grap::call(

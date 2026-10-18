@@ -1,5 +1,6 @@
 //! An open u64 record convention with the stock editable projection.
 
+use crate::display::Host;
 use crate::libraries::{Library, absent, number};
 use gid::{CellId, Value};
 
@@ -136,7 +137,7 @@ fn functions() -> ::grap::ForeignFunctions {
     parts().functions
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     convention().library(ID, parts(), std::iter::empty())
 }
 

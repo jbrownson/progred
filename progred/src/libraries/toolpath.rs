@@ -1,6 +1,7 @@
 //! Experimental CAM path geometry, not machine-ready motion. Generators emit
 //! through a sink; recording is one consumer, not the program representation.
 
+use crate::display::Host;
 use crate::libraries::{Definitions, Library, absent, f64, layout, name, presentation};
 #[cfg(test)]
 use ::grap::Evaluation;
@@ -444,7 +445,7 @@ fn functions() -> ForeignFunctions {
         )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (id, spelling) in [
         (TOOLPATH, "toolpaths"),

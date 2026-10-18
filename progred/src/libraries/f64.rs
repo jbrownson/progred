@@ -2,6 +2,7 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
+use crate::display::Host;
 use crate::libraries::{Library, absent, name, number};
 use gid::CellId;
 #[cfg(test)]
@@ -201,7 +202,7 @@ fn lerp(
     })
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     convention().library(ID, parts(), std::iter::empty())
 }
 

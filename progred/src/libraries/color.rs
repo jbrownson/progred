@@ -1,7 +1,7 @@
 //! Open sRGB RGB8 and RGBA8 conventions with an editable projected spelling.
 
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, f64, line_edit, name, text};
-use crate::view::{Layout, ProjectionInput};
 use gid::{Cells, Step, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
@@ -163,7 +163,7 @@ fn completions(
 
 /// The seed belongs only to the picker. The first point interaction writes the
 /// chosen color through the same location and gesture machinery as an edit.
-fn missing_picker(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+fn missing_picker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     input.value.is_none().then_some(())?;
     input.writable.then_some(())?;
     let hue = picker_hue(input.selection)?;
@@ -215,7 +215,11 @@ fn without_picker(selection: Option<&Value>) -> Value {
     Value::Record(fields)
 }
 
-fn picker_leaf(height: f64, color: Hsva, draw: fn(Hsva, &mut dyn CanvasSink, Affine)) -> Layout {
+fn picker_leaf<W: Host>(
+    height: f64,
+    color: Hsva,
+    draw: fn(Hsva, &mut dyn CanvasSink, Affine),
+) -> Layout<W> {
     Layout::widget(Rc::new(move |context| {
         let scale = context.viewing().scale();
         widget::paint(
@@ -265,7 +269,7 @@ fn hsva(encoded: Encoded) -> Hsva {
     Hsva::from_rgba8(rgba)
 }
 
-fn picker(original: &Value, encoded: Encoded, hue: f64) -> Layout {
+fn picker<W: Host>(original: &Value, encoded: Encoded, hue: f64) -> Layout<W> {
     let color = Hsva {
         hue,
         ..hsva(encoded)
@@ -338,7 +342,7 @@ pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
     replace_color(current?, parse(spelling)?)
 }
 
-fn swatch(color: Color) -> Layout {
+fn swatch<W: Host>(color: Color) -> Layout<W> {
     Layout::widget(Rc::new(move |context| {
         let scale = context.viewing().scale();
         let border = context.face_brush(crate::display::Face::Dim);
@@ -359,7 +363,7 @@ fn swatch(color: Color) -> Layout {
     }))
 }
 
-pub fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+pub fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     if input.value.is_none() {
         return missing_picker(input);
     }
@@ -383,7 +387,7 @@ pub fn display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     } else {
         crate::display::widget::navigation::selecting(site.clone())
     };
-    let hover = crate::frame::Hovered::from(site.hover());
+    let hover = W::Hover::from(site.hover());
     let swatch = on_hover(on_activate(swatch(color), hover.clone(), activate), hover);
     let swatch = if input.writable
         && let Some(hue) = selected_hue
@@ -426,7 +430,7 @@ fn hex_editor(color: Encoded) -> crate::display::LineEdit {
     )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::RGB, name::record("rgb", []));
     cells.set_value(vocabulary::RGBA, name::record("rgba", []));

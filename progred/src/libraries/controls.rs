@@ -1,7 +1,7 @@
 //! Evaluation-local controls: native widgets emit alongside ordinary Grap values.
 use super::{Definitions, Library, absent, f64, layout, name, presentation, tree};
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{self, widget};
-use crate::view::{Layout, ProjectionInput};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
     RuntimeValue,
@@ -49,7 +49,7 @@ use layout::vocabulary::{HEIGHT, WIDTH};
 use presentation::vocabulary::VALUE;
 use vocabulary::*;
 
-type Widget = widget::Widget<crate::Editor, crate::frame::Hovered>;
+type Widget<W> = widget::Widget<W, <W as Host>::Hover>;
 type Change = Rc<dyn Fn(&mut crate::editing::Session<'_>, &crate::editing::Site, Value)>;
 
 const PADDING_X: f64 = 10.0;
@@ -174,7 +174,7 @@ impl widget::gesture::Gesture for Drag {
     }
 }
 
-fn slider_widget(slider: Slider, width: f64, handler: ::grap::RuntimeValue) -> Widget {
+fn slider_widget<W: Host>(slider: Slider, width: f64, handler: ::grap::RuntimeValue) -> Widget<W> {
     slider_control(
         slider,
         width,
@@ -186,13 +186,13 @@ fn slider_widget(slider: Slider, width: f64, handler: ::grap::RuntimeValue) -> W
     )
 }
 
-fn slider_widget_with(
+fn slider_widget_with<W: Host>(
     key: CellId,
     slider: Slider,
     width: f64,
     ticks: Vec<puri_widgets::slider::TickLevel>,
     value: Rc<dyn Fn(f64) -> Value>,
-) -> Widget {
+) -> Widget<W> {
     slider_control(
         slider,
         width,
@@ -206,13 +206,13 @@ fn slider_widget_with(
     )
 }
 
-fn slider_control(
+fn slider_control<W: Host>(
     slider: Slider,
     width: f64,
     ticks: Vec<puri_widgets::slider::TickLevel>,
     value: Rc<dyn Fn(f64) -> Value>,
     on_change: Change,
-) -> Widget {
+) -> Widget<W> {
     let ticks: Rc<[puri_widgets::slider::TickLevel]> = ticks.into();
     Rc::new(move |context| {
         let scale = context.viewing().scale();
@@ -233,13 +233,13 @@ fn slider_control(
                 });
                 output
                     .handler()
-                    .on_pointer_down(move |editor: &mut crate::Editor, event| {
+                    .on_pointer_down(move |world: &mut W, event| {
                         let point = Point::new(event.state.position.x, event.state.position.y);
                         if !puri::interact::is_primary_contact(event) || !placement.contains(point)
                         {
                             return false;
                         }
-                        editor.session().start_gesture(
+                        world.session().start_gesture(
                             Box::new(Drag {
                                 site: site.clone(),
                                 on_change: on_change.clone(),
@@ -278,7 +278,12 @@ fn radio_options(value: &Value) -> Option<Vec<RadioOption>> {
     (!options.is_empty()).then_some(options)
 }
 
-fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: f64) -> Widget {
+fn radio_widget<W: Host>(
+    key: CellId,
+    options: Vec<RadioOption>,
+    selected: Value,
+    width: f64,
+) -> Widget<W> {
     Rc::new(move |context| {
         let scale = context.viewing().scale();
         let mut buttons = Vec::new();
@@ -305,8 +310,8 @@ fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: 
             let value = option.value.clone();
             buttons.push(widget::before_place(button, move |placement, output| {
                 output.claim(puri::hover::Probe::occludes(placement));
-                puri::interact::clickable(output, placement, move |editor: &mut crate::Editor| {
-                    let mut session = editor.session();
+                puri::interact::clickable(output, placement, move |world: &mut W| {
+                    let mut session = world.session();
                     let mut edit = site.open(&mut session);
                     let state = set_state(edit.state(), key, value.clone());
                     edit.set_state(state);
@@ -325,7 +330,7 @@ fn radio_widget(key: CellId, options: Vec<RadioOption>, selected: Value, width: 
     })
 }
 
-fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?.field(WITH_CONTROLS)?;
     let controls = fields.field(CONTROLS)?;
     let view = fields.field(VIEW)?;
@@ -389,13 +394,13 @@ fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> 
     })))
 }
 
-fn controls_output(
+fn controls_output<W: Host>(
     controls: &::grap::RuntimeValue,
     state: Option<&Value>,
     width: f64,
-    frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
-) -> Result<(Vec<Widget>, RuntimeValue), RuntimeValue> {
-    let widgets: RefCell<Vec<Widget>> = RefCell::new(Vec::new());
+    frame: &widget::Context<'_, '_, W, W::Hover>,
+) -> Result<(Vec<Widget<W>>, RuntimeValue), RuntimeValue> {
+    let widgets: RefCell<Vec<Widget<W>>> = RefCell::new(Vec::new());
     let emit = |function,
                 context: &mut Context<'_>,
                 call: &Expression,
@@ -473,7 +478,7 @@ fn controls_output(
                 Err(error) => return Ok(error.clone()),
             };
             let root = built.root.clone();
-            let decorate: tree_range::ItemDecoration = Rc::new(move |key| {
+            let decorate: tree_range::ItemDecoration<W> = Rc::new(move |key| {
                 let source = crate::hover::from_grap(root.at(key)?.source.clone()?, None)?;
                 Some(crate::display::widget::source_link::decoration(source))
             });
@@ -589,10 +594,10 @@ fn controls_output(
     }
 }
 
-fn stored_tree_items(
+fn stored_tree_items<W: Host>(
     context: &Context,
     expression: Expression,
-) -> Option<tree_range::ItemDecoration> {
+) -> Option<tree_range::ItemDecoration<W>> {
     context.value(&expression).as_list()?;
     let source = crate::hover::from_grap(context.source_origin(&expression)?, None)?;
     Some(Rc::new(move |key| {
@@ -607,7 +612,7 @@ fn stored_tree_items(
     }))
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (key, label) in [
         (WITH_CONTROLS, "with controls"),

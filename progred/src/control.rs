@@ -101,7 +101,10 @@ impl Session {
     /// The editor's libraries, with the computer's actions on this session.
     fn libraries(session: &Rc<RefCell<Self>>) -> Libraries {
         let mut libraries = session.borrow().driver.editor().stack.libraries.clone();
-        libraries.insert(computer::ID, computer::library(session).definitions);
+        libraries.insert(
+            computer::ID,
+            computer::library::<crate::Editor>(session).definitions,
+        );
         libraries
     }
 

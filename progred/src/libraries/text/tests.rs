@@ -58,7 +58,7 @@ fn display_is_an_editable_line() {
 
 #[test]
 fn the_library_owns_its_vocabulary_and_projection() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(
         library.value(vocabulary::UTF8).and_then(name::read),
         Some("utf8")

@@ -241,7 +241,7 @@ fn profile_validity_and_bounds_do_not_depend_on_sampling() {
         "the geometry is still valid"
     );
     assert!(
-        super::view::picture(&tool).is_some(),
+        super::view::picture::<crate::Editor>(&tool).is_some(),
         "display chooses its own quality"
     );
 }
@@ -258,7 +258,7 @@ fn valid_profiles_survive_fidget_range_failures() {
             let tool = constructor(diameter, length).unwrap();
             assert_eq!(Tool::read(&tool.value()), Some(tool.clone()));
             assert!(tool.sections[0].outline(diameter * 0.001).is_some());
-            assert!(super::view::picture(&tool).is_some());
+            assert!(super::view::picture::<crate::Editor>(&tool).is_some());
             assert!(matches!(
                 tool.sweep([0.0; 3], [0.0; 3], Axis::Z, diameter * 0.001),
                 Err(InvalidPath::CoordinateRange)
@@ -277,7 +277,7 @@ fn f64_profile_sampling_does_not_require_f32_axial_separation() {
     .unwrap();
     assert_eq!(Tool::read(&tool.value()), Some(tool.clone()));
     assert_eq!(tool.sections[0].outline(0.001).unwrap().len(), 2);
-    assert!(super::view::picture(&tool).is_some());
+    assert!(super::view::picture::<crate::Editor>(&tool).is_some());
     assert!(matches!(
         tool.sweep([0.0; 3], [0.0; 3], Axis::Z, 0.001),
         Err(InvalidPath::CoordinateRange)
@@ -316,7 +316,7 @@ fn a_gap_that_collapses_in_fidget_does_not_invalidate_the_profile() {
     ])
     .unwrap();
     assert_eq!(Tool::read(&tool.value()), Some(tool.clone()));
-    assert!(super::view::picture(&tool).is_some());
+    assert!(super::view::picture::<crate::Editor>(&tool).is_some());
     assert!(matches!(
         tool.sweep([0.0; 3], [0.0; 3], Axis::Z, 0.001),
         Err(InvalidPath::CoordinateRange)

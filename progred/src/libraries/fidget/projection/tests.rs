@@ -75,7 +75,10 @@ fn grouping_preserves_the_expression_tree_without_reassociating() {
         (DIVIDE, RIGHT, &product, true),
     ] {
         assert_eq!(
-            matches!(operand(parent, key, child).record(), Recorded::Row { .. }),
+            matches!(
+                operand::<crate::Editor>(parent, key, child).record(),
+                Recorded::Row { .. }
+            ),
             grouped
         );
     }
@@ -108,7 +111,10 @@ fn unrelated_fields_do_not_block_notation_or_change_grouping() {
             (SUM, RIGHT, true),
         ] {
             assert_eq!(
-                matches!(operand(parent, key, &value).record(), Recorded::Row { .. }),
+                matches!(
+                    operand::<crate::Editor>(parent, key, &value).record(),
+                    Recorded::Row { .. }
+                ),
                 grouped,
             );
         }

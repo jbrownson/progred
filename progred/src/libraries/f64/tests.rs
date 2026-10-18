@@ -283,7 +283,7 @@ fn binary_notation_wraps_before_its_operator() {
 #[test]
 fn every_numeric_operator_reads_infix() {
     use crate::libraries::{f32, u64};
-    let infix = |library: &Library, call: Value| {
+    let infix = |library: &Library<crate::Editor>, call: Value| {
         let layout = (library.projection.as_ref().unwrap())(&projection_input(
             &NoEval,
             &RuntimeValue::from(&call),
@@ -422,7 +422,7 @@ fn type_absences_are_library_values() {
 
 #[test]
 fn library_names_are_ordinary_facts_for_random_identities() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(
         library.value(vocabulary::F64).and_then(name::read),
         Some("f64")

@@ -7,9 +7,8 @@ use puri_widgets::tree_slider::{self, Cursor, Intent};
 use std::ops::Range;
 
 type Key = Vec<gid::Position>;
-pub(crate) type ItemDecoration = Rc<
-    dyn Fn(&[gid::Position]) -> Option<widget::Decoration<crate::Editor, crate::frame::Hovered>>,
->;
+type Decoration<W> = widget::Decoration<W, <W as Host>::Hover>;
+pub(crate) type ItemDecoration<W> = Rc<dyn Fn(&[gid::Position]) -> Option<Decoration<W>>>;
 
 pub(crate) fn encode(range: Range<usize>) -> Value {
     Value::list([f64::value(range.start as f64), f64::value(range.end as f64)])
@@ -156,22 +155,22 @@ impl Selection {
         Value::list(self.intent.iter().map(intent_value))
     }
 
-    pub fn widgets(
+    pub fn widgets<W: Host>(
         &self,
         key: CellId,
         width: f64,
-        decorate: Option<ItemDecoration>,
-    ) -> impl Iterator<Item = Widget> + '_ {
+        decorate: Option<ItemDecoration<W>>,
+    ) -> impl Iterator<Item = Widget<W>> + '_ {
         self.range_widgets(key, width, None, decorate)
     }
 
-    fn range_widgets(
+    fn range_widgets<W: Host>(
         &self,
         key: CellId,
         width: f64,
         position: Option<f64>,
-        decorate: Option<ItemDecoration>,
-    ) -> impl Iterator<Item = Widget> + '_ {
+        decorate: Option<ItemDecoration<W>>,
+    ) -> impl Iterator<Item = Widget<W>> + '_ {
         self.rows.iter().rev().map(move |row| {
             range_widget(
                 key,
@@ -202,14 +201,14 @@ pub(crate) fn cursor_state(selection: &Selection, position: f64) -> Value {
     ])
 }
 
-pub(super) fn cursor(
+pub(super) fn cursor<W: Host>(
     items: &Value,
     state: Option<&Value>,
     initial: f64,
     key: CellId,
     width: f64,
-    decorate: Option<ItemDecoration>,
-) -> (Vec<Widget>, Value) {
+    decorate: Option<ItemDecoration<W>>,
+) -> (Vec<Widget<W>>, Value) {
     cursor_from_tree(
         tree(items, Vec::new()),
         state,
@@ -220,14 +219,14 @@ pub(super) fn cursor(
     )
 }
 
-pub(super) fn cursor_from_tree(
+pub(super) fn cursor_from_tree<W: Host>(
     tree: tree_slider::Tree<Key>,
     state: Option<&Value>,
     initial: f64,
     key: CellId,
     width: f64,
-    decorate: Option<ItemDecoration>,
-) -> (Vec<Widget>, Value) {
+    decorate: Option<ItemDecoration<W>>,
+) -> (Vec<Widget<W>>, Value) {
     let state = state.and_then(Value::as_record);
     let selection =
         Selection::from_tree(tree, state.and_then(|state| state.get(&vocabulary::RANGE)));
@@ -297,15 +296,15 @@ impl widget::gesture::Gesture for RangeDrag {
     }
 }
 
-fn range_widget(
+fn range_widget<W: Host>(
     key: CellId,
     slider: RangeSlider,
     level: usize,
     selection: Selection,
     position: Option<f64>,
     width: f64,
-    decorations: Option<Vec<Option<widget::Decoration<crate::Editor, crate::frame::Hovered>>>>,
-) -> Widget {
+    decorations: Option<Vec<Option<Decoration<W>>>>,
+) -> Widget<W> {
     let current = position.and_then(|position| selection.current_item(level, position));
     Rc::new(move |context| {
         let scale = context.viewing().scale();
@@ -331,7 +330,7 @@ fn range_widget(
                     .render(move |canvas, _| painted.draw(canvas, placement.rect, scale, current));
                 output
                     .handler()
-                    .on_pointer_down(move |editor: &mut crate::Editor, event| {
+                    .on_pointer_down(move |world: &mut W, event| {
                         let point = Point::new(event.state.position.x, event.state.position.y);
                         if !puri::interact::is_primary_contact(event) || !placement.contains(point)
                         {
@@ -343,13 +342,13 @@ fn range_widget(
                                 || selection.state(),
                                 |p| cursor_state(&selection, selection.position(p)),
                             );
-                            let mut session = editor.session();
+                            let mut session = world.session();
                             let mut edit = site.open(&mut session);
                             let state = set_state(edit.state(), key, value);
                             edit.set_state(state);
                         } else {
                             let drag = slider.begin(placement.rect, scale, point);
-                            editor.session().start_gesture(
+                            world.session().start_gesture(
                                 Box::new(RangeDrag {
                                     site: site.clone(),
                                     key,

@@ -3,6 +3,7 @@
 //! them; libraries can use the same ordinary data when constructing
 //! templates.
 
+use crate::display::Host;
 use crate::libraries::{Library, name};
 use gid::{CellId, Cells};
 
@@ -12,7 +13,7 @@ pub mod vocabulary {
     pub use crate::workspace::vocabulary::{KEYS, LEFT, LIBRARIES, PANES, RIGHT};
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::PANES, "panes"),

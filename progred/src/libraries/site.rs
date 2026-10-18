@@ -4,6 +4,7 @@
 //! The editor defines these cells and the fold states beside the code
 //! that interprets them; this library names them.
 
+use crate::display::Host;
 use crate::libraries::{Library, name};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xab8d8d4b75ef3526d258d2689f95daba);
@@ -13,7 +14,7 @@ pub mod vocabulary {
     pub use crate::site::vocabulary::{GET, NO_STATE, PATH, SET, VALUE};
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::GET, "get"),

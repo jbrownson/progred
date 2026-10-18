@@ -1,8 +1,8 @@
 //! PNG images as an open record convention: `{png: bytes}` holds an encoded
 //! PNG, and the projection shows the picture.
 
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, absent, name};
-use crate::view::{Layout, ProjectionInput};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{CellId, Cells, Value};
 use puri::{ImageAlphaType, ImageData, ImageFormat, Size};
@@ -120,7 +120,7 @@ fn shown_size(width: u32, height: u32) -> Size {
 
 /// A PNG reads as its picture, then any other fields. Bytes that don't
 /// decode decline, so the record shows as ordinary data.
-pub fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let bytes = input.value?.field(vocabulary::PNG)?;
     let image = decode(bytes.as_blob()?)?;
     Some(crate::display::structure::with_extra_fields(
@@ -153,7 +153,7 @@ pub fn functions() -> ForeignFunctions {
         .register(vocabulary::HEIGHT, dimension(|(_, height)| height))
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::PNG, "png"),

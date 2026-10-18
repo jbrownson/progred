@@ -1,6 +1,7 @@
 //! Open boolean records. The payload identifies true or false without
 //! evaluating that cell's description.
 
+use crate::display::Host;
 use crate::libraries::{Library, absent, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{Cells, Value};
@@ -68,7 +69,7 @@ fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::TRUE, "true"),

@@ -1,4 +1,5 @@
 use super::{one_marker, parameters, vocabulary::*};
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::projection::{group, group_hug, hug};
 use crate::display::{
     Delim, Face, activatable, alternatives, col, descend_path, dim, faced, row, selectable_bracket,
@@ -6,7 +7,6 @@ use crate::display::{
 };
 use crate::libraries::name;
 use crate::libraries::representation::Precedence;
-use crate::view::{Layout, ProjectionInput};
 use gid::{CellId, Step, Value};
 
 #[cfg(test)]
@@ -37,7 +37,7 @@ fn form(value: &Value) -> Option<(CellId, &Value)> {
     Some((marker, content))
 }
 
-fn operand(marker: CellId, key: CellId, value: &Value) -> Layout {
+fn operand<W: Host>(marker: CellId, key: CellId, value: &Value) -> Layout<W> {
     let child = descend_path([Step::Key(marker), Step::Key(key)]);
     let needs_group = value
         .as_record()
@@ -56,7 +56,7 @@ fn operand(marker: CellId, key: CellId, value: &Value) -> Layout {
     }
 }
 
-fn infix(marker: CellId, left: &Value, right: &Value, operator: Layout) -> Layout {
+fn infix<W: Host>(marker: CellId, left: &Value, right: &Value, operator: Layout<W>) -> Layout<W> {
     let left = shared(operand(marker, LEFT, left));
     let right = shared(operand(marker, RIGHT, right));
     let operator = shared(operator);
@@ -66,7 +66,7 @@ fn infix(marker: CellId, left: &Value, right: &Value, operator: Layout) -> Layou
     ])
 }
 
-fn arguments(children: impl IntoIterator<Item = Layout>) -> Layout {
+fn arguments<W: Host>(children: impl IntoIterator<Item = Layout<W>>) -> Layout<W> {
     let children: Vec<_> = children.into_iter().map(shared).collect();
     selectable_bracket(
         Delim::Paren,
@@ -98,7 +98,9 @@ fn arguments(children: impl IntoIterator<Item = Layout>) -> Layout {
     )
 }
 
-pub(super) fn field(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+pub(super) fn field<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
     // An active new field needs the structural record's insertion control.
     input.pending.is_none().then_some(())?;
     super::one_marker_by(|marker| input.value.is_some_and(|v| v.contains_field(marker)))?;

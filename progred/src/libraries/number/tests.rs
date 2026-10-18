@@ -5,7 +5,7 @@ fn every_convention_updates_a_missing_location_from_text() {
     use crate::libraries::{f32, f64, text, u64};
     for (library, update, spelling, expected) in [
         (
-            f64::library(),
+            f64::library::<crate::Editor>(),
             f64::vocabulary::UPDATE,
             "2.5",
             f64::value(2.5),

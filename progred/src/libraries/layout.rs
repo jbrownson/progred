@@ -9,8 +9,8 @@
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
 //!
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, color, f64 as f64_convention, name, presentation};
-use crate::view::{Layout, ProjectionInput};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
@@ -497,7 +497,7 @@ pub fn bordered(child: Value) -> Value {
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
 #[cfg(test)]
-pub(crate) fn decode(value: &Value, site: &crate::editing::Site) -> Option<Layout> {
+pub(crate) fn decode<W: Host>(value: &Value, site: &crate::editing::Site) -> Option<Layout<W>> {
     decode_with(&value.into(), &|| site.clone())
 }
 
@@ -508,10 +508,10 @@ fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
         .then_some(baseline as usize)
 }
 
-fn decode_with(
+fn decode_with<W: Host>(
     value: &::grap::RuntimeValue,
     site: &impl Fn() -> crate::editing::Site,
-) -> Option<Layout> {
+) -> Option<Layout<W>> {
     value.record_len()?;
     if let Some(content) = value.field(vocabulary::ROW) {
         content.record_len()?;
@@ -653,7 +653,7 @@ fn decode_with(
         let child = decode_with(&content.field(vocabulary::CHILD)?, site)?;
         return Some(pickable_runtime(
             child,
-            crate::frame::Hovered::from(site().hover()),
+            W::Hover::from(site().hover()),
             content.field(vocabulary::VALUE)?,
         ));
     }
@@ -670,10 +670,10 @@ fn decode_with(
     None
 }
 
-fn children(
+fn children<W: Host>(
     list: &::grap::RuntimeValue,
     site: &impl Fn() -> crate::editing::Site,
-) -> Option<Vec<Layout>> {
+) -> Option<Vec<Layout<W>>> {
     list.list_values()?
         .map(|child| decode_with(&child, site))
         .collect()
@@ -898,11 +898,11 @@ fn read_point(value: &Value) -> Option<Point> {
     ))
 }
 
-pub fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     scope::display(input).or_else(|| decode_with(input.value?, &|| input.site()))
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::ROW, "row"),

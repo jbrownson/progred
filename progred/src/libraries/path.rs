@@ -1,6 +1,7 @@
 //! Paths as ordinary GID data, interpreted in a caller-supplied root
 //! and resolution context. List positions retain their session lifetime.
 
+use crate::display::Host;
 use crate::libraries::{Library, absent, name};
 #[cfg(test)]
 pub use ::grap::path::step_value;
@@ -13,7 +14,7 @@ pub mod vocabulary {
     pub use ::grap::path::vocabulary::*;
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     use vocabulary::*;
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [

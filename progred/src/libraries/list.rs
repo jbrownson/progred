@@ -2,6 +2,7 @@
 //! these functions only provide the operations awkward to express by
 //! structural matching alone.
 
+use crate::display::Host;
 use crate::libraries::{Library, absent, f64, name, number};
 use gid::Cells;
 
@@ -267,7 +268,7 @@ fn functions() -> ForeignFunctions {
         )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::PREPEND, "prepend"),

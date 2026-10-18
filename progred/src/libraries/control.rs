@@ -4,8 +4,8 @@
 //! expressions until the first absent, `all` retains every result, and
 //! `quote` constructs data while evaluating explicit unquotes.
 
+use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::libraries::{Library, absent, name};
-use crate::view::{Layout, Partial, ProjectionInput};
 use gid::{CellId, Cells, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
@@ -551,7 +551,7 @@ fn matches_pattern(
 
 /// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
-pub fn match_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+pub fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
@@ -584,7 +584,7 @@ pub fn match_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout
     ))
 }
 
-fn pattern_path(steps: impl Into<Vec<Step>>, default: &Partial) -> Layout {
+fn pattern_path<W: Host>(steps: impl Into<Vec<Step>>, default: &Partial<W>) -> Layout<W> {
     crate::display::descend_path_scoped(
         steps,
         crate::display::runtime_partial(pattern_binder),
@@ -592,7 +592,7 @@ fn pattern_path(steps: impl Into<Vec<Step>>, default: &Partial) -> Layout {
     )
 }
 
-fn pattern_binder(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+fn pattern_binder<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     input.pending.is_none().then_some(())?;
     let fields = input.value?;
     let binder = fields.field(vocabulary::BIND)?;
@@ -620,7 +620,7 @@ fn pattern_binder(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     ))
 }
 
-fn case_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+fn case_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     input.pending.is_none().then_some(())?;
     input.value?.field(vocabulary::PATTERN)?;
     input.value?.field(::grap::vocabulary::EXPRESSION)?;
@@ -654,7 +654,9 @@ enum BindingForm {
 /// `let` and `where` are the same sequential binding call with two
 /// arrangements. Keeping the function field visible makes switching
 /// between the prefix and postfix forms an ordinary graph edit.
-pub fn bindings_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+pub fn bindings_display<W: Host>(
+    input: &ProjectionInput<'_, W, RuntimeValue>,
+) -> Option<Layout<W>> {
     let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
@@ -715,7 +717,7 @@ pub fn bindings_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Lay
     }
 }
 
-fn binding_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let left = match (
@@ -748,7 +750,7 @@ fn binding_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> 
     ))
 }
 
-fn quote_marker(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
         let site = input.site();
         crate::display::projection::target(activatable(dim("\""), &site))
@@ -759,7 +761,7 @@ fn quote_marker(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
 /// rather than as a generic call with a redundant `expression` label.
 /// Unrelated fields do not change recognition. Active field insertion
 /// still uses the ordinary record/call projection.
-pub fn quote_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+pub fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
@@ -782,7 +784,7 @@ pub fn quote_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout
 /// Unquote marks an expression embedded in a quoted template. Its prefix
 /// is a handle for the whole unquote; the body keeps its own stored location.
 /// A just-inserted unquote is already one, so its empty hole offers code.
-pub fn unquote_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+pub fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     match &input.pending {
         None => {
@@ -807,14 +809,14 @@ pub fn unquote_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layo
 
 /// `do [a, b, c]` evaluates as a control form while retaining the
 /// ordinary list projection for its ordered expressions.
-pub fn do_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+pub fn do_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     expression_list_display(input, vocabulary::DO)
 }
 
-fn expression_list_display(
-    input: &ProjectionInput<'_, RuntimeValue>,
+fn expression_list_display<W: Host>(
+    input: &ProjectionInput<'_, W, RuntimeValue>,
     callable: CellId,
-) -> Option<Layout> {
+) -> Option<Layout<W>> {
     let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
@@ -839,7 +841,7 @@ fn expression_list_display(
     )))
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::MATCH, "match"),

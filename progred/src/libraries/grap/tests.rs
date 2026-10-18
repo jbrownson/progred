@@ -888,7 +888,7 @@ fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
 
 #[test]
 fn the_library_describes_grap_and_owns_evaluate() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(
         library
             .value(::grap::vocabulary::FUNCTION)

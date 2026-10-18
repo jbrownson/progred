@@ -1,5 +1,6 @@
 //! Conversions between number types, belonging to neither type.
 
+use crate::display::Host;
 use crate::libraries::{Library, f32, name};
 use ::grap::ForeignFunctions;
 use gid::{CellId, Cells};
@@ -19,7 +20,7 @@ fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::F32_FROM_F64, name::record("f32 from f64", []));
     Library::named(

@@ -1,9 +1,9 @@
 //! Outline entries own their UI state; their bodies jump to shared record fields.
 
 use super::vocabulary::OUTLINE;
+use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::display::projection::group;
 use crate::display::{self as d, col};
-use crate::view::{Layout, Partial, ProjectionInput};
 use gid::{CellId, Step, Value};
 use std::rc::Rc;
 
@@ -17,7 +17,7 @@ fn sections(value: &Value) -> Option<Vec<CellId>> {
         .collect()
 }
 
-pub(super) fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
+pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
     let keys = sections(input.value?)?;
     let fields = input.value?.as_record()?.clone();
     let value = ::grap::RuntimeValue::from(input.value?.clone());
@@ -69,14 +69,14 @@ pub(super) fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
 
 /// A section whose body is the outline's field `key`, drawn where the
 /// outline is stored and edited there.
-fn section(
+fn section<W: Host>(
     position: gid::Position,
     key: CellId,
-    heading: Layout,
+    heading: Layout<W>,
     outline: &crate::editing::Site,
     fields: &gid::Record,
-    default_projection: &Partial,
-) -> Layout {
+    default_projection: &Partial<W>,
+) -> Layout<W> {
     let steps = [Step::Element(position), Step::Key(key)];
     let body_projection = Some(d::compose_partials([
         d::structure::list_column(16.0, None),
@@ -114,7 +114,7 @@ fn open(viewing: &dyn crate::display::Viewing, steps: &[Step]) -> bool {
 /// Whether a section starts closed.
 const CLOSED: bool = false;
 
-fn heading(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+fn heading<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let key = input.value?.as_cell()?;
     let site = input.site();
     crate::libraries::grap::shallow_cell_with(input, move |label| {
@@ -127,7 +127,7 @@ fn heading(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> 
                     6.0,
                     [d::dim(if visible { "▾" } else { "▸" }), label.clone()],
                 ),
-                crate::frame::Hovered::from(site.hover()),
+                W::Hover::from(site.hover()),
                 Rc::new(move |session| {
                     section.open(session).fold(CLOSED, Some(visible));
                     heading.open(session).select();

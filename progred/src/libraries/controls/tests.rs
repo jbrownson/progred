@@ -6,7 +6,7 @@ fn controls_output(
     state: Option<&Value>,
     width: f64,
     frame: &widget::Context<'_, '_, crate::Editor, crate::frame::Hovered>,
-) -> Result<(Vec<Widget>, Value), Value> {
+) -> Result<(Vec<Widget<crate::Editor>>, Value), Value> {
     let callable = ::grap::evaluate(controls, frame.viewing().host(), ::grap::DEFAULT_FUEL).result;
     super::controls_output(&callable, state, width, frame)
         .map(|(widgets, value)| (widgets, value.into_value()))
@@ -1233,7 +1233,7 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
     libraries.insert(library, definitions);
     let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let expression = context.field(call, ITEMS).unwrap();
-        assert!(stored_tree_items(context, expression.clone()).is_none());
+        assert!(stored_tree_items::<crate::Editor>(context, expression.clone()).is_none());
         context.eval_to_value(expression, environment)
     };
     assert_eq!(
@@ -1255,7 +1255,7 @@ fn tree_cursor_stacks_disjoint_rows_without_extra_frame_padding() {
         Value::list([A.into(), A.into()]),
         Value::list([A.into(), A.into()]),
     ]);
-    let (rows, _) = tree_range::cursor(&tree, None, 0.25, A, 180.0, None);
+    let (rows, _) = tree_range::cursor::<crate::Editor>(&tree, None, 0.25, A, 180.0, None);
     let measured = with_context(&Output::default(), |context| {
         measured::col(0, 0.0, rows.iter().map(|row| row(context)).collect())
     });
@@ -1435,7 +1435,7 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
             );
             let selection = tree_range::Selection::new(&tree, Some(&ranges));
             let widgets: Vec<_> = if cursor {
-                tree_range::cursor(&tree, Some(&old), 0.0, A, 180.0, None).0
+                tree_range::cursor::<crate::Editor>(&tree, Some(&old), 0.0, A, 180.0, None).0
             } else {
                 selection.widgets(A, 180.0, None).collect()
             };
@@ -1507,7 +1507,8 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
             let old = tree_range::cursor_state(&selection, position);
             let annotation = set_state(None, A, old.clone());
             crate::editing::annotate(&mut editor.session(), &root, &[], annotation.clone());
-            let (widgets, before) = tree_range::cursor(&tree, Some(&old), 0.0, A, 180.0, None);
+            let (widgets, before) =
+                tree_range::cursor::<crate::Editor>(&tree, Some(&old), 0.0, A, 180.0, None);
             let control = widgets.last().unwrap();
             let measured = with_context(&Output::default(), |context| control(context));
             let height = measured.extent.height();
@@ -1528,7 +1529,8 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
             };
             assert!(dispatch.dispatch_pointer_down(&mut editor, &event));
             let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
-            let (_, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
+            let (_, result) =
+                tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
             assert_eq!(
                 result.as_record().unwrap().get(&RANGE),
                 Some(&tree_range::encode(range))
@@ -1571,7 +1573,7 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
 
 #[test]
 fn tree_cursor_updates_range_and_position_together() {
-    fn click(editor: &mut crate::Editor, control: &Widget, x: f64, count: u8) {
+    fn click(editor: &mut crate::Editor, control: &Widget<crate::Editor>, x: f64, count: u8) {
         let measured = with_context(&Output::default(), |context| control(context));
         let height = measured.extent.height();
         let placed = widget::frame::place(
@@ -1604,11 +1606,12 @@ fn tree_cursor_updates_range_and_position_together() {
         Value::list([B.into(), B.into()]),
         Value::list([B.into(), B.into()]),
     ]);
-    let (widgets, _) = tree_range::cursor(&tree, None, 2.75, A, 180.0, None);
+    let (widgets, _) = tree_range::cursor::<crate::Editor>(&tree, None, 2.75, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 150.0, 1);
     let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(2.75));
-    let (widgets, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
+    let (widgets, result) =
+        tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
     assert_eq!(
         result.as_record().unwrap().get(&RANGE),
         Some(&tree_range::encode(2..4))
@@ -1616,26 +1619,26 @@ fn tree_cursor_updates_range_and_position_together() {
     click(&mut editor, &widgets[0], 100.0, 1);
     let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(3.0));
-    let (widgets, _) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
+    let (widgets, _) = tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 50.0, 1);
     let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
     assert_eq!(tree_cursor_position(&tree, state), Some(0.0));
     assert_eq!(
-        tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None)
+        tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None)
             .1
             .as_record()
             .unwrap()
             .get(&RANGE),
         Some(&tree_range::encode(0..2))
     );
-    let (widgets, _) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
+    let (widgets, _) = tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
     click(&mut editor, widgets.last().unwrap(), 50.0, 2);
     let state = read_state(editor.model.workspace.document.annotations.at(&[]), A).unwrap();
     assert_eq!(
         state.as_record().unwrap().get(&RANGE),
         Some(&Value::list([ALL.into(), ALL.into()]))
     );
-    let (_, result) = tree_range::cursor(&tree, Some(state), 0.0, A, 180.0, None);
+    let (_, result) = tree_range::cursor::<crate::Editor>(&tree, Some(state), 0.0, A, 180.0, None);
     assert_eq!(
         result.as_record().unwrap().get(&RANGE),
         Some(&tree_range::encode(0..4))
@@ -1644,7 +1647,7 @@ fn tree_cursor_updates_range_and_position_together() {
 }
 
 fn tree_cursor_position(tree: &Value, state: &Value) -> Option<f64> {
-    tree_range::cursor(tree, Some(state), 0.0, A, 180.0, None)
+    tree_range::cursor::<crate::Editor>(tree, Some(state), 0.0, A, 180.0, None)
         .1
         .as_record()?
         .get(&POSITION)

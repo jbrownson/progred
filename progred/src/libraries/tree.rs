@@ -1,6 +1,7 @@
 //! Final-encoded trees. Consumers choose what to retain; source links are not GID fields.
 use super::{Definitions, Library, absent, layout, name, presentation};
 use crate::computations::memo;
+use crate::display::Host;
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
     SourceOrigin,
@@ -343,7 +344,7 @@ fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>)
     }
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, label) in [
         (ID, "Trees"),

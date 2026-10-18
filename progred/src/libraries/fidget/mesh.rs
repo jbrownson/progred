@@ -1,7 +1,7 @@
 //! An opt-in triangle viewport. Geometry and camera rendering are independent.
 
 use super::*;
-use crate::view::{Layout, ProjectionInput};
+use crate::display::host::{Host, Layout, ProjectionInput};
 
 #[cfg(test)]
 mod cpu;
@@ -121,7 +121,9 @@ fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Opt
     })
 }
 
-pub(super) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+pub(super) fn display<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
     let value = input.value?;
     value.field(vocabulary::PREVIEW_MESH)?;
     let (preview, depth) = read(value.as_value())?;
@@ -143,22 +145,22 @@ pub(crate) fn read(value: &Value) -> Option<(VolumePreview, u8)> {
     ))
 }
 
-pub(crate) fn drawing(
+pub(crate) fn drawing<W: Host>(
     geometry: &Mesh,
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
-) -> Option<Layout> {
+) -> Option<Layout<W>> {
     drawing_surface(geometry, None, preview, state, scale_factor)
 }
 
-pub(crate) fn drawing_surface(
+pub(crate) fn drawing_surface<W: Host>(
     geometry: &Mesh,
     surface: Option<Surface>,
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
-) -> Option<Layout> {
+) -> Option<Layout<W>> {
     let pixels = raster_size(preview.size, scale_factor)?;
     let scene = puri::mesh::Scene {
         geometry: geometry.clone(),

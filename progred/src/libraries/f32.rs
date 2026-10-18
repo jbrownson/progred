@@ -2,6 +2,7 @@
 //! single precision. It remains ordinary GID data and ordinary Grap
 //! library behavior.
 
+use crate::display::Host;
 use crate::libraries::{Library, number};
 use gid::{CellId, Value};
 
@@ -124,7 +125,7 @@ pub fn functions() -> ::grap::ForeignFunctions {
     parts().functions
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     convention().library(ID, parts(), std::iter::empty())
 }
 

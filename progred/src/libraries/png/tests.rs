@@ -162,7 +162,7 @@ fn the_editor_shows_the_picture_and_the_record_around_it() {
 
 #[test]
 fn the_library_names_its_vocabulary() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(
         library.value(vocabulary::WIDTH).and_then(name::read),
         Some("png width")

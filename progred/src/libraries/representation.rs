@@ -3,21 +3,21 @@
 //! or as calls headed by the tagged operator, and how tightly infix binds.
 
 use crate::display::Pending;
+use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::display::projection::group;
 use crate::display::{Delim, Face, alternatives, col, row, selectable_bracket, shared, subscript};
 use crate::libraries::number::vocabulary::{LEFT, RIGHT};
-use crate::view::{Layout, Partial, ProjectionInput};
 use ::grap::RuntimeValue;
 use ::grap::vocabulary::FUNCTION;
 use gid::{CellId, Step};
 use std::rc::Rc;
 
 /// `content` followed by the representation's name as a subscript.
-pub(crate) fn tagged<V>(
-    input: &ProjectionInput<'_, V>,
-    content: Layout,
+pub(crate) fn tagged<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
+    content: Layout<W>,
     representation: CellId,
-) -> Layout {
+) -> Layout<W> {
     row(
         2.0,
         [
@@ -34,7 +34,7 @@ pub(crate) fn tagged<V>(
     )
 }
 
-pub(crate) fn operation(representation: CellId) -> Partial {
+pub(crate) fn operation<W: Host>(representation: CellId) -> Partial<W> {
     crate::display::runtime_partial(move |input| {
         crate::libraries::grap::shallow_cell_with(input, |label| {
             tagged(input, label, representation)
@@ -70,11 +70,11 @@ impl Precedence {
 /// `left op right` for one representation's operators, from the moment the
 /// operator is chosen: a missing operand is an empty slot, and other fields,
 /// including one being added, follow in a record.
-pub(crate) fn infix_display(
+pub(crate) fn infix_display<W: Host>(
     representation: CellId,
     operators: &[(CellId, Precedence)],
-    input: &ProjectionInput<'_, RuntimeValue>,
-) -> Option<Layout> {
+    input: &ProjectionInput<'_, W, RuntimeValue>,
+) -> Option<Layout<W>> {
     match &input.pending {
         None | Some(Pending::Field | Pending::Child(Step::Key(_))) => {}
         Some(Pending::Child(_)) => return None,
@@ -122,7 +122,10 @@ pub(crate) fn infix_display(
 }
 
 /// Calls of `operations`, headed by the operator with its tag.
-pub(crate) fn calls(representation: CellId, operations: impl Into<Rc<[CellId]>>) -> Partial {
+pub(crate) fn calls<W: Host>(
+    representation: CellId,
+    operations: impl Into<Rc<[CellId]>>,
+) -> Partial<W> {
     let operations = operations.into();
     let function_projection = operation(representation);
     crate::display::runtime_partial(move |input| {

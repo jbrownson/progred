@@ -44,7 +44,7 @@ fn coarser_changes_store_all_for_finer_rows() {
             .state(),
         all.state()
     );
-    let (widgets, _) = cursor(
+    let (widgets, _) = cursor::<crate::Editor>(
         &tree,
         Some(&cursor_state(&narrowed, 1.5)),
         0.0,
@@ -90,7 +90,7 @@ fn stored_paths_track_insertions_and_survive_missing_endpoints() {
         0..7
     );
     let stored_cursor = cursor_state(&all, 2.25);
-    let (_, result) = cursor(
+    let (_, result) = cursor::<crate::Editor>(
         &edited_value,
         Some(&stored_cursor),
         0.0,
@@ -139,7 +139,7 @@ fn cursor_keeps_its_leaf_position_only_inside_the_selected_range() {
     let second = all.select(1, 1..2);
     assert_eq!(first.position(1.25), 1.25);
     assert_eq!(second.position(1.25), 2.0);
-    let (widgets, value) = cursor(
+    let (widgets, value) = cursor::<crate::Editor>(
         &tree,
         Some(&cursor_state(&second, 2.75)),
         0.0,
@@ -151,6 +151,7 @@ fn cursor_keeps_its_leaf_position_only_inside_the_selected_range() {
     let value = value.as_record().unwrap();
     assert_eq!(value.get(&RANGE), Some(&encode(2..4)));
     assert_eq!(value.get(&POSITION).and_then(f64::read), Some(2.75));
-    let (widgets, _) = cursor(&Value::list([]), None, 0.0, TREE_CURSOR, 200.0, None);
+    let (widgets, _) =
+        cursor::<crate::Editor>(&Value::list([]), None, 0.0, TREE_CURSOR, 200.0, None);
     assert!(widgets.is_empty());
 }

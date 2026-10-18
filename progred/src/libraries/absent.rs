@@ -1,8 +1,8 @@
 //! Tagged Grap absence values. The tag identifies the result as absent;
 //! its cell payload is the stable, language-independent reason identity.
 
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, name};
-use crate::view::{Layout, ProjectionInput};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{CellId, Cells, Value};
 
@@ -48,7 +48,7 @@ pub fn named_reason(value: impl Into<String>) -> Value {
 
 /// An absent value reads as its reason, then any other fields, such as a
 /// failed alternative's causes, all on red.
-fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let reason = input.value?.field(vocabulary::ABSENT)?.as_cell()?;
     let name = input
         .env
@@ -95,7 +95,7 @@ fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::ABSENT, name::record("absent", []));
     cells.set_value(vocabulary::CELL, name::record("cell", []));

@@ -2,8 +2,8 @@
 //! one lowering and preview backend. Neither Grap nor GID knows about
 //! the host representation.
 
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, absent, color, control, f32, name, presentation, representation};
-use crate::view::{Layout, ProjectionInput};
 #[cfg(test)]
 use fidget_engine::shape::EzShape;
 #[cfg(not(target_arch = "wasm32"))]
@@ -531,7 +531,7 @@ fn slice_preview(value: &Value) -> Option<SlicePreview> {
     (preview.min_x < preview.max_x && preview.min_y < preview.max_y).then_some(preview)
 }
 
-fn slice_display(preview: SlicePreview, scale_factor: f64) -> Option<Layout> {
+fn slice_display<W: Host>(preview: SlicePreview, scale_factor: f64) -> Option<Layout<W>> {
     let raster_size = raster_size(preview.size, scale_factor)?;
     let minimum = raster_size.width().min(raster_size.height()) as f32;
     let half_width = (preview.max_x - preview.min_x) / 2.0;
@@ -581,7 +581,7 @@ fn raster_size(size: Size, scale: f64) -> Option<PixelRenderSize> {
     ))
 }
 
-fn image_layout(size: Size, raster_size: PixelRenderSize, rgba: Vec<u8>) -> Layout {
+fn image_layout<W: Host>(size: Size, raster_size: PixelRenderSize, rgba: Vec<u8>) -> Layout<W> {
     let image = ImageData {
         data: rgba.into(),
         format: ImageFormat::Rgba8,
@@ -1016,12 +1016,12 @@ impl GpuRenderer {
     }
 }
 
-pub(crate) fn volume_display(
+pub(crate) fn volume_display<W: Host>(
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
     renderer: &mut PreviewRenderer,
-) -> Option<Layout> {
+) -> Option<Layout<W>> {
     let raster_size = raster_size(preview.size, scale_factor)?;
     Some(image_layout(
         preview.size,
@@ -1030,10 +1030,10 @@ pub(crate) fn volume_display(
     ))
 }
 
-fn display(
-    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
+fn display<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     renderer: &RefCell<PreviewRenderer>,
-) -> Option<Layout> {
+) -> Option<Layout<W>> {
     let value = input.value?;
     if value.contains_field(vocabulary::PREVIEW_3D) {
         let drawing = volume_display(
@@ -1049,9 +1049,12 @@ fn display(
     }
 }
 
-pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_, V>) -> Layout {
+pub(crate) fn interactive_volume<W: Host, V>(
+    drawing: Layout<W>,
+    input: &ProjectionInput<'_, W, V>,
+) -> Layout<W> {
     let site = input.site();
-    let hover = crate::frame::Hovered::from(site.hover());
+    let hover = W::Hover::from(site.hover());
     crate::display::widget::before(
         on_state_drag(
             on_hover(drawing, hover.clone()),
@@ -1066,7 +1069,7 @@ pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_,
             let pinch_site = site.clone();
             let scroll = crate::display::widget::scroll::scroll(
                 context.viewing().scale(),
-                move |world: &mut crate::Editor, delta| {
+                move |world: &mut W, delta| {
                     let mut session = world.session();
                     let mut edit = site.open(&mut session);
                     let (state, outcome) = zoom_handler(edit.state())(delta);
@@ -1079,26 +1082,22 @@ pub(crate) fn interactive_volume<V>(drawing: Layout, input: &ProjectionInput<'_,
             );
             Box::new(move |output, placement| {
                 scroll(output, placement);
-                puri::interact::on_pinch(
-                    output,
-                    placement,
-                    move |world: &mut crate::Editor, delta| {
-                        let mut session = world.session();
-                        let mut edit = pinch_site.open(&mut session);
-                        if let Some(state) = pinch_zoom(edit.state(), delta) {
-                            edit.set_state(state);
-                            pinch_activity.zoomed(session.timers, web_time::Instant::now());
-                        }
-                        // Own the gesture even at a zoom limit.
-                        true
-                    },
-                );
+                puri::interact::on_pinch(output, placement, move |world: &mut W, delta| {
+                    let mut session = world.session();
+                    let mut edit = pinch_site.open(&mut session);
+                    if let Some(state) = pinch_zoom(edit.state(), delta) {
+                        edit.set_state(state);
+                        pinch_activity.zoomed(session.timers, web_time::Instant::now());
+                    }
+                    // Own the gesture even at a zoom limit.
+                    true
+                });
             })
         }),
     )
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::FIDGET, "fidget"),

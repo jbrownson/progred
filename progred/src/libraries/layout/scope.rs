@@ -1,8 +1,8 @@
 //! Evaluation-local layout output. Grap carries only ordinary values; the
 //! borrowed FFIs emit into this Rust buffer, including through calls and loops.
 use super::*;
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::absent;
-use crate::view::{Layout, ProjectionInput};
 use ::grap::{Context, Evaluation, ForeignOverlay, RuntimeValue};
 use std::cell::RefCell;
 use vocabulary::*;
@@ -43,8 +43,8 @@ pub(super) fn program(
     }
 }
 
-struct Output {
-    children: RefCell<Vec<Layout>>,
+struct Output<W: Host> {
+    children: RefCell<Vec<Layout<W>>>,
 }
 
 enum BuildError {
@@ -69,8 +69,11 @@ fn invalid(function: CellId) -> BuildError {
     )
 }
 
-impl Output {
-    fn collect<T>(&self, run: impl FnOnce() -> Result<T, Halt>) -> Result<(T, Vec<Layout>), Halt> {
+impl<W: Host> Output<W> {
+    fn collect<T>(
+        &self,
+        run: impl FnOnce() -> Result<T, Halt>,
+    ) -> Result<(T, Vec<Layout<W>>), Halt> {
         let parent = self.children.take();
         let result = run();
         let children = self.children.replace(parent);
@@ -80,10 +83,10 @@ impl Output {
 
 /// Exactly one emitted root is a layout; no emission leaves the ordinary
 /// value result alone. A halt or final absent drops the entire output.
-pub fn run(
+pub fn run<W: Host>(
     site: impl Fn() -> crate::editing::Site,
     evaluate: impl FnOnce(&ForeignOverlay<'_>) -> Evaluation,
-) -> (Evaluation, Option<Layout>) {
+) -> (Evaluation, Option<Layout<W>>) {
     let output = Output {
         children: RefCell::new(Vec::new()),
     };
@@ -112,7 +115,9 @@ pub fn run(
     (evaluation, layout)
 }
 
-pub(super) fn display(input: &ProjectionInput<'_, ::grap::RuntimeValue>) -> Option<Layout> {
+pub(super) fn display<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
     let function = input.value?.field(LAYOUT_PROGRAM)?;
     let (evaluation, layout) = run(
         || input.site(),
@@ -165,7 +170,7 @@ fn number_argument(
     }
 }
 
-fn single(children: Vec<Layout>) -> Option<Layout> {
+fn single<W: Host>(children: Vec<Layout<W>>) -> Option<Layout<W>> {
     if children.len() == 1 {
         children.into_iter().next()
     } else {
@@ -173,14 +178,14 @@ fn single(children: Vec<Layout>) -> Option<Layout> {
     }
 }
 
-fn operation(
+fn operation<W: Host>(
     function: CellId,
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
-    output: &Output,
+    output: &Output<W>,
     site: &impl Fn() -> crate::editing::Site,
-) -> Result<Layout, BuildError> {
+) -> Result<Layout<W>, BuildError> {
     macro_rules! need {
         ($value:expr) => {
             match $value {
@@ -354,11 +359,7 @@ fn operation(
             match function {
                 SELECTABLE => activatable(child, &site()),
                 HOVER_BLOCK => block_hover(child),
-                PICKABLE => pickable_runtime(
-                    child,
-                    crate::frame::Hovered::from(site().hover()),
-                    need!(value),
-                ),
+                PICKABLE => pickable_runtime(child, W::Hover::from(site().hover()), need!(value)),
                 ON_EVENT => on_event(child, need!(handler)),
                 _ => unreachable!(),
             }

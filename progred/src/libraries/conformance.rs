@@ -14,7 +14,7 @@ fn functions() -> ForeignFunctions {
         control::functions(),
         f32::functions(),
         f64::functions(),
-        list::library().functions(),
+        list::library::<crate::Editor>().functions(),
     ])
 }
 

@@ -3,10 +3,10 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
+use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::display::{activatable, overlay_value};
 use crate::libraries::representation::{Precedence, calls, infix_display, tagged};
 use crate::libraries::{Library, absent, line_edit, logic, name};
-use crate::view::{Layout, Partial, ProjectionInput};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
@@ -28,7 +28,7 @@ pub mod vocabulary {
     pub const OPERAND: CellId = CellId::from_u128(0x50a20d15e4ae56be51b882de9d58c676);
 }
 
-pub fn library() -> Library {
+pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
         (vocabulary::LEFT, "left"),
@@ -158,12 +158,12 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         )
     }
 
-    pub fn library(
+    pub fn library<W: Host>(
         self,
         id: CellId,
         parts: Parts,
-        before: impl IntoIterator<Item = Partial>,
-    ) -> Library {
+        before: impl IntoIterator<Item = Partial<W>>,
+    ) -> Library<W> {
         let Parts {
             cells,
             functions,
@@ -187,7 +187,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                 crate::display::runtime_partial(move |input| {
                     let layout = self.display(input)?;
                     Some(if input.writable && input.selection.is_some() {
-                        typed_operators::<N>(layout, symbols.clone())
+                        typed_operators::<_, N>(layout, symbols.clone())
                     } else {
                         layout
                     })
@@ -203,7 +203,10 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
 
     /// A number reads as its spelling, then any other fields, including one
     /// being added.
-    pub fn display(self, input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
+    pub fn display<W: Host>(
+        self,
+        input: &ProjectionInput<'_, W, RuntimeValue>,
+    ) -> Option<Layout<W>> {
         layout(input, (self.read)(input.value?)?, self.tag, self.encode)
     }
 
@@ -340,21 +343,19 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
 /// one typed at the end of a whole number makes the number its left operand,
 /// with the right operand's picker open. A sign or exponent that doesn't yet
 /// make a number still goes into its text.
-fn typed_operators<N: std::str::FromStr + 'static>(
-    child: Layout,
+fn typed_operators<W: Host, N: std::str::FromStr + 'static>(
+    child: Layout<W>,
     symbols: Rc<[(&'static str, CellId)]>,
-) -> Layout {
+) -> Layout<W> {
     crate::display::widget::after(
         child,
         Rc::new(move |context| {
             let site = context.site();
             let symbols = symbols.clone();
             Box::new(move |output, _| {
-                output
-                    .handler()
-                    .on_key(move |editor: &mut crate::Editor, event| {
-                        wrap_typed::<N>(&mut editor.session(), event, &site, &symbols)
-                    });
+                output.handler().on_key(move |world: &mut W, event| {
+                    wrap_typed::<N>(&mut world.session(), event, &site, &symbols)
+                });
             })
         }),
     )
@@ -415,12 +416,12 @@ pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
     fn spelling(self, precision: f64) -> String;
 }
 
-pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
-    input: &ProjectionInput<'_, ::grap::RuntimeValue>,
+pub(crate) fn layout<W: Host, N: Scrubbable + std::str::FromStr>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     number: N,
     representation: CellId,
     encode: fn(N) -> Value,
-) -> Option<Layout> {
+) -> Option<Layout<W>> {
     let original = input.value?;
     let digits = line_edit::layout(
         number.to_string(),
@@ -436,7 +437,7 @@ pub(crate) fn layout<N: Scrubbable + std::str::FromStr>(
         // Outlined where it drags: the whole number, its tag too.
         on_scrub(
             crate::display::drag_outlined(line),
-            crate::frame::Hovered::from(site.hover()),
+            W::Hover::from(site.hover()),
             Rc::new(move || {
                 let original = original.to_value();
                 let mut scrub = NumberScrub::new(number);

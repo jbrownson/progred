@@ -46,7 +46,7 @@ use gid::Value;
 
 #[test]
 fn the_vocabulary_alone_grants_no_selection_access() {
-    let library = library();
+    let library = library::<crate::Editor>();
     assert_eq!(
         crate::libraries::test_evaluate(
             &::grap::call(Value::from(vocabulary::GET), []),
@@ -92,7 +92,7 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
             }))
         }
     };
-    let functions = crate::libraries::list::library().functions();
+    let functions = crate::libraries::list::library::<crate::Editor>().functions();
     let overlay = ::grap::ForeignOverlay::from_value(
         &[crate::libraries::site::vocabulary::PATH, vocabulary::SET],
         &interpret,
