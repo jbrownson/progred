@@ -94,18 +94,16 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
     let second = path();
     let b = Scope::default().jump(second.clone(), source.clone());
     let annotation = text::value("local state");
-    a.open(Access::new(editor.session()))
+    a.open(editor.session())
         .annotate(&root, &first, annotation.clone());
-    b.open(Access::new(editor.session())).select(&root, &second);
-    assert!(b.open(Access::new(editor.session())).edit_line(
-        &root,
-        &second,
-        &line("before"),
-        &|edit| {
-            edit.state.set_text("after");
-            true
-        }
-    ));
+    b.open(editor.session()).select(&root, &second);
+    assert!(
+        b.open(editor.session())
+            .edit_line(&root, &second, &line("before"), &|edit| {
+                edit.state.set_text("after");
+                true
+            })
+    );
     assert_eq!(
         a.read(&editor.sources(), &first),
         Some(&text::value("after"))
@@ -130,15 +128,13 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
             .scope()
             .same_location(&b, &editor.sources(), selected.path())
     );
-    assert!(b.open(Access::new(editor.session())).edit_line(
-        &root,
-        &second,
-        &line("before"),
-        &|edit| {
-            edit.state.set_text("after undo");
-            true
-        }
-    ));
+    assert!(
+        b.open(editor.session())
+            .edit_line(&root, &second, &line("before"), &|edit| {
+                edit.state.set_text("after undo");
+                true
+            })
+    );
     assert_eq!(
         editor.sources().resolve_path(&source),
         Some(&text::value("after undo"))
@@ -148,9 +144,7 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
 #[test]
 fn structural_paste_delete_and_undo_use_the_same_scope() {
     let (mut editor, root, source, occurrence, scope) = fixture(text::value("old"));
-    scope
-        .open(Access::new(editor.session()))
-        .select(&root, &occurrence);
+    scope.open(editor.session()).select(&root, &occurrence);
     assert!(editor.paste_value(text::value("pasted")));
     assert_eq!(
         editor.sources().resolve_path(&source),
@@ -183,9 +177,7 @@ fn a_missing_scoped_child_uses_the_ordinary_completion_and_continuation() {
     let (mut editor, root, source, mut occurrence, scope) = fixture(Value::record([]));
     let field = new_cell_id();
     occurrence.push(Step::Key(field));
-    scope
-        .open(Access::new(editor.session()))
-        .select(&root, &occurrence);
+    scope.open(editor.session()).select(&root, &occurrence);
     assert_eq!(
         editor
             .model
@@ -249,7 +241,7 @@ fn grap_handler_uses_the_scope_without_an_opaque_value() {
             )],
         ),
     );
-    assert!(scope.open(Access::new(editor.session())).grap(
+    assert!(scope.open(editor.session()).grap(
         root.clone(),
         occurrence.clone(),
         handler,
@@ -342,7 +334,7 @@ fn redirected_library_values_remain_read_only_and_failed_writes_do_not_detach() 
     assert!(!scope.writable(&editor.sources(), &occurrence));
     assert!(
         !scope
-            .open(Access::new(editor.session()))
+            .open(editor.session())
             .replace(&occurrence, text::value("denied"))
     );
     assert!(Rc::ptr_eq(&document, &editor.model.doc));
@@ -365,9 +357,7 @@ fn inserting_a_scoped_list_sibling_preserves_the_occurrence() {
         .clone();
     let position = gid::position::between(Some(&position), None).unwrap();
     let item = [occurrence.clone(), vec![Step::Element(position)]].concat();
-    scope
-        .open(Access::new(editor.session()))
-        .select(&root, &item);
+    scope.open(editor.session()).select(&root, &item);
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(&selected.path()[..1], occurrence);
     assert!(

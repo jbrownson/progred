@@ -201,8 +201,8 @@ ordinary [editing helpers](../progred/src/editing.rs). There is no per-widget
 dictionary of editor callbacks. A read-only line installs no editing handlers.
 Puri's text editor remains independent of these document operations.
 The location-facing callbacks capture an
-[editing scope](../progred/src/editing/scope.rs). At dispatch, an opaque borrowed
-`Access` combines with that scope to create an `Edit` interface. Opening it
+[editing scope](../progred/src/editing/scope.rs). At dispatch, the scope opens
+an `Edit` interface over the session the dispatch lends. Opening it
 neither allocates nor copies the editor. The scope interprets locations with
 an optional-path-returning `Conject`, not arbitrary replacements of every editor
 operation; the normal projection uses its allocation-free identity case.

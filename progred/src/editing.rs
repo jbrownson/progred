@@ -12,7 +12,7 @@ mod scope;
 mod session;
 mod site;
 pub use scope::Read;
-pub(crate) use scope::{Access, Edit, Scope};
+pub(crate) use scope::{Edit, Scope};
 pub(crate) use session::{Session, TextTools};
 pub(crate) use site::{Selected, Site};
 

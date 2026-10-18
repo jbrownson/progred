@@ -2,7 +2,7 @@
 //! path there, and the scope that reads that path. Widgets act on their place
 //! through it, without carrying the view or the path themselves.
 
-use super::{Access, Edit, Scope, Session};
+use super::{Edit, Scope, Session};
 use crate::display::widget::view::Root;
 use crate::hover::Hover;
 use gid::{Step, Value};
@@ -70,7 +70,7 @@ impl Site {
     pub(crate) fn open<'s>(&'s self, session: &'s mut Session<'_>) -> SiteEdit<'s> {
         SiteEdit {
             site: self,
-            edit: self.scope.open(Access::of(session)),
+            edit: self.scope.open(session.reborrow()),
         }
     }
 }

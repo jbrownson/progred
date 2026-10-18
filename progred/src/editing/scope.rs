@@ -144,10 +144,10 @@ impl Scope {
             .is_some_and(|location| crate::location::writable(sources, &location))
     }
 
-    pub(crate) fn open<'a>(&'a self, access: Access<'a>) -> Edit<'a> {
+    pub(crate) fn open<'a>(&'a self, session: Session<'a>) -> Edit<'a> {
         Edit {
             scope: self,
-            access,
+            session,
         }
     }
 }
@@ -168,41 +168,25 @@ impl<'data> Read<'_, 'data> {
     }
 }
 
-/// Dispatch-time access. Widgets cannot extract the root editor from this token.
-pub(crate) struct Access<'a> {
-    session: Session<'a>,
-}
-
-impl<'a> Access<'a> {
-    pub(crate) fn new(session: Session<'a>) -> Self {
-        Self { session }
-    }
-
-    /// Access through a session already lent, as a gesture has one.
-    pub(crate) fn of(session: &'a mut Session<'_>) -> Self {
-        Self::new(session.reborrow())
-    }
-}
-
-/// A borrowed interface, not an editor copy or an allocated callback dictionary.
+/// Edits read and written through a scope, acting on the session a dispatch
+/// lends.
 pub(crate) struct Edit<'a> {
     scope: &'a Scope,
-    access: Access<'a>,
+    session: Session<'a>,
 }
 
 impl Edit<'_> {
     /// The value at `path`, read through this scope.
     pub(crate) fn value(&self, path: &[Step]) -> Option<&Value> {
-        self.scope.read(&self.access.session.sources(), path)
+        self.scope.read(&self.session.sources(), path)
     }
 
     pub(crate) fn selection(&self) -> Option<&selection::Selection> {
-        self.access.session.model.selection.as_ref()
+        self.session.model.selection.as_ref()
     }
 
     pub(crate) fn annotation(&self, root: &Root, path: &[Step]) -> Option<&Value> {
-        self.access
-            .session
+        self.session
             .model
             .workspace
             .view(root)?
@@ -211,7 +195,7 @@ impl Edit<'_> {
     }
 
     pub(crate) fn replace(&mut self, path: &[Step], value: Value) -> bool {
-        let session = &mut self.access.session;
+        let session = &mut self.session;
         let Some(source) = self.scope.location(path) else {
             return false;
         };
@@ -227,7 +211,7 @@ impl Edit<'_> {
     }
 
     pub(crate) fn select(&mut self, root: &Root, path: &[Step]) {
-        let session = &mut self.access.session;
+        let session = &mut self.session;
         if session.model.selection.as_ref().is_some_and(|selection| {
             selection.root() == root
                 && selection.path() == path
@@ -244,7 +228,7 @@ impl Edit<'_> {
     }
 
     pub(crate) fn select_payload(&mut self, root: &Root, path: Path, payload: Value) {
-        let session = &mut self.access.session;
+        let session = &mut self.session;
         let selection = selection::Selection::from_scoped_payload(
             root,
             &session.sources(),
@@ -264,21 +248,19 @@ impl Edit<'_> {
         default: bool,
         closed: Option<bool>,
     ) -> bool {
-        self.access
-            .session
-            .set_collapsed(root, path, default, closed)
+        self.session.set_collapsed(root, path, default, closed)
     }
 
     /// Leaves the value at `path` pending, for the picker to fill.
     pub(crate) fn pend(&mut self, root: &Root, path: Path) {
         let mut pending = selection::pending_value(root, path);
         pending.set_scope(self.scope.clone());
-        self.access.session.model.selection = Some(pending);
+        self.session.model.selection = Some(pending);
     }
 
     pub(crate) fn annotate(&mut self, root: &Root, path: &[Step], value: Value) -> bool {
         // UI state belongs to the displayed occurrence, not the shared source.
-        annotate(&mut self.access.session, root, path, value)
+        annotate(&mut self.session, root, path, value)
     }
 
     pub(crate) fn edit_line(
@@ -288,7 +270,7 @@ impl Edit<'_> {
         line: &crate::display::LineEdit,
         operation: &puri::edit::EditOperation<'_>,
     ) -> bool {
-        let session = &mut self.access.session;
+        let session = &mut self.session;
         if session.model.selection.as_ref().is_none_or(|selection| {
             !selection
                 .scope()
@@ -301,12 +283,8 @@ impl Edit<'_> {
 
     #[cfg(test)]
     pub(crate) fn grap(&mut self, root: Root, path: Path, function: Value, event: Value) -> bool {
-        let function = grap::evaluate(
-            &function,
-            &self.access.session.sources(),
-            grap::DEFAULT_FUEL,
-        )
-        .result;
+        let function =
+            grap::evaluate(&function, &self.session.sources(), grap::DEFAULT_FUEL).result;
         self.grap_runtime(root, path, function, event)
     }
 
@@ -318,7 +296,7 @@ impl Edit<'_> {
         event: Value,
     ) -> bool {
         crate::site::apply_scoped_event(
-            &mut self.access.session,
+            &mut self.session,
             self.scope.clone(),
             root,
             path,

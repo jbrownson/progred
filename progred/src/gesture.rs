@@ -57,7 +57,7 @@ impl EditRun {
             false
         } else {
             self.scope
-                .open(crate::editing::Access::of(session))
+                .open(session.reborrow())
                 .select(&self.root, &self.path);
             true
         }

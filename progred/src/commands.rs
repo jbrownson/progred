@@ -30,9 +30,7 @@ impl Editor {
                 .map(|selection| selection.scope().clone())
                 .unwrap_or_default();
             self.model.selection = None;
-            scope
-                .open(crate::editing::Access::new(self.session()))
-                .select(root, &path);
+            scope.open(self.session()).select(root, &path);
         }
     }
 
@@ -198,14 +196,9 @@ impl Editor {
         if current.value(&self.sources()) == Some(&value) {
             return true;
         }
-        if scope
-            .open(crate::editing::Access::new(self.session()))
-            .replace(&path, value)
-        {
+        if scope.open(self.session()).replace(&path, value) {
             self.model.selection = None;
-            scope
-                .open(crate::editing::Access::new(self.session()))
-                .select(&root, &path);
+            scope.open(self.session()).select(&root, &path);
             true
         } else {
             false
@@ -294,7 +287,7 @@ impl Editor {
             current
                 .scope()
                 .clone()
-                .open(crate::editing::Access::new(self.session()))
+                .open(self.session())
                 .select(&root, &origin);
         } else {
             self.model.selection = Some(current);
