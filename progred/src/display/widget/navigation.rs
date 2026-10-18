@@ -29,13 +29,15 @@ pub(crate) fn selecting(site: crate::editing::Site) -> crate::display::Action {
 }
 
 /// Plain arrival at an occurrence: select it, whatever the direction.
-pub(crate) fn arrival(site: crate::editing::Site) -> Select<crate::Editor> {
+pub(crate) fn arrival<W: crate::display::Host>(site: crate::editing::Site) -> Select<W> {
     let select = selecting(site);
-    Rc::new(move |editor: &mut crate::Editor, _| select(&mut editor.session()))
+    Rc::new(move |world: &mut W, _| select(&mut world.session()))
 }
 
 /// A native control supplies its entry without introducing child routing.
-pub fn target(child: crate::view::Layout) -> crate::view::Layout {
+pub fn target<W: 'static, H: 'static>(
+    child: crate::display::Layout<W, H>,
+) -> crate::display::Layout<W, H> {
     super::before(
         child,
         Rc::new(|context| {
@@ -46,7 +48,9 @@ pub fn target(child: crate::view::Layout) -> crate::view::Layout {
     )
 }
 
-pub fn nav_group(child: crate::view::Layout) -> crate::view::Layout {
+pub fn nav_group<W: 'static, H: 'static>(
+    child: crate::display::Layout<W, H>,
+) -> crate::display::Layout<W, H> {
     super::around(
         child,
         Rc::new(move |context| {

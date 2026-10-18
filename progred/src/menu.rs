@@ -417,7 +417,7 @@ mod view {
         active: bool,
         scale: f64,
     ) -> Measured<HoverPass<Editor>> {
-        let text = crate::render::text(tcx, label, style);
+        let text = crate::placed::text(tcx, label, style);
         let vertical = ((bar_height(scale) - text.extent.height()) / 2.0).max(0.0);
         let content = measured::pad(
             Insets::new(10.0 * scale, vertical, 10.0 * scale, vertical),
@@ -510,8 +510,8 @@ mod view {
                 .map(|(_, name)| name.as_str()),
             _ => None,
         };
-        let label = crate::render::text(tcx, name.unwrap_or(spec.label), style);
-        let shortcut = crate::render::text(
+        let label = crate::placed::text(tcx, name.unwrap_or(spec.label), style);
+        let shortcut = crate::placed::text(
             tcx,
             &spec
                 .shortcut
@@ -689,7 +689,7 @@ mod view {
         let heading_width = x;
         // How finished Progred is, at the bar's far end: a note, not a menu.
         let stage = {
-            let text = crate::render::text(tcx, &crate::editor::stage(), &styles.dim);
+            let text = crate::placed::text(tcx, &crate::editor::stage(), &styles.dim);
             let vertical = ((bar_height(description.scale) - text.extent.height()) / 2.0).max(0.0);
             let horizontal = 10.0 * description.scale;
             measured::pad(

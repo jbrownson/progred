@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 pub mod builder;
 mod conject;
 pub use conject::Conject;
-mod host;
+pub mod host;
 pub use host::Host;
 mod measure;
 #[cfg(all(test, feature = "layout-profile"))]
@@ -530,14 +530,11 @@ pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, on_click, pickable, pickable_runtime};
 
 /// `child`, which hovers `site` and selects it when activated.
-pub(crate) fn activatable<
-    World: Host,
-    Hover: Clone + PartialEq + From<crate::hover::Hover> + 'static,
->(
-    child: Layout<World, Hover>,
+pub(crate) fn activatable<W: Host>(
+    child: host::Layout<W>,
     site: &crate::editing::Site,
-) -> Layout<World, Hover> {
-    let target = Hover::from(site.hover());
+) -> host::Layout<W> {
+    let target = W::Hover::from(site.hover());
     let select = widget::navigation::selecting(site.clone());
     on_hover(on_activate(child, target.clone(), select), target)
 }
@@ -732,23 +729,23 @@ pub struct RecordField<World, Hover> {
 }
 
 #[cfg(test)]
-pub fn record<'a>(
+pub fn record<'a, W: Host>(
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     order: impl FnMut(&CellId, &CellId) -> Ordering,
-    field: impl FnMut(CellId, &'a Value) -> RecordField<crate::Editor, crate::frame::Hovered>,
-) -> crate::view::Layout {
+    field: impl FnMut(CellId, &'a Value) -> RecordField<W, W::Hover>,
+) -> host::Layout<W> {
     record_with(fields, order, field, [])
 }
 
 /// The record layout with explicit trailing fields, such as the one
 /// pending field currently being authored. They participate in both
 /// responsive forms but not in sorting the stored fields.
-pub fn record_with<T>(
+pub fn record_with<W: Host, T>(
     fields: impl IntoIterator<Item = (CellId, T)>,
     order: impl FnMut(&CellId, &CellId) -> Ordering,
-    field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
-    trailing: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-) -> crate::view::Layout {
+    field: impl FnMut(CellId, T) -> RecordField<W, W::Hover>,
+    trailing: impl IntoIterator<Item = RecordField<W, W::Hover>>,
+) -> host::Layout<W> {
     record_heads(
         ordered_record_fields(fields, order, field)
             .chain(trailing)
@@ -758,12 +755,12 @@ pub fn record_with<T>(
 }
 
 /// Ordered fields without a whole-value stop; the enclosing form owns it.
-pub fn record_fragment_with<T>(
+pub fn record_fragment_with<W: Host, T>(
     fields: impl IntoIterator<Item = (CellId, T)>,
     order: impl FnMut(&CellId, &CellId) -> Ordering,
-    field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
-    trailing: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-) -> crate::view::Layout {
+    field: impl FnMut(CellId, T) -> RecordField<W, W::Hover>,
+    trailing: impl IntoIterator<Item = RecordField<W, W::Hover>>,
+) -> host::Layout<W> {
     record_fragment(
         ordered_record_fields(fields, order, field)
             .chain(trailing)
@@ -772,11 +769,11 @@ pub fn record_fragment_with<T>(
     )
 }
 
-fn ordered_record_fields<T>(
+fn ordered_record_fields<W, H, T>(
     fields: impl IntoIterator<Item = (CellId, T)>,
     mut order: impl FnMut(&CellId, &CellId) -> Ordering,
-    mut field: impl FnMut(CellId, T) -> RecordField<crate::Editor, crate::frame::Hovered>,
-) -> impl Iterator<Item = RecordField<crate::Editor, crate::frame::Hovered>> {
+    mut field: impl FnMut(CellId, T) -> RecordField<W, H>,
+) -> impl Iterator<Item = RecordField<W, H>> {
     let mut fields = fields.into_iter().collect::<Vec<_>>();
     fields.sort_by(|(left, _), (right, _)| order(left, right));
     fields
@@ -784,9 +781,7 @@ fn ordered_record_fields<T>(
         .map(move |(key, value)| field(key, value))
 }
 
-fn record_colon(
-    field: RecordField<crate::Editor, crate::frame::Hovered>,
-) -> RecordField<crate::Editor, crate::frame::Hovered> {
+fn record_colon<W: 'static, H: 'static>(field: RecordField<W, H>) -> RecordField<W, H> {
     RecordField {
         label: row(0.0, [field.label, dim(":")]),
         value: field.value,
@@ -795,10 +790,10 @@ fn record_colon(
 
 /// Shared record geometry. Heads already include punctuation and its
 /// interaction target; trailing rows can be incomplete field editors.
-pub fn record_heads(
-    fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-    trailing: impl IntoIterator<Item = crate::view::Layout>,
-) -> crate::view::Layout {
+pub fn record_heads<W: Host>(
+    fields: impl IntoIterator<Item = RecordField<W, W::Hover>>,
+    trailing: impl IntoIterator<Item = host::Layout<W>>,
+) -> host::Layout<W> {
     let [horizontal, vertical] = record_forms(fields, trailing);
     selectable_bracket(
         Delim::Brace,
@@ -808,17 +803,17 @@ pub fn record_heads(
 
 /// A record-shaped fragment of a larger projection. Its fields compose their
 /// navigation, but the enclosing projection owns the whole-value stop.
-pub fn record_fragment(
-    fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-    trailing: impl IntoIterator<Item = crate::view::Layout>,
-) -> crate::view::Layout {
+pub fn record_fragment<W: Host>(
+    fields: impl IntoIterator<Item = RecordField<W, W::Hover>>,
+    trailing: impl IntoIterator<Item = host::Layout<W>>,
+) -> host::Layout<W> {
     selectable_bracket(Delim::Brace, alternatives(record_forms(fields, trailing)))
 }
 
-fn record_forms(
-    fields: impl IntoIterator<Item = RecordField<crate::Editor, crate::frame::Hovered>>,
-    trailing: impl IntoIterator<Item = crate::view::Layout>,
-) -> [crate::view::Layout; 2] {
+fn record_forms<W: 'static, H: Clone + 'static>(
+    fields: impl IntoIterator<Item = RecordField<W, H>>,
+    trailing: impl IntoIterator<Item = Layout<W, H>>,
+) -> [Layout<W, H>; 2] {
     let fields = fields
         .into_iter()
         .map(|field| RecordField {

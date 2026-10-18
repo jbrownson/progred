@@ -64,7 +64,7 @@ impl FrameState {
 }
 
 impl Dispatch {
-    pub(crate) fn geometry(&self, scale: f64) -> navigate::Geometry<'_> {
+    pub(crate) fn geometry(&self, scale: f64) -> navigate::Geometry<'_, Editor> {
         navigate::Geometry {
             descends: &self.descends,
             view_regions: &self.view_regions,
@@ -77,11 +77,20 @@ impl Dispatch {
         Rc::get_mut(&mut self.handler).expect("no dispatch is in progress")
     }
 
-    pub(crate) fn context(&self, hover: Option<Hovered>) -> placed::DispatchContext<Editor> {
+    /// The context a dispatch to `editor` runs in, `hover` resting under its
+    /// pointer.
+    pub(crate) fn context(
+        &self,
+        editor: &Editor,
+        hover: Option<Hovered>,
+    ) -> placed::DispatchContext<Editor> {
         placed::DispatchContext {
             handler: self.handler.clone(),
             descends: self.descends.clone(),
             view_regions: self.view_regions.clone(),
+            pointer: editor.pointer,
+            modifiers: editor.modifiers,
+            pressed: editor.pressed,
             ..placed::DispatchContext::new(self.pointer_root.clone(), hover)
         }
     }
@@ -103,6 +112,23 @@ pub(crate) enum Hovered {
 impl From<hover::Hover> for Hovered {
     fn from(hover: hover::Hover) -> Self {
         Self::Tree(hover)
+    }
+}
+
+/// The editor hosts the toolkit: its pointer rests on what the frame draws,
+/// trees and chrome alike, and its dispatches act through its session.
+impl crate::display::Host for Editor {
+    type Hover = Hovered;
+
+    fn tree(hover: &Hovered) -> Option<&hover::Hover> {
+        match hover {
+            Hovered::Tree(hover) => Some(hover),
+            _ => None,
+        }
+    }
+
+    fn session(&mut self) -> crate::editing::Session<'_> {
+        Editor::session(self)
     }
 }
 
@@ -470,7 +496,10 @@ impl EditorRunner {
             && self.frame.notified_hover != self.frame.hover_location()
         {
             self.frame.notified_hover = self.frame.hover_location();
-            let mut input = self.frame.dispatch.context(self.frame.hover.clone());
+            let mut input = self
+                .frame
+                .dispatch
+                .context(&self.editor, self.frame.hover.clone());
             let handled = self
                 .frame
                 .dispatch

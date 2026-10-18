@@ -3,7 +3,7 @@
 use crate::display::widget::HoverPass;
 
 use super::{Context, Select, extent, leaf};
-use crate::display::{Env, Layout, TextFamily};
+use crate::display::{Env, Host, Layout, TextFamily};
 use gid::Value;
 use measured::Measured;
 use puri::edit::{LineEditDescription, LineEditPointerDown};
@@ -25,16 +25,16 @@ pub struct LineEdit {
 
 pub type LineUpdate = Rc<dyn Fn(&dyn Env, &str, Option<&Value>) -> Option<Value>>;
 
-pub fn layout(line: LineEdit) -> crate::view::Layout {
+pub fn layout<W: Host>(line: LineEdit) -> crate::display::host::Layout<W> {
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::LineEdit);
     Layout::widget(Rc::new(move |context| view(context, line.clone())))
 }
 
-pub fn view(
-    context: &mut Context<'_, '_, crate::Editor, crate::frame::Hovered>,
+pub fn view<W: Host>(
+    context: &mut Context<'_, '_, W, W::Hover>,
     line: LineEdit,
-) -> Measured<HoverPass<crate::Editor, crate::frame::Hovered>> {
+) -> Measured<HoverPass<W, W::Hover>> {
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::LineEdit);
     let toolkit = context.toolkit;
@@ -74,13 +74,9 @@ pub fn view(
             let site = site.clone();
             let line = line.clone();
             leaf(extent(widget.metrics()), move |output, placement| {
-                output.line_edit(
-                    widget,
-                    placement,
-                    move |world: &mut crate::Editor, operation| {
-                        site.open(&mut world.session()).edit_line(&line, operation)
-                    },
-                );
+                output.line_edit(widget, placement, move |world: &mut W, operation| {
+                    site.open(&mut world.session()).edit_line(&line, operation)
+                });
             })
         }
         None => {
@@ -109,7 +105,7 @@ pub fn view(
     if writable {
         let nav_site = site.clone();
         let nav_line = line.clone();
-        let navigation: Select<crate::Editor> = Rc::new(move |world, direction| {
+        let navigation: Select<W> = Rc::new(move |world, direction| {
             let mut session = world.session();
             let mut edit = nav_site.open(&mut session);
             edit.select();
@@ -130,7 +126,7 @@ pub fn view(
         let stop = path.clone();
         let presentation = context.toolkit.styles().line_presentation(&line);
         let scale = context.toolkit.styles().scale as f32;
-        let target = crate::frame::Hovered::Tree(site.hover());
+        let target = W::Hover::from(site.hover());
         crate::display::widget::before_place(content, move |placement: Placement, output| {
             output.navigation_stop(stop.clone(), selected);
             // Arriving from the left or right places the caret at that edge.

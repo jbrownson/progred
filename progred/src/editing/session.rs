@@ -101,12 +101,6 @@ impl Session<'_> {
     }
 }
 
-impl crate::display::Host for crate::Editor {
-    fn session(&mut self) -> Session<'_> {
-        crate::Editor::session(self)
-    }
-}
-
 impl crate::Editor {
     /// The editor's capabilities for one dispatch.
     pub(crate) fn session(&mut self) -> Session<'_> {

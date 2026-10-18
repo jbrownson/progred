@@ -1,7 +1,6 @@
 //! Completion interaction is a native widget; callers supply offers and own state.
 
 use crate::display::widget::{HoverContext, HoverPass};
-use crate::frame::Hovered;
 use crate::hover::Hover;
 
 use super::frame::Probe;
@@ -59,14 +58,14 @@ pub fn placement(field: Placement, extent: Extent, scale: f64) -> Option<Placeme
 /// A card listing `entries`, `state.choice` chosen. Each row claims its index
 /// among them as [`Hover::Entry`], so the caller retains the same entries as
 /// the frame's offers for the index to name.
-pub fn card<C: 'static>(
+pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
     entries: &[Entry<C>],
     state: State,
     current_scroll: impl Fn(&mut C) -> Option<f64> + 'static,
     set_view: impl Fn(&mut C, State) + 'static,
-) -> Measured<HoverPass<C, Hovered>> {
+) -> Measured<HoverPass<C, H>> {
     let State { choice, scroll } = state;
     let set_view = move |world: &mut C, scroll, choice| set_view(world, State { scroll, choice });
     let scale = styles.scale;
@@ -91,13 +90,7 @@ pub fn card<C: 'static>(
         .into_iter()
         .zip(entries)
         .enumerate()
-        .map(|(index, (row, entry))| {
-            (
-                row,
-                Hovered::Tree(Hover::Entry(index)),
-                entry.activate.clone(),
-            )
-        })
+        .map(|(index, (row, entry))| (row, H::from(Hover::Entry(index)), entry.activate.clone()))
         .collect::<Vec<_>>();
     let count = items.len();
     let choice = choice.min(count.saturating_sub(1));
@@ -169,7 +162,7 @@ pub fn card<C: 'static>(
         let card = pad(Insets::uniform(inset), viewport);
         let card = crate::display::widget::before_place(
             card,
-            move |_, output: &mut HoverContext<'_, C, Hovered>| {
+            move |_, output: &mut HoverContext<'_, C, H>| {
                 let command = output.input.command_modifier;
                 output.handler().on_key(move |world, event| {
                     if event.state.is_down() {

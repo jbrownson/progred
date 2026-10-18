@@ -1,6 +1,5 @@
 use super::*;
 use crate::display::widget::recorded::Drawing;
-use crate::frame::Hovered;
 use crate::hover::SourceTrace;
 use crate::library::Libraries;
 use crate::location::Location;
@@ -135,7 +134,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
                 Step::Key(grap::vocabulary::BODY),
             ]),
         );
-        let Some(Hovered::Tree(hover)) = drawing.target_at(Point::new(5.0, 5.0)) else {
+        let Some(hover) = drawing.target_at(Point::new(5.0, 5.0)) else {
             panic!("drawing should have a source");
         };
         assert_eq!(

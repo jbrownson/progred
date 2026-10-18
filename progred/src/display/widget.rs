@@ -1,7 +1,7 @@
 //! Native widget continuations and their editor-facing inputs/outputs.
 //! Layout measures and places these without interpreting a widget description.
 
-use crate::display::Layout;
+use crate::display::{Host, Layout};
 #[cfg(test)]
 pub use frame::place;
 #[cfg(test)]
@@ -29,6 +29,7 @@ pub mod list;
 pub mod navigation;
 pub mod offers;
 pub mod picker;
+pub mod placed;
 pub mod popover;
 pub mod project;
 pub mod recorded;
@@ -180,21 +181,17 @@ pub fn ground<World: 'static, Hover: 'static>(
     )
 }
 
-pub fn selectable(
-    context: &Context<'_, '_, crate::Editor, crate::frame::Hovered>,
-) -> impl FnOnce(
-    Measured<HoverPass<crate::Editor, crate::frame::Hovered>>,
-) -> Measured<HoverPass<crate::Editor, crate::frame::Hovered>>
-+ 'static {
+pub fn selectable<W: Host>(
+    context: &Context<'_, '_, W, W::Hover>,
+) -> impl FnOnce(Measured<HoverPass<W, W::Hover>>) -> Measured<HoverPass<W, W::Hover>> + 'static {
     let site = context.site();
-    let target = crate::frame::Hovered::Tree(site.hover());
+    let target = W::Hover::from(site.hover());
     let select = navigation::selecting(site);
     let value = context.value.cloned();
     move |child| {
         crate::display::widget::before_place(
             child,
-            move |placement,
-                  output: &mut HoverContext<'_, crate::Editor, crate::frame::Hovered>| {
+            move |placement, output: &mut HoverContext<'_, W, W::Hover>| {
                 if !placement.clipped_out() {
                     let command = output.input.command_modifier;
                     output.claim(Probe::retaining(placement, target.clone()));
@@ -220,9 +217,7 @@ pub fn selectable(
     }
 }
 
-pub fn selectable_widget(
-    widget: Widget<crate::Editor, crate::frame::Hovered>,
-) -> Widget<crate::Editor, crate::frame::Hovered> {
+pub fn selectable_widget<W: Host>(widget: Widget<W, W::Hover>) -> Widget<W, W::Hover> {
     Rc::new(move |context| {
         let decorate = selectable(context);
         decorate(widget(context))

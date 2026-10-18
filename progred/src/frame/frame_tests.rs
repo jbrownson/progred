@@ -850,7 +850,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
             editor.model.workspace.document_root(),
             path.clone(),
         ));
-        dispatch.geometry(1.0).reveal_selection(editor);
+        dispatch.geometry(1.0).reveal_selection(&mut editor.model);
         FrameDisposition::Remint
     });
     assert_eq!(projected.replace(0), 41);

@@ -4,9 +4,10 @@
 //! links them to their source on Cmd+click and hover, and highlights the
 //! selected and hovered sources.
 
-use crate::frame::Hovered;
+use super::HoverPass;
+use super::placed::leaf;
+use crate::display::Host;
 use crate::hover::{Hover, SourceCalls, SourceTrace};
-use crate::placed::{HoverPass, leaf};
 use crate::sources::Sources;
 use gid::Step;
 use kurbo::{Affine, Point, Rect, Shape as _};
@@ -64,18 +65,22 @@ impl Recorder {
 /// A leaf `extent` logical units big that `record` draws into. `program`
 /// locates the program below this occurrence, so the calls a fill traces back
 /// to inside it name the document.
-pub fn recorded(extent: Extent, program: Vec<Step>, record: Record) -> crate::view::Layout {
+pub fn recorded<W: Host>(
+    extent: Extent,
+    program: Vec<Step>,
+    record: Record,
+) -> crate::display::host::Layout<W> {
     crate::display::Layout::widget(Rc::new(move |context| {
         recorded_leaf(context.toolkit, extent, &program, record.clone())
     }))
 }
 
-fn recorded_leaf(
+fn recorded_leaf<W: Host>(
     toolkit: &dyn crate::display::Toolkit,
     extent: Extent,
     program: &[Step],
     record: Record,
-) -> Measured<HoverPass<crate::Editor>> {
+) -> Measured<HoverPass<W, W::Hover>> {
     let Extent {
         width,
         ascent,
@@ -110,7 +115,7 @@ fn recorded_leaf(
             Affine::translate((placement.rect.x0, placement.rect.y0)) * Affine::scale(scale);
         let probe_drawing = drawing.clone();
         builder.claim_dynamic(placement, move |point| {
-            probe_drawing.target_at(point, outer)
+            probe_drawing.target_at(point, outer).map(W::Hover::from)
         });
         let command = builder.command_modifier();
         crate::display::widget::source_link::handlers(builder, placement, scale, command);
@@ -171,7 +176,7 @@ impl Drawing {
         self.0.hits.len()
     }
 
-    pub(crate) fn target_at(&self, point: Point) -> Option<Hovered> {
+    pub(crate) fn target_at(&self, point: Point) -> Option<Hover> {
         self.0.target_at(point, Affine::IDENTITY)
     }
 
@@ -258,17 +263,15 @@ impl Hit {
 }
 
 impl Recorded {
-    fn target_at(&self, point: Point, outer: Affine) -> Option<Hovered> {
+    fn target_at(&self, point: Point, outer: Affine) -> Option<Hover> {
         let point = outer.inverse() * point;
         self.hits
             .iter()
             .rev()
             .find(|hit| hit.contains(point))
-            .map(|hit| {
-                Hovered::Tree(match &hit.source {
-                    HitSource::Calls(calls) => Hover::Calls(calls.clone()),
-                    HitSource::Exact(source) => Hover::Source(source.clone()),
-                })
+            .map(|hit| match &hit.source {
+                HitSource::Calls(calls) => Hover::Calls(calls.clone()),
+                HitSource::Exact(source) => Hover::Source(source.clone()),
             })
     }
 

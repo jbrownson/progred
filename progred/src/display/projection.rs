@@ -22,11 +22,11 @@ pub fn hug<C: 'static, H: Clone + 'static>(
 }
 
 /// A selectable whole around either head/body presentation.
-pub fn group_hug(
-    head: crate::view::Layout,
-    child: crate::view::Layout,
+pub fn group_hug<C: 'static, H: Clone + 'static>(
+    head: Layout<C, H>,
+    child: Layout<C, H>,
     gap: f64,
     tab: f64,
-) -> crate::view::Layout {
+) -> Layout<C, H> {
     group(hug(head, child, gap, tab))
 }

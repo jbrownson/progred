@@ -24,7 +24,7 @@ fn recorded_hits_use_paint_order_and_the_current_placement() {
 
     assert_eq!(
         drawing.target_at(Point::new(25.0, 35.0), Affine::translate((20.0, 30.0)),),
-        Some(Hovered::Tree(Hover::Source(front))),
+        Some(Hover::Source(front)),
     );
 }
 

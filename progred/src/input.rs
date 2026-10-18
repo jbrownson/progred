@@ -134,7 +134,7 @@ fn navigate_frame(
         .dispatch(editor, Event::Navigate(direction), input)
         .handled();
     if handled {
-        input.geometry(scale).reveal_selection(editor);
+        input.geometry(scale).reveal_selection(&mut editor.model);
     }
     handled
 }
@@ -225,7 +225,7 @@ impl EditorRunner {
             dispatch.handler.dispatch(
                 editor,
                 Event::ModifiersChanged(&modifiers),
-                &mut dispatch.context(hover.cloned()),
+                &mut dispatch.context(editor, hover.cloned()),
             );
             frame_disposition(false, true)
         });
@@ -254,7 +254,7 @@ impl EditorRunner {
                     dispatch.handler.dispatch_key_with(
                         editor,
                         event,
-                        &mut dispatch.context(hover.cloned()),
+                        &mut dispatch.context(editor, hover.cloned()),
                     ),
                     false,
                 )
@@ -270,7 +270,7 @@ impl EditorRunner {
                         .dispatch(
                             editor,
                             Event::Ime(event),
-                            &mut dispatch.context(hover.cloned()),
+                            &mut dispatch.context(editor, hover.cloned()),
                         )
                         .handled(),
                     false,
@@ -358,7 +358,7 @@ impl EditorRunner {
                             editor.pointer = window_pointer(editor.cursor, viewport);
                             editor.pressed = true;
                             editor.finish_gesture();
-                            let mut pointer = dispatch.context(hover.cloned());
+                            let mut pointer = dispatch.context(editor, hover.cloned());
                             let handled = dispatch.handler.dispatch_pointer_down_with(
                                 editor,
                                 button,
@@ -382,7 +382,7 @@ impl EditorRunner {
                                         .dispatch(
                                             editor,
                                             Event::PointerUp(button),
-                                            &mut dispatch.context(hover.cloned()),
+                                            &mut dispatch.context(editor, hover.cloned()),
                                         )
                                         .handled(),
                                 true,
@@ -400,7 +400,7 @@ impl EditorRunner {
                                 .dispatch(
                                     editor,
                                     Event::PointerCancel(pointer),
-                                    &mut dispatch.context(hover.cloned()),
+                                    &mut dispatch.context(editor, hover.cloned()),
                                 )
                                 .handled();
                             let resize_cancelled = editor.model.workspace.cancel_resize();
@@ -420,7 +420,7 @@ impl EditorRunner {
             pending.scale,
             pending.viewport,
             |editor, dispatch, hover| {
-                let mut input = dispatch.context(hover.cloned());
+                let mut input = dispatch.context(editor, hover.cloned());
                 frame_disposition(
                     dispatch
                         .handler
@@ -447,7 +447,7 @@ impl EditorRunner {
                         .dispatch(
                             editor,
                             Event::Gesture(Cow::Borrowed(&pending.events)),
-                            &mut dispatch.context(hover.cloned()),
+                            &mut dispatch.context(editor, hover.cloned()),
                         )
                         .handled(),
                     false,
@@ -470,7 +470,7 @@ impl EditorRunner {
             pending.viewport,
             |editor, dispatch, hover| {
                 let event = &pending.event;
-                let mut input = dispatch.context(hover.cloned());
+                let mut input = dispatch.context(editor, hover.cloned());
                 let samples: Vec<_> = puri::interact::pointer_samples(event)
                     .map(|sample| Point::new(sample.position.x, sample.position.y))
                     .collect();

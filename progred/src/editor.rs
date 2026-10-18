@@ -558,7 +558,11 @@ impl Editor {
         }
     }
 
-    pub(crate) fn choose_menu(&mut self, command: Command, geometry: navigate::Geometry<'_>) {
+    pub(crate) fn choose_menu(
+        &mut self,
+        command: Command,
+        geometry: navigate::Geometry<'_, Editor>,
+    ) {
         self.menu.close();
         match command {
             Command::Doc(command) => self.run_doc_command(command, geometry),
@@ -575,7 +579,7 @@ impl Editor {
     pub(crate) fn run_doc_command(
         &mut self,
         command: DocCommand,
-        geometry: navigate::Geometry<'_>,
+        geometry: navigate::Geometry<'_, Editor>,
     ) {
         match command {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -650,7 +654,7 @@ impl Editor {
     pub(crate) fn menu_key(
         &mut self,
         event: &KeyboardEvent,
-        geometry: navigate::Geometry<'_>,
+        geometry: navigate::Geometry<'_, Editor>,
     ) -> bool {
         let availability = self.menu_availability();
         if let Some(command) = menu::shortcut(event, self.command_modifier)
@@ -676,10 +680,10 @@ impl Editor {
 
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
-    pub(crate) fn step_history(&mut self, back: bool, geometry: navigate::Geometry<'_>) {
+    pub(crate) fn step_history(&mut self, back: bool, geometry: navigate::Geometry<'_, Editor>) {
         self.finish_gesture();
         if self.model.step_history(back) {
-            geometry.reveal_selection(self);
+            geometry.reveal_selection(&mut self.model);
             self.refresh_title();
         }
     }

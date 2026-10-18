@@ -3,6 +3,7 @@ use crate::display::Face;
 use crate::display::test_support::{ResolveForDispatch, painted};
 use crate::display::widget::frame::{Attribution, DispatchContext, HoverInput, HoverOutput, place};
 use crate::display::widget::style::{Theme, editor, primary_highlight};
+use crate::frame::Hovered;
 use gid::Value;
 use peniko::Brush;
 use puri::Rect;
@@ -63,7 +64,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
     }];
     let mut fonts = Fonts::new();
     let placed = {
-        let layout = card::<usize>(
+        let layout = card::<usize, Hovered>(
             &mut fonts.text(1.0),
             &editor(Theme::Light.palette(), 1.0),
             &entries,
@@ -104,7 +105,7 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
         for above in [false, true] {
             let y = if above { 450.0 } else { 30.0 } * scale;
             let field = Rect::new(50.0 * scale, y, 150.0 * scale, y + 20.0 * scale);
-            let layout = card::<()>(
+            let layout = card::<(), Hovered>(
                 &mut tcx,
                 &styles,
                 &entries,
@@ -173,7 +174,7 @@ fn completion_details_share_the_cards_right_edge() {
                 .metrics()
                 .width
         });
-        let layout = card::<()>(
+        let layout = card::<(), Hovered>(
             &mut tcx,
             &styles,
             &entries,
@@ -220,7 +221,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
     ];
     let place_card = |pointer| {
         let mut fonts = Fonts::new();
-        let layout = card::<()>(
+        let layout = card::<(), Hovered>(
             &mut fonts.text(1.0),
             &editor(Theme::Light.palette(), 1.0),
             &entries,
@@ -274,7 +275,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     let mut fonts = Fonts::new();
     let mut tcx = fonts.text(1.0);
     let mut frame = |(scroll, choice), pointer| {
-        let layout = card::<(f64, usize)>(
+        let layout = card::<(f64, usize), Hovered>(
             &mut tcx,
             &styles,
             &entries,
@@ -419,7 +420,7 @@ fn a_card_placed_shorter_scrolls_what_it_cannot_show() {
     let mut tcx = fonts.text(1.0);
     let height = 60.0;
     let mut hovered = |(scroll, choice), pointer: Option<Point>| {
-        let layout = card::<(f64, usize)>(
+        let layout = card::<(f64, usize), Hovered>(
             &mut tcx,
             &styles,
             &entries,
@@ -490,7 +491,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
     let mut fonts = Fonts::new();
     let mut tcx = fonts.text(1.0);
     let mut frame = |world: &World, clip: Option<Rect>, pointer| {
-        let layout = card::<World>(
+        let layout = card::<World, Hovered>(
             &mut tcx,
             &styles,
             &entries,
@@ -647,7 +648,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     let mut fonts = Fonts::new();
     let mut tcx = fonts.text(1.0);
     let mut frame = |world: &World, entries: &[Entry<World>], pointer| {
-        let layout = card::<World>(
+        let layout = card::<World, Hovered>(
             &mut tcx,
             &styles,
             entries,

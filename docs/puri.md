@@ -55,7 +55,7 @@ The package boundaries are:
 | [uig](../ui/uig/src/lib.rs) | Shared geometry vocabulary (`Placement`), re-exported by Puri |
 | [puri-vello](../ui/puri-vello/src/lib.rs) | Native Vello canvas backend |
 | [puri-web](../ui/puri-web/src/lib.rs) | Browser Canvas2D fallback (WebGPU uses puri-vello) |
-| [Progred placement](../progred/src/placed.rs) | Editor hover, navigation, popup policy, deferred paint, and dispatch inputs |
+| [Progred placement](../progred/src/display/widget/frame.rs) | Editor hover, navigation, popup policy, deferred paint, and dispatch inputs |
 
 Reusable widgets do not interpret document values or choose domain completion
 vocabulary. Progred and its projection libraries supply those choices. The Puri

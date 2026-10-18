@@ -4,19 +4,19 @@
 
 use crate::display::widget::offers::{Entry, HoleOffers, entry, rank};
 use crate::display::widget::picker::Picker;
-use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face};
+use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face, Host};
 use crate::libraries::{blob, name, text};
 use gid::{Value, new_cell_id};
 use std::rc::Rc;
 
 /// Raw's picker for a hole of `kind`, its brackets making its constructors.
-pub fn picker(kind: CompletionKind) -> Picker {
+pub fn picker<W: Host>(kind: CompletionKind) -> Picker<W> {
     Picker::new(kind, offers()).with_keys(keys(kind))
 }
 
 /// The picker of a document's empty root: Raw's, led by what the libraries
 /// start a document as.
-pub fn start_picker() -> Picker {
+pub fn start_picker<W: Host>() -> Picker<W> {
     Picker::new(CompletionKind::Value, start()).with_keys(keys(CompletionKind::Value))
 }
 
@@ -26,12 +26,12 @@ pub fn start_picker() -> Picker {
 /// text and bytes lead; otherwise a reading that spells the query exactly
 /// comes first, then the constructors the query names, then the other
 /// readings and the text.
-fn offers() -> HoleOffers {
+fn offers<W: Host>() -> HoleOffers<W> {
     Rc::new(entries)
 }
 
 /// What the libraries start a document as, then [`offers`].
-fn start() -> HoleOffers {
+fn start<W: Host>() -> HoleOffers<W> {
     Rc::new(|request| {
         let start = CompletionRequest {
             scope: CompletionScope::Start,
@@ -123,7 +123,7 @@ fn literals(request: &CompletionRequest<'_>) -> (Vec<Completion>, Vec<Completion
     (readings, strings)
 }
 
-fn entries(request: &CompletionRequest<'_>) -> Vec<Entry<crate::Editor>> {
+fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
     let kind = request.kind;
     let query = request.query;
     let trimmed = query.trim();
@@ -140,7 +140,7 @@ fn entries(request: &CompletionRequest<'_>) -> Vec<Entry<crate::Editor>> {
                 matches: Vec::new(),
                 face: Face::Dim,
                 source: None,
-                activate: Rc::new(move |world: &mut crate::Editor| {
+                activate: Rc::new(move |world: &mut W| {
                     if let Some(picking) = world.session().pending() {
                         picking.commit_label(
                             new_cell_id(),

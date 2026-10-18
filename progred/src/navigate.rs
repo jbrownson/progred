@@ -1,5 +1,8 @@
 //! Selection commands, arrow normalization, and revealing selected occurrences.
 
+use crate::display::Host;
+use crate::display::widget::frame::{DispatchContext, ViewRegion};
+use crate::model::Model;
 use crate::selection::Selection;
 use crate::workspace::{Root, Target};
 use gid::{Path, Step};
@@ -22,14 +25,21 @@ pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
 pub use crate::display::widget::navigation::Landmark as Descend;
 
 /// Borrowed geometry from the installed frame, used by explicit navigation actions.
-#[derive(Clone, Copy)]
-pub(crate) struct Geometry<'a> {
-    pub descends: &'a [Descend<crate::Editor>],
-    pub view_regions: &'a [crate::placed::ViewRegion],
+pub(crate) struct Geometry<'a, W> {
+    pub descends: &'a [Descend<W>],
+    pub view_regions: &'a [ViewRegion],
     pub scale: f64,
 }
 
-impl Default for Geometry<'_> {
+impl<W> Clone for Geometry<'_, W> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<W> Copy for Geometry<'_, W> {}
+
+impl<W> Default for Geometry<'_, W> {
     fn default() -> Self {
         Self {
             descends: &[],
@@ -39,31 +49,42 @@ impl Default for Geometry<'_> {
     }
 }
 
-impl Geometry<'_> {
+impl<W, H> DispatchContext<W, H> {
+    /// The geometry of the frame this dispatch runs in, at `scale`.
+    pub(crate) fn geometry(&self, scale: f64) -> Geometry<'_, W> {
+        Geometry {
+            descends: &self.descends,
+            view_regions: &self.view_regions,
+            scale,
+        }
+    }
+}
+
+impl<W> Geometry<'_, W> {
     /// Missing paths do nothing; new geometry does not retry the request.
-    pub fn reveal_path(self, editor: &mut crate::Editor, root: &Root, path: &[Step]) {
+    pub fn reveal_path(self, model: &mut Model, root: &Root, path: &[Step]) {
         if let Some(target) = self
             .descends
             .iter()
             .find(|target| target.root.as_ref() == Some(root) && target.path.as_ref() == path)
         {
-            self.reveal_rect(editor, root, target.rect);
+            self.reveal_rect(model, root, target.rect);
         }
     }
 
-    pub fn reveal_selection(self, editor: &mut crate::Editor) {
-        if let Some(selection) = &editor.model.selection {
+    pub fn reveal_selection(self, model: &mut Model) {
+        if let Some(selection) = &model.selection {
             let root = selection.root().clone();
             let path = selection.path().to_vec();
-            self.reveal_path(editor, &root, &path);
+            self.reveal_path(model, &root, &path);
         }
     }
 
-    pub fn reveal_rect(self, editor: &mut crate::Editor, root: &Root, rect: Rect) -> bool {
+    pub fn reveal_rect(self, model: &mut Model, root: &Root, rect: Rect) -> bool {
         let Some(region) = self.view_regions.iter().find(|region| &region.root == root) else {
             return false;
         };
-        let Some(view) = editor.model.workspace.view_mut(root) else {
+        let Some(view) = model.workspace.view_mut(root) else {
             return false;
         };
         let before = view.scroll;
@@ -92,16 +113,14 @@ impl Geometry<'_> {
         );
         view.scroll != before
     }
+}
 
-    pub fn arrive(
-        self,
-        editor: &mut crate::Editor,
-        target: &Descend<crate::Editor>,
-        direction: Option<Direction>,
-    ) -> bool {
-        let handled = (target.select)(editor, direction);
+impl<W: Host> Geometry<'_, W> {
+    /// Arrives at `target` as its widget says to, revealing what it selects.
+    pub fn arrive(self, world: &mut W, target: &Descend<W>, direction: Option<Direction>) -> bool {
+        let handled = (target.select)(world, direction);
         if handled {
-            self.reveal_selection(editor);
+            self.reveal_selection(world.session().model);
         }
         handled
     }
@@ -152,7 +171,7 @@ pub fn selection_after_removing<World>(
 /// is supplied separately by the projection's ordinary navigation handlers.
 pub(crate) fn keyboard(
     editor: &mut crate::Editor,
-    geometry: Geometry<'_>,
+    geometry: Geometry<'_, crate::Editor>,
     event: &KeyboardEvent,
 ) -> bool {
     let root = editor
@@ -179,7 +198,7 @@ pub(crate) fn keyboard(
 /// to go, so there Tab clears the selection itself and the next starts over.
 pub(crate) fn tab(
     editor: &mut crate::Editor,
-    geometry: Geometry<'_>,
+    geometry: Geometry<'_, crate::Editor>,
     event: &KeyboardEvent,
 ) -> bool {
     if !event.state.is_down()
@@ -198,45 +217,46 @@ pub(crate) fn tab(
 
 /// Selects the next tab stop after the selection, or with `back` the one
 /// before it, if there is one.
-pub(crate) fn advance(editor: &mut crate::Editor, geometry: Geometry<'_>, back: bool) -> bool {
-    let selection = editor.model.selection.as_ref();
-    let root = selection
-        .map(Selection::root)
-        .unwrap_or_else(|| editor.model.workspace.document_root())
-        .clone();
-    let anchor = selection.and_then(|selection| {
-        geometry
-            .descends
-            .iter()
-            .find(|descend| {
-                descend.root.as_ref() == Some(&root) && descend.path.as_ref() == selection.path()
-            })
-            .map(|descend| descend.rect)
-    });
-    let stops = tab_stops(geometry.descends, &root);
-    let target = match (anchor, back) {
-        (None, false) => stops.first(),
-        (None, true) => stops.last(),
-        (Some(anchor), false) => stops.iter().find(|stop| follows(stop.rect, anchor)),
-        (Some(anchor), true) => stops.iter().rev().find(|stop| follows(anchor, stop.rect)),
-    }
-    .map(|stop| (*stop).clone());
-    target.is_some_and(|stop| geometry.arrive(editor, &stop, None))
+pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: bool) -> bool {
+    let target = {
+        let session = world.session();
+        let selection = session.model.selection.as_ref();
+        let root = selection
+            .map(Selection::root)
+            .unwrap_or_else(|| session.model.workspace.document_root())
+            .clone();
+        let anchor = selection.and_then(|selection| {
+            geometry
+                .descends
+                .iter()
+                .find(|descend| {
+                    descend.root.as_ref() == Some(&root)
+                        && descend.path.as_ref() == selection.path()
+                })
+                .map(|descend| descend.rect)
+        });
+        let stops = tab_stops(geometry.descends, &root);
+        match (anchor, back) {
+            (None, false) => stops.first(),
+            (None, true) => stops.last(),
+            (Some(anchor), false) => stops.iter().find(|stop| follows(stop.rect, anchor)),
+            (Some(anchor), true) => stops.iter().rev().find(|stop| follows(anchor, stop.rect)),
+        }
+        .map(|stop| (*stop).clone())
+    };
+    target.is_some_and(|stop| geometry.arrive(world, &stop, None))
 }
 
 /// The view's tab stops, the places to fill in that its widgets marked, in
 /// reading order: line by line, where a line is what overlaps vertically,
 /// then left to right.
-fn tab_stops<'a>(
-    descends: &'a [Descend<crate::Editor>],
-    root: &Root,
-) -> Vec<&'a Descend<crate::Editor>> {
+fn tab_stops<'a, W>(descends: &'a [Descend<W>], root: &Root) -> Vec<&'a Descend<W>> {
     let mut stops: Vec<_> = descends
         .iter()
         .filter(|descend| descend.tab_stop && descend.root.as_ref() == Some(root))
         .collect();
     stops.sort_by(|a, b| a.rect.y0.total_cmp(&b.rect.y0));
-    let mut lines: Vec<(f64, Vec<&Descend<crate::Editor>>)> = Vec::new();
+    let mut lines: Vec<(f64, Vec<&Descend<W>>)> = Vec::new();
     for stop in stops {
         match lines.last_mut() {
             Some((bottom, line)) if stop.rect.y0 < *bottom => {

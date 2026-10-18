@@ -61,7 +61,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
     });
     let root = editor.model.workspace.document_root().clone();
     let other = Root::document();
-    let descends = [
+    let descends: [Descend<()>; 2] = [
         Descend {
             scope: Default::default(),
             root: Some(other.clone()),
@@ -94,9 +94,9 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
         view_regions: &regions,
         scale: 2.0,
     };
-    geometry.reveal_path(&mut editor, &other, &[]);
+    geometry.reveal_path(&mut editor.model, &other, &[]);
     assert_eq!(editor.model.workspace.document.scroll, Vec2::ZERO);
-    geometry.reveal_path(&mut editor, &root, &[]);
+    geometry.reveal_path(&mut editor.model, &root, &[]);
     assert_eq!(
         editor.model.workspace.document.scroll,
         Vec2::new(0.0, 442.0)

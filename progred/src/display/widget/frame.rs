@@ -398,6 +398,12 @@ pub struct DispatchContext<C, Hover> {
     pub root: Option<Root>,
     pub hovered: Option<Hover>,
     pub outside_view: bool,
+    /// The pointer while it's over the window, as of this dispatch.
+    pub pointer: Option<Point>,
+    /// The modifier keys held as of this dispatch.
+    pub modifiers: ui_events::keyboard::Modifiers,
+    /// Whether a button is down, as of this dispatch.
+    pub pressed: bool,
 }
 
 impl<C, Hover> Default for DispatchContext<C, Hover> {
@@ -409,6 +415,9 @@ impl<C, Hover> Default for DispatchContext<C, Hover> {
             root: None,
             hovered: None,
             outside_view: false,
+            pointer: None,
+            modifiers: Default::default(),
+            pressed: false,
         }
     }
 }

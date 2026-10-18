@@ -1,10 +1,15 @@
 use super::*;
-use peniko::Color;
-use puri::draw::{DrawCmd, DrawList};
+use kurbo::{Affine, Point, Rect, Stroke};
+use measured::Extent;
+use peniko::{Brush, Color, ImageData};
+use puri::draw::{Canvas, DrawCmd, DrawList, GlyphRun, Shape};
+use puri::handler::HasHandler;
 use ui_events::ScrollDelta;
 use ui_events::pointer::{
-    PointerButton, PointerId, PointerInfo, PointerState, PointerType, PointerUpdate,
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+    PointerUpdate,
 };
+use uig::Placement;
 
 struct TestCanvas(DrawList);
 

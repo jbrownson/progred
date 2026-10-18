@@ -442,7 +442,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         maximum: kurbo::Vec2::new(0.0, 1_000.0),
         content: None,
     }]);
-    editor.pointer = Some(Point::new(5.0, 5.0));
+    input.pointer = Some(Point::new(5.0, 5.0));
     assert!(
         !handler
             .dispatch(&mut editor, Event::HoverChanged, &mut input)
@@ -454,7 +454,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     );
 
     let modifiers = Modifiers::META | Modifiers::CONTROL;
-    editor.modifiers = modifiers;
+    input.modifiers = modifiers;
     for event in [Event::HoverChanged, Event::ModifiersChanged(&modifiers)] {
         editor
             .model

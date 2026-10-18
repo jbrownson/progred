@@ -1,5 +1,6 @@
 use super::{Annotate, HoverCallback, before};
-use crate::display::Action;
+use crate::display::host::Layout;
+use crate::display::{Action, Host};
 use gid::Value;
 use puri::drag::Drag;
 use puri::handler::HasHandler;
@@ -74,12 +75,12 @@ pub fn targeted<World: 'static, Hover: 'static>(
     })
 }
 
-pub fn on_state_drag(
-    child: crate::view::Layout,
-    target: crate::frame::Hovered,
+pub fn on_state_drag<W: Host>(
+    child: Layout<W>,
+    target: W::Hover,
     on_press: Action,
     handler: StateDragHandler,
-) -> crate::view::Layout {
+) -> Layout<W> {
     before(
         child,
         Rc::new(move |context| {
@@ -94,7 +95,7 @@ pub fn on_state_drag(
                 target.clone(),
                 false,
                 PartialEq::eq,
-                move |world: &mut crate::Editor, point| {
+                move |world: &mut W, point| {
                     let mut session = world.session();
                     if on_press(&mut session) {
                         session.start_gesture(
@@ -118,7 +119,9 @@ pub fn on_state_drag(
 /// While the command modifier is held, what can be dragged here is outlined
 /// as hovering outlines a value, in the drag color: every place the pointer
 /// can drag shows at once.
-pub fn drag_outlined(child: crate::view::Layout) -> crate::view::Layout {
+pub fn drag_outlined<W: 'static, H: 'static>(
+    child: crate::display::Layout<W, H>,
+) -> crate::display::Layout<W, H> {
     super::around(
         child,
         Rc::new(|context| {
@@ -142,7 +145,7 @@ pub fn drag_outlined(child: crate::view::Layout) -> crate::view::Layout {
     )
 }
 
-pub fn on_point(child: crate::view::Layout, handler: PointHandler) -> crate::view::Layout {
+pub fn on_point<W: Host>(child: Layout<W>, handler: PointHandler) -> Layout<W> {
     before(
         child,
         Rc::new(move |context| {

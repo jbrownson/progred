@@ -1,5 +1,5 @@
 use super::{Widget, fill_height, paint, selectable_widget};
-use crate::display::{Delim, Layout};
+use crate::display::{Delim, Host, Layout};
 use measured::Extent;
 use puri::{Affine, delim};
 use std::rc::Rc;
@@ -56,7 +56,10 @@ pub fn bracket<World: 'static, Hover: 'static>(
     )
 }
 
-pub fn selectable_bracket(delim: Delim, child: crate::view::Layout) -> crate::view::Layout {
+pub fn selectable_bracket<W: Host>(
+    delim: Delim,
+    child: crate::display::host::Layout<W>,
+) -> crate::display::host::Layout<W> {
     crate::display::row(
         0.0,
         [

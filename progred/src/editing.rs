@@ -1,8 +1,10 @@
 //! Document-facing widget operations, given the session a dispatch lends.
 
-use crate::{projection, selection, sources::Sources, workspace::Root};
+use crate::{navigate::Geometry, projection, selection, sources::Sources, workspace::Root};
 use gid::{Step, Value};
 use puri::edit::EditCtx;
+use puri::keyboard::CommandModifier;
+use ui_events::keyboard::KeyboardEvent;
 
 mod picking;
 mod scope;
@@ -87,4 +89,92 @@ pub(crate) fn edit_line(
         model.history.record(before);
     }
     handled
+}
+
+/// What Enter would start from `selection`, leaving it as it is: a peer
+/// beside it (a sibling element in a list, with Shift before it, or a new
+/// field on the record holding it, the root taking one on itself), with
+/// the command chord something within it (a field on a record or cell, an
+/// element appended to a list, with Shift at the front), or with no
+/// selection an empty document's root value. Labels author first, then
+/// values; list elements are one-stage value pendings, the projection
+/// minting the position.
+pub(crate) fn enter_pending(
+    session: &Session<'_>,
+    selection: Option<&selection::Selection>,
+    command: CommandModifier,
+    event: &KeyboardEvent,
+) -> Option<selection::Selection> {
+    let sources = session.sources();
+    let shift = event.modifiers.shift();
+    let root = selection
+        .map(|current| current.root().clone())
+        .unwrap_or_else(|| session.model.workspace.document_root().clone());
+    let scope = selection
+        .map(|current| current.scope().clone())
+        .unwrap_or_default();
+    match selection {
+        Some(current) if command.pressed(&event.modifiers) => {
+            selection::pending_insert(&root, &scope.view(sources), current.path(), shift)
+        }
+        Some(current) => {
+            selection::pending_enter(&root, &scope.view(sources), current.path(), shift)
+        }
+        None => selection::pending_root(&root, &sources),
+    }
+    .map(|mut pending| {
+        pending.set_scope(scope);
+        pending.with_origin(selection.map(|current| current.path().to_vec()))
+    })
+}
+
+/// Starts what Enter would author from the selected value in the view
+/// `root`, if it lands in the container drawn at `container`: a field on
+/// that record, or an element of that list or cell. Containers offer this
+/// through [`crate::display::structure::authoring`], children first, so a
+/// projection without it, such as a number's, takes nothing in.
+pub(crate) fn author_in<W>(
+    session: &mut Session<'_>,
+    root: &Root,
+    container: &[Step],
+    command: CommandModifier,
+    geometry: Geometry<'_, W>,
+    event: &KeyboardEvent,
+) -> bool {
+    // What lands in a container is on the way to the selection, or the
+    // value a cell there refers to: a cheap test before the full one.
+    let reached = container
+        .iter()
+        .rposition(|step| !matches!(step, Step::Follow(_)))
+        .map_or(&[][..], |last| &container[..=last]);
+    let Some(current) = session
+        .model
+        .selection
+        .as_ref()
+        .filter(|current| current.root() == root && current.path().starts_with(reached))
+    else {
+        return false;
+    };
+    let sources = session.sources();
+    if current.stage(&sources) != selection::Stage::Edge
+        || current.value_edit().is_some() && !command.pressed(&event.modifiers)
+    {
+        return false;
+    }
+    let Some(pending) = enter_pending(session, Some(current), command, event) else {
+        return false;
+    };
+    let lands = match pending.stage(&sources) {
+        selection::Stage::Label => pending.path(),
+        _ => pending
+            .path()
+            .split_last()
+            .map_or(&[][..], |(_, parent)| parent),
+    };
+    if lands != container {
+        return false;
+    }
+    session.model.selection = Some(pending);
+    geometry.reveal_selection(session.model);
+    true
 }

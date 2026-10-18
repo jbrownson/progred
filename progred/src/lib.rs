@@ -46,7 +46,6 @@ mod perf;
 mod placed;
 mod platform;
 mod projection;
-mod render;
 #[cfg(test)]
 mod sample;
 mod selection;

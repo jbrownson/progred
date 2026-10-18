@@ -1,17 +1,15 @@
 //! Source following shared by generated drawings and ordinary widgets.
-use crate::{
-    Editor,
-    frame::Hovered,
-    hover::{Hover, SourceTrace},
-    sources::Sources,
-};
+use super::frame::DispatchContext;
+use crate::display::Host;
+use crate::hover::{Hover, SourceTrace};
+use crate::sources::Sources;
 use puri::handler::{Event, EventOutcome, HasHandler};
 use puri::{Placement, Point};
 use std::rc::Rc;
 
-pub(crate) fn decoration(
+pub(crate) fn decoration<W: Host>(
     source: SourceTrace,
-) -> crate::display::widget::Decoration<Editor, Hovered> {
+) -> crate::display::widget::Decoration<W, W::Hover> {
     Rc::new(move |context| {
         let source = source.clone();
         let selected = context.toolkit.selected_trace() == Some(&source);
@@ -21,7 +19,7 @@ pub(crate) fn decoration(
         Box::new(move |output, placement| {
             output.claim(puri::hover::Probe::exact(
                 placement,
-                Hovered::Tree(Hover::Source(source.clone())),
+                W::Hover::from(Hover::Source(source.clone())),
             ));
             let command = output.input.command_modifier;
             handlers(output, placement, scale, command);
@@ -47,8 +45,10 @@ pub(crate) fn decoration(
     })
 }
 
-pub(crate) fn handlers(
-    output: &mut impl HasHandler<Editor, Input = crate::placed::DispatchContext<Editor>>,
+/// Cmd+click on a source drawn in `placement` selects where it's drawn, and
+/// holding Cmd over it reveals that.
+pub(crate) fn handlers<W: Host>(
+    output: &mut impl HasHandler<W, Input = DispatchContext<W, W::Hover>>,
     placement: Placement,
     scale: f64,
     command: puri::keyboard::CommandModifier,
@@ -61,16 +61,18 @@ pub(crate) fn handlers(
                     && command.pressed(&event.state.modifiers)
                     && placement
                         .contains(Point::new(event.state.position.x, event.state.position.y))
-                    && match input.hovered() {
-                        Some(Hovered::Tree(hover @ (Hover::Source(_) | Hover::Calls(_)))) => {
-                            let Some(source) =
-                                hover_source(&world.sources(), &input.descends, hover)
-                            else {
-                                return true;
+                    && match input.hovered().and_then(W::tree) {
+                        Some(hover @ (Hover::Source(_) | Hover::Calls(_))) => {
+                            let target = {
+                                let session = world.session();
+                                let sources = session.sources();
+                                let Some(source) = hover_source(&sources, &input.descends, hover)
+                                else {
+                                    return true;
+                                };
+                                source_descend(&sources, &input.descends, &source)
                             };
-                            if let Some(target) =
-                                source_descend(&world.sources(), &input.descends, &source)
-                            {
+                            if let Some(target) = target {
                                 input.geometry(scale).arrive(world, target, None);
                             }
                             true
@@ -80,20 +82,22 @@ pub(crate) fn handlers(
             });
         output.handler().on(move |world, event, input| {
             let handled = matches!(event, Event::HoverChanged | Event::ModifiersChanged(_))
-                && !world.pressed
-                && command.pressed(&world.modifiers)
-                && world.pointer.is_some_and(|point| placement.contains(point))
-                && match input.hovered() {
-                    Some(Hovered::Tree(hover @ (Hover::Source(_) | Hover::Calls(_)))) => {
-                        let target = hover_source(&world.sources(), &input.descends, hover)
-                            .and_then(|source| {
-                                source_descend(&world.sources(), &input.descends, &source)
-                            })
+                && !input.pressed
+                && command.pressed(&input.modifiers)
+                && input.pointer.is_some_and(|point| placement.contains(point))
+                && match input.hovered().and_then(W::tree) {
+                    Some(hover @ (Hover::Source(_) | Hover::Calls(_))) => {
+                        let session = world.session();
+                        let sources = session.sources();
+                        let target = hover_source(&sources, &input.descends, hover)
+                            .and_then(|source| source_descend(&sources, &input.descends, &source))
                             .and_then(|descend| {
                                 descend.root.clone().map(|root| (root, descend.rect))
                             });
                         if let Some((root, rect)) = target {
-                            input.geometry(scale).reveal_rect(world, &root, rect);
+                            input
+                                .geometry(scale)
+                                .reveal_rect(session.model, &root, rect);
                         }
                         true
                     }

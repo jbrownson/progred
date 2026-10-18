@@ -1,5 +1,5 @@
 use crate::display::{
-    Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionText, Face,
+    Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionText, Face, Host,
 };
 use crate::identity::short_id;
 use gid::{CellId, Value};
@@ -33,21 +33,21 @@ pub struct Offers<C> {
 }
 
 /// A hole's list for a query, in the order shown, with the spans that matched.
-pub type HoleOffers = Rc<dyn Fn(&CompletionRequest<'_>) -> Vec<Entry<crate::Editor>>>;
+pub type HoleOffers<W> = Rc<dyn Fn(&CompletionRequest<'_>) -> Vec<Entry<W>>>;
 
 /// A projection's own vocabulary for its holes, and nothing else, narrowed to
 /// the query and ranked by how well it matches.
-pub fn ranked(provider: CompletionProvider) -> HoleOffers {
+pub fn ranked<W: Host>(provider: CompletionProvider) -> HoleOffers<W> {
     Rc::new(move |request| rank(provider(request).unwrap_or_default(), request))
 }
 
 /// `offers` that match the query, best first, named as the document names
 /// them before matching. A new field's label is a cell the record doesn't
 /// have yet.
-pub(crate) fn rank(
+pub(crate) fn rank<W: Host>(
     offers: Vec<Completion>,
     request: &CompletionRequest<'_>,
-) -> Vec<Entry<crate::Editor>> {
+) -> Vec<Entry<W>> {
     crate::filter::rank_with_aliases(
         offers
             .into_iter()
@@ -83,7 +83,7 @@ pub(crate) fn rank(
 
 /// `offer` as listed, if it fits the hole: labels can only be cells, so an
 /// offer advertising another value is not one.
-fn fitting(request: &CompletionRequest<'_>, offer: Completion) -> Option<Entry<crate::Editor>> {
+fn fitting<W: Host>(request: &CompletionRequest<'_>, offer: Completion) -> Option<Entry<W>> {
     (request.kind == CompletionKind::Value
         || offer
             .preview
@@ -93,8 +93,8 @@ fn fitting(request: &CompletionRequest<'_>, offer: Completion) -> Option<Entry<c
 }
 
 /// `offer` as listed, unmatched, choosing it through the session the
-/// dispatching editor lends.
-pub(crate) fn entry(request: &CompletionRequest<'_>, offer: Completion) -> Entry<crate::Editor> {
+/// dispatching world lends.
+pub(crate) fn entry<W: Host>(request: &CompletionRequest<'_>, offer: Completion) -> Entry<W> {
     let activate = offer.activate;
     Entry {
         display: text(request, &offer.display),
@@ -102,7 +102,7 @@ pub(crate) fn entry(request: &CompletionRequest<'_>, offer: Completion) -> Entry
         matches: Vec::new(),
         face: offer.face,
         source: offer.preview.as_ref().and_then(Value::as_cell),
-        activate: Rc::new(move |world: &mut crate::Editor| activate(&mut world.session())),
+        activate: Rc::new(move |world: &mut W| activate(&mut world.session())),
     }
 }
 

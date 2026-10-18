@@ -12,7 +12,7 @@ use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 impl Editor {
     fn select_landmark_or_edge(
         &mut self,
-        geometry: navigate::Geometry<'_>,
+        geometry: navigate::Geometry<'_, Editor>,
         root: &crate::workspace::Root,
         path: gid::Path,
     ) {
@@ -42,7 +42,7 @@ impl Editor {
     /// its place. Pressing again on the hole removes it (see insert_key).
     pub(crate) fn delete_key(
         &mut self,
-        geometry: navigate::Geometry<'_>,
+        geometry: navigate::Geometry<'_, Editor>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -57,7 +57,10 @@ impl Editor {
     /// Deletes the selected edge and keeps its place selected as a hole,
     /// ready for a replacement — Backspace/Delete's action, and cut's
     /// second half.
-    pub(crate) fn delete_selected_edge(&mut self, geometry: navigate::Geometry<'_>) -> bool {
+    pub(crate) fn delete_selected_edge(
+        &mut self,
+        geometry: navigate::Geometry<'_, Editor>,
+    ) -> bool {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
@@ -82,7 +85,7 @@ impl Editor {
                     let mut hole = selection::pending_value(&root, path);
                     hole.set_scope(scope);
                     self.model.selection = Some(hole);
-                    geometry.reveal_selection(self);
+                    geometry.reveal_selection(&mut self.model);
                     true
                 }
             }
@@ -212,12 +215,12 @@ impl Editor {
     /// Completion handlers own committing their query, and Enter while
     /// typing in a value only ends the typing. What Enter authors beside or
     /// within a selected value belongs to the projection of the container
-    /// it lands in, through [`Self::author_in`]; on an empty document Enter
+    /// it lands in, through [`crate::editing::author_in`]; on an empty document Enter
     /// begins the root value. Escape and an empty query's Backspace or Delete
     /// step back out of a picker.
     pub(crate) fn insert_key(
         &mut self,
-        geometry: navigate::Geometry<'_>,
+        geometry: navigate::Geometry<'_, Editor>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -242,11 +245,13 @@ impl Editor {
                         false
                     }
                     None => {
-                        let started = self.enter_pending(None, event);
+                        let command = self.command_modifier;
+                        let started =
+                            crate::editing::enter_pending(&self.session(), None, command, event);
                         let began = started.is_some();
                         self.model.selection = started;
                         if began {
-                            geometry.reveal_selection(self);
+                            geometry.reveal_selection(&mut self.model);
                         }
                         began
                     }
@@ -259,99 +264,10 @@ impl Editor {
             }
     }
 
-    /// What Enter would start from `selection`, leaving it as it is: a peer
-    /// beside it (a sibling element in a list, with Shift before it, or a new
-    /// field on the record holding it, the root taking one on itself), with
-    /// the command chord something within it (a field on a record or cell, an
-    /// element appended to a list, with Shift at the front), or with no
-    /// selection an empty document's root value. Labels author first, then
-    /// values; list elements are one-stage value pendings, the projection
-    /// minting the position.
-    pub(crate) fn enter_pending(
-        &self,
-        selection: Option<&selection::Selection>,
-        event: &KeyboardEvent,
-    ) -> Option<selection::Selection> {
-        let sources = self.sources();
-        let shift = event.modifiers.shift();
-        let root = selection
-            .map(|current| current.root().clone())
-            .unwrap_or_else(|| self.model.workspace.document_root().clone());
-        let scope = selection
-            .map(|current| current.scope().clone())
-            .unwrap_or_default();
-        match selection {
-            Some(current) if self.command_modifier.pressed(&event.modifiers) => {
-                selection::pending_insert(&root, &scope.view(sources), current.path(), shift)
-            }
-            Some(current) => {
-                selection::pending_enter(&root, &scope.view(sources), current.path(), shift)
-            }
-            None => selection::pending_root(&root, &sources),
-        }
-        .map(|mut pending| {
-            pending.set_scope(scope);
-            pending.with_origin(selection.map(|current| current.path().to_vec()))
-        })
-    }
-
-    /// Opens the selected value for what goes inside it, as the command
-    /// chord's Enter would: a field on a record, an element of a list, a
-    /// bare cell's value. Escape steps back out to it.
-    /// Starts what Enter would author from the selected value in the view
-    /// `root`, if it lands in the container drawn at `container`: a field on
-    /// that record, or an element of that list or cell. Containers offer this
-    /// through [`crate::display::structure::authoring`], children first, so a
-    /// projection without it, such as a number's, takes nothing in.
-    pub(crate) fn author_in(
-        &mut self,
-        root: &crate::workspace::Root,
-        container: &[gid::Step],
-        geometry: navigate::Geometry<'_>,
-        event: &KeyboardEvent,
-    ) -> bool {
-        // What lands in a container is on the way to the selection, or the
-        // value a cell there refers to: a cheap test before the full one.
-        let reached = container
-            .iter()
-            .rposition(|step| !matches!(step, gid::Step::Follow(_)))
-            .map_or(&[][..], |last| &container[..=last]);
-        let Some(current) = self
-            .model
-            .selection
-            .as_ref()
-            .filter(|current| current.root() == root && current.path().starts_with(reached))
-        else {
-            return false;
-        };
-        let sources = self.sources();
-        if current.stage(&sources) != selection::Stage::Edge
-            || current.value_edit().is_some() && !self.command_modifier.pressed(&event.modifiers)
-        {
-            return false;
-        }
-        let Some(pending) = self.enter_pending(Some(current), event) else {
-            return false;
-        };
-        let lands = match pending.stage(&sources) {
-            selection::Stage::Label => pending.path(),
-            _ => pending
-                .path()
-                .split_last()
-                .map_or(&[][..], |(_, parent)| parent),
-        };
-        if lands != container {
-            return false;
-        }
-        self.model.selection = Some(pending);
-        geometry.reveal_selection(self);
-        true
-    }
-
     /// Escape steps back one level: a picker opened from a key returns to
     /// where it was opened, so a replacement gets its value back; anything
     /// else clears the selection.
-    fn escape(&mut self, geometry: navigate::Geometry<'_>) -> bool {
+    fn escape(&mut self, geometry: navigate::Geometry<'_, Editor>) -> bool {
         let Some(current) = &self.model.selection else {
             return false;
         };
@@ -366,7 +282,7 @@ impl Editor {
     /// Leaves a picker for the selection it was opened from. A replacement's
     /// origin is its own place, where this frame draws the hole, so that
     /// value is selected afresh rather than through the frame.
-    fn return_to_origin(&mut self, geometry: navigate::Geometry<'_>) {
+    fn return_to_origin(&mut self, geometry: navigate::Geometry<'_, Editor>) {
         let Some(current) = self.model.selection.take() else {
             return;
         };
@@ -384,13 +300,13 @@ impl Editor {
             self.model.selection = Some(current);
             self.select_landmark_or_edge(geometry, &root, origin);
         }
-        geometry.reveal_selection(self);
+        geometry.reveal_selection(&mut self.model);
     }
 
     /// An empty query's Backspace or Delete cancels its picker: back to
     /// where it was opened, else to the stop before the hole it leaves
     /// (after it, for Delete). A label goes back to its record.
-    fn cancel_pending(&mut self, geometry: navigate::Geometry<'_>, forward: bool) -> bool {
+    fn cancel_pending(&mut self, geometry: navigate::Geometry<'_, Editor>, forward: bool) -> bool {
         let Some(current) = &self.model.selection else {
             return false;
         };
@@ -419,7 +335,7 @@ impl Editor {
         } else {
             self.select_landmark_or_edge(geometry, &root, back);
         }
-        geometry.reveal_selection(self);
+        geometry.reveal_selection(&mut self.model);
         true
     }
 
@@ -428,7 +344,7 @@ impl Editor {
     /// until a choice commits, so Escape brings it back.
     pub(crate) fn replace_key(
         &mut self,
-        geometry: navigate::Geometry<'_>,
+        geometry: navigate::Geometry<'_, Editor>,
         event: &KeyboardEvent,
     ) -> bool {
         if !event.state.is_down()
@@ -457,7 +373,7 @@ impl Editor {
             .with_origin(Some(path));
         replacing.set_scope(current.scope().clone());
         self.model.selection = Some(replacing);
-        geometry.reveal_selection(self);
+        geometry.reveal_selection(&mut self.model);
         true
     }
 }

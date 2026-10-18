@@ -151,7 +151,10 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
     let unspecified: CompletionProvider = Rc::new(|_| None);
     let empty: CompletionProvider = Rc::new(|_| Some(vec![]));
     for provider in [unspecified, empty] {
-        assert!(ranked(provider)(&request).is_empty());
+        assert!(ranked::<crate::Editor>(provider)(&request).is_empty());
     }
-    assert!(!(crate::display::raw::picker(CompletionKind::Field).offers)(&request).is_empty());
+    assert!(
+        !(crate::display::raw::picker::<crate::Editor>(CompletionKind::Field).offers)(&request)
+            .is_empty()
+    );
 }

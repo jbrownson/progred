@@ -83,26 +83,26 @@ pub fn on_activate<World: Host, Hover: Clone + PartialEq + 'static>(
     )
 }
 
-pub fn pickable(
-    child: crate::view::Layout,
-    target: crate::frame::Hovered,
+pub fn pickable<W: Host>(
+    child: crate::display::host::Layout<W>,
+    target: W::Hover,
     value: Value,
-) -> crate::view::Layout {
+) -> crate::display::host::Layout<W> {
     pickable_runtime(child, target, value.into())
 }
 
-pub fn pickable_runtime(
-    child: crate::view::Layout,
-    target: crate::frame::Hovered,
+pub fn pickable_runtime<W: Host>(
+    child: crate::display::host::Layout<W>,
+    target: W::Hover,
     value: grap::RuntimeValue,
-) -> crate::view::Layout {
+) -> crate::display::host::Layout<W> {
     before(
         child,
         Rc::new(move |_| {
             let value = value.clone();
             target_action(
                 target.clone(),
-                Rc::new(move |world: &mut crate::Editor| {
+                Rc::new(move |world: &mut W| {
                     world
                         .session()
                         .pending()
