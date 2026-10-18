@@ -449,11 +449,7 @@ impl BenchContext {
         let phase = std::time::Instant::now();
         #[cfg(feature = "layout-profile")]
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Choices);
-        let node = resolve_choices(
-            graph,
-            width,
-            std::env::var_os("PROGRED_LAYOUT_TRACE").is_some(),
-        );
+        let node = resolve_choices(graph, width);
         #[cfg(feature = "layout-profile")]
         drop(profile);
         let choices = phase.elapsed();

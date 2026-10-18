@@ -44,7 +44,6 @@ enum ChoiceKind<Out> {
     Map {
         child: Box<ChoiceLayout<Out>>,
         map: MeasureMap<Out>,
-        width_add: f64,
     },
     Row {
         alignment: crate::RowAlignment,
@@ -162,17 +161,6 @@ impl<Out: 'static> ChoiceBuild<Out> {
     }
 }
 
-#[derive(Default)]
-struct LayoutTrace {
-    nodes: usize,
-    alternatives: usize,
-    multiway_alternatives: usize,
-    wider_backups: usize,
-    maximum_depth: usize,
-    selected_fallbacks: usize,
-    deepest_selected_fallback: usize,
-}
-
 impl<Out: 'static> ChoiceLayout<Out> {
     pub fn fixed(measured: Measured<Out>) -> Self {
         Self {
@@ -190,18 +178,13 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    pub fn map(
-        child: Self,
-        width_add: f64,
-        map: impl FnOnce(Measured<Out>) -> Measured<Out> + 'static,
-    ) -> Self {
+    pub fn map(child: Self, map: impl FnOnce(Measured<Out>) -> Measured<Out> + 'static) -> Self {
         Self {
-            widths: child.widths.plus(width_add),
+            widths: child.widths,
             extent: Extent::default(),
             kind: ChoiceKind::Map {
                 child: Box::new(child),
                 map: Box::new(map),
-                width_add,
             },
         }
     }
@@ -325,20 +308,22 @@ impl<Out: 'static> ChoiceLayout<Out> {
             ChoiceKind::Use(id) => shared[*id]
                 .as_ref()
                 .map_or(0.0, |child| child.select(choices, shared, available)),
-            ChoiceKind::Map {
-                child, width_add, ..
-            } => child.select(choices, shared, (available - width_add).max(0.0)) + width_add,
+            ChoiceKind::Map { child, .. } => child.select(choices, shared, available),
             ChoiceKind::Row { gap, children, .. } => {
                 let gaps = gap * children.len().saturating_sub(1) as f64;
-                let mut slack = (available - self.widths.minimum).max(0.0);
+                // Each child may use its minimum plus what its elder
+                // siblings left unused.
                 children
                     .iter()
-                    .map(|child| {
-                        let budget = child.widths.minimum + slack;
-                        let width = child.select(choices, shared, budget);
-                        slack = (budget - width).max(0.0);
-                        width
-                    })
+                    .scan(
+                        (available - self.widths.minimum).max(0.0),
+                        |slack, child| {
+                            let budget = child.widths.minimum + *slack;
+                            let width = child.select(choices, shared, budget);
+                            *slack = (budget - width).max(0.0);
+                            Some(width)
+                        },
+                    )
                     .sum::<f64>()
                     + gaps
             }
@@ -435,173 +420,63 @@ impl<Out: 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn inspect(&self, depth: usize, trace: &mut LayoutTrace) {
-        trace.nodes += 1;
-        trace.maximum_depth = trace.maximum_depth.max(depth);
-        match &self.kind {
-            ChoiceKind::Fixed(_) | ChoiceKind::Use(_) => {}
-            ChoiceKind::Map { child, .. } | ChoiceKind::Pad { child, .. } => {
-                child.inspect(depth + 1, trace)
-            }
-            ChoiceKind::Row { children, .. }
-            | ChoiceKind::Col { children, .. }
-            | ChoiceKind::Overlay { children } => {
-                for child in children {
-                    child.inspect(depth + 1, trace);
-                }
-            }
-            ChoiceKind::Attached {
-                trigger, content, ..
-            } => {
-                trigger.inspect(depth + 1, trace);
-                content.inspect(depth + 1, trace);
-            }
-            ChoiceKind::Alternatives { options, .. } => {
-                trace.alternatives += 1;
-                trace.multiway_alternatives += usize::from(options.len() > 2);
-                trace.wider_backups += options
-                    .windows(2)
-                    .filter(|pair| pair[1].widths.preferred > pair[0].widths.preferred)
-                    .count();
-                for option in options {
-                    option.inspect(depth + 1, trace);
-                }
-            }
-        }
-    }
-
-    fn inspect_selection(
-        &self,
-        choices: &[usize],
-        shared: &[Option<Self>],
-        depth: usize,
-        trace: &mut LayoutTrace,
-    ) {
-        match &self.kind {
-            ChoiceKind::Fixed(_) => {}
-            ChoiceKind::Use(id) => {
-                if let Some(child) = shared[*id].as_ref() {
-                    child.inspect_selection(choices, shared, depth + 1, trace);
-                }
-            }
-            ChoiceKind::Map { child, .. } | ChoiceKind::Pad { child, .. } => {
-                child.inspect_selection(choices, shared, depth + 1, trace)
-            }
-            ChoiceKind::Row { children, .. }
-            | ChoiceKind::Col { children, .. }
-            | ChoiceKind::Overlay { children } => {
-                for child in children {
-                    child.inspect_selection(choices, shared, depth + 1, trace);
-                }
-            }
-            ChoiceKind::Attached {
-                trigger, content, ..
-            } => {
-                trigger.inspect_selection(choices, shared, depth + 1, trace);
-                content.inspect_selection(choices, shared, depth + 1, trace);
-            }
-            ChoiceKind::Alternatives { id, options } => {
-                let selected = choices[*id];
-                if selected > 0 {
-                    trace.selected_fallbacks += 1;
-                    trace.deepest_selected_fallback = trace.deepest_selected_fallback.max(depth);
-                }
-                if let Some(option) = options.get(selected) {
-                    option.inspect_selection(choices, shared, depth + 1, trace);
-                }
-            }
-        }
-    }
-
     fn settle(self, choices: &[usize], shared: &mut [Option<Self>]) -> Self
     where
         Out: crate::ObserveLayout,
     {
-        let kind = match self.kind {
-            ChoiceKind::Use(id) => {
-                return shared[id]
-                    .take()
-                    .expect("a shared layout is consumed by only one selected form")
-                    .settle(choices, shared);
-            }
-            ChoiceKind::Alternatives { id, options } => {
-                return options
-                    .into_iter()
-                    .nth(choices[id])
-                    .map(|option| option.settle(choices, shared))
-                    .unwrap_or_else(|| {
-                        Self::fixed(crate::leaf_into(Extent::default(), |_, _| {}))
-                    });
-            }
-            ChoiceKind::Map { child, map, .. } => {
-                ChoiceKind::Fixed(map(child.settle(choices, shared).into_measured()))
-            }
+        let widths = self.widths;
+        let settled = |kind| Self {
+            widths,
+            extent: settled_extent(&kind),
+            kind,
+        };
+        match self.kind {
+            ChoiceKind::Use(id) => shared[id]
+                .take()
+                .expect("a shared layout is consumed by only one selected form")
+                .settle(choices, shared),
+            ChoiceKind::Alternatives { id, options } => options
+                .into_iter()
+                .nth(choices[id])
+                .map(|option| option.settle(choices, shared))
+                .unwrap_or_else(|| Self::fixed(crate::leaf_into(Extent::default(), |_, _| {}))),
+            ChoiceKind::Map { child, map } => settled(ChoiceKind::Fixed(map(child
+                .settle(choices, shared)
+                .into_measured()))),
             ChoiceKind::Attached {
                 trigger,
                 content,
                 map,
-            } => ChoiceKind::Fixed(map(
+            } => settled(ChoiceKind::Fixed(map(
                 trigger.settle(choices, shared).into_measured(),
                 content.settle(choices, shared).into_measured(),
-            )),
+            ))),
             ChoiceKind::Row {
                 alignment,
                 gap,
                 children,
-            } => ChoiceKind::Row {
+            } => settled(ChoiceKind::Row {
                 alignment,
                 gap,
-                children: children
-                    .into_iter()
-                    .map(|child| child.settle(choices, shared))
-                    .collect(),
-            },
+                children: settle_all(children, choices, shared),
+            }),
             ChoiceKind::Col {
                 baseline,
                 gap,
                 children,
-            } => ChoiceKind::Col {
+            } => settled(ChoiceKind::Col {
                 baseline,
                 gap,
-                children: children
-                    .into_iter()
-                    .map(|child| child.settle(choices, shared))
-                    .collect(),
-            },
-            ChoiceKind::Overlay { children } => ChoiceKind::Overlay {
-                children: children
-                    .into_iter()
-                    .map(|child| child.settle(choices, shared))
-                    .collect(),
-            },
-            ChoiceKind::Pad { insets, child } => ChoiceKind::Pad {
+                children: settle_all(children, choices, shared),
+            }),
+            ChoiceKind::Overlay { children } => settled(ChoiceKind::Overlay {
+                children: settle_all(children, choices, shared),
+            }),
+            ChoiceKind::Pad { insets, child } => settled(ChoiceKind::Pad {
                 insets,
                 child: Box::new(child.settle(choices, shared)),
-            },
-            fixed @ ChoiceKind::Fixed(_) => fixed,
-        };
-        let extent = match &kind {
-            ChoiceKind::Fixed(measured) => measured.extent,
-            ChoiceKind::Row {
-                alignment,
-                gap,
-                children,
-            } => crate::row_extent(*gap, *alignment, children.iter().map(|child| child.extent)),
-            ChoiceKind::Col {
-                baseline,
-                gap,
-                children,
-            } => crate::col_extent(*baseline, *gap, children.iter().map(|child| child.extent)),
-            ChoiceKind::Overlay { children } => {
-                crate::overlay_extent(children.iter().map(|child| child.extent))
-            }
-            ChoiceKind::Pad { insets, child } => crate::padded_extent(*insets, child.extent),
-            _ => unreachable!("choices and measurement wrappers have been settled"),
-        };
-        Self {
-            widths: self.widths,
-            extent,
-            kind,
+            }),
+            fixed @ ChoiceKind::Fixed(_) => settled(fixed),
         }
     }
 
@@ -669,46 +544,51 @@ impl<Out: 'static> ChoiceLayout<Out> {
     }
 }
 
+/// The extent of a node `settle` made: a fixed leaf or a container of settled children.
+fn settled_extent<Out>(kind: &ChoiceKind<Out>) -> Extent {
+    match kind {
+        ChoiceKind::Fixed(measured) => measured.extent,
+        ChoiceKind::Row {
+            alignment,
+            gap,
+            children,
+        } => crate::row_extent(*gap, *alignment, children.iter().map(|child| child.extent)),
+        ChoiceKind::Col {
+            baseline,
+            gap,
+            children,
+        } => crate::col_extent(*baseline, *gap, children.iter().map(|child| child.extent)),
+        ChoiceKind::Overlay { children } => {
+            crate::overlay_extent(children.iter().map(|child| child.extent))
+        }
+        ChoiceKind::Pad { insets, child } => crate::padded_extent(*insets, child.extent),
+        _ => unreachable!("choices and measurement wrappers have been settled"),
+    }
+}
+
+fn settle_all<Out: crate::ObserveLayout + 'static>(
+    children: Vec<ChoiceLayout<Out>>,
+    choices: &[usize],
+    shared: &mut [Option<ChoiceLayout<Out>>],
+) -> Vec<ChoiceLayout<Out>> {
+    children
+        .into_iter()
+        .map(|child| child.settle(choices, shared))
+        .collect()
+}
+
 pub fn resolve_choices<Out: crate::ObserveLayout + 'static>(
     graph: ChoiceGraph<Out>,
     available: f64,
-    tracing: bool,
 ) -> Measured<Out> {
     let ChoiceGraph {
-        root: layout,
+        root,
         mut shared,
         choice_count,
     } = graph;
-    let mut trace = LayoutTrace::default();
-    if tracing {
-        layout.inspect(0, &mut trace);
-        for child in shared.iter().flatten() {
-            child.inspect(0, &mut trace);
-        }
-    }
-    let preferred = layout.widths.preferred;
-    let minimum = layout.widths.minimum;
-    if tracing {
-        eprintln!(
-            "layout analysis: nodes={} alternatives={} wider_backups={} preferred={preferred:.1} minimum={minimum:.1} available={available:.1}",
-            trace.nodes, trace.alternatives, trace.wider_backups,
-        );
-    }
     let mut choices = vec![0; choice_count];
-    let selected = layout.select(&mut choices, &shared, available);
-    if tracing {
-        layout.inspect_selection(&choices, &shared, 0, &mut trace);
-        eprintln!(
-            "layout: nodes={} alternatives={} multiway={} wider_backups={} preferred={preferred:.1} minimum={minimum:.1} selected={selected:.1} available={available:.1} fallbacks={} deepest_fallback={}",
-            trace.nodes,
-            trace.alternatives,
-            trace.multiway_alternatives,
-            trace.wider_backups,
-            trace.selected_fallbacks,
-            trace.deepest_selected_fallback,
-        );
-    }
-    layout.settle(&choices, &mut shared).into_measured()
+    root.select(&mut choices, &shared, available);
+    root.settle(&choices, &mut shared).into_measured()
 }
 
 #[cfg(test)]

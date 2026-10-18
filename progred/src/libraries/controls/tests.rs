@@ -786,7 +786,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
             .unwrap()
             .measure(context, &mut build)
     });
-    let measured = resolve_choices(build.finish(graph), 200.0, false);
+    let measured = resolve_choices(build.finish(graph), 200.0);
     assert_eq!(measured.extent.height(), 300.0);
     let result = output.0.borrow();
     let result = result.as_ref().unwrap().as_record().unwrap();

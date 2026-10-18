@@ -669,11 +669,7 @@ pub(crate) fn project(
     tcx: &mut TextCtx,
 ) -> Measured<HoverPass<crate::Editor>> {
     let width = description.width;
-    resolve_choices(
-        prepare_project(description, tcx),
-        width,
-        std::env::var_os("PROGRED_LAYOUT_TRACE").is_some(),
-    )
+    resolve_choices(prepare_project(description, tcx), width)
 }
 
 fn prepare_project(
@@ -1054,7 +1050,7 @@ fn prepare_value(
             let target =
                 value.map(|value| (value.clone(), select_handler(landmark_path.clone(), cx)));
             let edits = cx.edits.clone();
-            ChoiceLayout::map(inner, 0.0, move |inner| {
+            ChoiceLayout::map(inner, move |inner| {
                 let placed = descend_landmark_with(
                     palette,
                     selected,
@@ -1086,10 +1082,10 @@ fn prepare_value(
     let scale = cx.styles.scale;
     let palette = cx.styles.palette;
     match changed_ground {
-        Some(Ground::Readonly) => ChoiceLayout::map(prepared, 0.0, move |content| {
-            readonly(scale, palette, content)
-        }),
-        Some(Ground::Writable) => ChoiceLayout::map(prepared, 0.0, move |content| {
+        Some(Ground::Readonly) => {
+            ChoiceLayout::map(prepared, move |content| readonly(scale, palette, content))
+        }
+        Some(Ground::Writable) => ChoiceLayout::map(prepared, move |content| {
             ground_with(scale, palette.paper, content)
         }),
         None => prepared,

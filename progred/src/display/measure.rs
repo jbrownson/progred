@@ -55,7 +55,7 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Decoration);
         let before = before(self.context);
         let child = self.build.take(child.0);
-        self.push(ChoiceLayout::map(child, 0.0, move |child| {
+        self.push(ChoiceLayout::map(child, move |child| {
             widget::before_place(child, move |placement, output| before(output, placement))
         }))
     }
@@ -64,14 +64,14 @@ impl<W: 'static, H: 'static> Builder<W, H> for Prepare<'_, '_, '_, W, H> {
         let _profile = crate::display::profile::enter(crate::display::profile::Kind::Decoration);
         let after = after(self.context);
         let child = self.build.take(child.0);
-        self.push(ChoiceLayout::map(child, 0.0, move |child| {
+        self.push(ChoiceLayout::map(child, move |child| {
             widget::after_place(child, move |placement, output| after(output, placement))
         }))
     }
     fn around(&mut self, child: Node, wrap: widget::Around<W, H>) -> Node {
         let wrap = wrap(self.context);
         let child = self.build.take(child.0);
-        self.push(ChoiceLayout::map(child, 0.0, wrap))
+        self.push(ChoiceLayout::map(child, wrap))
     }
     fn row(&mut self, alignment: RowAlignment, gap: f64, children: Vec<Node>) -> Node {
         #[cfg(all(test, feature = "layout-profile"))]

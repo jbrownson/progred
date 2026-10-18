@@ -54,7 +54,7 @@ fn chosen_structure_and_direct_measured_structure_have_the_same_traversal() {
             ChoiceLayout::aligned_row(RowAlignment::Baseline, 0.0, children()),
             ChoiceLayout::col(1, 0.0, children()),
         ]);
-        let chosen = resolve_choices(build.finish(layout), available, false);
+        let chosen = resolve_choices(build.finish(layout), available);
         let direct = if available < 20.0 {
             col(1, 0.0, vec![leaf("a"), leaf("b")])
         } else {

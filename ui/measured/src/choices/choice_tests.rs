@@ -48,7 +48,7 @@ fn top_aligned_row_uses_the_selected_child_heights() {
             12.0,
             vec![picture, fields],
         );
-        let layout = resolve_choices(build.finish(root), available, false);
+        let layout = resolve_choices(build.finish(root), available);
         assert_eq!(layout.extent.height(), height);
         assert_eq!(layout.extent.ascent, 3.0);
         let clip = Rect::new(30.0, 40.0, 200.0, 160.0);
@@ -69,7 +69,7 @@ fn top_aligned_row_uses_the_selected_child_heights() {
 #[test]
 fn only_the_selected_form_places_and_wrappers_keep_settled_geometry() {
     let placements = Rc::new(Cell::new(0));
-    let child = ChoiceLayout::map(recording("chosen", 10.0), 0.0, {
+    let child = ChoiceLayout::map(recording("chosen", 10.0), {
         let placements = placements.clone();
         move |child| {
             crate::after_into(
@@ -86,7 +86,7 @@ fn only_the_selected_form_places_and_wrappers_keep_settled_geometry() {
         recording("discarded", 100.0),
         ChoiceLayout::pad(Insets::new(5.0, 6.0, 7.0, 8.0), child),
     ]);
-    let layout = resolve_choices(build.finish(root), 30.0, false);
+    let layout = resolve_choices(build.finish(root), 30.0);
     assert_eq!(placements.get(), 0);
     assert_eq!(layout.extent.width, 22.0);
     assert_eq!(layout.extent.height(), 18.0);
@@ -120,7 +120,7 @@ fn shared_children_prepare_once_and_place_in_the_chosen_form() {
             ),
             ChoiceLayout::col(0, 2.0, vec![recording("prefix", 10.0), narrow]),
         ]);
-        let layout = resolve_choices(build.finish(root), available, false);
+        let layout = resolve_choices(build.finish(root), available);
         assert_eq!(prepared.get(), 1);
         let placement = Placement::new(
             layout.extent.rect_at(Point::ORIGIN),
@@ -160,7 +160,7 @@ fn a_preferred_form_chosen_after_exploring_the_fallback_keeps_its_natural_childr
         ),
         ChoiceLayout::pad(Insets::new(50.0, 0.0, 0.0, 0.0), padded),
     ]);
-    let layout = resolve_choices(build.finish(root), 100.0, false);
+    let layout = resolve_choices(build.finish(root), 100.0);
     assert_eq!(layout.extent.width, 110.0);
     let placement = Placement::new(
         layout.extent.rect_at(Point::ORIGIN),
@@ -189,7 +189,7 @@ fn attached_content_is_settled_but_its_placement_remains_the_consumers_choice() 
                 })
             })
         });
-        let layout = resolve_choices(build.finish(root), 30.0, false);
+        let layout = resolve_choices(build.finish(root), 30.0);
         assert_eq!(layout.extent.width, 10.0);
         assert_eq!(layout.extent.height(), 4.0);
         let placement = Placement::new(

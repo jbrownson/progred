@@ -234,7 +234,7 @@ pub fn fill_height<World: 'static, Hover: 'static>(
 pub fn fill_width<W: 'static, H: 'static>(child: Layout<W, H>) -> Layout<W, H> {
     Layout::program(Rc::new(move |context, build| {
         let child = child.measure(context, build);
-        measured::choices::ChoiceLayout::map(child, 0.0, |child| {
+        measured::choices::ChoiceLayout::map(child, |child| {
             measured::around_into(child, |placement, inner, output| {
                 inner.place_at_into(
                     Placement {

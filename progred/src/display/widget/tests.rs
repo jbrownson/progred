@@ -31,7 +31,7 @@ fn fill_width_expands_ink_and_interaction_together_without_changing_measurement(
     let layout = fill_width(crate::display::on_hover(activated, 7_u32));
     let mut build = ChoiceBuild::default();
     let prepared = with_context(&NoProject, |context| layout.measure(context, &mut build));
-    let measured = resolve_choices(build.finish(prepared), 100.0, false);
+    let measured = resolve_choices(build.finish(prepared), 100.0);
     assert_eq!(measured.extent.width, 0.0);
     assert_eq!(measured.extent.height(), 16.0);
     let output = frame::place(
@@ -339,7 +339,7 @@ fn discarded_layout_alternatives_do_not_place_widget_outputs() {
     };
     let mut choices = ChoiceBuild::default();
     let layout = choices.alternatives(vec![widget(100.0, 1), widget(20.0, 2)]);
-    let measured = resolve_choices(choices.finish(layout), 50.0, false);
+    let measured = resolve_choices(choices.finish(layout), 50.0);
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
     let output = crate::display::widget::frame::place(
         measured,

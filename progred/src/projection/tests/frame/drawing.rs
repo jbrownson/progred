@@ -217,7 +217,7 @@ fn drawing_frame(
         &crate::display::test_support::NoProject,
         |context| layout.measure(context, &mut build),
     );
-    measured::choices::resolve_choices(build.finish(prepared), 40.0, false)
+    measured::choices::resolve_choices(build.finish(prepared), 40.0)
 }
 
 #[test]

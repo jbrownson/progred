@@ -31,7 +31,7 @@ fn shared_program_prepares_once_per_frame_and_places_only_the_chosen_use() {
         });
         assert_eq!(preparations.get(), frame);
         assert_eq!(placements.get(), frame - 1);
-        let measured = resolve_choices(build.finish(prepared), width, false);
+        let measured = resolve_choices(build.finish(prepared), width);
         assert_eq!(measured.extent.width, expected_width);
         crate::display::widget::frame::place(
             measured,
