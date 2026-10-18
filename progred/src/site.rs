@@ -1,9 +1,9 @@
 //! Interpret site and selection effects while applying a Grap callable.
 //! Reads observe staged writes; a declined handler commits neither.
 
+use crate::display::widget::view::Root;
 use crate::selection::Selection;
 use crate::sources::Sources;
-use crate::workspace::Root;
 use gid::{Path, Value};
 use grap::absent;
 use std::cell::RefCell;

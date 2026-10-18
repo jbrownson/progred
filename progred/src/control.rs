@@ -79,7 +79,7 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn new(doc: Document, binders: Binders) -> Self {
         let mut editor = crate::editor::new_editor(
-            crate::styles::Theme::Light.palette(),
+            crate::display::widget::style::Theme::Light.palette(),
             crate::modifiers::native(),
             true,
             crate::stack::load(),

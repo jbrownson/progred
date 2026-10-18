@@ -249,7 +249,7 @@ fn write_svg(list: &DrawList, width: f64, height: f64, out_path: &str) {
         list,
         width,
         height,
-        crate::styles::Theme::Light.palette().paper,
+        crate::display::widget::style::Theme::Light.palette().paper,
         out_path,
     );
 }

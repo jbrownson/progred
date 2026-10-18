@@ -14,10 +14,10 @@ pub(crate) fn initial_cascade() -> CascadePoint {
 pub(crate) fn palette(
     preference: Option<winit::window::Theme>,
     observed: Option<winit::window::Theme>,
-) -> crate::styles::Palette {
+) -> crate::display::widget::style::Palette {
     match preference.or(observed) {
-        Some(winit::window::Theme::Dark) => crate::styles::Theme::Dark,
-        _ => crate::styles::Theme::Light,
+        Some(winit::window::Theme::Dark) => crate::display::widget::style::Theme::Dark,
+        _ => crate::display::widget::style::Theme::Light,
     }
     .palette()
 }

@@ -11,7 +11,10 @@ fn native_annotation_handler_retains_the_projected_site() {
         cells,
     };
     let libraries = Libraries::default();
-    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
+    let styles = crate::display::widget::style::editor(
+        crate::display::widget::style::Theme::Light.palette(),
+        1.0,
+    );
     let projection = Projection::new([crate::display::partial(|input| {
         input.value?.as_blob()?;
         Some(crate::display::widget::before(

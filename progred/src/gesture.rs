@@ -2,13 +2,13 @@
 //! press installs one; it owns motion until release or cancellation.
 
 use crate::display::widget::gesture::Gesture;
+use crate::display::widget::view::Root;
 use crate::editing::Session;
 use crate::library::Libraries;
 use crate::location::Location;
 use crate::model::Model;
 use crate::selection::{self, Selection};
 use crate::sources::Sources;
-use crate::workspace::Root;
 use gid::{Path, Value};
 #[cfg(test)]
 use kurbo::Point;

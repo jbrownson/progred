@@ -19,7 +19,7 @@ fn dots(embed: &Embed) -> Vec<(Point, f64)> {
 fn outlined(embed: &Embed) -> Vec<kurbo::Rect> {
     use puri::draw::{DrawCmd, Shape};
     let ink = peniko::Brush::from(
-        crate::styles::Theme::Light
+        crate::display::widget::style::Theme::Light
             .palette()
             .literal
             .with_alpha(0.55),

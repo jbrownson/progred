@@ -3,12 +3,12 @@
 //! the text tools a line editor needs. Nothing reachable from it leads to the
 //! window or the menus; the shell shows what changed once dispatch returns.
 
+use crate::display::widget::view::Root;
 use crate::gesture::Active;
 use crate::library::Libraries;
 use crate::model::Model;
 use crate::sources::Sources;
 use crate::timers::Timers;
-use crate::workspace::Root;
 use gid::Step;
 use kurbo::Point;
 use parley::{FontContext, LayoutContext};

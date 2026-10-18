@@ -334,7 +334,7 @@ mod view {
     const MENU_WIDTH: f64 = 230.0;
 
     pub struct Description {
-        pub palette: crate::styles::Palette,
+        pub palette: crate::display::widget::style::Palette,
         pub command_modifier: puri::keyboard::CommandModifier,
         pub state: State,
         pub availability: Availability,
@@ -359,7 +359,7 @@ mod view {
         disabled: TextStyle,
     }
 
-    fn styles(palette: crate::styles::Palette) -> Styles {
+    fn styles(palette: crate::display::widget::style::Palette) -> Styles {
         let text = |color| TextStyle {
             size: 14.0,
             brush: Brush::from(color),
@@ -409,7 +409,7 @@ mod view {
     }
 
     fn heading(
-        palette: crate::styles::Palette,
+        palette: crate::display::widget::style::Palette,
         tcx: &mut TextCtx,
         style: &TextStyle,
         index: usize,
@@ -447,7 +447,7 @@ mod view {
     }
 
     fn separator<C: 'static>(
-        palette: crate::styles::Palette,
+        palette: crate::display::widget::style::Palette,
         scale: f64,
         width: f64,
     ) -> Measured<HoverPass<C>> {
@@ -532,7 +532,7 @@ mod view {
 
     fn item(
         item: Item,
-        palette: crate::styles::Palette,
+        palette: crate::display::widget::style::Palette,
         scale: f64,
         width: f64,
     ) -> Measured<HoverPass<Editor>> {

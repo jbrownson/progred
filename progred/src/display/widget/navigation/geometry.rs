@@ -5,9 +5,9 @@
 use super::{Direction, Landmark};
 use crate::display::Host;
 use crate::display::widget::frame::ViewRegion;
+use crate::display::widget::view::Root;
 use crate::model::Model;
 use crate::selection::Selection;
-use crate::workspace::Root;
 use gid::Step;
 use kurbo::{Rect, Vec2};
 

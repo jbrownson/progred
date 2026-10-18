@@ -73,7 +73,8 @@ fn an_absent_value_reads_as_its_reason_then_its_fields_all_on_red() {
             root: Some(root),
             cells: Cells::new(),
         };
-        let error = peniko::Brush::from(crate::styles::Theme::Light.palette().error);
+        let error =
+            peniko::Brush::from(crate::display::widget::style::Theme::Light.palette().error);
         place(&doc, None, 600.0)
             .0
             .list

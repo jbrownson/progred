@@ -3,8 +3,8 @@
 //! installed frame's [`Geometry`].
 
 use crate::display::widget::navigation::advance;
+use crate::display::widget::view::{Root, Target};
 use crate::selection::Selection;
-use crate::workspace::{Root, Target};
 use gid::{Path, Step};
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 

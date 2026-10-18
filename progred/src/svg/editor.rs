@@ -217,7 +217,7 @@ fn website_libraries_image() {
             .chain([(LIBRARIES, declarations)]),
     ));
     let mut editor = crate::test_editor(doc);
-    editor.palette = crate::styles::Theme::Light.palette();
+    editor.palette = crate::display::widget::style::Theme::Light.palette();
     editor.drawn_menu = false;
     render_editor(
         editor,
@@ -262,7 +262,7 @@ fn website_preview_image() {
         )
         .unwrap(),
     );
-    editor.palette = crate::styles::Theme::Light.palette();
+    editor.palette = crate::display::widget::style::Theme::Light.palette();
     editor.drawn_menu = false;
     render_editor(
         editor,

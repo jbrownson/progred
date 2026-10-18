@@ -2,8 +2,9 @@
 //! headless GPU: a pixel regression and two timing canaries. They need a real
 //! adapter or Mesa's lavapipe; `make test-gpu` runs them.
 
+use crate::display::widget::source::SourceTrace;
 use crate::frame::Hovered;
-use crate::hover::{Hover, SourceTrace};
+use crate::hover::Hover;
 use gid::{Step, Value};
 use kurbo::Point;
 use peniko::Color;
@@ -61,7 +62,12 @@ fn cam_hover_compositor_pixels() {
         .dispatch
         .view_regions
         .iter()
-        .find(|region| matches!(region.root.target(), crate::workspace::Target::Pane { .. }))
+        .find(|region| {
+            matches!(
+                region.root.target(),
+                crate::display::widget::view::Target::Pane { .. }
+            )
+        })
         .unwrap()
         .rect;
     let point = (1..(160.0 * scale) as usize)
@@ -212,7 +218,7 @@ fn cam_hover_compositor_pixels() {
 fn editor_compositor_profile() {
     let gpu = gpu::Gpu::new();
     let size = kurbo::Size::new(2400.0, 1600.0);
-    let base_color = crate::styles::Theme::Light.palette().paper;
+    let base_color = crate::display::widget::style::Theme::Light.palette().paper;
     for example in [
         crate::command::Example::IopTree,
         crate::command::Example::Toolpaths,

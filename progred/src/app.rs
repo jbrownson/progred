@@ -22,9 +22,9 @@ use crate::web_render;
 use crate::{UserEvent, translate_window_event};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog};
-use crate::{gid_text, stack};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-use crate::{modifiers, platform, styles, text_store};
+use crate::{display::widget::style, modifiers, platform, text_store};
+use crate::{gid_text, stack};
 use kurbo::Size;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -351,7 +351,7 @@ impl App {
         binders: gid_text::Binders,
     ) {
         self.editors.push(EditorRunner::new(new_editor(
-            styles::Theme::Light.palette(),
+            style::Theme::Light.palette(),
             modifiers::native(),
             self.drawn_menu,
             self.stack.clone(),

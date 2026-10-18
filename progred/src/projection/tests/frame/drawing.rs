@@ -126,7 +126,7 @@ fn iop_tree_at_size(size: kurbo::Size) {
             shape: Shape::RoundedRect(_),
             brush: Brush::Solid(color),
             ..
-        } if *color == crate::styles::Theme::Light.palette().readonly_ground
+        } if *color == crate::display::widget::style::Theme::Light.palette().readonly_ground
     ));
     let outer = match scene.first() {
         Some(DrawCmd::Fill { transform, .. }) => *transform,
@@ -145,7 +145,7 @@ fn iop_tree_at_size(size: kurbo::Size) {
         matches!(
             &linked.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Calls(calls))))
-                if matches!(calls.sources().next(), Some(crate::hover::SourceTrace::InCell { .. }))
+                if matches!(calls.sources().next(), Some(crate::display::widget::source::SourceTrace::InCell { .. }))
         ),
         "unexpected drawing link: {:?}",
         linked.hit
@@ -400,7 +400,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         cells: Cells::new(),
     });
     let source_view = editor.model.workspace.document_root().clone();
-    let drawing_view = crate::workspace::Root::document();
+    let drawing_view = crate::display::widget::view::Root::document();
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
     let output = crate::display::widget::frame::place(
         crate::display::widget::view::in_view(

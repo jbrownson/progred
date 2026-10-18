@@ -3,8 +3,8 @@
 //! through it, without carrying the view or the path themselves.
 
 use super::{Access, Edit, Scope, Session};
+use crate::display::widget::view::Root;
 use crate::hover::Hover;
-use crate::workspace::Root;
 use gid::{Step, Value};
 use puri::edit::LineEditState;
 use std::rc::Rc;

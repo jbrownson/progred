@@ -97,7 +97,7 @@ fn memo_keeps_runtime_input_output_and_absence_origins_distinct() {
         doc: &doc,
         libraries: &host,
     });
-    let root = crate::workspace::Root::document();
+    let root = crate::display::widget::view::Root::document();
     let callbacks =
         [A, B].map(|source| retained(::grap::lambda([], f64::value(7.0)), source, &host));
     assert_ne!(callbacks[0].to_value(), callbacks[1].to_value());

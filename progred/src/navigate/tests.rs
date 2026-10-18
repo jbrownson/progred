@@ -67,8 +67,8 @@ fn navigation_direction_accepts_modifiers_but_excludes_other_keys_and_releases()
 fn command_a_selects_the_current_views_root() {
     let document = crate::test_root();
     let pane_path = vec![key("pane")];
-    let pane = crate::workspace::Root::pane(pane_path.clone());
-    let other_pane = crate::workspace::Root::pane(pane_path.clone());
+    let pane = crate::display::widget::view::Root::pane(pane_path.clone());
+    let other_pane = crate::display::widget::view::Root::pane(pane_path.clone());
     let child_path = vec![key("pane"), key("child")];
     let landmarks: Vec<_> = [
         (&document, child_path.clone()),

@@ -416,7 +416,11 @@ fn outline_library_tint_stops_at_the_heading() {
                     shape: Shape::RoundedRect(rect),
                     brush: Brush::Solid(color),
                     ..
-                } if *color == crate::styles::Theme::Light.palette().readonly_ground => {
+                } if *color
+                    == crate::display::widget::style::Theme::Light
+                        .palette()
+                        .readonly_ground =>
+                {
                     Some(rect.rect())
                 }
                 _ => None,

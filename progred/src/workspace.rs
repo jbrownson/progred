@@ -5,6 +5,7 @@
 //! sizing remain process state.
 
 use crate::annotations::Annotations;
+use crate::display::widget::view::{Root, Target};
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
 #[cfg(test)]
@@ -43,8 +44,6 @@ pub enum Side {
     Left,
     Right,
 }
-
-pub use crate::display::widget::view::{Root, Target};
 
 pub struct View {
     pub root: Root,

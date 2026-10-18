@@ -13,15 +13,15 @@ use crate::annotations::Annotations;
 #[cfg(test)]
 use crate::display::widget::navigation::Landmark;
 use crate::display::widget::placed::{before, decorate};
+use crate::display::widget::source::{Secondary, SourceTrace};
 use crate::display::widget::style::{
-    highlight_outline, hover_highlight, primary_highlight, secondary_highlight,
+    Styles, highlight_outline, hover_highlight, primary_highlight, secondary_highlight,
 };
 use crate::frame::{Attribution, HoverPass, Hovered};
-use crate::hover::{Hover, Secondary, SourceTrace};
+use crate::hover::Hover;
 use crate::location::{Location, Start};
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
-use crate::styles::Styles;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use kurbo::Point;
@@ -120,7 +120,7 @@ impl<World: 'static> Projection<World> {
 pub(crate) struct Cx<'a> {
     pub(crate) computations: &'a crate::computations::Computations,
     pub(crate) focused: bool,
-    pub(crate) view: &'a crate::workspace::Root,
+    pub(crate) view: &'a crate::display::widget::view::Root,
     pub(crate) completions: Option<&'a crate::display::CompletionProvider>,
     /// The reading context: the document read over its library.
     pub(crate) sources: Sources<'a>,
@@ -186,7 +186,7 @@ impl crate::display::Toolkit for Occurrence<'_> {
         self.path
     }
 
-    fn view(&self) -> &crate::workspace::Root {
+    fn view(&self) -> &crate::display::widget::view::Root {
         self.cx.view
     }
 
@@ -648,7 +648,7 @@ impl Cx<'_> {
 pub struct ProjectDescription<'a> {
     pub computations: &'a crate::computations::Computations,
     pub focused: bool,
-    pub view: &'a crate::workspace::Root,
+    pub view: &'a crate::display::widget::view::Root,
     pub completions: Option<&'a crate::display::CompletionProvider>,
     pub sources: Sources<'a>,
     pub root: Option<&'a Value>,
@@ -751,7 +751,7 @@ fn prepare_project(
 /// background's deselect.
 #[allow(clippy::too_many_arguments)]
 fn descend_landmark_with(
-    palette: crate::styles::Palette,
+    palette: crate::display::widget::style::Palette,
     selected: bool,
     scale: f64,
     path: SharedPath,
@@ -788,7 +788,7 @@ fn descend_landmark_with(
 /// The occurrence identifies the selection; only mutations need its conject.
 fn bind_selection(
     child: Measured<HoverPass<crate::Editor>>,
-    root: crate::workspace::Root,
+    root: crate::display::widget::view::Root,
     path: SharedPath,
     value: grap::RuntimeValue,
     fold_default: Option<bool>,
@@ -859,7 +859,7 @@ fn ground(cx: &Cx, source: Option<&Location>, value: Option<&grap::RuntimeValue>
 /// Read-only appearance; document permissions remain in the editing scope.
 fn readonly(
     scale: f64,
-    palette: crate::styles::Palette,
+    palette: crate::display::widget::style::Palette,
     content: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
     ground_with(scale, palette.readonly_ground, content)

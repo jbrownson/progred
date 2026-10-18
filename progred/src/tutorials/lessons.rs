@@ -13,7 +13,8 @@ use puri::hover::Claim;
 use std::rc::Rc;
 #[test]
 fn website_forest_hover_finds_the_available_call() {
-    use crate::hover::{Hover, SourceTrace};
+    use crate::display::widget::source::SourceTrace;
+    use crate::hover::Hover;
     let (editor, names) = website_growing_forest_editor();
     let mut runner = crate::EditorRunner::new(editor);
     runner.refresh_frame(1.0, kurbo::Size::new(720.0, 684.0));

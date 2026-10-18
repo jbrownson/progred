@@ -1,5 +1,6 @@
 //! The window's focus and appearance, as the shell takes them in.
 
+use crate::display::widget::style;
 use crate::driver::Driver;
 use crate::libraries::{f64, text};
 use crate::selection::Stage;
@@ -17,12 +18,7 @@ fn driver(root: Option<Value>, cells: Cells) -> Driver {
 }
 
 fn selection_marks(commands: &[DrawCmd], alpha: f32) -> usize {
-    let color = Brush::from(
-        crate::styles::Theme::Light
-            .palette()
-            .accent
-            .with_alpha(alpha),
-    );
+    let color = Brush::from(style::Theme::Light.palette().accent.with_alpha(alpha));
     crate::display::test_support::painted(commands)
         .filter(|command| matches!(command, DrawCmd::Fill { brush, .. } if *brush == color))
         .count()
@@ -39,7 +35,7 @@ fn changing_palette_repaints_without_losing_edits_selection_or_history() {
             |command| matches!(command, DrawCmd::GlyphRun(run) if run.brush == Brush::from(color)),
         )
     }
-    for theme in [crate::styles::Theme::Dark, crate::styles::Theme::Light] {
+    for theme in [style::Theme::Dark, style::Theme::Light] {
         assert!(driver.palette(theme.palette()));
         assert!(!driver.palette(theme.palette()));
         assert!(has_ink(&driver.painted().0, theme.palette().literal));
@@ -57,12 +53,12 @@ fn native_appearance_follows_system_until_overridden_and_can_follow_again() {
     let mut driver = driver(Some(text::value("hello")), Cells::new());
     let document = driver.editor().model.doc.clone();
     for (preference, observed, expected) in [
-        (None, Some(Dark), crate::styles::Theme::Dark),
-        (None, Some(Light), crate::styles::Theme::Light),
-        (Some(Dark), Some(Light), crate::styles::Theme::Dark),
-        (Some(Light), Some(Dark), crate::styles::Theme::Light),
-        (None, Some(Dark), crate::styles::Theme::Dark),
-        (None, None, crate::styles::Theme::Light),
+        (None, Some(Dark), style::Theme::Dark),
+        (None, Some(Light), style::Theme::Light),
+        (Some(Dark), Some(Light), style::Theme::Dark),
+        (Some(Light), Some(Dark), style::Theme::Light),
+        (None, Some(Dark), style::Theme::Dark),
+        (None, None, style::Theme::Light),
     ] {
         driver.palette(crate::macos_window::palette(preference, observed));
         assert_eq!(driver.editor().palette, expected.palette());

@@ -68,7 +68,7 @@ impl OrbitProfile {
             .chain([Step::Key(libraries::presentation::vocabulary::RESULT)])
             .collect();
         let mut editor = crate::editor::new_editor(
-            crate::styles::Theme::Light.palette(),
+            crate::display::widget::style::Theme::Light.palette(),
             crate::modifiers::native(),
             true,
             stack,

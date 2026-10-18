@@ -1,6 +1,7 @@
 //! The editor's durable document state: document, selection, view,
 //! and history.
 
+use crate::display::widget::view::Root;
 use crate::history;
 #[cfg(test)]
 use crate::library::Libraries;
@@ -21,7 +22,7 @@ pub(crate) struct Model {
 
 pub(crate) struct Snapshot {
     doc: Rc<Document>,
-    selection: Option<(workspace::Root, Path, crate::editing::Scope)>,
+    selection: Option<(Root, Path, crate::editing::Scope)>,
     folds: workspace::Folds,
 }
 
@@ -91,7 +92,7 @@ impl Model {
 
     pub(crate) fn set_collapsed(
         &mut self,
-        root: &workspace::Root,
+        root: &Root,
         path: &[Step],
         default: bool,
         closed: Option<bool>,

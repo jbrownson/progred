@@ -1,5 +1,6 @@
 use super::*;
-use crate::hover::{Hover, SourceTrace};
+use crate::display::widget::source::SourceTrace;
+use crate::hover::Hover;
 use crate::libraries::{controls, presentation};
 use kurbo::Point;
 use puri::hover::Claim;

@@ -99,7 +99,7 @@ fn splice(value: Value) -> Value {
 
 #[test]
 fn source_highlight_clips_its_rectangle_without_a_pane_sized_layer() {
-    use crate::hover::SourceTrace;
+    use crate::display::widget::source::SourceTrace;
     let source = SourceTrace::Stored(Rc::from([]));
     let rect = Rect::new(30.0, 40.0, 34.0, 56.0);
     for clip in [
@@ -139,7 +139,7 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
         libraries: &libraries,
     };
     let computations = crate::computations::Computations::from_sources(sources);
-    let root = crate::workspace::Root::document();
+    let root = crate::display::widget::view::Root::document();
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let mut previous: Option<RuntimeValue> = None;
     for width in [400.0, 600.0, 401.0] {
@@ -207,7 +207,7 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
                 },
             );
             assert!(
-                matches!(&placed.claim, Some((_,puri::hover::Claim::Direct(crate::frame::Hovered::Tree(crate::hover::Hover::Source(crate::hover::SourceTrace::InCell {cell,..}))))) if *cell==names["diagonal_groups"]),
+                matches!(&placed.claim, Some((_,puri::hover::Claim::Direct(crate::frame::Hovered::Tree(crate::hover::Hover::Source(crate::display::widget::source::SourceTrace::InCell {cell,..}))))) if *cell==names["diagonal_groups"]),
                 "{:?}",
                 placed.claim
             );
@@ -274,7 +274,7 @@ fn program_cursor_preserves_list_leaves_and_captures_sources_directly() {
         let Some((
             _,
             puri::hover::Claim::Direct(crate::frame::Hovered::Tree(crate::hover::Hover::Source(
-                crate::hover::SourceTrace::InCell { cell, path, .. },
+                crate::display::widget::source::SourceTrace::InCell { cell, path, .. },
             ))),
         )) = &placed.claim
         else {
@@ -701,7 +701,7 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
             ],
         );
         let computations = Computations::default();
-        let root = crate::workspace::Root::document();
+        let root = crate::display::widget::view::Root::document();
         let evaluate = |doc: &gid::Document| {
             computations.begin(Rc::new(doc.clone()), libraries.clone());
             let result = computations.evaluate(&root, &[], &expression, 1000);
@@ -1053,7 +1053,8 @@ fn range_stack_uses_row_hit_height_without_extra_vertical_padding() {
 
 #[test]
 fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
-    use crate::hover::{Hover, SourceTrace};
+    use crate::display::widget::source::SourceTrace;
+    use crate::hover::Hover;
     use gid::Step;
     use puri::handler::Event;
     use puri::hover::Claim;

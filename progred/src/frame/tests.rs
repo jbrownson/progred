@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::test_support::Landmarks;
+use crate::display::widget::source::Secondary;
 use gid::{CellId, Cells, Document, Step, Value};
 
 type HoverLog = Rc<std::cell::RefCell<Vec<(&'static str, f64)>>>;
@@ -12,7 +13,7 @@ fn scrolling_a_view_that_no_longer_exists_declines() {
         root: Some(Value::record([])),
         cells: Cells::new(),
     });
-    let gone = crate::workspace::Root::pane(vec![Step::Key(gid::new_cell_id())]);
+    let gone = crate::display::widget::view::Root::pane(vec![Step::Key(gid::new_cell_id())]);
     let event = PointerScrollEvent {
         pointer: crate::display::test_support::mouse(),
         delta: ui_events::ScrollDelta::LineDelta(0.0, 1.0),
@@ -40,7 +41,7 @@ fn the_document_view_reports_content_that_does_not_depend_on_its_height() {
             .dispatch
             .view_regions
             .iter()
-            .find(|region| matches!(region.root.target(), workspace::Target::Document))
+            .find(|region| matches!(region.root.target(), Target::Document))
             .expect("document view");
         let content = region
             .content
@@ -72,7 +73,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         crate::display::Conject::descend(),
     );
     // What the projection draws a conjected occurrence sharing.
-    let secondary = hover::Secondary::Stored(Rc::from(source.as_slice()));
+    let secondary = Secondary::Stored(Rc::from(source.as_slice()));
     let mut landmarks = [navigate::Landmark::<Editor> {
         path: occurrence.clone(),
         root: Some(root.clone()),
@@ -92,7 +93,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         hover.clone(),
         false,
     );
-    let expected = hover::SourceTrace::Stored(Rc::from(source));
+    let expected = SourceTrace::Stored(Rc::from(source));
     assert_eq!(resolved.hovered_trace, Some(expected.clone()));
     assert_eq!(resolved.hovered_secondary, Some(secondary.clone()));
     // A held press must carry the owning view into successor attribution,
@@ -877,9 +878,7 @@ fn only_transitions_and_changed_frame_inputs_remint() {
 #[test]
 fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
     let code = Hovered::Tree(hover::Hover::Value(Rc::from([])));
-    let drawing = Hovered::Tree(hover::Hover::Source(hover::SourceTrace::Stored(Rc::from(
-        [],
-    ))));
+    let drawing = Hovered::Tree(hover::Hover::Source(SourceTrace::Stored(Rc::from([]))));
 
     assert!(source_hover_visible(Some(&code), false));
     assert!(!source_hover_visible(Some(&drawing), false));
@@ -913,7 +912,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         doc: &doc,
         libraries: &libraries,
     };
-    let root = workspace::Root::document();
+    let root = Root::document();
     let targets = [
         (gid::Resolution::Document, Rect::new(10.0, 20.0, 30.0, 40.0)),
         (
@@ -937,7 +936,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
         },
     );
     for (resolution, rect) in targets {
-        let trace = hover::SourceTrace::InCell {
+        let trace = SourceTrace::InCell {
             cell,
             resolution,
             path: Rc::from([Step::Key(call)]),
@@ -1041,7 +1040,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             ),
         ),
     );
-    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
+    let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
@@ -1086,7 +1085,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     .into_iter()
     .map(|(index, steps)| {
         let pane = &model.workspace.left.panes[index];
-        let workspace::Target::Pane { path } = pane.view.root.target() else {
+        let Target::Pane { path } = pane.view.root.target() else {
             panic!("pane path")
         };
         let mut path = path.clone();
@@ -1231,14 +1230,14 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         ),
     );
     let pane = &model.workspace.left.panes[0].view;
-    let workspace::Target::Pane { path } = pane.root.target() else {
+    let Target::Pane { path } = pane.root.target() else {
         panic!("pane")
     };
     for (size, scale) in [
         (Size::new(300.0, 500.0), 1.0),
         (Size::new(700.0, 400.0), 2.0),
     ] {
-        let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
+        let styles = style::editor(style::Theme::Light.palette(), scale);
         let mut fonts = crate::fonts::bundled_font_context();
         let mut layouts = LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
@@ -1349,7 +1348,7 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
     let upper = model.workspace.left.panes[0].view.root.clone();
     let lower = model.workspace.left.panes[1].view.root.clone();
     let stack = crate::stack::load();
-    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
+    let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
@@ -1408,7 +1407,7 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
             .iter()
             .all(|landmark| landmark.root.is_some())
     );
-    let workspace::Target::Pane { path } = upper.target() else {
+    let Target::Pane { path } = upper.target() else {
         panic!("pane root")
     };
     assert!(placed.landmarks.iter().any(|landmark| {
@@ -1723,13 +1722,8 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
             .starts_with(&[Step::Key(workspace::vocabulary::PANES)])
     );
     let marked = |driver: &crate::driver::Driver, alpha, other: Rect| {
-        let brush = Brush::from(
-            crate::styles::Theme::Light
-                .palette()
-                .accent
-                .with_alpha(alpha),
-        );
-        let outline = crate::display::widget::style::highlight_outline(1.0, other);
+        let brush = Brush::from(style::Theme::Light.palette().accent.with_alpha(alpha));
+        let outline = style::highlight_outline(1.0, other);
         crate::display::test_support::painted(&driver.painted().0).any(|command| {
             matches!(command, DrawCmd::Fill {
                 shape: Shape::RoundedRect(rect),

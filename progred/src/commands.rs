@@ -13,7 +13,7 @@ impl Editor {
     fn select_landmark_or_edge(
         &mut self,
         geometry: navigate::Geometry<'_, Editor>,
-        root: &crate::workspace::Root,
+        root: &crate::display::widget::view::Root,
         path: gid::Path,
     ) {
         if let Some(target) = geometry

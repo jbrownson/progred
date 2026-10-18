@@ -3,7 +3,9 @@
 //! caller's choice, so a silent mint never draws.
 
 use crate::display::widget::frame::{Cursor, ViewRegion};
-use crate::display::widget::{container, placed, view};
+use crate::display::widget::source::SourceTrace;
+use crate::display::widget::view::{Root, Target};
+use crate::display::widget::{container, placed, style, view};
 use crate::hover;
 use crate::input::PendingPaint;
 use crate::menu;
@@ -12,7 +14,7 @@ use crate::navigate;
 use crate::projection;
 use crate::sources;
 use crate::stack;
-use crate::workspace::{self, Root};
+use crate::workspace;
 use crate::{Editor, EditorRunner, content_viewport};
 use kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 use parley::{FontContext, LayoutContext};
@@ -31,7 +33,7 @@ pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 #[derive(Default)]
 pub(crate) struct Dispatch {
     pub(crate) handler: Rc<Handler<Editor, DispatchContext<Editor>>>,
-    pub(crate) pointer_root: Option<crate::workspace::Root>,
+    pub(crate) pointer_root: Option<crate::display::widget::view::Root>,
     pub(crate) landmarks: Rc<[navigate::Landmark<Editor>]>,
     pub(crate) view_regions: Rc<[ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
@@ -151,7 +153,7 @@ impl crate::display::Host for Editor {
 fn attribute(
     sources: &sources::Sources<'_>,
     landmarks: &[navigate::Landmark<Editor>],
-    root: Option<&workspace::Root>,
+    root: Option<&Root>,
     completion: Option<&crate::display::widget::offers::Offers<Editor>>,
     hovered: Option<Hovered>,
     link: bool,
@@ -181,7 +183,7 @@ fn attribute(
     let hovered_trace = match &hovered {
         Some(Hovered::Tree(hover::Hover::Value(_))) if visible => landmark
             .and_then(|d| d.scope.location(&d.path))
-            .map(|location| hover::SourceTrace::from_location(sources, &location)),
+            .map(|location| SourceTrace::from_location(sources, &location)),
         Some(Hovered::Tree(hover::Hover::Source(source))) if visible => Some(source.clone()),
         _ => None,
     };
@@ -214,8 +216,8 @@ pub(crate) use crate::display::widget::scroll::offset as scroll_offset;
 
 /// Interpret the winning claim as an editor target and its owning view.
 fn hover_target(
-    claim: Option<(Option<crate::workspace::Root>, Claim<Hovered>)>,
-) -> (Option<Hovered>, Option<crate::workspace::Root>) {
+    claim: Option<(Option<crate::display::widget::view::Root>, Claim<Hovered>)>,
+) -> (Option<Hovered>, Option<crate::display::widget::view::Root>) {
     match claim {
         Some((root, Claim::Direct(target) | Claim::Extended(target))) => (Some(target), root),
         Some((root, Claim::Occludes)) => (Some(Hovered::Blocked), root),
@@ -233,7 +235,7 @@ fn source_hover_visible(hover: Option<&Hovered>, linking: bool) -> bool {
 }
 
 pub(crate) struct FrameDescription<'a> {
-    pub palette: crate::styles::Palette,
+    pub palette: style::Palette,
     pub command_modifier: puri::keyboard::CommandModifier,
     computations: &'a crate::computations::Computations,
     focused: bool,
@@ -581,7 +583,7 @@ fn project_workspace_view(
     focused: bool,
     computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
-    styles: &crate::styles::Styles,
+    styles: &style::Styles,
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
     view: &workspace::View,
@@ -591,7 +593,7 @@ fn project_workspace_view(
     let raw = view.projection == workspace::Projection::Raw;
     let standard = view.projection == workspace::Projection::Standard;
     let viewport = match view.root.target() {
-        workspace::Target::Pane { path } if standard => projection::viewport::entry(sources, path),
+        Target::Pane { path } if standard => projection::viewport::entry(sources, path),
         _ => None,
     };
     let plain = (view.projection == workspace::Projection::Plain).then(|| stack.plain());
@@ -614,11 +616,11 @@ fn project_workspace_view(
     let body_width = (size.width - 2.0 * margin).max(0.0);
     let root_path;
     let (root, projection) = match view.root.target() {
-        workspace::Target::Document => {
+        Target::Document => {
             root_path = Vec::new();
             (sources.root(), document_projection)
         }
-        workspace::Target::Pane { path } => {
+        Target::Pane { path } => {
             if let Some((entry, projection)) = &viewport {
                 root_path = entry.path.clone();
                 (Some(entry.value), projection)
@@ -706,7 +708,7 @@ fn project_workspace(
     focused: bool,
     computations: &crate::computations::Computations,
     stack: &stack::Stack<Editor>,
-    styles: &crate::styles::Styles,
+    styles: &style::Styles,
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
     size: Size,
@@ -852,7 +854,7 @@ fn project_frame(
         scale: scale as f32,
         cache: text_cache,
     };
-    let styles = crate::styles::editor(palette, scale);
+    let styles = style::editor(palette, scale);
     let application_menu = drawn_menu.then(|| {
         menu::view(
             &mut tcx,

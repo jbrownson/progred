@@ -2,6 +2,7 @@
 //! to for secondary marks.
 
 use crate::display::widget::offers::Offers;
+use crate::display::widget::source::{Secondary, SourceTrace};
 use gid::Step;
 use std::rc::Rc;
 
@@ -28,8 +29,6 @@ pub enum Hover {
     /// snapshot.
     Entry(usize),
 }
-
-pub use crate::display::widget::source::{Secondary, SourceTrace};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceCalls {

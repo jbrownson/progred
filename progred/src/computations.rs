@@ -1,6 +1,6 @@
 //! The editor owns memo roots; libraries compose typed computations in them.
 
-use crate::{library::Libraries, sources::Sources, workspace::Root};
+use crate::{display::widget::view::Root, library::Libraries, sources::Sources};
 use gid::{Document, Step, Value};
 use grap::Host;
 use incremental::background::{Executor, Tasks};

@@ -227,7 +227,10 @@ pub(crate) fn projected_completion_entries_in(
     projection: Option<&Projection<crate::Editor>>,
     provider: Option<&crate::display::CompletionProvider>,
 ) -> Vec<Entry<crate::Editor>> {
-    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
+    let styles = crate::display::widget::style::editor(
+        crate::display::widget::style::Theme::Light.palette(),
+        1.0,
+    );
     let annotations = Annotations::default();
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();

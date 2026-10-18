@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::widget::style;
 use crate::projection::{Layout, ProjectionInput};
 
 #[test]
@@ -339,7 +340,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     };
     let lib = core_libraries();
     let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
-    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
+    let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
@@ -422,7 +423,7 @@ fn a_projection_defined_as_data_realizes() {
     };
     let lib = core_libraries();
     let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
-    let styles = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0);
+    let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();

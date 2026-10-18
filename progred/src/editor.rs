@@ -4,6 +4,7 @@ use crate::UserEvent;
 use crate::clipboard::Clipboard;
 use crate::command::{Command, DocCommand};
 use crate::display::widget::frame::Cursor;
+use crate::display::widget::view::{Root, Target};
 use crate::frame::FrameState;
 use crate::input::{PendingGesture, PendingPointer, PendingScroll, continuous_input};
 #[cfg(target_os = "macos")]
@@ -16,8 +17,8 @@ use crate::web_worker;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog, text_store};
 use crate::{
-    command, computations, gesture, gid_text, menu, navigate, selection, sources, stack, styles,
-    timers, workspace,
+    command, computations, display::widget::style, gesture, gid_text, menu, navigate, selection,
+    sources, stack, timers, workspace,
 };
 use kurbo::{Point, Rect, Size};
 use peniko::Brush;
@@ -89,7 +90,7 @@ pub(crate) fn stage() -> String {
 /// context is a cheap clone over shared font data). The dispatch
 /// world type.
 pub(crate) struct Editor {
-    pub(crate) palette: styles::Palette,
+    pub(crate) palette: style::Palette,
     pub(crate) command_modifier: puri::keyboard::CommandModifier,
     pub(crate) computations: computations::Computations,
     pub(crate) timers: timers::Timers,
@@ -282,7 +283,7 @@ impl EditorRunner {
 }
 
 pub(crate) fn new_editor(
-    palette: styles::Palette,
+    palette: style::Palette,
     command_modifier: puri::keyboard::CommandModifier,
     drawn_menu: bool,
     stack: stack::Stack<Editor>,
@@ -542,7 +543,7 @@ impl Editor {
 
     fn move_selected_pane(&mut self, direction: workspace::Move) -> bool {
         let next = self.model.selection.as_ref().and_then(|selection| {
-            let workspace::Target::Pane { path } = selection.root().target() else {
+            let Target::Pane { path } = selection.root().target() else {
                 return None;
             };
             let suffix = selection.path().strip_prefix(path.as_slice())?.to_vec();
@@ -554,7 +555,7 @@ impl Editor {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);
             self.model.history.record(before);
-            let next_root = workspace::Root::pane(path.clone());
+            let next_root = Root::pane(path.clone());
             if let Some(view) = self.model.workspace.view_mut(&root) {
                 view.root = next_root.clone();
                 view.annotations = Default::default();
@@ -869,7 +870,7 @@ pub(crate) fn test_editor(doc: gid::Document) -> Editor {
 #[cfg(test)]
 pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack<Editor>) -> Editor {
     let mut editor = new_editor(
-        styles::Theme::Light.palette(),
+        style::Theme::Light.palette(),
         modifiers::native(),
         false,
         stack,
@@ -885,7 +886,7 @@ pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack<Edi
 }
 
 #[cfg(test)]
-pub(crate) fn test_root() -> workspace::Root {
-    thread_local! { static ROOT: workspace::Root = workspace::Root::document(); }
+pub(crate) fn test_root() -> Root {
+    thread_local! { static ROOT: Root = Root::document(); }
     ROOT.with(Clone::clone)
 }

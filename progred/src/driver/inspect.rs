@@ -87,7 +87,7 @@ impl<P> Driver<P> {
 
     /// The system's appearance becomes `palette`; whether that changed
     /// anything.
-    pub(crate) fn palette(&mut self, palette: crate::styles::Palette) -> bool {
+    pub(crate) fn palette(&mut self, palette: crate::display::widget::style::Palette) -> bool {
         let changed = self
             .runner
             .palette_changed(palette, self.scale(), self.viewport);

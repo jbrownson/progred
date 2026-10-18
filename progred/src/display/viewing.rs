@@ -4,11 +4,11 @@
 //! the sources in full, through [`Toolkit`].
 
 use crate::display::widget::source::SourceTrace;
+use crate::display::widget::view::Root;
 use crate::editing::{Scope, Site};
 use crate::location::Location;
 use crate::selection::Selection;
 use crate::sources::Sources;
-use crate::workspace::Root;
 use gid::{Step, Value};
 use puri::edit::LineEditState;
 
@@ -39,7 +39,7 @@ pub(crate) trait Toolkit: Viewing {
     /// This occurrence, as a place to act.
     fn site(&self) -> Site;
     /// The theme, at the view's scale.
-    fn styles(&self) -> &crate::styles::Styles;
+    fn styles(&self) -> &crate::display::widget::style::Styles;
     /// The document read over its libraries.
     fn sources(&self) -> Sources<'_>;
     /// Where this occurrence is stored.

@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::widget::recorded::Drawing;
-use crate::hover::SourceTrace;
+use crate::display::widget::source::SourceTrace;
+use crate::display::widget::style;
 use crate::library::Libraries;
 use crate::location::Location;
 use crate::sources::Sources;
@@ -70,7 +71,7 @@ fn declining_after_drawing_discards_the_whole_recording() {
             libraries: &stack.libraries,
         },
         Some(SourceTrace::Stored(Rc::from([]))),
-        &crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
+        &style::editor(style::Theme::Light.palette(), 1.0),
     );
     assert!(drawing.is_empty());
 }
@@ -124,7 +125,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
             &record(grap::call(Value::from(function), []).into(), 100),
             &sources,
             Some(SourceTrace::Stored(Rc::from([]))),
-            &crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
+            &style::editor(style::Theme::Light.palette(), 1.0),
         );
         assert_eq!(drawing.hits(), 1);
         let selected = SourceTrace::from_location(

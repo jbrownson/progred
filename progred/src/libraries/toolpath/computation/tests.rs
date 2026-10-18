@@ -6,14 +6,14 @@ use super::*;
 use crate::libraries::{absent, control, f64};
 
 /// The pane's occurrence at `path`, where the tree program's work is kept.
-fn site(root: &crate::workspace::Root, path: &[gid::Step]) -> crate::editing::Site {
+fn site(root: &crate::display::widget::view::Root, path: &[gid::Step]) -> crate::editing::Site {
     crate::editing::Site::new(root.clone(), std::rc::Rc::from(path), Default::default())
 }
 
 struct ViewportEnv<'a> {
     sources: crate::sources::Sources<'a>,
     computations: &'a Computations,
-    root: &'a crate::workspace::Root,
+    root: &'a crate::display::widget::view::Root,
 }
 
 impl crate::display::Env for ViewportEnv<'_> {
@@ -50,7 +50,7 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
         crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let libraries = crate::stack::load().libraries;
     let computations = Computations::default();
-    let root = crate::workspace::Root::document();
+    let root = crate::display::widget::view::Root::document();
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let program = computations.runtime.input(RuntimeValue::record([]));
     let paths = recording(
@@ -151,7 +151,7 @@ fn profile_program_tree_construction() {
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let declaration = sources.resolve_path(&pane.path).unwrap();
     let computations = crate::computations::Computations::from_sources(sources);
-    let root = crate::workspace::Root::document();
+    let root = crate::display::widget::view::Root::document();
     let samples: Vec<_> = (0..5)
         .map(|trial| {
             let start = Instant::now();

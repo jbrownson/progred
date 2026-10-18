@@ -1,5 +1,6 @@
 use super::*;
 use crate::display as d;
+use crate::display::widget::style;
 use crate::projection::Partial;
 
 fn world(root: Value) -> crate::Editor {
@@ -55,10 +56,7 @@ fn evaluated_output_is_tinted_without_tinting_its_expression() {
     let result = stop(&frame, &[Step::Key(RESULT)]).rect;
     let expression = stop(&frame, &[Step::Key(grap::vocabulary::EVALUATE)]).rect;
     let drawing = settle(frame).list;
-    let tints = grounds(
-        &drawing.0,
-        crate::styles::Theme::Light.palette().readonly_ground,
-    );
+    let tints = grounds(&drawing.0, style::Theme::Light.palette().readonly_ground);
     assert_eq!(tints, [result.inset(3.0)]);
     assert!(!tints[0].contains(expression.center()));
 }
@@ -79,10 +77,7 @@ fn nested_computed_results_do_not_stack_readonly_tints() {
     .rect;
     stop(&frame, &[Step::Key(RESULT), Step::Key(RESULT)]);
     let drawing = settle(frame).list;
-    let tints = grounds(
-        &drawing.0,
-        crate::styles::Theme::Light.palette().readonly_ground,
-    );
+    let tints = grounds(&drawing.0, style::Theme::Light.palette().readonly_ground);
     assert_eq!(tints, [source_result.inset(3.0), outer.inset(3.0)]);
 }
 
@@ -667,7 +662,7 @@ fn explicit_jump_can_establish_a_source_below_at() {
         Some(&text::value("changed"))
     );
     let drawing = settle(frame).list;
-    let palette = crate::styles::Theme::Light.palette();
+    let palette = style::Theme::Light.palette();
     assert_eq!(
         grounds(&drawing.0, palette.readonly_ground),
         [computed_rect.inset(3.0)]

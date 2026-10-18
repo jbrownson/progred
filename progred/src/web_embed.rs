@@ -1,7 +1,8 @@
 //! Browser-host observation and opt-in fixed-slot tutorial presentation.
 
+use crate::display::widget::view::{Root, Target};
 use crate::location::{Location, Start};
-use crate::{Editor, selection::Stage, workspace};
+use crate::{Editor, selection::Stage};
 use ::grap::path;
 use gid::{Document, Path, Resolution, Step, Value};
 use std::rc::Rc;
@@ -62,7 +63,7 @@ pub(crate) fn content_height(
 ) -> Option<f64> {
     regions.iter().find_map(|region| {
         let content = region.content?;
-        (matches!(region.root.target(), workspace::Target::Document) && region.rect.area() > 0.0)
+        (matches!(region.root.target(), Target::Document) && region.rect.area() > 0.0)
             .then(|| (region.rect.y0 / scale + content.y).ceil())
     })
 }
@@ -247,7 +248,7 @@ fn named_reference(
 
 #[derive(PartialEq, Eq)]
 struct Selection {
-    root: workspace::Root,
+    root: Root,
     path: Path,
     /// Where the selected data is stored.
     source: Option<Location<'static>>,
@@ -303,8 +304,8 @@ impl Changes {
                 "document": &*editor.model.doc,
                 "selection": selection.as_ref().map(|selected| serde_json::json!({
                     "view": match selected.root.target() {
-                        workspace::Target::Document => serde_json::json!("document"),
-                        workspace::Target::Pane { path: root } => serde_json::json!({"pane": path::value(root)}),
+                        Target::Document => serde_json::json!("document"),
+                        Target::Pane { path: root } => serde_json::json!({"pane": path::value(root)}),
                     },
                     "path": path::value(&selected.path),
                     "source": selected.source.as_ref().map(source),

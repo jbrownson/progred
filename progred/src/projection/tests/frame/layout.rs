@@ -419,7 +419,10 @@ fn decorative_and_pending_slots_share_the_active_query_frame() {
     };
     let selected = pending_value(&crate::test_root(), Vec::new());
     for (scale, size) in [(1.0, 14.0), (1.0, 22.0), (2.0, 14.0), (2.0, 22.0)] {
-        context.styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
+        context.styles = crate::display::widget::style::editor(
+            crate::display::widget::style::Theme::Light.palette(),
+            scale,
+        );
         context.styles.label.size = size;
         let frames = [
             (&decorative, None),
@@ -480,7 +483,10 @@ fn cell_parentheses_leave_a_gap_beside_empty_frames() {
     );
     let mut context = BenchContext::new();
     for scale in [1.0, 2.0] {
-        context.styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
+        context.styles = crate::display::widget::style::editor(
+            crate::display::widget::style::Theme::Light.palette(),
+            scale,
+        );
         for selection in [None, Some(&selected)] {
             let (bench, _) = context.place(
                 &doc,
@@ -567,7 +573,7 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
                     ..
                 } if *brush
                     == Brush::from(
-                        crate::styles::Theme::Light
+                        crate::display::widget::style::Theme::Light
                             .palette()
                             .accent
                             .with_alpha(0.10),
@@ -613,7 +619,7 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
     let selected = Selection::edge(&crate::test_root(), paths[0].clone());
     let blue = |alpha| {
         Brush::from(
-            crate::styles::Theme::Light
+            crate::display::widget::style::Theme::Light
                 .palette()
                 .accent
                 .with_alpha(alpha),
@@ -650,7 +656,10 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
             .collect::<Vec<_>>()
     };
     for scale in [1.0, 2.0] {
-        context.styles = crate::styles::editor(crate::styles::Theme::Light.palette(), scale);
+        context.styles = crate::display::widget::style::editor(
+            crate::display::widget::style::Theme::Light.palette(),
+            scale,
+        );
         let annotations = Annotations::default();
         let (unmarked, _) = context.place(&doc, None, &annotations, 1200.0, None, None, None);
         let rects = paths.each_ref().map(|path| {

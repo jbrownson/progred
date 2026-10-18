@@ -63,7 +63,7 @@ pub(crate) fn editing_frame_with_annotations(
     annotations: &Annotations,
 ) -> crate::frame::HoverOutput<EditingWorld> {
     let stack = &world.stack;
-    let styles = crate::styles::editor(world.palette, 1.0);
+    let styles = crate::display::widget::style::editor(world.palette, 1.0);
     world
         .computations
         .begin(world.model.doc.clone(), stack.libraries.clone());
@@ -330,7 +330,7 @@ pub(crate) fn place_with_annotations(
 pub(crate) struct BenchContext {
     pub(crate) computations: crate::computations::Computations,
     pub(crate) stack: crate::stack::Stack<World>,
-    pub(crate) styles: crate::styles::Styles,
+    pub(crate) styles: crate::display::widget::style::Styles,
     pub(crate) fonts: parley::FontContext,
     pub(crate) layouts: parley::LayoutContext<Brush>,
     pub(crate) cache: puri::text::TextCache,
@@ -352,7 +352,10 @@ impl BenchContext {
         Self {
             computations: crate::computations::Computations::default(),
             stack: crate::stack::load(),
-            styles: crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0),
+            styles: crate::display::widget::style::editor(
+                crate::display::widget::style::Theme::Light.palette(),
+                1.0,
+            ),
             fonts: crate::fonts::bundled_font_context(),
             layouts: parley::LayoutContext::new(),
             cache: puri::text::TextCache::default(),
@@ -513,7 +516,10 @@ impl ProfileView {
         doc: &Document,
         mut context: BenchContext,
     ) -> (Self, BenchContext) {
-        context.styles = crate::styles::editor(crate::styles::Theme::Light.palette(), self.scale);
+        context.styles = crate::display::widget::style::editor(
+            crate::display::widget::style::Theme::Light.palette(),
+            self.scale,
+        );
         if let Some(path) = &self.root {
             let sources = Sources {
                 doc,

@@ -6,8 +6,10 @@
 
 use super::HoverPass;
 use super::placed::leaf;
+use super::style::{Styles, face_style};
 use crate::display::Host;
-use crate::hover::{Hover, SourceCalls, SourceTrace};
+use crate::display::widget::source::SourceTrace;
+use crate::hover::{Hover, SourceCalls};
 use crate::sources::Sources;
 use gid::Step;
 use kurbo::{Affine, Point, Rect, Shape as _};
@@ -163,7 +165,7 @@ impl Drawing {
         record: &Record,
         host: &dyn grap::Host,
         input: Option<SourceTrace>,
-        styles: &crate::styles::Styles,
+        styles: &Styles,
     ) -> Self {
         Self(draw(record, host, input, Faces::new(styles)))
     }
@@ -194,21 +196,17 @@ impl Drawing {
 }
 
 /// Recording happens after the frame's style borrow ends, so it keeps a copy.
-struct Faces(crate::styles::Styles);
+struct Faces(Styles);
 
 impl Faces {
-    fn new(styles: &crate::styles::Styles) -> Self {
+    fn new(styles: &Styles) -> Self {
         Self(styles.clone())
     }
 
     fn resolve(&self, paint: crate::display::Paint) -> Brush {
         match paint {
             crate::display::Paint::Brush(brush) => brush,
-            crate::display::Paint::Face(face) => {
-                crate::display::widget::style::face_style(&self.0, face)
-                    .brush
-                    .clone()
-            }
+            crate::display::Paint::Face(face) => face_style(&self.0, face).brush.clone(),
         }
     }
 }

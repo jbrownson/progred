@@ -1,11 +1,11 @@
 //! Selection, collapse, and the writes they drive. Selection paths name
 //! projected occurrences; their conject locates document data for mutations.
 
+use crate::display::widget::view::Root;
 use crate::library::Libraries;
 use crate::location::{Location, Start};
 use crate::sources::Sources;
 use crate::spine;
-use crate::workspace;
 use ::grap::text;
 use gid::CellId;
 use gid::{Document, Path, Position, Resolution, Step, Value, position};
@@ -31,7 +31,7 @@ pub(crate) struct Editor {
 pub struct Selection {
     /// Which transient projection root owns this occurrence. Paths
     /// may coincide across panes, but selection never does.
-    root: workspace::Root,
+    root: Root,
     /// Where: the value's path for edge and pending stages, the
     /// parent record's for a label stage.
     path: Path,
@@ -62,12 +62,7 @@ impl Selection {
     /// Editor fields are decoded once into
     /// their live owner, then removed from the stored payload.
     #[cfg(test)]
-    pub(crate) fn from_payload(
-        root: &workspace::Root,
-        sources: &Sources,
-        path: Path,
-        payload: Value,
-    ) -> Self {
+    pub(crate) fn from_payload(root: &Root, sources: &Sources, path: Path, payload: Value) -> Self {
         Self::from_scoped_payload(
             root,
             sources,
@@ -78,7 +73,7 @@ impl Selection {
     }
 
     pub(crate) fn from_scoped_payload(
-        root: &workspace::Root,
+        root: &Root,
         sources: &Sources,
         scope: crate::editing::Scope,
         path: Path,
@@ -118,13 +113,13 @@ impl Selection {
         selection
     }
 
-    pub fn edge(root: &workspace::Root, path: Path) -> Self {
+    pub fn edge(root: &Root, path: Path) -> Self {
         edge_selection(root, path, None)
     }
 
     #[cfg(test)]
     pub(crate) fn from_line(
-        root: &workspace::Root,
+        root: &Root,
         sources: &Sources,
         path: Path,
         line: crate::display::LineEdit,
@@ -170,11 +165,11 @@ impl Selection {
         self.scope.writable(sources, &self.path)
     }
 
-    pub fn root(&self) -> &workspace::Root {
+    pub fn root(&self) -> &Root {
         &self.root
     }
 
-    pub(crate) fn relocate(&mut self, root: workspace::Root, path: Path) {
+    pub(crate) fn relocate(&mut self, root: Root, path: Path) {
         self.root = root;
         self.path = path;
         self.preserve_recorded(false);
@@ -338,7 +333,7 @@ impl Selection {
     }
 }
 
-fn edge_selection(root: &workspace::Root, path: Path, editor: Option<Editor>) -> Selection {
+fn edge_selection(root: &Root, path: Path, editor: Option<Editor>) -> Selection {
     Selection {
         root: root.clone(),
         path,
@@ -395,13 +390,13 @@ fn store(doc: &mut Rc<Document>, start: Start, value: Option<Value>) {
 
 /// A value-stage pending: the location named by `path` does not
 /// exist, and its value is being authored.
-pub fn pending_value(root: &workspace::Root, path: Path) -> Selection {
+pub fn pending_value(root: &Root, path: Path) -> Selection {
     pending_with_query(root, path, "")
 }
 
 /// An edge with no editor mounted — the test paths' plain selection.
 #[cfg(test)]
-pub(crate) fn bare_edge(root: &workspace::Root, path: Path) -> Selection {
+pub(crate) fn bare_edge(root: &Root, path: Path) -> Selection {
     Selection {
         root: root.clone(),
         path,
@@ -414,13 +409,13 @@ pub(crate) fn bare_edge(root: &workspace::Root, path: Path) -> Selection {
 
 /// A value pending with a seeded query — the clipboard, replacement, and
 /// test paths.
-pub(crate) fn pending_with_query(root: &workspace::Root, path: Path, seed: &str) -> Selection {
+pub(crate) fn pending_with_query(root: &Root, path: Path, seed: &str) -> Selection {
     query_selection(root, path, payload::pending(seed, 0))
 }
 
 /// Decode an incoming pending selection. The caret defaults to the
 /// end of the query when no offset was supplied.
-fn query_selection(root: &workspace::Root, path: Path, payload: Value) -> Selection {
+fn query_selection(root: &Root, path: Path, payload: Value) -> Selection {
     let line = payload::editor_line(&payload, payload::query(&payload).unwrap_or(""));
     Selection {
         root: root.clone(),
@@ -470,7 +465,7 @@ impl LocationRead for crate::editing::Read<'_, '_> {
 
 /// A new field on a writable record, following a cell if needed.
 pub(crate) fn pending_edge(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     parent: Path,
 ) -> Option<Selection> {
@@ -493,7 +488,7 @@ pub(crate) fn pending_edge(
 /// A bare cell's value being authored: the within-gesture's meaning
 /// on a referenced identity with no value yet.
 pub(crate) fn pending_follow(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
@@ -509,7 +504,7 @@ pub(crate) fn pending_follow(
 /// an element step), minted between it and its neighbor. The list
 /// projection's gesture.
 fn pending_beside(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
     after: bool,
@@ -536,7 +531,7 @@ fn pending_beside(
 }
 
 pub(crate) fn pending_after(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
@@ -544,7 +539,7 @@ pub(crate) fn pending_after(
 }
 
 pub(crate) fn pending_before(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
@@ -556,7 +551,7 @@ pub(crate) fn pending_before(
 /// prepended at the front. Only lists take elements, by type, and
 /// the owning cell must be writable, as in [`pending_edge`].
 fn pending_into_at(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
     end: bool,
@@ -588,7 +583,7 @@ fn pending_into_at(
 /// Appends: "add to this list" goes at the end — the within chord's
 /// meaning on a list, where fields don't exist.
 pub(crate) fn pending_into(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
@@ -596,7 +591,7 @@ pub(crate) fn pending_into(
 }
 
 pub(crate) fn pending_into_first(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
 ) -> Option<Selection> {
@@ -610,7 +605,7 @@ pub(crate) fn pending_into_first(
 /// appended element on a list. A cell's whole value is drawn where its
 /// reference is, so it continues the reference's enumeration.
 pub(crate) fn pending_enter(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
     before: bool,
@@ -637,7 +632,7 @@ pub(crate) fn pending_enter(
 /// a bare cell's first value. With shift, the front instead —
 /// prepend. Atoms other than links have no within and decline.
 pub(crate) fn pending_insert(
-    root: &workspace::Root,
+    root: &Root,
     sources: &impl LocationRead,
     path: &[Step],
     front: bool,
@@ -652,7 +647,7 @@ pub(crate) fn pending_insert(
 }
 
 /// A pending root for an empty document.
-pub fn pending_root(root: &workspace::Root, sources: &Sources) -> Option<Selection> {
+pub fn pending_root(root: &Root, sources: &Sources) -> Option<Selection> {
     sources
         .root()
         .is_none()

@@ -159,7 +159,7 @@ pub fn border<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
 /// A wash of the palette's `color` under the child, its corners rounded.
 pub fn ground<World: 'static, Hover: 'static>(
     child: Layout<World, Hover>,
-    color: fn(&crate::styles::Palette) -> peniko::Color,
+    color: fn(&style::Palette) -> peniko::Color,
 ) -> Layout<World, Hover> {
     before(
         child,

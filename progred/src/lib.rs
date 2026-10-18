@@ -56,7 +56,6 @@ mod site;
 mod sources;
 mod spine;
 mod stack;
-mod styles;
 #[cfg(test)]
 mod svg;
 #[cfg(test)]
@@ -119,7 +118,7 @@ pub(crate) enum UserEvent {
     #[cfg(target_arch = "wasm32")]
     BrowserModifiersChanged(winit::keyboard::ModifiersState),
     #[cfg(target_arch = "wasm32")]
-    PaletteChanged(styles::Palette),
+    PaletteChanged(display::widget::style::Palette),
     /// The libraries whose projections the embedding page wants drawn, and
     /// whether names show.
     #[cfg(target_arch = "wasm32")]
@@ -227,7 +226,7 @@ pub fn run() {
         drawn_menu,
         stack::load(),
         modifiers::native(),
-        styles::Theme::Light.palette(),
+        display::widget::style::Theme::Light.palette(),
         #[cfg(target_arch = "wasm32")]
         None,
     );
@@ -240,7 +239,7 @@ fn run_document(
     drawn_menu: bool,
     stack: stack::Stack<Editor>,
     command_modifier: puri::keyboard::CommandModifier,
-    palette: styles::Palette,
+    palette: display::widget::style::Palette,
     #[cfg(target_arch = "wasm32")] on_change: Option<web_sys::js_sys::Function>,
 ) {
     let mut builder = EventLoop::<UserEvent>::with_user_event();

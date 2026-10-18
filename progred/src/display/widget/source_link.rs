@@ -1,7 +1,8 @@
 //! Source following shared by generated drawings and ordinary widgets.
 use super::frame::DispatchContext;
 use crate::display::Host;
-use crate::hover::{Hover, SourceTrace};
+use crate::display::widget::source::SourceTrace;
+use crate::hover::Hover;
 use crate::sources::Sources;
 use kurbo::Point;
 use puri::handler::{Event, EventOutcome, HasHandler};

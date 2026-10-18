@@ -93,7 +93,7 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
     assert_eq!(model.workspace.right_width, fresh.right_width);
 }
 
-fn select(model: &mut Model, root: &workspace::Root, path: Path) {
+fn select(model: &mut Model, root: &Root, path: Path) {
     model.selection = Some(selection::Selection::edge(root, path));
 }
 

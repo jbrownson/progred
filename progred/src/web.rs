@@ -1,6 +1,6 @@
 //! Browser entry points called from the embedding page.
 
-use crate::{UserEvent, gid_text, run_document, styles, web_embed};
+use crate::{UserEvent, display::widget::style, gid_text, run_document, web_embed};
 use wasm_bindgen::JsCast;
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
@@ -109,7 +109,7 @@ pub(crate) fn report_content_height(
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn set_theme(theme: &str) -> Result<(), wasm_bindgen::JsValue> {
     let palette = theme
-        .parse::<styles::Theme>()
+        .parse::<style::Theme>()
         .map_err(wasm_bindgen::JsValue::from_str)?
         .palette();
     WEB_PROXY.with(|proxy| {
@@ -242,7 +242,7 @@ pub fn start_editor(
         theme
             .as_deref()
             .unwrap_or("light")
-            .parse::<styles::Theme>()
+            .parse::<style::Theme>()
             .map_err(wasm_bindgen::JsValue::from_str)?
             .palette(),
         on_change,

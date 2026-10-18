@@ -91,9 +91,12 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
     // Stacked: each part centered over the other, with a rule as wide as
     // the wider part between them.
     let frame = settle(editing_frame(&mut world, false));
-    let ink = crate::styles::editor(crate::styles::Theme::Light.palette(), 1.0)
-        .ink
-        .brush;
+    let ink = crate::display::widget::style::editor(
+        crate::display::widget::style::Theme::Light.palette(),
+        1.0,
+    )
+    .ink
+    .brush;
     let rules = frame
         .list
         .0
