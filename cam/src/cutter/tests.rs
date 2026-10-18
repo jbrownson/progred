@@ -71,7 +71,7 @@ fn square_and_taper_sweeps_match_dense_placements_including_axial_motion() {
 #[test]
 fn profile_joints_are_not_internal_cap_surfaces() {
     let tool = Tool::bull(0.25, 0.05, 0.4).unwrap();
-    let outline = tool.sections[0].outline(0.001).unwrap();
+    let outline = tool.sections()[0].outline(0.001).unwrap();
     let points: Vec<_> = outline
         .iter()
         .skip(1)
@@ -122,7 +122,7 @@ fn non_cutting_shanks_and_gaps_are_not_swept_into_stock() {
         ],
     );
     assert!(values[0] < 0.0 && values[1] > 0.0 && values[2] < 0.0 && values[3] > 0.0);
-    let shank = tool.sections[1]
+    let shank = tool.sections()[1]
         .sweep(0.001, [0.0; 3], [0.0; 3], Axis::Z)
         .unwrap();
     assert!(samples(shank, &[[0.2, 0.0, 0.3]])[0] < 0.0);

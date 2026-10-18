@@ -166,7 +166,7 @@ impl ToolValue for Tool {
         let mut current = Point::new(0.0, 0.0);
         Value::record([(
             TOOL,
-            Value::list(self.sections.iter().map(|s| {
+            Value::list(self.sections().iter().map(|s| {
                 let kind = match s.kind {
                     SectionKind::Cutting => CUTTING,
                     SectionKind::NonCutting => NON_CUTTING,

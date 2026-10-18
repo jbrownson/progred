@@ -390,7 +390,7 @@ impl Section {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tool {
-    pub sections: Vec<Section>,
+    sections: Vec<Section>,
 }
 
 impl Tool {
@@ -414,6 +414,11 @@ impl Tool {
             }
         }
         Some(Self { sections })
+    }
+
+    /// The sections, tip to spindle, as `new` checked them.
+    pub fn sections(&self) -> &[Section] {
+        &self.sections
     }
 
     pub fn square(diameter: f64, length: f64) -> Option<Self> {

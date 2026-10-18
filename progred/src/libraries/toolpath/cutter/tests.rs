@@ -100,8 +100,8 @@ fn section_tags_are_explicit_exclusive_and_open_to_metadata() {
             (name, crate::libraries::text::value("section")),
         ]);
         let decoded = read_section(section).unwrap();
-        assert_eq!(decoded.sections[0].kind, kind);
-        assert_eq!(decoded.sections[0].profile, tool.sections[0].profile);
+        assert_eq!(decoded.sections()[0].kind, kind);
+        assert_eq!(decoded.sections()[0].profile, tool.sections()[0].profile);
         assert_eq!(Tool::read(&decoded.value()), Some(decoded));
     }
     for section in [
@@ -145,7 +145,7 @@ fn arcs_use_named_bend_tags_and_reject_ambiguous_segments() {
         )
         .unwrap();
         assert_eq!(
-            decoded.sections[0].profile,
+            decoded.sections()[0].profile,
             vec![Segment::Arc {
                 end,
                 radius: 0.1,
@@ -153,7 +153,7 @@ fn arcs_use_named_bend_tags_and_reject_ambiguous_segments() {
             }]
         );
         assert_eq!(Tool::read(&decoded.value()), Some(decoded.clone()));
-        let outline = decoded.sections[0].outline(0.001).unwrap();
+        let outline = decoded.sections()[0].outline(0.001).unwrap();
         assert_eq!(outline.first(), Some(&start));
         assert_eq!(outline.last(), Some(&end));
         assert!(outline.windows(2).all(|points| match bend {
@@ -179,7 +179,7 @@ fn arc_tolerance_bounds_chord_error_and_preserves_endpoints() {
     let tool = Tool::bull(0.25, 0.05, 0.4).unwrap();
     let definition = tool.value();
     for tolerance in [0.01, 0.001, 0.0001] {
-        let points = tool.sections[0].outline(tolerance).unwrap();
+        let points = tool.sections()[0].outline(tolerance).unwrap();
         assert_eq!(points[0], Point::new(0.075, 0.0));
         assert_eq!(*points.last().unwrap(), Point::new(0.125, 0.4));
         for pair in points.windows(2).take(points.len() - 2) {
@@ -194,7 +194,7 @@ fn arc_tolerance_bounds_chord_error_and_preserves_endpoints() {
     }
     for tolerance in [0.0, -0.1, f64::NAN, 1e-100] {
         let tool = Tool::ball(1.0, 2.0).unwrap();
-        assert!(tool.sections[0].outline(tolerance).is_none());
+        assert!(tool.sections()[0].outline(tolerance).is_none());
     }
     let bad = Section {
         kind: SectionKind::Cutting,
@@ -220,19 +220,19 @@ fn profile_validity_and_bounds_do_not_depend_on_sampling() {
         }],
     }])
     .unwrap();
-    let bounds = tool.sections[0].bounds().unwrap();
+    let bounds = tool.sections()[0].bounds().unwrap();
     assert_eq!(
         (bounds.radius, bounds.min_axial, bounds.max_axial),
         (2.0, 0.0, 2.0)
     );
-    let coarse = tool.sections[0].outline(3.0).unwrap();
+    let coarse = tool.sections()[0].outline(3.0).unwrap();
     assert_eq!(
         coarse.len(),
         2,
         "these endpoints miss the arc's radial maximum"
     );
     assert!(
-        tool.sections[0].outline(1e-100).is_none(),
+        tool.sections()[0].outline(1e-100).is_none(),
         "unreasonable sampling requests can fail"
     );
     assert_eq!(
@@ -257,7 +257,7 @@ fn valid_profiles_survive_fidget_range_failures() {
         ] {
             let tool = constructor(diameter, length).unwrap();
             assert_eq!(Tool::read(&tool.value()), Some(tool.clone()));
-            assert!(tool.sections[0].outline(diameter * 0.001).is_some());
+            assert!(tool.sections()[0].outline(diameter * 0.001).is_some());
             assert!(super::view::picture::<crate::Editor>(&tool).is_some());
             assert!(matches!(
                 tool.sweep([0.0; 3], [0.0; 3], Axis::Z, diameter * 0.001),
@@ -276,7 +276,7 @@ fn f64_profile_sampling_does_not_require_f32_axial_separation() {
     )])
     .unwrap();
     assert_eq!(Tool::read(&tool.value()), Some(tool.clone()));
-    assert_eq!(tool.sections[0].outline(0.001).unwrap().len(), 2);
+    assert_eq!(tool.sections()[0].outline(0.001).unwrap().len(), 2);
     assert!(super::view::picture::<crate::Editor>(&tool).is_some());
     assert!(matches!(
         tool.sweep([0.0; 3], [0.0; 3], Axis::Z, 0.001),
@@ -293,7 +293,7 @@ fn f64_profile_sampling_does_not_require_f32_axial_separation() {
         }],
     }])
     .unwrap();
-    assert!(arc.sections[0].outline(1e-10).unwrap().len() > 8);
+    assert!(arc.sections()[0].outline(1e-10).unwrap().len() > 8);
     assert!(matches!(
         arc.sweep([0.0; 3], [0.0; 3], Axis::Z, 1e-10),
         Err(InvalidPath::CoordinateRange)
@@ -355,9 +355,9 @@ fn offset_profiles_and_example_tools_remain_ordinary_data() {
         SectionKind::Cutting,
     )])
     .unwrap();
-    assert_eq!(tool.sections[0].start, Point::new(0.125, 0.5));
+    assert_eq!(tool.sections()[0].start, Point::new(0.125, 0.5));
     assert_eq!(
-        tool.sections[0].profile,
+        tool.sections()[0].profile,
         [Segment::Line(Point::new(0.125, 0.9))]
     );
     assert_eq!(Tool::read(&tool.value()), Some(tool));
@@ -377,7 +377,7 @@ fn offset_profiles_and_example_tools_remain_ordinary_data() {
         &::grap::evaluate_value(&Value::from(names["square_tool"]), &sources, 1000).result,
     )
     .unwrap();
-    assert_eq!(square.sections.len(), 2);
-    assert_eq!(square.sections[0].kind, SectionKind::Cutting);
-    assert_eq!(square.sections[1].kind, SectionKind::NonCutting);
+    assert_eq!(square.sections().len(), 2);
+    assert_eq!(square.sections()[0].kind, SectionKind::Cutting);
+    assert_eq!(square.sections()[1].kind, SectionKind::NonCutting);
 }

@@ -45,7 +45,7 @@ impl Tubes {
         let origin = Vector3::from(coordinate(pose.tip)?);
         let [x, y, z] = pose.axis.basis();
         let circle = circle::<TOOL_SIDES>();
-        for section in &tool.sections {
+        for section in tool.sections() {
             let outline = section
                 .shaded_outline(tolerance)
                 .ok_or(InvalidPath::CoordinateRange)?;

@@ -36,11 +36,11 @@ fn non_cutting_continues_from_the_cutting_endpoint() {
         [movement([(AXIAL, 0.6)])],
     );
     let tool = Tool::read(&value).unwrap();
-    assert_eq!(tool.sections.len(), 2);
-    assert_eq!(tool.sections[1].kind, SectionKind::NonCutting);
-    assert_eq!(tool.sections[1].start, Point::new(0.0625, 0.22));
+    assert_eq!(tool.sections().len(), 2);
+    assert_eq!(tool.sections()[1].kind, SectionKind::NonCutting);
+    assert_eq!(tool.sections()[1].start, Point::new(0.0625, 0.22));
     assert_eq!(
-        tool.sections[1].profile,
+        tool.sections()[1].profile,
         [Segment::Line(Point::new(0.0625, 0.6))]
     );
     assert_eq!(
@@ -62,12 +62,12 @@ fn kind_boundaries_preserve_the_authored_endpoint_even_after_a_radial_cap() {
     );
     let tool = Tool::read(&value).unwrap();
     assert_eq!(
-        tool.sections[0].profile,
+        tool.sections()[0].profile,
         [Segment::Line(Point::new(0.1, 0.2))]
     );
-    assert_eq!(tool.sections[1].start, Point::new(0.2, 0.2));
+    assert_eq!(tool.sections()[1].start, Point::new(0.2, 0.2));
     assert_eq!(
-        tool.sections[1].profile,
+        tool.sections()[1].profile,
         [Segment::Arc {
             end: Point::new(0.3, 0.3),
             radius: 0.1,
@@ -89,8 +89,8 @@ fn explicit_axis_travel_preserves_gaps_between_kinds() {
         ],
     );
     let tool = Tool::read(&value).unwrap();
-    assert_eq!(tool.sections.len(), 2);
-    assert_eq!(tool.sections[1].start, Point::new(0.2, 0.4));
+    assert_eq!(tool.sections().len(), 2);
+    assert_eq!(tool.sections()[1].start, Point::new(0.2, 0.4));
     assert_eq!(
         tool.value(),
         value,
@@ -151,7 +151,7 @@ fn the_same_endpoints_and_radius_have_two_distinct_bends() {
             movement([(tag, 0.1), (RADIUS, 0.3), (AXIAL, 0.1)]),
         ])
         .unwrap()
-        .sections[0]
+        .sections()[0]
             .outline(0.0001)
             .unwrap()
     };
@@ -224,9 +224,9 @@ fn axis_travel_is_empty_and_survives_value_roundtrip() {
         movement([(AXIAL, 0.8)]),
     ])
     .unwrap();
-    assert_eq!(tool.sections.len(), 2);
-    assert_eq!(tool.sections[0].start, Point::new(0.1, 0.2));
-    assert_eq!(tool.sections[1].start, Point::new(0.2, 0.6));
+    assert_eq!(tool.sections().len(), 2);
+    assert_eq!(tool.sections()[0].start, Point::new(0.1, 0.2));
+    assert_eq!(tool.sections()[1].start, Point::new(0.2, 0.6));
     let values = samples(
         tool.sweep([0.0; 3], [0.0; 3], Axis::Z, 0.001)
             .unwrap()
@@ -283,7 +283,7 @@ fn redundant_caps_and_radial_steps_lower_without_extra_surfaces() {
     ])
     .unwrap();
     assert_eq!(
-        tool.sections[0].profile,
+        tool.sections()[0].profile,
         [
             Segment::Line(Point::new(0.2, 0.4)),
             Segment::Shoulder(0.4),

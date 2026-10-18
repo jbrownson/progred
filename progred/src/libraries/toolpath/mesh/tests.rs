@@ -316,7 +316,7 @@ fn tool_normals_follow_curves_but_do_not_round_caps() {
     ] {
         let mut tubes = Tubes::new(0.01, [255; 3]).unwrap();
         tubes.tool(&tool, pose, [255; 3], 0.001).unwrap();
-        let outline = tool.sections[0].outline(0.001).unwrap();
+        let outline = tool.sections()[0].outline(0.001).unwrap();
         let zero_ends = usize::from(outline.first().unwrap().radius == 0.0)
             + usize::from(outline.last().unwrap().radius == 0.0);
         // Only the displayed cutter uses the finer, 64-sided circumference.

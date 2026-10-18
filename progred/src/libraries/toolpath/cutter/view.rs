@@ -26,7 +26,7 @@ pub(super) fn picture<W: Host>(tool: &Tool) -> Option<Layout<W>> {
     let mut radius: f64 = 0.0;
     let mut low = f64::INFINITY;
     let mut high = f64::NEG_INFINITY;
-    for section in &tool.sections {
+    for section in tool.sections() {
         let bounds = section.bounds()?;
         radius = radius.max(bounds.radius);
         low = low.min(bounds.min_axial);
@@ -39,7 +39,7 @@ pub(super) fn picture<W: Host>(tool: &Tool) -> Option<Layout<W>> {
     // This picture's quality is in logical display units, not tool units.
     let tolerance = 0.25 / fit;
     let mut paths = Vec::new();
-    for section in &tool.sections {
+    for section in tool.sections() {
         let points = section.outline(tolerance)?;
         let mut path = BezPath::new();
         for (i, p) in points.iter().enumerate() {

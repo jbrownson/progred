@@ -17,7 +17,7 @@ fn stepped(r0: f64, r1: f64) -> Tool {
 fn shoulder_inherits_height_and_survives_value_roundtrip() {
     use vocabulary::*;
     let tool = stepped(0.125, 0.25);
-    let outline = tool.sections[0].outline(0.001).unwrap();
+    let outline = tool.sections()[0].outline(0.001).unwrap();
     assert_eq!(
         outline,
         [
@@ -122,7 +122,7 @@ fn radius_only_and_explicit_same_height_moves_lower_to_shoulders() {
         assert!(
             Tool::new(vec![Section {
                 profile,
-                ..tool.sections[0].clone()
+                ..tool.sections()[0].clone()
             }])
             .is_none()
         );

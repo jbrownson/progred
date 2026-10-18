@@ -399,7 +399,7 @@ fn chamfer_groups_cover_each_edge_once_with_the_shared_square_tool_dimensions() 
             libraries: &libraries,
         };
         let tool = square_tool(&sources, &names);
-        let cutting = &tool.sections[0];
+        let cutting = &tool.sections()[0];
         assert_eq!(
             cutting,
             &Section::taper(
