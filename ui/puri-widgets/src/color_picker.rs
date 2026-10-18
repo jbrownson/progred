@@ -141,21 +141,9 @@ pub fn plane(color: Hsva, canvas: &mut dyn CanvasSink, transform: Affine) {
 }
 
 pub fn hue(color: Hsva, canvas: &mut dyn CanvasSink, transform: Affine) {
-    let colors: [u32; 7] = [
-        0xff0000ff, 0xffff00ff, 0x00ff00ff, 0x00ffffff, 0x0000ffff, 0xff00ffff, 0xff0000ff,
-    ];
-    let stops = std::array::from_fn::<_, 7, _>(|index| {
-        let rgba = colors[index];
-        ColorStop {
-            offset: index as f32 / 6.0,
-            color: Color::from_rgba8(
-                (rgba >> 24) as u8,
-                (rgba >> 16) as u8,
-                (rgba >> 8) as u8,
-                rgba as u8,
-            )
-            .into(),
-        }
+    let stops = std::array::from_fn::<_, 7, _>(|index| ColorStop {
+        offset: index as f32 / 6.0,
+        color: color.with_hue(index as f64 / 6.0).opaque_hue().into(),
     });
     canvas.fill(
         Rect::new(0.0, 0.0, WIDTH, RAIL_HEIGHT),
