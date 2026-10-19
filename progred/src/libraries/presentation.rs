@@ -71,7 +71,20 @@ fn viewport_runtime_output(
 ) -> Option<::grap::RuntimeValue> {
     let (value, function) = viewport(declaration)?;
     let fields = declaration.as_record()?;
-    let value = match fields.get(&vocabulary::PREPARE) {
+    let view = |value| {
+        env.apply_expression_runtime(
+            &function.into(),
+            &[
+                (vocabulary::VALUE, value),
+                (layout::vocabulary::WIDTH, ::grap::RuntimeValue::f64(width)),
+                (
+                    layout::vocabulary::HEIGHT,
+                    ::grap::RuntimeValue::f64(height),
+                ),
+            ],
+        )
+    };
+    Some(match fields.get(&vocabulary::PREPARE) {
         Some(prepare) => {
             let fuel = match fields.get(&layout::vocabulary::FUEL) {
                 Some(value) => ::grap::f64::to_usize(f64::read(value)?)?,
@@ -79,47 +92,42 @@ fn viewport_runtime_output(
             };
             let prepared =
                 env.apply_runtime_memo(prepare, &[(vocabulary::VALUE, value.clone())], fuel);
+            // An absent preparation is the output; the viewport doesn't run.
             if prepared.absent_reason().is_some() {
-                return Some(prepared);
+                prepared
+            } else {
+                view(prepared)
             }
-            prepared
         }
-        None => value.into(),
-    };
-    Some(env.apply_expression_runtime(
-        &function.into(),
-        &[
-            (vocabulary::VALUE, value),
-            (layout::vocabulary::WIDTH, ::grap::RuntimeValue::f64(width)),
-            (
-                layout::vocabulary::HEIGHT,
-                ::grap::RuntimeValue::f64(height),
-            ),
-        ],
+        None => view(value.into()),
+    })
+}
+
+/// A render's own fuel and the expression it runs, when it gives both.
+fn fueled(render: &::grap::RuntimeValue) -> Option<(usize, ::grap::RuntimeValue)> {
+    Some((
+        ::grap::f64::to_usize(render.field(layout::vocabulary::FUEL)?.as_f64()?)?,
+        render.field(::grap::vocabulary::EXPRESSION)?,
     ))
 }
 
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let expression = input.value?.field(vocabulary::RENDER)?;
-    let evaluated = (|| {
-        let fuel = ::grap::f64::to_usize(expression.field(layout::vocabulary::FUEL)?.as_f64()?)?;
-        let expression = expression.field(::grap::vocabulary::EXPRESSION)?;
-        Some(input.env.evaluate_runtime_memo(
+    let render = input.value?.field(vocabulary::RENDER)?;
+    let result = match fueled(&render) {
+        Some((fuel, expression)) => input.env.evaluate_runtime_memo(
             &expression,
             fuel,
             &[
                 Step::Key(vocabulary::RENDER),
                 Step::Key(::grap::vocabulary::EXPRESSION),
             ],
-        ))
-    })();
-    let result = evaluated.unwrap_or_else(|| {
-        input.env.evaluate_runtime_memo(
-            &expression,
+        ),
+        None => input.env.evaluate_runtime_memo(
+            &render,
             ::grap::DEFAULT_FUEL,
             &[Step::Key(vocabulary::RENDER)],
-        )
-    });
+        ),
+    };
     Some(at([Step::Key(vocabulary::RESULT)], &result))
 }
 
