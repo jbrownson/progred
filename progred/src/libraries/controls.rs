@@ -268,17 +268,23 @@ struct RadioOption {
 }
 
 fn radio_options(value: &Value) -> Option<Vec<RadioOption>> {
-    let mut options = Vec::<RadioOption>::new();
-    for value in value.as_list()?.values() {
-        let fields = value.as_record()?;
-        let label = name::read(value)?.to_owned();
-        let value = fields.get(&VALUE)?.clone();
-        if options.iter().any(|option| option.value == value) {
-            return None;
-        }
-        options.push(RadioOption { label, value });
-    }
-    (!options.is_empty()).then_some(options)
+    let options = value
+        .as_list()?
+        .values()
+        .map(|value| {
+            Some(RadioOption {
+                label: name::read(value)?.to_owned(),
+                value: value.as_record()?.get(&VALUE)?.clone(),
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let distinct = options.iter().enumerate().all(|(index, option)| {
+        options
+            .iter()
+            .take(index)
+            .all(|earlier| earlier.value != option.value)
+    });
+    (distinct && !options.is_empty()).then_some(options)
 }
 
 fn radio_widget<W: Host>(
@@ -289,35 +295,37 @@ fn radio_widget<W: Host>(
 ) -> Widget<W> {
     Rc::new(move |context| {
         let scale = context.viewing().scale();
-        let mut buttons = Vec::new();
-        for option in &options {
-            let label = context.faced_text(&option.label, crate::display::Face::Label);
-            let label_extent = widget::extent(label.metrics());
-            let indicator_size = puri_widgets::radio::SIZE * scale;
-            let radio = puri_widgets::radio::Radio {
-                selected: option.value == selected,
-            };
-            let indicator = widget::paint(
-                Extent {
-                    width: indicator_size,
-                    ascent: indicator_size / 2.0,
-                    descent: indicator_size / 2.0,
-                },
-                move |canvas, placement| radio.draw(canvas, placement.rect, scale),
-            );
-            let label = widget::paint(label_extent, move |canvas, placement| {
-                label.place(canvas, placement)
-            });
-            let button = measured::centered_row(4.0 * scale, vec![indicator, label]);
-            let site = context.site();
-            let value = option.value.clone();
-            buttons.push(widget::before_place(button, move |placement, output| {
-                output.claim(puri::hover::Probe::occludes(placement));
-                puri::interact::clickable(output, placement, move |world: &mut W| {
-                    store(&mut world.session(), &site, key, value.clone())
+        let buttons: Vec<_> = options
+            .iter()
+            .map(|option| {
+                let label = context.faced_text(&option.label, crate::display::Face::Label);
+                let label_extent = widget::extent(label.metrics());
+                let indicator_size = puri_widgets::radio::SIZE * scale;
+                let radio = puri_widgets::radio::Radio {
+                    selected: option.value == selected,
+                };
+                let indicator = widget::paint(
+                    Extent {
+                        width: indicator_size,
+                        ascent: indicator_size / 2.0,
+                        descent: indicator_size / 2.0,
+                    },
+                    move |canvas, placement| radio.draw(canvas, placement.rect, scale),
+                );
+                let label = widget::paint(label_extent, move |canvas, placement| {
+                    label.place(canvas, placement)
                 });
-            }));
-        }
+                let button = measured::centered_row(4.0 * scale, vec![indicator, label]);
+                let site = context.site();
+                let value = option.value.clone();
+                widget::before_place(button, move |placement, output| {
+                    output.claim(puri::hover::Probe::occludes(placement));
+                    puri::interact::clickable(output, placement, move |world: &mut W| {
+                        store(&mut world.session(), &site, key, value.clone())
+                    });
+                })
+            })
+            .collect();
         let gap = 12.0 * scale;
         let row_width = buttons.iter().map(|b| b.extent.width).sum::<f64>()
             + gap * buttons.len().saturating_sub(1) as f64;

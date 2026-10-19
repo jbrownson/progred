@@ -236,18 +236,17 @@ pub(super) fn cursor_from_tree<W: Host>(
             .and_then(|cursor| selection.tree.position(&cursor))
             .unwrap_or(initial),
     );
-    let mut widgets = Vec::new();
-    if let Some(slider) = selection.slider(position) {
-        let selection = selection.clone();
-        widgets.push(keyed_slider(
-            key,
-            slider,
-            width,
-            selection.ticks(),
-            move |position| cursor_state(&selection, position),
-        ));
-    }
-    widgets.extend(selection.range_widgets(key, width, Some(position), decorate));
+    let widgets = selection
+        .slider(position)
+        .map(|slider| {
+            let selection = selection.clone();
+            keyed_slider(key, slider, width, selection.ticks(), move |position| {
+                cursor_state(&selection, position)
+            })
+        })
+        .into_iter()
+        .chain(selection.range_widgets(key, width, Some(position), decorate))
+        .collect();
     (
         widgets,
         [
