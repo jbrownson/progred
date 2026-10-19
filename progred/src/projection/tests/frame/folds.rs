@@ -2,6 +2,8 @@
 //! default the projection supplies.
 
 use super::*;
+use crate::driver::Driver;
+use ui_events::keyboard::Modifiers;
 
 fn view_annotations(world: &crate::Editor) -> Annotations {
     world
@@ -13,45 +15,20 @@ fn view_annotations(world: &crate::Editor) -> Annotations {
         .clone()
 }
 
-fn frame(world: &mut crate::Editor) -> crate::projection::test_support::HoverOutput<crate::Editor> {
-    let annotations = view_annotations(world);
-    editing_frame_with_annotations(world, false, None, None, &annotations)
+/// Select the occurrence at `path` and press `key` there with `modifiers`,
+/// returning the resulting fold annotations.
+fn press(driver: &mut Driver, path: &[Step], key: Key, modifiers: Modifiers) -> Annotations {
+    driver.select(path);
+    driver.keystroke(key, modifiers);
+    view_annotations(driver.editor())
 }
 
-/// Select the occurrence at `path` and press `key` there, returning the
-/// resulting fold annotations.
-fn press(world: &mut crate::Editor, path: &[Step], key: KeyboardEvent) -> Annotations {
-    let selected = frame(world);
-    let occurrence = selected
-        .landmarks
-        .landmark(path)
-        .expect("projected occurrence");
-    assert!((occurrence.select)(world, None));
-    frame(world)
-        .resolve_for_dispatch()
-        .dispatch_key(world, &key);
-    view_annotations(world)
+fn space(driver: &mut Driver, path: &[Step]) -> Annotations {
+    press(driver, path, Key::Character(" ".into()), Modifiers::empty())
 }
 
-fn space() -> KeyboardEvent {
-    KeyboardEvent {
-        key: Key::Character(" ".into()),
-        state: KeyState::Down,
-        ..Default::default()
-    }
-}
-
-fn command(key: NamedKey) -> KeyboardEvent {
-    KeyboardEvent {
-        key: Key::Named(key),
-        state: KeyState::Down,
-        modifiers: crate::modifiers::command(),
-        ..Default::default()
-    }
-}
-
-fn world_of(doc: &Document) -> crate::Editor {
-    editing_world(doc, &core_libraries())
+fn driver_of(doc: &Document) -> Driver {
+    Driver::new(editing_world(doc, &core_libraries()), Driver::VIEWPORT)
 }
 
 #[test]
@@ -64,22 +41,22 @@ fn cycles_collapse_by_default_and_expand_turn_by_turn() {
         a,
         Value::record([(crate::test_values::label("next"), Value::from(a))]),
     );
-    let mut world = world_of(&Document {
+    let mut driver = driver_of(&Document {
         root: Some(Value::from(a)),
         cells,
     });
     let reentry = vec![Step::Follow(gid::Resolution::Document), key("next")];
     // Space expands the default-collapsed re-entry.
-    let folds = press(&mut world, &reentry, space());
+    let folds = space(&mut driver, &reentry);
     assert!(!crate::annotations::folded(folds.at(&reentry), true));
     // The next turn defaults collapsed at its own deeper path and
     // expands the same way — follow the cycle as far as wanted.
     let deeper: Vec<Step> = reentry.iter().chain(reentry.iter()).cloned().collect();
     assert!(crate::annotations::folded(folds.at(&deeper), true));
-    let folds = press(&mut world, &deeper, space());
+    let folds = space(&mut driver, &deeper);
     assert!(!crate::annotations::folded(folds.at(&deeper), true));
     // Toggling back restores the default (the override is sparse).
-    let folds = press(&mut world, &deeper, space());
+    let folds = space(&mut driver, &deeper);
     assert!(crate::annotations::folded(folds.at(&deeper), true));
     assert!(folds.at(&deeper).is_none());
 }
@@ -90,15 +67,15 @@ fn any_valued_cell_and_any_container_collapse() {
         crate::test_values::label("kind"),
         crate::test_values::text("building"),
     )]);
-    let mut world = world_of(&doc);
+    let mut driver = driver_of(&doc);
     // A plain (non-cycle) cell collapses to ( … ) via the same toggle.
-    let folds = press(&mut world, &[], space());
+    let folds = space(&mut driver, &[]);
     assert!(crate::annotations::folded(folds.at(&[]), false));
     // Its record collapses too — layout never enters into it, so inline
     // literals toggle exactly like block forms.
     let record = [Step::Follow(gid::Resolution::Document)];
-    press(&mut world, &[], space());
-    let folds = press(&mut world, &record, space());
+    space(&mut driver, &[]);
+    let folds = space(&mut driver, &record);
     assert!(crate::annotations::folded(folds.at(&record), false));
 }
 
@@ -108,21 +85,31 @@ fn fold_keys_are_directional_and_stay_sparse() {
         crate::test_values::label("a"),
         crate::test_values::text("1"),
     )]);
-    let mut world = world_of(&doc);
+    let mut driver = driver_of(&doc);
     for (key, closed) in [
         (NamedKey::ArrowUp, true),
         (NamedKey::ArrowUp, true),
         (NamedKey::ArrowDown, false),
         (NamedKey::ArrowDown, false),
     ] {
-        let folds = press(&mut world, &[], command(key));
+        let folds = press(
+            &mut driver,
+            &[],
+            Key::Named(key),
+            crate::modifiers::command(),
+        );
         assert_eq!(crate::annotations::folded(folds.at(&[]), false), closed);
     }
     // Matching the default stores nothing.
-    assert!(view_annotations(&world).at(&[]).is_none());
+    assert!(view_annotations(driver.editor()).at(&[]).is_none());
     // A leaf has nothing to fold.
     let leaf = vec![Step::Follow(gid::Resolution::Document), key("a")];
-    let folds = press(&mut world, &leaf, command(NamedKey::ArrowUp));
+    let folds = press(
+        &mut driver,
+        &leaf,
+        Key::Named(NamedKey::ArrowUp),
+        crate::modifiers::command(),
+    );
     assert!(folds.at(&leaf).is_none());
 }
 

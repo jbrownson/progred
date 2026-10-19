@@ -92,42 +92,40 @@ fn empty_slots_make_values_through_the_picker() {
 fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
     let slots = [new_cell_id(), new_cell_id(), new_cell_id()];
     let original = Value::record([(new_cell_id(), f64::value(2.0))]);
-    let mut world = crate::editor_of(Value::record([
+    let mut editor = crate::editor_of(Value::record([
         (slots[0], f64::value(1.0)),
         (slots[1], original.clone()),
         (slots[2], f64::value(3.0)),
     ]));
-    set_tutorial_slots(&mut world, &slots);
-    let frame = editing_frame(&mut world, false);
-    assert_eq!(top_slots(&frame), slots);
+    set_tutorial_slots(&mut editor, &slots);
+    let mut driver = Driver::new(editor, Driver::VIEWPORT);
+    let top_slots = |driver: &Driver| {
+        driver
+            .drawn_under(&[])
+            .into_iter()
+            .filter_map(|(path, _)| match path.as_ref() {
+                [Step::Key(key)] => Some(*key),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(top_slots(&driver), slots);
     let path = [Step::Key(slots[1])];
-    assert!((stop(&frame, &path).select)(&mut world, None));
-    assert!(
-        world.delete_selected_edge(crate::display::widget::navigation::Geometry {
-            landmarks: &frame.landmarks,
-            ..Default::default()
-        })
-    );
-    assert!(world.sources().resolve_path(&path).is_none());
-    let frame = editing_frame(&mut world, false);
-    assert_eq!(top_slots(&frame), slots);
-    let empty = stop(&frame, &path);
-    assert!(empty.rect.width() > 0.0 && empty.rect.height() > 0.0);
-    assert!((empty.select)(&mut world, None));
-    assert!(editing_frame(&mut world, false).completion.is_some());
-    assert!(crate::completion::commit(
-        &mut world.session(),
-        f64::value(9.0),
-        None,
-        None
-    ));
-    assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(9.0)));
-    assert_eq!(top_slots(&editing_frame(&mut world, false)), slots);
-    assert!(world.model.step_history(true));
-    assert!(world.sources().resolve_path(&path).is_none());
-    assert!(world.model.step_history(true));
-    assert_eq!(world.sources().resolve_path(&path), Some(&original));
-    assert_eq!(top_slots(&editing_frame(&mut world, false)), slots);
+    driver.select(&path);
+    driver.press(NamedKey::Delete);
+    assert!(driver.editor().sources().resolve_path(&path).is_none());
+    assert_eq!(top_slots(&driver), slots);
+    let empty = driver.rect(&path);
+    assert!(empty.width() > 0.0 && empty.height() > 0.0);
+    assert!(driver.picker_entries().is_some());
+    assert!(driver.paste(&f64::value(9.0)));
+    assert_eq!(driver.value(&path), f64::value(9.0));
+    assert_eq!(top_slots(&driver), slots);
+    assert!(driver.undo());
+    assert!(driver.editor().sources().resolve_path(&path).is_none());
+    assert!(driver.undo());
+    assert_eq!(driver.value(&path), original);
+    assert_eq!(top_slots(&driver), slots);
 }
 
 #[test]

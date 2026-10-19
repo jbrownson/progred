@@ -1,10 +1,10 @@
-//! The frame harness tests share: editors framed headlessly, clicks into a
-//! frame, projected selections, line writes, and a bench that times a frame's
-//! phases in a window of a given size.
+//! The frame harness tests share: editors framed headlessly, projected
+//! selections, line writes, and a bench that times a frame's phases in a
+//! window of a given size.
 
 use super::*;
 use crate::annotations::Annotations;
-use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
 use crate::driver::Driver;
 use crate::hover::hover_secondary;
@@ -17,9 +17,6 @@ use peniko::{Brush, ImageData};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::hover::Claim;
 use ui_events::keyboard::NamedKey;
-use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-};
 use uig::Placement;
 
 /// The toolkit's frame output and projection input over the editor.
@@ -113,35 +110,6 @@ pub(crate) fn editing_frame_with_annotations(
             ..Default::default()
         },
     )
-}
-
-/// Press the primary button at `point` in a fresh frame, answering what the
-/// press landed on.
-pub(crate) fn click_at(world: &mut crate::Editor, point: Point) -> Option<Hovered> {
-    let frame = editing_frame(world, false);
-    let Some((_, Claim::Direct(target))) = frame.hover_geometry.probe(Some(point), None, 0.0)
-    else {
-        return None;
-    };
-    let mut input =
-        crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target.clone()));
-    frame.resolve_for_dispatch().dispatch_pointer_down_with(
-        world,
-        &PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state: PointerState {
-                position: (point.x, point.y).into(),
-                ..Default::default()
-            },
-        },
-        &mut input,
-    );
-    Some(target)
 }
 
 /// Select what the current projection draws at `path`, without an editing

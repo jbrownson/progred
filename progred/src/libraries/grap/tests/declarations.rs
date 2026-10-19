@@ -1,6 +1,7 @@
 use super::*;
-use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
+use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::libraries::control::vocabulary as control;
@@ -11,10 +12,6 @@ use gid::Path;
 use kurbo::Point;
 use puri::hover::Claim;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent};
-use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-};
 
 #[test]
 fn expression_cells_are_shallow_only_with_a_valid_name() {
@@ -94,32 +91,22 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
     );
     let mut cells = Cells::new();
     cells.set_value(cell, f64::value(3.0));
-    let mut world = crate::test_editor(Document {
-        root: Some(expression.clone()),
-        cells,
-    });
-    let path = [
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(expression.clone()),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
+    driver.select(&[
         Step::Key(number::vocabulary::LEFT),
         Step::Follow(gid::Resolution::Document),
-    ];
-    let frame = editing_frame(&mut world, false);
-    let target = frame.landmarks.landmark(&path).unwrap();
-    assert!((target.select)(&mut world, None));
-    assert!(
-        editing_frame(&mut world, false)
-            .resolve_for_dispatch()
-            .dispatch_key(
-                &mut world,
-                &KeyboardEvent {
-                    key: Key::Character("4".into()),
-                    state: KeyState::Down,
-                    ..Default::default()
-                },
-            )
-    );
-    assert_eq!(world.model.doc.root.as_ref(), Some(&expression));
-    assert_eq!(world.model.doc.cells.value(cell), Some(&f64::value(34.0)));
-    let evaluation = grap::evaluate_value(&expression, &world.sources(), grap::DEFAULT_FUEL);
+    ]);
+    driver.type_text("4");
+    let editor = driver.editor();
+    assert_eq!(editor.model.doc.root.as_ref(), Some(&expression));
+    assert_eq!(editor.model.doc.cells.value(cell), Some(&f64::value(34.0)));
+    let evaluation = grap::evaluate_value(&expression, &editor.sources(), grap::DEFAULT_FUEL);
     assert!(evaluation.completed);
     assert_eq!(f64::read(&evaluation.result), Some(68.0));
 }
@@ -142,33 +129,26 @@ fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
             ],
         ),
     );
-    let mut world = crate::test_editor(Document {
-        root: Some(cell.into()),
-        cells,
-    });
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(cell.into()),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
     for (path, typed) in [(&name_path[..], " label"), (&value_path[..], "2")] {
-        let frame = editing_frame(&mut world, false);
         // Unrelated metadata does not disqualify the wrapper projection.
         assert!(
-            !frame
-                .landmarks
+            !driver
+                .drawn_under(&[])
                 .iter()
-                .any(|d| d.path.last() == Some(&Step::Key(metadata)))
+                .any(|(path, _)| path.last() == Some(&Step::Key(metadata)))
         );
-        let target = frame.landmarks.landmark(path).unwrap();
-        assert!((target.select)(&mut world, None));
-        let frame = editing_frame(&mut world, false);
-        assert!(frame.resolve_for_dispatch().dispatch_key(
-            &mut world,
-            &KeyboardEvent {
-                key: Key::Character(typed.into()),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-        ));
+        driver.select(path);
+        driver.type_text(typed);
     }
     assert_eq!(
-        world.model.doc.cells.value(cell),
+        driver.editor().model.doc.cells.value(cell),
         Some(&name::record(
             "size label",
             [
@@ -210,41 +190,13 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
 
 #[test]
 fn anonymous_lambda_marker_still_opens_name_completion_when_clicked() {
-    let mut world = crate::editor_of(grap::lambda([], f64::value(3.0)));
-    let before = world.model.doc.clone();
+    let mut driver = Driver::of(grap::lambda([], f64::value(3.0)));
+    let before = driver.editor().model.doc.clone();
     let name_path = [Step::Key(name::vocabulary::NAME)];
-    let marker = editing_frame(&mut world, false)
-        .landmarks
-        .landmark(&name_path)
-        .unwrap()
-        .rect
-        .center();
-    let frame = editing_frame_at(&mut world, false, None, Some(marker));
-    let (_, Claim::Direct(hovered)) = frame.claim.as_ref().unwrap() else {
-        panic!("lambda marker hover");
-    };
-    let mut dispatch =
-        crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
-    let event = PointerButtonEvent {
-        button: Some(PointerButton::Primary),
-        pointer: PointerInfo {
-            pointer_id: Some(PointerId::PRIMARY),
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        },
-        state: PointerState {
-            position: (marker.x, marker.y).into(),
-            ..Default::default()
-        },
-    };
-    assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
-        &mut world,
-        &event,
-        &mut dispatch,
-    ));
-    assert_eq!(world.model.selection.as_ref().unwrap().path(), name_path);
-    assert!(editing_frame(&mut world, false).completion.is_some());
-    assert!(Rc::ptr_eq(&world.model.doc, &before));
+    driver.click(&name_path);
+    assert_eq!(driver.selection(), name_path);
+    assert!(driver.picker_entries().is_some());
+    assert!(Rc::ptr_eq(&driver.editor().model.doc, &before));
 }
 
 fn declarations(binder: CellId) -> Vec<(Value, Path)> {
@@ -653,35 +605,9 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found.as_ref() == &expression_path[..1]));
 
-        let mut world = crate::test_editor(doc);
-        let marker = marker_position(&editing_frame(&mut world, false).landmarks);
-        let frame = editing_frame_at(&mut world, false, None, Some(marker));
-        let (_, Claim::Direct(hovered)) = frame.claim.as_ref().unwrap() else {
-            panic!("backtick hover");
-        };
-        let mut dispatch =
-            crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
-        let event = PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state: PointerState {
-                position: (marker.x, marker.y).into(),
-                ..Default::default()
-            },
-        };
-        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
-            &mut world,
-            &event,
-            &mut dispatch,
-        ));
-        assert_eq!(
-            world.model.selection.as_ref().unwrap().path(),
-            &expression_path[..1]
-        );
+        let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+        driver.click_at(marker_position(&driver.runner.frame.dispatch.landmarks));
+        assert_eq!(driver.selection(), &expression_path[..1]);
     }
 }
 

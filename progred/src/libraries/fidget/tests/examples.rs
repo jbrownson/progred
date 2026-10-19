@@ -2,7 +2,7 @@ use super::*;
 use crate::annotations::Annotations;
 use crate::display::test_support::Landmarks;
 use crate::gid_text::Binders;
-use crate::projection::test_support::{ProfileView, click_at, editing_frame, settle};
+use crate::projection::test_support::{ProfileView, editing_frame, settle};
 use crate::test_support::{core_libraries, src};
 use gid::{Document, Position, Record, Step};
 use kurbo::Point;
@@ -130,13 +130,10 @@ fn fidget_example_shows_each_preview_beside_its_code() {
     );
     // Between a picture and its code, a click selects the figure.
     let (first, ..) = &figures[0];
-    let picture = landmark(&picture(first)).unwrap();
-    let gap = Point::new(picture.x1 + 8.0, picture.y0 + 8.0);
-    assert!(click_at(&mut world, gap).is_some());
-    assert_eq!(
-        world.model.selection.as_ref().unwrap().path(),
-        figure(first)
-    );
+    let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);
+    let picture = driver.rect(&picture(first));
+    driver.click_at(Point::new(picture.x1 + 8.0, picture.y0 + 8.0));
+    assert_eq!(driver.selection(), figure(first));
 }
 
 #[test]

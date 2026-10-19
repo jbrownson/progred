@@ -402,7 +402,7 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
             .iter()
             .find(|entry| inserted_value(&doc, &pending, entry).as_ref() == Some(&value))
             .unwrap();
-        let mut world = activate_projected(&doc, &pending, entry);
+        let world = activate_projected(&doc, &pending, entry);
         let document = world.model.doc.clone();
         let selected = world.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), path);
@@ -412,26 +412,24 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
             selected.payload(),
             make_projected_selection(&document, &libraries, path.clone()).payload()
         );
-        let frame = editing_frame(&mut world, false);
-        assert!(
-            world.model.selection.as_ref().unwrap().edit().is_none(),
-            "projection is pure"
+        let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);
+        assert!(driver.line().is_none(), "projection is pure");
+        driver.press(NamedKey::End);
+        assert_eq!(
+            driver.line(),
+            Some(spelling),
+            "the selected line handles input"
         );
-        frame
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &arrow(NamedKey::End));
-        let selected = world.model.selection.as_ref().unwrap();
-        let editor = selected.edit().expect("the selected line handles input");
-        assert_eq!(editor.text(), spelling);
-        assert_eq!(editor.selection_offsets(), (spelling.len(), spelling.len()));
-        *world.model.selection.as_mut().unwrap().edit_mut().unwrap() =
-            LineEditState::from_parts(spelling, 0, spelling.len(), None, None);
-        assert!(
-            editing_frame(&mut world, false)
-                .resolve_for_dispatch()
-                .dispatch_ime(&mut world, &puri::handler::ImeEvent::Commit(edit.into()),)
+        assert_eq!(
+            driver.line_selection(),
+            Some((spelling.len(), spelling.len()))
         );
-        assert_eq!(world.sources().resolve_path(&path), Some(&changed));
+        driver.keystroke(
+            ui_events::keyboard::Key::Named(NamedKey::Home),
+            ui_events::keyboard::Modifiers::SHIFT,
+        );
+        assert!(driver.ime(puri::handler::ImeEvent::Commit(edit.into())));
+        assert_eq!(driver.value(&path), changed);
     }
 }
 

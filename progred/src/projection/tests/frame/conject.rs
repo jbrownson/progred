@@ -1,7 +1,9 @@
 use super::*;
 use crate::display as d;
 use crate::display::widget::style;
+use crate::driver::Driver;
 use crate::projection::Partial;
+use ui_events::keyboard::Modifiers;
 
 fn world(root: Value) -> crate::Editor {
     crate::editor_of(root)
@@ -21,13 +23,13 @@ fn stop<'a>(
         .expect("projected occurrence")
 }
 
-fn command(key: Key) -> KeyboardEvent {
-    KeyboardEvent {
-        key,
-        state: KeyState::Down,
-        modifiers: crate::modifiers::command(),
-        ..Default::default()
-    }
+/// Press `key` with the command key held; whether the editor took it.
+fn command(driver: &mut Driver, key: Key) -> bool {
+    driver.keystroke(key, crate::modifiers::command())
+}
+
+fn copy(driver: &mut Driver) -> bool {
+    command(driver, Key::Character("c".into()))
 }
 
 fn grounds(commands: &[DrawCmd], color: Color) -> Vec<Rect> {
@@ -88,11 +90,11 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
     let child_path = [Step::Key(RESULT), Step::Key(child)];
     let before = world.model.doc.clone();
     world.model.mark_saved();
-    let frame = editing_frame(&mut world, false);
-    assert!((stop(&frame, &child_path).select)(&mut world, None));
-    assert_eq!(world.model.selection.as_ref().unwrap().path(), child_path);
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    driver.select(&child_path);
     assert!(
-        world
+        driver
+            .editor()
             .model
             .selection
             .as_ref()
@@ -101,37 +103,19 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
             .location(&child_path)
             .is_none()
     );
-    let frame = editing_frame(&mut world, false);
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &command(Key::Character("c".into())))
-    );
+    assert!(copy(&mut driver));
     assert_eq!(
-        world.text_clipboard.structure(),
+        driver.copied(),
         value.as_record().unwrap().get(&child).cloned()
     );
 
-    let frame = editing_frame(&mut world, false);
-    assert!((stop(&frame, &result).select)(&mut world, None));
-    let frame = editing_frame(&mut world, false);
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &command(Key::Named(NamedKey::ArrowUp)))
-    );
-    let annotations = world.model.workspace.document.annotations.clone();
-    let frame = editing_frame_with_annotations(&mut world, false, None, None, &annotations);
-    assert!(
-        !frame
-            .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == child_path)
-    );
+    driver.select(&result);
+    assert!(command(&mut driver, Key::Named(NamedKey::ArrowUp)));
+    assert!(!driver.drawn(&child_path));
     // The stored expression remains projected, not folded with its result.
-    stop(&frame, &[Step::Key(grap::vocabulary::EVALUATE)]);
-    assert!(Rc::ptr_eq(&before, &world.model.doc));
-    assert!(!world.model.dirty());
+    assert!(driver.drawn(&[Step::Key(grap::vocabulary::EVALUATE)]));
+    assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
+    assert!(!driver.editor().model.dirty());
 }
 
 #[test]
@@ -159,23 +143,16 @@ fn nested_result_evaluations_use_their_own_allowance() {
             Value::record([(grap::vocabulary::EVALUATE, expression.clone())])
         };
         // Returning this inert record is cheap; evaluating its expression is not.
-        let mut world = world(Value::record([(
+        let mut driver = Driver::of(Value::record([(
             RENDER,
             Value::record([
                 (grap::vocabulary::EXPRESSION, nested),
                 (layout::vocabulary::FUEL, f64::value(3.0)),
             ]),
         )]));
-        let frame = editing_frame(&mut world, false);
-        let path = [Step::Key(RESULT), Step::Key(RESULT)];
-        assert!((stop(&frame, &path).select)(&mut world, None));
-        let frame = editing_frame(&mut world, false);
-        assert!(
-            frame
-                .resolve_for_dispatch()
-                .dispatch_key(&mut world, &command(Key::Character("c".into())))
-        );
-        assert_eq!(world.text_clipboard.structure(), Some(value.clone()));
+        driver.select(&[Step::Key(RESULT), Step::Key(RESULT)]);
+        assert!(copy(&mut driver));
+        assert_eq!(driver.copied(), Some(value.clone()));
     }
 }
 
@@ -188,7 +165,7 @@ fn at_copies_the_displayed_value_not_a_coincident_document_path() {
         (marker, Value::record([])),
         (occurrence, text::value("unrelated stored value")),
     ]));
-    let projection = projection(
+    world.stack.projection = projection(
         &world,
         d::partial({
             let displayed = displayed.clone();
@@ -198,33 +175,23 @@ fn at_copies_the_displayed_value_not_a_coincident_document_path() {
             }
         }),
     );
-    let path = [Step::Key(occurrence)];
     let before = world.model.doc.clone();
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!((stop(&frame, &path).select)(&mut world, None));
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    let handler = frame.resolve_for_dispatch();
-    assert!(handler.dispatch_key(&mut world, &command(Key::Character("c".into()))));
-    assert_eq!(world.text_clipboard.structure(), Some(displayed));
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    driver.select(&[Step::Key(occurrence)]);
+    assert!(copy(&mut driver));
+    assert_eq!(driver.copied(), Some(displayed));
     // A cut can copy read-only data but must never delete a coincident source.
-    assert!(handler.dispatch_key(&mut world, &command(Key::Character("x".into()))));
-    assert!(Rc::ptr_eq(&before, &world.model.doc));
-    assert!(!world.model.history.can_undo());
+    assert!(command(&mut driver, Key::Character("x".into())));
+    assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
+    assert!(!driver.editor().model.history.can_undo());
 
-    let child_path = [Step::Key(occurrence), Step::Key(child)];
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!((stop(&frame, &child_path).select)(&mut world, None));
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &command(Key::Character("c".into())),)
-    );
+    driver.select(&[Step::Key(occurrence), Step::Key(child)]);
+    assert!(copy(&mut driver));
     assert_eq!(
-        world.text_clipboard.get_text().as_deref(),
+        driver.runner.editor.text_clipboard.get_text().as_deref(),
         Some("\"computed\"")
     );
-    assert_eq!(world.text_clipboard.structure(), None);
+    assert_eq!(driver.copied(), None);
 }
 
 #[test]
@@ -235,7 +202,7 @@ fn copying_a_stored_or_jumped_cell_keeps_the_reference_shallow() {
         Rc::make_mut(&mut world.model.doc)
             .cells
             .set_value(cell, text::value("definition"));
-        let projection = projection(
+        world.stack.projection = projection(
             &world,
             d::partial(move |input| {
                 input.value?.as_record()?.get(&source)?;
@@ -246,22 +213,25 @@ fn copying_a_stored_or_jumped_cell_keeps_the_reference_shallow() {
                 })
             }),
         );
-        let path = [Step::Key(if jump { occurrence } else { source })];
-        let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-        assert!((stop(&frame, &path).select)(&mut world, None));
-        let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-        let handler = frame.resolve_for_dispatch();
-        assert!(handler.dispatch_key(&mut world, &command(Key::Character("c".into())),));
-        assert_eq!(world.text_clipboard.structure(), Some(Value::Cell(cell)));
-        assert!(handler.dispatch_key(&mut world, &command(Key::Character("x".into())),));
-        assert!(world.sources().resolve_path(&[Step::Key(source)]).is_none());
+        let mut driver = Driver::new(world, Driver::VIEWPORT);
+        driver.select(&[Step::Key(if jump { occurrence } else { source })]);
+        assert!(copy(&mut driver));
+        assert_eq!(driver.copied(), Some(Value::Cell(cell)));
+        assert!(command(&mut driver, Key::Character("x".into())));
+        let editor = driver.editor();
+        assert!(
+            editor
+                .sources()
+                .resolve_path(&[Step::Key(source)])
+                .is_none()
+        );
         assert_eq!(
-            world.model.doc.cells.value(cell),
+            editor.model.doc.cells.value(cell),
             Some(&text::value("definition"))
         );
-        assert!(world.model.step_history(true));
+        assert!(driver.undo());
         assert_eq!(
-            world.sources().resolve_path(&[Step::Key(source)]),
+            driver.editor().sources().resolve_path(&[Step::Key(source)]),
             Some(&Value::Cell(cell))
         );
     }
@@ -277,7 +247,7 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
         // This location exists but is not foldable; the other does not exist.
         (first, text::value("unrelated")),
     ]));
-    let projection = projection(
+    world.stack.projection = projection(
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&marker)?;
@@ -295,133 +265,60 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
     let root = world.model.workspace.document_root().clone();
     let before = world.model.doc.clone();
     world.model.mark_saved();
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!((stop(&frame, &path).select)(&mut world, None));
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &command(Key::Named(NamedKey::ArrowUp)),)
-    );
-    let annotations = world
-        .model
-        .workspace
-        .view(&root)
-        .unwrap()
-        .annotations
-        .clone();
-    assert!(crate::annotations::folded(annotations.at(&path), false));
-    assert!(!crate::annotations::folded(
-        annotations.at(&[Step::Key(second)]),
-        false
-    ));
-    assert!(Rc::ptr_eq(&before, &world.model.doc));
-    assert!(!world.model.dirty());
-    let folded =
-        editing_frame_with_annotations(&mut world, false, Some(&projection), None, &annotations);
-    assert!(
-        !folded
-            .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == [Step::Key(first), Step::Key(child)])
-    );
-    assert!(
-        folded
-            .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == [Step::Key(second), Step::Key(child)])
-    );
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    let folded = |driver: &Driver, path: &[Step]| {
+        crate::annotations::folded(
+            driver
+                .editor()
+                .model
+                .workspace
+                .view(&root)
+                .unwrap()
+                .annotations
+                .at(path),
+            false,
+        )
+    };
+    driver.select(&path);
+    assert!(command(&mut driver, Key::Named(NamedKey::ArrowUp)));
+    assert!(folded(&driver, &path));
+    assert!(!folded(&driver, &[Step::Key(second)]));
+    assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
+    assert!(!driver.editor().model.dirty());
+    assert!(!driver.drawn(&[Step::Key(first), Step::Key(child)]));
+    assert!(driver.drawn(&[Step::Key(second), Step::Key(child)]));
     // The folded ellipsis uses the same occurrence-local operation as the key.
-    let target = Hovered::Tree(Hover::Toggle(Rc::from(path.clone())));
-    assert!(folded.resolve_for_dispatch().dispatch_pointer_down_with(
-        &mut world,
-        &PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state: PointerState {
-                position: (5.0, 5.0).into(),
-                ..Default::default()
-            },
-        },
-        &mut crate::frame::DispatchContext::new(Some(root.clone()), Some(target)),
-    ));
-    assert!(!crate::annotations::folded(
-        world
-            .model
-            .workspace
-            .view(&root)
-            .unwrap()
-            .annotations
-            .at(&path),
-        false
-    ));
-    assert!(world.model.step_history(true));
-    assert!(crate::annotations::folded(
-        world
-            .model
-            .workspace
-            .view(&root)
-            .unwrap()
-            .annotations
-            .at(&path),
-        false
-    ));
-    assert!(world.model.step_history(true));
-    assert!(!crate::annotations::folded(
-        world
-            .model
-            .workspace
-            .view(&root)
-            .unwrap()
-            .annotations
-            .at(&path),
-        false
-    ));
-    assert!(!world.model.dirty());
+    driver.click_at(driver.locate(Hovered::Tree(Hover::Toggle(Rc::from(path.clone())))));
+    assert!(!folded(&driver, &path));
+    assert!(driver.undo());
+    assert!(folded(&driver, &path));
+    assert!(driver.undo());
+    assert!(!folded(&driver, &path));
+    assert!(!driver.editor().model.dirty());
 }
 
 #[test]
 fn line_editor_keeps_first_refusal_for_copy_and_space() {
     use puri::edit::TextClipboard;
-    let mut world = world(text::value("hello"));
-    let frame = editing_frame(&mut world, false);
-    assert!((stop(&frame, &[]).select)(&mut world, None));
+    let mut driver = Driver::of(text::value("hello"));
+    driver.select(&[]);
     for _ in 0..2 {
-        let frame = editing_frame(&mut world, false);
-        assert!(frame.resolve_for_dispatch().dispatch_key(
-            &mut world,
-            &KeyboardEvent {
-                key: Key::Named(NamedKey::ArrowLeft),
-                state: KeyState::Down,
-                modifiers: ui_events::keyboard::Modifiers::SHIFT,
-                ..Default::default()
-            }
-        ));
+        assert!(driver.keystroke(Key::Named(NamedKey::ArrowLeft), Modifiers::SHIFT));
     }
-    let frame = editing_frame(&mut world, false);
-    let handler = frame.resolve_for_dispatch();
-    assert!(handler.dispatch_key(&mut world, &command(Key::Character("c".into()))));
-    assert_eq!(world.text_clipboard.get_text().as_deref(), Some("lo"));
-    assert!(handler.dispatch_key(
-        &mut world,
-        &KeyboardEvent {
-            key: Key::Character(" ".into()),
-            state: KeyState::Down,
-            ..Default::default()
-        }
-    ));
-    assert_eq!(world.model.doc.root, Some(text::value("hel ")));
+    assert!(copy(&mut driver));
+    assert_eq!(
+        driver.runner.editor.text_clipboard.get_text().as_deref(),
+        Some("lo")
+    );
+    assert!(driver.keystroke(Key::Character(" ".into()), Modifiers::empty()));
+    assert_eq!(driver.value(&[]), text::value("hel "));
 }
 
 #[test]
 fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
     let (source, first, second) = (new_cell_id(), new_cell_id(), new_cell_id());
     let mut world = world(Value::record([(source, text::value("before"))]));
-    let projection = projection(
+    world.stack.projection = projection(
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&source)?;
@@ -436,38 +333,36 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
         }),
     );
     let paths = [[Step::Key(first)], [Step::Key(second)]];
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(stop(&frame, &paths[0]).rect.y1 < stop(&frame, &paths[1]).rect.y0);
-    assert!((stop(&frame, &paths[1]).select)(&mut world, None));
-    let selected = world.model.selection.as_ref().unwrap();
-    assert_eq!(selected.path(), paths[1]);
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    assert!(driver.rect(&paths[0]).y1 < driver.rect(&paths[1]).y0);
+    driver.select(&paths[1]);
+    let editor = driver.editor();
+    let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(
         selected.location(),
         Some(Location::root(vec![Step::Key(source)]))
     );
     assert_eq!(
-        selected.value(&world.sources()),
+        selected.value(&editor.sources()),
         Some(&text::value("before"))
     );
     // Rebuilding remints the jump's scope; this must not discard text state.
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(frame.resolve_for_dispatch().dispatch_key(
-        &mut world,
-        &KeyboardEvent {
-            key: Key::Character("!".into()),
-            state: KeyState::Down,
-            ..Default::default()
-        }
-    ));
+    assert!(driver.keystroke(Key::Character("!".into()), Modifiers::empty()));
+    let editor = driver.editor();
     assert_eq!(
-        world.sources().resolve_path(&[Step::Key(source)]),
+        editor.sources().resolve_path(&[Step::Key(source)]),
         Some(&text::value("before!"))
     );
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     for path in &paths {
-        let target = stop(&frame, path);
+        let target = driver
+            .runner
+            .frame
+            .dispatch
+            .landmarks
+            .landmark(path)
+            .unwrap();
         assert_eq!(
-            target.scope.view(world.sources()).resolve_path(path),
+            target.scope.view(editor.sources()).resolve_path(path),
             Some(&text::value("before!"))
         );
         assert_eq!(
@@ -475,12 +370,12 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
             Some(Location::root(vec![Step::Key(source)]))
         );
     }
-    assert!(world.model.step_history(true));
+    assert!(driver.undo());
     assert_eq!(
-        world.sources().resolve_path(&[Step::Key(source)]),
+        driver.editor().sources().resolve_path(&[Step::Key(source)]),
         Some(&text::value("before"))
     );
-    assert_eq!(world.model.selection.as_ref().unwrap().path(), paths[1]);
+    assert_eq!(driver.selection(), paths[1]);
 }
 
 #[test]

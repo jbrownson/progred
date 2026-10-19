@@ -1,6 +1,7 @@
 use super::*;
-use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
+use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::libraries::presentation::vocabulary::{OUTLINE, RESULT};
@@ -8,16 +9,12 @@ use crate::libraries::{f64, name};
 use crate::location::Location;
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_value};
-use crate::test_support::make_selection;
 use gid::{Cells, Document, Path, new_cell_id};
 use kurbo::{Point, Rect};
 use peniko::Brush;
 use puri::draw::{DrawCmd, Shape};
-use puri::hover::Claim;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
-use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-};
+use ui_events::keyboard::{Key, Modifiers, NamedKey};
+use winit::keyboard::ModifiersState;
 
 fn document() -> (Document, CellId, CellId, CellId) {
     let (a, b, extra) = (new_cell_id(), new_cell_id(), new_cell_id());
@@ -81,53 +78,34 @@ fn body(entry: &[Step], key: CellId) -> Path {
     entry.iter().cloned().chain([Step::Key(key)]).collect()
 }
 
-fn key(key: Key) -> KeyboardEvent {
-    KeyboardEvent {
-        key,
-        state: KeyState::Down,
-        ..Default::default()
-    }
-}
-
 fn hidden(world: &crate::Editor, path: &[Step]) -> bool {
     crate::annotations::folded(world.model.workspace.document.annotations.at(path), false)
 }
 
-fn click_heading(world: &mut crate::Editor, path: &[Step], modifiers: Modifiers) {
-    let frame = frame(world);
-    let rect = stop(&frame, path).rect;
-    let point = Point::new(rect.x0 + 4.0, rect.y0 + 4.0);
-    click_frame(world, frame, point, path, modifiers);
+/// Click `path` at `point`, where the pointer lands on it.
+fn click(driver: &mut Driver, point: Point, path: &[Step]) {
+    assert_eq!(
+        driver.hover_at(point),
+        Some(Hovered::Tree(Hover::Value(Rc::from(path))))
+    );
+    driver.click_at(point);
 }
 
-fn click_frame(
-    world: &mut crate::Editor,
-    frame: crate::projection::test_support::HoverOutput<crate::Editor>,
-    point: Point,
-    path: &[Step],
-    modifiers: Modifiers,
-) {
-    let target = Hovered::Tree(Hover::Value(Rc::from(path)));
-    assert!(matches!(frame.hover_geometry.probe(Some(point), None, 0.0),
-        Some((_, Claim::Direct(ref found))) if *found == target));
-    let mut input = crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
-    assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
-        world,
-        &PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse
-            },
-            state: PointerState {
-                position: (point.x, point.y).into(),
-                modifiers,
-                ..Default::default()
-            },
-        },
-        &mut input,
-    ));
+/// Click the heading at `path` near its top-left corner.
+fn click_heading(driver: &mut Driver, path: &[Step]) {
+    let rect = driver.rect(path);
+    click(driver, Point::new(rect.x0 + 4.0, rect.y0 + 4.0), path);
+}
+
+/// The landmark the driven frame draws at `path`.
+fn drawn<'a>(driver: &'a Driver, path: &[Step]) -> &'a Landmark<crate::Editor> {
+    driver
+        .runner
+        .frame
+        .dispatch
+        .landmarks
+        .landmark(path)
+        .expect("outline occurrence")
 }
 
 #[test]
@@ -162,52 +140,37 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
     }
     let path = [Step::Key(panes)];
     assert!(hidden(&world, &path));
-    let f = frame(&mut world);
-    for (from, direction, to) in [
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    for (from, key, to) in [
+        (vec![], NamedKey::ArrowRight, vec![Step::Key(OUTLINE)]),
+        (vec![], NamedKey::ArrowDown, first_heading.clone()),
         (
-            vec![],
-            puri::handler::NavigationDirection::Right,
             vec![Step::Key(OUTLINE)],
-        ),
-        (
-            vec![],
-            puri::handler::NavigationDirection::Down,
+            NamedKey::ArrowDown,
             first_heading.clone(),
         ),
-        (
-            vec![Step::Key(OUTLINE)],
-            puri::handler::NavigationDirection::Down,
-            first_heading.clone(),
-        ),
-        (
-            first_heading,
-            puri::handler::NavigationDirection::Up,
-            vec![],
-        ),
-        (
-            vec![Step::Key(OUTLINE)],
-            puri::handler::NavigationDirection::Left,
-            vec![],
-        ),
+        (first_heading, NamedKey::ArrowUp, vec![]),
+        (vec![Step::Key(OUTLINE)], NamedKey::ArrowLeft, vec![]),
     ] {
-        world.model.selection = Some(make_selection(from));
-        let (handlers, mut context) = frame(&mut world).resolve_with_context();
-        assert!(
-            handlers
-                .dispatch(
-                    &mut world,
-                    puri::handler::Event::Navigate(direction),
-                    &mut context
-                )
-                .handled()
-        );
-        assert_eq!(world.model.selection.as_ref().unwrap().path(), to);
+        driver.select(&from);
+        driver.press(key);
+        assert_eq!(driver.selection(), to);
     }
-    stop(&f, &path);
+    // The document draws the collapsed panes field but nothing inside it;
+    // the panes it declares draw their own views.
+    assert!(driver.drawn(&path));
     assert!(
-        !f.landmarks
+        !driver
+            .runner
+            .frame
+            .dispatch
+            .landmarks
             .iter()
-            .any(|d| d.path.starts_with(&path) && d.path.len() > path.len())
+            .any(|landmark| {
+                landmark.root.as_ref() == Some(&crate::test_root())
+                    && landmark.path.starts_with(&path)
+                    && landmark.path.len() > path.len()
+            })
     );
 }
 
@@ -306,80 +269,51 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
         unreachable!()
     };
     fields.remove(&extra);
-    let mut world = crate::test_editor(doc);
-    let f = frame(&mut world);
-    let root_rect = stop(&f, &[]).rect;
-    let list_rect = stop(&f, &[Step::Key(OUTLINE)]).rect;
+    let mut driver = Driver::new(crate::test_editor(doc.clone()), Driver::VIEWPORT);
+    let root_rect = driver.rect(&[]);
+    let list_rect = driver.rect(&[Step::Key(OUTLINE)]);
     assert_eq!(
         root_rect.x0, list_rect.x0,
         "the outline adds no outer indent"
     );
-    let (_, before) = place(&world.model.doc, None, 500.0);
+    let (_, before) = place(&doc, None, 500.0);
     assert!(
         root_rect.y0 < list_rect.y0,
         "the record includes the field label outside the list"
     );
     let label_point = Point::new(root_rect.x0 + 4.0, root_rect.y0 + 4.0);
-    click_frame(
-        &mut world,
-        f,
-        label_point,
-        &[Step::Key(OUTLINE)],
-        Modifiers::empty(),
-    );
-    assert_eq!(
-        world.model.selection.as_ref().unwrap().path(),
-        [Step::Key(OUTLINE)]
-    );
-    assert!(stop(&frame(&mut world), &[Step::Key(OUTLINE)]).rect.y0 > root_rect.y0);
+    click(&mut driver, label_point, &[Step::Key(OUTLINE)]);
+    assert_eq!(driver.selection(), [Step::Key(OUTLINE)]);
+    assert!(driver.rect(&[Step::Key(OUTLINE)]).y0 > root_rect.y0);
 
     // Override the ordinary definition: the label must follow that name,
     // without changing the geometry or identity of the section list.
-    world.model.selection = None;
-    Rc::make_mut(&mut world.model.doc).cells.set_value(
+    doc.cells.set_value(
         OUTLINE,
         name::record("A much longer document organization handle", []),
     );
-    let renamed = frame(&mut world);
-    let (_, after) = place(&world.model.doc, None, 500.0);
+    let (_, after) = place(&doc, None, 500.0);
     assert!(
         after.width > before.width,
         "the field label measures the updated name"
     );
-    assert_eq!(stop(&renamed, &[Step::Key(OUTLINE)]).rect, list_rect);
-    click_frame(
-        &mut world,
-        renamed,
-        label_point,
-        &[Step::Key(OUTLINE)],
-        Modifiers::empty(),
-    );
-
-    let f = frame(&mut world);
-    // This fixture places one projection without the pane wrapper, so what
-    // it draws belongs to no view.
-    let target = crate::display::widget::navigation::landmark_at(&f.landmarks, None, &[])
-        .expect("the root is drawn");
-    assert!((target.select)(&mut world, None));
-    assert!(world.model.selection.as_ref().unwrap().path().is_empty());
+    let mut renamed = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+    assert_eq!(renamed.rect(&[Step::Key(OUTLINE)]), list_rect);
+    click(&mut renamed, label_point, &[Step::Key(OUTLINE)]);
+    renamed.select(&[]);
 
     // Removing the outline field exposes the remaining data structurally.
-    assert!((stop(&f, &[Step::Key(OUTLINE)]).select)(&mut world, None));
+    renamed.select(&[Step::Key(OUTLINE)]);
+    renamed.press(NamedKey::Delete);
     assert!(
-        world.delete_selected_edge(crate::display::widget::navigation::Geometry {
-            landmarks: &f.landmarks,
-            ..Default::default()
-        })
-    );
-    assert!(
-        world
+        renamed
+            .editor()
             .sources()
             .resolve_path(&[Step::Key(OUTLINE)])
             .is_none()
     );
-    let structural = frame(&mut world);
     for field in [a, b] {
-        stop(&structural, &[Step::Key(field)]);
+        assert!(renamed.drawn(&[Step::Key(field)]));
     }
 }
 
@@ -434,29 +368,21 @@ fn outline_library_tint_stops_at_the_heading() {
 #[test]
 fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     let (doc, a, b, extra) = document();
-    let mut world = crate::test_editor(doc);
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let (a_path, b_path) = (
-        body(&entry(&world, &[], a), a),
-        body(&entry(&world, &[], b), b),
+        body(&entry(driver.editor(), &[], a), a),
+        body(&entry(driver.editor(), &[], b), b),
     );
-    let f = frame(&mut world);
-    assert!(stop(&f, &b_path).rect.y0 < stop(&f, &a_path).rect.y0);
-    assert!(stop(&f, &a_path).rect.y1 < stop(&f, &[Step::Key(extra)]).rect.y0);
+    assert!(driver.rect(&b_path).y0 < driver.rect(&a_path).y0);
+    assert!(driver.rect(&a_path).y1 < driver.rect(&[Step::Key(extra)]).y0);
     assert_eq!(
-        stop(&f, &b_path).scope.location(&b_path),
+        drawn(&driver, &b_path).scope.location(&b_path),
         Some(Location::root(vec![Step::Key(b)]))
     );
-    assert!((stop(&f, &b_path).select)(&mut world, None));
-    assert!(
-        frame(&mut world)
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &key(Key::Character("5".into())))
-    );
-    assert_eq!(
-        world.sources().resolve_path(&[Step::Key(b)]),
-        Some(&f64::value(35.0))
-    );
-    let raw = editing_frame(&mut world, true);
+    driver.select(&b_path);
+    driver.type_text("5");
+    assert_eq!(driver.value(&[Step::Key(b)]), f64::value(35.0));
+    let raw = editing_frame(&mut driver.runner.editor, true);
     for field in [a, b, extra, OUTLINE] {
         stop(&raw, &[Step::Key(field)]);
     }
@@ -469,40 +395,37 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
         unreachable!()
     };
     fields.insert(OUTLINE, Value::list([a.into(), a.into(), b.into()]));
-    let mut world = crate::test_editor(doc);
-    let entries = entry_paths(world.model.doc.root.as_ref().unwrap(), &[], a);
+    let entries = entry_paths(doc.root.as_ref().unwrap(), &[], a);
     let bodies = entries.iter().map(|p| body(p, a)).collect::<Vec<_>>();
-    let before = world.model.doc.clone();
-    click_heading(&mut world, &entries[0], Modifiers::empty());
-    assert!(hidden(&world, &bodies[0]));
-    assert!(!hidden(&world, &bodies[1]));
-    let f = frame(&mut world);
-    assert!(!f.landmarks.iter().any(|d| d.path.as_ref() == bodies[0]));
-    stop(&f, &bodies[1]);
-    assert!(Rc::ptr_eq(&before, &world.model.doc));
-    assert!(!world.model.dirty());
-    assert!(world.model.step_history(true));
-    assert!(!hidden(&world, &bodies[0]));
-    assert!(world.model.step_history(false));
-    assert!(hidden(&world, &bodies[0]));
-    click_heading(&mut world, &entries[0], Modifiers::empty());
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+    let before = driver.editor().model.doc.clone();
+    click_heading(&mut driver, &entries[0]);
+    assert!(hidden(driver.editor(), &bodies[0]));
+    assert!(!hidden(driver.editor(), &bodies[1]));
+    assert!(!driver.drawn(&bodies[0]));
+    assert!(driver.drawn(&bodies[1]));
+    assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
+    assert!(!driver.editor().model.dirty());
+    assert!(driver.undo());
+    assert!(!hidden(driver.editor(), &bodies[0]));
+    assert!(driver.redo());
+    assert!(hidden(driver.editor(), &bodies[0]));
+    click_heading(&mut driver, &entries[0]);
 
-    let f = frame(&mut world);
-    assert!((stop(&f, &bodies[1]).select)(&mut world, None));
+    driver.select(&bodies[1]);
     let replacement = Value::list([f64::value(9.0)]);
-    assert!(world.paste_value(replacement.clone()));
-    let f = frame(&mut world);
+    assert!(driver.paste(&replacement));
     for path in &bodies {
         assert_eq!(
-            stop(&f, path)
+            drawn(&driver, path)
                 .scope
-                .view(world.sources())
+                .view(driver.editor().sources())
                 .resolve_path(path),
             Some(&replacement)
         );
     }
-    assert!(world.model.step_history(true));
-    assert_eq!(world.model.selection.as_ref().unwrap().path(), bodies[1]);
+    assert!(driver.undo());
+    assert_eq!(driver.selection(), bodies[1]);
 }
 
 #[test]
@@ -515,9 +438,8 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
     let source_body = body(&source_entry, a);
     let expected = value.as_record().unwrap().get(&a).unwrap().clone();
     doc.root = Some(Value::record([(grap::vocabulary::EVALUATE, value)]));
-    let mut world = crate::test_editor(doc);
-    let before = world.model.doc.clone();
-    let f = frame(&mut world);
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+    let before = driver.editor().model.doc.clone();
     let positions: Vec<_> = expected.as_list().unwrap().keys().cloned().collect();
     let element = |position| {
         result_body
@@ -526,45 +448,47 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
             .chain([Step::Element(position)])
             .collect::<Path>()
     };
-    let first = stop(&f, &element(positions[0].clone())).rect;
-    let second = stop(&f, &element(positions[1].clone())).rect;
+    let first = driver.rect(&element(positions[0].clone()));
+    let second = driver.rect(&element(positions[1].clone()));
     let missing =
         element(gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap());
-    assert!(
-        !matches!(
-            f.hover_geometry.probe(Some(Point::new(first.x0 + 4.0, (first.y1 + second.y0) / 2.0)), None, 0.0),
-            Some((_, Claim::Direct(Hovered::Tree(Hover::Value(path))))) if path.as_ref() == missing
-        ),
+    assert_ne!(
+        driver.hover_at(Point::new(first.x0 + 4.0, (first.y1 + second.y0) / 2.0)),
+        Some(Hovered::Tree(Hover::Value(Rc::from(missing)))),
         "computed lists have no insertion target"
     );
-    assert!((stop(&f, &result_body).select)(&mut world, None));
-    assert!(world.model.selection.as_ref().unwrap().location().is_none());
-    assert!(!world.paste_value(Value::record([])));
-    let mut copy = key(Key::Character("c".into()));
-    copy.modifiers = crate::modifiers::command();
+    driver.select(&result_body);
     assert!(
-        frame(&mut world)
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &copy)
+        driver
+            .editor()
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .location()
+            .is_none()
     );
-    assert_eq!(world.text_clipboard.structure(), Some(expected));
-    click_heading(&mut world, &e, Modifiers::empty());
-    let f = frame(&mut world);
-    assert!(!f.landmarks.iter().any(|d| d.path.as_ref() == result_body));
-    stop(&f, &source_body);
-    assert!(Rc::ptr_eq(&before, &world.model.doc));
+    assert!(!driver.paste(&Value::record([])));
+    assert!(driver.keystroke(Key::Character("c".into()), crate::modifiers::command()));
+    assert_eq!(driver.copied(), Some(expected));
+    click_heading(&mut driver, &e);
+    assert!(!driver.drawn(&result_body));
+    assert!(driver.drawn(&source_body));
+    assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
 }
 
 #[test]
 fn outline_column_gaps_open_pending_before_between_and_after_items() {
     for index in 0_usize..=2 {
         let (doc, a, b, _) = document();
-        let mut world = crate::test_editor(doc);
-        let entries = [entry(&world, &[], b), entry(&world, &[], a)];
+        let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+        let entries = [
+            entry(driver.editor(), &[], b),
+            entry(driver.editor(), &[], a),
+        ];
         for path in &entries {
-            click_heading(&mut world, path, Modifiers::empty());
+            click_heading(&mut driver, path);
         }
-        world.model.selection = None;
         let positions: Vec<_> = entries
             .iter()
             .map(|path| match path.last().unwrap() {
@@ -578,40 +502,27 @@ fn outline_column_gaps_open_pending_before_between_and_after_items() {
         )
         .unwrap();
         let path = vec![Step::Key(OUTLINE), Step::Element(inserted.clone())];
-        let f = frame(&mut world);
-        let list = stop(&f, &[Step::Key(OUTLINE)]).rect;
+        let list = driver.rect(&[Step::Key(OUTLINE)]);
         let top = index
             .checked_sub(1)
-            .map_or(list.y0, |i| stop(&f, &entries[i]).rect.y1);
-        let bottom = entries.get(index).map_or(list.y1, |p| stop(&f, p).rect.y0);
+            .map_or(list.y0, |i| driver.rect(&entries[i]).y1);
+        let bottom = entries.get(index).map_or(list.y1, |p| driver.rect(p).y0);
         assert!(bottom > top);
-        let before = world.model.doc.clone();
-        click_frame(
-            &mut world,
-            f,
+        let before = driver.editor().model.doc.clone();
+        click(
+            &mut driver,
             Point::new(list.x0 + 4.0, (top + bottom) / 2.0),
             &path,
-            Modifiers::empty(),
         );
         assert!(
-            Rc::ptr_eq(&before, &world.model.doc),
+            Rc::ptr_eq(&before, &driver.editor().model.doc),
             "opening a pending doesn't edit the document"
         );
-        assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
-        assert!(frame(&mut world).completion.is_some());
-        assert!(crate::completion::commit(
-            &mut world.session(),
-            a.into(),
-            None,
-            None
-        ));
-        let list = world
-            .sources()
-            .resolve_path(&[Step::Key(OUTLINE)])
-            .unwrap()
-            .as_list()
-            .unwrap()
-            .clone();
+        assert_eq!(driver.selection(), path);
+        assert!(driver.picker_entries().is_some());
+        assert!(driver.paste(&a.into()));
+        let list = driver.value(&[Step::Key(OUTLINE)]);
+        let list = list.as_list().unwrap();
         assert_eq!(list.len(), 3);
         assert_eq!(list.get(&inserted), Some(&Value::Cell(a)));
     }
@@ -620,17 +531,9 @@ fn outline_column_gaps_open_pending_before_between_and_after_items() {
 #[test]
 fn outline_body_column_gap_inserts_through_its_jump() {
     let (doc, a, _, _) = document();
-    let mut world = crate::test_editor(doc);
-    let section = body(&entry(&world, &[], a), a);
-    let positions: Vec<_> = world
-        .sources()
-        .resolve_path(&[Step::Key(a)])
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .keys()
-        .cloned()
-        .collect();
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+    let section = body(&entry(driver.editor(), &[], a), a);
+    let positions = driver.positions(&[Step::Key(a)]);
     let inserted = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
     let element = |position| {
         section
@@ -640,149 +543,88 @@ fn outline_body_column_gap_inserts_through_its_jump() {
             .collect::<Path>()
     };
     let path = element(inserted.clone());
-    let f = frame(&mut world);
-    let first = stop(&f, &element(positions[0].clone())).rect;
-    let second = stop(&f, &element(positions[1].clone())).rect;
-    click_frame(
-        &mut world,
-        f,
+    let first = driver.rect(&element(positions[0].clone()));
+    let second = driver.rect(&element(positions[1].clone()));
+    click(
+        &mut driver,
         Point::new(first.x0 + 4.0, (first.y1 + second.y0) / 2.0),
         &path,
-        Modifiers::empty(),
     );
     assert_eq!(
-        world.model.selection.as_ref().unwrap().location(),
+        driver.editor().model.selection.as_ref().unwrap().location(),
         Some(Location::root(vec![
             Step::Key(a),
             Step::Element(inserted.clone())
         ]))
     );
-    let f = frame(&mut world);
-    assert!(f.completion.is_some());
-    let pending = stop(&f, &path).rect;
-    let first = stop(&f, &element(positions[0].clone())).rect;
-    let second = stop(&f, &element(positions[1].clone())).rect;
+    assert!(driver.picker_entries().is_some());
+    let pending = driver.rect(&path);
+    let first = driver.rect(&element(positions[0].clone()));
+    let second = driver.rect(&element(positions[1].clone()));
     for (before, after, y) in [
         (&positions[0], &inserted, (first.y1 + pending.y0) / 2.0),
         (&inserted, &positions[1], (pending.y1 + second.y0) / 2.0),
     ] {
         let missing = element(gid::position::between(Some(before), Some(after)).unwrap());
-        assert!(
-            !matches!(
-                f.hover_geometry.probe(Some(Point::new(first.x0 + 4.0, y)), None, 0.0),
-                Some((_, Claim::Direct(Hovered::Tree(Hover::Value(path))))) if path.as_ref() == missing
-            ),
+        assert_ne!(
+            driver.hover_at(Point::new(first.x0 + 4.0, y)),
+            Some(Hovered::Tree(Hover::Value(Rc::from(missing)))),
             "both gaps beside a pending stay inactive"
         );
     }
-    assert!(crate::completion::commit(
-        &mut world.session(),
-        f64::value(7.0),
-        None,
-        None
-    ));
+    assert!(driver.paste(&f64::value(7.0)));
     assert_eq!(
-        world
-            .sources()
-            .resolve_path(&[Step::Key(a), Step::Element(inserted)]),
-        Some(&f64::value(7.0))
+        driver.value(&[Step::Key(a), Step::Element(inserted)]),
+        f64::value(7.0)
     );
 }
 
 #[test]
 fn outline_preserves_pending_insertions_in_both_lists() {
     let (doc, a, _, _) = document();
-    let mut world = crate::test_editor(doc);
-    let e = entry(&world, &[], a);
-    let section = body(&e, a);
-    let pos = world
-        .sources()
-        .resolve_path(&[Step::Key(a)])
-        .unwrap()
-        .as_list()
-        .unwrap()
-        .keys()
-        .next()
-        .unwrap()
-        .clone();
-    let item: Path = section
-        .iter()
-        .cloned()
-        .chain([Step::Element(pos)])
-        .collect();
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+    let e = entry(driver.editor(), &[], a);
+    let item = [
+        body(&e, a),
+        vec![Step::Element(driver.positions(&[Step::Key(a)])[0].clone())],
+    ]
+    .concat();
     for target in [item, e] {
-        let f = frame(&mut world);
-        assert!((stop(&f, &target).select)(&mut world, None));
-        assert!(
-            frame(&mut world)
-                .resolve_for_dispatch()
-                .dispatch_key(&mut world, &key(Key::Named(NamedKey::Enter)))
-        );
-        let path = world.model.selection.as_ref().unwrap().path().to_vec();
-        let f = frame(&mut world);
-        assert!(f.completion.is_some());
-        stop(&f, &path);
-        assert!(crate::completion::commit(
-            &mut world.session(),
-            if path.len() == 2 {
-                a.into()
-            } else {
-                f64::value(7.0)
-            },
-            None,
-            None
-        ));
+        driver.select(&target);
+        driver.press(NamedKey::Enter);
+        let path = driver.selection();
+        assert!(driver.picker_entries().is_some());
+        assert!(driver.drawn(&path));
+        assert!(driver.paste(&if path.len() == 2 {
+            a.into()
+        } else {
+            f64::value(7.0)
+        }));
     }
-    assert_eq!(
-        world
-            .sources()
-            .resolve_path(&[Step::Key(a)])
-            .unwrap()
-            .as_list()
-            .unwrap()
-            .len(),
-        3
-    );
-    assert_eq!(
-        world
-            .sources()
-            .resolve_path(&[Step::Key(OUTLINE)])
-            .unwrap()
-            .as_list()
-            .unwrap()
-            .len(),
-        3
-    );
+    for list in [a, OUTLINE] {
+        assert_eq!(driver.positions(&[Step::Key(list)]).len(), 3);
+    }
 }
 
 #[test]
 fn outline_headings_delete_and_pick_references_not_bodies() {
     let (doc, a, _, extra) = document();
-    let mut world = crate::test_editor(doc);
-    let e = entry(&world, &[], a);
-    world.model.selection = Some(pending_value(&crate::test_root(), vec![Step::Key(extra)]));
-    click_heading(&mut world, &e, Modifiers::META | Modifiers::CONTROL);
-    assert_eq!(
-        world.sources().resolve_path(&[Step::Key(extra)]),
-        Some(&Value::Cell(a))
-    );
-    assert!(!hidden(&world, &body(&e, a)));
-    click_heading(&mut world, &e, Modifiers::empty());
-    let before = world
-        .sources()
-        .resolve_path(&[Step::Key(a)])
-        .unwrap()
-        .clone();
-    let f = frame(&mut world);
-    assert!(
-        world.delete_selected_edge(crate::display::widget::navigation::Geometry {
-            landmarks: &f.landmarks,
-            ..Default::default()
-        })
-    );
-    assert!(world.sources().resolve_path(&e).is_none());
-    assert_eq!(world.sources().resolve_path(&[Step::Key(a)]), Some(&before));
-    stop(&frame(&mut world), &[Step::Key(a)]);
+    let mut editor = crate::test_editor(doc);
+    let e = entry(&editor, &[], a);
+    editor.model.selection = Some(pending_value(&crate::test_root(), vec![Step::Key(extra)]));
+    let mut driver = Driver::new(editor, Driver::VIEWPORT);
+    // The command key, on either platform, picks the heading's reference.
+    driver.hold(ModifiersState::CONTROL | ModifiersState::SUPER);
+    click_heading(&mut driver, &e);
+    driver.hold(ModifiersState::empty());
+    assert_eq!(driver.value(&[Step::Key(extra)]), Value::Cell(a));
+    assert!(!hidden(driver.editor(), &body(&e, a)));
+    click_heading(&mut driver, &e);
+    let before = driver.value(&[Step::Key(a)]);
+    driver.press(NamedKey::Delete);
+    assert!(driver.editor().sources().resolve_path(&e).is_none());
+    assert_eq!(driver.value(&[Step::Key(a)]), before);
+    assert!(driver.drawn(&[Step::Key(a)]));
 }
 
 #[test]
@@ -795,33 +637,25 @@ fn nested_outline_composes_jumps_and_cell_follows() {
         (parent, alias.into()),
         (b, f64::value(99.0)),
     ]));
-    let mut world = crate::test_editor(doc);
-    let outer = body(&entry(&world, &[], parent), parent);
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+    let outer = body(&entry(driver.editor(), &[], parent), parent);
     let followed: Path = outer
         .into_iter()
         .chain([Step::Follow(gid::Resolution::Document)])
         .collect();
-    let inner = world
-        .sources()
-        .resolve_path(&[Step::Key(parent), Step::Follow(gid::Resolution::Document)])
-        .unwrap();
-    let e = entry_paths(inner, &followed, a).remove(0);
-    let p = body(&e, a);
-    let f = frame(&mut world);
-    assert!((stop(&f, &p).select)(&mut world, None));
-    assert!(world.paste_value(Value::list([f64::value(12.0)])));
+    let inner = driver.value(&[Step::Key(parent), Step::Follow(gid::Resolution::Document)]);
+    let e = entry_paths(&inner, &followed, a).remove(0);
+    driver.select(&body(&e, a));
+    assert!(driver.paste(&Value::list([f64::value(12.0)])));
     assert_eq!(
-        world.sources().resolve_path(&[
+        driver.value(&[
             Step::Key(parent),
             Step::Follow(gid::Resolution::Document),
             Step::Key(a)
         ]),
-        Some(&Value::list([f64::value(12.0)]))
+        Value::list([f64::value(12.0)])
     );
-    assert_eq!(
-        world.sources().resolve_path(&[Step::Key(b)]),
-        Some(&f64::value(99.0))
-    );
+    assert_eq!(driver.value(&[Step::Key(b)]), f64::value(99.0));
 }
 
 #[test]

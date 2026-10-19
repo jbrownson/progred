@@ -134,6 +134,34 @@ impl<P> Driver<P> {
         self.present();
     }
 
+    /// The structure the last copy put on the clipboard.
+    pub(crate) fn copied(&mut self) -> Option<Value> {
+        self.runner.editor.text_clipboard.structure()
+    }
+
+    /// Copy `value` from elsewhere and paste it with the command key's V;
+    /// whether the editor took it.
+    pub(crate) fn paste(&mut self, value: &Value) -> bool {
+        self.runner
+            .editor
+            .text_clipboard
+            .copy(value.to_string(), Some(value));
+        self.keystroke(Key::Character("v".into()), crate::modifiers::command())
+    }
+
+    /// The command key's Z; whether there was anything to undo.
+    pub(crate) fn undo(&mut self) -> bool {
+        self.keystroke(Key::Character("z".into()), crate::modifiers::command())
+    }
+
+    /// The command key's Shift-Z; whether there was anything to redo.
+    pub(crate) fn redo(&mut self) -> bool {
+        self.keystroke(
+            Key::Character("z".into()),
+            crate::modifiers::command() | Modifiers::SHIFT,
+        )
+    }
+
     /// The text of the line the selection edits, if it edits one.
     pub(crate) fn line(&self) -> Option<&str> {
         Some(self.editor().model.selection.as_ref()?.edit()?.text())

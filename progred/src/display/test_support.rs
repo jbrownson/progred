@@ -5,14 +5,16 @@ use puri::handler::Handler;
 
 pub trait ResolveForDispatch<C, H> {
     fn resolve_for_dispatch(self) -> Handler<C, widget::frame::DispatchContext<C, H>>;
-    /// The handler with the frame's landmarks, as the shell dispatches it.
+    /// The handler, and a dispatch context holding the frame's landmarks.
     fn resolve_with_context(
         self,
     ) -> (
         Handler<C, widget::frame::DispatchContext<C, H>>,
         widget::frame::DispatchContext<C, H>,
     );
-    /// Dispatch an arrow's navigation as the shell does.
+    /// Dispatch the navigation an arrow nothing claims becomes, straight to
+    /// the frame's handler: unlike the shell, this gives no key handler the
+    /// arrow first and doesn't reveal the selection.
     fn navigate(self, world: &mut C, direction: puri::handler::NavigationDirection) -> bool;
 }
 
