@@ -102,24 +102,23 @@ impl Settings {
         if let Some((pose, Some(tool))) = cursor {
             tubes.tool(tool, pose, self.profile_tolerance)?;
         }
-        if self.stock_color.is_some() {
-            return Ok(());
-        }
-        tubes.style(line_radius * 0.6, [137, 150, 163])?;
-        for corner in 0..8 {
-            let a = std::array::from_fn(|i| {
-                if corner & (1 << i) == 0 {
-                    self.stock_min[i]
-                } else {
-                    self.stock_max[i]
-                }
-            });
-            for axis in 0..3 {
-                if corner & (1 << axis) == 0 {
-                    let mut b = a;
-                    b[axis] = self.stock_max[axis];
-                    tubes.start_at(a, Axis::Z)?;
-                    tubes.line_to(b)?;
+        if self.stock_color.is_none() {
+            tubes.style(line_radius * 0.6, [137, 150, 163])?;
+            for corner in 0..8 {
+                let a = std::array::from_fn(|i| {
+                    if corner & (1 << i) == 0 {
+                        self.stock_min[i]
+                    } else {
+                        self.stock_max[i]
+                    }
+                });
+                for axis in 0..3 {
+                    if corner & (1 << axis) == 0 {
+                        let mut b = a;
+                        b[axis] = self.stock_max[axis];
+                        tubes.start_at(a, Axis::Z)?;
+                        tubes.line_to(b)?;
+                    }
                 }
             }
         }

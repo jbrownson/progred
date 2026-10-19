@@ -106,18 +106,19 @@ pub(super) fn preview(
     let width = number(context, call, environment, layout::vocabulary::WIDTH)?;
     let height = number(context, call, environment, layout::vocabulary::HEIGHT)?;
     if width <= 0.0 || height <= 0.0 {
-        return Err(invalid());
+        Err(invalid())
+    } else {
+        let fuel = fuel(context, call, environment)?;
+        Ok(RuntimeValue::record([(
+            PREVIEW,
+            RuntimeValue::record([
+                (PROGRAM, program),
+                (layout::vocabulary::WIDTH, RuntimeValue::f64(width)),
+                (layout::vocabulary::HEIGHT, RuntimeValue::f64(height)),
+                (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
+            ]),
+        )]))
     }
-    let fuel = fuel(context, call, environment)?;
-    Ok(RuntimeValue::record([(
-        PREVIEW,
-        RuntimeValue::record([
-            (PROGRAM, program),
-            (layout::vocabulary::WIDTH, RuntimeValue::f64(width)),
-            (layout::vocabulary::HEIGHT, RuntimeValue::f64(height)),
-            (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
-        ]),
-    )]))
 }
 
 pub(super) fn display<W: Host>(

@@ -53,24 +53,22 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     let Some(y) = context.field(call, vocabulary::Y) else {
                         return Ok(context.missing_argument(vocabulary::Y));
                     };
-                    let (Some(x), Some(y)) = (
-                        number(context, x, environment)?,
-                        number(context, y, environment)?,
-                    ) else {
-                        return Ok(::grap::absent::with_detail(
-                            vocabulary::INVALID_DRAWING,
-                            ::grap::absent::VALUE,
-                            context.value(call).clone(),
-                        ));
-                    };
-                    Ok(context.effect(|| {
-                        if function == vocabulary::MOVE_TO {
-                            path.borrow_mut().move_to((x, y));
-                        } else {
-                            path.borrow_mut().line_to((x, y));
-                        }
-                        unit.clone()
-                    }))
+                    Ok(
+                        match (
+                            number(context, x, environment)?,
+                            number(context, y, environment)?,
+                        ) {
+                            (Some(x), Some(y)) => context.effect(|| {
+                                if function == vocabulary::MOVE_TO {
+                                    path.borrow_mut().move_to((x, y));
+                                } else {
+                                    path.borrow_mut().line_to((x, y));
+                                }
+                                unit.clone()
+                            }),
+                            _ => invalid_drawing(context, call),
+                        },
+                    )
                 }
                 vocabulary::CLOSE => Ok(context.effect(|| {
                     path.borrow_mut().close_path();
@@ -92,20 +90,16 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                         }
                         None => Some(Affine::IDENTITY),
                     };
-                    let (Some(shape), Some(paint), Some(transform)) =
-                        (shape, read_paint(&paint), transform)
-                    else {
-                        return Ok(::grap::absent::with_detail(
-                            vocabulary::INVALID_DRAWING,
-                            ::grap::absent::VALUE,
-                            context.value(call).clone(),
-                        ));
-                    };
-                    let calls = context.call_trace();
-                    Ok(context.effect(|| {
-                        recorder.borrow_mut().fill(shape, paint, transform, calls);
-                        unit.clone()
-                    }))
+                    Ok(match (shape, read_paint(&paint), transform) {
+                        (Some(shape), Some(paint), Some(transform)) => {
+                            let calls = context.call_trace();
+                            context.effect(|| {
+                                recorder.borrow_mut().fill(shape, paint, transform, calls);
+                                unit.clone()
+                            })
+                        }
+                        _ => invalid_drawing(context, call),
+                    })
                 }
                 _ => unreachable!("the overlay only advertises drawing functions"),
             }
@@ -114,6 +108,15 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
         let evaluation = grap::evaluate_runtime_scoped(&program, host, &overlay, fuel);
         evaluation.completed && !evaluation.result.declines()
     })
+}
+
+/// An absent naming `call`, a drawing call with an argument it can't read.
+fn invalid_drawing(context: &grap::Context, call: &grap::Expression) -> Value {
+    ::grap::absent::with_detail(
+        vocabulary::INVALID_DRAWING,
+        ::grap::absent::VALUE,
+        context.value(call).clone(),
+    )
 }
 
 fn evaluated_field(

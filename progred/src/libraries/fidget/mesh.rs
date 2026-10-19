@@ -24,27 +24,28 @@ pub(crate) fn preview(
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let requested = evaluated(context, call, environment, vocabulary::MESH_DEPTH)?;
-    let Some(depth) = depth(requested.as_ref()) else {
-        return Ok(::grap::absent::value(vocabulary::INVALID_MESH_DEPTH));
-    };
-    let value = volume_preview_function(context, call, environment, vocabulary::PREVIEW_MESH)?;
-    Ok(
-        if let Some(fields) = value
-            .as_record()
-            .and_then(|r| r.get(&vocabulary::PREVIEW_MESH))
-            .and_then(Value::as_record)
-        {
-            node(
-                vocabulary::PREVIEW_MESH,
-                Value::record(fields.iter().map(|(k, v)| (*k, v.clone())).chain([(
-                    vocabulary::MESH_DEPTH,
-                    crate::libraries::u64::value(u64::from(depth)),
-                )])),
-            )
-        } else {
-            value
-        },
-    )
+    Ok(match depth(requested.as_ref()) {
+        None => ::grap::absent::value(vocabulary::INVALID_MESH_DEPTH),
+        Some(depth) => {
+            let value =
+                volume_preview_function(context, call, environment, vocabulary::PREVIEW_MESH)?;
+            if let Some(fields) = value
+                .as_record()
+                .and_then(|r| r.get(&vocabulary::PREVIEW_MESH))
+                .and_then(Value::as_record)
+            {
+                node(
+                    vocabulary::PREVIEW_MESH,
+                    Value::record(fields.iter().map(|(k, v)| (*k, v.clone())).chain([(
+                        vocabulary::MESH_DEPTH,
+                        crate::libraries::u64::value(u64::from(depth)),
+                    )])),
+                )
+            } else {
+                value
+            }
+        }
+    })
 }
 
 fn generate(preview: &VolumePreview, depth: u8) -> Option<Mesh> {

@@ -123,6 +123,16 @@ fn invalid() -> Error {
     Error::Invalid(::grap::absent::value(INVALID_INPUT).into())
 }
 
+/// `value`, unless it's absent: then an `Error::Invalid` that carries it out
+/// as the result.
+fn present(value: RuntimeValue) -> Result<RuntimeValue, Error> {
+    if value.absent_reason().is_some() {
+        Err(Error::Invalid(value))
+    } else {
+        Ok(value)
+    }
+}
+
 fn argument(context: &Context, call: &Expression, field: CellId) -> Result<Expression, Error> {
     context
         .field(call, field)

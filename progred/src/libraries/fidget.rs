@@ -158,10 +158,36 @@ fn preview_value(
     } else {
         tree(&field).map(|_| ()).ok_or(vocabulary::INVALID_FIELD)
     };
-    if let Err(reason) = validation {
-        return Ok(::grap::absent::value(reason));
-    }
-    let dimensions = [
+    Ok(match validation {
+        Err(reason) => ::grap::absent::value(reason),
+        Ok(()) => match size_arguments(context, call, environment)? {
+            None => ::grap::absent::value(vocabulary::INVALID_SIZE),
+            Some(size) => match bound_arguments(context, call, environment, bounds)?
+                .filter(|bounds| valid(bounds))
+            {
+                Some(bounds) => node(
+                    marker,
+                    Value::record(
+                        [(vocabulary::FIELD, field)]
+                            .into_iter()
+                            .chain(size)
+                            .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
+                    ),
+                ),
+                None => ::grap::absent::value(vocabulary::INVALID_BOUNDS),
+            },
+        },
+    })
+}
+
+/// A preview's width and height arguments, each defaulting to
+/// `DEFAULT_PREVIEW_SIZE`; `None` when either isn't a positive finite number.
+fn size_arguments(
+    context: &mut ::grap::Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<Option<Vec<(CellId, Value)>>, Halt> {
+    [
         crate::libraries::layout::vocabulary::WIDTH,
         crate::libraries::layout::vocabulary::HEIGHT,
     ]
@@ -174,11 +200,18 @@ fn preview_value(
                 .map(|_| (label, value))
         })
     })
-    .collect::<Result<Option<Vec<_>>, _>>()?;
-    let Some(dimensions) = dimensions else {
-        return Ok(::grap::absent::value(vocabulary::INVALID_SIZE));
-    };
-    let bounds = bounds
+    .collect()
+}
+
+/// A preview's `bounds` arguments, each with its default, as stored and as
+/// read; `None` when one isn't a finite f32.
+fn bound_arguments(
+    context: &mut ::grap::Context,
+    call: &Expression,
+    environment: &Environment,
+    bounds: impl IntoIterator<Item = (CellId, f32)>,
+) -> Result<Option<Vec<(CellId, Value, f32)>>, Halt> {
+    bounds
         .into_iter()
         .map(|(label, default)| {
             evaluated(context, call, environment, label).map(|value| {
@@ -188,19 +221,7 @@ fn preview_value(
                     .map(|number| (label, value, number))
             })
         })
-        .collect::<Result<Option<Vec<_>>, _>>()?;
-    Ok(match bounds.filter(|bounds| valid(bounds)) {
-        Some(bounds) => node(
-            marker,
-            Value::record(
-                [(vocabulary::FIELD, field)]
-                    .into_iter()
-                    .chain(dimensions)
-                    .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
-            ),
-        ),
-        None => ::grap::absent::value(vocabulary::INVALID_BOUNDS),
-    })
+        .collect()
 }
 
 fn unary_function(marker: CellId) -> ForeignFunction {

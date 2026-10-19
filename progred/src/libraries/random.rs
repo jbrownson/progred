@@ -46,20 +46,25 @@ fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
             let Some(max) = context.field(call, vocabulary::MAX) else {
                 return Ok(context.missing_runtime_argument(vocabulary::MAX));
             };
-            let min = context.eval_f64(min, environment)?;
-            let max = context.eval_f64(max, environment)?;
-            let (Some(min), Some(max)) = (min, max) else {
-                return Ok(::grap::absent::value(vocabulary::INVALID_BOUNDS).into());
-            };
-            let next = state
-                .get()
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1_442_695_040_888_963_407);
-            Ok(context.effect(|| {
-                state.set(next);
-                let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
-                RuntimeValue::f64(min + (max - min) * unit)
-            }))
+            Ok(
+                match (
+                    context.eval_f64(min, environment)?,
+                    context.eval_f64(max, environment)?,
+                ) {
+                    (Some(min), Some(max)) => {
+                        let next = state
+                            .get()
+                            .wrapping_mul(6_364_136_223_846_793_005)
+                            .wrapping_add(1_442_695_040_888_963_407);
+                        context.effect(|| {
+                            state.set(next);
+                            let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
+                            RuntimeValue::f64(min + (max - min) * unit)
+                        })
+                    }
+                    _ => ::grap::absent::value(vocabulary::INVALID_BOUNDS).into(),
+                },
+            )
         }),
     )
 }

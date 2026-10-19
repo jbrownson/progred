@@ -110,45 +110,46 @@ fn consume(
 ) -> Result<RuntimeValue, Halt> {
     let sequence = evaluated(context, call, env, ITEMS)?;
     if sequence.absent_reason().is_some() {
-        return Ok(sequence);
-    }
-    let mut sequence = context.prepare_runtime_callable(sequence, env);
-    let action = if collect {
-        None
+        Ok(sequence)
     } else {
-        let Some(expression) = context.field(call, ACTION) else {
-            return Ok(context.missing_runtime_argument(ACTION));
+        let mut sequence = context.prepare_runtime_callable(sequence, env);
+        let action = if collect {
+            None
+        } else {
+            let Some(expression) = context.field(call, ACTION) else {
+                return Ok(context.missing_runtime_argument(ACTION));
+            };
+            Some(context.prepare_callable(expression, env)?)
         };
-        Some(context.prepare_callable(expression, env)?)
-    };
-    let mut collected = Vec::new();
-    loop {
-        let result = context.call_prepared(&sequence, [])?;
-        match (
-            result.absent_reason(),
-            result.field(ITEM),
-            result.field(NEXT),
-        ) {
-            (Some(vocabulary::FINISHED), _, _) => {
-                break Ok(if collect {
-                    RuntimeValue::list(collected)
-                } else {
-                    RuntimeValue::record([])
-                });
-            }
-            (Some(_), _, _) => break Ok(result),
-            (None, Some(item), Some(next)) => {
-                if let Some(action) = &action {
-                    let result = context.call_prepared(action, [(ITEM, item)])?;
-                    if result.absent_reason().is_some() {
-                        break Ok(result);
-                    }
-                } else {
-                    collected.push(item);
+        let mut collected = Vec::new();
+        loop {
+            let result = context.call_prepared(&sequence, [])?;
+            match (
+                result.absent_reason(),
+                result.field(ITEM),
+                result.field(NEXT),
+            ) {
+                (Some(vocabulary::FINISHED), _, _) => {
+                    break Ok(if collect {
+                        RuntimeValue::list(collected)
+                    } else {
+                        RuntimeValue::record([])
+                    });
                 }
-                sequence = context.prepare_runtime_callable(next, env);
+                (Some(_), _, _) => break Ok(result),
+                (None, Some(item), Some(next)) => {
+                    if let Some(action) = &action {
+                        let result = context.call_prepared(action, [(ITEM, item)])?;
+                        if result.absent_reason().is_some() {
+                            break Ok(result);
+                        }
+                    } else {
+                        collected.push(item);
+                    }
+                    sequence = context.prepare_runtime_callable(next, env);
+                }
+                (None, _, _) => break Ok(invalid()),
             }
-            (None, _, _) => break Ok(invalid()),
         }
     }
 }

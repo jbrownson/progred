@@ -2,7 +2,7 @@
 
 use super::mesh::computation::PathStyle;
 use super::playback;
-use super::{Error, argument, invalid, number, runtime_result, vocabulary::*};
+use super::{Error, argument, invalid, number, present, runtime_result, vocabulary::*};
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{color, f64, fidget, layout, presentation};
@@ -67,20 +67,14 @@ pub(super) fn preview_with(
 ) -> Result<RuntimeValue, Error> {
     let playback = match context.field(call, PLAYBACK) {
         Some(expression) => {
-            let value = context.eval_to_value(expression, environment)?;
-            if ::grap::absent::is_absent(&value) {
-                return Ok(value.into());
-            }
-            playback::Settings::read(&value).ok_or_else(invalid)?;
-            Some((PLAYBACK, value.into()))
+            let value = present(context.eval_to_value(expression, environment)?.into())?;
+            playback::Settings::read(value.as_value()).ok_or_else(invalid)?;
+            Some((PLAYBACK, value))
         }
         None => None,
     };
     let program = argument(context, call, PROGRAM)?;
-    let program = context.eval(program, environment)?;
-    if program.absent_reason().is_some() {
-        return Ok(program);
-    }
+    let program = present(context.eval(program, environment)?)?;
     let radius = number(context, call, environment, LINE_RADIUS)?;
     read_radius(radius).ok_or_else(invalid)?;
     let color = argument(context, call, fidget::vocabulary::COLOR)?;
@@ -89,15 +83,12 @@ pub(super) fn preview_with(
         Error::Invalid(::grap::absent::value(fidget::vocabulary::INVALID_COLOR).into())
     })?;
     let fuel = super::fuel(context, call, environment)?;
-    let model = model(context, call, environment)?;
-    if ::grap::absent::is_absent(&model) {
-        return Ok(model.into());
-    }
+    let model = present(model(context, call, environment)?.into())?;
     Ok(RuntimeValue::record([(
         marker,
         RuntimeValue::record(
             [
-                (presentation::vocabulary::VALUE, model.into()),
+                (presentation::vocabulary::VALUE, model),
                 (PROGRAM, program),
                 (LINE_RADIUS, RuntimeValue::f64(radius)),
                 (fidget::vocabulary::COLOR, color.into()),

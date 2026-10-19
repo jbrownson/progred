@@ -16,6 +16,7 @@ use crate::display::{group, group_hug, hug};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
+use std::ops::ControlFlow;
 use std::rc::Rc;
 
 #[cfg(test)]
@@ -97,21 +98,29 @@ fn do_foreign(
     let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
         return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
     };
-    let Some(elements) = context.elements(&expressions) else {
-        return Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into());
-    };
-    let mut result = None;
-    for expression in elements {
-        let value = context.eval(expression.clone(), environment)?;
-        if value.absent_reason().is_some() {
-            return Ok(value);
-        }
-        result = Some(value);
+    match context.elements(&expressions) {
+        Some(elements) => in_turn(elements, context, environment),
+        None => Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into()),
     }
-    Ok(
-        result
-            .unwrap_or_else(|| ::grap::absent::value(vocabulary::MISSING_FINAL_EXPRESSION).into()),
-    )
+}
+
+/// Evaluates `expressions` in turn. The first halt or absent is the result;
+/// without one, the last value is.
+fn in_turn(
+    expressions: &[Expression],
+    context: &mut Context,
+    environment: &Environment,
+) -> Result<RuntimeValue, Halt> {
+    match expressions.iter().try_fold(None, |_, expression| {
+        match context.eval(expression.clone(), environment) {
+            Ok(value) if value.absent_reason().is_none() => ControlFlow::Continue(Some(value)),
+            stopped => ControlFlow::Break(stopped),
+        }
+    }) {
+        ControlFlow::Continue(last) => Ok(last
+            .unwrap_or_else(|| ::grap::absent::value(vocabulary::MISSING_FINAL_EXPRESSION).into())),
+        ControlFlow::Break(stopped) => stopped,
+    }
 }
 
 fn all_foreign(
@@ -122,13 +131,13 @@ fn all_foreign(
     let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
         return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
     };
-    let Some(elements) = context.elements(&expressions) else {
-        return Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into());
-    };
-    try_map_sized(elements, |expression| {
-        context.eval(expression.clone(), environment)
-    })
-    .map(RuntimeValue::list)
+    match context.elements(&expressions) {
+        Some(elements) => try_map_sized(elements, |expression| {
+            context.eval(expression.clone(), environment)
+        })
+        .map(RuntimeValue::list),
+        None => Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into()),
+    }
 }
 
 fn quote_foreign(
@@ -148,28 +157,28 @@ fn replace_unquotes(
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     if let Some(fields) = context.fields(&expression) {
-        if let Some((_, unquote)) = fields
+        match fields
             .iter()
             .find(|(field, _)| *field == vocabulary::UNQUOTE)
         {
-            return context.eval(unquote.clone(), environment);
+            Some((_, unquote)) => context.eval(unquote.clone(), environment),
+            None => try_map_sized(fields, |(field, value)| {
+                Ok((
+                    *field,
+                    replace_unquotes(value.clone(), context, environment)?,
+                ))
+            })
+            .map(RuntimeValue::record),
         }
-        return try_map_sized(fields, |(field, value)| {
-            Ok((
-                *field,
-                replace_unquotes(value.clone(), context, environment)?,
-            ))
-        })
-        .map(RuntimeValue::record);
-    }
-    if let Some(elements) = context.elements(&expression) {
-        return try_map_sized(elements, |value| {
+    } else if let Some(elements) = context.elements(&expression) {
+        try_map_sized(elements, |value| {
             replace_unquotes(value.clone(), context, environment)
         })
-        .map(RuntimeValue::list);
+        .map(RuntimeValue::list)
+    } else {
+        let value = context.value(&expression).clone();
+        replace_unquotes_value(&value, context, environment)
     }
-    let value = context.value(&expression).clone();
-    replace_unquotes_value(&value, context, environment)
 }
 
 /// Collecting through `Result` loses the length hint, and quoted templates
@@ -539,25 +548,23 @@ fn matches_pattern(
             }
         }
         Value::List(pattern_values) => {
-            let Some(value_len) = value.list_len() else {
-                return Ok(false);
-            };
-            if pattern_values.len() != value_len {
-                return Ok(false);
-            }
-            pattern_values
-                .values()
-                .enumerate()
-                .try_fold(true, |matched, (index, pattern)| {
-                    if matched {
-                        match value.list_get(index) {
-                            Some(value) => matches_pattern(pattern, &value, bindings),
-                            None => Ok(false),
+            if value.list_len() == Some(pattern_values.len()) {
+                pattern_values
+                    .values()
+                    .enumerate()
+                    .try_fold(true, |matched, (index, pattern)| {
+                        if matched {
+                            match value.list_get(index) {
+                                Some(value) => matches_pattern(pattern, &value, bindings),
+                                None => Ok(false),
+                            }
+                        } else {
+                            Ok(false)
                         }
-                    } else {
-                        Ok(false)
-                    }
-                })
+                    })
+            } else {
+                Ok(false)
+            }
         }
         Value::Cell(_) | Value::Blob(_) => Ok(value.to_value() == *pattern),
     }
