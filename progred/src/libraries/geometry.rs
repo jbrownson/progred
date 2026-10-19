@@ -1,5 +1,5 @@
-//! The first geometry Grap library: a circle value and a Rust-backed
-//! constructor consuming the f64 library's representation.
+//! A geometry Grap library: a circle value and a Rust-backed constructor
+//! consuming the f64 library's representation.
 
 use crate::display::Host;
 use crate::libraries::{Library, f64, name};

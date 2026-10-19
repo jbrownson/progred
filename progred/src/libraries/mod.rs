@@ -1,6 +1,6 @@
-//! Progred's built-in libraries. Each module owns one conceptual
-//! library and exports its complete contribution to the editor, through
-//! the interface in [`crate::library`].
+//! Progred's built-in libraries. Most modules are one library's complete
+//! contribution to the editor, through the interface in [`crate::library`];
+//! `completion`, `line_edit` and `representation` are helpers several share.
 
 /// A built-in library's contribution, over a world that hosts the toolkit.
 pub type Library<W> = crate::library::Library<W, <W as crate::display::Host>::Hover>;

@@ -1,7 +1,7 @@
-//! What every number representation shares: the argument labels of
-//! binary and unary operations, and the scrub editing helper. The
-//! operation identities stay with each representation until dispatch
-//! evaluates arguments once per call.
+//! What the number representations share: the convention that generates
+//! each one's operations, projections and completions from its own cells;
+//! the argument labels of binary and unary operations, which list
+//! concatenation takes too; and scrub editing.
 
 use crate::display::activatable;
 use crate::display::host::{Host, Layout, ProjectionInput};

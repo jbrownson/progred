@@ -1,11 +1,6 @@
 //! A UTF-8 text library over ordinary GID data. Text is a positively
 //! recognized record facet, not a GID-core atom; Grap owns its encoding,
 //! beside f64's, and keeps text unboxed as it does numbers.
-//!
-//! When a real string-function library lands here, funnel argument
-//! reads and result construction through shared helpers, the way f64
-//! routes through `binary`/`unary`: read with `RuntimeValue::as_text`
-//! and build native results the way `RuntimeValue::f64` does.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, line_edit, name};
