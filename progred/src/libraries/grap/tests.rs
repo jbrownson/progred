@@ -4,6 +4,7 @@ use crate::projection::ProjectionInput;
 
 use crate::display::Env;
 use crate::display::test_support::{EvaluatesTo, ProjectionCall, inspect, unshared};
+use crate::identity::short_id;
 use crate::libraries::test_widgets::{project_runtime, projection_input};
 use crate::library::Libraries;
 use crate::test_support::{

@@ -1,7 +1,7 @@
 use crate::display::{
     Completion, CompletionKind, CompletionProvider, CompletionRequest, CompletionText, Face, Host,
 };
-use crate::identity::short_id;
+use crate::identity::name_or_short_id;
 use gid::{CellId, Value};
 use std::{ops::Range, rc::Rc};
 
@@ -126,9 +126,7 @@ fn listed<W: Host>(
 fn text(request: &CompletionRequest<'_>, text: &CompletionText) -> String {
     match text {
         CompletionText::Literal(text) => text.clone(),
-        CompletionText::Name(cell) => (request.name)(*cell)
-            .map(str::to_owned)
-            .unwrap_or_else(|| short_id(*cell)),
+        CompletionText::Name(cell) => name_or_short_id((request.name)(*cell), *cell),
     }
 }
 

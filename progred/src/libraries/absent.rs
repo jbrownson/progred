@@ -26,11 +26,7 @@ pub mod vocabulary {
 /// failed alternative's causes, all on red.
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let reason = input.value?.absent_reason()?;
-    let name = input
-        .env
-        .name(reason)
-        .map(str::to_owned)
-        .unwrap_or_else(|| crate::identity::short_id(reason));
+    let name = crate::identity::name_or_short_id(input.env.name(reason), reason);
     let site = input.site();
     let head = crate::display::stop(crate::display::activatable(
         crate::display::faced(name, crate::display::Face::Ink),

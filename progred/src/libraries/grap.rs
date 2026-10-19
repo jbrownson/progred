@@ -4,7 +4,6 @@
 
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-use crate::identity::short_id;
 use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
 
@@ -585,10 +584,10 @@ fn call_detail(
         gid::Resolution::Document => "call".to_owned(),
         gid::Resolution::Library(library) => format!(
             "call · {}",
-            (request.resolve)(library)
-                .and_then(|definition| name::read(definition.value))
-                .map(str::to_owned)
-                .unwrap_or_else(|| short_id(library))
+            crate::identity::name_or_short_id(
+                (request.resolve)(library).and_then(|definition| name::read(definition.value)),
+                library,
+            )
         ),
     }
 }

@@ -23,11 +23,7 @@ pub(crate) fn tagged<W: Host, V>(
         [
             content,
             subscript(
-                input
-                    .env
-                    .name(representation)
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| crate::identity::short_id(representation)),
+                crate::identity::name_or_short_id(input.env.name(representation), representation),
                 Face::Dim,
             ),
         ],
