@@ -1250,14 +1250,15 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         }));
     let project =
         |world: &mut crate::Editor| editing_frame_with_projection(world, false, Some(&projection));
-    let between =
-        |frame: &crate::frame::HoverOutput<crate::Editor>, left: &[Step], right: &[Step]| {
-            let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
-            let (left, right) = (rect(left), rect(right));
-            Point::new((left.x1 + right.x0) / 2.0, left.center().y)
-        };
+    let between = |frame: &crate::projection::test_support::HoverOutput<crate::Editor>,
+                   left: &[Step],
+                   right: &[Step]| {
+        let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
+        let (left, right) = (rect(left), rect(right));
+        Point::new((left.x1 + right.x0) / 2.0, left.center().y)
+    };
     let click = |world: &mut crate::Editor,
-                 frame: crate::frame::HoverOutput<crate::Editor>,
+                 frame: crate::projection::test_support::HoverOutput<crate::Editor>,
                  point: Point,
                  target: &[Step]| {
         let mut input = crate::frame::DispatchContext::new(

@@ -38,9 +38,6 @@ use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 /// [`crate::display::host`].
 pub(crate) type Layout = crate::display::host::Layout<crate::Editor>;
 pub(crate) type Partial = crate::display::host::Partial<crate::Editor>;
-#[cfg(test)]
-pub(crate) type ProjectionInput<'a, V = Value> =
-    crate::display::host::ProjectionInput<'a, crate::Editor, V>;
 
 type SharedPath = Rc<[Step]>;
 

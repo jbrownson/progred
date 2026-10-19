@@ -1,5 +1,6 @@
 use super::*;
-use crate::projection::{Layout, ProjectionInput};
+use crate::projection::Layout;
+use crate::projection::test_support::ProjectionInput;
 use crate::test_values::binary_call;
 
 fn binary_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {

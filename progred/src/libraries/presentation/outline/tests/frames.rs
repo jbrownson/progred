@@ -41,13 +41,13 @@ fn document() -> (Document, CellId, CellId, CellId) {
     )
 }
 
-fn frame(world: &mut crate::Editor) -> crate::frame::HoverOutput<crate::Editor> {
+fn frame(world: &mut crate::Editor) -> crate::projection::test_support::HoverOutput<crate::Editor> {
     let annotations = world.model.workspace.document.annotations.clone();
     editing_frame_with_annotations(world, false, None, None, &annotations)
 }
 
 fn stop<'a>(
-    frame: &'a crate::frame::HoverOutput<crate::Editor>,
+    frame: &'a crate::projection::test_support::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Landmark<crate::Editor> {
     frame.landmarks.landmark(path).expect("outline occurrence")
@@ -102,7 +102,7 @@ fn click_heading(world: &mut crate::Editor, path: &[Step], modifiers: Modifiers)
 
 fn click_frame(
     world: &mut crate::Editor,
-    frame: crate::frame::HoverOutput<crate::Editor>,
+    frame: crate::projection::test_support::HoverOutput<crate::Editor>,
     point: Point,
     path: &[Step],
     modifiers: Modifiers,

@@ -706,7 +706,7 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
                     .update(extra, text::value("metadata")),
             )),
         });
-        let has_metadata = |frame: &crate::frame::HoverOutput<crate::Editor>| {
+        let has_metadata = |frame: &crate::projection::test_support::HoverOutput<crate::Editor>| {
             frame
                 .landmarks
                 .iter()

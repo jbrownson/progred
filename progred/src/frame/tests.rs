@@ -4,6 +4,7 @@ use crate::display::widget::source::Secondary;
 use gid::{CellId, Cells, Document, Step, Value};
 
 type HoverLog = Rc<std::cell::RefCell<Vec<(&'static str, f64)>>>;
+type Probe = crate::display::widget::frame::Probe<Hovered>;
 const HOVER_VIEWPORT: Size = Size::new(500.0, 400.0);
 
 #[test]

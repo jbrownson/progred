@@ -4,6 +4,7 @@ use crate::display::widget::container::scrolled;
 use crate::display::widget::placed::leaf;
 use crate::display::widget::view::in_view;
 use crate::display::widget::{HoverContext, HoverInput};
+use crate::projection::test_support::HoverOutput;
 use kurbo::{Affine, Point, Rect, Stroke};
 use measured::{Extent, Measured};
 use peniko::{Brush, Color, ImageData};
@@ -15,6 +16,8 @@ use ui_events::pointer::{
     PointerType, PointerUpdate,
 };
 use uig::Placement;
+
+type Placed<'a, 'input, C> = crate::display::widget::placed::Placed<'a, 'input, C, Hovered>;
 
 struct TestCanvas(DrawList);
 

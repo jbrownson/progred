@@ -13,7 +13,7 @@ fn view_annotations(world: &crate::Editor) -> Annotations {
         .clone()
 }
 
-fn frame(world: &mut crate::Editor) -> crate::frame::HoverOutput<crate::Editor> {
+fn frame(world: &mut crate::Editor) -> crate::projection::test_support::HoverOutput<crate::Editor> {
     let annotations = view_annotations(world);
     editing_frame_with_annotations(world, false, None, None, &annotations)
 }

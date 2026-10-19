@@ -3,7 +3,8 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
 use crate::display::widget;
 use crate::display::widget::placed::leaf;
-use crate::projection::{Layout, ProjectionInput};
+use crate::projection::Layout;
+use crate::projection::test_support::ProjectionInput;
 use crate::{Editor, frame::Hovered};
 use kurbo::Rect;
 use measured::Extent;
@@ -338,7 +339,7 @@ pub fn gesture_place(
 pub fn drag_frame(
     place: crate::display::widget::HoverCallback<crate::Editor, Hovered>,
     covered: bool,
-) -> crate::frame::HoverOutput<crate::Editor> {
+) -> crate::projection::test_support::HoverOutput<crate::Editor> {
     let extent = Extent {
         width: 20.0,
         ascent: 0.0,

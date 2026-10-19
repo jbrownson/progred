@@ -145,13 +145,6 @@ impl From<hover::Hover> for Hovered {
 pub(crate) type HoverPass<C> = crate::display::widget::HoverPass<C, Hovered>;
 pub(crate) type DispatchContext<C> = crate::display::widget::frame::DispatchContext<C, Hovered>;
 pub(crate) type Attribution = crate::display::widget::frame::Attribution<Hovered>;
-#[cfg(test)]
-pub(crate) type HoverOutput<C> = crate::display::widget::frame::HoverOutput<C, Hovered>;
-#[cfg(test)]
-pub(crate) type Probe = crate::display::widget::frame::Probe<Hovered>;
-#[cfg(test)]
-pub(crate) type Placed<'a, 'input, C> =
-    crate::display::widget::placed::Placed<'a, 'input, C, Hovered>;
 
 /// The editor hosts the toolkit: its pointer rests on what the frame draws,
 /// trees and chrome alike, and its dispatches act through its session.

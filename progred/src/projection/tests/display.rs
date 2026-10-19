@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::widget::style;
-use crate::projection::{Layout, ProjectionInput};
+use crate::projection::Layout;
+use crate::projection::test_support::ProjectionInput;
 
 #[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {

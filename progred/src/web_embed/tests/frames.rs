@@ -15,13 +15,13 @@ use puri::hover::Claim;
 use ui_events::keyboard::NamedKey;
 
 fn stop<'a>(
-    frame: &'a crate::frame::HoverOutput<crate::Editor>,
+    frame: &'a crate::projection::test_support::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Landmark<crate::Editor> {
     frame.landmarks.landmark(path).expect("tutorial slot")
 }
 
-fn top_slots(frame: &crate::frame::HoverOutput<crate::Editor>) -> Vec<CellId> {
+fn top_slots(frame: &crate::projection::test_support::HoverOutput<crate::Editor>) -> Vec<CellId> {
     frame
         .landmarks
         .iter()

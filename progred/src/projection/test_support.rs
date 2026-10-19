@@ -22,16 +22,18 @@ use ui_events::pointer::{
 };
 use uig::Placement;
 
+/// The toolkit's frame output and projection input over the editor.
+pub(crate) type HoverOutput<C> = crate::display::widget::frame::HoverOutput<C, Hovered>;
+pub(crate) type ProjectionInput<'a, V = Value> =
+    crate::display::host::ProjectionInput<'a, crate::Editor, V>;
+
 pub(crate) fn editing_world(doc: &Document, libraries: &Libraries) -> crate::Editor {
     let mut world = crate::test_editor(doc.clone());
     world.stack.libraries = libraries.clone();
     world
 }
 
-pub(crate) fn editing_frame(
-    world: &mut crate::Editor,
-    raw: bool,
-) -> crate::frame::HoverOutput<crate::Editor> {
+pub(crate) fn editing_frame(world: &mut crate::Editor, raw: bool) -> HoverOutput<crate::Editor> {
     editing_frame_with_projection(world, raw, None)
 }
 
@@ -39,7 +41,7 @@ pub(crate) fn editing_frame_with_projection(
     world: &mut crate::Editor,
     raw: bool,
     projection: Option<&Projection>,
-) -> crate::frame::HoverOutput<crate::Editor> {
+) -> HoverOutput<crate::Editor> {
     editing_frame_at(world, raw, projection, None)
 }
 
@@ -48,7 +50,7 @@ pub(crate) fn editing_frame_at(
     raw: bool,
     projection: Option<&Projection>,
     pointer: Option<Point>,
-) -> crate::frame::HoverOutput<crate::Editor> {
+) -> HoverOutput<crate::Editor> {
     editing_frame_with_annotations(world, raw, projection, pointer, &Annotations::default())
 }
 
@@ -58,7 +60,7 @@ pub(crate) fn editing_frame_with_annotations(
     projection: Option<&Projection>,
     pointer: Option<Point>,
     annotations: &Annotations,
-) -> crate::frame::HoverOutput<crate::Editor> {
+) -> HoverOutput<crate::Editor> {
     let stack = &world.stack;
     let styles = crate::display::widget::style::editor(world.palette, 1.0);
     let raw_projection = Projection::default();
@@ -215,7 +217,7 @@ pub(crate) struct Bench {
 }
 
 /// Paint and unpack the output of the completed hover pass.
-pub(crate) fn settle(mut placed: crate::frame::HoverOutput<crate::Editor>) -> Bench {
+pub(crate) fn settle(mut placed: HoverOutput<crate::Editor>) -> Bench {
     let binding = std::time::Instant::now();
     #[cfg(feature = "layout-profile")]
     let profile = crate::display::profile::enter(crate::display::profile::Kind::Hover);

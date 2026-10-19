@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
-use crate::projection::{Layout, ProjectionInput};
+use crate::projection::Layout;
+use crate::projection::test_support::ProjectionInput;
 
 use crate::display::Env;
 use crate::display::test_support::{EvaluatesTo, NoEval, ProjectionCall, inspect};

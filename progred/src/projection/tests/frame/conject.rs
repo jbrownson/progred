@@ -15,7 +15,7 @@ fn projection(world: &crate::Editor, rule: Partial) -> Projection {
 }
 
 fn stop<'a>(
-    frame: &'a crate::frame::HoverOutput<crate::Editor>,
+    frame: &'a crate::projection::test_support::HoverOutput<crate::Editor>,
     path: &[Step],
 ) -> &'a Landmark<crate::Editor> {
     frame

@@ -1,7 +1,8 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::name;
-use crate::projection::{Layout, ProjectionInput};
+use crate::projection::Layout;
+use crate::projection::test_support::ProjectionInput;
 
 use crate::display::test_support::{NoEval, text as text_layout};
 use crate::libraries::test_widgets::projection_input;
