@@ -5,8 +5,6 @@ use crate::command::{AppCommand, Command};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::editor::new_editor;
 use crate::editor::{AfterDiscard, Editor, EditorRunner, RenderState, viewport};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::frame::Paint;
 use crate::frame::PendingPaint;
 use crate::gid_text;
 #[cfg(target_os = "macos")]
@@ -34,7 +32,7 @@ use web_time::Instant;
 use parley::FontContext;
 use puri::handler::ImeEvent;
 #[cfg(not(target_arch = "wasm32"))]
-use puri_vello::compositor::{Compositor, Resources};
+use puri_vello::compositor::{Compositor, Resources, SplitCanvas};
 use ui_events_winit::WindowEventTranslation;
 #[cfg(not(target_arch = "wasm32"))]
 use vello::util::RenderContext;
@@ -927,7 +925,7 @@ impl App {
         let viewport = Size::new(width as f64, height as f64);
         let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
         runner.sync_window(&window);
-        let mut paint = Paint::default();
+        let mut paint = SplitCanvas::default();
         puri::frame::render(renders, &mut paint);
         let layers = paint.finish();
 

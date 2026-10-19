@@ -215,9 +215,6 @@ fn attribute(
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) type Paint = puri_vello::compositor::SplitCanvas;
-
 /// Interpret the winning claim as an editor target and its owning view.
 fn hover_target(
     claim: Option<(Option<crate::display::widget::view::Root>, Claim<Hovered>)>,
