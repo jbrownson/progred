@@ -361,21 +361,10 @@ fn modifier(name: &str) -> Option<ModifiersState> {
 /// `ctrl+z`, `shift+Tab`.
 fn key_combination(combination: &str) -> Option<(Key, Modifiers)> {
     let (held, key) = combination.rsplit_once('+').unwrap_or(("", combination));
-    Some((key_named(key)?, key_modifiers(held_modifiers(held)?)))
-}
-
-fn key_modifiers(held: ModifiersState) -> Modifiers {
-    [
-        (ModifiersState::CONTROL, Modifiers::CONTROL),
-        (ModifiersState::SHIFT, Modifiers::SHIFT),
-        (ModifiersState::ALT, Modifiers::ALT),
-        (ModifiersState::SUPER, Modifiers::META),
-    ]
-    .into_iter()
-    .filter(|(state, _)| held.contains(*state))
-    .fold(Modifiers::empty(), |modifiers, (_, modifier)| {
-        modifiers | modifier
-    })
+    Some((
+        key_named(key)?,
+        ui_events_winit::keyboard::from_winit_modifier_state(held_modifiers(held)?),
+    ))
 }
 
 fn key_named(name: &str) -> Option<Key> {
