@@ -1592,31 +1592,32 @@ impl<'a> Context<'a> {
                     && environment.get_at(&context.indices, cell, index).is_none()
                     && context.foreign_target_cell(cell).is_none()
                 {
-                    return context.call_cell(cell, &call, environment, Some(&target));
-                }
-                context.checked_call(|context| {
-                    let callable = match function_cell {
-                        Some((cell, index)) => {
-                            context.burn()?;
-                            match environment.get_at(&context.indices, cell, index) {
-                                Some(value) => unbox(value.clone()),
-                                // Ordinary cells took the direct path above.
-                                None => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
+                    context.call_cell(cell, &call, environment, Some(&target))
+                } else {
+                    context.checked_call(|context| {
+                        let callable = match function_cell {
+                            Some((cell, index)) => {
+                                context.burn()?;
+                                match environment.get_at(&context.indices, cell, index) {
+                                    Some(value) => unbox(value.clone()),
+                                    // Ordinary cells took the direct path above.
+                                    None => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
+                                }
                             }
+                            None => context.eval(function.clone(), environment)?,
+                        };
+                        match context.try_call_callable(
+                            callable.clone(),
+                            &call,
+                            environment,
+                            &plan,
+                            &stages,
+                        ) {
+                            Some(result) => result,
+                            None => Ok(not_callable(&callable)),
                         }
-                        None => context.eval(function.clone(), environment)?,
-                    };
-                    match context.try_call_callable(
-                        callable.clone(),
-                        &call,
-                        environment,
-                        &plan,
-                        &stages,
-                    ) {
-                        Some(result) => result,
-                        None => Ok(not_callable(&callable)),
-                    }
-                })
+                    })
+                }
             })
         })
     }
@@ -1711,40 +1712,29 @@ impl<'a> Context<'a> {
     ) -> Option<Result<RuntimeValue, Halt>> {
         match &callable.0 {
             RuntimeValueKind::Closure(closure) => {
-                return Some(self.eval_grap_call(closure.clone(), call, environment, plan));
+                Some(self.eval_grap_call(closure.clone(), call, environment, plan))
             }
-            RuntimeValueKind::Foreign(cell) => {
-                return Some(match self.foreign_target_cell(*cell) {
-                    Some(foreign) => {
-                        self.call_foreign_staged(&foreign, call, environment, Some(stages))
-                    }
-                    None => self.call_cell(*cell, call, environment, None),
-                });
-            }
-            _ => {}
-        }
-        if let Some(closure) = self.runtime_closure(&callable) {
-            Some(self.eval_grap_call(closure, call, environment, plan))
-        } else {
-            match &callable.0 {
-                RuntimeValueKind::Data(_)
-                | RuntimeValueKind::Unboxed(_)
-                | RuntimeValueKind::Record(_) => {
-                    let cell = callable
-                        .as_cell()
-                        .or_else(|| callable.field(vocabulary::FFI)?.as_cell());
-                    if let Some(cell) = cell
-                        && self.foreign_target_cell(cell).is_none()
-                    {
-                        return Some(self.call_cell(cell, call, environment, None));
-                    }
-                    cell.and_then(|cell| self.foreign_target_cell(cell))
-                        .map(|foreign| {
-                            self.call_foreign_staged(&foreign, call, environment, Some(stages))
-                        })
+            RuntimeValueKind::Foreign(cell) => Some(match self.foreign_target_cell(*cell) {
+                Some(foreign) => {
+                    self.call_foreign_staged(&foreign, call, environment, Some(stages))
                 }
-                _ => None,
-            }
+                None => self.call_cell(*cell, call, environment, None),
+            }),
+            RuntimeValueKind::Data(_)
+            | RuntimeValueKind::Unboxed(_)
+            | RuntimeValueKind::Record(_) => match self.runtime_closure(&callable) {
+                Some(closure) => Some(self.eval_grap_call(closure, call, environment, plan)),
+                None => callable
+                    .as_cell()
+                    .or_else(|| callable.field(vocabulary::FFI)?.as_cell())
+                    .map(|cell| match self.foreign_target_cell(cell) {
+                        Some(foreign) => {
+                            self.call_foreign_staged(&foreign, call, environment, Some(stages))
+                        }
+                        None => self.call_cell(cell, call, environment, None),
+                    }),
+            },
+            RuntimeValueKind::List(_) => None,
         }
     }
 
@@ -1856,6 +1846,23 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         self.call_foreign_staged(foreign, call, environment, None)
+    }
+
+    /// Call `foreign` with evaluated arguments, which it receives as the
+    /// fields of a call to `callable`.
+    fn apply_foreign(
+        &mut self,
+        foreign: &ResolvedForeign,
+        callable: RuntimeValue,
+        arguments: impl IntoIterator<Item = (CellId, RuntimeValue)>,
+        environment: &Environment,
+    ) -> Result<RuntimeValue, Halt> {
+        let call = self.lower_runtime_code(&RuntimeValue::record(
+            [(vocabulary::FUNCTION, callable)]
+                .into_iter()
+                .chain(arguments),
+        ));
+        self.call_foreign(foreign, &call, environment)
     }
 
     fn call_foreign_staged(
@@ -2009,23 +2016,20 @@ impl<'a> Context<'a> {
                 | RuntimeValueKind::Unboxed(_)
                 | RuntimeValueKind::Record(_) => {
                     let value = &callable.value;
-                    let target = value
+                    match value
                         .as_cell()
-                        .or_else(|| value.field(vocabulary::FFI)?.as_cell());
-                    match target {
-                        Some(cell) if context.foreign_target_cell(cell).is_none() => {
-                            let call = runtime_call(callable.value.clone(), arguments);
-                            context.call_cell(cell, &call, &callable.environment, None)
+                        .or_else(|| value.field(vocabulary::FFI)?.as_cell())
+                    {
+                        Some(cell) => {
+                            let call = runtime_call(value.clone(), arguments);
+                            match context.foreign_target_cell(cell) {
+                                Some(foreign) => {
+                                    context.call_foreign(&foreign, &call, &callable.environment)
+                                }
+                                None => context.call_cell(cell, &call, &callable.environment, None),
+                            }
                         }
-                        _ => {
-                            let Some(target) =
-                                target.and_then(|cell| context.foreign_target_cell(cell))
-                            else {
-                                return Ok(not_callable(value));
-                            };
-                            let call = runtime_call(callable.value.clone(), arguments);
-                            context.call_foreign(&target, &call, &callable.environment)
-                        }
+                        None => Ok(not_callable(value)),
                     }
                 }
                 RuntimeValueKind::List(_) => Ok(not_callable(&callable.value)),
@@ -2048,24 +2052,27 @@ impl<'a> Context<'a> {
         if let Some(cell) = function.as_cell()
             && self.foreign_target_cell(cell).is_none()
         {
-            return self.apply_cell(cell, function.clone(), arguments, &environment);
-        }
-        self.checked_call(|context| {
-            let callable = if function.as_cell().is_some() {
-                context.burn()?;
-                function.clone()
-            } else {
-                let function = match &function.0 {
-                    RuntimeValueKind::Data(value) => context.lower_source(value, OriginRoot::Input),
-                    _ => context.lower_runtime_code(function),
+            self.apply_cell(cell, function.clone(), arguments, &environment)
+        } else {
+            self.checked_call(|context| {
+                let callable = if function.as_cell().is_some() {
+                    context.burn()?;
+                    function.clone()
+                } else {
+                    let function = match &function.0 {
+                        RuntimeValueKind::Data(value) => {
+                            context.lower_source(value, OriginRoot::Input)
+                        }
+                        _ => context.lower_runtime_code(function),
+                    };
+                    context.eval(function, &environment)?
                 };
-                context.eval(function, &environment)?
-            };
-            match context.try_apply_callable(callable.clone(), &arguments, &environment) {
-                Some(result) => result,
-                None => Ok(not_callable(&callable)),
-            }
-        })
+                match context.try_apply_callable(callable.clone(), &arguments, &environment) {
+                    Some(result) => result,
+                    None => Ok(not_callable(&callable)),
+                }
+            })
+        }
     }
 
     fn apply_cell(
@@ -2077,18 +2084,12 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
         self.checked_call(|context| match context.host.resolve(cell) {
-            Some((_, Definition::Foreign(definition))) => {
-                let call = context.lower_runtime_code(&RuntimeValue::record(
-                    [(vocabulary::FUNCTION, callable)]
-                        .into_iter()
-                        .chain(arguments),
-                ));
-                context.call_foreign(
-                    &ResolvedForeign::Function(definition.implementation.clone()),
-                    &call,
-                    environment,
-                )
-            }
+            Some((_, Definition::Foreign(definition))) => context.apply_foreign(
+                &ResolvedForeign::Function(definition.implementation.clone()),
+                callable,
+                arguments,
+                environment,
+            ),
             Some((resolution, Definition::Value(value))) => {
                 let expression =
                     context.lower_source(&value, OriginRoot::Cell { cell, resolution });
@@ -2114,20 +2115,32 @@ impl<'a> Context<'a> {
         callable: &RuntimeValue,
         arguments: &[(CellId, RuntimeValue)],
     ) -> Result<RuntimeValue, Halt> {
-        let mut bound = Vec::with_capacity(closure.params.len());
-        for &parameter in closure.params.iter() {
-            let value = if parameter == vocabulary::FUNCTION {
-                callable.clone()
-            } else {
-                let Some((_, value)) = arguments.iter().find(|(cell, _)| *cell == parameter) else {
-                    return Ok(self.missing_runtime_argument(parameter));
+        // Binding stops at a missing argument, whose absence answers the
+        // call, or at a halt.
+        match closure.params.iter().try_fold(
+            Vec::with_capacity(closure.params.len()),
+            |mut bound, &parameter| {
+                let value = if parameter == vocabulary::FUNCTION {
+                    Some(callable.clone())
+                } else {
+                    arguments
+                        .iter()
+                        .find(|(cell, _)| *cell == parameter)
+                        .map(|(_, value)| unbox(value.clone()))
                 };
-                unbox(value.clone())
-            };
-            self.burn()?;
-            bound.push((parameter, value));
+                match value {
+                    Some(value) => {
+                        self.burn().map_err(Err)?;
+                        bound.push((parameter, value));
+                        Ok(bound)
+                    }
+                    None => Err(Ok(self.missing_runtime_argument(parameter))),
+                }
+            },
+        ) {
+            Ok(bound) => self.eval(closure.body, &closure.environment.extended_runtime(bound)),
+            Err(answer) => answer,
         }
-        self.eval(closure.body, &closure.environment.extended_runtime(bound))
     }
 
     fn try_apply_callable(
@@ -2136,50 +2149,37 @@ impl<'a> Context<'a> {
         arguments: &[(CellId, RuntimeValue)],
         environment: &Environment,
     ) -> Option<Result<RuntimeValue, Halt>> {
-        if let Some(closure) = self.runtime_closure(&callable) {
-            return Some(self.call_closure(closure, &callable, arguments));
-        }
-        let foreign = match &callable.0 {
-            RuntimeValueKind::Foreign(cell) => {
-                if let Some(foreign) = self.foreign_target_cell(*cell) {
-                    Some(foreign)
-                } else {
-                    return Some(self.apply_cell(
-                        *cell,
-                        ffi(*cell).into(),
-                        arguments.to_vec(),
+        match self.runtime_closure(&callable) {
+            Some(closure) => Some(self.call_closure(closure, &callable, arguments)),
+            None => match callable.0 {
+                RuntimeValueKind::Foreign(cell) => Some(match self.foreign_target_cell(cell) {
+                    Some(foreign) => self.apply_foreign(
+                        &foreign,
+                        callable,
+                        arguments.iter().cloned(),
                         environment,
-                    ));
-                }
-            }
-            RuntimeValueKind::Data(_)
-            | RuntimeValueKind::Unboxed(_)
-            | RuntimeValueKind::Record(_) => {
-                let cell = callable
+                    ),
+                    None => {
+                        self.apply_cell(cell, ffi(cell).into(), arguments.to_vec(), environment)
+                    }
+                }),
+                RuntimeValueKind::Data(_)
+                | RuntimeValueKind::Unboxed(_)
+                | RuntimeValueKind::Record(_) => callable
                     .as_cell()
-                    .or_else(|| callable.field(vocabulary::FFI)?.as_cell());
-                if let Some(cell) = cell
-                    && self.foreign_target_cell(cell).is_none()
-                {
-                    return Some(self.apply_cell(
-                        cell,
-                        callable.clone(),
-                        arguments.to_vec(),
-                        environment,
-                    ));
-                }
-                cell.and_then(|cell| self.foreign_target_cell(cell))
-            }
-            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
-        };
-        foreign.map(|foreign| {
-            let call = self.lower_runtime_code(&RuntimeValue::record(
-                [(vocabulary::FUNCTION, callable)]
-                    .into_iter()
-                    .chain(arguments.iter().cloned()),
-            ));
-            self.call_foreign(&foreign, &call, environment)
-        })
+                    .or_else(|| callable.field(vocabulary::FFI)?.as_cell())
+                    .map(|cell| match self.foreign_target_cell(cell) {
+                        Some(foreign) => self.apply_foreign(
+                            &foreign,
+                            callable,
+                            arguments.iter().cloned(),
+                            environment,
+                        ),
+                        None => self.apply_cell(cell, callable, arguments.to_vec(), environment),
+                    }),
+                RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
+            },
+        }
     }
 
     fn eval_grap_call(
@@ -2207,18 +2207,27 @@ impl<'a> Context<'a> {
                 arguments
             }
         };
-        let mut arguments = Vec::with_capacity(closure.params.len());
-        for (&parameter, argument) in closure.params.iter().zip(arguments_plan.iter()) {
-            let Some(expression) = argument else {
-                return Ok(RuntimeValue::from(self.missing_argument(parameter)));
-            };
-            arguments.push((
-                parameter,
-                self.eval(expression.clone(), calling_environment)?,
-            ));
+        // Binding stops at a missing argument, whose absence answers the
+        // call, or at a halt.
+        match closure.params.iter().zip(arguments_plan.iter()).try_fold(
+            Vec::with_capacity(closure.params.len()),
+            |mut arguments, (&parameter, argument)| match argument {
+                Some(expression) => {
+                    let value = self
+                        .eval(expression.clone(), calling_environment)
+                        .map_err(Err)?;
+                    arguments.push((parameter, value));
+                    Ok(arguments)
+                }
+                None => Err(Ok(self.missing_runtime_argument(parameter))),
+            },
+        ) {
+            Ok(arguments) => self.eval(
+                closure.body,
+                &closure.environment.extended_runtime(arguments),
+            ),
+            Err(answer) => answer,
         }
-        let body_environment = closure.environment.extended_runtime(arguments);
-        self.eval(closure.body, &body_environment)
     }
 
     fn runtime_closure(&mut self, value: &RuntimeValue) -> Option<Closure> {
@@ -2240,12 +2249,13 @@ impl<'a> Context<'a> {
                 let body = self.lower_runtime_code_at(&fields.field(vocabulary::BODY)?, origin);
                 let captured = fields.field(vocabulary::ENVIRONMENT)?;
                 let environment = match &captured.0 {
-                    RuntimeValueKind::Data(value) => self.environment(value)?,
-                    RuntimeValueKind::Record(fields) => self
-                        .empty_environment()
-                        .extended_runtime(fields.iter().cloned()),
-                    _ => return None,
-                };
+                    RuntimeValueKind::Data(value) => self.environment(value),
+                    RuntimeValueKind::Record(fields) => Some(
+                        self.empty_environment()
+                            .extended_runtime(fields.iter().cloned()),
+                    ),
+                    _ => None,
+                }?;
                 Some(Closure {
                     params,
                     body,

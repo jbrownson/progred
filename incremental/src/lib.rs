@@ -290,27 +290,28 @@ impl<T: 'static> MemoNode<T> {
             })
         {
             self.state.borrow_mut().as_mut().unwrap().verified = parent.revision;
-            return Ok(());
+            Ok(())
+        } else {
+            parent.check()?;
+            let mut read = Read::new(&self.runtime, &parent.cancellation);
+            let value = (self.compute)(&mut read)?;
+            read.check()?;
+            let mut state = self.state.borrow_mut();
+            let (value, changed) = match state.as_ref() {
+                Some(previous) if (self.equal)(&previous.value, &value) => {
+                    (previous.value.clone(), previous.changed)
+                }
+                _ => (Rc::new(value), parent.revision),
+            };
+            *state = Some(Cached {
+                value,
+                changed,
+                verified: parent.revision,
+                dependencies: read.dependencies,
+                reusable: read.reusable,
+            });
+            Ok(())
         }
-        parent.check()?;
-        let mut read = Read::new(&self.runtime, &parent.cancellation);
-        let value = (self.compute)(&mut read)?;
-        read.check()?;
-        let mut state = self.state.borrow_mut();
-        let (value, changed) = match state.as_ref() {
-            Some(previous) if (self.equal)(&previous.value, &value) => {
-                (previous.value.clone(), previous.changed)
-            }
-            _ => (Rc::new(value), parent.revision),
-        };
-        *state = Some(Cached {
-            value,
-            changed,
-            verified: parent.revision,
-            dependencies: read.dependencies,
-            reusable: read.reusable,
-        });
-        Ok(())
     }
 }
 
