@@ -32,11 +32,10 @@ use web_time::Instant;
 use parley::FontContext;
 use puri::handler::ImeEvent;
 #[cfg(not(target_arch = "wasm32"))]
-use puri_vello::compositor::{Compositor, Resources, SplitCanvas};
+use puri_vello::compositor::SplitCanvas;
+use puri_vello::compositor::{Compositor, Layer, Resources};
 use ui_events_winit::WindowEventTranslation;
-#[cfg(not(target_arch = "wasm32"))]
-use vello::util::RenderContext;
-#[cfg(not(target_arch = "wasm32"))]
+use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
@@ -902,88 +901,46 @@ impl App {
         if self.focused_index() == Some(index) {
             self.sync_menus(index);
         }
-        let App {
-            editors,
-            context,
-            renderers,
-            ..
-        } = &mut *self;
-        let runner = &mut editors[index];
-        let RenderState::Active {
-            surface,
-            valid_surface: true,
-            window,
-        } = &runner.editor.state
-        else {
-            return;
+        let runner = &mut self.editors[index];
+        let drawable = match &runner.editor.state {
+            RenderState::Active {
+                surface,
+                valid_surface: true,
+                window,
+            } => Some((
+                window.clone(),
+                Size::new(surface.config.width.into(), surface.config.height.into()),
+            )),
+            _ => None,
         };
-        let window = window.clone();
-        let scale = runner.editor.scale(&window);
-        let width = surface.config.width;
-        let height = surface.config.height;
-
-        let viewport = Size::new(width as f64, height as f64);
-        let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
-        runner.sync_window(&window);
-        let mut paint = SplitCanvas::default();
-        puri::frame::render(renders, &mut paint);
-        let layers = paint.finish();
-
-        let RenderState::Active { surface, .. } = &mut runner.editor.state else {
-            return;
-        };
-        let device_handle = &context.devices[surface.dev_id];
-
-        let output = renderers[surface.dev_id]
-            .as_mut()
-            .unwrap()
-            .render(
-                &device_handle.device,
-                &device_handle.queue,
-                &layers,
-                &mut runner.editor.paint_resources,
-                &surface.target_texture,
-                runner.editor.palette.paper,
-            )
-            .expect("failed to render to texture");
-
-        let surface_texture = match surface.surface.get_current_texture() {
-            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-            CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Suboptimal(_) => {
-                context.configure_surface(surface);
-                window.request_redraw();
-                return;
+        if let Some((window, viewport)) = drawable {
+            let PendingPaint { renders, .. } =
+                runner.prepare_paint(runner.editor.scale(&window), viewport);
+            runner.sync_window(&window);
+            let mut paint = SplitCanvas::default();
+            puri::frame::render(renders, &mut paint);
+            if let RenderState::Active { surface, .. } = &runner.editor.state {
+                let presented = present(
+                    &self.context,
+                    surface,
+                    self.renderers[surface.dev_id]
+                        .as_mut()
+                        .expect("a surface's device has a compositor"),
+                    &mut runner.editor.paint_resources,
+                    &paint.finish(),
+                    runner.editor.palette.paper,
+                )
+                .expect("failed to present");
+                if presented {
+                    self.context.devices[surface.dev_id]
+                        .device
+                        .poll(wgpu::PollType::Poll)
+                        .unwrap();
+                }
+                if !presented || runner.frame_presented() {
+                    window.request_redraw();
+                }
             }
-            CurrentSurfaceTexture::Occluded | CurrentSurfaceTexture::Timeout => {
-                window.request_redraw();
-                return;
-            }
-            CurrentSurfaceTexture::Lost => panic!("Surface was lost"),
-            CurrentSurfaceTexture::Validation => {
-                panic!("Validation error getting surface")
-            }
-        };
-
-        let mut encoder =
-            device_handle
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Surface Blit"),
-                });
-        surface.blitter.copy(
-            &device_handle.device,
-            &mut encoder,
-            &output.texture.create_view(&Default::default()),
-            &surface_texture
-                .texture
-                .create_view(&wgpu::TextureViewDescriptor::default()),
-        );
-        device_handle.queue.submit([encoder.finish()]);
-        device_handle.queue.present(surface_texture);
-
-        device_handle.device.poll(wgpu::PollType::Poll).unwrap();
-        if runner.frame_presented() {
-            window.request_redraw();
         }
     }
 
@@ -1030,4 +987,53 @@ impl App {
             window.request_redraw();
         }
     }
+}
+
+/// Composites `layers` over `background` and presents them on `surface`:
+/// false when the surface wasn't ready, so the caller draws again.
+pub(crate) fn present(
+    context: &RenderContext,
+    surface: &RenderSurface<'_>,
+    compositor: &mut Compositor,
+    resources: &mut Resources,
+    layers: &[Layer],
+    background: peniko::Color,
+) -> Result<bool, String> {
+    let device = &context.devices[surface.dev_id];
+    compositor
+        .render(
+            &device.device,
+            &device.queue,
+            layers,
+            resources,
+            &surface.target_texture,
+            background,
+        )
+        .map_err(|error| error.to_string())
+        .and_then(|output| match surface.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(texture) => {
+                let mut encoder =
+                    device
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Surface Blit"),
+                        });
+                surface.blitter.copy(
+                    &device.device,
+                    &mut encoder,
+                    &output.texture.create_view(&Default::default()),
+                    &texture.texture.create_view(&Default::default()),
+                );
+                device.queue.submit([encoder.finish()]);
+                device.queue.present(texture);
+                Ok(true)
+            }
+            CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Suboptimal(_) => {
+                context.configure_surface(surface);
+                Ok(false)
+            }
+            CurrentSurfaceTexture::Occluded | CurrentSurfaceTexture::Timeout => Ok(false),
+            CurrentSurfaceTexture::Lost => Err("the surface was lost".into()),
+            CurrentSurfaceTexture::Validation => Err("the surface failed validation".into()),
+        })
 }

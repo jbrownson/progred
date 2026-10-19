@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use vello::{
     peniko::Color,
     util::{RenderContext, RenderSurface},
-    wgpu::{self, CurrentSurfaceTexture},
+    wgpu,
 };
 use wasm_bindgen::{JsCast, prelude::*};
 use web_sys::HtmlCanvasElement;
@@ -106,45 +106,16 @@ impl Renderer {
                 if surface.config.width != width || surface.config.height != height {
                     context.resize_surface(surface, width, height);
                 }
-                let device = &context.devices[surface.dev_id];
                 let mut paint = SplitCanvas::default();
                 draw(&mut paint);
-                let output = compositor
-                    .render(
-                        &device.device,
-                        &device.queue,
-                        &paint.finish(),
-                        resources,
-                        &surface.target_texture,
-                        background,
-                    )
-                    .map_err(|e| e.to_string())?;
-                let texture = match surface.surface.get_current_texture() {
-                    CurrentSurfaceTexture::Success(texture) => texture,
-                    CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Suboptimal(_) => {
-                        context.configure_surface(surface);
-                        return Ok(false);
-                    }
-                    CurrentSurfaceTexture::Occluded | CurrentSurfaceTexture::Timeout => {
-                        return Ok(false);
-                    }
-                    CurrentSurfaceTexture::Lost => {
-                        return Err("WebGPU surface lost; reload to retry".into());
-                    }
-                    CurrentSurfaceTexture::Validation => {
-                        return Err("WebGPU surface validation failed".into());
-                    }
-                };
-                let mut encoder = device.device.create_command_encoder(&Default::default());
-                surface.blitter.copy(
-                    &device.device,
-                    &mut encoder,
-                    &output.texture.create_view(&Default::default()),
-                    &texture.texture.create_view(&Default::default()),
-                );
-                device.queue.submit([encoder.finish()]);
-                device.queue.present(texture);
-                Ok(true)
+                crate::app::present(
+                    context,
+                    surface,
+                    compositor,
+                    resources,
+                    &paint.finish(),
+                    background,
+                )
             }
         }
     }
