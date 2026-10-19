@@ -717,46 +717,35 @@ fn prepare_project(
     build.finish(layout)
 }
 
-/// Marks `child` as the projection of `path` WITHOUT claiming any
-/// clicks: the highlight, reveal rect, and keyboard reach of
-/// [`descend`] over the full bounds, while pointer selection belongs
-/// to the content targets the view registers — heads, delimiters,
-/// rows — so clicks on structural whitespace (gutters, inter-row
-/// gaps, the dead space inside a bounding box) fall through to the
-/// background's deselect.
-#[allow(clippy::too_many_arguments)]
-fn descend_landmark(
+/// `child` with `path`'s highlight over its full bounds: the primary one
+/// when `selected`, else the secondary mark it shares with the selected or
+/// hovered occurrence, or the hover's.
+fn highlighted(
     palette: crate::display::widget::style::Palette,
     selected: bool,
     scale: f64,
     path: SharedPath,
     secondary: Option<Secondary>,
-    select: crate::display::widget::navigation::Select<crate::Editor>,
-    scope: crate::editing::Scope,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let highlight_path = path.clone();
-    let mark = secondary.clone();
-    let marked = decorate(child, move |p, rect| {
-        let highlight_path = highlight_path.clone();
+    decorate(child, move |p, rect| {
         let outline = highlight_outline(scale, rect);
         p.render(move |cv, hover| {
-            let shares = |other: &Option<Secondary>| mark.is_some() && *other == mark;
+            let shares = |other: &Option<Secondary>| secondary.is_some() && *other == secondary;
             if selected {
                 primary_highlight(palette, scale, cv, outline);
             } else if shares(&hover.selected_secondary) {
                 secondary_highlight(palette, scale, cv, outline, true);
             } else if matches!(
                 tree_hovered(hover),
-                Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
+                Some(Hover::Value(hovered)) if hovered.as_ref() == path.as_ref()
             ) {
                 hover_highlight(palette, scale, cv, outline);
             } else if shares(&hover.hovered_secondary) {
                 secondary_highlight(palette, scale, cv, outline, false);
             }
         });
-    });
-    crate::display::widget::navigation::landmark(marked, path, select, scope, secondary, selected)
+    })
 }
 
 /// Standard commands for this displayed value, below its own widget handlers:
@@ -955,15 +944,20 @@ fn prepare_value(
             });
             let edits = cx.edits.clone();
             ChoiceLayout::map(inner, move |inner| {
-                let placed = descend_landmark(
-                    palette,
-                    selected,
-                    scale,
+                let placed = crate::display::widget::navigation::landmark(
+                    highlighted(
+                        palette,
+                        selected,
+                        scale,
+                        landmark_path.clone(),
+                        secondary.clone(),
+                        inner,
+                    ),
                     landmark_path.clone(),
-                    secondary,
                     select,
                     edits.clone(),
-                    inner,
+                    secondary,
+                    selected,
                 );
                 let placed = match selected_value {
                     Some(value) => bind_selection(
