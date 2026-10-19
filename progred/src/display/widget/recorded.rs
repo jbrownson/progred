@@ -90,6 +90,8 @@ fn recorded_leaf<W: Host>(
     } = extent;
     let styles = toolkit.styles();
     let scale = styles.scale;
+    let highlight = styles.accent_wash.brush.clone();
+    let selected_highlight = styles.selection_wash.clone();
     let scaled = Extent {
         width: width * scale,
         ascent: ascent * scale,
@@ -100,28 +102,26 @@ fn recorded_leaf<W: Host>(
     let document = sources.doc.clone();
     let libraries = sources.libraries.clone();
     // Recording runs after the projection pass's borrows end, so it keeps
-    // its own clones of the theme, the document and the libraries.
-    let theme = styles.clone();
+    // its own clones of the styles, the document and the libraries.
+    let styles = styles.clone();
     let drawing = Rc::new(LazyCell::new(move || {
         let sources = Sources {
             doc: &document,
             libraries: &libraries,
         };
-        draw(&record, &sources, input, theme)
+        draw(&record, &sources, input, styles)
     }));
-    let highlight = styles.accent_wash.brush.clone();
-    let selected_highlight = styles.selection_wash.clone();
     let selected = toolkit.selected_trace().cloned();
-    leaf(scaled, move |builder, placement| {
+    leaf(scaled, move |placed, placement| {
         let outer =
             Affine::translate((placement.rect.x0, placement.rect.y0)) * Affine::scale(scale);
         let probe_drawing = drawing.clone();
-        builder.claim_dynamic(placement, move |point| {
+        placed.claim_dynamic(placement, move |point| {
             probe_drawing.target_at(point, outer).map(W::Hover::from)
         });
-        let command = builder.command_modifier();
-        crate::display::widget::source_link::handlers(builder, placement, scale, command);
-        builder.render(move |canvas: &mut dyn puri::draw::CanvasSink, hover| {
+        let command = placed.command_modifier();
+        crate::display::widget::source_link::handlers(placed, placement, scale, command);
+        placed.render(move |canvas: &mut dyn puri::draw::CanvasSink, hover| {
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),
                 outer,
