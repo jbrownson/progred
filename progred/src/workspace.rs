@@ -120,11 +120,18 @@ impl<'a> Geometry<'a> {
         self
     }
 
-    fn and(mut self, other: Self) -> Self {
+    fn extend(mut self, other: Self) -> Self {
         self.views.extend(other.views);
         self.dividers.extend(other.dividers);
         self
     }
+}
+
+/// What a strip of the workspace shows: the document, or a side column.
+#[derive(Clone, Copy)]
+enum Area {
+    Document,
+    Column(Side),
 }
 
 pub struct Workspace {
@@ -149,13 +156,10 @@ pub struct Declaration {
 /// Read pane declarations only from the document root. No recursive
 /// search means an identical record deeper in user data stays data.
 pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
-    let Some(panes) = root
+    let panes = root
         .and_then(Value::as_record)
         .and_then(|fields| fields.get(&vocabulary::PANES))
-        .and_then(Value::as_record)
-    else {
-        return Vec::new();
-    };
+        .and_then(Value::as_record);
     [
         (vocabulary::LEFT, Side::Left),
         (vocabulary::RIGHT, Side::Right),
@@ -163,7 +167,7 @@ pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
     .into_iter()
     .flat_map(|(field, side)| {
         panes
-            .get(&field)
+            .and_then(|panes| panes.get(&field))
             .and_then(Value::as_list)
             .into_iter()
             .flat_map(move |declarations| {
@@ -182,16 +186,13 @@ pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
 pub(crate) fn libraries(
     sources: &crate::sources::Sources<'_>,
 ) -> Vec<crate::display::DocumentLibrary> {
-    let Some(declared) = sources
+    sources
         .root()
         .and_then(Value::as_record)
         .and_then(|fields| fields.get(&vocabulary::LIBRARIES))
         .and_then(Value::as_list)
-    else {
-        return Vec::new();
-    };
-    declared
-        .values()
+        .into_iter()
+        .flat_map(|declared| declared.values())
         .filter_map(|entry| {
             let entry = match entry.as_cell() {
                 Some(cell) => sources.resolve(cell)?.value,
@@ -264,15 +265,18 @@ pub fn append(root: &Value, side: Side, value: Value) -> Option<(Value, Path)> {
 }
 
 pub fn move_value(root: &Value, path: &[Step], direction: Move) -> Option<(Value, Path)> {
-    let [Step::Key(panes), Step::Key(side), Step::Element(position)] = path else {
-        return None;
-    };
-    (*panes == vocabulary::PANES).then_some(())?;
-    let side = match *side {
-        vocabulary::LEFT => Side::Left,
-        vocabulary::RIGHT => Side::Right,
-        _ => return None,
-    };
+    let (side, position) = match path {
+        [
+            Step::Key(vocabulary::PANES),
+            Step::Key(side),
+            Step::Element(position),
+        ] => match *side {
+            vocabulary::LEFT => Some((Side::Left, position)),
+            vocabulary::RIGHT => Some((Side::Right, position)),
+            _ => None,
+        },
+        _ => None,
+    }?;
     let column = root
         .as_record()?
         .get(&vocabulary::PANES)?
@@ -491,15 +495,13 @@ impl Workspace {
     }
 
     pub fn can_move(&self, root: &Root, direction: Move) -> bool {
-        let Some((side, column, index)) = self.pane(root) else {
-            return false;
-        };
-        match direction {
-            Move::Up => index > 0,
-            Move::Down => index + 1 < column.panes.len(),
-            Move::Left => side == Side::Right,
-            Move::Right => side == Side::Left,
-        }
+        self.pane(root)
+            .is_some_and(|(side, column, index)| match direction {
+                Move::Up => index > 0,
+                Move::Down => index + 1 < column.panes.len(),
+                Move::Left => side == Side::Right,
+                Move::Right => side == Side::Left,
+            })
     }
 
     pub fn start_resize(&mut self, divider: Divider, start: Vec2) -> bool {
@@ -559,12 +561,7 @@ impl Workspace {
                     after,
                 } => {
                     let panes = &mut self.column_mut(*side).panes;
-                    // The two panes the rule divides, one right after the other.
-                    let at = panes.windows(2).position(|pair| {
-                        matches!(pair, [first, second]
-                            if first.view.root == *before && second.view.root == *after)
-                    });
-                    match at.and_then(|at| panes.get_mut(at..=at + 1)) {
+                    match divided(panes, before, after).and_then(|at| panes.get_mut(at..=at + 1)) {
                         Some([first, second]) => {
                             let pair = drag.before + drag.after;
                             let delta = ratio(point.y - drag.start.y, size.height);
@@ -601,19 +598,19 @@ impl Workspace {
     /// document the rest, any of them raised to a minimum where all fit.
     pub fn geometry(&self, size: Size, scale: f64) -> Geometry<'_> {
         let rule = scale.max(1.0);
-        let side = |side: Side, width: f64| {
-            Some((Some(side), width)).filter(|_| !self.column(side).panes.is_empty())
+        let column = |side: Side, width: f64| {
+            (!self.column(side).panes.is_empty()).then_some((Area::Column(side), width))
         };
         let (left, right) = (
-            side(Side::Left, self.left_width),
-            side(Side::Right, self.right_width),
+            column(Side::Left, self.left_width),
+            column(Side::Right, self.right_width),
         );
         let document_weight = left
             .into_iter()
             .chain(right)
             .fold(1.0, |rest, (_, width)| rest - width)
             .max(0.0);
-        let areas: Vec<_> = [left, Some((None, document_weight)), right]
+        let areas: Vec<_> = [left, Some((Area::Document, document_weight)), right]
             .into_iter()
             .flatten()
             .collect();
@@ -626,14 +623,14 @@ impl Workspace {
             .fold(
                 (0.0, Geometry::default()),
                 |(x, geometry), ((area, _), width)| match area {
-                    None => (
+                    Area::Document => (
                         x + width,
                         geometry.with_view(&self.document, strip(x, width)),
                     ),
-                    Some(Side::Left) => (
+                    Area::Column(Side::Left) => (
                         x + width + rule,
                         geometry
-                            .and(column_geometry(
+                            .extend(column_geometry(
                                 &self.left,
                                 Side::Left,
                                 strip(x, width),
@@ -642,11 +639,11 @@ impl Workspace {
                             ))
                             .with_divider(Divider::Columns(Side::Left), strip(x + width, rule)),
                     ),
-                    Some(Side::Right) => (
+                    Area::Column(Side::Right) => (
                         x + rule + width,
                         geometry
                             .with_divider(Divider::Columns(Side::Right), strip(x, rule))
-                            .and(column_geometry(
+                            .extend(column_geometry(
                                 &self.right,
                                 Side::Right,
                                 strip(x + rule, width),
@@ -681,12 +678,7 @@ impl Workspace {
                 side,
                 before,
                 after,
-            } => {
-                let panes = &self.column(*side).panes;
-                panes
-                    .windows(2)
-                    .any(|pair| pair[0].view.root == *before && pair[1].view.root == *after)
-            }
+            } => divided(&self.column(*side).panes, before, after).is_some(),
         }
     }
 }
@@ -699,15 +691,21 @@ pub enum Move {
     Right,
 }
 
+/// Where in `panes` a rule divides `before` from `after`, one right after
+/// the other: the index of `before`.
+fn divided(panes: &[Pane], before: &Root, after: &Root) -> Option<usize> {
+    panes.windows(2).position(|pair| {
+        matches!(pair, [first, second]
+            if first.view.root == *before && second.view.root == *after)
+    })
+}
+
 fn ratio(value: f64, total: f64) -> f64 {
     if total > 0.0 { value / total } else { 0.0 }
 }
 
 fn normalize(panes: &mut [Pane]) {
     let total: f64 = panes.iter().map(|pane| pane.height.max(0.0)).sum();
-    if panes.is_empty() {
-        return;
-    }
     if total > 0.0 {
         for pane in panes {
             pane.height = pane.height.max(0.0) / total;
