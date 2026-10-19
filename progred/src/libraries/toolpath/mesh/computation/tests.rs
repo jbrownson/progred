@@ -30,6 +30,31 @@ fn preview() -> fidget::VolumePreview {
     fidget::mesh::read(&value).unwrap().0
 }
 
+/// The path tubes and the surface that `geometry` combines, over `settings`.
+fn layers(
+    runtime: &Runtime,
+    tasks: &Tasks,
+    recording: Memo<Recorded>,
+    settings: &Input<Settings>,
+    depth: Input<u8>,
+) -> (
+    Memo<Outcome<Mesh>>,
+    AsyncMemo<Outcome<Surface>, Outcome<Mesh>>,
+) {
+    let style = runtime.memo({
+        let settings = settings.clone();
+        move |read| Ok(settings.read(read).style.clone())
+    });
+    let settings = runtime.memo({
+        let settings = settings.clone();
+        move |read| Ok((*settings.read(read)).clone())
+    });
+    (
+        path_tubes(runtime, recording.clone(), style),
+        surface(runtime, tasks, recording, settings, depth),
+    )
+}
+
 #[test]
 fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
     use incremental::background::{Executor, Job};
@@ -91,30 +116,22 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
     };
     let mut props = Settings {
         shape: (&preview()).into(),
-        radius: 0.01,
-        color: [20, 150, 230],
-        playback: Some(playback(0.25, 0.001)),
+        style: PathStyle {
+            radius: 0.01,
+            color: [20, 150, 230],
+            playback: Some(playback(0.25, 0.001)),
+        },
     };
     let settings = runtime.input(props.clone());
-    let layers = Layers::new(
-        &runtime,
-        &tasks,
-        recording,
-        runtime.memo({
-            let settings = settings.clone();
-            move |read| Ok((*settings.read(read)).clone())
-        }),
-        runtime.input(4),
-    );
-    let paths = layers.paths.clone();
+    let (paths, surface_memo) = layers(&runtime, &tasks, recording, &settings, runtime.input(4));
     let surface = runtime.memo_by(
         {
-            let surface = layers.surface.clone();
+            let surface = surface_memo.clone();
             move |read| surface.read(read)
         },
         Rc::ptr_eq,
     );
-    let combined = layers.combined(&runtime);
+    let combined = combined(&runtime, paths.clone(), surface_memo);
     let first = runtime.read(&combined).unwrap();
     assert!(first.as_ref().as_ref().unwrap().awaiting_first_surface);
     assert!(!first.as_ref().as_ref().unwrap().geometry.indices.is_empty());
@@ -131,7 +148,7 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
 
     assert!(Rc::ptr_eq(&ready, &runtime.read(&combined).unwrap()));
     for progress in [0.4, 0.5, 0.6] {
-        props.playback = Some(playback(progress, 0.001));
+        props.style.playback = Some(playback(progress, 0.001));
         settings.set(props.clone());
         let dragging = runtime.read(&combined).unwrap();
         assert!(dragging.as_ref().as_ref().unwrap().surface_pending);
@@ -141,7 +158,7 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
             "dragging keeps one admitted stock job"
         );
     }
-    props.playback = Some(playback(0.75, 0.001));
+    props.style.playback = Some(playback(0.75, 0.001));
     settings.set(props);
     let waiting = runtime.read(&combined).unwrap();
     let waiting = &waiting.as_ref().as_ref().unwrap();
@@ -268,47 +285,34 @@ fn path_appearance_changes_retain_the_stock_mesh() {
     };
     let mut props = Settings {
         shape: (&preview()).into(),
-        radius: 0.01,
-        color: [20, 150, 230],
-        playback: Some(playback(0.25, 0.001)),
+        style: PathStyle {
+            radius: 0.01,
+            color: [20, 150, 230],
+            playback: Some(playback(0.25, 0.001)),
+        },
     };
     let settings = runtime.input(props.clone());
     let depth = runtime.input(3);
-    let layers = Layers::new(
-        &runtime,
-        &tasks,
-        recording,
-        runtime.memo({
-            let settings = settings.clone();
-            move |read| Ok((*settings.read(read)).clone())
-        }),
-        depth.clone(),
-    );
-    let surface_node = runtime.memo_by(
-        {
-            let surface = layers.surface.clone();
-            move |read| surface.read(read)
-        },
-        Rc::ptr_eq,
-    );
+    let (paths_node, surface) = layers(&runtime, &tasks, recording, &settings, depth.clone());
+    let surface_node = runtime.memo_by(move |read| surface.read(read), Rc::ptr_eq);
     let surface = runtime.read(&surface_node).unwrap();
     let Availability::Ready(value) = &**surface else {
         panic!("inline result is ready")
     };
     assert!(!value.as_ref().as_ref().unwrap().indices.is_empty());
-    let paths = runtime.read(&layers.paths).unwrap();
-    props.color = [250, 100, 20];
+    let paths = runtime.read(&paths_node).unwrap();
+    props.style.color = [250, 100, 20];
     settings.set(props.clone());
     assert!(Rc::ptr_eq(&surface, &runtime.read(&surface_node).unwrap()));
-    assert!(!Rc::ptr_eq(&paths, &runtime.read(&layers.paths).unwrap()));
-    props.radius = 0.02;
+    assert!(!Rc::ptr_eq(&paths, &runtime.read(&paths_node).unwrap()));
+    props.style.radius = 0.02;
     settings.set(props.clone());
     assert!(Rc::ptr_eq(&surface, &runtime.read(&surface_node).unwrap()));
-    props.playback = Some(playback(0.75, 0.001));
+    props.style.playback = Some(playback(0.75, 0.001));
     settings.set(props.clone());
     let moved = runtime.read(&surface_node).unwrap();
     assert!(!Rc::ptr_eq(&surface, &moved));
-    props.playback = Some(playback(0.75, 0.01));
+    props.style.playback = Some(playback(0.75, 0.01));
     settings.set(props.clone());
     let accuracy_changed = runtime.read(&surface_node).unwrap();
     assert!(
@@ -329,22 +333,22 @@ fn path_appearance_changes_retain_the_stock_mesh() {
         ]))
         .unwrap()
     };
-    props.playback = Some(model_playback(0.25));
+    props.style.playback = Some(model_playback(0.25));
     settings.set(props.clone());
     let model = runtime.read(&surface_node).unwrap();
     assert!(!Rc::ptr_eq(&accuracy_changed, &model));
-    let paths = runtime.read(&layers.paths).unwrap();
-    props.playback = Some(model_playback(0.75));
+    let paths = runtime.read(&paths_node).unwrap();
+    props.style.playback = Some(model_playback(0.75));
     settings.set(props.clone());
     assert!(
         Rc::ptr_eq(&model, &runtime.read(&surface_node).unwrap()),
         "moving playback in Model mode must not remesh the unchanged part"
     );
     assert!(
-        !Rc::ptr_eq(&paths, &runtime.read(&layers.paths).unwrap()),
+        !Rc::ptr_eq(&paths, &runtime.read(&paths_node).unwrap()),
         "tool and remaining paths still update"
     );
-    props.playback = Some(playback(0.75, 0.001));
+    props.style.playback = Some(playback(0.75, 0.001));
     settings.set(props);
     assert!(
         !Rc::ptr_eq(&model, &runtime.read(&surface_node).unwrap()),
@@ -406,9 +410,11 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
     let model = preview();
     let settings = Settings {
         shape: (&model).into(),
-        radius: 0.01,
-        color: [255, 120, 20],
-        playback: None,
+        style: PathStyle {
+            radius: 0.01,
+            color: [255, 120, 20],
+            playback: None,
+        },
     };
     let computations = Computations::from_sources(crate::sources::Sources {
         doc: &doc,
@@ -441,7 +447,7 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
     assert!(!Rc::ptr_eq(&first, &deeper));
     assert_eq!(runs.get(), 1, "meshing quality does not re-run the path");
     let mut recolored = settings.clone();
-    recolored.color = [50, 100, 255];
+    recolored.style.color = [50, 100, 255];
     graph.settings.set(recolored);
     let colored = computations.runtime.read(&graph.geometry).unwrap();
     assert!(!Rc::ptr_eq(&deeper, &colored));
@@ -491,7 +497,7 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
     ]);
     let set_playback = |value: &Value| {
         let mut settings = (*graph.settings.observed().0).clone();
-        settings.playback = Some(playback::Settings::read(value).unwrap());
+        settings.style.playback = Some(playback::Settings::read(value).unwrap());
         graph.settings.set(settings);
         computations.runtime.read(&graph.geometry).unwrap()
     };

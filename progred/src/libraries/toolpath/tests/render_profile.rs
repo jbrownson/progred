@@ -170,9 +170,11 @@ fn cam_render_profile() {
                 path: std::sync::Arc::new(recording),
                 evaluation: eval,
             },
-            0.005,
-            [240, 174, 80],
-            Some(&settings),
+            &super::super::mesh::computation::PathStyle {
+                radius: 0.005,
+                color: [240, 174, 80],
+                playback: Some(settings),
+            },
         )
         .unwrap();
         eprintln!(

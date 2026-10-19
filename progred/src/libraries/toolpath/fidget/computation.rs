@@ -1,4 +1,5 @@
 use super::super::computation::{Outcome, Recorded, recording};
+use super::super::mesh::computation::{PathStyle, path_tubes};
 use super::*;
 use crate::computations::Computations;
 use fidget::raster::{Passes, SoftwareScene, ViewRequest};
@@ -9,9 +10,7 @@ use puri::mesh::{DepthImage, Mesh};
 #[derive(Clone, PartialEq)]
 pub(crate) struct Settings {
     pub request: fidget::raster::Request,
-    pub radius: f64,
-    pub color: [u8; 3],
-    pub playback: Option<playback::Settings>,
+    pub style: PathStyle,
 }
 
 #[derive(Clone, PartialEq)]
@@ -23,6 +22,7 @@ enum SceneRequest {
 impl SceneRequest {
     fn new(path: Arc<Recording>, settings: &Settings) -> Self {
         match settings
+            .style
             .playback
             .as_ref()
             .and_then(playback::Settings::removal)
@@ -130,22 +130,12 @@ fn paths(
     recording: Memo<Recorded>,
     settings: Input<Settings>,
 ) -> Memo<Outcome<Mesh>> {
-    let geometry_settings = computations.runtime.memo(move |read| {
-        let settings = settings.read(read);
-        Ok((settings.radius, settings.color, settings.playback.clone()))
-    });
-    computations.runtime.memo_by(
-        move |read| {
-            let record = recording.read(read)?;
-            let settings = geometry_settings.read(read)?;
-            Ok(super::super::mesh::computation::paths(
-                &record,
-                settings.0,
-                settings.1,
-                settings.2.as_ref(),
-            ))
-        },
-        |_, _| false,
+    path_tubes(
+        &computations.runtime,
+        recording,
+        computations
+            .runtime
+            .memo(move |read| Ok(settings.read(read).style.clone())),
     )
 }
 

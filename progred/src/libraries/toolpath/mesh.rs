@@ -48,9 +48,11 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let scale = input.scale_factor;
     let settings = computation::Settings {
         shape: (&model).into(),
-        radius,
-        color,
-        playback,
+        style: computation::PathStyle {
+            radius,
+            color,
+            playback,
+        },
     };
     let drawing = Layout::program(Rc::new(move |context, build| {
         let computations = context.viewing().computations();

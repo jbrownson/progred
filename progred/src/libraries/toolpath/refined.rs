@@ -79,9 +79,7 @@ impl Computation {
                 let settings = settings.read(read);
                 Ok(mesh::computation::Settings {
                     shape: (&settings.request.preview).into(),
-                    radius: settings.radius,
-                    color: settings.color,
-                    playback: settings.playback.clone(),
+                    style: settings.style.clone(),
                 })
             }
         });
@@ -163,9 +161,11 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     };
     let image_settings = implicit::computation::Settings {
         request: fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?,
-        radius,
-        color,
-        playback,
+        style: mesh::computation::PathStyle {
+            radius,
+            color,
+            playback,
+        },
     };
     let state = input.state.cloned();
     let scale = input.scale_factor;

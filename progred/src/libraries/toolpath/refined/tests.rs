@@ -62,9 +62,11 @@ fn settings_at(
     )]);
     implicit::computation::Settings {
         request: fidget::raster::Request::new(model, Some(&camera), scale).unwrap(),
-        radius: 0.01,
-        color: [200, 150, 20],
-        playback: Some(playback),
+        style: mesh::computation::PathStyle {
+            radius: 0.01,
+            color: [200, 150, 20],
+            playback: Some(playback),
+        },
     }
 }
 
@@ -480,7 +482,7 @@ fn model_implicit_image_survives_tool_motion_and_path_style_changes() {
     let f = Fixture::new();
     let model_settings = |progress| {
         let mut settings = settings(0.0, progress);
-        settings.playback = Some(
+        settings.style.playback = Some(
             playback::Settings::read(&Value::record([
                 (PROGRESS, f64::value(progress)),
                 (PROFILE_TOLERANCE, f64::value(0.001)),
@@ -519,8 +521,8 @@ fn model_implicit_image_survives_tool_motion_and_path_style_changes() {
         "tool motion schedules neither meshing nor implicit rendering"
     );
     let mut restyled = model_settings(0.75);
-    restyled.color = [100, 50, 200];
-    restyled.radius *= 2.0;
+    restyled.style.color = [100, 50, 200];
+    restyled.style.radius *= 2.0;
     f.graph.settings.set(restyled);
     let styled = f.read();
     let View::Implicit(styled_image, _) = &*styled else {

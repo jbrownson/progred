@@ -5,12 +5,20 @@ use incremental::background::{AsyncMemo, Availability, Tasks};
 use incremental::{Input, Memo, Runtime};
 use std::sync::Arc;
 
+/// How a preview draws its recorded paths: their radius and color, and the
+/// playback, if any, which hides what's cut, places the cutter, and cuts the
+/// stock.
 #[derive(Clone, PartialEq)]
-pub(crate) struct Settings {
-    pub shape: fidget::mesh::Shape,
+pub(crate) struct PathStyle {
     pub radius: f64,
     pub color: [u8; 3],
     pub playback: Option<playback::Settings>,
+}
+
+#[derive(Clone, PartialEq)]
+pub(crate) struct Settings {
+    pub shape: fidget::mesh::Shape,
+    pub style: PathStyle,
 }
 
 pub(crate) struct ViewGeometry {
@@ -76,88 +84,79 @@ pub(crate) fn geometry(
     settings: Memo<Settings>,
     depth: Input<u8>,
 ) -> Memo<Outcome<ViewGeometry>> {
-    Layers::new(
-        &computations.runtime,
-        &computations.tasks,
-        recording,
-        settings,
-        depth,
+    let runtime = &computations.runtime;
+    let style = runtime.memo({
+        let settings = settings.clone();
+        move |read| Ok(settings.read(read)?.style.clone())
+    });
+    combined(
+        runtime,
+        path_tubes(runtime, recording.clone(), style),
+        surface(runtime, &computations.tasks, recording, settings, depth),
     )
-    .combined(&computations.runtime)
 }
 
-struct Layers {
+/// The model's surface, or the stock's once playback cuts it, meshed off the
+/// editor thread.
+fn surface(
+    runtime: &Runtime,
+    tasks: &Tasks,
+    recording: Memo<Recorded>,
+    settings: Memo<Settings>,
+    depth: Input<u8>,
+) -> AsyncMemo<Outcome<Surface>, Outcome<Mesh>> {
+    let prepared = runtime.memo(move |read| {
+        let record = recording.read(read)?;
+        let settings = settings.read(read)?;
+        let depth = *depth.read(read);
+        Ok(record.path().map(|_| Surface {
+            model: settings.shape.clone(),
+            removal: settings
+                .style
+                .playback
+                .as_ref()
+                .and_then(playback::Settings::removal)
+                .map(|removal| (record.path.clone(), removal)),
+            depth,
+        }))
+    });
+    // Paths and cutter redraw immediately. Let each admitted surface finish,
+    // then catch up to the latest inputs, without a queue of drag samples.
+    tasks.memo_conflated(prepared, |prepared, cancel| {
+        let request = match prepared {
+            Ok(request) => request,
+            Err(failure) => return Ok(Err(failure)),
+        };
+        cancel.check()?;
+        let shape = remaining_shape(&request);
+        cancel.check()?;
+        let shape = match shape {
+            Ok(shape) => shape,
+            Err(failure) => return Ok(Err(failure)),
+        };
+        let mut geometry = Geometry::default();
+        Ok(shape
+            .append(&mut geometry, request.depth, cancel)?
+            .map(|()| geometry.into())
+            .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
+    })
+}
+
+/// The paths' tubes with the surface after them, which shows as updating
+/// while it's remeshed.
+fn combined(
+    runtime: &Runtime,
     paths: Memo<Outcome<Mesh>>,
     surface: AsyncMemo<Outcome<Surface>, Outcome<Mesh>>,
-}
-
-impl Layers {
-    fn new(
-        runtime: &Runtime,
-        tasks: &Tasks,
-        recording: Memo<Recorded>,
-        settings: Memo<Settings>,
-        depth: Input<u8>,
-    ) -> Self {
-        let prepared = runtime.memo({
-            let recording = recording.clone();
-            let settings = settings.clone();
-            move |read| {
-                let record = recording.read(read)?;
-                let settings = settings.read(read)?;
-                let depth = *depth.read(read);
-                Ok(record.path().map(|_| Surface {
-                    model: settings.shape.clone(),
-                    removal: settings
-                        .playback
-                        .as_ref()
-                        .and_then(playback::Settings::removal)
-                        .map(|removal| (record.path.clone(), removal)),
-                    depth,
-                }))
-            }
-        });
-        // Paths and cutter redraw immediately. Let each admitted surface finish,
-        // then catch up to the latest inputs, without a queue of drag samples.
-        let surface = tasks.memo_conflated(prepared, |prepared, cancel| {
-            let request = match prepared {
-                Ok(request) => request,
-                Err(failure) => return Ok(Err(failure)),
-            };
-            cancel.check()?;
-            let shape = remaining_shape(&request);
-            cancel.check()?;
-            let shape = match shape {
-                Ok(shape) => shape,
-                Err(failure) => return Ok(Err(failure)),
-            };
-            let mut geometry = Geometry::default();
-            Ok(shape
-                .append(&mut geometry, request.depth, cancel)?
-                .map(|()| geometry.into())
-                .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
-        });
-        let paths = runtime.memo_by(
-            move |read| {
-                let record = recording.read(read)?;
-                let settings = settings.read(read)?;
-                Ok(path_geometry(&record, &settings))
-            },
-            |_, _| false,
-        );
-        Self { paths, surface }
-    }
-
-    fn combined(self, runtime: &Runtime) -> Memo<Outcome<ViewGeometry>> {
-        runtime.memo_by(
-            move |read| {
-                let paths = self.paths.read(read)?;
-                let surface = self.surface.read(read)?;
-                Ok(combine(&paths, &surface))
-            },
-            |_, _| false,
-        )
-    }
+) -> Memo<Outcome<ViewGeometry>> {
+    runtime.memo_by(
+        move |read| {
+            let paths = paths.read(read)?;
+            let surface = surface.read(read)?;
+            Ok(combine(&paths, &surface))
+        },
+        |_, _| false,
+    )
 }
 
 fn combine(paths: &Outcome<Mesh>, surface: &Availability<Outcome<Mesh>>) -> Outcome<ViewGeometry> {
@@ -209,27 +208,30 @@ fn remaining_shape(request: &Surface) -> Outcome<fidget::mesh::Shape> {
     Ok(shape)
 }
 
-fn path_geometry(record: &Recorded, settings: &Settings) -> Outcome<Mesh> {
-    paths(
-        record,
-        settings.radius,
-        settings.color,
-        settings.playback.as_ref(),
+/// The tubes of the recorded paths and the cutter, drawn again only when the
+/// recording or `style` changes.
+pub(crate) fn path_tubes(
+    runtime: &Runtime,
+    recording: Memo<Recorded>,
+    style: Memo<PathStyle>,
+) -> Memo<Outcome<Mesh>> {
+    runtime.memo_by(
+        move |read| {
+            let record = recording.read(read)?;
+            let style = style.read(read)?;
+            Ok(paths(&record, &style))
+        },
+        |_, _| false,
     )
 }
 
-pub(crate) fn paths(
-    record: &Recorded,
-    radius: f64,
-    color: [u8; 3],
-    playback: Option<&playback::Settings>,
-) -> Outcome<Mesh> {
+pub(crate) fn paths(record: &Recorded, style: &PathStyle) -> Outcome<Mesh> {
     let path = record.path()?;
     let invalid = || ::grap::absent::value(INVALID_INPUT);
-    let mut tubes = tubes::Tubes::new(radius, color).ok_or_else(invalid)?;
-    if let Some(playback) = playback {
+    let mut tubes = tubes::Tubes::new(style.radius, style.color).ok_or_else(invalid)?;
+    if let Some(playback) = &style.playback {
         playback
-            .draw(path, &mut tubes, radius, color)
+            .draw(path, &mut tubes, style.radius, style.color)
             .map_err(|_| invalid())?;
     } else {
         path.replay(&mut tubes).map_err(|_| invalid())?;

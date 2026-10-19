@@ -33,9 +33,13 @@ pub(crate) fn profile(
     let start = Instant::now();
     let stock = settings.removal().unwrap().remaining(path).unwrap();
     let stock_ms = start.elapsed().as_secs_f64() * 1000.0;
+    let style = mesh::computation::PathStyle {
+        radius: 0.005,
+        color: [240, 174, 80],
+        playback: Some(settings),
+    };
     let start = Instant::now();
-    let paths =
-        mesh::computation::paths(&recorded, 0.005, [240, 174, 80], Some(&settings)).unwrap();
+    let paths = mesh::computation::paths(&recorded, &style).unwrap();
     let paths_ms = start.elapsed().as_secs_f64() * 1000.0;
     let render =
         implicit::raster::performance::profile(stock, paths.clone(), width, height, controls);

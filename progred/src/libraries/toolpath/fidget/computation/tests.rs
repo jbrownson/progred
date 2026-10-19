@@ -27,9 +27,11 @@ fn settings(yaw: f32) -> Settings {
     )]);
     Settings {
         request: fidget::raster::Request::new(preview, Some(&camera), 1.0).unwrap(),
-        radius: 0.01,
-        color: [20, 150, 230],
-        playback: None,
+        style: PathStyle {
+            radius: 0.01,
+            color: [20, 150, 230],
+            playback: None,
+        },
     }
 }
 
@@ -58,9 +60,10 @@ fn playback(progress: f64) -> playback::Settings {
 
 #[test]
 fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures() {
-    let settings = |yaw| Settings {
-        playback: Some(playback(0.5)),
-        ..settings(yaw)
+    let settings = |yaw| {
+        let mut settings = settings(yaw);
+        settings.style.playback = Some(playback(0.5));
+        settings
     };
     let stack = crate::stack::load();
     let endpoint = new_cell_id();
@@ -365,7 +368,7 @@ fn implicit_playback_contains_only_stock_not_paths_or_visible_cutter() {
     let mut settings = settings(0.0);
     let playback = playback(0.5);
     let expected = playback.removal().unwrap().remaining(&path).unwrap();
-    settings.playback = Some(playback);
+    settings.style.playback = Some(playback);
     let rendered = scene(SceneRequest::new(path, &settings)).unwrap();
     assert_eq!(
         rendered.len(),

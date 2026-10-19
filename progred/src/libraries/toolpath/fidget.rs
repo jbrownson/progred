@@ -120,11 +120,13 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let request = fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?;
     let settings = computation::Settings {
         request,
-        radius,
-        color,
-        playback: match fields.field(PLAYBACK) {
-            Some(value) => Some(playback::Settings::read(value.as_value())?),
-            None => None,
+        style: super::mesh::computation::PathStyle {
+            radius,
+            color,
+            playback: match fields.field(PLAYBACK) {
+                Some(value) => Some(playback::Settings::read(value.as_value())?),
+                None => None,
+            },
         },
     };
     let state = input.state.cloned();
