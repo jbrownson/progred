@@ -17,8 +17,8 @@ fn svg_bench_renders_the_sample_projection() {
     render(&doc, None, 900.0, "raw_projection.svg");
     render(&doc, None, 560.0, "raw_projection_narrow.svg");
     // The deep-fallback regime: hugging fails at most levels, so
-    // this render is also the canary against layout cost blowing
-    // up when width is scarce.
+    // layout cost blowing up when width is scarce shows as this test
+    // slowing down.
     render(&doc, None, 320.0, "raw_projection_tight.svg");
 }
 
@@ -127,14 +127,15 @@ fn svg_bench_renders_fidget_source() {
 #[test]
 fn svg_bench_renders_the_placeholder_notation() {
     let empty = Document::default();
-    render(&empty, None, 320.0, "raw_placeholder_root.svg");
+    let (_, root) = render(&empty, None, 320.0, "raw_placeholder_root.svg");
     // The engaged twin: same slot, same rect, selection blue.
-    render(
+    let (_, engaged) = render(
         &empty,
         Some(&pending_value(&crate::test_root(), Vec::new())),
         320.0,
         "raw_placeholder_engaged.svg",
     );
+    assert_eq!(engaged, root);
     let cells = Cells::new();
     let bare = new_cell_id();
     render(
@@ -147,8 +148,8 @@ fn svg_bench_renders_the_placeholder_notation() {
         "raw_placeholder_cell.svg",
     );
     // The commit transition pair: the same spelling typed in the
-    // slot and committed as the string — glyphs should not move.
-    render(
+    // slot and committed as the string, its glyphs where they were.
+    let (typed, typed_extent) = render(
         &empty,
         Some(&crate::selection::pending_with_query(
             &crate::test_root(),
@@ -158,7 +159,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         320.0,
         "raw_placeholder_typed.svg",
     );
-    render(
+    let (committed, committed_extent) = render(
         &Document {
             root: Some(crate::libraries::text::value("asdf")),
             cells: Cells::new(),
@@ -170,6 +171,15 @@ fn svg_bench_renders_the_placeholder_notation() {
         320.0,
         "raw_placeholder_committed.svg",
     );
+    assert_eq!(committed_extent, typed_extent);
+    let (typed, committed) = (glyphs(&typed.list), glyphs(&committed.list));
+    assert_eq!(committed.len(), "\"asdf\"".len());
+    assert!(
+        committed.iter().all(|(id, at)| typed
+            .iter()
+            .any(|(other, there)| other == id && there.distance(*at) < 1e-6)),
+        "{committed:?} moved from {typed:?}"
+    );
     // The empty string under its write-through editor: quotes
     // stay snug, no slot minimum applies to string literals.
     let empty_string = Document {
@@ -177,12 +187,36 @@ fn svg_bench_renders_the_placeholder_notation() {
         cells: Cells::new(),
     };
     let sel = Selection::edge(&crate::test_root(), Vec::new());
-    render(
+    let (_, string) = render(
         &empty_string,
         Some(&sel),
         320.0,
         "raw_empty_string_editing.svg",
     );
+    assert!(
+        string.width < engaged.width,
+        "{} < {}",
+        string.width,
+        engaged.width
+    );
+}
+
+/// Each glyph `list` draws, by its id, and where.
+fn glyphs(list: &DrawList) -> Vec<(u32, Point)> {
+    crate::display::test_support::painted(&list.0)
+        .filter_map(|command| match command {
+            DrawCmd::GlyphRun(run) => Some(run),
+            _ => None,
+        })
+        .flat_map(|run| {
+            run.glyphs.iter().map(|glyph| {
+                (
+                    glyph.id,
+                    run.transform * Point::new(glyph.x.into(), glyph.y.into()),
+                )
+            })
+        })
+        .collect()
 }
 
 /// `pending` with `query` typed into it, the caret at its end.

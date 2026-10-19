@@ -2,11 +2,12 @@
 //! projected through the frame harness and whole editor frames, written to the
 //! build directory. See docs/testing.md#pictures.
 
-use crate::projection::test_support::place;
+use crate::projection::test_support::{Bench, place};
 use crate::selection::Selection;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use gid::Document;
 use kurbo::{Affine, BezPath, Point, Shape as KurboShape};
+use measured::Extent;
 use peniko::{
     Brush, Color, Extend, GradientKind, ImageAlphaType, ImageData, ImageFormat, color::Srgb,
 };
@@ -238,10 +239,18 @@ fn write_clipped_cmds(out: &mut String, cmds: &[DrawCmd], next_id: &mut usize) {
     }
 }
 
-fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
+/// `doc` placed as the frame harness places it and written to `out_path`;
+/// what was placed, for checks of the drawing.
+fn render(
+    doc: &Document,
+    selection: Option<&Selection>,
+    width: f64,
+    out_path: &str,
+) -> (Bench, Extent) {
     let (bench, extent) = place(doc, selection, width);
     let (width, height) = (width.max(extent.width + 48.0), extent.height() + 48.0);
     write_svg(&bench.list, width, height, out_path);
+    (bench, extent)
 }
 
 fn write_svg(list: &DrawList, width: f64, height: f64, out_path: &str) {
