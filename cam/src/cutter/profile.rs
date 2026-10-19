@@ -313,7 +313,7 @@ impl Section {
         b: Point3,
         axis: Axis,
     ) -> Result<Tree, InvalidPath> {
-        self.lower(
+        self.sweep_within(
             Tolerance::new(tolerance).ok_or(InvalidPath::CoordinateRange)?,
             a,
             b,
@@ -322,7 +322,7 @@ impl Section {
     }
 
     /// `sweep`, for a tolerance already checked.
-    fn lower(
+    fn sweep_within(
         &self,
         tolerance: Tolerance,
         a: Point3,
@@ -473,7 +473,7 @@ impl Tool {
                     Some(match section.profile.last() {
                         Some(Segment::Line(end) | Segment::Arc { end, .. }) if distinct => {
                             *previous_end = Some(end.axial as f32);
-                            section.lower(tolerance, a, b, axis)
+                            section.sweep_within(tolerance, a, b, axis)
                         }
                         _ => Err(InvalidPath::CoordinateRange),
                     })
