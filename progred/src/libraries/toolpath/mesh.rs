@@ -1,15 +1,16 @@
 //! Stream path segments into triangles alongside a meshed Fidget model.
 
-use super::{paths::*, playback, vocabulary::*};
+use super::{playback, vocabulary::*};
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{f64, fidget, layout, presentation};
 use ::grap::RuntimeValue;
 use cam::field::{coordinate, read_radius};
-use fidget::mesh::{Geometry, Mesh, Normal, Vertex};
+use cam::paths::*;
 #[cfg(test)]
 use gid::Value;
 use nalgebra::Vector3;
+use puri::mesh::{Geometry, Mesh, Normal, Vertex};
 use std::rc::Rc;
 
 pub(super) mod computation;

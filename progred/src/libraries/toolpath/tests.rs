@@ -1,5 +1,6 @@
-use super::{cutter::Tool, paths::*, *};
+use super::{cutter::Tool, *};
 use crate::libraries::{absent, control, number};
+use cam::paths::*;
 
 mod chamfers;
 mod geometry;
@@ -812,7 +813,7 @@ fn example_stock_removal_is_seekable_and_only_removes_completed_cuts() {
         })
         .collect();
     let simulate = |progress| {
-        let mut stock = super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
+        let mut stock = cam::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
         recording
             .playback::<InvalidPath>(progress, |a, b, axis, _, completed| {
                 if completed {
@@ -869,7 +870,7 @@ fn stock_meshing_profile() {
     for progress in [0.0, 0.35, 1.0] {
         for depth in [5, 6, 7] {
             let now = Instant::now();
-            let mut stock = super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
+            let mut stock = cam::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
             recording
                 .playback::<InvalidPath>(progress, |a, b, axis, _, completed| {
                     if completed {

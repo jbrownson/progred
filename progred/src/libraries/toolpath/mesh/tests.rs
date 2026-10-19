@@ -1,11 +1,9 @@
 use super::{tubes::Tubes, *};
 
 fn draw(sink: &mut impl Sink<Error = InvalidPath>) {
-    sink.start_at([0.0; 3], super::super::paths::Axis::Z)
-        .unwrap();
+    sink.start_at([0.0; 3], Axis::Z).unwrap();
     sink.line_to([1.0, 0.5, 0.1]).unwrap();
-    sink.start_at([-1.0, 2.0, 0.5], super::super::paths::Axis::Z)
-        .unwrap();
+    sink.start_at([-1.0, 2.0, 0.5], Axis::Z).unwrap();
     sink.line_to([0.0, 2.5, 0.2]).unwrap();
 }
 
@@ -43,9 +41,7 @@ fn capsules_have_the_requested_radius_for_arbitrary_axes() {
         [1.0, 2.0, 3.0],
     ] {
         let mut tubes = Tubes::new(0.1, [255, 100, 20]).unwrap();
-        tubes
-            .start_at([0.0; 3], super::super::paths::Axis::Z)
-            .unwrap();
+        tubes.start_at([0.0; 3], Axis::Z).unwrap();
         tubes.line_to(end).unwrap();
         assert_eq!(tubes.geometry.vertices.len(), 74);
         assert_eq!(tubes.geometry.indices.len() / 3, 144);
@@ -73,13 +69,9 @@ fn capsules_have_the_requested_radius_for_arbitrary_axes() {
 #[test]
 fn path_breaks_do_not_emit_links_and_duplicate_points_are_spheres() {
     let mut tubes = Tubes::new(0.1, [255; 3]).unwrap();
-    tubes
-        .start_at([100.0; 3], super::super::paths::Axis::Z)
-        .unwrap();
+    tubes.start_at([100.0; 3], Axis::Z).unwrap();
     assert!(tubes.geometry.vertices.is_empty());
-    tubes
-        .start_at([0.0; 3], super::super::paths::Axis::Z)
-        .unwrap();
+    tubes.start_at([0.0; 3], Axis::Z).unwrap();
     tubes.line_to([0.0; 3]).unwrap();
     let sphere_vertices = tubes.geometry.vertices.len();
     assert!(
@@ -96,9 +88,7 @@ fn path_breaks_do_not_emit_links_and_duplicate_points_are_spheres() {
             .iter()
             .all(|v| { (v.normal.vector().normalize() - v.position.normalize()).norm() < 0.01 })
     );
-    tubes
-        .start_at([10.0; 3], super::super::paths::Axis::Z)
-        .unwrap();
+    tubes.start_at([10.0; 3], Axis::Z).unwrap();
     assert_eq!(tubes.geometry.vertices.len(), sphere_vertices);
     tubes.line_to([10.0; 3]).unwrap();
     assert_eq!(tubes.geometry.vertices.len(), 2 * sphere_vertices);
@@ -123,11 +113,9 @@ fn invalid_emissions_do_not_change_geometry_or_the_previous_point() {
     }
     let mut tubes = Tubes::new(0.1, [255; 3]).unwrap();
     assert_eq!(tubes.line_to([0.0; 3]), Err(InvalidPath::MissingStart));
-    tubes
-        .start_at([0.0; 3], super::super::paths::Axis::Z)
-        .unwrap();
+    tubes.start_at([0.0; 3], Axis::Z).unwrap();
     assert_eq!(
-        tubes.start_at([f64::NAN; 3], super::super::paths::Axis::Z),
+        tubes.start_at([f64::NAN; 3], Axis::Z),
         Err(InvalidPath::NonFinitePoint)
     );
     assert_eq!(

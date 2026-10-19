@@ -702,7 +702,7 @@ fn pinch_zoom(state: Option<&Value>, delta: f32) -> Option<Value> {
         .then(|| with_camera(state, Camera { zoom, ..initial }))
 }
 
-pub(crate) use volume::SceneObject;
+use volume::SceneObject;
 
 fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
     let Some(scene) = value

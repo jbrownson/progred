@@ -23,7 +23,6 @@ mod preview;
 mod refined;
 #[cfg(test)]
 mod tests;
-pub use cam::{paths, stock};
 
 pub const ID: CellId = CellId::from_u128(0xa3f84c8e8c0930058475518fe17bf84a);
 
@@ -61,8 +60,8 @@ pub mod vocabulary {
     pub const STOCK: CellId = CellId::from_u128(0xc7dc9217fe6809ea89ba31d458706e5c);
 }
 
+use cam::paths::{Axis, InvalidPath, Point3, Sink};
 use cutter::ToolValue;
-use paths::{Axis, InvalidPath, Point3, Sink};
 use vocabulary::*;
 
 const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, MAP_AXES, WITH_TOOL, SEQUENCE];

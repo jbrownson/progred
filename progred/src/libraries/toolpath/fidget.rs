@@ -5,7 +5,7 @@ use super::cutter::{SectionKind, Tool};
 use super::playback;
 #[cfg(test)]
 use super::playback::Draw;
-use super::{Error, argument, invalid, number, paths::*, runtime_result, vocabulary::*};
+use super::{Error, argument, invalid, number, runtime_result, vocabulary::*};
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{color, f64, fidget, layout, presentation};
@@ -13,6 +13,7 @@ use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 use cam::field::read_radius;
 #[cfg(test)]
 use cam::field::{capsule, coordinate};
+use cam::paths::*;
 #[cfg(test)]
 use fidget_engine::context::Tree;
 use gid::Value;
@@ -59,7 +60,7 @@ pub(super) struct Tubes {
     path: Option<Tree>,
     paths: Vec<Tree>,
     color: [u8; 3],
-    objects: Vec<fidget::SceneObject>,
+    objects: Vec<volume::SceneObject>,
 }
 
 #[cfg(test)]
@@ -78,13 +79,13 @@ impl Tubes {
     fn flush(&mut self) {
         self.paths.extend(self.path.take());
         self.objects
-            .extend(self.paths.drain(..).map(|tree| fidget::SceneObject {
+            .extend(self.paths.drain(..).map(|tree| volume::SceneObject {
                 tree,
                 color: self.color,
             }));
     }
 
-    pub(super) fn scene(mut self) -> Vec<fidget::SceneObject> {
+    pub(super) fn scene(mut self) -> Vec<volume::SceneObject> {
         self.flush();
         self.objects
     }
@@ -117,7 +118,7 @@ impl Draw for Tubes {
                 SectionKind::NonCutting => [122, 138, 153],
             };
             self.objects
-                .push(fidget::SceneObject { tree: field, color });
+                .push(volume::SceneObject { tree: field, color });
         }
         Ok(())
     }
@@ -272,7 +273,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                     .as_ref()
                     .map_err(Clone::clone)?;
                 let surface = image.image.as_ref().filter(|_| !image.stale).map(|frame| {
-                    fidget::mesh::Surface {
+                    puri::mesh::Surface {
                         frame: frame.clone(),
                         mesh_start: paths.indices.len(),
                     }

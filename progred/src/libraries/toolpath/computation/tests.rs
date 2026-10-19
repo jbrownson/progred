@@ -1,9 +1,7 @@
-use super::super::{
-    paths::{Cursor, InvalidPath},
-    vocabulary::*,
-};
+use super::super::vocabulary::*;
 use super::*;
 use crate::libraries::{control, f64};
+use cam::paths::{Cursor, InvalidPath};
 
 /// The pane's occurrence at `path`, where the tree program's work is kept.
 fn site(root: &crate::display::widget::view::Root, path: &[gid::Step]) -> crate::editing::Site {

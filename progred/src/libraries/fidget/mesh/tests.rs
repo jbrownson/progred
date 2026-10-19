@@ -1,5 +1,6 @@
 use super::*;
 use gid::Cells;
+use puri::mesh::{Normal, Vertex};
 
 mod cpu;
 #[cfg(not(target_arch = "wasm32"))]

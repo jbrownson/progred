@@ -49,11 +49,8 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
     let next = || queue.lock().unwrap().pop_front().unwrap();
     let mut path = Recording::default();
     path.enter_tool(&crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4).unwrap());
-    path.start_at(
-        [-0.25, 0.0, 0.5],
-        crate::libraries::toolpath::paths::Axis::Z,
-    )
-    .unwrap();
+    path.start_at([-0.25, 0.0, 0.5], cam::paths::Axis::Z)
+        .unwrap();
     path.line_to([0.25, 0.0, 0.5]).unwrap();
     path.leave_tool();
     let path = Arc::new(path);
@@ -232,11 +229,8 @@ fn path_appearance_changes_retain_the_stock_mesh() {
         move |_| {
             let mut path = Recording::default();
             path.enter_tool(&crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4).unwrap());
-            path.start_at(
-                [-0.25, 0.0, 0.5],
-                crate::libraries::toolpath::paths::Axis::Z,
-            )
-            .unwrap();
+            path.start_at([-0.25, 0.0, 0.5], cam::paths::Axis::Z)
+                .unwrap();
             path.line_to([0.25, 0.0, 0.5]).unwrap();
             path.leave_tool();
             Ok(Recorded {

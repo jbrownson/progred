@@ -1,8 +1,9 @@
 //! Dependency-tracked path generation, shared by the rendering interpretations.
 
-use super::{paths::Recording, run};
+use super::run;
 use crate::computations::{Computations, memo};
 use ::grap::RuntimeValue;
+use cam::paths::Recording;
 use gid::Value;
 use incremental::{Input, Memo};
 use std::sync::Arc;

@@ -5,7 +5,7 @@ use web_time::Instant;
 
 pub(crate) fn profile(
     stock: SceneObject,
-    paths: mesh::Mesh,
+    paths: puri::mesh::Mesh,
     width: u32,
     height: u32,
     controls: bool,
@@ -17,7 +17,7 @@ pub(crate) fn profile(
         max: Vector3::repeat(0.85),
     };
     let cancel = incremental::Cancellation::default();
-    let mut geometry = mesh::Geometry::default();
+    let mut geometry = puri::mesh::Geometry::default();
     let start = Instant::now();
     mesh::Shape::from(&preview)
         .append(&mut geometry, 6, &cancel)

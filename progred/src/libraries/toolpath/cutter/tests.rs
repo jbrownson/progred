@@ -1,6 +1,6 @@
-use super::super::paths::{Axis, InvalidPath};
 use super::*;
 use crate::libraries::f64;
+use cam::paths::{Axis, InvalidPath};
 use fidget_engine::{context::Tree, shape::EzShape, vm::VmShape};
 use gid::Value;
 

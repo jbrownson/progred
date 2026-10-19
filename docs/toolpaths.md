@@ -567,7 +567,7 @@ and stale stock during playback with the production refined declaration.
 
 ### Fidget stock removal
 
-`toolpath::stock::Stock` starts with a box-shaped Fidget field. Each completed
+`cam::stock::Stock` starts with a box-shaped Fidget field. Each completed
 segment, including the completed portion of the current segment, subtracts the
 continuous swept solid of the tool's cutting sections: `stock.max(-sweep)`.
 The mesh preview uses Fidget's CPU mesher and the shared triangle renderer.

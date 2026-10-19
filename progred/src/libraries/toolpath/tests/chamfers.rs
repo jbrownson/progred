@@ -1,9 +1,7 @@
-use super::super::{
-    cutter::{Point, Section, SectionKind, Tool},
-    stock::Stock,
-};
+use super::super::cutter::{Point, Section, SectionKind, Tool};
 use super::*;
 use crate::{gid_text::Binders, sources::Sources};
+use cam::stock::Stock;
 use fidget_engine::{shape::EzShape, vm::VmShape};
 use nalgebra::Vector3;
 

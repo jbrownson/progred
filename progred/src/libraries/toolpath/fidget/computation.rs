@@ -4,7 +4,7 @@ use crate::computations::Computations;
 use fidget::raster::{Passes, SoftwareScene, ViewRequest};
 use incremental::background::{Availability, Progress};
 use incremental::{Input, Memo};
-use puri::mesh::DepthImage;
+use puri::mesh::{DepthImage, Mesh};
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct Settings {
@@ -16,7 +16,7 @@ pub(crate) struct Settings {
 
 #[derive(Clone, PartialEq)]
 enum SceneRequest {
-    Model(Vec<fidget::SceneObject>),
+    Model(Vec<volume::SceneObject>),
     Stock(Arc<Recording>, playback::Settings),
 }
 
@@ -45,7 +45,7 @@ pub(super) struct Computation {
     pub fuel: Input<usize>,
     pub settings: Input<Settings>,
     pub image: Memo<Outcome<ViewImage>>,
-    pub paths: Memo<Outcome<fidget::mesh::Mesh>>,
+    pub paths: Memo<Outcome<Mesh>>,
 }
 
 impl Computation {
@@ -129,7 +129,7 @@ fn paths(
     computations: &Computations,
     recording: Memo<Recorded>,
     settings: Input<Settings>,
-) -> Memo<Outcome<fidget::mesh::Mesh>> {
+) -> Memo<Outcome<Mesh>> {
     let geometry_settings = computations.runtime.memo(move |read| {
         let settings = settings.read(read);
         Ok((settings.radius, settings.color, settings.playback.clone()))
@@ -318,7 +318,7 @@ fn image_with<S: Send + Sync + 'static>(
     )
 }
 
-fn scene(request: SceneRequest) -> Outcome<Vec<fidget::SceneObject>> {
+fn scene(request: SceneRequest) -> Outcome<Vec<volume::SceneObject>> {
     let invalid = || ::grap::absent::value(INVALID_INPUT);
     let objects = match request {
         SceneRequest::Model(objects) => objects,

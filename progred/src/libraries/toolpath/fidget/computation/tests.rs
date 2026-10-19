@@ -355,11 +355,8 @@ fn current_refinements_are_not_dimmed_like_stale_images() {
 fn implicit_playback_contains_only_stock_not_paths_or_visible_cutter() {
     let mut path = Recording::default();
     path.enter_tool(&crate::libraries::toolpath::cutter::Tool::ball(0.2, 0.4).unwrap());
-    path.start_at(
-        [-0.25, 0.0, 0.45],
-        crate::libraries::toolpath::paths::Axis::Z,
-    )
-    .unwrap();
+    path.start_at([-0.25, 0.0, 0.45], cam::paths::Axis::Z)
+        .unwrap();
     for x in [-0.125, 0.0, 0.125, 0.25] {
         path.line_to([x, 0.0, 0.45]).unwrap();
     }

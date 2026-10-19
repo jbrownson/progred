@@ -3,6 +3,7 @@ use super::*;
 use crate::libraries::fidget as implicit;
 use fidget_engine::{compiler::RegOp, context::Tree, vm::VmShape};
 use std::time::Instant;
+use volume::SceneObject;
 
 fn balanced_union(trees: &[Tree]) -> Tree {
     if trees.len() == 1 {
@@ -52,7 +53,7 @@ fn program_size(shape: &VmShape) -> (usize, usize) {
 }
 
 /// A preview of `objects` within ±0.85, `height` pixels tall and 4/9 as wide.
-fn volume(objects: Vec<implicit::SceneObject>, height: f64) -> implicit::VolumePreview {
+fn volume(objects: Vec<SceneObject>, height: f64) -> implicit::VolumePreview {
     use implicit::vocabulary as f;
     let mut preview = implicit::volume_preview(&Value::record([(
         f::PREVIEW_3D,
@@ -221,7 +222,7 @@ fn cam_render_profile() {
         if std::env::var("CAM_MESH_SHADING").is_ok() {
             let mut flat = geometry.clone();
             for vertex in &mut std::sync::Arc::make_mut(&mut flat).vertices {
-                vertex.normal = implicit::mesh::Normal::default();
+                vertex.normal = puri::mesh::Normal::default();
             }
             eprintln!(
                 "{} vertices, {} extra normal bytes",
@@ -273,7 +274,7 @@ fn cam_render_profile() {
                 if label == "hybrid" {
                     gpu::raster_surface(
                         &geometry,
-                        Some(implicit::mesh::Surface {
+                        Some(puri::mesh::Surface {
                             frame: frame.clone(),
                             mesh_start: geometry.indices.len(),
                         }),
@@ -333,7 +334,7 @@ fn cam_render_profile() {
             !fields.is_empty(),
             "stock grouping requires positive playback progress"
         );
-        let block = super::super::stock::Stock::block([-0.5; 3], [0.5; 3])
+        let block = cam::stock::Stock::block([-0.5; 3], [0.5; 3])
             .unwrap()
             .into_field();
         let variants = [
@@ -349,7 +350,7 @@ fn cam_render_profile() {
                 "stock {name}: compile {:?}, {n} instructions, {spills} spills",
                 start.elapsed()
             );
-            let object = implicit::SceneObject {
+            let object = SceneObject {
                 tree,
                 color: stock.color,
             };
@@ -378,7 +379,7 @@ fn cam_render_profile() {
             }
             if std::env::var("CAM_MESH").is_ok() {
                 let start = Instant::now();
-                let mut geometry = implicit::mesh::Geometry::default();
+                let mut geometry = puri::mesh::Geometry::default();
                 implicit::mesh::Shape::from(&preview(vec![object]))
                     .append(&mut geometry, 6, &Default::default())
                     .unwrap()
@@ -443,7 +444,7 @@ fn cam_render_profile() {
             settings.remaining_stock(&recording).unwrap().unwrap(),
         ]));
         let start = Instant::now();
-        let mut geometry = implicit::mesh::Geometry::default();
+        let mut geometry = puri::mesh::Geometry::default();
         shape
             .append(&mut geometry, 6, &Default::default())
             .unwrap()
@@ -459,7 +460,7 @@ fn cam_render_profile() {
         for group in [1, 8, 32, usize::MAX] {
             let objects = paths
                 .chunks(group)
-                .map(|group| implicit::SceneObject {
+                .map(|group| SceneObject {
                     tree: balanced_union(&group.iter().map(|o| o.tree.clone()).collect::<Vec<_>>()),
                     color: group[0].color,
                 })

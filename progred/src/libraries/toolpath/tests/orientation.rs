@@ -321,7 +321,7 @@ fn assert_pull_and_climb(commands: &[Command], face: usize) {
 
 // Evaluate actual Fidget subtraction at each face center and the interior.
 fn stock_samples(path: &Recording) -> Vec<f32> {
-    let mut stock = super::super::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
+    let mut stock = cam::stock::Stock::block([-0.5; 3], [0.5; 3]).unwrap();
     for (a, b, axis, tool) in path.tool_segments() {
         stock.cut(tool.unwrap(), a, b, axis, 0.001).unwrap();
     }

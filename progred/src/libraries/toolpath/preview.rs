@@ -1,12 +1,8 @@
-use super::paths::Axis;
-use super::{
-    paths::{InvalidPath, MapPoints, Point3, Sink},
-    run,
-    vocabulary::*,
-};
+use super::{run, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::widget;
 use crate::libraries::layout;
+use cam::paths::{Axis, InvalidPath, MapPoints, Point3, Sink};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Stroke};
 use peniko::Color;
 use puri::draw::Canvas;

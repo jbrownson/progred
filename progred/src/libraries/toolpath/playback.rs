@@ -1,5 +1,6 @@
-use super::{cutter::Tool, paths::*, stock::Stock, vocabulary::*};
+use super::{cutter::Tool, vocabulary::*};
 use crate::libraries::{f64, fidget};
+use cam::{paths::*, stock::Stock};
 use gid::Value;
 
 pub(super) trait Draw: Sink<Error = InvalidPath> {
@@ -71,7 +72,7 @@ impl Settings {
     pub(super) fn remaining_stock(
         &self,
         path: &Recording,
-    ) -> Result<Option<fidget::SceneObject>, InvalidPath> {
+    ) -> Result<Option<volume::SceneObject>, InvalidPath> {
         let Some(color) = self.stock_color else {
             return Ok(None);
         };
@@ -88,7 +89,7 @@ impl Settings {
                 Ok(())
             },
         )?;
-        Ok(Some(fidget::SceneObject {
+        Ok(Some(volume::SceneObject {
             tree: stock.into_field(),
             color,
         }))

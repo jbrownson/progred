@@ -213,7 +213,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                     let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
                     let drawing = fidget::mesh::drawing_surface(
                         &geometry.geometry,
-                        Some(fidget::mesh::Surface {
+                        Some(puri::mesh::Surface {
                             frame: image.frame.clone(),
                             mesh_start: geometry.surface_start,
                         }),

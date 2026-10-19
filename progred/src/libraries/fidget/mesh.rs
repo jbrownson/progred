@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
+use puri::mesh::{Geometry, Mesh, Surface, View};
 
 #[cfg(feature = "cam-profile")]
 pub(crate) mod performance;
@@ -45,8 +46,6 @@ pub(crate) fn preview(
         },
     )
 }
-
-pub(crate) use puri::mesh::{Geometry, Mesh, Normal, Surface, Vertex, View};
 
 fn generate(preview: &VolumePreview, depth: u8) -> Option<Mesh> {
     let mut geometry = Geometry::default();
