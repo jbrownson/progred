@@ -55,79 +55,48 @@ impl Computation {
         settings: Settings,
         permitted: Memo<bool>,
     ) -> Self {
-        let program = Program::new(computations, program, fuel);
-        let settings = computations.runtime.input(settings);
-        let paths = paths(computations, program.recording.clone(), settings.clone());
-        let image = image(
+        Self::with_image(
             computations,
-            program.recording.clone(),
-            settings.clone(),
-            Passes::Progressive {
-                first_max_edge: 128,
-            },
-            None,
-            Some(permitted),
-        );
-        Self {
             program,
+            fuel,
             settings,
-            image,
-            paths,
-        }
+            |recording, settings| {
+                image(
+                    computations,
+                    recording,
+                    settings,
+                    Passes::Progressive {
+                        first_max_edge: 128,
+                    },
+                    None,
+                    permitted,
+                )
+            },
+        )
     }
 
-    #[cfg(test)]
-    fn with_render(
+    /// The paths' tubes beside the image that `image` makes of the recording
+    /// in the settings.
+    fn with_image(
         computations: &Computations,
         program: RuntimeValue,
         fuel: usize,
         settings: Settings,
-        render: impl Fn(
-            Arc<SceneRequest>,
-            ViewRequest,
-            &incremental::Cancellation,
-            &mut (dyn FnMut(Outcome<DepthImage>) -> Result<(), incremental::Error> + Send),
-            &(dyn Fn(Progress) + Sync),
-        ) -> Result<Outcome<DepthImage>, incremental::Error>
-        + Send
-        + Sync
-        + 'static,
+        image: impl FnOnce(Memo<Recorded>, Input<Settings>) -> Memo<Outcome<ViewImage>>,
     ) -> Self {
         let program = Program::new(computations, program, fuel);
         let settings = computations.runtime.input(settings);
-        let paths = paths(computations, program.recording.clone(), settings.clone());
-        let image = image_with(
-            computations,
-            program.recording.clone(),
-            settings.clone(),
-            None,
-            None,
-            |request, _| Ok(Ok(Arc::new(request))),
-            move |scene, view, cancel, publish, progress| {
-                render(scene.clone(), view, cancel, publish, progress)
-            },
-        );
+        let style = computations.runtime.memo({
+            let settings = settings.clone();
+            move |read| Ok(settings.read(read).style.clone())
+        });
         Self {
+            paths: path_tubes(&computations.runtime, program.recording.clone(), style),
+            image: image(program.recording.clone(), settings.clone()),
             program,
             settings,
-            image,
-            paths,
         }
     }
-}
-
-fn paths(
-    computations: &Computations,
-    recording: Memo<Recorded>,
-    settings: Input<Settings>,
-) -> Memo<Outcome<Mesh>> {
-    path_tubes(
-        &computations.runtime,
-        recording,
-        computations
-            .runtime
-            .memo(move |read| Ok(settings.read(read).style.clone())),
-    )
 }
 
 /// Use the same observed program as other interpretations. The caller chooses
@@ -139,7 +108,7 @@ pub(crate) fn image(
     settings: Input<Settings>,
     passes: Passes,
     ready: Option<Memo<bool>>,
-    permitted: Option<Memo<bool>>,
+    permitted: Memo<bool>,
 ) -> Memo<Outcome<ViewImage>> {
     image_with(
         computations,
@@ -176,7 +145,7 @@ fn image_with<S: Send + Sync + 'static>(
     recording: Memo<Recorded>,
     settings: Input<Settings>,
     ready: Option<Memo<bool>>,
-    permitted: Option<Memo<bool>>,
+    permitted: Memo<bool>,
     prepare: impl Fn(SceneRequest, &incremental::Cancellation) -> Result<Outcome<S>, incremental::Error>
     + Send
     + Sync
@@ -250,7 +219,7 @@ fn image_with<S: Send + Sync + 'static>(
     );
     let worker = computations.tasks.memo_reporting_with_start_condition(
         worker_input,
-        permitted,
+        Some(permitted),
         move |(scene, view), cancel, publish, progress| {
             cancel.check()?;
             match scene.as_ref() {

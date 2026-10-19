@@ -36,6 +36,43 @@ fn settings(yaw: f32) -> Settings {
     }
 }
 
+/// A computation whose scene is its request, which `render` renders.
+fn with_render(
+    computations: &Computations,
+    program: RuntimeValue,
+    settings: Settings,
+    render: impl Fn(
+        Arc<SceneRequest>,
+        ViewRequest,
+        &incremental::Cancellation,
+        &mut (dyn FnMut(Outcome<DepthImage>) -> Result<(), incremental::Error> + Send),
+        &(dyn Fn(Progress) + Sync),
+    ) -> Result<Outcome<DepthImage>, incremental::Error>
+    + Send
+    + Sync
+    + 'static,
+) -> Computation {
+    Computation::with_image(
+        computations,
+        program,
+        10000,
+        settings,
+        |recording, settings| {
+            image_with(
+                computations,
+                recording,
+                settings,
+                None,
+                computations.runtime.memo(|_| Ok(true)),
+                |request, _| Ok(Ok(Arc::new(request))),
+                move |scene, view, cancel, publish, progress| {
+                    render(scene.clone(), view, cancel, publish, progress)
+                },
+            )
+        },
+    )
+}
+
 fn playback(progress: f64) -> playback::Settings {
     playback::Settings::read(&Value::record([
         (PROGRESS, f64::value(progress)),
@@ -104,7 +141,7 @@ fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures
     );
     let program = crate::libraries::toolpath::tests::tool_program(program);
     let rendered = Arc::new(Mutex::new(Vec::new()));
-    let graph = Computation::with_render(&computations, program.into(), 10000, settings(0.0), {
+    let graph = with_render(&computations, program.into(), settings(0.0), {
         let rendered = rendered.clone();
         move |scene, view, cancel, _publish, _progress| {
             cancel.check()?;
@@ -212,7 +249,7 @@ fn camera_changes_do_not_cancel_running_preparation_but_geometry_changes_do() {
         recording(&computations, program, fuel),
         settings_input.clone(),
         None,
-        None,
+        runtime.memo(|_| Ok(true)),
         move |request, cancel| {
             started.send(cancel.clone()).unwrap();
             resumed.lock().unwrap().recv().unwrap();
@@ -291,10 +328,9 @@ fn current_refinements_are_not_dimmed_like_stale_images() {
     let (published, receive) = mpsc::channel();
     let (resume, resumed) = mpsc::channel();
     let resumed = Mutex::new(resumed);
-    let graph = Computation::with_render(
+    let graph = with_render(
         &computations,
         ::grap::lambda([], Value::record([])).into(),
-        10000,
         settings(0.0),
         move |_, _, _, publish, progress| {
             let image = peniko::ImageData {

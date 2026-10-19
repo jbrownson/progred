@@ -103,7 +103,7 @@ impl Computation {
             settings.clone(),
             fidget::raster::Passes::Final,
             Some(mesh_ready),
-            Some(permitted),
+            permitted,
         );
         let view = runtime.memo_by(
             move |read| {
