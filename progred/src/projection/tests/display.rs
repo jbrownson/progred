@@ -277,7 +277,7 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
 
 #[test]
 fn record_combinator_chooses_a_projection_for_each_field() {
-    use crate::display::{dim, partial, structure};
+    use crate::display::{dim, partial};
     let first = new_cell_id();
     let second = new_cell_id();
     let ordinary = new_cell_id();
@@ -301,7 +301,7 @@ fn record_combinator_chooses_a_projection_for_each_field() {
     let second_projection = observe(second);
     let default_projection = observe(ordinary);
     let projection = Projection::new([
-        structure::record(move |key| match key {
+        crate::display::test_support::record_partial(move |key| match key {
             key if key == first => Some(first_projection.clone()),
             key if key == second => Some(second_projection.clone()),
             _ => None,

@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
-use crate::display::widget::{Attribution, HoverInput, HoverOutput};
+use crate::display::widget::HoverInput;
+use crate::display::widget::frame::{Attribution, HoverOutput};
 use kurbo::{Point, Rect};
 use puri::draw::{DrawCmd, DrawList, Shape};
 use uig::Placement;

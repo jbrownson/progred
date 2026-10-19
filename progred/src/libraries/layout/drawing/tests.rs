@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::widget::recorded::Drawing;
+use crate::display::widget::recorded::test_support::Drawing;
 use crate::display::widget::source::SourceTrace;
 use crate::display::widget::style;
 use crate::library::Libraries;

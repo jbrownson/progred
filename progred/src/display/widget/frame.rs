@@ -35,17 +35,6 @@ impl<H> Clone for HoverInput<'_, H> {
         *self
     }
 }
-impl<H> Default for HoverInput<'_, H> {
-    fn default() -> Self {
-        Self {
-            command_modifier: crate::modifiers::native(),
-            picking: false,
-            pointer: None,
-            prior: None,
-            reach_px: 0.0,
-        }
-    }
-}
 
 /// Transient access to caller-owned output during a widget's hover computation.
 /// The input is not retained by the resulting paint or event continuations.

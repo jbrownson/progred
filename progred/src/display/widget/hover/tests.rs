@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
-use crate::display::widget::HoverOutput;
+use crate::display::widget::frame::HoverOutput;
 use crate::display::widget::{HoverContext, HoverInput};
 use kurbo::{Point, Rect};
 use puri::draw::DrawList;
@@ -36,7 +36,7 @@ fn place_at(
 fn a_border_uses_settled_geometry_without_requesting_site_or_event_capabilities() {
     let placement = Placement::root(Rect::new(10.0, 20.0, 40.0, 60.0));
     let output = place(
-        crate::display::widget::border(crate::display::text("inside")),
+        crate::display::widget::border(crate::display::test_support::text("inside")),
         placement,
     );
     assert!(output.handler.is_none());
@@ -51,7 +51,7 @@ fn a_border_uses_settled_geometry_without_requesting_site_or_event_capabilities(
     let clipped = Placement::new(placement.rect, Rect::new(80.0, 80.0, 90.0, 90.0));
     assert!(
         place(
-            crate::display::widget::border(crate::display::text("inside")),
+            crate::display::widget::border(crate::display::test_support::text("inside")),
             clipped
         )
         .after_hover
@@ -66,7 +66,7 @@ fn claiming_and_painting_hover_are_independent() {
         Rect::new(0.0, 0.0, 100.0, 100.0),
     );
     let claimed = place_at(
-        on_hover(crate::display::text("target"), 7),
+        on_hover(crate::display::test_support::text("target"), 7),
         placement,
         HoverInput {
             pointer: Some(Point::new(5.0, 5.0)),
@@ -80,7 +80,7 @@ fn claiming_and_painting_hover_are_independent() {
     );
     assert_eq!(
         place_at(
-            on_hover(crate::display::text("target"), 7),
+            on_hover(crate::display::test_support::text("target"), 7),
             placement,
             HoverInput {
                 pointer: Some(Point::new(22.0, 5.0)),
@@ -97,7 +97,7 @@ fn claiming_and_painting_hover_are_independent() {
     assert!(claimed.handler.is_none());
     for hovered in [None, Some(7), Some(8)] {
         let highlighted = place(
-            hover_highlight(crate::display::text("feedback"), 7),
+            hover_highlight(crate::display::test_support::text("feedback"), 7),
             placement,
         );
         assert!(highlighted.claim.is_none());
@@ -105,7 +105,7 @@ fn claiming_and_painting_hover_are_independent() {
         let mut canvas = DrawList::new();
         puri::frame::render(
             highlighted
-                .bind(crate::display::widget::Attribution {
+                .bind(crate::display::widget::frame::Attribution {
                     hovered,
                     ..Default::default()
                 })
@@ -122,7 +122,10 @@ fn occlusion_blocks_starts_not_releases_and_respects_the_clip() {
         Rect::new(0.0, 0.0, 20.0, 20.0),
         Rect::new(0.0, 0.0, 10.0, 20.0),
     );
-    let blocked = place(block_hover(crate::display::text("panel")), placement);
+    let blocked = place(
+        block_hover(crate::display::test_support::text("panel")),
+        placement,
+    );
     let handler = blocked.handler.unwrap();
     for x in [5.0, 15.0, 25.0] {
         let event = PointerButtonEvent {
@@ -141,7 +144,7 @@ fn occlusion_blocks_starts_not_releases_and_respects_the_clip() {
         assert!(!handler.dispatch_pointer_up(&mut (), &event));
         assert_eq!(
             place_at(
-                block_hover(crate::display::text("panel")),
+                block_hover(crate::display::test_support::text("panel")),
                 placement,
                 HoverInput {
                     pointer: Some(Point::new(x, 5.0)),
@@ -156,9 +159,9 @@ fn occlusion_blocks_starts_not_releases_and_respects_the_clip() {
     }
     let clipped = Placement::new(placement.rect, Rect::new(30.0, 0.0, 40.0, 20.0));
     for layout in [
-        on_hover(crate::display::text("target"), 7),
-        block_hover(crate::display::text("panel")),
-        hover_highlight(crate::display::text("feedback"), 7),
+        on_hover(crate::display::test_support::text("target"), 7),
+        block_hover(crate::display::test_support::text("panel")),
+        hover_highlight(crate::display::test_support::text("feedback"), 7),
     ] {
         let output = place(layout, clipped);
         assert!(

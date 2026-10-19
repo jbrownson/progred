@@ -2,10 +2,6 @@
 //! Layout measures and places these without interpreting a widget description.
 
 use crate::display::{Host, Layout};
-#[cfg(test)]
-pub use frame::place;
-#[cfg(test)]
-pub use frame::{Attribution, HoverOutput};
 pub use frame::{HoverContext, HoverInput, HoverPass, Probe};
 use gid::Value;
 pub use measured::Extent;

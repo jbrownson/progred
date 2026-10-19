@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
-use crate::display::widget::{HoverContext, HoverOutput};
+use crate::display::widget::HoverContext;
+use crate::display::widget::frame::HoverOutput;
 use kurbo::{Point, Rect};
 use measured::Extent;
 use puri::handler::HasHandler;
@@ -74,12 +75,12 @@ fn clipped_out_presses_install_nothing() {
             );
             for layout in [
                 on_activate(
-                    crate::display::text("activate"),
+                    crate::display::test_support::text("activate"),
                     crate::libraries::test_widgets::hover(vec![]),
                     Rc::new(|_| panic!("clipped action")),
                 ),
                 pickable(
-                    crate::display::text("pick"),
+                    crate::display::test_support::text("pick"),
                     crate::libraries::test_widgets::hover(vec![]),
                     gid::Value::record([]),
                 ),

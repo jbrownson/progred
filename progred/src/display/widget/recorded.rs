@@ -154,47 +154,6 @@ fn draw(
     }
 }
 
-/// What a recording drew, for tests of the programs that draw.
-#[cfg(test)]
-pub(crate) struct Drawing(Recorded);
-
-#[cfg(test)]
-impl Drawing {
-    /// Runs `record` as a leaf would.
-    pub(crate) fn of(
-        record: &Record,
-        host: &dyn grap::Host,
-        input: Option<SourceTrace>,
-        styles: &Styles,
-    ) -> Self {
-        Self(draw(record, host, input, Faces::new(styles)))
-    }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.0.commands.0.is_empty() && self.0.hits.is_empty()
-    }
-
-    pub(crate) fn hits(&self) -> usize {
-        self.0.hits.len()
-    }
-
-    pub(crate) fn target_at(&self, point: Point) -> Option<Hover> {
-        self.0.target_at(point, Affine::IDENTITY)
-    }
-
-    /// Whether highlighting `source` fills anything.
-    pub(crate) fn highlights(&self, source: &SourceTrace) -> bool {
-        let mut highlighted = DrawList::new();
-        self.0.highlight(
-            &mut highlighted,
-            Affine::IDENTITY,
-            source,
-            &Brush::default(),
-        );
-        !highlighted.0.is_empty()
-    }
-}
-
 /// Recording happens after the frame's style borrow ends, so it keeps a copy.
 struct Faces(Styles);
 
@@ -309,5 +268,7 @@ fn shape_contains(shape: &puri::draw::Shape, point: Point) -> bool {
     }
 }
 
+#[cfg(test)]
+pub(crate) mod test_support;
 #[cfg(test)]
 mod tests;

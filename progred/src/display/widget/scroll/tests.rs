@@ -16,7 +16,7 @@ fn event(delta: ScrollDelta) -> PointerScrollEvent {
 #[test]
 fn acceptance_does_not_require_a_state_write() {
     for accepts in [false, true] {
-        let mut frame = crate::display::widget::HoverOutput::default();
+        let mut frame = crate::display::widget::frame::HoverOutput::default();
         let mut navigation = Default::default();
         let mut output = crate::display::widget::HoverContext::<(), ()>::new(
             Default::default(),
@@ -66,7 +66,7 @@ fn partial_consumption_round_trips_all_units() {
             ScrollDelta::PixelDelta((2.0, 2.0).into()),
         ),
     ] {
-        let mut frame = crate::display::widget::HoverOutput::default();
+        let mut frame = crate::display::widget::frame::HoverOutput::default();
         let mut navigation = Default::default();
         let mut output = crate::display::widget::HoverContext::<(), ()>::new(
             Default::default(),
@@ -92,7 +92,7 @@ fn partial_consumption_round_trips_all_units() {
 
 #[test]
 fn nested_handlers_receive_only_unused_scroll_and_respect_clipping() {
-    let mut frame = crate::display::widget::HoverOutput::default();
+    let mut frame = crate::display::widget::frame::HoverOutput::default();
     let mut navigation = Default::default();
     let mut output = crate::display::widget::HoverContext::<Vec<Vec2>, ()>::new(
         Default::default(),

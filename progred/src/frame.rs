@@ -124,7 +124,7 @@ pub(crate) type HoverPass<C> = crate::display::widget::HoverPass<C, Hovered>;
 pub(crate) type DispatchContext<C> = crate::display::widget::frame::DispatchContext<C, Hovered>;
 pub(crate) type Attribution = crate::display::widget::frame::Attribution<Hovered>;
 #[cfg(test)]
-pub(crate) type HoverOutput<C> = crate::display::widget::HoverOutput<C, Hovered>;
+pub(crate) type HoverOutput<C> = crate::display::widget::frame::HoverOutput<C, Hovered>;
 #[cfg(test)]
 pub(crate) type Probe = crate::display::widget::frame::Probe<Hovered>;
 #[cfg(test)]

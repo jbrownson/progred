@@ -16,7 +16,7 @@ pub trait ResolveForDispatch<C, H> {
     fn navigate(self, world: &mut C, direction: widget::Direction) -> bool;
 }
 
-impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::HoverOutput<C, H> {
+impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::frame::HoverOutput<C, H> {
     fn resolve_for_dispatch(self) -> Handler<C, widget::frame::DispatchContext<C, H>> {
         self.resolve_with_context().0
     }
@@ -170,39 +170,6 @@ pub enum ProjectionCall<W, H> {
     Other,
 }
 
-#[test]
-fn recorder_preserves_local_and_descendant_projection_inputs() {
-    use crate::display::{at_with_projection, descend, partial};
-    let local = partial::<(), ()>(|_| None);
-    let default = partial::<(), ()>(|_| None);
-    let step = Step::Key(gid::new_cell_id());
-    for layout in [
-        descend([step.clone()], Some(local.clone()), Some(default.clone())),
-        at_with_projection(
-            [step],
-            Value::record([]),
-            Some(local.clone()),
-            Some(default.clone()),
-        ),
-    ] {
-        let (actual, descendants) = match inspect(&layout) {
-            ProjectionCall::Descend {
-                projection,
-                default_projection,
-                ..
-            }
-            | ProjectionCall::At {
-                projection,
-                default_projection,
-                ..
-            } => (projection, default_projection),
-            _ => panic!("a scoped projection call"),
-        };
-        assert!(std::rc::Rc::ptr_eq(actual.as_ref().unwrap(), &local));
-        assert!(std::rc::Rc::ptr_eq(descendants.as_ref().unwrap(), &default));
-    }
-}
-
 pub fn delimited<W, H>(
     layout: &Recorded<W, H>,
 ) -> (
@@ -289,21 +256,15 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
     }
 }
 
+/// [`with_sources`] over an empty document and no libraries.
 pub fn with_context<W: 'static, H: 'static, R>(
     project: &dyn widget::project::Project<W, H>,
     run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
 ) -> R {
-    with_empty_view(project, |cx, text, project| {
-        run(&mut widget::Context {
-            text,
-            project,
-            toolkit: &crate::projection::Occurrence { cx, path: &[] },
-            value: None,
-        })
-    })
+    with_empty(|sources| with_sources(sources, project, run))
 }
 
-/// [`with_context`] reading through `sources`.
+/// A widget context at the root of a view reading through `sources`.
 pub fn with_sources<W: 'static, H: 'static, R>(
     sources: crate::sources::Sources<'_>,
     project: &dyn widget::project::Project<W, H>,
@@ -328,19 +289,20 @@ pub(crate) fn with_empty_view<W: 'static, H: 'static, R>(
         &dyn widget::project::Project<W, H>,
     ) -> R,
 ) -> R {
+    with_empty(|sources| with_view(sources, project, run))
+}
+
+/// An empty document read over no libraries.
+fn with_empty<R>(run: impl FnOnce(crate::sources::Sources<'_>) -> R) -> R {
     let document = gid::Document {
         root: None,
         cells: gid::Cells::new(),
     };
     let libraries = crate::library::Libraries::default();
-    with_view(
-        crate::sources::Sources {
-            doc: &document,
-            libraries: &libraries,
-        },
-        project,
-        run,
-    )
+    run(crate::sources::Sources {
+        doc: &document,
+        libraries: &libraries,
+    })
 }
 
 /// The view a widget is built in, reading through `sources`, for a test to
@@ -394,6 +356,34 @@ pub fn inspect<W: 'static, H: 'static>(layout: &impl Recordable<W, H>) -> Projec
         });
     }
     recorder.0.into_inner()
+}
+
+/// `text` in the name face.
+pub fn text<W: 'static, H: 'static>(text: impl Into<String>) -> crate::display::Layout<W, H> {
+    crate::display::faced(text, crate::display::Face::Name)
+}
+
+/// Records drawn with the structural record layout, each field's value by
+/// `child`'s projection where it has one.
+pub fn record_partial<W: crate::display::Host>(
+    child: impl Fn(CellId) -> Option<crate::display::host::Partial<W>> + 'static,
+) -> crate::display::host::Partial<W> {
+    crate::display::runtime_partial(move |input| {
+        crate::display::structure::record_layout(input, &child)
+    })
+}
+
+/// No pointer, nothing hovered before, and the platform's command key.
+impl<H> Default for widget::HoverInput<'_, H> {
+    fn default() -> Self {
+        Self {
+            command_modifier: crate::modifiers::native(),
+            picking: false,
+            pointer: None,
+            prior: None,
+            reach_px: 0.0,
+        }
+    }
 }
 
 /// Native-only widget tests intentionally provide no document recursion.

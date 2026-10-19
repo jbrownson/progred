@@ -4,8 +4,6 @@
 use gid::{CellId, Resolution, Step, Value};
 use peniko::Brush;
 pub use puri::delim::Delim;
-#[cfg(test)]
-pub use puri::delim::Side;
 use puri::draw::Leaf;
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -423,11 +421,6 @@ pub fn compose_partials<World: 'static, Hover: 'static>(
         [only] => only.clone(),
         _ => runtime_partial(move |input| partials.iter().find_map(|projection| projection(input))),
     }
-}
-
-#[cfg(test)]
-pub fn text<World: 'static, Hover: 'static>(text: impl Into<String>) -> Layout<World, Hover> {
-    faced(text, Face::Name)
 }
 
 pub fn dim<World: 'static, Hover: 'static>(text: impl Into<String>) -> Layout<World, Hover> {

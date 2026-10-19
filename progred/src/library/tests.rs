@@ -3,8 +3,7 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::name;
 use crate::projection::{Layout, ProjectionInput};
 
-use crate::display::test_support::NoEval;
-use crate::display::text as text_layout;
+use crate::display::test_support::{NoEval, text as text_layout};
 use crate::libraries::test_widgets::projection_input;
 use ::grap::{Environment, Expression, ForeignFunction, Halt};
 use gid::{CellId, Value};

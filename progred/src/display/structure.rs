@@ -169,11 +169,6 @@ pub fn list_layout_at<W: Host>(
     ))
 }
 
-#[cfg(test)]
-pub fn record<W: Host>(child: impl Fn(CellId) -> Option<Partial<W>> + 'static) -> Partial<W> {
-    runtime_partial(move |input| record_layout(input, &child))
-}
-
 pub fn record_layout<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     child: impl Fn(CellId) -> Option<Partial<W>>,

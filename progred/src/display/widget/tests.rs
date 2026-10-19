@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
+use crate::display::widget::frame::{Attribution, HoverOutput, place};
 use crate::frame::Hovered;
 use gid::{Cells, Document};
 use kurbo::{Affine, Point, Rect, Stroke};
@@ -36,7 +37,7 @@ fn fill_width_expands_ink_and_interaction_together_without_changing_measurement(
     let measured = resolve_choices(build.finish(prepared), 100.0);
     assert_eq!(measured.extent.width, 0.0);
     assert_eq!(measured.extent.height(), 16.0);
-    let output = frame::place(
+    let output = place(
         measured,
         Placement::new(
             Rect::new(10.0, 20.0, 10.0, 36.0),
@@ -85,7 +86,7 @@ fn paint_only_leaves_defer_ink_and_skip_clipped_or_discarded_paint() {
         assert_eq!(leaf.extent, extent);
         let mut placement = Placement::root(rect);
         placement.clip_rect = clip;
-        let fragment = crate::display::widget::frame::place(leaf, placement, &Default::default());
+        let fragment = place(leaf, placement, &Default::default());
         assert_eq!(calls.get(), 0);
         assert!(fragment.claim.is_none());
         assert!(fragment.handler.is_none());
@@ -249,25 +250,23 @@ fn inert_widgets_and_pointer_wrappers_do_not_request_site_state() {
     crate::display::test_support::with_context::<crate::Editor, crate::frame::Hovered, _>(
         &crate::display::test_support::NoProject,
         |context| {
-            let measured = delimiter::side(
-                crate::display::Delim::Bracket,
-                crate::display::Side::Open,
-            )(context);
+            let measured =
+                delimiter::side(crate::display::Delim::Bracket, puri::delim::Side::Open)(context);
             let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
             assert_eq!(
-                crate::display::widget::frame::place(measured, placement, &Default::default())
+                place(measured, placement, &Default::default())
                     .after_hover
                     .len(),
                 1
             );
             for layout in [
                 interaction::on_activate(
-                    crate::display::text("activate"),
+                    crate::display::test_support::text("activate"),
                     crate::libraries::test_widgets::hover(vec![]),
                     Rc::new(|_| true),
                 ),
                 interaction::pickable(
-                    crate::display::text("pick"),
+                    crate::display::test_support::text("pick"),
                     crate::libraries::test_widgets::hover(vec![]),
                     Value::record([]),
                 ),
@@ -288,12 +287,12 @@ fn inert_widgets_and_pointer_wrappers_do_not_request_site_state() {
             }
             for layout in [
                 hover::on_hover(
-                    crate::display::text("claim"),
+                    crate::display::test_support::text("claim"),
                     crate::libraries::test_widgets::hover(vec![]),
                 ),
-                hover::block_hover(crate::display::text("occluder")),
+                hover::block_hover(crate::display::test_support::text("occluder")),
                 hover::hover_highlight(
-                    crate::display::text("highlight"),
+                    crate::display::test_support::text("highlight"),
                     crate::libraries::test_widgets::hover(vec![]),
                 ),
             ] {
@@ -310,7 +309,7 @@ fn inert_widgets_and_pointer_wrappers_do_not_request_site_state() {
                 );
             }
             assert_eq!(
-                crate::display::widget::frame::place(
+                place(
                     empty::<(), ()>(context.text, context.toolkit.styles()),
                     placement,
                     &Default::default()
@@ -342,7 +341,7 @@ fn discarded_layout_alternatives_do_not_place_widget_outputs() {
     let layout = choices.alternatives(vec![widget(100.0, 1), widget(20.0, 2)]);
     let measured = resolve_choices(choices.finish(layout), 50.0);
     let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let output = crate::display::widget::frame::place(
+    let output = place(
         measured,
         placement,
         &HoverInput {
@@ -391,7 +390,7 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     let output = {
         let layout = decorated;
         let placement = uig::Placement::root(layout.extent.rect_at(Point::ZERO));
-        crate::display::widget::frame::place(layout, placement, &Default::default())
+        place(layout, placement, &Default::default())
     };
     let output = output.bind(Default::default());
     assert!(log.borrow().is_empty());

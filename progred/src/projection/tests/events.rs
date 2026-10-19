@@ -18,7 +18,7 @@ fn native_annotation_handler_retains_the_projected_site() {
     let projection = Projection::new([crate::display::partial(|input| {
         input.value?.as_blob()?;
         Some(crate::display::widget::before(
-            crate::display::text("scroll"),
+            crate::display::test_support::text("scroll"),
             Rc::new(|context| {
                 let root = context.toolkit.view().clone();
                 let path = context.path().to_vec();

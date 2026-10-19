@@ -73,7 +73,7 @@ pub fn point_update(
         &crate::test_root(),
         vec![],
     ));
-    let mut output = widget::HoverOutput::default();
+    let mut output = widget::frame::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 100.0, 100.0)),
@@ -109,7 +109,7 @@ pub fn claim(layout: &impl Recordable<Editor, Hovered>) -> Option<puri::hover::C
     let place = with_context(&crate::display::test_support::NoProject, |context| {
         before(context)
     });
-    let mut output = widget::HoverOutput::default();
+    let mut output = widget::frame::HoverOutput::default();
     let placement = uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0));
     place(
         &mut widget::HoverContext::new(
@@ -232,7 +232,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
     let place = with_context(&crate::display::test_support::NoProject, |context| {
         before(context)
     });
-    let mut output = widget::HoverOutput::default();
+    let mut output = widget::frame::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0)),
@@ -266,7 +266,7 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
     let place = with_context(&crate::display::test_support::NoProject, |context| {
         before(context)
     });
-    let mut output = widget::HoverOutput::default();
+    let mut output = widget::frame::HoverOutput::default();
     place(
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0)),

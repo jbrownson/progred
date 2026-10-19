@@ -41,7 +41,7 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
                         "widget preparation must retain the native callback too"
                     );
                     visits.set(visits.get() + 1);
-                    d::text("retained callback").measure(context, build)
+                    d::test_support::text("retained callback").measure(context, build)
                 }))
             })
         }
@@ -87,7 +87,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
         move |input| {
             input.value?.same_result(&closure).then(|| {
                 visits.set(visits.get() + 1);
-                d::text("retained closure")
+                d::test_support::text("retained closure")
             })
         }
     });
@@ -95,7 +95,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
         let children = d::compose_partials([
             child.clone(),
             d::structure::list(None),
-            d::structure::record(|_| None),
+            d::test_support::record_partial(|_| None),
         ]);
         Some(d::at_with_projection(
             [Step::Key(result)],
@@ -1122,7 +1122,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                 move |input| {
                     f64::read(input.value?)?;
                     visits.set(visits.get() + 1);
-                    Some(d::text("value"))
+                    Some(d::test_support::text("value"))
                 }
             });
             let projection = world

@@ -463,16 +463,8 @@ fn a_layout_round_trips_from_data() {
         ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(vocabulary::GAP)]
     ));
     let (left, child, right) = crate::display::test_support::delimited(&forms[1]);
-    crate::libraries::test_widgets::assert_delimiter(
-        left,
-        Delim::Brace,
-        crate::display::Side::Open,
-    );
-    crate::libraries::test_widgets::assert_delimiter(
-        right,
-        Delim::Brace,
-        crate::display::Side::Close,
-    );
+    crate::libraries::test_widgets::assert_delimiter(left, Delim::Brace, puri::delim::Side::Open);
+    crate::libraries::test_widgets::assert_delimiter(right, Delim::Brace, puri::delim::Side::Close);
     let Recorded::Col { children, .. } = child else {
         panic!("col inside");
     };

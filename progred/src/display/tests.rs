@@ -112,6 +112,38 @@ fn all_declining_partials_leave_fallback_to_the_caller() {
 }
 
 #[test]
+fn recorder_preserves_local_and_descendant_projection_inputs() {
+    let local = partial::<(), ()>(|_| None);
+    let default = partial::<(), ()>(|_| None);
+    let step = Step::Key(gid::new_cell_id());
+    for layout in [
+        descend([step.clone()], Some(local.clone()), Some(default.clone())),
+        at_with_projection(
+            [step],
+            Value::record([]),
+            Some(local.clone()),
+            Some(default.clone()),
+        ),
+    ] {
+        let (actual, descendants) = match inspect(&layout) {
+            ProjectionCall::Descend {
+                projection,
+                default_projection,
+                ..
+            }
+            | ProjectionCall::At {
+                projection,
+                default_projection,
+                ..
+            } => (projection, default_projection),
+            _ => panic!("a scoped projection call"),
+        };
+        assert!(Rc::ptr_eq(actual.as_ref().unwrap(), &local));
+        assert!(Rc::ptr_eq(descendants.as_ref().unwrap(), &default));
+    }
+}
+
+#[test]
 fn a_record_fragment_uses_the_supplied_order_in_both_responsive_forms() {
     const FIRST: CellId = CellId::from_u128(1);
     const SECOND: CellId = CellId::from_u128(2);

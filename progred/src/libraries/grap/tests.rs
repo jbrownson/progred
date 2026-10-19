@@ -561,12 +561,12 @@ fn a_call_argument_label_targets_its_value() {
     crate::libraries::test_widgets::assert_delimiter(
         left,
         crate::display::Delim::Brace,
-        crate::display::Side::Open,
+        puri::delim::Side::Open,
     );
     crate::libraries::test_widgets::assert_delimiter(
         right,
         crate::display::Delim::Brace,
-        crate::display::Side::Close,
+        puri::delim::Side::Close,
     );
     let Recorded::Alternatives(argument_options) = child else {
         panic!("arguments have responsive forms");

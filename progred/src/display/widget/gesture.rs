@@ -172,7 +172,7 @@ struct StateDrag {
     annotate: Annotate,
 }
 
-pub fn state_drag(
+fn state_drag(
     drag: Drag,
     update: crate::display::StateDragGesture,
     annotate: Annotate,
@@ -207,11 +207,7 @@ struct PointControl {
     edit: crate::gesture::EditRun,
 }
 
-pub(crate) fn point(
-    rect: Rect,
-    update: PointHandler,
-    edit: crate::gesture::EditRun,
-) -> Box<dyn Gesture> {
+fn point(rect: Rect, update: PointHandler, edit: crate::gesture::EditRun) -> Box<dyn Gesture> {
     Box::new(PointControl { rect, update, edit })
 }
 

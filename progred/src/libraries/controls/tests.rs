@@ -116,7 +116,7 @@ fn source_highlight_clips_its_rectangle_without_a_pane_sized_layer() {
     ] {
         with_context(&Output::default(), |context| {
             let decorate = crate::display::widget::source_link::decoration(source.clone())(context);
-            let mut output = widget::HoverOutput::default();
+            let mut output = widget::frame::HoverOutput::default();
             decorate(
                 &mut widget::HoverContext::new(
                     Default::default(),
@@ -125,7 +125,7 @@ fn source_highlight_clips_its_rectangle_without_a_pane_sized_layer() {
                 ),
                 Placement::new(rect, clip),
             );
-            let frame = output.bind(widget::Attribution {
+            let frame = output.bind(widget::frame::Attribution {
                 hovered_trace: Some(source.clone()),
                 ..Default::default()
             });
@@ -1140,7 +1140,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
                 sources[0].clone()
             ))))
         );
-        placed.bind(widget::Attribution {
+        placed.bind(widget::frame::Attribution {
             hovered_trace: hovered,
             ..Default::default()
         })

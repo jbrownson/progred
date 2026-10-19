@@ -1,8 +1,39 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
+use crate::display::widget::view::Root;
+use crate::libraries::f64;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, press, target};
-use gid::{Cells, Document};
+use gid::{Cells, Document, Path, Step};
 use ui_events::pointer::{PointerButton, PointerType};
+
+fn model(value: Value) -> crate::Editor {
+    crate::test_editor(Document {
+        root: Some(value),
+        cells: Cells::new(),
+    })
+}
+
+/// A state drag from `origin` that annotates `path` in `root`'s view.
+fn annotating_drag(
+    origin: Point,
+    scale: f64,
+    root: Root,
+    path: Path,
+    handler: StateDragHandler,
+) -> Box<dyn Gesture> {
+    state_drag(
+        Drag::new(origin, scale, crate::gesture::DRAG_THRESHOLD),
+        handler(),
+        Rc::new(move |session: &mut crate::editing::Session<'_>, value| {
+            if let Some(view) = session.model.workspace.view_mut(&root) {
+                view.annotations.set(&path, Some(value));
+                true
+            } else {
+                false
+            }
+        }),
+    )
+}
 
 #[test]
 fn state_drag_press_composes_selection_and_start_in_pointer_order() {
@@ -162,4 +193,117 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
         );
         assert!(world.gesture.is_none());
     }
+}
+
+#[test]
+fn state_drags_use_total_logical_distance_and_only_update_their_view() {
+    let mut model = model(Value::record([]));
+    let root = model.model.workspace.document_root().clone();
+    let path = vec![Step::Key(gid::new_cell_id())];
+    let mut gesture = annotating_drag(
+        Point::ZERO,
+        2.0,
+        root.clone(),
+        path.clone(),
+        Rc::new(|| {
+            Box::new(|event, _| Value::list([f64::value(event.delta_x), f64::value(event.delta_y)]))
+        }),
+    );
+    gesture.advance(&mut model.session(), &[Point::new(5.0, 0.0)]);
+    assert!(
+        model
+            .model
+            .workspace
+            .view(&root)
+            .unwrap()
+            .annotations
+            .at(&path)
+            .is_none()
+    );
+    gesture.advance(&mut model.session(), &[Point::new(8.0, 12.0)]);
+    gesture.advance(&mut model.session(), &[Point::new(10.0, 12.0)]);
+    assert_eq!(
+        model
+            .model
+            .workspace
+            .view(&root)
+            .unwrap()
+            .annotations
+            .at(&path),
+        Some(&Value::list([f64::value(5.0), f64::value(6.0)]))
+    );
+    assert_eq!(model.model.doc.root, Some(Value::record([])));
+    assert!(!model.model.history.can_undo());
+}
+
+#[test]
+fn state_drag_gets_one_batch_including_threshold_excursions() {
+    let mut model = model(Value::record([]));
+    let root = model.model.workspace.document_root().clone();
+    let calls = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let log = calls.clone();
+    let mut gesture = annotating_drag(
+        Point::ZERO,
+        1.0,
+        root.clone(),
+        vec![],
+        Rc::new(move || {
+            let log = log.clone();
+            Box::new(move |current, coalesced| {
+                log.borrow_mut().push((current, coalesced.to_vec()));
+                f64::value(current.delta_x)
+            })
+        }),
+    );
+    gesture.advance(
+        &mut model.session(),
+        &[Point::new(8.0, 0.0), Point::new(1.0, 0.0)],
+    );
+    let sample = |x| crate::display::StateDragEvent {
+        delta_x: x,
+        delta_y: 0.0,
+    };
+    assert_eq!(*calls.borrow(), [(sample(1.0), vec![sample(8.0)])]);
+    assert_eq!(
+        model
+            .model
+            .workspace
+            .view(&root)
+            .unwrap()
+            .annotations
+            .at(&[]),
+        Some(&f64::value(1.0))
+    );
+    assert!(!model.model.history.can_undo());
+}
+
+#[test]
+fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
+    let mut model = model(f64::value(0.0));
+    let original = model.model.doc.clone();
+    let root = model.model.workspace.document_root().clone();
+    model.model.selection = Some(crate::selection::Selection::edge(&root, vec![]));
+    let mut gesture = point(
+        Rect::new(10.0, 20.0, 110.0, 120.0),
+        Rc::new(|event| crate::display::PointUpdate {
+            value: Value::list([f64::value(event.x), f64::value(event.y)]),
+            selection: Some(crate::selection::payload::edge()),
+        }),
+        crate::gesture::EditRun::new(root.clone(), vec![], Default::default()),
+    );
+    assert!(gesture.advance(&mut model.session(), &[Point::new(30.0, 40.0)]));
+    assert_eq!(
+        model.model.doc.root,
+        Some(Value::list([f64::value(0.2), f64::value(0.2)]))
+    );
+    assert!(gesture.advance(&mut model.session(), &[Point::new(210.0, -20.0)]));
+    assert_eq!(
+        model.model.doc.root,
+        Some(Value::list([f64::value(1.0), f64::value(0.0)]))
+    );
+    assert!(!gesture.advance(&mut model.session(), &[Point::new(210.0, -20.0)]));
+    assert_eq!(model.model.selection.as_ref().unwrap().root(), &root);
+    assert!(model.model.step_history(true));
+    assert_eq!(model.model.doc.root, original.root);
+    assert!(!model.model.history.can_undo());
 }
