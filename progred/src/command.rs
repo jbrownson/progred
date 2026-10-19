@@ -2,6 +2,8 @@
 //! shortcuts — asks the app to do. Application commands are meaningful
 //! with no window at all; document commands act on one editor.
 
+use crate::workspace::{Move, Side};
+
 /// Match only the commands contributed by this component.
 pub fn shortcut(
     event: &ui_events::keyboard::KeyboardEvent,
@@ -123,12 +125,10 @@ pub enum DocCommand {
     SaveAs,
     Undo,
     Redo,
-    OpenPaneLeft,
-    OpenPaneRight,
-    MovePaneUp,
-    MovePaneDown,
-    MovePaneLeft,
-    MovePaneRight,
+    /// Open the selected value in a pane on that side.
+    OpenPane(Side),
+    /// Move the selected pane.
+    MovePane(Move),
     Plain,
     Raw,
     /// One library's projection in the selected area. Menus label it with
@@ -303,17 +303,17 @@ pub fn spec(command: Command) -> Spec {
         }
         Command::Doc(DocCommand::Undo) => item("Undo", Some(Shortcut::plain(ShortcutKey::Z))),
         Command::Doc(DocCommand::Redo) => item("Redo", Some(Shortcut::shifted(ShortcutKey::Z))),
-        Command::Doc(DocCommand::OpenPaneLeft) => {
+        Command::Doc(DocCommand::OpenPane(Side::Left)) => {
             item("Open Value on Left", Some(Shortcut::plain(ShortcutKey::P)))
         }
-        Command::Doc(DocCommand::OpenPaneRight) => item(
+        Command::Doc(DocCommand::OpenPane(Side::Right)) => item(
             "Open Value on Right",
             Some(Shortcut::shifted(ShortcutKey::P)),
         ),
-        Command::Doc(DocCommand::MovePaneUp) => item("Move Pane Up", None),
-        Command::Doc(DocCommand::MovePaneDown) => item("Move Pane Down", None),
-        Command::Doc(DocCommand::MovePaneLeft) => item("Move Pane Left", None),
-        Command::Doc(DocCommand::MovePaneRight) => item("Move Pane Right", None),
+        Command::Doc(DocCommand::MovePane(Move::Up)) => item("Move Pane Up", None),
+        Command::Doc(DocCommand::MovePane(Move::Down)) => item("Move Pane Down", None),
+        Command::Doc(DocCommand::MovePane(Move::Left)) => item("Move Pane Left", None),
+        Command::Doc(DocCommand::MovePane(Move::Right)) => item("Move Pane Right", None),
         Command::Doc(DocCommand::Plain) => toggle("Plain", None),
         Command::Doc(DocCommand::Raw) => toggle("Raw", Some(Shortcut::plain(ShortcutKey::R))),
         Command::Doc(DocCommand::Projection(_)) => toggle("Projection", None),
@@ -362,11 +362,11 @@ impl Availability {
             DocCommand::SaveAs => true,
             DocCommand::Undo => self.undo,
             DocCommand::Redo => self.redo,
-            DocCommand::OpenPaneLeft | DocCommand::OpenPaneRight => self.open_pane,
-            DocCommand::MovePaneUp => self.move_up,
-            DocCommand::MovePaneDown => self.move_down,
-            DocCommand::MovePaneLeft => self.move_left,
-            DocCommand::MovePaneRight => self.move_right,
+            DocCommand::OpenPane(_) => self.open_pane,
+            DocCommand::MovePane(Move::Up) => self.move_up,
+            DocCommand::MovePane(Move::Down) => self.move_down,
+            DocCommand::MovePane(Move::Left) => self.move_left,
+            DocCommand::MovePane(Move::Right) => self.move_right,
             DocCommand::Plain | DocCommand::Raw | DocCommand::Projection(_) => true,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.actual_size,

@@ -510,7 +510,7 @@ impl Editor {
         }
     }
 
-    fn open_selected_in_pane(&mut self, side: workspace::Side) -> bool {
+    fn open_selected_in_pane(&mut self, side: workspace::Side) {
         let next = self.model.selection.as_ref().and_then(|selection| {
             let value = selection.value(&self.sources())?.clone();
             workspace::append(self.model.doc.root.as_ref()?, side, value)
@@ -522,25 +522,19 @@ impl Editor {
             self.model
                 .workspace
                 .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
-            let root = self
+            // The value opens as its column's last pane.
+            self.model.selection = self
                 .model
                 .workspace
                 .column(side)
                 .panes
                 .last()
-                .unwrap()
-                .view
-                .root
-                .clone();
-            self.model.selection = Some(selection::Selection::edge(&root, path));
+                .map(|pane| selection::Selection::edge(&pane.view.root, path));
             self.refresh_title();
-            true
-        } else {
-            false
         }
     }
 
-    fn move_selected_pane(&mut self, direction: workspace::Move) -> bool {
+    fn move_selected_pane(&mut self, direction: workspace::Move) {
         let next = self.model.selection.as_ref().and_then(|selection| {
             let Target::Pane { path } = selection.root().target() else {
                 return None;
@@ -566,10 +560,16 @@ impl Editor {
                 .workspace
                 .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
             self.refresh_title();
-            true
-        } else {
-            false
         }
+    }
+
+    /// The view the selection is in, which view commands act on.
+    fn selected_view(&self) -> Option<Root> {
+        self.model
+            .selection
+            .as_ref()
+            .map(selection::Selection::root)
+            .cloned()
     }
 
     pub(crate) fn choose_menu(&mut self, command: Command, geometry: Geometry<'_, Editor>) {
@@ -599,51 +599,20 @@ impl Editor {
             DocCommand::SaveAs => self.menu_save(true),
             DocCommand::Undo => self.step_history(true, geometry),
             DocCommand::Redo => self.step_history(false, geometry),
-            DocCommand::OpenPaneLeft => {
-                self.open_selected_in_pane(workspace::Side::Left);
-            }
-            DocCommand::OpenPaneRight => {
-                self.open_selected_in_pane(workspace::Side::Right);
-            }
-            DocCommand::MovePaneUp
-            | DocCommand::MovePaneDown
-            | DocCommand::MovePaneLeft
-            | DocCommand::MovePaneRight => {
-                let direction = match command {
-                    DocCommand::MovePaneUp => workspace::Move::Up,
-                    DocCommand::MovePaneDown => workspace::Move::Down,
-                    DocCommand::MovePaneLeft => workspace::Move::Left,
-                    DocCommand::MovePaneRight => workspace::Move::Right,
-                    _ => unreachable!(),
-                };
-                self.move_selected_pane(direction);
-            }
-            DocCommand::Plain | DocCommand::Raw => {
-                let selected = self
-                    .model
-                    .selection
-                    .as_ref()
-                    .map(selection::Selection::root)
-                    .cloned();
-                let projection = match command {
-                    DocCommand::Plain => workspace::Projection::Plain,
-                    _ => workspace::Projection::Raw,
-                };
-                self.model
-                    .workspace
-                    .toggle_projection(selected.as_ref(), projection);
-            }
-            DocCommand::Projection(library) => {
-                let selected = self
-                    .model
-                    .selection
-                    .as_ref()
-                    .map(selection::Selection::root)
-                    .cloned();
-                self.model
-                    .workspace
-                    .toggle_library_projection(selected.as_ref(), library);
-            }
+            DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
+            DocCommand::MovePane(direction) => self.move_selected_pane(direction),
+            DocCommand::Plain => self
+                .model
+                .workspace
+                .toggle_projection(self.selected_view().as_ref(), workspace::Projection::Plain),
+            DocCommand::Raw => self
+                .model
+                .workspace
+                .toggle_projection(self.selected_view().as_ref(), workspace::Projection::Raw),
+            DocCommand::Projection(library) => self
+                .model
+                .workspace
+                .toggle_library_projection(self.selected_view().as_ref(), library),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.zoom = 1.0,
             #[cfg(any(target_os = "macos", target_os = "linux"))]

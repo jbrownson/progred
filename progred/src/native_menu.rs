@@ -88,6 +88,7 @@ struct Section {
 /// One `Projections` entry per library that brings a projection, before the
 /// Window menu.
 fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>) -> Vec<Section> {
+    use crate::workspace::{Move, Side};
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
     let section = |label, entries| Section {
         label,
@@ -138,13 +139,13 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
         section(
             "View",
             vec![
-                Entry::Command(C::Doc(D::OpenPaneLeft)),
-                Entry::Command(C::Doc(D::OpenPaneRight)),
+                Entry::Command(C::Doc(D::OpenPane(Side::Left))),
+                Entry::Command(C::Doc(D::OpenPane(Side::Right))),
                 Entry::Separator,
-                Entry::Command(C::Doc(D::MovePaneUp)),
-                Entry::Command(C::Doc(D::MovePaneDown)),
-                Entry::Command(C::Doc(D::MovePaneLeft)),
-                Entry::Command(C::Doc(D::MovePaneRight)),
+                Entry::Command(C::Doc(D::MovePane(Move::Up))),
+                Entry::Command(C::Doc(D::MovePane(Move::Down))),
+                Entry::Command(C::Doc(D::MovePane(Move::Left))),
+                Entry::Command(C::Doc(D::MovePane(Move::Right))),
                 Entry::Separator,
                 Entry::Command(C::Doc(D::Plain)),
                 Entry::Command(C::Doc(D::Raw)),
