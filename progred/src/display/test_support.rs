@@ -318,6 +318,12 @@ impl crate::display::Viewing for NoSite<'_> {
     fn selected_below(&self, steps: &[Step]) -> bool {
         self.0.selected_below(steps)
     }
+    fn inside(&self, cell: gid::CellId) -> bool {
+        self.0.inside(cell)
+    }
+    fn inside_a_cell(&self) -> bool {
+        self.0.inside_a_cell()
+    }
 }
 
 impl crate::display::Toolkit for NoSite<'_> {

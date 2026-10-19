@@ -115,9 +115,10 @@ fn fold_keys_are_directional_and_stay_sparse() {
 
 #[test]
 fn raw_opens_only_the_cells_it_reaches_directly() {
-    let [shared, user, alias, uses, inner, first, second] = [(); 7].map(|_| new_cell_id());
+    let [leaf, shared, user, alias, uses, inner, first, second] = [(); 8].map(|_| new_cell_id());
     let mut cells = Cells::new();
-    cells.set_value(shared, Value::record([(inner, f64::value(1.0))]));
+    cells.set_value(leaf, f64::value(1.0));
+    cells.set_value(shared, Value::record([(inner, Value::Cell(leaf))]));
     cells.set_value(user, Value::record([(uses, Value::Cell(shared))]));
     cells.set_value(alias, Value::Cell(shared));
     let mut world = crate::test_editor(Document {
@@ -131,8 +132,9 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
     world.model.workspace.document.projection = crate::workspace::Projection::Raw;
     let frame = editing_frame(&mut world);
     let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
-    // The cell the document reaches opens, and a reference inside it stays
-    // folded, so a shared cell isn't expanded again at every use.
+    // The cell the document reaches opens, and a cell holding cells inside
+    // its value stays folded, so a shared cell isn't expanded again at every
+    // use.
     assert!(drawn(&[Step::Key(first), follow.clone(), Step::Key(uses)]));
     assert!(!drawn(&[
         Step::Key(first),
@@ -141,7 +143,7 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
         follow.clone(),
         Step::Key(inner),
     ]));
-    // A cell that is only a reference to another opens through to it.
+    // A cell whose whole value is another cell opens through to it.
     assert!(drawn(&[
         Step::Key(second),
         follow.clone(),
@@ -151,19 +153,15 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
 }
 
 #[test]
-fn a_cell_holding_one_plain_value_never_folds() {
-    let [compound, number, user, inner, uses, count, first] = [(); 7].map(|_| new_cell_id());
+fn inside_a_cell_only_cells_holding_cells_start_closed() {
+    let [leaf, nested, flat, user, inner, uses, count, first] = [(); 8].map(|_| new_cell_id());
     let mut cells = Cells::new();
-    cells.set_value(compound, Value::record([(inner, f64::value(1.0))]));
-    let mut named_number = f64::value(2.0).as_record().unwrap().clone();
-    named_number.insert(
-        crate::libraries::name::vocabulary::NAME,
-        crate::libraries::text::value("count"),
-    );
-    cells.set_value(number, Value::Record(named_number));
+    cells.set_value(leaf, f64::value(1.0));
+    cells.set_value(nested, Value::record([(inner, Value::Cell(leaf))]));
+    cells.set_value(flat, Value::record([(inner, f64::value(2.0))]));
     cells.set_value(
         user,
-        Value::record([(uses, Value::Cell(compound)), (count, Value::Cell(number))]),
+        Value::record([(uses, Value::Cell(nested)), (count, Value::Cell(flat))]),
     );
     let mut world = crate::test_editor(Document {
         root: Some(Value::record([(first, user.into())])),
@@ -173,18 +171,48 @@ fn a_cell_holding_one_plain_value_never_folds() {
     world.model.workspace.document.projection = crate::workspace::Projection::Raw;
     let frame = editing_frame(&mut world);
     let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
-    let inside = |key| {
+    let inner_of = |key| {
         [
             Step::Key(first),
             follow.clone(),
             Step::Key(key),
             follow.clone(),
+            Step::Key(inner),
         ]
     };
-    // Nested in a definition, a compound cell stays folded, but one holding
-    // a single number shows it, name or not.
-    assert!(!drawn(
-        &[inside(uses).as_slice(), &[Step::Key(inner)]].concat()
-    ));
-    assert!(drawn(&inside(count)));
+    // Opening a cell that holds cells could open more in turn; one holding
+    // none can't, so it opens.
+    assert!(!drawn(&inner_of(uses)));
+    assert!(drawn(&inner_of(count)));
+}
+
+#[test]
+fn a_cell_a_projection_draws_its_own_way_doesnt_fold() {
+    // Inside a cell's value, a call's function is a cell holding cells,
+    // which Raw would fold; Grap draws it as its name instead.
+    let [function, parameter, caller] = [(); 3].map(|_| new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(parameter, name::record("x", []));
+    let mut lambda = grap::lambda([parameter], Value::Cell(parameter))
+        .as_record()
+        .unwrap()
+        .clone();
+    lambda.insert(
+        crate::libraries::name::vocabulary::NAME,
+        crate::libraries::text::value("f"),
+    );
+    cells.set_value(function, Value::Record(lambda));
+    cells.set_value(
+        caller,
+        grap::call(Value::Cell(function), [(parameter, f64::value(1.0))]),
+    );
+    let mut driver = driver_of(&Document {
+        root: Some(Value::Cell(caller)),
+        cells,
+    });
+    let position = vec![
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(grap::vocabulary::FUNCTION),
+    ];
+    assert!(space(&mut driver, &position).at(&position).is_none());
 }

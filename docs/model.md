@@ -89,9 +89,19 @@ definition can itself still be replaced or removed from a writable document.
 payload, and optional Rust editor. Its stages distinguish an existing edge,
 a pending value, and a pending record label. Annotation records live in a
 path-keyed [`Annotations`](../progred/src/annotations.rs) map owned by the view;
-folding is one convention in those records. Space folds and unfolds the selected
-occurrence. Clicking a fold's `…` selects the occurrence as it opens it, so Space
-closes it again.
+folding is one convention in those records. A projection folds what it draws by
+consulting that state through [`display::fold`](../progred/src/display/fold.rs),
+and decides how it starts: Raw's cells, lists and records fold, as do Grap's
+calls and the control forms. Space folds and unfolds the selected occurrence
+where its projection folds. Clicking a fold's `…` selects the occurrence as it
+opens it, so Space closes it again.
+
+Raw's lists and records start open. A cell starts closed where drawing it would
+draw its value again inside itself, a cycle, and where it sits inside another
+cell's value and holds cells itself, since opening it could open more in turn.
+The cells a view reaches directly open, so their projections get going, and so
+do cells holding no cells, which can't cascade. A cell whose whole value is
+another cell opens through to it.
 
 Selection also retains a native editing scope, which maps an occurrence to its
 location, if any. Ordinary document projection uses its allocation-free identity
@@ -126,9 +136,9 @@ occurrence beneath that element. Repeating a field yields independent folds and
 selection locations while both bodies edit the same source field.
 
 Copy and fold do not resolve an occurrence through conject. The shared
-projection boundary installs handlers that copy the displayed `Value` and
-change the occurrence's fold annotation using the default already determined
-during projection. This also works for source-less `at` values. Inner widget
+projection boundary installs handlers that copy the displayed `Value`, and a
+folding projection changes the occurrence's fold annotation using the default
+it determined. This also works for source-less `at` values. Inner widget
 handlers take precedence (for example, copying a text selection). Structural
 cut copies that same value, then attempts deletion through the selection's
 conject; a source-less value can be copied but not deleted.

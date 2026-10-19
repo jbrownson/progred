@@ -699,7 +699,7 @@ fn sample_text_line_claims_its_own_hover() {
 }
 
 #[test]
-fn custom_match_projection_uses_the_editor_fold() {
+fn control_forms_fold_as_their_projection_chooses() {
     let arm = Value::record([
         (
             crate::libraries::control::vocabulary::PATTERN,

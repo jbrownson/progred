@@ -212,8 +212,8 @@ projection uses its allocation-free identity case.
 Selection and annotations remain local to the occurrence, while document reads
 and mutations resolve through the same conject. Document-editing shell commands
 use the scope retained by the selection too. Copy and fold are instead supplied
-by the current projection, using its displayed value and fold default without
-requiring a document source. A detached occurrence has no document source;
+by the current projection, using its displayed value and its own fold default
+without requiring a document source. A detached occurrence has no document source;
 read-only behavior follows from that rather than a widget-specific write veto.
 Ordinary decorations do not resolve paths or inspect selection.
 

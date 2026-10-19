@@ -35,7 +35,11 @@ pub(crate) fn at_root<W: 'static, H: 'static, R>(
     run(&mut crate::display::widget::Context {
         text,
         project,
-        toolkit: &Occurrence { cx, path: &[] },
+        toolkit: &Occurrence {
+            cx,
+            path: &[],
+            ancestors: &super::Ancestry::default(),
+        },
         value,
     })
 }

@@ -505,7 +505,7 @@ pub fn library<W: Host>() -> Library<W> {
         // but ordinary partial failures still try the next projection.
         crate::display::compose_partials([
             crate::display::runtime_partial(evaluate_display),
-            crate::display::runtime_partial(call_display),
+            crate::display::fold::folding(crate::display::runtime_partial(call_display)),
             crate::display::runtime_partial(lambda_display),
             crate::display::runtime_partial(value_display),
             crate::display::runtime_partial(ffi_display),

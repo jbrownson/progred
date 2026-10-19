@@ -2,7 +2,6 @@
 //! retain source provenance, and fall back to total structural display.
 
 mod child;
-mod fold;
 #[cfg(test)]
 pub(crate) mod test_support;
 #[cfg(test)]
@@ -31,7 +30,6 @@ use puri::handler::HasHandler;
 use puri::text::TextCtx;
 use std::collections::HashSet;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 /// The toolkit's types over the editor, which hosts everything the runtime
 /// projects. Display and the libraries stay generic over their host, through
@@ -124,6 +122,7 @@ pub(crate) struct Cx<'a> {
 struct Occurrence<'a> {
     cx: &'a Cx<'a>,
     path: &'a [Step],
+    ancestors: &'a Ancestry,
 }
 
 impl Occurrence<'_> {
@@ -163,6 +162,16 @@ impl crate::display::Viewing for Occurrence<'_> {
         self.cx
             .selection
             .is_some_and(|selection| selection.path().starts_with(&below))
+    }
+
+    fn inside(&self, cell: CellId) -> bool {
+        self.ancestors.cells.contains(&cell)
+    }
+
+    fn inside_a_cell(&self) -> bool {
+        self.ancestors
+            .enclosing
+            .is_some_and(|(_, _, start)| self.path.len() > start)
     }
 }
 
@@ -339,6 +348,7 @@ fn prepare(
             toolkit: &Occurrence {
                 cx: scope.cx,
                 path: scope.path,
+                ancestors: scope.ancestors,
             },
             value: scope.value,
         },
@@ -743,14 +753,13 @@ fn highlighted(
 }
 
 /// Standard commands for this displayed value, below its own widget handlers:
-/// copy and cut, folding when it folds, and deleting it.
+/// copy and cut, and deleting it.
 /// The occurrence identifies the selection; only mutations need its conject.
 fn bind_selection(
     child: Measured<HoverPass<crate::Editor>>,
     root: crate::display::widget::view::Root,
     path: SharedPath,
     value: grap::RuntimeValue,
-    fold_default: Option<bool>,
     scale: f64,
 ) -> Measured<HoverPass<crate::Editor>> {
     before(child, move |p, _| {
@@ -772,29 +781,10 @@ fn bind_selection(
                         true
                     }
                 } else {
-                    match fold_default.zip(fold_key(command, event)) {
-                        Some((default, closed)) => {
-                            editor.session().set_folded(&root, &path, default, closed)
-                        }
-                        None => editor.delete_key(input.geometry(scale), event),
-                    }
+                    editor.delete_key(input.geometry(scale), event)
                 }
         })
     })
-}
-
-/// The fold a key asks of a selected value: Space toggles it, and the
-/// command modifier with Up closes it and with Down opens it.
-fn fold_key(
-    command: puri::keyboard::CommandModifier,
-    event: &KeyboardEvent,
-) -> Option<Option<bool>> {
-    match &event.key {
-        Key::Character(key) if key.as_str() == " " => Some(None),
-        Key::Named(NamedKey::ArrowUp) if command.pressed(&event.modifiers) => Some(Some(true)),
-        Key::Named(NamedKey::ArrowDown) if command.pressed(&event.modifiers) => Some(Some(false)),
-        _ => None,
-    }
 }
 
 fn ground(cx: &Cx, source: Option<&Location>, value: Option<&grap::RuntimeValue>) -> Ground {
@@ -857,27 +847,15 @@ fn prepare_value(
                 .then(|| projection.without_entry())
         });
     let child_projection = child_projection.as_ref().unwrap_or(projection);
-    // Ancestry is already available from projection; folds must not re-read an
-    // occurrence as a document path (and computed values have no such path).
-    // Only the cells a view reaches directly open: references inside a cell's
-    // definition start folded, so a call doesn't inline its callee, nor a
-    // shared cell expand again at every use, whichever projection draws them.
-    // A cell that is only a reference to another opens through to it.
-    let fold_default = value.and_then(|value| {
-        let folded = value.as_cell().is_some_and(|cell| {
-            ancestors.cells.contains(&cell)
-                || ancestors
-                    .enclosing
-                    .is_some_and(|(_, _, start)| path.len() > start)
-        });
-        crate::selection::collapse_default_for_value(&cx.sources, value, folded)
-    });
     let layout = value_layout(
-        ProjectionScope { value, ..scope },
+        ProjectionScope {
+            value,
+            ancestors,
+            ..scope
+        },
         current_projection,
         &child_projection.partial,
         source.as_ref(),
-        fold_default,
     );
     let prepared = match layout {
         None => {
@@ -889,7 +867,11 @@ fn prepare_value(
                 crate::display::raw::picker(crate::display::CompletionKind::Value)
             };
             ChoiceLayout::fixed(crate::display::widget::picker::hole(
-                &Occurrence { cx, path },
+                &Occurrence {
+                    cx,
+                    path,
+                    ancestors,
+                },
                 tcx,
                 &picker,
             ))
@@ -957,14 +939,9 @@ fn prepare_value(
                     selected,
                 );
                 let placed = match selected_value {
-                    Some(value) => bind_selection(
-                        placed,
-                        root,
-                        landmark_path.clone(),
-                        value,
-                        fold_default,
-                        scale,
-                    ),
+                    Some(value) => {
+                        bind_selection(placed, root, landmark_path.clone(), value, scale)
+                    }
                     None => placed,
                 };
                 match target {
@@ -996,53 +973,48 @@ fn value_layout(
     current_projection: Option<&Partial>,
     default_projection: &Partial,
     source: Option<&Location>,
-    fold_default: Option<bool>,
 ) -> Option<Layout> {
     let ProjectionScope {
         cx,
         projection,
         path,
+        ancestors,
         value,
-        ..
     } = scope;
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
-    // A closed fold draws as its brackets around an ellipsis.
-    value
-        .zip(fold_default)
-        .filter(|(_, default)| crate::annotations::folded(cx.annotations.at(path), *default))
-        .and_then(|(value, default)| fold::collapsed_layout(cx, path, value, default))
-        .or_else(|| {
-            let selection = cx
-                .selection
-                .filter(|current| current.path() == path)
-                .map(Selection::payload);
-            let pending = if cx.pending_edge_under(path).is_some() {
-                Some(crate::display::Pending::Field)
-            } else {
-                cx.pending_child_of(path)
-                    .map(crate::display::Pending::Child)
-            };
-            let state = cx.annotations.at(path);
-            let occurrence = || cx.site(Rc::from(path));
-            let input = crate::display::ProjectionInput {
-                env: &Occurrence { cx, path },
-                default_projection: default_projection.clone(),
-                value,
-                scale_factor: cx.styles.scale,
-                writable: source
-                    .is_some_and(|source| crate::location::writable(&cx.sources, source)),
-                selection: selection.as_ref(),
-                pending,
-                state,
-                occurrence: &occurrence,
-            };
-            match current_projection {
-                Some(current) => current(&input),
-                None => projection.apply(&input),
-            }
-            .or_else(|| crate::display::raw::view(&input))
-        })
+    let selection = cx
+        .selection
+        .filter(|current| current.path() == path)
+        .map(Selection::payload);
+    let pending = if cx.pending_edge_under(path).is_some() {
+        Some(crate::display::Pending::Field)
+    } else {
+        cx.pending_child_of(path)
+            .map(crate::display::Pending::Child)
+    };
+    let state = cx.annotations.at(path);
+    let occurrence = || cx.site(Rc::from(path));
+    let input = crate::display::ProjectionInput {
+        env: &Occurrence {
+            cx,
+            path,
+            ancestors,
+        },
+        default_projection: default_projection.clone(),
+        value,
+        scale_factor: cx.styles.scale,
+        writable: source.is_some_and(|source| crate::location::writable(&cx.sources, source)),
+        selection: selection.as_ref(),
+        pending,
+        state,
+        occurrence: &occurrence,
+    };
+    match current_projection {
+        Some(current) => current(&input),
+        None => projection.apply(&input),
+    }
+    .or_else(|| crate::display::raw::view(&input))
 }
 
 /// Every projected value's Pick backstop: pick the value into an open

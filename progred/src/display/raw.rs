@@ -2,16 +2,20 @@
 //! constructors and what's typed read as a value. Raw's holes list the
 //! offers, and a projection can offer them among its own, as Grap's slots do.
 
+use crate::display::fold::{cell_starts_closed, foldable};
 use crate::display::host::{Layout, ProjectionInput};
 use crate::display::widget::offers::{Entry, HoleOffers, entry, fitting, rank};
 use crate::display::widget::picker::Picker;
-use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face, Host};
+use crate::display::{
+    Completion, CompletionKind, CompletionRequest, CompletionScope, Delim, Face, Host,
+};
 use gid::{Value, new_cell_id};
 use std::rc::Rc;
 
 /// Raw's view of the value at `input`, GID's own kinds and nothing else: a
-/// blob reads as its hex, a cell as its definition followed between
-/// parentheses, and lists and records as their structure.
+/// blob reads as its hex, a cell as its value followed between parentheses,
+/// and lists and records as their structure. Cells, lists and records fold;
+/// lists and records start open, and cells as [`cell_starts_closed`] says.
 pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let value = input.value?;
     Some(match value.shape() {
@@ -22,10 +26,22 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
         ),
         ::grap::Shape::Cell(cell) => cell_view(input, cell),
         ::grap::Shape::List(positions) => {
-            crate::display::structure::list_layout_at(input, positions, None)
+            let empty = positions.is_empty();
+            let open = crate::display::structure::list_layout_at(input, positions, None);
+            if empty {
+                open
+            } else {
+                foldable(Delim::Bracket, None, |_| false, open)
+            }
         }
         ::grap::Shape::Record(keys) => {
-            crate::display::structure::record_layout_at(input, keys, |_| None)
+            let empty = keys.is_empty();
+            let open = crate::display::structure::record_layout_at(input, keys, |_| None);
+            if empty {
+                open
+            } else {
+                foldable(Delim::Brace, None, |_| false, open)
+            }
         }
     })
 }
@@ -43,19 +59,43 @@ fn blob_text(bytes: &[u8]) -> String {
     }
 }
 
-/// A cell as its definition, followed where it resolves, between parentheses.
+/// A cell as its value, followed where it resolves, between parentheses;
+/// closed, as its name.
 fn cell_view<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     cell: gid::CellId,
 ) -> Layout<W> {
-    let resolution = input
-        .env
-        .resolve(cell)
-        .map_or(gid::Resolution::Document, |cell| cell.resolution);
-    crate::display::structure::authoring(crate::display::group(crate::display::selectable_bracket(
-        crate::display::Delim::Paren,
-        crate::display::descend([gid::Step::Follow(resolution)], None, None),
-    )))
+    let resolved = input.env.resolve(cell);
+    let open = crate::display::structure::authoring(crate::display::group(
+        crate::display::selectable_bracket(
+            Delim::Paren,
+            crate::display::descend(
+                [gid::Step::Follow(
+                    resolved
+                        .as_ref()
+                        .map_or(gid::Resolution::Document, |definition| {
+                            definition.resolution
+                        }),
+                )],
+                None,
+                None,
+            ),
+        ),
+    ));
+    let Some(definition) = resolved else {
+        return open;
+    };
+    let value = definition.value.clone();
+    let name = match input.env.name(cell) {
+        Some(name) => crate::display::faced(name, Face::Name),
+        None => crate::display::faced(crate::identity::short_id(cell), Face::Id),
+    };
+    foldable(
+        Delim::Paren,
+        Some(name),
+        move |viewing| cell_starts_closed(viewing, cell, &value),
+        open,
+    )
 }
 
 /// Raw's picker for a hole of `kind`, its brackets making its constructors.

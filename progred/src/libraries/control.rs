@@ -905,14 +905,18 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions(),
     )
-    .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(match_display),
-        crate::display::runtime_partial(bindings_display),
-        crate::display::runtime_partial(do_display),
-        crate::display::runtime_partial(|input| expression_list_display(input, vocabulary::ALL)),
-        crate::display::runtime_partial(quote_display),
-        crate::display::runtime_partial(unquote_display),
-    ]))
+    .with_projection(crate::display::fold::folding(
+        crate::display::compose_partials([
+            crate::display::runtime_partial(match_display),
+            crate::display::runtime_partial(bindings_display),
+            crate::display::runtime_partial(do_display),
+            crate::display::runtime_partial(|input| {
+                expression_list_display(input, vocabulary::ALL)
+            }),
+            crate::display::runtime_partial(quote_display),
+            crate::display::runtime_partial(unquote_display),
+        ]),
+    ))
 }
 
 #[cfg(test)]

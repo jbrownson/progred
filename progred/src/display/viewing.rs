@@ -25,6 +25,12 @@ pub trait Viewing {
     fn state_below(&self, steps: &[Step]) -> Option<&Value>;
     /// Whether the selection is `steps` below this occurrence, or deeper.
     fn selected_below(&self, steps: &[Step]) -> bool;
+    /// Whether this occurrence sits inside `cell`'s value, so drawing
+    /// `cell` here would draw that value again inside itself.
+    fn inside(&self, cell: gid::CellId) -> bool;
+    /// Whether this occurrence sits inside some cell's value, rather than
+    /// being reached directly by the view or being a cell's whole value.
+    fn inside_a_cell(&self) -> bool;
 }
 
 /// What the toolkit's own widgets read besides: the theme, the occurrence's

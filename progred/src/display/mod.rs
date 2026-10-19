@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 pub mod builder;
+pub mod fold;
 pub mod host;
 pub use host::Host;
 mod measure;

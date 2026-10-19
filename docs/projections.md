@@ -177,11 +177,12 @@ having no source is distinct and does not offer document editing. Selection,
 navigation, and annotations always belong to the displayed occurrence.
 
 The common preparation boundary for `descend`, `at`, and `jump` supplies
-selected-value copy/cut and fold handlers below the projected widget's own
-handlers. Copy captures the actual projected value, not a document lookup.
-Fold captures the value's collapse default and updates only occurrence-local
-annotations; even an occurrence with no document source can copy and fold.
-Only the deletion half of cut requires a document destination.
+selected-value copy/cut handlers below the projected widget's own handlers.
+Copy captures the actual projected value, not a document lookup. A projection
+that folds supplies its own fold keys, with the default it chose, and updates
+only occurrence-local annotations; even an occurrence with no document source
+can copy and fold. Only the deletion half of cut requires a document
+destination.
 
 The shared read-only decoration uses the palette's `readonly_ground` for computed
 output and external definitions. Preparation threads the enclosing ground through

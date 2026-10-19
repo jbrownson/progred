@@ -500,46 +500,6 @@ pub fn resolve_query(text: &str) -> Value {
     }
 }
 
-/// The collapse class of an already-resolved value. Projection has
-/// the ancestor cells in hand as it walks and supplies whether a
-/// collapsible value starts `folded` (inside a cycle, say).
-pub(crate) fn collapse_default_for_value(
-    sources: &Sources,
-    value: &grap::RuntimeValue,
-    folded: bool,
-) -> Option<bool> {
-    let collapsible = value.as_text().is_none()
-        && value.as_f64().is_none()
-        && match value.as_cell() {
-            Some(cell) => sources
-                .resolve(cell)
-                .is_some_and(|definition| !plain(definition.value)),
-            None => value
-                .list_len()
-                .or_else(|| value.record_len())
-                .is_some_and(|len| len != 0),
-        };
-    collapsible.then_some(folded)
-}
-
-/// Nothing more than a name and a plain value: bytes, or a record holding,
-/// besides its name, nothing or one field of bytes, such as a parameter, a
-/// number, text or a color. A cell holding one shows the same closed as
-/// open, so it never folds.
-fn plain(value: &Value) -> bool {
-    value.as_blob().is_some()
-        || value.as_record().is_some_and(|fields| {
-            let mut kept = fields
-                .iter()
-                .filter(|(key, _)| *key != crate::libraries::name::vocabulary::NAME);
-            match (kept.next(), kept.next()) {
-                (None, _) => true,
-                (Some((_, field)), None) => field.as_blob().is_some(),
-                _ => false,
-            }
-        })
-}
-
 /// After a commit, select `path` below the committing site, with `payload`.
 pub fn at(path: &[Step], payload: Value) -> crate::site::Continuation {
     let path = path.to_vec();

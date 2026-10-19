@@ -49,6 +49,11 @@ impl Site {
         Hover::Value(self.path.clone())
     }
 
+    /// What hovering what opens this occurrence's fold shows.
+    pub(crate) fn toggle_hover(&self) -> Hover {
+        Hover::Toggle(self.path.clone())
+    }
+
     /// Work `computations` keeps for this occurrence across frames, made by
     /// `create` the first time.
     pub(crate) fn memo<T: 'static>(

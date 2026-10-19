@@ -20,6 +20,7 @@ use kurbo::{Point, Rect};
 use measured::Extent;
 use peniko::Brush;
 use ui_events::ScrollDelta;
+use ui_events::keyboard::{Key, NamedKey};
 use ui_events::pointer::{PointerButton, PointerScrollEvent, PointerState};
 use uig::Placement;
 
