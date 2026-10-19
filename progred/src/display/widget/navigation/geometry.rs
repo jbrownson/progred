@@ -87,8 +87,9 @@ impl<W: Host> Geometry<'_, W> {
     }
 }
 
-/// The scroll offset along one axis that shows the `target` span within the
-/// `viewport` span, both in pixels, moving as little as it can from `current`.
+/// The scroll offset along one axis that shows the span from `start` to `end`
+/// within the viewport's span from `viewport_start` to `viewport_end`, both
+/// in pixels, moving as little as it can from `current`.
 fn reveal_axis(
     current: f64,
     maximum: f64,

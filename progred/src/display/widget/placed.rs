@@ -87,7 +87,8 @@ impl<C: 'static, H: Clone + PartialEq + 'static> Placed<'_, '_, C, H> {
         self.context.occlude(placement);
     }
 
-    /// Run `action` on a primary press over `target`.
+    /// Run `action` on a primary press over `target` without the command
+    /// key held.
     pub fn activate(&mut self, target: H, action: impl Fn(&mut C) -> bool + 'static) {
         if self.visible {
             self.context

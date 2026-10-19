@@ -171,7 +171,8 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
     }
 
     /// A primary press over `target`, as this frame's hover settled, runs
-    /// `activate`, or `pick` while the command key is held.
+    /// `activate`, or `pick` while the command key is held. Most callers take
+    /// one of the two and pass `|_, _| false` for the other.
     pub fn on_press(
         &mut self,
         target: H,

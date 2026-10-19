@@ -110,8 +110,8 @@ pub fn on_state_drag<W: Host>(
 }
 
 /// While the command modifier is held, what can be dragged here is outlined
-/// as hovering outlines a value, in the drag color: every place the pointer
-/// can drag shows at once.
+/// as hovering outlines a value, in the palette's literal color: every place
+/// the pointer can drag shows at once.
 pub fn drag_outlined<W: 'static, H: 'static>(
     child: crate::display::Layout<W, H>,
 ) -> crate::display::Layout<W, H> {
