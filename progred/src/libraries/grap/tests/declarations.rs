@@ -332,14 +332,14 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
             .landmark(&extra_path)
             .is_some()
     );
-    world.model.workspace.document.projection = crate::workspace::Projection::Raw;
+    world.model.workspace.document.shown = crate::workspace::Shown::RAW;
     assert!(
         editing_frame(&mut world)
             .landmarks
             .landmark(&extra_path)
             .is_some()
     );
-    world.model.workspace.document.projection = crate::workspace::Projection::Standard;
+    world.model.workspace.document.shown = crate::workspace::Shown::ALL;
     let pending = pending_edge(
         &crate::test_root(),
         &crate::editing::Scope::default().view(src(&doc, &libraries)),
@@ -624,9 +624,9 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
             frame.landmarks.landmark(&[Step::Key(extra)]).is_some()
         };
         assert!(!has_metadata(&editing_frame(&mut world)));
-        world.model.workspace.document.projection = crate::workspace::Projection::Raw;
+        world.model.workspace.document.shown = crate::workspace::Shown::RAW;
         assert!(has_metadata(&editing_frame(&mut world)));
-        world.model.workspace.document.projection = crate::workspace::Projection::Standard;
+        world.model.workspace.document.shown = crate::workspace::Shown::ALL;
         world.model.selection = pending_edge(
             &crate::test_root(),
             &crate::editing::Scope::default().view(world.sources()),
@@ -736,7 +736,7 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
                 .landmark(&[Step::Key(extra)])
                 .is_some()
         );
-        world.model.workspace.document.projection = crate::workspace::Projection::Raw;
+        world.model.workspace.document.shown = crate::workspace::Shown::RAW;
         assert!(
             editing_frame(&mut world)
                 .landmarks

@@ -18,9 +18,9 @@ empty.
   `macos_window.rs` and `macos_surface.rs` read a window's AppKit view; and
   app.rs's macOS branches: `App::new`'s menu and window cascade,
   `create_window`, `activate`, `change_palette`, and theme changes. Open
-  several windows, open and move panes from the View menu, switch a library's
-  projection off and on from the Projections menu, and switch between Light,
-  Dark and Follow System Appearance.
+  several windows, open and move panes from the View menu, choose All, Plain
+  and Raw and switch a library off and on from the Projections menu, and
+  switch between Light, Dark and Follow System Appearance.
 
 ## Later
 

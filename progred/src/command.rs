@@ -2,6 +2,7 @@
 //! shortcuts — asks the app to do. Application commands are meaningful
 //! with no window at all; document commands act on one editor.
 
+use crate::stack::Preset;
 use crate::workspace::{Move, Side};
 
 /// Match only the commands contributed by this component.
@@ -133,10 +134,11 @@ pub enum DocCommand {
     OpenPane(Side),
     /// Move the selected pane.
     MovePane(Move),
-    Plain,
-    Raw,
-    /// One library's projection in the selected area. Menus label it with
-    /// the library's name.
+    /// Show a preset's libraries in the selected area, or every library if
+    /// it shows them already.
+    Preset(Preset),
+    /// Switch one library off, or back on, in the selected area. Menus label
+    /// it with the library's name.
     Projection(gid::CellId),
     // On the web, the browser's page zoom does this.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -318,8 +320,11 @@ pub fn spec(command: Command) -> Spec {
         Command::Doc(DocCommand::MovePane(Move::Down)) => item("Move Pane Down", None),
         Command::Doc(DocCommand::MovePane(Move::Left)) => item("Move Pane Left", None),
         Command::Doc(DocCommand::MovePane(Move::Right)) => item("Move Pane Right", None),
-        Command::Doc(DocCommand::Plain) => toggle("Plain", None),
-        Command::Doc(DocCommand::Raw) => toggle("Raw", Some(Shortcut::plain(ShortcutKey::R))),
+        Command::Doc(DocCommand::Preset(Preset::All)) => toggle("All", None),
+        Command::Doc(DocCommand::Preset(Preset::Plain)) => toggle("Plain", None),
+        Command::Doc(DocCommand::Preset(Preset::Raw)) => {
+            toggle("Raw", Some(Shortcut::plain(ShortcutKey::R)))
+        }
         Command::Doc(DocCommand::Projection(_)) => toggle("Projection", None),
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         Command::Doc(DocCommand::ActualSize) => {
@@ -371,7 +376,7 @@ impl Availability {
             DocCommand::MovePane(Move::Down) => self.move_down,
             DocCommand::MovePane(Move::Left) => self.move_left,
             DocCommand::MovePane(Move::Right) => self.move_right,
-            DocCommand::Plain | DocCommand::Raw | DocCommand::Projection(_) => true,
+            DocCommand::Preset(_) | DocCommand::Projection(_) => true,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.actual_size,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -393,18 +398,17 @@ impl Availability {
 /// display this answer.
 #[derive(Clone, Default)]
 pub struct Toggles {
-    pub plain: bool,
-    pub raw: bool,
-    /// Libraries whose projections the selected area leaves off.
-    pub hidden: Vec<gid::CellId>,
+    /// The libraries the selected area shows.
+    pub shown: crate::workspace::Shown,
+    /// The preset they make, if any.
+    pub preset: Option<Preset>,
 }
 
 impl Toggles {
     pub fn checked(&self, command: Command) -> bool {
         match command {
-            Command::Doc(DocCommand::Plain) => self.plain,
-            Command::Doc(DocCommand::Raw) => self.raw,
-            Command::Doc(DocCommand::Projection(library)) => !self.hidden.contains(&library),
+            Command::Doc(DocCommand::Preset(preset)) => self.preset == Some(preset),
+            Command::Doc(DocCommand::Projection(library)) => self.shown.shows(library),
             _ => false,
         }
     }

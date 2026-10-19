@@ -41,9 +41,10 @@ fn drawn_label(shortcut: command::Shortcut, command: puri::keyboard::CommandModi
     )
 }
 
-/// One `Projections` entry per library that brings a projection, after the
-/// fixed menus.
+/// The fixed menus, then `Projections`: the presets, and an entry for each
+/// library an area can switch off.
 pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Menu> {
+    use crate::stack::Preset;
     use crate::workspace::{Move, Side};
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
     #[cfg(target_arch = "wasm32")]
@@ -76,7 +77,7 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
         Entry::Command(C::Doc(D::ZoomIn)),
         Entry::Command(C::Doc(D::ZoomOut)),
     ];
-    let mut menus = vec![
+    vec![
         Menu {
             label: "File",
             entries: file_entries,
@@ -105,26 +106,25 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
                 Entry::Command(C::Doc(D::MovePane(Move::Down))),
                 Entry::Command(C::Doc(D::MovePane(Move::Left))),
                 Entry::Command(C::Doc(D::MovePane(Move::Right))),
-                Entry::Separator,
-                Entry::Command(C::Doc(D::Plain)),
-                Entry::Command(C::Doc(D::Raw)),
             ]
             .into_iter()
             .chain(zoom_entries)
             .collect(),
         },
-    ];
-    let projections = projections
-        .into_iter()
-        .map(|library| Entry::Command(C::Doc(D::Projection(library))))
-        .collect::<Vec<_>>();
-    if !projections.is_empty() {
-        menus.push(Menu {
+        Menu {
             label: "Projections",
-            entries: projections,
-        });
-    }
-    menus
+            entries: Preset::ALL
+                .into_iter()
+                .map(|preset| Entry::Command(C::Doc(D::Preset(preset))))
+                .chain([Entry::Separator])
+                .chain(
+                    projections
+                        .into_iter()
+                        .map(|library| Entry::Command(C::Doc(D::Projection(library)))),
+                )
+                .collect(),
+        },
+    ]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -28,13 +28,47 @@ pub mod vocabulary {
 
 const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Projection {
-    Standard,
-    /// Raw's structure with names, text, bytes and numbers reading as
-    /// themselves.
-    Plain,
-    Raw,
+/// The libraries an area shows: their projections, their offers and, for
+/// the name library, names. Those it leaves off keep their definitions
+/// loaded, so code still runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Shown {
+    /// Every library but these.
+    AllBut(Vec<CellId>),
+    /// Only these, whatever else is loaded.
+    Only(Vec<CellId>),
+}
+
+impl Shown {
+    /// Every library.
+    pub const ALL: Self = Self::AllBut(Vec::new());
+    /// No library: GID's own kinds as they are.
+    pub const RAW: Self = Self::Only(Vec::new());
+
+    /// Whether `library` shows.
+    pub fn shows(&self, library: CellId) -> bool {
+        match self {
+            Self::AllBut(hidden) => !hidden.contains(&library),
+            Self::Only(shown) => shown.contains(&library),
+        }
+    }
+
+    /// Switches `library` off, or back on.
+    fn toggle(&mut self, library: CellId) {
+        let (Self::AllBut(libraries) | Self::Only(libraries)) = self;
+        match libraries.iter().position(|id| *id == library) {
+            Some(index) => {
+                libraries.remove(index);
+            }
+            None => libraries.push(library),
+        }
+    }
+}
+
+impl Default for Shown {
+    fn default() -> Self {
+        Self::ALL
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,11 +79,7 @@ pub enum Side {
 
 pub struct View {
     pub root: Root,
-    pub projection: Projection,
-    /// Libraries switched off in this area: their projections, offers and,
-    /// for the name library, names. Their definitions stay loaded, so code
-    /// still runs.
-    pub hidden: Vec<CellId>,
+    pub shown: Shown,
     /// Sparse projection-local state. Two views over the same GID
     /// location deliberately do not share folds or other annotations.
     pub annotations: Annotations,
@@ -61,8 +91,7 @@ impl View {
     fn new(root: Root) -> Self {
         Self {
             root,
-            projection: Projection::Standard,
-            hidden: Vec::new(),
+            shown: Shown::ALL,
             annotations: Annotations::default(),
             scroll: Vec2::ZERO,
         }
@@ -410,36 +439,19 @@ impl Workspace {
             .unwrap_or(&self.document)
     }
 
-    /// Switch the selected area to `projection`, or back to the standard
-    /// one if it's already showing it.
-    pub fn toggle_projection(&mut self, selected: Option<&Root>, projection: Projection) {
-        let toggle = |view: &mut View| {
-            view.projection = if view.projection == projection {
-                Projection::Standard
-            } else {
-                projection
-            };
-        };
+    /// Show `shown` in the selected area.
+    pub fn show(&mut self, selected: Option<&Root>, shown: Shown) {
         match selected.and_then(|root| self.view_mut(root)) {
-            Some(view) => toggle(view),
-            None => toggle(&mut self.document),
+            Some(view) => view.shown = shown,
+            None => self.document.shown = shown,
         }
     }
 
-    /// Switch one library's projection off, or back on, in the selected
-    /// area.
-    pub fn toggle_library_projection(&mut self, selected: Option<&Root>, library: CellId) {
-        fn toggle(view: &mut View, library: CellId) {
-            match view.hidden.iter().position(|hidden| *hidden == library) {
-                Some(index) => {
-                    view.hidden.remove(index);
-                }
-                None => view.hidden.push(library),
-            }
-        }
+    /// Switch one library off, or back on, in the selected area.
+    pub fn toggle_library(&mut self, selected: Option<&Root>, library: CellId) {
         match selected.and_then(|root| self.view_mut(root)) {
-            Some(view) => toggle(view, library),
-            None => toggle(&mut self.document, library),
+            Some(view) => view.shown.toggle(library),
+            None => self.document.shown.toggle(library),
         }
     }
 

@@ -15,7 +15,7 @@ fn commands(sections: &[Section]) -> Vec<Command> {
 #[test]
 fn the_native_tree_lists_every_command_once() {
     let stack = crate::stack::load();
-    let definition = definition(stack.projections());
+    let definition = definition(stack.switchable());
     assert_eq!(
         definition
             .iter()
@@ -34,7 +34,7 @@ fn the_native_tree_lists_every_command_once() {
     let commands = commands(&definition);
     assert_eq!(
         commands.len(),
-        23 + Example::ALL.len() + stack.projections().count()
+        24 + Example::ALL.len() + stack.switchable().count()
     );
     for (index, command) in commands.iter().enumerate() {
         assert!(commands[index + 1..].iter().all(|other| command != other));
@@ -44,9 +44,9 @@ fn the_native_tree_lists_every_command_once() {
 #[test]
 fn both_menu_systems_expose_the_same_commands_except_native_appearance() {
     let stack = crate::stack::load();
-    let mut native = commands(&definition(stack.projections()));
+    let mut native = commands(&definition(stack.switchable()));
     native.retain(|command| !matches!(command, Command::App(AppCommand::Appearance(_))));
-    let drawn_definition = crate::menu::definition(stack.projections().map(|(library, _)| library));
+    let drawn_definition = crate::menu::definition(stack.switchable().map(|(library, _)| library));
     let mut drawn = crate::menu::commands(&drawn_definition).collect::<Vec<_>>();
     let key = |command: &Command| format!("{command:?}");
     native.sort_by_key(key);

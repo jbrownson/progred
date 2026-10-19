@@ -724,7 +724,10 @@ fn raw_shortcut_is_contributed_only_by_the_menu() {
             let mut runner = crate::EditorRunner::new(editor);
             let viewport = Size::new(620.0, 304.0);
             runner.refresh_frame(1.0, viewport);
-            assert!(!runner.editor.menu_toggles().raw);
+            let raw = |runner: &crate::EditorRunner| {
+                runner.editor.menu_toggles().preset == Some(crate::stack::Preset::Raw)
+            };
+            assert!(!raw(&runner));
             assert_eq!(
                 runner.keyboard_event(
                     &key_down(Key::Character("r".into()), modifiers),
@@ -733,7 +736,17 @@ fn raw_shortcut_is_contributed_only_by_the_menu() {
                 ),
                 menu
             );
-            assert_eq!(runner.editor.menu_toggles().raw, menu);
+            assert_eq!(raw(&runner), menu);
+            // Again, it goes back to every library.
+            runner.keyboard_event(
+                &key_down(Key::Character("r".into()), modifiers),
+                1.0,
+                viewport,
+            );
+            assert_eq!(
+                runner.editor.menu_toggles().preset,
+                Some(crate::stack::Preset::All)
+            );
         }
     }
 }
@@ -742,10 +755,9 @@ fn raw_shortcut_is_contributed_only_by_the_menu() {
 fn raw_switches_every_library_off() {
     let stack = crate::stack::load();
     let document = Document::default();
-    let view = |projection| workspace::View {
+    let view = |shown| workspace::View {
         root: crate::test_root(),
-        projection,
-        hidden: Vec::new(),
+        shown,
         annotations: Default::default(),
         scroll: Vec2::ZERO,
     };
@@ -762,10 +774,10 @@ fn raw_switches_every_library_off() {
         .unwrap_or_default()
         .len()
     };
-    let standard = view(workspace::Projection::Standard);
+    let standard = view(workspace::Shown::ALL);
     assert!(names(&stack, &standard));
     assert!(starters(&standard) > 0);
-    let raw = view(workspace::Projection::Raw);
+    let raw = view(workspace::Shown::RAW);
     assert!(!names(&stack, &raw));
     assert_eq!(starters(&raw), 0);
 }
@@ -1082,7 +1094,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         }
     }
     for pane in &mut model.workspace.left.panes {
-        pane.view.projection = workspace::Projection::Raw;
+        pane.view.shown = workspace::Shown::RAW;
     }
     let raw = place(&model);
     assert_eq!(calls.replace(0), 0);
@@ -1102,7 +1114,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         }
     }
     for pane in &mut model.workspace.left.panes {
-        pane.view.projection = workspace::Projection::Standard;
+        pane.view.shown = workspace::Shown::ALL;
     }
     *result.borrow_mut() = ::grap::absent::value(projector);
     let absent = place(&model);
@@ -1241,8 +1253,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
 
         let raw = workspace::View {
             root: pane.root.clone(),
-            projection: workspace::Projection::Raw,
-            hidden: Vec::new(),
+            shown: workspace::Shown::RAW,
             annotations: Default::default(),
             scroll: Vec2::ZERO,
         };

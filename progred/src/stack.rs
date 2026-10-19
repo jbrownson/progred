@@ -9,12 +9,13 @@ use crate::libraries::{
 use crate::library::{Libraries, Library};
 use crate::projection::Partial;
 use crate::projection::Projection;
+use crate::workspace::Shown;
+use std::borrow::Cow;
 use std::rc::Rc;
 
-/// The libraries Plain reads through, for the editor and the tutorial page
-/// alike: names, text, bytes and absent values read as themselves, and
-/// numbers as numbers, but nothing else a library draws, so calls,
-/// arithmetic included, stay records.
+/// The libraries Plain shows, for the editor and the tutorial page alike:
+/// names, text, bytes, absent values and numbers read as themselves, and
+/// everything else as Raw draws it.
 pub const PLAIN: [gid::CellId; 7] = [
     name::ID,
     text::ID,
@@ -24,6 +25,28 @@ pub const PLAIN: [gid::CellId; 7] = [
     f64::ID,
     u64::ID,
 ];
+
+/// The sets of libraries the Projections menu offers by name. Any other set
+/// is a custom one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Preset {
+    All,
+    Plain,
+    Raw,
+}
+
+impl Preset {
+    pub const ALL: [Self; 3] = [Self::All, Self::Plain, Self::Raw];
+
+    /// The libraries this preset shows.
+    pub fn shown(self) -> Shown {
+        match self {
+            Self::All => Shown::ALL,
+            Self::Plain => Shown::Only(PLAIN.to_vec()),
+            Self::Raw => Shown::RAW,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Stack {
@@ -38,33 +61,36 @@ pub struct Stack {
 }
 
 impl Stack {
-    /// Each library that brings a projection, and its name, in the order
-    /// projections are tried. The name library's is the labels the core
-    /// still draws for it.
-    pub fn projections(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
+    /// Each library an area can switch off, one bringing a projection or
+    /// offers, and its name, in load order.
+    pub fn switchable(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
         crate::libraries::name::library_names(&self.libraries).filter(|(library, _)| {
-            *library == name::ID || self.partials.iter().any(|(id, _)| id == library)
+            self.partials.iter().any(|(id, _)| id == library)
+                || self.providers.iter().any(|(id, _)| id == library)
         })
     }
 
-    /// Plain's projection, from those of its libraries this stack loads.
-    pub fn plain(&self) -> Projection {
-        Projection::new(
-            PLAIN
-                .into_iter()
-                .filter_map(|library| self.plain_reading(library)),
-        )
+    /// The libraries `shown` leaves off.
+    pub fn hidden<'a>(&self, shown: &'a Shown) -> Cow<'a, [gid::CellId]> {
+        match shown {
+            Shown::AllBut(hidden) => Cow::Borrowed(hidden),
+            Shown::Only(shown) => Cow::Owned(
+                self.libraries
+                    .iter()
+                    .map(|(id, _)| id)
+                    .filter(|id| !shown.contains(id))
+                    .collect(),
+            ),
+        }
     }
 
-    /// A number library draws its numbers but not its arithmetic; Plain's
-    /// other libraries draw as they always do.
-    fn plain_reading(&self, library: gid::CellId) -> Option<Partial> {
-        let (_, partial) = self.partials.iter().find(|(id, _)| *id == library)?;
-        Some(match library {
-            f32::ID => crate::display::runtime_partial(|input| f32::convention().display(input)),
-            f64::ID => crate::display::runtime_partial(|input| f64::convention().display(input)),
-            u64::ID => crate::display::runtime_partial(|input| u64::convention().display(input)),
-            _ => partial.clone(),
+    /// The preset showing what `shown` does of the libraries an area can
+    /// switch off, if one does.
+    pub fn preset(&self, shown: &Shown) -> Option<Preset> {
+        Preset::ALL.into_iter().find(|preset| {
+            let preset = preset.shown();
+            self.switchable()
+                .all(|(library, _)| preset.shows(library) == shown.shows(library))
         })
     }
 

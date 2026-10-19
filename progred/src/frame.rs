@@ -553,16 +553,13 @@ impl EditorRunner {
     }
 }
 
-/// What `view` draws with: Plain's or Raw's projection, or the libraries'
-/// less those the view leaves off, as a pane's when `pane`.
+/// What `view` draws with: the libraries' projections less those the view
+/// leaves off, as a pane's when `pane`.
 fn view_projection<'a>(
     stack: &'a stack::Stack,
     view: &workspace::View,
     pane: bool,
 ) -> Cow<'a, projection::Projection> {
-    if view.projection == workspace::Projection::Plain {
-        return Cow::Owned(stack.plain());
-    }
     match &*hidden(stack, view) {
         [] => Cow::Borrowed(if pane {
             &stack.pane_projection
@@ -576,17 +573,12 @@ fn view_projection<'a>(
     }
 }
 
-/// The libraries switched off in `view`: Raw is every library off.
+/// The libraries switched off in `view`.
 pub(crate) fn hidden<'a>(
     stack: &stack::Stack,
     view: &'a workspace::View,
 ) -> Cow<'a, [gid::CellId]> {
-    match view.projection {
-        workspace::Projection::Raw => {
-            Cow::Owned(stack.libraries.iter().map(|(id, _)| id).collect())
-        }
-        _ => Cow::Borrowed(&view.hidden),
-    }
+    stack.hidden(&view.shown)
 }
 
 /// What `view` offers: none of what its libraries switched off offer.
@@ -610,8 +602,9 @@ struct ViewContent<'a> {
     viewport: bool,
 }
 
-/// What `view` shows in an area of `size` at `scale`: a standard pane whose
-/// value is a viewport fills the pane with it.
+/// What `view` shows in an area of `size` at `scale`: a pane whose value is
+/// a viewport fills the pane with it, while it shows the presentation
+/// library.
 fn view_content<'a>(
     stack: &'a stack::Stack,
     sources: sources::Sources<'a>,
@@ -620,7 +613,7 @@ fn view_content<'a>(
     scale: f64,
 ) -> ViewContent<'a> {
     let viewport = match view.root.target() {
-        Target::Pane { path } if view.projection == workspace::Projection::Standard => {
+        Target::Pane { path } if view.shown.shows(crate::libraries::presentation::ID) => {
             projection::viewport::entry(sources, path)
         }
         _ => None,
@@ -923,7 +916,7 @@ fn project_frame(
                 availability,
                 toggles: toggles.clone(),
                 projections: stack
-                    .projections()
+                    .switchable()
                     .map(|(library, name)| (library, name.to_owned()))
                     .collect(),
                 scale,

@@ -38,18 +38,18 @@ fn add_pane(workspace: &mut Workspace, side: Side) -> Root {
 }
 
 #[test]
-fn plain_and_raw_each_toggle_back_to_the_standard_projection() {
+fn a_library_toggles_whichever_way_the_area_lists_its_libraries() {
+    let [one, other] = [(); 2].map(|_| gid::new_cell_id());
     let mut workspace = Workspace::default();
-    let mut toggle = |projection| {
-        workspace.toggle_projection(None, projection);
-        workspace.document.projection
-    };
-    assert_eq!(toggle(Projection::Plain), Projection::Plain);
-    assert_eq!(toggle(Projection::Raw), Projection::Raw);
-    assert_eq!(toggle(Projection::Plain), Projection::Plain);
-    assert_eq!(toggle(Projection::Plain), Projection::Standard);
-    assert_eq!(toggle(Projection::Raw), Projection::Raw);
-    assert_eq!(toggle(Projection::Raw), Projection::Standard);
+    workspace.toggle_library(None, one);
+    assert!(!workspace.document.shown.shows(one));
+    assert!(workspace.document.shown.shows(other));
+    workspace.show(None, Shown::RAW);
+    workspace.toggle_library(None, one);
+    assert!(workspace.document.shown.shows(one));
+    assert!(!workspace.document.shown.shows(other));
+    workspace.toggle_library(None, one);
+    assert_eq!(workspace.document.shown, Shown::RAW);
 }
 
 #[test]
@@ -180,13 +180,13 @@ fn declared_panes_reconcile_without_losing_view_state() {
     );
     let root = workspace.left.panes[0].view.root.clone();
     workspace.left.panes[0].view.scroll = Vec2::new(4.0, 9.0);
-    workspace.left.panes[0].view.projection = Projection::Raw;
+    workspace.left.panes[0].view.shown = Shown::RAW;
 
     workspace.sync_declared(&[two, one.clone()]);
     let moved = &workspace.left.panes[1].view;
     assert_eq!(moved.root, root);
     assert_eq!(moved.scroll, Vec2::new(4.0, 9.0));
-    assert_eq!(moved.projection, Projection::Raw);
+    assert_eq!(moved.shown, Shown::RAW);
     assert!(!crate::annotations::folded(
         workspace.document.annotations.at(&panes_path),
         false

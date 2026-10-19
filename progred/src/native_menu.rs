@@ -85,8 +85,8 @@ struct Section {
     windows_menu: bool,
 }
 
-/// One `Projections` entry per library that brings a projection, before the
-/// Window menu.
+/// `Projections` before the Window menu: the presets, and an entry for each
+/// library an area can switch off.
 fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>) -> Vec<Section> {
     use crate::workspace::{Move, Side};
     use {AppCommand as A, Command as C, DocCommand as D, Example as E};
@@ -147,9 +147,6 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
                 Entry::Command(C::Doc(D::MovePane(Move::Left))),
                 Entry::Command(C::Doc(D::MovePane(Move::Right))),
                 Entry::Separator,
-                Entry::Command(C::Doc(D::Plain)),
-                Entry::Command(C::Doc(D::Raw)),
-                Entry::Separator,
                 Entry::Command(C::Doc(D::ActualSize)),
                 Entry::Command(C::Doc(D::ZoomIn)),
                 Entry::Command(C::Doc(D::ZoomOut)),
@@ -163,9 +160,13 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
         ),
         section(
             "Projections",
-            projections
+            crate::stack::Preset::ALL
                 .into_iter()
-                .map(|(library, name)| Entry::Labeled(C::Doc(D::Projection(library)), name.into()))
+                .map(|preset| Entry::Command(C::Doc(D::Preset(preset))))
+                .chain([Entry::Separator])
+                .chain(projections.into_iter().map(|(library, name)| {
+                    Entry::Labeled(C::Doc(D::Projection(library)), name.into())
+                }))
                 .collect(),
         ),
         Section {

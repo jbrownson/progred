@@ -9,14 +9,14 @@ type World = crate::Editor;
 #[test]
 fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
     use crate::libraries::{absent, f64};
-    use crate::workspace::Projection;
-    let (words, number, sum, missing) =
+    use crate::stack::Preset;
+    let (words, number, call, missing) =
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let doc = Document {
         root: Some(Value::record([
             (words, text::value("hello")),
             (number, f64::value(3.0)),
-            (sum, grap::call(f64::vocabulary::SUM.into(), [])),
+            (call, grap::call(new_cell_id().into(), [])),
             (
                 missing,
                 ::grap::absent::value(absent::vocabulary::NO_ALTERNATIVE),
@@ -26,9 +26,9 @@ fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
     };
     // How many glyphs each field draws, and whether the call's function
     // field is drawn as a field of its own.
-    let drawn = |projection| {
+    let drawn = |preset: Preset| {
         let mut editor = crate::test_editor(doc.clone());
-        editor.model.workspace.document.projection = projection;
+        editor.model.workspace.document.shown = preset.shown();
         let driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
         let glyphs = |field| {
             let rect = driver.rect(&[Step::Key(field)]);
@@ -49,12 +49,12 @@ fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
         (
             glyphs(words),
             glyphs(number),
-            driver.drawn(&[Step::Key(sum), Step::Key(grap::vocabulary::FUNCTION)]),
+            driver.drawn(&[Step::Key(call), Step::Key(grap::vocabulary::FUNCTION)]),
             driver.drawn(&[Step::Key(missing), Step::Key(absent::vocabulary::ABSENT)]),
         )
     };
-    let (words_plain, number_plain, function_plain, reason_plain) = drawn(Projection::Plain);
-    let (words_raw, number_raw, _, reason_raw) = drawn(Projection::Raw);
+    let (words_plain, number_plain, function_plain, reason_plain) = drawn(Preset::Plain);
+    let (words_raw, number_raw, _, reason_raw) = drawn(Preset::Raw);
     // Plain reads "hello" and 3; Raw spells out their bytes.
     assert!(words_plain >= "hello".len(), "{words_plain}");
     assert!(words_plain < words_raw, "{words_plain} < {words_raw}");

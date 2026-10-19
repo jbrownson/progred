@@ -143,8 +143,7 @@ impl ProfileView {
                 crate::display::widget::view::Root::document,
                 crate::display::widget::view::Root::pane,
             ),
-            projection: crate::workspace::Projection::Standard,
-            hidden: Vec::new(),
+            shown: crate::workspace::Shown::ALL,
             annotations: Annotations::default(),
             scroll: kurbo::Vec2::ZERO,
         };

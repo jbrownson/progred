@@ -472,9 +472,8 @@ impl Editor {
                 .map(selection::Selection::root),
         );
         command::Toggles {
-            plain: area.projection == workspace::Projection::Plain,
-            raw: area.projection == workspace::Projection::Raw,
-            hidden: area.hidden.clone(),
+            shown: area.shown.clone(),
+            preset: self.stack.preset(&area.shown),
         }
     }
 
@@ -604,18 +603,26 @@ impl Editor {
             DocCommand::Redo => self.step_history(false, geometry),
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
             DocCommand::MovePane(direction) => self.move_selected_pane(direction),
-            DocCommand::Plain => self
-                .model
-                .workspace
-                .toggle_projection(self.selected_view().as_ref(), workspace::Projection::Plain),
-            DocCommand::Raw => self
-                .model
-                .workspace
-                .toggle_projection(self.selected_view().as_ref(), workspace::Projection::Raw),
+            DocCommand::Preset(preset) => {
+                let selected = self.selected_view();
+                let showing = self.stack.preset(
+                    &self
+                        .model
+                        .workspace
+                        .selected_or_document(selected.as_ref())
+                        .shown,
+                );
+                let preset = if showing == Some(preset) {
+                    crate::stack::Preset::All
+                } else {
+                    preset
+                };
+                self.model.workspace.show(selected.as_ref(), preset.shown());
+            }
             DocCommand::Projection(library) => self
                 .model
                 .workspace
-                .toggle_library_projection(self.selected_view().as_ref(), library),
+                .toggle_library(self.selected_view().as_ref(), library),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.zoom = 1.0,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -639,7 +646,7 @@ impl Editor {
             Some(command) => menu::Navigation::Activate(command),
             None => menu::navigate(
                 &mut self.menu,
-                &menu::definition(self.stack.projections().map(|(library, _)| library)),
+                &menu::definition(self.stack.switchable().map(|(library, _)| library)),
                 availability,
                 event,
             ),

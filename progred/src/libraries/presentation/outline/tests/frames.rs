@@ -367,7 +367,7 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     driver.select(&b_path);
     driver.type_text("5");
     assert_eq!(driver.value(&[Step::Key(b)]), f64::value(35.0));
-    driver.runner.editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
+    driver.runner.editor.model.workspace.document.shown = crate::workspace::Shown::RAW;
     let raw = editing_frame(&mut driver.runner.editor);
     for field in [a, b, extra, OUTLINE] {
         stop(&raw, &[Step::Key(field)]);

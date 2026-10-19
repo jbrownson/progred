@@ -28,10 +28,10 @@ fn explicit_order_and_empty_selection_are_preserved_and_unknown_ids_fail() {
 }
 
 #[test]
-fn only_libraries_that_bring_a_projection_offer_one() {
+fn only_libraries_that_bring_a_projection_or_offers_can_be_switched_off() {
     let stack = load_selected(&[name::ID, text::ID, random::ID, color::ID, declared::ID]).unwrap();
     assert_eq!(
-        stack.projections().collect::<Vec<_>>(),
+        stack.switchable().collect::<Vec<_>>(),
         [
             (name::ID, "name"),
             (text::ID, "text"),
@@ -39,6 +39,20 @@ fn only_libraries_that_bring_a_projection_offer_one() {
             (declared::ID, "document libraries")
         ]
     );
+}
+
+#[test]
+fn a_preset_is_read_from_what_an_area_shows() {
+    use crate::workspace::Shown;
+    let stack = load();
+    for preset in Preset::ALL {
+        assert_eq!(stack.preset(&preset.shown()), Some(preset));
+    }
+    // Every box unchecked by hand is Raw; one checked again is a set of
+    // its own.
+    let unchecked = Shown::AllBut(stack.switchable().map(|(library, _)| library).collect());
+    assert_eq!(stack.preset(&unchecked), Some(Preset::Raw));
+    assert_eq!(stack.preset(&Shown::Only(vec![text::ID])), None);
 }
 
 #[test]

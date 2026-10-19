@@ -157,9 +157,12 @@ fn open_menu_accepts_shortcuts_and_pointer_cancellation() {
     let mut driver = empty();
     key(&mut driver, Key::Named(NamedKey::F10), Modifiers::empty());
     assert_eq!(driver.runner.editor.menu.open(), Some(0));
-    assert!(!driver.runner.editor.menu_toggles().raw);
+    assert_ne!(
+        driver.runner.editor.menu_toggles().preset,
+        Some(crate::stack::Preset::Raw)
+    );
     key(&mut driver, Key::Character("r".into()), Modifiers::CONTROL);
-    assert!(driver.runner.editor.menu_toggles().raw);
+    assert!(driver.runner.editor.menu_toggles().preset == Some(crate::stack::Preset::Raw));
     assert_eq!(driver.runner.editor.menu.open(), None);
     key(&mut driver, Key::Named(NamedKey::F10), Modifiers::empty());
     driver.runner.pointer_event(
@@ -173,11 +176,14 @@ fn open_menu_accepts_shortcuts_and_pointer_cancellation() {
 #[test]
 fn clicking_a_command_executes_it_and_closes_the_menu() {
     let mut driver = empty();
-    let view = point_for(&driver, Hover::Heading(3));
-    driver.click_at(view);
-    let raw = point_for(&driver, Hover::Item(Command::Doc(DocCommand::Raw)));
+    let projections = point_for(&driver, Hover::Heading(4));
+    driver.click_at(projections);
+    let raw = point_for(
+        &driver,
+        Hover::Item(Command::Doc(DocCommand::Preset(crate::stack::Preset::Raw))),
+    );
     driver.click_at(raw);
-    assert!(driver.runner.editor.menu_toggles().raw);
+    assert!(driver.runner.editor.menu_toggles().preset == Some(crate::stack::Preset::Raw));
     assert_eq!(driver.runner.editor.menu.open(), None);
     key(&mut driver, Key::Named(NamedKey::F10), Modifiers::empty());
     key(&mut driver, Key::Named(NamedKey::Tab), Modifiers::SHIFT);
@@ -194,7 +200,7 @@ fn bar_hit_height_tracks_display_scale() {
                 .runner
                 .editor
                 .stack
-                .projections()
+                .switchable()
                 .map(|(library, _)| library),
         )
         .len()
@@ -228,7 +234,7 @@ fn headings_fill_the_bar_and_popup_rows_share_their_hit_width() {
                 .runner
                 .editor
                 .stack
-                .projections()
+                .switchable()
                 .map(|(library, _)| library),
         )[1..2],
     ) {
@@ -246,11 +252,11 @@ fn headings_fill_the_bar_and_popup_rows_share_their_hit_width() {
 #[test]
 fn a_popup_near_the_right_edge_stays_inside_the_viewport() {
     let mut driver = empty();
-    driver.runner.editor.menu.toggle(3);
+    driver.runner.editor.menu.toggle(4);
     driver
         .runner
         .refresh_frame(1.0, Size::new(350.0, VIEWPORT.height));
-    let raw = Hover::Item(Command::Doc(DocCommand::Raw));
+    let raw = Hover::Item(Command::Doc(DocCommand::Preset(crate::stack::Preset::Raw)));
     let point = point_for(&driver, raw);
     assert_eq!(menu_at(&driver, Point::new(348.0, point.y)), Some(raw));
     assert_eq!(menu_at(&driver, Point::new(350.0, point.y)), None);
@@ -294,7 +300,7 @@ fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
             .runner
             .editor
             .stack
-            .projections()
+            .switchable()
             .map(|(library, _)| library),
     )
     .iter()
@@ -328,7 +334,7 @@ fn the_document_libraries_entry_switches_the_documents_own_projections() {
             .runner
             .editor
             .stack
-            .projections()
+            .switchable()
             .map(|(library, _)| library),
     )
     .iter()
@@ -381,7 +387,7 @@ fn the_name_entry_switches_labels_to_identities() {
             .runner
             .editor
             .stack
-            .projections()
+            .switchable()
             .map(|(library, _)| library),
     )
     .iter()

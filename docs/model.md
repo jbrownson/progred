@@ -489,12 +489,13 @@ pane's root removes that list element. Opening and moving panes edit these
 lists, so they save and undo with the document. A malformed pane container or
 nonrecord root is not overwritten to make the operation possible.
 
-Pane identity, projection mode, folds, scroll, and requested size are session
+Pane identity, the libraries shown, folds, scroll, and requested size are session
 state. The document view starts with the contents of `panes` folded; individual
 pane entries have no initial fold. Expanding the field is preserved when panes
 are added, removed, or moved. Surviving declarations retain their view state.
 Moving an entry assigns a new list position and explicitly retargets selection;
-its size, scroll, and projection mode carry across, while path-keyed folds reset.
+its size, scroll, and the libraries it shows carry across, while path-keyed folds
+reset.
 
 `{value: source, projection: function}` is a presentation-library convention,
 not workspace configuration. The document's normal projection shows this
@@ -555,7 +556,7 @@ Replacement keeps the window, surface, geometry, fonts, text-shaping cache,
 clipboard, library stack, physical pointer/modifier input, and debug-display
 preference. It resets document/saved identity, history, selection and text/IME
 state, all pane identities and annotations (including camera and folds), scroll,
-projection modes, divider state, binders, menus, gestures, queued input, retained
+shown libraries, divider state, binders, menus, gestures, queued input, retained
 handlers/paint, and hover attribution. The successor frame is built immediately.
 On macOS the old file's frame-autosave name is detached without deleting its
 saved geometry; the represented file, title, and edited flag are refreshed.
@@ -567,7 +568,7 @@ recording a new branch clears redo. The editor's snapshot contains its shared
 document, view-qualified selection, and per-view folds. Collapse and expand
 record steps without editing the document. Undo restores fold overrides and
 their view identities, including when a deleted pane returns; it leaves current
-scroll positions, projection modes, and unrelated annotations alone in surviving
+scroll positions, shown libraries, and unrelated annotations alone in surviving
 views. Selection paths include the owning view rather than borrowing whichever
 pane happens to be selected when Undo is invoked.
 

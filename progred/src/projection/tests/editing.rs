@@ -341,7 +341,7 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
         let mut editor = crate::editor_of(value);
         editor.stack.libraries = libraries.clone();
         if raw {
-            editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
+            editor.model.workspace.document.shown = crate::workspace::Shown::RAW;
         }
         editor.model.selection = Some(make_selection(path));
         let mut driver = Driver::new(editor, Driver::VIEWPORT);

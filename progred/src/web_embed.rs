@@ -166,7 +166,7 @@ pub(crate) fn tutorial_slots(
                 .any(|(_, level)| matches!(level, Level::Plain))
                 .then(|| {
                     crate::stack::load_selected(&crate::stack::PLAIN)
-                        .map(|stack| stack.plain().partial().clone())
+                        .map(|stack| stack.projection.partial().clone())
                 })
                 .transpose()?;
             let plain_inside = plain.clone().map(|plain| {

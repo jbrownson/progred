@@ -61,7 +61,7 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
             Some((1, 1)),
         ));
     model.workspace.document.scroll = Vec2::new(12.0, 300.0);
-    model.workspace.document.projection = workspace::Projection::Raw;
+    model.workspace.document.shown = workspace::Shown::RAW;
     model.workspace.left_width = 0.5;
     model.workspace.right_width = 0.1;
     for view in [
@@ -85,10 +85,7 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
     assert!(model.workspace.view(&pane_root).is_none());
     assert!(model.workspace.left.panes.is_empty() && model.workspace.right.panes.is_empty());
     assert_eq!(model.workspace.document.scroll, Vec2::ZERO);
-    assert_eq!(
-        model.workspace.document.projection,
-        workspace::Projection::Standard
-    );
+    assert_eq!(model.workspace.document.shown, workspace::Shown::ALL);
     assert!(model.workspace.document.annotations.at(&[]).is_none());
     let fresh = workspace::Workspace::default();
     assert_eq!(model.workspace.left_width, fresh.left_width);
@@ -269,13 +266,10 @@ fn undo_does_not_restore_scroll_projection_or_unrelated_annotations() {
         .annotations
         .set(&[Step::Key(state)], Some(Value::from(vec![6])));
     model.workspace.document.scroll = Vec2::new(50.0, 75.0);
-    model.workspace.document.projection = workspace::Projection::Raw;
+    model.workspace.document.shown = workspace::Shown::RAW;
     assert!(model.step_history(true));
     assert_eq!(model.workspace.document.scroll, Vec2::new(50.0, 75.0));
-    assert_eq!(
-        model.workspace.document.projection,
-        workspace::Projection::Raw
-    );
+    assert_eq!(model.workspace.document.shown, workspace::Shown::RAW);
     assert_eq!(
         model
             .workspace

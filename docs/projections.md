@@ -104,11 +104,16 @@ closed by declining; malformed shapes must remain accessible through a later
 projection or Raw. Raw is every library switched off: the structural fallback
 alone, in the same `Layout` language, with no library's offers or names. It
 declines only at a missing location, draws a cell as its definition between
-parentheses, and shows labels as short ids. Plain is Raw with names,
-text, bytes, absent values and numbers reading as themselves through their
-libraries; calls, arithmetic included, stay the records
-they are. One list in stack.rs defines it for the editor and the tutorial page
-alike. The View menu switches the selected area to either and back. Specific
+parentheses, and shows labels as short ids. Raw and Plain are sets of
+libraries an area shows, as any other set is: Raw shows none, and Plain shows
+the name, text, bytes, absent and number libraries, so those read as
+themselves and the rest as Raw draws it. A number library draws its own
+operators, so Plain shows arithmetic as `1 + 2` while other calls stay records.
+One list in stack.rs defines Plain for the editor and the tutorial page alike.
+The Projections menu leads with All, Plain and Raw, then a checkbox for each
+library an area can switch off, one bringing a projection or offers; a set
+matching no preset is a custom one. Choosing the preset an area already shows
+goes back to every library. Specific
 domain projections precede general ones. Libraries contribute these functions
 explicitly; composition does not depend on registering them under a shared cell
 identity. The current host partials are Rust callbacks,
