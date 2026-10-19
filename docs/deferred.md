@@ -874,12 +874,64 @@ This is the biggest weak spot.
   its left form. Typing an operator at the end of a number already does this
   for that one case.
 
-### A second language
+### Languages as peers
 
 Grap is the language the examples are written in, not Progred's own, yet
-newcomers take Progred for a Grap editor. A second language whose programs live
-in the same documents, with its own projections and evaluator, would show the
-difference, and would show where the editor still assumes Grap.
+newcomers take Progred for a Grap editor, and it is one more thing an
+introduction has to explain. The direction is JavaScript, Python or a
+WebAssembly engine as peers of Grap, any of them able to write everything Grap
+writes today: presentations, layout programs, controls, event handlers and
+computations. Grap joins through the same interface as the others, and could
+still grow into a typed language; making it fast is its own project. A
+language could later arrive as a plugin, as the libraries with native code
+above might.
+
+A language would be a library that brings an evaluator:
+
+- It claims code values by its vocabulary (`{js: "…"}`, or Grap's lambda and
+  call records) and prepares them into callables. The editor tries the loaded
+  languages in library order and the first that accepts wins, as partial
+  projections compose.
+- Callables take and return a neutral value: GID data or another callable.
+  Native functions do the same, taking evaluated arguments, with a lazy
+  parameter arriving as a callable, as the note on native code above already
+  asks.
+- Everything a language reaches goes through the host: resolving cells, so a
+  JavaScript function can call a Grap one stored in a cell; dependency
+  tracking, which keeps per-occurrence memoization working; effects; a budget
+  in place of Grap's fuel; and the call's own capabilities, such as an event
+  handler's get, set and path.
+
+The editing core, layout, `incremental` and grap's `Host` are already
+language-neutral. The coupling is in four places:
+
+1. Display's value type is `grap::RuntimeValue`. It would become the neutral
+   value, with Grap's closures and unboxed numbers staying inside Grap.
+2. Every library's native functions take Grap's `(Context, Expression,
+   Environment)` and read their arguments with the same few lines, repeated
+   about 66 times. The new signature replaces both.
+3. Display's `Env` evaluates and applies Grap. It would call a callable,
+   whatever its language.
+4. Click-to-source reads Grap's per-call origins. A neutral origin is a cell
+   and a path; a language that can't trace its calls reports its code cell.
+
+JavaScript is the cheapest route to demo quality: the web build already has
+the browser's engine, macOS has JavaScriptCore, and QuickJS covers Linux, or
+every platform if one engine everywhere matters more. A WebAssembly engine
+gives many languages, fuel metering and sandboxing at once, and is the better
+plugin story, since a sandboxed module can be loaded more freely than native
+code. Its values cross as bytes, which needs the binary GID encoding above, so
+code calling native functions in a tight loop pays for each call. Python is
+the heaviest to embed.
+
+Open questions: whether code is stored as source text, which engines take, or
+as structure; and how JavaScript sees records keyed by cells, since
+`shape.radius` needs names, which the libraries' name records could supply.
+
+In October 2026, Grap's evaluator and its values took 70% of the IoP tree
+benchmark's instructions, malloc not counted, 24% of the layout FFI
+benchmark's, 19% of the forest slider's and 13% of CAM scrolling's, where
+Fidget took 25%.
 
 ### Notebook and REPL
 
