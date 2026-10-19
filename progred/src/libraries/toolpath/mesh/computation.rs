@@ -46,6 +46,7 @@ pub(super) struct Computation {
 impl Computation {
     pub fn new(
         computations: &Computations,
+        tasks: &Tasks,
         program: RuntimeValue,
         fuel: usize,
         settings: Settings,
@@ -57,6 +58,7 @@ impl Computation {
         let depth = runtime.input(depth);
         let geometry = geometry(
             computations,
+            tasks,
             program.recording.clone(),
             runtime.memo({
                 let settings = settings.clone();
@@ -76,6 +78,7 @@ impl Computation {
 /// Compose mesh layers over a caller's recording, independently of image rendering.
 pub(crate) fn geometry(
     computations: &Computations,
+    tasks: &Tasks,
     recording: Memo<Recorded>,
     settings: Memo<Settings>,
     depth: Input<u8>,
@@ -88,7 +91,7 @@ pub(crate) fn geometry(
     combined(
         runtime,
         path_tubes(runtime, recording.clone(), style),
-        surface(runtime, &computations.tasks, recording, settings, depth),
+        surface(runtime, tasks, recording, settings, depth),
     )
 }
 

@@ -238,6 +238,8 @@ fn replacement_cancels_old_jobs_and_preserves_the_executor_and_wake() {
     let root = |computations: &Computations| {
         let worker = computations
             .tasks
+            .as_ref()
+            .unwrap()
             .memo(computations.runtime.memo(|_| Ok(7)), |v, _| Ok(v));
         computations.runtime.memo(move |read| {
             Ok(match &*worker.read(read)? {
@@ -259,6 +261,6 @@ fn replacement_cancels_old_jobs_and_preserves_the_executor_and_wake() {
         job();
     }
     assert_eq!(wakes.load(Ordering::Relaxed), 1);
-    assert!(computations.tasks.poll());
+    assert!(computations.poll());
     assert_eq!(*computations.runtime.read(&fresh).unwrap(), Some(7));
 }

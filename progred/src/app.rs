@@ -187,7 +187,7 @@ impl ApplicationHandler<UserEvent> for App {
             }
             UserEvent::ComputationFinished => {
                 for runner in &mut self.editors {
-                    if runner.editor.computations.tasks.poll()
+                    if runner.editor.computations.poll()
                         && let RenderState::Active { window, .. } = &runner.editor.state
                     {
                         let window = window.clone();

@@ -133,6 +133,21 @@ fn present(value: RuntimeValue) -> Result<RuntimeValue, Error> {
     }
 }
 
+/// What a 3D preview of `model` draws where the editor has nowhere to render
+/// it in the background, as in a browser page without shared memory.
+fn background_unavailable<W: Host>(
+    model: &crate::libraries::fidget::VolumePreview,
+) -> crate::display::host::Layout<W> {
+    crate::libraries::fidget::mesh::note(
+        model,
+        &[
+            "No 3D preview here:",
+            "this browser doesn't allow",
+            "background rendering",
+        ],
+    )
+}
+
 fn argument(context: &Context, call: &Expression, field: CellId) -> Result<Expression, Error> {
     context
         .field(call, field)

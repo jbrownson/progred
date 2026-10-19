@@ -98,7 +98,7 @@ fn editor_toolpath_progressive_svg_captures() {
     let mut seen = Vec::new();
     loop {
         let finished = receive.recv_timeout(Duration::from_secs(60)).unwrap();
-        if runner.editor.computations.tasks.poll() {
+        if runner.editor.computations.poll() {
             runner.refresh_frame(1.0, size);
             let paint = runner.prepare_paint(1.0, size);
             let mut list = DrawList::new();
@@ -177,7 +177,7 @@ fn capture_cam_async(mode: CellId) {
             "preview worker {:.2} ms",
             start.elapsed().as_secs_f64() * 1000.0
         );
-        assert!(runner.editor.computations.tasks.poll());
+        assert!(runner.editor.computations.poll());
     };
     capture(&mut runner, "cam_async_first.svg");
     complete(&mut runner);

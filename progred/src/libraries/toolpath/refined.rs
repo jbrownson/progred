@@ -10,6 +10,7 @@ use crate::computations::{Computations, memo};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{fidget, presentation};
 use ::grap::RuntimeValue;
+use incremental::background::Tasks;
 use incremental::{Input, Memo};
 use std::rc::Rc;
 
@@ -58,6 +59,7 @@ struct Refinement {
 impl Computation {
     fn new(
         computations: &Computations,
+        tasks: &Tasks,
         program: RuntimeValue,
         fuel: usize,
         settings: implicit::computation::Settings,
@@ -82,6 +84,7 @@ impl Computation {
         });
         let geometry = mesh::computation::geometry(
             computations,
+            tasks,
             program.recording.clone(),
             mesh_settings,
             depth.clone(),
@@ -99,6 +102,7 @@ impl Computation {
         // The mesh supplies the draft; completed final-quality tiles replace it.
         let image = implicit::computation::image(
             computations,
+            tasks,
             program.recording.clone(),
             settings.clone(),
             fidget::raster::Passes::Final,
@@ -159,60 +163,71 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let scale = input.scale_factor;
     let drawing = Layout::program(Rc::new(move |context, build| {
         let computations = context.viewing().computations();
-        let site = context.site();
-        let interaction = fidget::interaction::Interaction::at(computations, &site);
-        let computation = site.memo(computations, || {
-            Computation::new(
-                computations,
-                program.clone(),
-                fuel,
-                image_settings.clone(),
-                depth,
-                interaction.permitted.clone(),
-            )
-        });
-        computation.program.update(program.clone(), fuel);
-        computation.settings.set(image_settings.clone());
-        computation.depth.set(depth);
-        let view = computations.runtime.read(&computation.view);
-        let drawing = view
-            .as_ref()
-            .map_err(|error| memo::failure(*error))
-            .and_then(|view| match view.as_ref() {
-                View::Mesh(geometry, progress) => {
-                    let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
-                    let image =
-                        fidget::mesh::drawing(&geometry.geometry, &model, state.as_ref(), scale)
+        match &computations.tasks {
+            None => super::background_unavailable(&model),
+            Some(tasks) => {
+                let site = context.site();
+                let interaction = fidget::interaction::Interaction::at(computations, &site);
+                let computation = site.memo(computations, || {
+                    Computation::new(
+                        computations,
+                        tasks,
+                        program.clone(),
+                        fuel,
+                        image_settings.clone(),
+                        depth,
+                        interaction.permitted.clone(),
+                    )
+                });
+                computation.program.update(program.clone(), fuel);
+                computation.settings.set(image_settings.clone());
+                computation.depth.set(depth);
+                let view = computations.runtime.read(&computation.view);
+                let drawing = view
+                    .as_ref()
+                    .map_err(|error| memo::failure(*error))
+                    .and_then(|view| match view.as_ref() {
+                        View::Mesh(geometry, progress) => {
+                            let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
+                            let image = fidget::mesh::drawing(
+                                &geometry.geometry,
+                                &model,
+                                state.as_ref(),
+                                scale,
+                            )
                             .ok_or_else(|| {
                                 ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)
                             })?;
-                    // Implicit refinement is pending, even when the fallback is current.
-                    Ok(implicit::progress_bar(image, *progress))
-                }
-                View::Implicit(image, geometry) => {
-                    let image = image.as_ref().map_err(Clone::clone)?;
-                    let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
-                    let drawing = fidget::mesh::drawing_surface(
-                        &geometry.geometry,
-                        Some(puri::mesh::Surface {
-                            frame: image.frame.clone(),
-                            mesh_start: geometry.surface_start,
-                        }),
-                        &model,
-                        state.as_ref(),
-                        scale,
-                    )
-                    .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))?;
-                    Ok(if image.pending {
-                        implicit::progress_bar(drawing, image.progress)
-                    } else {
-                        drawing
-                    })
-                }
-            });
-        drawing
-            .unwrap_or_else(presentation::result_layout)
-            .measure(context, build)
+                            // Implicit refinement is pending, even when the fallback is current.
+                            Ok(implicit::progress_bar(image, *progress))
+                        }
+                        View::Implicit(image, geometry) => {
+                            let image = image.as_ref().map_err(Clone::clone)?;
+                            let geometry = geometry.as_ref().as_ref().map_err(Clone::clone)?;
+                            let drawing = fidget::mesh::drawing_surface(
+                                &geometry.geometry,
+                                Some(puri::mesh::Surface {
+                                    frame: image.frame.clone(),
+                                    mesh_start: geometry.surface_start,
+                                }),
+                                &model,
+                                state.as_ref(),
+                                scale,
+                            )
+                            .ok_or_else(|| {
+                                ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)
+                            })?;
+                            Ok(if image.pending {
+                                implicit::progress_bar(drawing, image.progress)
+                            } else {
+                                drawing
+                            })
+                        }
+                    });
+                drawing.unwrap_or_else(presentation::result_layout)
+            }
+        }
+        .measure(context, build)
     }));
     Some(fidget::interactive_volume(drawing, input))
 }

@@ -3,7 +3,7 @@ use super::super::mesh::computation::{PathStyle, path_tubes};
 use super::*;
 use crate::computations::Computations;
 use fidget::raster::{Passes, SoftwareScene, ViewRequest};
-use incremental::background::{Availability, Progress};
+use incremental::background::{Availability, Progress, Tasks};
 use incremental::{Input, Memo};
 use puri::mesh::{DepthImage, Mesh};
 
@@ -50,6 +50,7 @@ pub(super) struct Computation {
 impl Computation {
     pub fn new(
         computations: &Computations,
+        tasks: &Tasks,
         program: RuntimeValue,
         fuel: usize,
         settings: Settings,
@@ -63,6 +64,7 @@ impl Computation {
             |recording, settings| {
                 image(
                     computations,
+                    tasks,
                     recording,
                     settings,
                     Passes::Progressive {
@@ -104,6 +106,7 @@ impl Computation {
 /// A readiness dependency gates background work; becoming unready cancels it.
 pub(crate) fn image(
     computations: &Computations,
+    tasks: &Tasks,
     recording: Memo<Recorded>,
     settings: Input<Settings>,
     passes: Passes,
@@ -112,6 +115,7 @@ pub(crate) fn image(
 ) -> Memo<Outcome<ViewImage>> {
     image_with(
         computations,
+        tasks,
         recording,
         settings,
         ready,
@@ -142,6 +146,7 @@ pub(crate) fn image(
 /// while scene preparation survives until its geometry inputs actually change.
 fn image_with<S: Send + Sync + 'static>(
     computations: &Computations,
+    tasks: &Tasks,
     recording: Memo<Recorded>,
     settings: Input<Settings>,
     ready: Option<Memo<bool>>,
@@ -182,16 +187,13 @@ fn image_with<S: Send + Sync + 'static>(
             })
         }
     });
-    let compiled =
-        computations
-            .tasks
-            .memo_reporting_when_ready(scene_input, move |request, cancel, _, _| {
-                cancel.check()?;
-                match request {
-                    Ok(request) => prepare(request, cancel),
-                    Err(failure) => Ok(Err(failure)),
-                }
-            });
+    let compiled = tasks.memo_reporting_when_ready(scene_input, move |request, cancel, _, _| {
+        cancel.check()?;
+        match request {
+            Ok(request) => prepare(request, cancel),
+            Err(failure) => Ok(Err(failure)),
+        }
+    });
     let worker_input = runtime.memo_by(
         {
             let compiled = compiled.clone();
@@ -215,7 +217,7 @@ fn image_with<S: Send + Sync + 'static>(
             _ => false,
         },
     );
-    let worker = computations.tasks.memo_reporting_with_start_condition(
+    let worker = tasks.memo_reporting_with_start_condition(
         worker_input,
         Some(permitted),
         move |(scene, view), cancel, publish, progress| {

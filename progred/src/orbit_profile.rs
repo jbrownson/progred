@@ -156,7 +156,7 @@ impl OrbitProfile {
     }
 
     pub fn ready(&mut self) -> bool {
-        if self.runner.editor.computations.tasks.poll() {
+        if self.runner.editor.computations.poll() {
             self.runner.refresh_frame(self.scale, self.size);
         }
         self.outstanding.load(Ordering::SeqCst) == 0

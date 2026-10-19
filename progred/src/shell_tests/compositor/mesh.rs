@@ -37,7 +37,7 @@ fn cam_mesh_roundtrip_profile() {
             let job = jobs.lock().unwrap().pop_front();
             let Some(job) = job else { break };
             std::thread::spawn(job).join().unwrap();
-            assert!(runner.editor.computations.tasks.poll());
+            assert!(runner.editor.computations.poll());
             runner.refresh_frame(scale, size);
         }
         let target = gpu.texture(size.width as u32, size.height as u32);

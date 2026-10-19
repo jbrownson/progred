@@ -60,6 +60,7 @@ fn with_render(
         |recording, settings| {
             image_with(
                 computations,
+                computations.tasks.as_ref().unwrap(),
                 recording,
                 settings,
                 None,
@@ -161,7 +162,7 @@ fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures
     let finish = || {
         let job = queue.lock().unwrap().pop_front().unwrap();
         std::thread::spawn(job).join().unwrap();
-        assert!(computations.tasks.poll());
+        assert!(computations.poll());
     };
     let first = read();
     let first = &first.as_ref().as_ref().unwrap();
@@ -243,6 +244,7 @@ fn camera_changes_do_not_cancel_running_preparation_but_geometry_changes_do() {
     let rendered = Arc::new(Mutex::new(Vec::new()));
     let image = image_with(
         &computations,
+        computations.tasks.as_ref().unwrap(),
         recording(&computations, program, fuel),
         settings_input.clone(),
         None,
@@ -278,11 +280,11 @@ fn camera_changes_do_not_cancel_running_preparation_but_geometry_changes_do() {
     assert!(queue.lock().unwrap().is_empty());
     resume.send(()).unwrap();
     worker.join().unwrap();
-    assert!(computations.tasks.poll());
+    assert!(computations.poll());
     read();
     let job = queue.lock().unwrap().pop_front().unwrap();
     std::thread::spawn(job).join().unwrap();
-    assert!(computations.tasks.poll());
+    assert!(computations.poll());
     assert!(
         rendered.lock().unwrap()[0] == next.request.view(),
         "render uses the latest camera"
@@ -303,10 +305,7 @@ fn camera_changes_do_not_cancel_running_preparation_but_geometry_changes_do() {
     );
     resume.send(()).unwrap();
     worker.join().unwrap();
-    assert!(
-        !computations.tasks.poll(),
-        "cancelled preparation cannot publish"
-    );
+    assert!(!computations.poll(), "cancelled preparation cannot publish");
 }
 
 #[test]
@@ -357,12 +356,12 @@ fn current_refinements_are_not_dimmed_like_stale_images() {
     assert!(initial.as_ref().as_ref().unwrap().image.is_none());
     let prepare = queue.lock().unwrap().pop_front().unwrap();
     std::thread::spawn(prepare).join().unwrap();
-    assert!(computations.tasks.poll());
+    assert!(computations.poll());
     read();
     let job = queue.lock().unwrap().pop_front().unwrap();
     let worker = std::thread::spawn(job);
     receive.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert!(computations.tasks.poll());
+    assert!(computations.poll());
     let partial = read();
     let partial = &partial.as_ref().as_ref().unwrap();
     assert!(partial.pending && !partial.stale && partial.image.is_some());
@@ -375,7 +374,7 @@ fn current_refinements_are_not_dimmed_like_stale_images() {
     );
     resume.send(()).unwrap();
     worker.join().unwrap();
-    assert!(computations.tasks.poll());
+    assert!(computations.poll());
     let final_image = read();
     let final_image = &final_image.as_ref().as_ref().unwrap();
     assert!(!final_image.pending && !final_image.stale);

@@ -54,7 +54,7 @@ fn cam_hover_compositor_pixels() {
         let job = jobs.lock().unwrap().pop_front();
         let Some(job) = job else { break };
         std::thread::spawn(job).join().unwrap();
-        assert!(runner.editor.computations.tasks.poll());
+        assert!(runner.editor.computations.poll());
         runner.refresh_frame(scale, size);
     }
     let pane = runner
@@ -244,7 +244,7 @@ fn editor_compositor_profile() {
             let job = jobs.lock().unwrap().pop_front();
             let Some(job) = job else { break };
             std::thread::spawn(job).join().unwrap();
-            assert!(runner.editor.computations.tasks.poll());
+            assert!(runner.editor.computations.poll());
             runner.refresh_frame(2.0, size);
         }
         let mut list = DrawList::new();

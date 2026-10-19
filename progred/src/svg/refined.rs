@@ -60,14 +60,14 @@ fn readme_svg_captures() {
             "README render: worker finished in {:.2}s",
             start.elapsed().as_secs_f64()
         );
-        assert!(runner.editor.computations.tasks.poll());
+        assert!(runner.editor.computations.poll());
         runner.refresh_frame(1.0, size);
     }
     let paint = runner.prepare_paint(1.0, size);
     let mut list = DrawList::new();
     puri::frame::render(paint.renders, &mut list);
     assert!(queue.lock().unwrap().is_empty());
-    assert!(!runner.editor.computations.tasks.poll());
+    assert!(!runner.editor.computations.poll());
     write_svg(&list, size.width, size.height, "readme_cam.svg");
 }
 
@@ -114,7 +114,7 @@ fn editor_toolpath_refined_svg_captures() {
             "mesh worker {:.2} ms",
             start.elapsed().as_secs_f64() * 1000.0
         );
-        assert!(runner.editor.computations.tasks.poll());
+        assert!(runner.editor.computations.poll());
     };
     let finish_image = |runner: &mut crate::EditorRunner, prefix: &str| {
         receive.try_iter().for_each(drop);
@@ -128,7 +128,7 @@ fn editor_toolpath_refined_svg_captures() {
         let mut updates = 0;
         loop {
             let finished = receive.recv_timeout(Duration::from_secs(60)).unwrap();
-            if runner.editor.computations.tasks.poll() {
+            if runner.editor.computations.poll() {
                 updates += 1;
                 eprintln!(
                     "{prefix} update {updates}: {:.2} ms",

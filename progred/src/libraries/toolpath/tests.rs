@@ -964,3 +964,26 @@ fn example_tubes_compile_without_gpu_memory_operations() {
         fidget_engine::wgpu::RenderShape::new(&shape).unwrap();
     }
 }
+
+/// Without background tasks, as in a browser page without shared memory, a
+/// 3D preview draws its note rather than starting work, so no mesh: not even
+/// the path tubes, which a preview with tasks draws while its jobs wait.
+#[test]
+fn previews_without_tasks_draw_their_note_instead() {
+    use crate::computations::Computations;
+    use incremental::background::Executor;
+    let meshes = |computations: Computations, mode| {
+        let mut editor = crate::test_examples::cam_editor(mode);
+        editor.computations = computations;
+        let driver = crate::driver::Driver::new(editor, kurbo::Size::new(1200.0, 900.0));
+        crate::display::test_support::painted(&driver.painted().0)
+            .filter(|command| matches!(command, puri::draw::DrawCmd::Mesh { .. }))
+            .count()
+    };
+    // This executor drops its jobs, so only what draws before them shows.
+    let waiting = Computations::new(Executor::new(drop), || {});
+    assert!(meshes(waiting, PREVIEW_MESH) > 0);
+    for mode in [PREVIEW_3D, PREVIEW_MESH, PREVIEW_REFINED] {
+        assert_eq!(meshes(Computations::without_tasks(), mode), 0);
+    }
+}

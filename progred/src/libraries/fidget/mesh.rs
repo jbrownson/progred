@@ -144,6 +144,30 @@ pub(crate) fn drawing<W: Host>(
     drawing_surface(geometry, None, preview, state, scale_factor)
 }
 
+/// `preview`'s box, blank but for `lines` of dim text: what a preview shows
+/// where it can't draw its picture.
+pub(crate) fn note<W: Host>(preview: &VolumePreview, lines: &[&'static str]) -> Layout<W> {
+    let size = preview.size;
+    let blank = Layout::widget(Rc::new(move |context| {
+        let scale = context.viewing().scale();
+        widget::paint(
+            widget::Extent {
+                width: size.width * scale,
+                ascent: size.height / 2.0 * scale,
+                descent: size.height / 2.0 * scale,
+            },
+            |_, _| {},
+        )
+    }));
+    let text = lines
+        .iter()
+        .map(|line| crate::display::center(crate::display::dim(*line)));
+    crate::display::overlay([
+        blank,
+        crate::display::center(crate::display::col(0, 2.0, text)),
+    ])
+}
+
 pub(crate) fn drawing_surface<W: Host>(
     geometry: &Mesh,
     surface: Option<Surface>,

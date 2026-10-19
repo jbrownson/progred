@@ -143,53 +143,64 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let scale = input.scale_factor;
     let drawing = Layout::program(Rc::new(move |context, build| {
         let computations = context.viewing().computations();
-        let site = context.site();
-        let interaction = fidget::interaction::Interaction::at(computations, &site);
-        let computation = site.memo(computations, || {
-            computation::Computation::new(
-                computations,
-                program.clone(),
-                fuel,
-                settings.clone(),
-                interaction.permitted.clone(),
-            )
-        });
-        computation.program.update(program.clone(), fuel);
-        computation.settings.set(settings.clone());
-        let image = computations.runtime.read(&computation.image);
-        let paths = computations.runtime.read(&computation.paths);
-        let result = image
-            .as_ref()
-            .map_err(|error| memo::failure(*error))
-            .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone))
-            .and_then(|image| {
-                let paths = paths
-                    .as_ref()
-                    .map_err(|e| memo::failure(*e))?
-                    .as_ref()
-                    .as_ref()
-                    .map_err(Clone::clone)?;
-                let surface = image.image.as_ref().filter(|_| !image.stale).map(|frame| {
-                    puri::mesh::Surface {
-                        frame: frame.clone(),
-                        mesh_start: paths.indices.len(),
-                    }
+        match &computations.tasks {
+            None => super::background_unavailable(&model),
+            Some(tasks) => {
+                let site = context.site();
+                let interaction = fidget::interaction::Interaction::at(computations, &site);
+                let computation = site.memo(computations, || {
+                    computation::Computation::new(
+                        computations,
+                        tasks,
+                        program.clone(),
+                        fuel,
+                        settings.clone(),
+                        interaction.permitted.clone(),
+                    )
                 });
-                let drawing =
-                    fidget::mesh::drawing_surface(paths, surface, &model, state.as_ref(), scale)
+                computation.program.update(program.clone(), fuel);
+                computation.settings.set(settings.clone());
+                let image = computations.runtime.read(&computation.image);
+                let paths = computations.runtime.read(&computation.paths);
+                let result = image
+                    .as_ref()
+                    .map_err(|error| memo::failure(*error))
+                    .and_then(|image| image.as_ref().as_ref().map_err(Clone::clone))
+                    .and_then(|image| {
+                        let paths = paths
+                            .as_ref()
+                            .map_err(|e| memo::failure(*e))?
+                            .as_ref()
+                            .as_ref()
+                            .map_err(Clone::clone)?;
+                        let surface = image.image.as_ref().filter(|_| !image.stale).map(|frame| {
+                            puri::mesh::Surface {
+                                frame: frame.clone(),
+                                mesh_start: paths.indices.len(),
+                            }
+                        });
+                        let drawing = fidget::mesh::drawing_surface(
+                            paths,
+                            surface,
+                            &model,
+                            state.as_ref(),
+                            scale,
+                        )
                         .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))?;
-                Ok((image, drawing))
-            });
-        result
-            .map(|(image, drawing)| {
-                if image.pending {
-                    progress_bar(drawing, image.progress)
-                } else {
-                    drawing
-                }
-            })
-            .unwrap_or_else(presentation::result_layout)
-            .measure(context, build)
+                        Ok((image, drawing))
+                    });
+                result
+                    .map(|(image, drawing)| {
+                        if image.pending {
+                            progress_bar(drawing, image.progress)
+                        } else {
+                            drawing
+                        }
+                    })
+                    .unwrap_or_else(presentation::result_layout)
+            }
+        }
+        .measure(context, build)
     }));
     Some(fidget::interactive_volume(drawing, input))
 }
