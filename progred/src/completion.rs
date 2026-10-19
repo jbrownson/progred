@@ -103,7 +103,12 @@ pub(crate) fn prepare(
         Stage::Label => {
             let label = value.as_cell()?;
             path.push(gid::Step::Key(label));
-            if selection.scope().read(sources, &path).is_some() {
+            if selection
+                .scope()
+                .view(*sources)
+                .resolve_path(&path)
+                .is_some()
+            {
                 false
             } else {
                 let changed = definition.is_some();

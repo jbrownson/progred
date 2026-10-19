@@ -160,22 +160,16 @@ pub(crate) fn enter_pending(
     let root = selection
         .map(|current| current.root().clone())
         .unwrap_or_else(|| session.model.workspace.document_root().clone());
-    let scope = selection
-        .map(|current| current.scope().clone())
-        .unwrap_or_default();
     match selection {
         Some(current) if command.pressed(&event.modifiers) => {
-            selection::pending_insert(&root, &scope.view(sources), current.path(), shift)
+            selection::pending_insert(&root, &current.scope().view(sources), current.path(), shift)
         }
         Some(current) => {
-            selection::pending_enter(&root, &scope.view(sources), current.path(), shift)
+            selection::pending_enter(&root, &current.scope().view(sources), current.path(), shift)
         }
         None => selection::pending_root(&root, &sources),
     }
-    .map(|mut pending| {
-        pending.set_scope(scope);
-        pending.with_origin(selection.map(|current| current.path().to_vec()))
-    })
+    .map(|pending| pending.with_origin(selection.map(|current| current.path().to_vec())))
 }
 
 /// Starts what Enter would author from the selected value in the view

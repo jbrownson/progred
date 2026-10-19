@@ -3,7 +3,7 @@ use crate::libraries::{f64, name};
 use crate::selection::payload as selection_payload;
 use crate::test_support::{core_libraries, doc_of, make_selection, positions, src};
 use crate::test_values::key;
-use gid::{Cells, new_cell_id};
+use gid::{CellId, Cells, new_cell_id};
 
 fn libraries(cells: Cells) -> Libraries {
     Libraries::from_contributions([(
@@ -334,17 +334,17 @@ fn a_shadowing_document_definition_stays_editable() {
         root: Some(cell.into()),
         cells: Cells::new(),
     });
-    assert!(pending_edge(&root, &src(&doc, &lib), vec![]).is_none());
+    assert!(pending_edge(&root, &Scope::default().view(src(&doc, &lib)), vec![]).is_none());
 
     Rc::make_mut(&mut doc)
         .cells
         .set_value(cell, Value::record([]));
-    let pending = pending_edge(&root, &src(&doc, &lib), vec![]).unwrap();
+    let pending = pending_edge(&root, &Scope::default().view(src(&doc, &lib)), vec![]).unwrap();
     assert_eq!(pending.path(), &[Step::Follow(gid::Resolution::Document)]);
     assert!(
         pending_edge(
             &root,
-            &src(&doc, &lib),
+            &Scope::default().view(src(&doc, &lib)),
             vec![Step::Follow(gid::Resolution::Library(CellId::from_u128(1)))],
         )
         .is_none()
@@ -353,7 +353,7 @@ fn a_shadowing_document_definition_stays_editable() {
     Rc::make_mut(&mut doc)
         .cells
         .set_value(cell, Value::list([]));
-    let pending = pending_into(&root, &src(&doc, &lib), &[]).unwrap();
+    let pending = pending_into(&root, &Scope::default().view(src(&doc, &lib)), &[]).unwrap();
     assert_eq!(
         pending.path().first(),
         Some(&Step::Follow(gid::Resolution::Document))
@@ -387,7 +387,8 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         ),
     ]);
     Rc::make_mut(&mut doc).root = doc.root.clone();
-    let sources = src(&doc, &lib);
+    let scope = Scope::default();
+    let sources = scope.view(src(&doc, &lib));
 
     // A link to a record cell pends its field under Follow; an
     // inline record pends at its own path.

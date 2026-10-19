@@ -182,7 +182,12 @@ pub(crate) fn test_entry(
             let root = world.model.workspace.document_root().clone();
             world.model.selection = Some(match kind {
                 CompletionKind::Value => crate::selection::pending_value(&root, vec![]),
-                CompletionKind::Field => pending_edge(&root, &world.sources(), vec![]).unwrap(),
+                CompletionKind::Field => pending_edge(
+                    &root,
+                    &crate::editing::Scope::default().view(world.sources()),
+                    vec![],
+                )
+                .unwrap(),
             });
             (entry.activate)(&mut world);
             result.selected = world

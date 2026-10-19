@@ -76,7 +76,12 @@ fn label_offer_explicitly_opens_its_missing_value() {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let pending = pending_edge(&root, &src(&doc, &libraries), vec![]).unwrap();
+    let pending = pending_edge(
+        &root,
+        &crate::editing::Scope::default().view(src(&doc, &libraries)),
+        vec![],
+    )
+    .unwrap();
     let field = new_cell_id();
     let offer = crate::libraries::completion::insert(
         field,

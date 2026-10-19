@@ -456,7 +456,7 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
     for path in &paths {
         let target = stop(&frame, path);
         assert_eq!(
-            target.scope.read(&world.sources(), path),
+            target.scope.view(world.sources()).resolve_path(path),
             Some(&text::value("before!"))
         );
         assert_eq!(

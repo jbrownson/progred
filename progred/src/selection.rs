@@ -2,12 +2,12 @@
 //! projected occurrences; their conject locates document data for mutations.
 
 use crate::display::widget::view::Root;
+use crate::editing::{Read, Scope};
 use crate::library::Libraries;
 use crate::location::{Location, Start};
 use crate::sources::Sources;
 use crate::spine;
 use ::grap::text;
-use gid::CellId;
 use gid::{Document, Path, Position, Resolution, Step, Value, position};
 use puri::edit::LineEditState;
 use std::rc::Rc;
@@ -35,7 +35,7 @@ pub struct Selection {
     /// Where: the value's path for edge and pending stages, the
     /// parent record's for a label stage.
     path: Path,
-    scope: crate::editing::Scope,
+    scope: Scope,
     payload: Value,
     editor: Option<Editor>,
     /// Where a picker opened from a key was opened, for stepping back to.
@@ -63,41 +63,36 @@ impl Selection {
     /// their live owner, then removed from the stored payload.
     #[cfg(test)]
     pub(crate) fn from_payload(root: &Root, sources: &Sources, path: Path, payload: Value) -> Self {
-        Self::from_scoped_payload(
-            root,
-            sources,
-            crate::editing::Scope::default(),
-            path,
-            payload,
-        )
+        Self::from_scoped_payload(root, sources, Scope::default(), path, payload)
     }
 
     pub(crate) fn from_scoped_payload(
         root: &Root,
         sources: &Sources,
-        scope: crate::editing::Scope,
+        scope: Scope,
         path: Path,
         payload: Value,
     ) -> Self {
         let mut selection = match payload::stage(&payload) {
             Some(stage) if stage == payload::vocabulary::PENDING => {
-                query_selection(root, path, payload)
+                query_selection(root, scope, path, payload)
             }
             Some(stage) if stage == payload::vocabulary::LABEL => {
-                query_selection(root, path, payload)
+                query_selection(root, scope, path, payload)
             }
             _ => {
+                let read = scope.view(*sources);
                 let editor = payload::editor_text(&payload)
-                    .filter(|_| scope.writable(sources, &path))
+                    .filter(|_| read.writable(&path))
                     .map(|fallback| Editor {
                         line: payload::editor_line(&payload, fallback),
-                        query: scope.read(sources, &path).is_none(),
+                        query: read.resolve_path(&path).is_none(),
                         recorded: false,
                     });
                 Self {
                     root: root.clone(),
                     path,
-                    scope: scope.clone(),
+                    scope,
                     payload: if editor.is_some() {
                         payload::without_editor(&payload)
                     } else {
@@ -108,7 +103,6 @@ impl Selection {
                 }
             }
         };
-        selection.scope = scope;
         selection.reset_completion_for_query();
         selection
     }
@@ -135,11 +129,11 @@ impl Selection {
         &self.path
     }
 
-    pub(crate) fn scope(&self) -> &crate::editing::Scope {
+    pub(crate) fn scope(&self) -> &Scope {
         &self.scope
     }
 
-    pub(crate) fn set_scope(&mut self, scope: crate::editing::Scope) {
+    pub(crate) fn set_scope(&mut self, scope: Scope) {
         self.scope = scope;
     }
 
@@ -158,11 +152,11 @@ impl Selection {
     }
 
     pub(crate) fn value<'a>(&self, sources: &Sources<'a>) -> Option<&'a Value> {
-        self.scope.read(sources, &self.path)
+        self.scope.view(*sources).resolve_path(&self.path)
     }
 
     pub(crate) fn writable(&self, sources: &Sources<'_>) -> bool {
-        self.scope.writable(sources, &self.path)
+        self.scope.view(*sources).writable(&self.path)
     }
 
     pub fn root(&self) -> &Root {
@@ -410,17 +404,22 @@ pub(crate) fn bare_edge(root: &Root, path: Path) -> Selection {
 /// A value pending with a seeded query — the clipboard, replacement, and
 /// test paths.
 pub(crate) fn pending_with_query(root: &Root, path: Path, seed: &str) -> Selection {
-    query_selection(root, path, payload::pending(seed, 0))
+    query_selection(root, Scope::default(), path, payload::pending(seed, 0))
+}
+
+/// A value pending at `path`, in the scope `read` reads it through.
+fn pending_in(root: &Root, read: &Read, path: Path) -> Selection {
+    query_selection(root, read.scope.clone(), path, payload::pending("", 0))
 }
 
 /// Decode an incoming pending selection. The caret defaults to the
 /// end of the query when no offset was supplied.
-fn query_selection(root: &Root, path: Path, payload: Value) -> Selection {
+fn query_selection(root: &Root, scope: Scope, path: Path, payload: Value) -> Selection {
     let line = payload::editor_line(&payload, payload::query(&payload).unwrap_or(""));
     Selection {
         root: root.clone(),
         path,
-        scope: Default::default(),
+        scope,
         payload: payload::without_editor(&payload),
         editor: Some(Editor {
             line,
@@ -431,49 +430,13 @@ fn query_selection(root: &Root, path: Path, payload: Value) -> Selection {
     }
 }
 
-/// Read displayed locations through their conject while preserving occurrence
-/// paths for insertion and navigation. No source-to-occurrence inverse is needed.
-pub(crate) trait LocationRead {
-    fn resolve_path(&self, path: &[Step]) -> Option<&Value>;
-    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>>;
-    fn writable(&self, path: &[Step]) -> bool;
-}
-
-impl LocationRead for Sources<'_> {
-    fn resolve_path(&self, path: &[Step]) -> Option<&Value> {
-        Sources::resolve_path(self, path)
-    }
-    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
-        Sources::resolve(self, cell)
-    }
-    fn writable(&self, path: &[Step]) -> bool {
-        crate::location::writable(self, &Location::root(path))
-    }
-}
-
-impl LocationRead for crate::editing::Read<'_, '_> {
-    fn resolve_path(&self, path: &[Step]) -> Option<&Value> {
-        self.resolve_path(path)
-    }
-    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
-        self.sources.resolve(cell)
-    }
-    fn writable(&self, path: &[Step]) -> bool {
-        self.writable(path)
-    }
-}
-
 /// A new field on a writable record, following a cell if needed.
-pub(crate) fn pending_edge(
-    root: &Root,
-    sources: &impl LocationRead,
-    parent: Path,
-) -> Option<Selection> {
-    let value = sources.resolve_path(&parent)?;
+pub(crate) fn pending_edge(root: &Root, read: &Read, parent: Path) -> Option<Selection> {
+    let value = read.resolve_path(&parent)?;
     let parent = match value {
         Value::Record(_) => parent,
         Value::Cell(cell) => {
-            let value = sources.resolve(*cell)?;
+            let value = read.sources.resolve(*cell)?;
             value.value.as_record()?;
             let mut followed = parent;
             followed.push(Step::Follow(value.resolution));
@@ -481,43 +444,39 @@ pub(crate) fn pending_edge(
         }
         Value::Blob(_) | Value::List(_) => return None,
     };
-    sources.writable(&parent).then_some(())?;
-    Some(query_selection(root, parent, payload::label("", 0)))
+    read.writable(&parent).then_some(())?;
+    Some(query_selection(
+        root,
+        read.scope.clone(),
+        parent,
+        payload::label("", 0),
+    ))
 }
 
 /// A bare cell's value being authored: the within-gesture's meaning
 /// on a referenced identity with no value yet.
-pub(crate) fn pending_follow(
-    root: &Root,
-    sources: &impl LocationRead,
-    path: &[Step],
-) -> Option<Selection> {
-    let cell = sources.resolve_path(path)?.as_cell()?;
-    sources.resolve(cell).is_none().then_some(())?;
+pub(crate) fn pending_follow(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
+    let cell = read.resolve_path(path)?.as_cell()?;
+    read.sources.resolve(cell).is_none().then_some(())?;
     let mut followed = path.to_vec();
     followed.push(Step::Follow(Resolution::Document));
-    sources.writable(&followed).then_some(())?;
-    Some(pending_value(root, followed))
+    read.writable(&followed).then_some(())?;
+    Some(pending_in(root, read, followed))
 }
 
 /// A pending sibling next to the element at `path` (which must sit at
 /// an element step), minted between it and its neighbor. The list
 /// projection's gesture.
-fn pending_beside(
-    root: &Root,
-    sources: &impl LocationRead,
-    path: &[Step],
-    after: bool,
-) -> Option<Selection> {
+fn pending_beside(root: &Root, read: &Read, path: &[Step], after: bool) -> Option<Selection> {
     let (step, parent_path) = path.split_last()?;
     let Step::Element(position) = step else {
         return None;
     };
-    let elements = sources.resolve_path(parent_path)?.as_list()?;
+    let elements = read.resolve_path(parent_path)?.as_list()?;
     // Stated, not incidental: a list under an external cell takes no
     // minted siblings (the write would decline anyway, but a pending
     // that opens and cannot commit is an affordance lie).
-    sources.writable(parent_path).then_some(())?;
+    read.writable(parent_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let index = positions.iter().position(|p| *p == position)?;
     let fresh = if after {
@@ -527,40 +486,27 @@ fn pending_beside(
     };
     let mut fresh_path = parent_path.to_vec();
     fresh_path.push(Step::Element(fresh));
-    Some(pending_value(root, fresh_path))
+    Some(pending_in(root, read, fresh_path))
 }
 
-pub(crate) fn pending_after(
-    root: &Root,
-    sources: &impl LocationRead,
-    path: &[Step],
-) -> Option<Selection> {
-    pending_beside(root, sources, path, true)
+pub(crate) fn pending_after(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
+    pending_beside(root, read, path, true)
 }
 
-pub(crate) fn pending_before(
-    root: &Root,
-    sources: &impl LocationRead,
-    path: &[Step],
-) -> Option<Selection> {
-    pending_beside(root, sources, path, false)
+pub(crate) fn pending_before(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
+    pending_beside(root, read, path, false)
 }
 
 /// A pending element inside the list at `path` — inline, or a link's
 /// cell value, normalized through Follow — appended at the end or
 /// prepended at the front. Only lists take elements, by type, and
 /// the owning cell must be writable, as in [`pending_edge`].
-fn pending_into_at(
-    root: &Root,
-    sources: &impl LocationRead,
-    path: &[Step],
-    end: bool,
-) -> Option<Selection> {
-    let value = sources.resolve_path(path)?;
+fn pending_into_at(root: &Root, read: &Read, path: &[Step], end: bool) -> Option<Selection> {
+    let value = read.resolve_path(path)?;
     let (list_path, elements) = match value {
         Value::List(elements) => (path.to_vec(), elements),
         Value::Cell(cell) => {
-            let value = sources.resolve(*cell)?;
+            let value = read.sources.resolve(*cell)?;
             let elements = value.value.as_list()?;
             let mut followed = path.to_vec();
             followed.push(Step::Follow(value.resolution));
@@ -568,7 +514,7 @@ fn pending_into_at(
         }
         Value::Blob(_) | Value::Record(_) => return None,
     };
-    sources.writable(&list_path).then_some(())?;
+    read.writable(&list_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let fresh = if end {
         position::between(positions.last().copied(), None)?
@@ -577,25 +523,17 @@ fn pending_into_at(
     };
     let mut fresh_path = list_path;
     fresh_path.push(Step::Element(fresh));
-    Some(pending_value(root, fresh_path))
+    Some(pending_in(root, read, fresh_path))
 }
 
 /// Appends: "add to this list" goes at the end — the within chord's
 /// meaning on a list, where fields don't exist.
-pub(crate) fn pending_into(
-    root: &Root,
-    sources: &impl LocationRead,
-    path: &[Step],
-) -> Option<Selection> {
-    pending_into_at(root, sources, path, true)
+pub(crate) fn pending_into(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
+    pending_into_at(root, read, path, true)
 }
 
-pub(crate) fn pending_into_first(
-    root: &Root,
-    sources: &impl LocationRead,
-    path: &[Step],
-) -> Option<Selection> {
-    pending_into_at(root, sources, path, false)
+pub(crate) fn pending_into_first(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
+    pending_into_at(root, read, path, false)
 }
 
 /// Plain Enter: a new peer BESIDE the selection — continue the
@@ -606,25 +544,25 @@ pub(crate) fn pending_into_first(
 /// reference is, so it continues the reference's enumeration.
 pub(crate) fn pending_enter(
     root: &Root,
-    sources: &impl LocationRead,
+    read: &Read,
     path: &[Step],
     before: bool,
 ) -> Option<Selection> {
     if let Some((Step::Follow(_), reference)) = path.split_last() {
-        return pending_enter(root, sources, reference, before);
+        return pending_enter(root, read, reference, before);
     }
     let beside = if before {
-        pending_before(root, sources, path)
+        pending_before(root, read, path)
     } else {
-        pending_after(root, sources, path)
+        pending_after(root, read, path)
     };
     beside
         .or_else(|| {
             path.split_last()
-                .and_then(|(_, parent)| pending_edge(root, sources, parent.to_vec()))
+                .and_then(|(_, parent)| pending_edge(root, read, parent.to_vec()))
         })
-        .or_else(|| pending_edge(root, sources, path.to_vec()))
-        .or_else(|| pending_into(root, sources, path))
+        .or_else(|| pending_edge(root, read, path.to_vec()))
+        .or_else(|| pending_into(root, read, path))
 }
 
 /// The command chord: author WITHIN the selection — a new field on
@@ -633,16 +571,16 @@ pub(crate) fn pending_enter(
 /// prepend. Atoms other than links have no within and decline.
 pub(crate) fn pending_insert(
     root: &Root,
-    sources: &impl LocationRead,
+    read: &Read,
     path: &[Step],
     front: bool,
 ) -> Option<Selection> {
     if front {
-        pending_into_first(root, sources, path)
+        pending_into_first(root, read, path)
     } else {
-        pending_edge(root, sources, path.to_vec())
-            .or_else(|| pending_into(root, sources, path))
-            .or_else(|| pending_follow(root, sources, path))
+        pending_edge(root, read, path.to_vec())
+            .or_else(|| pending_into(root, read, path))
+            .or_else(|| pending_follow(root, read, path))
     }
 }
 

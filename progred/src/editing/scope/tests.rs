@@ -105,11 +105,11 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
             })
     );
     assert_eq!(
-        a.read(&editor.sources(), &first),
+        a.view(editor.sources()).resolve_path(&first),
         Some(&text::value("after"))
     );
     assert_eq!(
-        b.read(&editor.sources(), &second),
+        b.view(editor.sources()).resolve_path(&second),
         Some(&text::value("after"))
     );
     assert_eq!(editor.model.selection.as_ref().unwrap().path(), second);
@@ -119,7 +119,7 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
     assert_eq!(annotations.at(&source), None);
     assert!(editor.model.step_history(true));
     assert_eq!(
-        b.read(&editor.sources(), &second),
+        b.view(editor.sources()).resolve_path(&second),
         Some(&text::value("before"))
     );
     let selected = editor.model.selection.as_ref().unwrap();
@@ -330,8 +330,13 @@ fn redirected_library_values_remain_read_only_and_failed_writes_do_not_detach() 
     let occurrence = path();
     let scope = Scope::default().jump(occurrence.clone(), source.clone());
     let document = editor.model.doc.clone();
-    assert!(scope.read(&editor.sources(), &occurrence).is_some());
-    assert!(!scope.writable(&editor.sources(), &occurrence));
+    assert!(
+        scope
+            .view(editor.sources())
+            .resolve_path(&occurrence)
+            .is_some()
+    );
+    assert!(!scope.view(editor.sources()).writable(&occurrence));
     assert!(
         !scope
             .open(editor.session())
@@ -437,7 +442,7 @@ fn a_route_through_a_cell_and_its_definitions_location_are_the_same_location() {
         &within
     ));
     assert_eq!(
-        restarted.read(&editor.sources(), &within),
+        restarted.view(editor.sources()).resolve_path(&within),
         Some(&text::value("inside"))
     );
 }

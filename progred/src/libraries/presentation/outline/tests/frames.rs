@@ -406,7 +406,8 @@ fn outline_library_tint_stops_at_the_heading() {
     assert!(
         stop(&f, &body_path)
             .scope
-            .writable(&world.sources(), &body_path)
+            .view(world.sources())
+            .writable(&body_path)
     );
 
     fn tints(commands: &[DrawCmd]) -> Vec<Rect> {
@@ -497,7 +498,10 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
     let f = frame(&mut world);
     for path in &bodies {
         assert_eq!(
-            stop(&f, path).scope.read(&world.sources(), path),
+            stop(&f, path)
+                .scope
+                .view(world.sources())
+                .resolve_path(path),
             Some(&replacement)
         );
     }
@@ -844,7 +848,11 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
         Some(&f64::value(4.0))
     );
 
-    world.model.selection = pending_edge(&crate::test_root(), &world.sources(), Vec::new());
+    world.model.selection = pending_edge(
+        &crate::test_root(),
+        &crate::editing::Scope::default().view(world.sources()),
+        Vec::new(),
+    );
     assert!(frame(&mut world).completion.is_some());
     let Value::Record(fields) = Rc::make_mut(&mut world.model.doc).root.as_mut().unwrap() else {
         unreachable!()

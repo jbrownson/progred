@@ -125,7 +125,11 @@ impl Picking<'_, '_> {
                             .cloned()
                             .chain([Step::Key(label)])
                             .collect();
-                        current.scope().read(&session.sources(), &path).is_none()
+                        current
+                            .scope()
+                            .view(session.sources())
+                            .resolve_path(&path)
+                            .is_none()
                     }) =>
             {
                 selection::pending_at(&[])
@@ -206,7 +210,7 @@ fn open_within(session: &mut Session<'_>) {
     };
     let scope = current.scope().clone();
     let origin = current.path().to_vec();
-    let Some(mut within) = selection::pending_insert(
+    let Some(within) = selection::pending_insert(
         current.root(),
         &scope.view(session.sources()),
         &origin,
@@ -214,6 +218,5 @@ fn open_within(session: &mut Session<'_>) {
     ) else {
         return;
     };
-    within.set_scope(scope);
     session.model.selection = Some(within.with_origin(Some(origin)));
 }

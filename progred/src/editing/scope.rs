@@ -135,15 +135,6 @@ impl Scope {
         }
     }
 
-    pub(crate) fn read<'a>(&self, sources: &Sources<'a>, path: &[Step]) -> Option<&'a Value> {
-        self.view(*sources).resolve_path(path)
-    }
-
-    pub(crate) fn writable(&self, sources: &Sources<'_>, path: &[Step]) -> bool {
-        self.location(path)
-            .is_some_and(|location| crate::location::writable(sources, &location))
-    }
-
     pub(crate) fn open<'a>(&'a self, session: Session<'a>) -> Edit<'a> {
         Edit {
             scope: self,
@@ -155,7 +146,7 @@ impl Scope {
 /// Read-only access in the same location interpretation as the writable view.
 pub struct Read<'scope, 'data> {
     pub(crate) sources: Sources<'data>,
-    scope: &'scope Scope,
+    pub(crate) scope: &'scope Scope,
 }
 
 impl<'data> Read<'_, 'data> {
@@ -164,7 +155,9 @@ impl<'data> Read<'_, 'data> {
     }
 
     pub(crate) fn writable(&self, path: &[Step]) -> bool {
-        self.scope.writable(&self.sources, path)
+        self.scope
+            .location(path)
+            .is_some_and(|location| crate::location::writable(&self.sources, &location))
     }
 }
 
@@ -178,7 +171,7 @@ pub(crate) struct Edit<'a> {
 impl Edit<'_> {
     /// The value at `path`, read through this scope.
     pub(crate) fn value(&self, path: &[Step]) -> Option<&Value> {
-        self.scope.read(&self.session.sources(), path)
+        self.scope.view(self.session.sources()).resolve_path(path)
     }
 
     pub(crate) fn selection(&self) -> Option<&selection::Selection> {
@@ -199,7 +192,7 @@ impl Edit<'_> {
         let Some(source) = self.scope.location(path) else {
             return false;
         };
-        if self.scope.read(&session.sources(), path) == Some(&value) {
+        if self.scope.view(session.sources()).resolve_path(path) == Some(&value) {
             return true;
         }
         let before = session.model.snapshot();

@@ -158,7 +158,7 @@ impl crate::display::Viewing for Occurrence<'_> {
     }
 
     fn writable(&self) -> bool {
-        self.cx.edits.writable(&self.cx.sources, self.path)
+        self.cx.edits.view(self.cx.sources).writable(self.path)
     }
 
     fn host(&self) -> &dyn grap::Host {
@@ -485,7 +485,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             edits: self.cx.edits.with_conject(path.clone(), document, conject),
             ..self.cx.clone()
         };
-        let value = cx.edits.read(&cx.sources, &path);
+        let value = cx.edits.view(cx.sources).resolve_path(&path);
         let mut ancestry = self.ancestors.clone();
         // Following the same source through jumps must not bypass cycle checks.
         if let Some(location) = cx.edits.location(&path) {
