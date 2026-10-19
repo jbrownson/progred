@@ -131,7 +131,11 @@ fn svg_bench_renders_the_placeholder_notation() {
     // The engaged twin: same slot, same rect, selection blue.
     let (_, engaged) = render(
         &empty,
-        Some(&pending_value(&crate::test_root(), Vec::new())),
+        Some(&pending_value(
+            &crate::test_root(),
+            Default::default(),
+            Vec::new(),
+        )),
         320.0,
         "raw_placeholder_engaged.svg",
     );
@@ -153,6 +157,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         &empty,
         Some(&crate::selection::pending_with_query(
             &crate::test_root(),
+            Default::default(),
             Vec::new(),
             "\"asdf\"",
         )),
@@ -166,6 +171,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         },
         Some(&crate::selection::Selection::edge(
             &crate::test_root(),
+            Default::default(),
             Vec::new(),
         )),
         320.0,
@@ -186,7 +192,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         root: Some(crate::libraries::text::value("")),
         cells: Cells::new(),
     };
-    let sel = Selection::edge(&crate::test_root(), Vec::new());
+    let sel = Selection::edge(&crate::test_root(), Default::default(), Vec::new());
     let (_, string) = render(
         &empty_string,
         Some(&sel),

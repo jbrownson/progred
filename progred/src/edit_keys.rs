@@ -26,7 +26,7 @@ impl Editor {
             Some(target) => {
                 (target.select)(self, None);
             }
-            None => self.model.selection = Some(Selection::edge(root, path).with_scope(scope)),
+            None => self.model.selection = Some(Selection::edge(root, scope, path)),
         }
     }
 
@@ -79,7 +79,7 @@ impl Editor {
                                 self.refresh_title();
                             }
                             self.model.selection =
-                                Some(selection::pending_value(&root, path).with_scope(scope));
+                                Some(selection::pending_value(&root, scope, path));
                             geometry.reveal_selection(&mut self.model);
                             true
                         }
@@ -156,8 +156,7 @@ impl Editor {
                         let path = current.path().to_vec();
                         let scope = current.scope().clone();
                         scope.open(self.session()).replace(&path, value) && {
-                            self.model.selection =
-                                Some(Selection::edge(&root, path).with_scope(scope));
+                            self.model.selection = Some(Selection::edge(&root, scope, path));
                             true
                         }
                     }
@@ -325,9 +324,13 @@ impl Editor {
                     && current.writable(&sources) =>
             {
                 Some(
-                    selection::pending_with_query(current.root(), current.path().to_vec(), typed)
-                        .with_origin(Some(current.path().to_vec()))
-                        .with_scope(current.scope().clone()),
+                    selection::pending_with_query(
+                        current.root(),
+                        current.scope().clone(),
+                        current.path().to_vec(),
+                        typed,
+                    )
+                    .with_origin(current.path().to_vec()),
                 )
             }
             _ => None,

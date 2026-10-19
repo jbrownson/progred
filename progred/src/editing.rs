@@ -145,7 +145,7 @@ pub(crate) fn enter_pending(
             } else {
                 selection::pending_enter(current.root(), &read, current.path(), shift)
             }
-            .map(|pending| pending.with_origin(Some(current.path().to_vec())))
+            .map(|pending| pending.with_origin(current.path().to_vec()))
         }
         None => selection::pending_root(session.model.workspace.document_root(), &sources),
     }

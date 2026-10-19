@@ -233,6 +233,7 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
         if picking {
             world.model.selection = Some(crate::selection::pending_value(
                 world.model.workspace.document_root(),
+                Default::default(),
                 vec![],
             ));
         }

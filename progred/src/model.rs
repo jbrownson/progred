@@ -85,9 +85,9 @@ impl Model {
             self.workspace
                 .sync_declared(&workspace::declarations(self.doc.root.as_ref()));
             self.workspace.restore_folds(restored.folds);
-            self.selection = restored.selection.map(|(root, path, scope)| {
-                selection::Selection::edge(&root, path).with_scope(scope)
-            });
+            self.selection = restored
+                .selection
+                .map(|(root, path, scope)| selection::Selection::edge(&root, scope, path));
             true
         } else {
             false

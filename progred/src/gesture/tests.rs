@@ -28,7 +28,11 @@ fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
     let original = world.model.doc.clone();
     let root = world.model.workspace.document_root().clone();
     let other_path = vec![Step::Key(gid::new_cell_id())];
-    world.model.selection = Some(Selection::edge(&root, other_path.clone()));
+    world.model.selection = Some(Selection::edge(
+        &root,
+        Default::default(),
+        other_path.clone(),
+    ));
     let mut edit = Site::new(root, Rc::from([]), Default::default()).edit_run();
     assert!(Rc::ptr_eq(&original, &world.model.doc));
     assert!(!edit.write(&mut world.session(), f64::value(10.0)));
@@ -50,7 +54,7 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
     let root = world.model.workspace.document_root().clone();
     let marker = gid::new_cell_id();
     let payload = Value::record([(marker, Value::from(vec![7]))]);
-    world.model.selection = Some(Selection::from_scoped_payload(
+    world.model.selection = Some(Selection::from_payload(
         &root,
         &world.sources(),
         Default::default(),
@@ -89,7 +93,7 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
     let mut active = gesture();
     active.advance(&mut world.session(), &[Point::new(10.0, 0.0)]);
     let other = vec![Step::Key(gid::new_cell_id())];
-    world.model.selection = Some(Selection::edge(&root, other.clone()));
+    world.model.selection = Some(Selection::edge(&root, Default::default(), other.clone()));
     active.finish(&mut world.session());
     assert_eq!(world.model.selection.as_ref().unwrap().path(), other);
 }
@@ -131,7 +135,7 @@ fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
     let mut model = model(f64::value(10.0));
     let original = model.model.doc.clone();
     let root = model.model.workspace.document_root().clone();
-    model.model.selection = Some(Selection::edge(&root, vec![]));
+    model.model.selection = Some(Selection::edge(&root, Default::default(), vec![]));
     let mut gesture = scrub(
         Point::new(100.0, 200.0),
         2.0,

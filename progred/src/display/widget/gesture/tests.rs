@@ -274,7 +274,11 @@ fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
     let mut model = model(f64::value(0.0));
     let original = model.model.doc.clone();
     let root = model.model.workspace.document_root().clone();
-    model.model.selection = Some(crate::selection::Selection::edge(&root, vec![]));
+    model.model.selection = Some(crate::selection::Selection::edge(
+        &root,
+        Default::default(),
+        vec![],
+    ));
     let mut gesture = point(
         Rect::new(10.0, 20.0, 110.0, 120.0),
         Rc::new(|event| PointUpdate {

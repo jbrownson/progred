@@ -380,6 +380,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     let selected = glyphs(
         Some(crate::selection::Selection::edge(
             &crate::test_root(),
+            Default::default(),
             Vec::new(),
         )),
         Annotations::default(),

@@ -24,7 +24,11 @@ pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
 /// An empty document's editor, its missing root a pending hole.
 fn pending_root() -> Editor {
     let mut world = crate::test_editor(gid::Document::default());
-    world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
+    world.model.selection = Some(crate::selection::pending_value(
+        &crate::test_root(),
+        Default::default(),
+        vec![],
+    ));
     world
 }
 
@@ -71,6 +75,7 @@ pub fn point_update(
     let mut world = crate::test_editor(gid::Document::default());
     world.model.selection = Some(crate::selection::Selection::edge(
         &crate::test_root(),
+        Default::default(),
         vec![],
     ));
     assert!(output.handler.unwrap().dispatch_pointer_down(

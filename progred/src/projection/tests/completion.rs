@@ -14,7 +14,7 @@ fn a_plain_missing_name_selection_offers_and_commits_text() {
     };
     let path = vec![Step::Key(name::vocabulary::NAME)];
     for payload in [Value::record([]), crate::selection::payload::edge()] {
-        let selected = Selection::from_scoped_payload(
+        let selected = Selection::from_payload(
             &root,
             &src(&doc, &stack.libraries),
             Default::default(),
@@ -51,7 +51,12 @@ fn a_grap_program_offers_grap_suggestions() {
     let offered = |query| {
         projected_completion_entries(
             &doc,
-            &crate::selection::pending_with_query(&crate::test_root(), program.clone(), query),
+            &crate::selection::pending_with_query(
+                &crate::test_root(),
+                Default::default(),
+                program.clone(),
+                query,
+            ),
         )
         .into_iter()
         .map(|entry| entry.display)
@@ -80,7 +85,8 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
     };
     let path = vec![Step::Key(GRAP), Step::Follow(Resolution::Document)];
     for query in ["new lambda", "lambda", "λ"] {
-        let pending = crate::selection::pending_with_query(&root, path.clone(), query);
+        let pending =
+            crate::selection::pending_with_query(&root, Default::default(), path.clone(), query);
         let entries = projected_completion_entries(&doc, &pending);
         let entry = entries
             .iter()
@@ -158,8 +164,12 @@ fn expression_list_insertion(callable: CellId) {
         Step::Key(control::vocabulary::EXPRESSIONS),
         Step::Element(gid::position::between(None, None).unwrap()),
     ];
-    let selection =
-        crate::selection::pending_with_query(&crate::test_root(), path.clone(), "clouds");
+    let selection = crate::selection::pending_with_query(
+        &crate::test_root(),
+        Default::default(),
+        path.clone(),
+        "clouds",
+    );
     let entries = projected_completion_entries(&document, &selection);
     let world = activate_projected(&document, &selection, entries.first().unwrap());
     assert_eq!(
@@ -198,8 +208,12 @@ fn without_the_text_library_nothing_offers_a_string() {
         (&empty, vec![]),
     ] {
         for query in ["\"hello", "hello"] {
-            let selected =
-                crate::selection::pending_with_query(&crate::test_root(), path.clone(), query);
+            let selected = crate::selection::pending_with_query(
+                &crate::test_root(),
+                Default::default(),
+                path.clone(),
+                query,
+            );
             let entries = offered(
                 &mut crate::test_editor_with_stack(document.clone(), stack.clone()),
                 &selected,
@@ -241,7 +255,8 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
         cells,
     };
     let path = vec![Step::Key(grap::vocabulary::BODY)];
-    let selected = crate::selection::pending_value(&crate::test_root(), path.clone());
+    let selected =
+        crate::selection::pending_value(&crate::test_root(), Default::default(), path.clone());
     let entries = projected_completion_entries(&document, &selected);
     assert!(entries.iter().any(|entry| entry.source == Some(parameter)));
     // Grap's slot offers only what grap does: other cells aren't among them.
@@ -284,8 +299,12 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
         ),
     ];
     for (display, delimiter, made, stage, depth) in made {
-        let typed =
-            crate::selection::pending_with_query(&crate::test_root(), path.clone(), delimiter);
+        let typed = crate::selection::pending_with_query(
+            &crate::test_root(),
+            Default::default(),
+            path.clone(),
+            delimiter,
+        );
         assert_eq!(
             projected_completion_entries(&document, &typed)
                 .first()
@@ -317,15 +336,20 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
         ("growth", parameter.into()),
         ("\"hello", text::value("hello")),
     ] {
-        let selected =
-            crate::selection::pending_with_query(&crate::test_root(), path.clone(), query);
+        let selected = crate::selection::pending_with_query(
+            &crate::test_root(),
+            Default::default(),
+            path.clone(),
+            query,
+        );
         let entries = projected_completion_entries(&document, &selected);
         assert_eq!(
             inserted_value(&document, &selected, &entries[0]),
             Some(expected)
         );
     }
-    let selected = crate::selection::pending_with_query(&crate::test_root(), path, "2.5");
+    let selected =
+        crate::selection::pending_with_query(&crate::test_root(), Default::default(), path, "2.5");
     let entries = projected_completion_entries(&document, &selected);
     assert!(
         entries
@@ -341,7 +365,12 @@ fn projected_numeric_offer_commits_the_typed_value() {
         cells: Cells::new(),
     };
     let path = vec![Step::Element(gid::position::between(None, None).unwrap())];
-    let pending = crate::selection::pending_with_query(&crate::test_root(), path.clone(), "2.5");
+    let pending = crate::selection::pending_with_query(
+        &crate::test_root(),
+        Default::default(),
+        path.clone(),
+        "2.5",
+    );
     let entries = projected_completion_entries(&doc, &pending);
     let entry = entries
         .iter()
@@ -395,7 +424,8 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
             Value::from(vec![0xaa, 0xbb]),
         ),
     ] {
-        let mut pending = crate::selection::pending_with_query(&root, path.clone(), query);
+        let mut pending =
+            crate::selection::pending_with_query(&root, Default::default(), path.clone(), query);
         pending.edit_mut().unwrap().cursor_to_start();
         let entries = projected_completion_entries(&doc, &pending);
         let entry = entries
@@ -439,7 +469,12 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     let displays = |query: &str| {
         projected_completion_entries(
             &doc,
-            &crate::selection::pending_with_query(&crate::test_root(), vec![], query),
+            &crate::selection::pending_with_query(
+                &crate::test_root(),
+                Default::default(),
+                vec![],
+                query,
+            ),
         )
         .into_iter()
         .map(|entry| entry.display)
@@ -449,7 +484,12 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
         displays(""),
         ["fidget", "grap", "new cell", "new list", "new record"]
     );
-    let selection = crate::selection::pending_with_query(&crate::test_root(), vec![], "sdf");
+    let selection = crate::selection::pending_with_query(
+        &crate::test_root(),
+        Default::default(),
+        vec![],
+        "sdf",
+    );
     let entries = projected_completion_entries(&doc, &selection);
     assert_eq!(entries[0].display, "fidget");
     let world = activate_projected(&doc, &selection, &entries[0]);
@@ -474,7 +514,7 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     let element = vec![Step::Element(gid::position::between(None, None).unwrap())];
     let entries = projected_completion_entries(
         &list,
-        &crate::selection::pending_with_query(&crate::test_root(), element, ""),
+        &crate::selection::pending_with_query(&crate::test_root(), Default::default(), element, ""),
     );
     assert_eq!(entries[0].display, "new cell");
 }
@@ -517,7 +557,11 @@ fn only_the_active_empty_requests_completion_offers() {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let selection = pending_value(&crate::test_root(), vec![Step::Key(fields[12])]);
+    let selection = pending_value(
+        &crate::test_root(),
+        Default::default(),
+        vec![Step::Key(fields[12])],
+    );
     let mut world = crate::test_editor(document);
     world.stack.projection = projection;
     let entries = offered(&mut world, &selection);
@@ -538,7 +582,12 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
             })
     };
     let empty = Document::default();
-    let root_selection = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
+    let root_selection = crate::selection::pending_with_query(
+        &crate::test_root(),
+        Default::default(),
+        Vec::new(),
+        "",
+    );
     let root_entries = projected_completion_entries(&empty, &root_selection);
     assert!(root_entries.iter().any(|entry| template(inserted_value(
         &empty,
@@ -553,6 +602,7 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
     };
     let nested_selection = crate::selection::pending_with_query(
         &crate::test_root(),
+        Default::default(),
         vec![Step::Element(position)],
         "",
     );
@@ -581,8 +631,12 @@ fn missing_call_argument_slots_edit_real_fields_without_materializing_other_argu
     };
     for argument in arguments {
         let path = vec![Step::Key(argument)];
-        let selected =
-            crate::selection::pending_with_query(&crate::test_root(), path.clone(), "0.5");
+        let selected = crate::selection::pending_with_query(
+            &crate::test_root(),
+            Default::default(),
+            path.clone(),
+            "0.5",
+        );
         let entries = projected_completion_entries(&document, &selected);
         let offer = entries
             .iter()

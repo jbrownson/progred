@@ -156,7 +156,7 @@ impl Picking<'_, '_> {
         else {
             return false;
         };
-        let next = selection::Selection::from_scoped_payload(
+        let next = selection::Selection::from_payload(
             current.root(),
             &sources,
             current.scope().clone(),

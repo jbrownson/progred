@@ -186,7 +186,7 @@ pub(crate) fn install_scoped(
                         && selection.scope().same_location(&scope, sources, &path)
                         && selection.recorded()
                 });
-                let mut next = Selection::from_scoped_payload(root, sources, scope, path, payload);
+                let mut next = Selection::from_payload(root, sources, scope, path, payload);
                 next.set_recorded(recorded);
                 *selection = Some(next);
             }

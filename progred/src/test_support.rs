@@ -271,7 +271,7 @@ pub(crate) fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a
 }
 
 pub(crate) fn make_selection(path: Path) -> Selection {
-    Selection::edge(&crate::test_root(), path)
+    Selection::edge(&crate::test_root(), Default::default(), path)
 }
 
 /// The value `spine`'s Key and Element steps reach within `value`; a Follow
@@ -371,7 +371,9 @@ pub(crate) fn test_entry(
             });
             let root = world.model.workspace.document_root().clone();
             world.model.selection = Some(match kind {
-                CompletionKind::Value => crate::selection::pending_value(&root, vec![]),
+                CompletionKind::Value => {
+                    crate::selection::pending_value(&root, Default::default(), vec![])
+                }
                 CompletionKind::Field => pending_edge(
                     &root,
                     &crate::editing::Scope::default().view(world.sources()),
@@ -414,7 +416,7 @@ pub(crate) fn activate_projected(
 ) -> crate::Editor {
     let mut editor = crate::test_editor(doc.clone());
     editor.model.workspace.document.root = selection.root().clone();
-    editor.model.selection = Some(Selection::from_scoped_payload(
+    editor.model.selection = Some(Selection::from_payload(
         selection.root(),
         &editor.sources(),
         Default::default(),

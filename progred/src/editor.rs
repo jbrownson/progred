@@ -520,13 +520,10 @@ impl Editor {
                 .workspace
                 .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
             // The value opens as its column's last pane.
-            self.model.selection = self
-                .model
-                .workspace
-                .column(side)
-                .panes
-                .last()
-                .map(|pane| selection::Selection::edge(&pane.view.root, path));
+            self.model.selection =
+                self.model.workspace.column(side).panes.last().map(|pane| {
+                    selection::Selection::edge(&pane.view.root, Default::default(), path)
+                });
             self.refresh_title();
         }
     }

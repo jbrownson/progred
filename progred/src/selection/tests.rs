@@ -25,7 +25,7 @@ fn replacing_query_text_settles_completion_state_before_the_next_edit() {
             f64::value(30.0),
         ),
     ]);
-    let mut selected = Selection::from_scoped_payload(
+    let mut selected = Selection::from_payload(
         &crate::test_root(),
         &src(&doc, &libraries),
         Default::default(),
@@ -362,7 +362,12 @@ fn runtime_fold_classification_matches_stored_data() {
 
 #[test]
 fn the_pending_payload_is_derived_from_the_live_editor() {
-    let mut pending = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
+    let mut pending = crate::selection::pending_with_query(
+        &crate::test_root(),
+        Default::default(),
+        Vec::new(),
+        "",
+    );
     pending.set_completion_view(24.0, 2);
     pending.edit_query(|line| line.handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string())));
     assert_eq!(pending.choice(), 0);

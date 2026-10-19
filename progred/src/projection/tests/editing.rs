@@ -55,7 +55,7 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
     }
     let editor = driver.editor();
     let payload = editor.model.selection.as_ref().unwrap().payload();
-    let selection = Selection::from_scoped_payload(
+    let selection = Selection::from_payload(
         &crate::test_root(),
         &editor.sources(),
         Default::default(),
@@ -235,7 +235,7 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
 #[test]
 fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
     let mut editor = crate::editor_of(text::value("ab"));
-    let selection = Selection::from_scoped_payload(
+    let selection = Selection::from_payload(
         &crate::test_root(),
         &editor.sources(),
         Default::default(),
@@ -308,7 +308,7 @@ fn deletion_and_history_landings_need_no_line_initialization() {
     let second = vec![Step::Element(positions[1].clone())];
     let mut model = crate::model::Model::new(doc.clone());
     let root = model.workspace.document_root().clone();
-    model.selection = Some(Selection::edge(&root, first.clone()));
+    model.selection = Some(Selection::edge(&root, Default::default(), first.clone()));
     model.history.record(model.snapshot());
     let drawn = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     assert!(delete_edge(
@@ -323,7 +323,7 @@ fn deletion_and_history_landings_need_no_line_initialization() {
         true,
     );
     assert_eq!(next, second);
-    model.selection = Some(Selection::edge(&root, next));
+    model.selection = Some(Selection::edge(&root, Default::default(), next));
     for (undo, expected) in [(false, "survivor!"), (true, "first!")] {
         if undo {
             assert!(model.step_history(true));
@@ -423,7 +423,7 @@ fn payload_conversion_preserves_an_explicit_caret() {
     selection.edit_mut().unwrap().cursor_to_start();
     assert_eq!(selection.edit().unwrap().selection_offsets(), (0, 0));
     assert!(!write_text(&mut doc, &libraries, &mut selection));
-    let reified = Selection::from_scoped_payload(
+    let reified = Selection::from_payload(
         &crate::test_root(),
         &src(&doc, &libraries),
         Default::default(),
@@ -720,7 +720,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
         };
         for payload in [Value::record([]), crate::selection::payload::edge()] {
             let mut editor = crate::test_editor(doc.clone());
-            editor.model.selection = Some(Selection::from_scoped_payload(
+            editor.model.selection = Some(Selection::from_payload(
                 &crate::test_root(),
                 &src(&doc, &libraries),
                 Default::default(),

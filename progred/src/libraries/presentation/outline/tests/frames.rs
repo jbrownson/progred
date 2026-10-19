@@ -612,7 +612,11 @@ fn outline_headings_delete_and_pick_references_not_bodies() {
     let (doc, a, _, extra) = document();
     let mut editor = crate::test_editor(doc);
     let e = entry(&editor, &[], a);
-    editor.model.selection = Some(pending_value(&crate::test_root(), vec![Step::Key(extra)]));
+    editor.model.selection = Some(pending_value(
+        &crate::test_root(),
+        Default::default(),
+        vec![Step::Key(extra)],
+    ));
     let mut driver = Driver::new(editor, Driver::VIEWPORT);
     // The command key, on either platform, picks the heading's reference.
     driver.hold(ModifiersState::CONTROL | ModifiersState::SUPER);

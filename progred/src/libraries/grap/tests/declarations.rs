@@ -689,6 +689,7 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(crate::selection::pending_value(
         &crate::test_root(),
+        Default::default(),
         vec![Step::Key(number::vocabulary::LEFT)],
     ));
     let frame = editing_frame(&mut world);

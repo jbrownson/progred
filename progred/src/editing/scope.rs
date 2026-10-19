@@ -204,23 +204,15 @@ impl Edit<'_> {
                     && current.scope().same_location(self.scope, &sources, path)
             });
         let current = self.session.model.selection.take().filter(|_| reselected);
-        self.session.model.selection = Some(
-            match current {
-                Some(mut current) => {
-                    if let Some(line) = current.edit_mut() {
-                        line.cursor_to_end();
-                    }
-                    current
-                }
-                None => selection::Selection::edge(root, path.to_vec()),
-            }
-            .with_scope(self.scope.clone()),
-        );
+        self.session.model.selection = Some(match current {
+            Some(current) => current.reselected(self.scope.clone()),
+            None => selection::Selection::edge(root, self.scope.clone(), path.to_vec()),
+        });
     }
 
     pub(crate) fn select_payload(&mut self, root: &Root, path: Path, payload: Value) {
         let session = &mut self.session;
-        let selection = selection::Selection::from_scoped_payload(
+        let selection = selection::Selection::from_payload(
             root,
             &session.sources(),
             self.scope.clone(),
@@ -245,7 +237,7 @@ impl Edit<'_> {
     /// Leaves the value at `path` pending, for the picker to fill.
     pub(crate) fn pend(&mut self, root: &Root, path: Path) {
         self.session.model.selection =
-            Some(selection::pending_value(root, path).with_scope(self.scope.clone()));
+            Some(selection::pending_value(root, self.scope.clone(), path));
     }
 
     /// Replaces the state of the occurrence at `path` in `root`'s view; false

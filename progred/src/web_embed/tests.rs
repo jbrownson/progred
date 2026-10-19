@@ -126,6 +126,7 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
     let position = gid::position::between(positions.first(), positions.get(1)).unwrap();
     editor.model.selection = Some(selection::Selection::edge(
         &editor.model.workspace.document.root,
+        Default::default(),
         vec![Step::Element(position.clone())],
     ));
     let pending: serde_json::Value =
@@ -145,6 +146,7 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
     );
     editor.model.selection = Some(selection::Selection::edge(
         &editor.model.workspace.document.root,
+        Default::default(),
         vec![],
     ));
     let whole: serde_json::Value = serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();

@@ -59,7 +59,7 @@ impl Selection {
     /// mutation boundary Grap capabilities use after decoding the path.
     /// Editor fields are decoded once into their live owner, then removed
     /// from the stored payload.
-    pub(crate) fn from_scoped_payload(
+    pub(crate) fn from_payload(
         root: &Root,
         sources: &Sources,
         scope: Scope,
@@ -91,11 +91,11 @@ impl Selection {
         selection
     }
 
-    pub fn edge(root: &Root, path: Path) -> Self {
+    pub(crate) fn edge(root: &Root, scope: Scope, path: Path) -> Self {
         Self {
             root: root.clone(),
             path,
-            scope: Scope::default(),
+            scope,
             payload: payload::edge(),
             editor: None,
             origin: None,
@@ -110,7 +110,12 @@ impl Selection {
         &self.scope
     }
 
-    pub(crate) fn with_scope(mut self, scope: Scope) -> Self {
+    /// This selection selected again, read through `scope`: its line's
+    /// caret moves to the end.
+    pub(crate) fn reselected(mut self, scope: Scope) -> Self {
+        if let Some(line) = self.edit_mut() {
+            line.cursor_to_end();
+        }
         self.scope = scope;
         self
     }
@@ -119,8 +124,8 @@ impl Selection {
         self.origin.as_deref()
     }
 
-    pub(crate) fn with_origin(mut self, origin: Option<Path>) -> Self {
-        self.origin = origin;
+    pub(crate) fn with_origin(mut self, origin: Path) -> Self {
+        self.origin = Some(origin);
         self
     }
 
@@ -311,19 +316,14 @@ fn mount(payload: &Value, text: &str, query: bool) -> (Value, Editor) {
 
 /// A value-stage pending: the location named by `path` does not
 /// exist, and its value is being authored.
-pub fn pending_value(root: &Root, path: Path) -> Selection {
-    pending_with_query(root, path, "")
+pub(crate) fn pending_value(root: &Root, scope: Scope, path: Path) -> Selection {
+    pending_with_query(root, scope, path, "")
 }
 
 /// A value pending with `seed` already typed as its query, as typing over a
 /// selected value opens one.
-pub(crate) fn pending_with_query(root: &Root, path: Path, seed: &str) -> Selection {
-    query_selection(root, Scope::default(), path, payload::pending(seed))
-}
-
-/// A value pending at `path`, in the scope `read` reads it through.
-fn pending_in(root: &Root, read: &Read, path: Path) -> Selection {
-    query_selection(root, read.scope.clone(), path, payload::pending(""))
+pub(crate) fn pending_with_query(root: &Root, scope: Scope, path: Path, seed: &str) -> Selection {
+    query_selection(root, scope, path, payload::pending(seed))
 }
 
 /// Decode an incoming pending selection. The caret defaults to the
@@ -371,7 +371,7 @@ pub(crate) fn pending_follow(root: &Root, read: &Read, path: &[Step]) -> Option<
     let mut followed = path.to_vec();
     followed.push(Step::Follow(Resolution::Document));
     read.writable(&followed).then_some(())?;
-    Some(pending_in(root, read, followed))
+    Some(pending_value(root, read.scope.clone(), followed))
 }
 
 /// A pending sibling next to the element at `path` (which must sit at
@@ -396,7 +396,7 @@ fn pending_beside(root: &Root, read: &Read, path: &[Step], after: bool) -> Optio
     };
     let mut fresh_path = parent_path.to_vec();
     fresh_path.push(Step::Element(fresh));
-    Some(pending_in(root, read, fresh_path))
+    Some(pending_value(root, read.scope.clone(), fresh_path))
 }
 
 /// A pending element inside the list at `path` — inline, or a link's
@@ -431,7 +431,7 @@ pub(crate) fn pending_into(
     };
     let mut fresh_path = list_path;
     fresh_path.push(Step::Element(fresh));
-    Some(pending_in(root, read, fresh_path))
+    Some(pending_value(root, read.scope.clone(), fresh_path))
 }
 
 /// Plain Enter: a new peer BESIDE the selection — continue the
@@ -482,7 +482,7 @@ pub fn pending_root(root: &Root, sources: &Sources) -> Option<Selection> {
     sources
         .root()
         .is_none()
-        .then(|| pending_value(root, Vec::new()))
+        .then(|| pending_value(root, Scope::default(), Vec::new()))
 }
 
 /// The value a pending query resolves to: a leading quote forces

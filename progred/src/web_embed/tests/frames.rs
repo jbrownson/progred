@@ -178,7 +178,11 @@ fn tutorial_slots_have_no_gap_insertions_and_do_not_override_children() {
     }
     let position = gid::position::between(positions.first(), positions.get(1)).unwrap();
     let path = vec![Step::Key(slots[0]), Step::Element(position)];
-    world.model.selection = Some(pending_value(&crate::test_root(), path.clone()));
+    world.model.selection = Some(pending_value(
+        &crate::test_root(),
+        Default::default(),
+        path.clone(),
+    ));
     assert!(editing_frame(&mut world).completion.is_some());
     assert!(crate::completion::commit(
         &mut world.session(),

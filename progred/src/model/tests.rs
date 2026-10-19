@@ -46,6 +46,7 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
     let pane_root = model.workspace.left.panes[0].view.root.clone();
     model.selection = Some(selection::pending_with_query(
         &pane_root,
+        Default::default(),
         pane_path,
         "old query",
     ));
@@ -95,7 +96,7 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
 }
 
 fn select(model: &mut Model, root: &Root, path: Path) {
-    model.selection = Some(selection::Selection::edge(root, path));
+    model.selection = Some(selection::Selection::edge(root, Default::default(), path));
 }
 
 #[test]
@@ -351,7 +352,7 @@ fn saving_and_folding_break_typing_runs() {
         cells: Cells::new(),
     });
     let root = model.workspace.document_root().clone();
-    let mut typing = selection::Selection::edge(&root, path.clone());
+    let mut typing = selection::Selection::edge(&root, Default::default(), path.clone());
     typing.edit_line_mut("a");
     model.selection = Some(typing);
     let type_text = |model: &mut Model, text| {

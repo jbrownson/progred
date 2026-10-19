@@ -565,6 +565,7 @@ fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
         .to_vec();
     runner.editor.model.selection = Some(crate::selection::Selection::edge(
         runner.editor.model.workspace.document_root(),
+        Default::default(),
         path,
     ));
 
@@ -601,6 +602,7 @@ fn selection_changes_do_not_implicitly_request_reveal() {
     runner.update_frame(1.0, viewport, |editor, _, _| {
         editor.model.selection = Some(crate::selection::pending_value(
             editor.model.workspace.document_root(),
+            Default::default(),
             path,
         ));
         true
@@ -635,6 +637,7 @@ fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
         if key == NamedKey::Backspace {
             runner.editor.model.selection = Some(crate::selection::pending_value(
                 runner.editor.model.workspace.document_root(),
+                Default::default(),
                 path.clone(),
             ));
         }
@@ -793,6 +796,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
         Rc::make_mut(&mut editor.model.doc).root = Some(content);
         editor.model.selection = Some(crate::selection::Selection::edge(
             editor.model.workspace.document_root(),
+            Default::default(),
             path.clone(),
         ));
         dispatch.geometry(1.0).reveal_selection(&mut editor.model);
