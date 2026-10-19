@@ -103,9 +103,10 @@ impl Scope {
         }
     }
 
-    /// Whether, beneath the occurrence the newest layer reads, an
-    /// occurrence's children are its location's children, so a projection
-    /// can descend into values rather than read each one again.
+    /// Whether an occurrence's own path names where its value is stored:
+    /// from the document's root with no layer, or from the cell the newest
+    /// layer follows. A projection can then descend into values rather than
+    /// read each one again.
     pub(crate) fn descends(&self) -> bool {
         self.0
             .as_ref()
