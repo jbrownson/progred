@@ -8,6 +8,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState};
 use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerState, PointerUpdate};
+use ui_events_winit::WindowEventTranslation;
+use winit::dpi::PhysicalPosition;
+use winit::event::{DeviceId, ElementState, MouseButton};
 
 const VIEWPORT: Size = Size::new(500.0, 400.0);
 type Log = Rc<RefCell<Vec<(&'static str, f64)>>>;
@@ -647,8 +650,8 @@ fn pinch_packets_keep_their_context_and_build_one_successor() {
         };
         for event in [&motion, &pinch] {
             assert!(!runner.flush_before_window_event(event));
-            let Some(crate::WindowEventTranslation::Pointer(pointer)) =
-                crate::translate_window_event(&mut runner.editor.reducer, 2.0, event)
+            let Some(WindowEventTranslation::Pointer(pointer)) =
+                runner.editor.reducer.reduce(2.0, event)
             else {
                 panic!("expected pointer event")
             };
@@ -892,8 +895,8 @@ fn paint_flushes_motion_without_requesting_another_paint_but_release_does_reques
             device_id,
             position: PhysicalPosition::new(25.0, 20.0),
         };
-        let Some(crate::WindowEventTranslation::Pointer(pointer)) =
-            crate::translate_window_event(&mut runner.editor.reducer, 1.0, &motion)
+        let Some(WindowEventTranslation::Pointer(pointer)) =
+            runner.editor.reducer.reduce(1.0, &motion)
         else {
             panic!("expected pointer motion");
         };
@@ -981,4 +984,78 @@ fn touch_without_prior_motion_selects_the_contact_and_text_input_uses_its_handle
     let value = text::read(runner.editor.model.doc.root.as_ref().unwrap()).unwrap();
     assert_eq!(value.len(), 6);
     assert!(value.contains('!'));
+}
+
+fn translate_pointer(reducer: &mut WindowEventReducer, event: WindowEvent) -> PointerEvent {
+    match reducer.reduce(1.0, &event) {
+        Some(WindowEventTranslation::Pointer(pointer)) => pointer,
+        _ => panic!("expected pointer input"),
+    }
+}
+
+#[test]
+fn window_departure_preserves_pressed_motion_and_release_outside() {
+    let mut reducer = WindowEventReducer::default();
+    let device_id = DeviceId::dummy();
+    assert!(matches!(
+        translate_pointer(
+            &mut reducer,
+            WindowEvent::MouseInput {
+                device_id,
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+            }
+        ),
+        PointerEvent::Down(_)
+    ));
+    assert!(matches!(
+        translate_pointer(&mut reducer, WindowEvent::CursorLeft { device_id }),
+        PointerEvent::Leave(_)
+    ));
+    let PointerEvent::Move(motion) = translate_pointer(
+        &mut reducer,
+        WindowEvent::CursorMoved {
+            device_id,
+            position: PhysicalPosition::new(-40.0, 700.0),
+        },
+    ) else {
+        panic!("expected motion")
+    };
+    assert!(puri::interact::is_primary_contact_move(&motion));
+    assert_eq!(
+        pointer_position(&PointerEvent::Move(motion)),
+        Some(Point::new(-40.0, 700.0))
+    );
+    let PointerEvent::Up(release) = translate_pointer(
+        &mut reducer,
+        WindowEvent::MouseInput {
+            device_id,
+            state: ElementState::Released,
+            button: MouseButton::Left,
+        },
+    ) else {
+        panic!("expected release")
+    };
+    assert!(release.state.buttons.is_empty());
+    assert_eq!(
+        pointer_position(&PointerEvent::Up(release)),
+        Some(Point::new(-40.0, 700.0))
+    );
+}
+
+#[test]
+fn outside_drag_positions_do_not_become_hover_positions() {
+    let size = Size::new(400.0, 300.0);
+    assert_eq!(
+        window_pointer(Point::new(10.0, 20.0), size),
+        Some(Point::new(10.0, 20.0))
+    );
+    for point in [
+        Point::new(-1.0, 20.0),
+        Point::new(401.0, 20.0),
+        Point::new(10.0, -1.0),
+        Point::new(10.0, 301.0),
+    ] {
+        assert_eq!(window_pointer(point, size), None);
+    }
 }

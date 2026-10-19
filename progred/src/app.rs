@@ -1,5 +1,6 @@
 //! The application: windows, their lifecycle, and app-level commands.
 
+use crate::UserEvent;
 use crate::command::{AppCommand, Command};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::editor::new_editor;
@@ -19,7 +20,6 @@ use crate::web::browser_editor_focused;
 use crate::web_embed;
 #[cfg(target_arch = "wasm32")]
 use crate::web_render;
-use crate::{UserEvent, translate_window_event};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -621,7 +621,7 @@ impl App {
                 }),
                 _ => None,
             };
-            let translation = translate_window_event(&mut runner.editor.reducer, scale, &event);
+            let translation = runner.editor.reducer.reduce(scale, &event);
             let size = window.inner_size();
             let viewport = Size::new(size.width as f64, size.height as f64);
             let redraw = match (ime, translation) {

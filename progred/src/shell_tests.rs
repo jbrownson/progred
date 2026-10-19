@@ -1,119 +1,12 @@
-use super::*;
-use crate::input::{
-    PendingPointer, PendingScroll, continuous_input, pointer_position, window_pointer,
-};
+use crate::input::{PendingPointer, PendingScroll, continuous_input};
 use kurbo::{Point, Size};
 use ui_events::ScrollDelta;
 use ui_events::keyboard::Modifiers;
 use ui_events::pointer::{
-    PointerEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState, PointerType,
-    PointerUpdate,
+    PointerId, PointerInfo, PointerScrollEvent, PointerState, PointerType, PointerUpdate,
 };
-use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use winit::dpi::PhysicalPosition;
 use winit::event::{DeviceId, ElementState, MouseButton, WindowEvent};
-
-fn translate_pointer(reducer: &mut WindowEventReducer, event: WindowEvent) -> PointerEvent {
-    match translate_window_event(reducer, 1.0, &event) {
-        Some(WindowEventTranslation::Pointer(pointer)) => pointer,
-        _ => panic!("expected pointer input"),
-    }
-}
-
-#[test]
-fn window_departure_preserves_pressed_motion_and_release_outside() {
-    let mut reducer = WindowEventReducer::default();
-    let device_id = DeviceId::dummy();
-    assert!(matches!(
-        translate_pointer(
-            &mut reducer,
-            WindowEvent::MouseInput {
-                device_id,
-                state: ElementState::Pressed,
-                button: MouseButton::Left,
-            }
-        ),
-        PointerEvent::Down(_)
-    ));
-    assert!(matches!(
-        translate_pointer(&mut reducer, WindowEvent::CursorLeft { device_id }),
-        PointerEvent::Leave(_)
-    ));
-    let PointerEvent::Move(motion) = translate_pointer(
-        &mut reducer,
-        WindowEvent::CursorMoved {
-            device_id,
-            position: PhysicalPosition::new(-40.0, 700.0),
-        },
-    ) else {
-        panic!("expected motion")
-    };
-    assert!(puri::interact::is_primary_contact_move(&motion));
-    assert_eq!(
-        pointer_position(&PointerEvent::Move(motion)),
-        Some(Point::new(-40.0, 700.0))
-    );
-    let PointerEvent::Up(release) = translate_pointer(
-        &mut reducer,
-        WindowEvent::MouseInput {
-            device_id,
-            state: ElementState::Released,
-            button: MouseButton::Left,
-        },
-    ) else {
-        panic!("expected release")
-    };
-    assert!(release.state.buttons.is_empty());
-    assert_eq!(
-        pointer_position(&PointerEvent::Up(release)),
-        Some(Point::new(-40.0, 700.0))
-    );
-}
-
-#[test]
-fn focus_loss_cancels_and_forgets_pressed_mouse_state() {
-    let mut reducer = WindowEventReducer::default();
-    let device_id = DeviceId::dummy();
-    translate_pointer(
-        &mut reducer,
-        WindowEvent::MouseInput {
-            device_id,
-            state: ElementState::Pressed,
-            button: MouseButton::Left,
-        },
-    );
-    assert!(matches!(
-        translate_pointer(&mut reducer, WindowEvent::Focused(false)),
-        PointerEvent::Cancel(_)
-    ));
-    let PointerEvent::Move(motion) = translate_pointer(
-        &mut reducer,
-        WindowEvent::CursorMoved {
-            device_id,
-            position: PhysicalPosition::new(10.0, 20.0),
-        },
-    ) else {
-        panic!("expected motion")
-    };
-    assert!(!puri::interact::is_primary_contact_move(&motion));
-}
-
-#[test]
-fn outside_drag_positions_do_not_become_hover_positions() {
-    let size = Size::new(400.0, 300.0);
-    assert_eq!(
-        window_pointer(Point::new(10.0, 20.0), size),
-        Some(Point::new(10.0, 20.0))
-    );
-    for point in [
-        Point::new(-1.0, 20.0),
-        Point::new(401.0, 20.0),
-        Point::new(10.0, -1.0),
-        Point::new(10.0, 301.0),
-    ] {
-        assert_eq!(window_pointer(point, size), None);
-    }
-}
 
 fn pending(delta: ScrollDelta, x: f64) -> PendingScroll {
     let mut state = PointerState::default();

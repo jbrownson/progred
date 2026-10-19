@@ -8,8 +8,10 @@ use std::borrow::Cow;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::{KeyboardEvent, Modifiers};
 use ui_events::pointer::{
-    PointerEvent, PointerGestureEvent, PointerScrollEvent, PointerType, PointerUpdate,
+    PointerEvent, PointerGestureEvent, PointerId, PointerInfo, PointerScrollEvent, PointerType,
+    PointerUpdate,
 };
+use ui_events_winit::WindowEventReducer;
 use winit::event::WindowEvent;
 
 pub(crate) struct PendingPaint {
@@ -86,7 +88,7 @@ impl<T> PendingBatch<T> {
     }
 }
 
-pub(super) fn pointer_position(event: &PointerEvent) -> Option<Point> {
+fn pointer_position(event: &PointerEvent) -> Option<Point> {
     match event {
         PointerEvent::Down(e) | PointerEvent::Up(e) => {
             Some(Point::new(e.state.position.x, e.state.position.y))
@@ -98,7 +100,7 @@ pub(super) fn pointer_position(event: &PointerEvent) -> Option<Point> {
     }
 }
 
-pub(super) fn window_pointer(position: Point, size: Size) -> Option<Point> {
+fn window_pointer(position: Point, size: Size) -> Option<Point> {
     Rect::from_origin_size(Point::ZERO, size)
         .contains(position)
         .then_some(position)
@@ -201,14 +203,21 @@ impl EditorRunner {
             self.editor.focused = focused;
             if focused {
                 self.refresh_frame(scale, viewport);
-            } else if let Some(ui_events_winit::WindowEventTranslation::Pointer(event)) =
-                crate::translate_window_event(
-                    &mut self.editor.reducer,
+            } else {
+                // Focus loss can take the release away from this window, so
+                // the press is forgotten and cancelled. Departure alone does
+                // not cancel: Winit forwards macOS drags outside the client
+                // area.
+                self.editor.reducer = WindowEventReducer::default();
+                self.pointer_event(
+                    &PointerEvent::Cancel(PointerInfo {
+                        pointer_id: Some(PointerId::PRIMARY),
+                        persistent_device_id: None,
+                        pointer_type: PointerType::Mouse,
+                    }),
                     scale,
-                    &winit::event::WindowEvent::Focused(false),
-                )
-            {
-                self.pointer_event(&event, scale, viewport);
+                    viewport,
+                );
             }
             true
         }

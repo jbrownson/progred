@@ -101,11 +101,8 @@ use std::path::PathBuf;
 #[cfg(target_arch = "wasm32")]
 use web::WEB_PROXY;
 
-use ui_events::pointer::{PointerEvent, PointerId, PointerInfo, PointerType};
-use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 #[cfg(not(target_arch = "wasm32"))]
 use vello::util::RenderContext;
-use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use winit::window::WindowId;
@@ -164,27 +161,6 @@ pub(crate) fn content_viewport(drawn_menu: bool, viewport: Size, scale: f64) -> 
         viewport.width,
         viewport.height,
     )
-}
-
-fn translate_window_event(
-    reducer: &mut WindowEventReducer,
-    scale: f64,
-    event: &WindowEvent,
-) -> Option<WindowEventTranslation> {
-    if matches!(event, WindowEvent::Focused(false)) {
-        // Focus loss can take the release away from this window. Departure alone
-        // does not cancel: Winit forwards macOS drags outside the client area.
-        *reducer = WindowEventReducer::default();
-        Some(WindowEventTranslation::Pointer(PointerEvent::Cancel(
-            PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-        )))
-    } else {
-        reducer.reduce(scale, event)
-    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]

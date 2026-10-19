@@ -5,11 +5,15 @@ use crate::driver::Driver;
 use crate::libraries::{f64, text};
 use crate::selection::Stage;
 use gid::{Cells, Document, Value, new_cell_id};
-use kurbo::Size;
+use kurbo::{Point, Size};
 use peniko::{Brush, Color};
 use puri::draw::DrawCmd;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
+use ui_events::pointer::PointerEvent;
+use ui_events_winit::WindowEventTranslation;
+use winit::dpi::PhysicalPosition;
+use winit::event::{DeviceId, WindowEvent};
 
 const VIEWPORT: Size = Size::new(900.0, 600.0);
 
@@ -64,6 +68,30 @@ fn native_appearance_follows_system_until_overridden_and_can_follow_again() {
         assert_eq!(driver.editor().palette, expected.palette());
         assert!(Rc::ptr_eq(&document, &driver.editor().model.doc));
     }
+}
+
+#[test]
+fn focus_loss_cancels_and_forgets_a_press() {
+    let mut driver = driver(Some(text::value("hello")), Cells::new());
+    driver.press_at(Point::new(10.0, 10.0));
+    assert!(driver.editor().pressed);
+    assert!(driver.focus(false));
+    assert!(!driver.editor().pressed, "the press is cancelled");
+    let Some(WindowEventTranslation::Pointer(PointerEvent::Move(motion))) =
+        driver.runner.editor.reducer.reduce(
+            1.0,
+            &WindowEvent::CursorMoved {
+                device_id: DeviceId::dummy(),
+                position: PhysicalPosition::new(10.0, 20.0),
+            },
+        )
+    else {
+        panic!("expected motion")
+    };
+    assert!(
+        !puri::interact::is_primary_contact_move(&motion),
+        "the window forgets the press"
+    );
 }
 
 #[test]

@@ -101,7 +101,7 @@ impl<P> Driver<P> {
     /// arrives.
     fn translate(&mut self, event: &WindowEvent) -> Option<PointerEvent> {
         let scale = self.scale();
-        match crate::translate_window_event(&mut self.runner.editor.reducer, scale, event) {
+        match self.runner.editor.reducer.reduce(scale, event) {
             Some(WindowEventTranslation::Pointer(pointer)) => Some(pointer),
             _ => None,
         }
@@ -148,11 +148,10 @@ impl<P> Driver<P> {
     fn pause(&mut self) {
         let scale = self.scale();
         self.runner.editor.reducer = Default::default();
-        crate::translate_window_event(
-            &mut self.runner.editor.reducer,
-            scale,
-            &WindowEvent::ModifiersChanged(self.held.into()),
-        );
+        self.runner
+            .editor
+            .reducer
+            .reduce(scale, &WindowEvent::ModifiersChanged(self.held.into()));
     }
 
     /// `count` presses in quick succession: two make a double click.

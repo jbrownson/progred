@@ -164,8 +164,8 @@ impl OrbitProfile {
 
     fn event(&mut self, event: WindowEvent) {
         self.runner.flush_before_window_event(&event);
-        if let Some(crate::WindowEventTranslation::Pointer(pointer)) =
-            crate::translate_window_event(&mut self.runner.editor.reducer, self.scale, &event)
+        if let Some(ui_events_winit::WindowEventTranslation::Pointer(pointer)) =
+            self.runner.editor.reducer.reduce(self.scale, &event)
         {
             self.runner.pointer_event(&pointer, self.scale, self.size);
         }
