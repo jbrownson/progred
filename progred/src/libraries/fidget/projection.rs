@@ -1,8 +1,7 @@
 use super::{one_marker, parameters, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{
-    Delim, Face, activatable, alternatives, col, descend, dim, faced, row, selectable_bracket,
-    shared,
+    Delim, activatable, alternatives, col, descend, dim, row, selectable_bracket, shared,
 };
 use crate::display::{group, group_hug, hug};
 use crate::libraries::name;
@@ -110,11 +109,10 @@ pub(super) fn field<W: Host>(
         crate::libraries::grap::shallow_path([Step::Key(AXIS)], &input.default_projection)
     } else {
         let site = input.site();
-        let (spelling, face) = match input.env.name(marker) {
-            Some(name) => (name.to_owned(), Face::Label),
-            None => (crate::identity::short_id(marker), Face::Id),
-        };
-        let operator = activatable(faced(spelling, face), &site);
+        let operator = activatable(
+            crate::display::structure::field_label(input.env, marker),
+            &site,
+        );
         let fields = content.as_record()?;
         if precedence(marker).is_some() {
             infix(marker, fields.get(&LEFT)?, fields.get(&RIGHT)?, operator)

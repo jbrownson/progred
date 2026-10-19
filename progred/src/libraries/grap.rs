@@ -9,6 +9,7 @@ use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
+use crate::display::structure::{field_label, field_order};
 use crate::display::{
     Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
     activatable, alternatives, at, col, descend_local, dim, faced, indent, picker, ranked,
@@ -202,13 +203,6 @@ pub(crate) fn expression_descend<W: Host>(step: Step, default: &Partial<W>) -> L
     expression_path([step], default)
 }
 
-fn field_spelling(env: &dyn crate::display::Env, field: CellId) -> (String, Face) {
-    match env.name(field) {
-        Some(name) => (name.to_owned(), Face::Label),
-        None => (short_id(field), Face::Id),
-    }
-}
-
 /// Parameter order is source metadata, not an evaluation. Follow
 /// transparent cell references to a stored lambda or closure; a
 /// computed callable has no order available to the projection.
@@ -253,19 +247,6 @@ pub fn call_completion<'a>(
     crate::libraries::completion::insert(display, ::grap::call(function, []), Some(continuation))
 }
 
-fn standard_field_order(
-    env: &dyn crate::display::Env,
-    left: &CellId,
-    right: &CellId,
-) -> std::cmp::Ordering {
-    match (env.name(*left), env.name(*right)) {
-        (Some(left_name), Some(right_name)) => left_name.cmp(right_name).then(left.cmp(right)),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => left.cmp(right),
-    }
-}
-
 /// Calls read as calls. Their function position is a shallow
 /// reference when it is a named cell; arguments retain Grap's contextual
 /// projection.
@@ -294,10 +275,9 @@ pub(crate) fn call_with_function<W: Host>(
         Some(Pending::Child(Step::Key(field)))
             if !fields.contains_field(*field) && !parameter_positions.contains_key(field) =>
         {
-            let (spelling, face) = field_spelling(input.env, *field);
             let site = input.site().below(&[Step::Key(*field)]);
             vec![RecordField {
-                label: activatable(faced(spelling, face), &site),
+                label: activatable(field_label(input.env, *field), &site),
                 value: expression_path([Step::Key(*field)], &input.default_projection),
             }]
         }
@@ -327,13 +307,12 @@ pub(crate) fn call_with_function<W: Host>(
             (Some(left), Some(right)) => left.cmp(right),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => standard_field_order(input.env, left, right),
+            (None, None) => field_order(input.env, left, right),
         },
         |field, _| {
-            let (spelling, face) = field_spelling(input.env, field);
             let site = input.site().below(&[Step::Key(field)]);
             RecordField {
-                label: activatable(faced(spelling, face), &site),
+                label: activatable(field_label(input.env, field), &site),
                 value: expression_path([Step::Key(field)], &input.default_projection),
             }
         },
