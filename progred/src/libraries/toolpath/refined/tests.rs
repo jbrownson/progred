@@ -1,7 +1,7 @@
 use super::*;
-use crate::libraries::{control, f32};
+use crate::libraries::{control, f32, f64};
 use crate::library::Definitions;
-use gid::{Cells, Document, new_cell_id};
+use gid::{Cells, Document, Value, new_cell_id};
 use incremental::background::{Executor, Job};
 use std::{
     cell::Cell,

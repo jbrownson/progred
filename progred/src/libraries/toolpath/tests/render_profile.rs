@@ -146,7 +146,7 @@ fn cam_render_profile() {
     let stock = settings.remaining_stock(&recording).unwrap().unwrap();
     eprintln!("stock construction {:?}", start.elapsed());
     let start = Instant::now();
-    let mut tubes = super::super::fidget::Tubes::new(0.005).unwrap();
+    let mut tubes = super::super::fidget::tests::Tubes::new(0.005).unwrap();
     tubes.style(0.005, [240, 174, 80]).unwrap();
     settings
         .draw(&recording, &mut tubes, 0.005, [240, 174, 80])

@@ -1,4 +1,5 @@
 use super::{tubes::Tubes, *};
+use gid::Value;
 
 fn draw(sink: &mut impl Sink<Error = InvalidPath>) {
     sink.start_at([0.0; 3], Axis::Z).unwrap();

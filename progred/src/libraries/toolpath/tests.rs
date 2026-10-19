@@ -1,5 +1,6 @@
 use super::{cutter::Tool, *};
 use crate::libraries::{absent, control, number};
+use ::grap::Evaluation;
 use cam::paths::*;
 
 mod chamfers;
@@ -921,7 +922,7 @@ fn example_tubes_compile_without_gpu_memory_operations() {
         doc: &doc,
         libraries: &stack.libraries,
     };
-    let mut tubes = super::fidget::Tubes::new(0.005).unwrap();
+    let mut tubes = super::fidget::tests::Tubes::new(0.005).unwrap();
     let evaluation = run(&mut tubes, |scope| {
         apply_groups(
             &names["crosshatch"].into(),

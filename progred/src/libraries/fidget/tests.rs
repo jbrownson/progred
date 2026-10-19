@@ -1,4 +1,5 @@
 use super::*;
+use fidget_engine::shape::EzShape;
 
 use crate::display::test_support::NoEval;
 use crate::libraries::test_widgets::projection_input;

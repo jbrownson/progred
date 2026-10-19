@@ -1,5 +1,106 @@
+use super::super::cutter::{SectionKind, Tool};
+use super::playback::Draw;
 use super::*;
-use fidget_engine::{shape::EzShape, vm::VmShape};
+use cam::field::{capsule, coordinate};
+use fidget_engine::{context::Tree, shape::EzShape, vm::VmShape};
+
+// The all-implicit path field: the benchmark reference, and the subject of a
+// regression test that it compiles without GPU memory operations.
+pub(crate) struct Tubes {
+    radius: f32,
+    previous: Option<[f32; 3]>,
+    path: Option<Tree>,
+    paths: Vec<Tree>,
+    color: [u8; 3],
+    objects: Vec<volume::SceneObject>,
+}
+
+impl Tubes {
+    pub(crate) fn new(radius: f64) -> Option<Self> {
+        Some(Self {
+            radius: read_radius(radius)?,
+            previous: None,
+            path: None,
+            paths: Vec::new(),
+            color: [255; 3],
+            objects: Vec::new(),
+        })
+    }
+
+    fn flush(&mut self) {
+        self.paths.extend(self.path.take());
+        self.objects
+            .extend(self.paths.drain(..).map(|tree| volume::SceneObject {
+                tree,
+                color: self.color,
+            }));
+    }
+
+    pub(crate) fn scene(mut self) -> Vec<volume::SceneObject> {
+        self.flush();
+        self.objects
+    }
+}
+
+impl Draw for Tubes {
+    fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath> {
+        let radius = read_radius(radius).ok_or(InvalidPath::CoordinateRange)?;
+        if self.radius != radius || self.color != color {
+            self.flush();
+            self.radius = radius;
+            self.color = color;
+        }
+        Ok(())
+    }
+
+    fn tool(
+        &mut self,
+        tool: &Tool,
+        pose: Pose,
+        color: [u8; 3],
+        tolerance: f64,
+    ) -> Result<(), InvalidPath> {
+        self.flush();
+        for section in tool.sections() {
+            let field = section.sweep(tolerance, pose.tip, pose.tip, pose.axis)?;
+            let color = match section.kind {
+                SectionKind::Cutting => color,
+                SectionKind::NonCutting => [122, 138, 153],
+            };
+            self.objects
+                .push(volume::SceneObject { tree: field, color });
+        }
+        Ok(())
+    }
+}
+
+impl Sink for Tubes {
+    type Error = InvalidPath;
+
+    fn end_path(&mut self) {
+        self.paths.extend(self.path.take());
+        self.previous = None;
+    }
+
+    fn start_at(&mut self, point: Point3, _: Axis) -> Result<(), Self::Error> {
+        let point = coordinate(point)?;
+        self.paths.extend(self.path.take());
+        self.previous = Some(point);
+        Ok(())
+    }
+
+    fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
+        let previous = self.previous.ok_or(InvalidPath::MissingStart)?;
+        let point = coordinate(point)?;
+        let tube = capsule(previous, point, self.radius)?;
+        self.path = Some(match self.path.take() {
+            Some(field) => field.min(tube),
+            None => tube,
+        });
+        self.previous = Some(point);
+        Ok(())
+    }
+}
 
 fn sample(tree: Tree, point: [f32; 3]) -> f32 {
     let shape = VmShape::from(tree);

@@ -7,8 +7,6 @@ use crate::libraries::{f64, fidget, layout, presentation};
 use ::grap::RuntimeValue;
 use cam::field::{coordinate, read_radius};
 use cam::paths::*;
-#[cfg(test)]
-use gid::Value;
 use nalgebra::Vector3;
 use puri::mesh::{Geometry, Mesh, Normal, Vertex};
 use std::rc::Rc;

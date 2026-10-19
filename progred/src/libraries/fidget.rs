@@ -4,8 +4,6 @@
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, color, control, f32, name, presentation, representation};
-#[cfg(test)]
-use fidget_engine::shape::EzShape;
 #[cfg(not(target_arch = "wasm32"))]
 use fidget_engine::wgpu::{
     Gpu, RenderShape,

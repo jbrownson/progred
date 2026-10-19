@@ -3,8 +3,6 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, f64, layout, name, presentation};
-#[cfg(test)]
-use ::grap::Evaluation;
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
     RuntimeValue,

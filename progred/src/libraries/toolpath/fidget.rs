@@ -1,21 +1,13 @@
 //! Async implicit surfaces combined with mesh paths and cutters.
 
-#[cfg(test)]
-use super::cutter::{SectionKind, Tool};
 use super::playback;
-#[cfg(test)]
-use super::playback::Draw;
 use super::{Error, argument, invalid, number, runtime_result, vocabulary::*};
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{color, f64, fidget, layout, presentation};
 use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 use cam::field::read_radius;
-#[cfg(test)]
-use cam::field::{capsule, coordinate};
 use cam::paths::*;
-#[cfg(test)]
-use fidget_engine::context::Tree;
 use gid::Value;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -49,108 +41,6 @@ pub(super) fn progress_bar<W: Host>(
             })
         }),
     )
-}
-
-// The all-implicit path field: the benchmark reference, and the subject of a
-// regression test that it compiles without GPU memory operations.
-#[cfg(test)]
-pub(super) struct Tubes {
-    radius: f32,
-    previous: Option<[f32; 3]>,
-    path: Option<Tree>,
-    paths: Vec<Tree>,
-    color: [u8; 3],
-    objects: Vec<volume::SceneObject>,
-}
-
-#[cfg(test)]
-impl Tubes {
-    pub(super) fn new(radius: f64) -> Option<Self> {
-        Some(Self {
-            radius: read_radius(radius)?,
-            previous: None,
-            path: None,
-            paths: Vec::new(),
-            color: [255; 3],
-            objects: Vec::new(),
-        })
-    }
-
-    fn flush(&mut self) {
-        self.paths.extend(self.path.take());
-        self.objects
-            .extend(self.paths.drain(..).map(|tree| volume::SceneObject {
-                tree,
-                color: self.color,
-            }));
-    }
-
-    pub(super) fn scene(mut self) -> Vec<volume::SceneObject> {
-        self.flush();
-        self.objects
-    }
-}
-
-#[cfg(test)]
-impl Draw for Tubes {
-    fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath> {
-        let radius = read_radius(radius).ok_or(InvalidPath::CoordinateRange)?;
-        if self.radius != radius || self.color != color {
-            self.flush();
-            self.radius = radius;
-            self.color = color;
-        }
-        Ok(())
-    }
-
-    fn tool(
-        &mut self,
-        tool: &Tool,
-        pose: Pose,
-        color: [u8; 3],
-        tolerance: f64,
-    ) -> Result<(), InvalidPath> {
-        self.flush();
-        for section in tool.sections() {
-            let field = section.sweep(tolerance, pose.tip, pose.tip, pose.axis)?;
-            let color = match section.kind {
-                SectionKind::Cutting => color,
-                SectionKind::NonCutting => [122, 138, 153],
-            };
-            self.objects
-                .push(volume::SceneObject { tree: field, color });
-        }
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-impl Sink for Tubes {
-    type Error = InvalidPath;
-
-    fn end_path(&mut self) {
-        self.paths.extend(self.path.take());
-        self.previous = None;
-    }
-
-    fn start_at(&mut self, point: Point3, _: Axis) -> Result<(), Self::Error> {
-        let point = coordinate(point)?;
-        self.paths.extend(self.path.take());
-        self.previous = Some(point);
-        Ok(())
-    }
-
-    fn line_to(&mut self, point: Point3) -> Result<(), Self::Error> {
-        let previous = self.previous.ok_or(InvalidPath::MissingStart)?;
-        let point = coordinate(point)?;
-        let tube = capsule(previous, point, self.radius)?;
-        self.path = Some(match self.path.take() {
-            Some(field) => field.min(tube),
-            None => tube,
-        });
-        self.previous = Some(point);
-        Ok(())
-    }
 }
 
 pub(super) fn preview(
@@ -302,4 +192,4 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
 }
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;

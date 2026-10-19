@@ -8,12 +8,8 @@ use super::{
 };
 use crate::computations::{Computations, memo};
 use crate::display::host::{Host, Layout, ProjectionInput};
-#[cfg(test)]
-use crate::libraries::f64;
 use crate::libraries::{fidget, layout, presentation};
 use ::grap::RuntimeValue;
-#[cfg(test)]
-use gid::Value;
 use incremental::{Input, Memo};
 use std::rc::Rc;
 

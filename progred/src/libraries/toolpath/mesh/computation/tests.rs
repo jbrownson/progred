@@ -1,7 +1,7 @@
 use super::*;
 use crate::libraries::control;
 use crate::library::Definitions;
-use gid::{Cells, Document, new_cell_id};
+use gid::{Cells, Document, Value, new_cell_id};
 use std::cell::Cell;
 
 fn preview() -> fidget::VolumePreview {
