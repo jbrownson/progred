@@ -135,6 +135,7 @@ impl Fixture {
         let interaction = Rc::new(fidget::interaction::Interaction::new(&computations));
         let graph = Computation::new(
             &computations,
+            computations.tasks.as_ref().unwrap(),
             program.into(),
             10000,
             settings(0.0, 0.25),
@@ -162,7 +163,7 @@ impl Fixture {
             .remove(index)
             .expect("requested work");
         std::thread::spawn(job).join().unwrap();
-        assert!(self.computations.tasks.poll());
+        assert!(self.computations.poll());
     }
 
     fn mesh(&self) -> Rc<Outcome<mesh::computation::ViewGeometry>> {
@@ -439,10 +440,7 @@ fn playback_cancels_queued_implicit_work_while_waiting_for_the_new_mesh() {
     assert!(f.mesh().as_ref().as_ref().unwrap().surface_pending);
     let cancelled = f.queue.lock().unwrap().pop_front().unwrap();
     std::thread::spawn(cancelled).join().unwrap();
-    assert!(
-        !f.computations.tasks.poll(),
-        "the old implicit slot was cleared"
-    );
+    assert!(!f.computations.poll(), "the old implicit slot was cleared");
     assert_eq!(
         f.queue.lock().unwrap().len(),
         1,

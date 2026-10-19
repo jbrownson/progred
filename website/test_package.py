@@ -33,6 +33,9 @@ class PackageTests(unittest.TestCase):
             "import { startWorkers } from './snippets/rayon/src/worker.js';\n"
         )
         (editor / "pkg/snippets/rayon/src/worker.js").write_text("export function startWorkers() {}")
+        (editor / "pkg-fallback").mkdir()
+        (editor / "pkg-fallback/progred_bg.wasm").write_bytes(b"\0asm\x01\0\0\0")
+        (editor / "pkg-fallback/progred.js").write_text("// generated editor without workers")
 
     def test_includes_lessons_and_complete_worker_module_tree(self):
         assemble(self.repository, self.destination)
@@ -80,11 +83,20 @@ class PackageTests(unittest.TestCase):
         self.assertNotIn("editor/pkg/progred_bg.wasm.d.ts", paths)
         self.assertNotIn("Cargo.lock", paths)
 
-    def test_requires_built_editor(self):
-        (self.repository / "web/pkg/progred_bg.wasm").unlink()
-        with self.assertRaises(FileNotFoundError):
-            assemble(self.repository, self.destination)
-        self.assertFalse(self.destination.exists())
+    def test_requires_both_built_editors(self):
+        for package in ("pkg", "pkg-fallback"):
+            with self.subTest(package=package):
+                wasm = self.repository / "web" / package / "progred_bg.wasm"
+                wasm.rename(wasm.with_suffix(".moved"))
+                with self.assertRaises(FileNotFoundError):
+                    assemble(self.repository, self.destination)
+                self.assertFalse(self.destination.exists())
+                wasm.with_suffix(".moved").rename(wasm)
+
+    def test_includes_the_fallback_editor(self):
+        assemble(self.repository, self.destination)
+        for name in ("progred_bg.wasm", "progred.js"):
+            self.assertTrue((self.destination / "editor/pkg-fallback" / name).is_file())
 
     def test_rejects_invalid_wasm_and_does_not_overlay_an_old_package(self):
         wasm = self.repository / "web/pkg/progred_bg.wasm"

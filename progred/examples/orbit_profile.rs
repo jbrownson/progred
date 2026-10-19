@@ -74,7 +74,7 @@ mod web {
         refined: bool,
         collapsed: bool,
     ) -> Result<String, JsValue> {
-        progred::web_worker::initialize();
+        progred::install_panic_hook();
         let renderer = Renderer::new(canvas.clone()).await?;
         let name = renderer.name().to_owned();
         let orbit = OrbitProfile::new(

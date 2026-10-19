@@ -18,7 +18,9 @@ pub(crate) struct Snapshot {
 
 pub(crate) struct Computations {
     pub runtime: Runtime,
-    pub tasks: Tasks,
+    /// Jobs run off the editor's thread, when the host has somewhere to run
+    /// them: a browser page without shared memory has nowhere.
+    pub tasks: Option<Tasks>,
     pub pointer_pressed: Input<bool>,
     pub frame_time: Cell<Instant>,
     snapshot: Input<Snapshot>,
@@ -36,10 +38,16 @@ impl Computations {
     pub fn new(executor: Executor, wake: impl Fn() + Send + Sync + 'static) -> Self {
         let runtime = Runtime::default();
         let tasks = Tasks::new(&runtime, executor, wake);
-        Self::with_tasks(runtime, tasks)
+        Self::with_tasks(runtime, Some(tasks))
     }
 
-    fn with_tasks(runtime: Runtime, tasks: Tasks) -> Self {
+    /// Computations for a host with nowhere to run background jobs.
+    #[cfg(any(test, all(target_arch = "wasm32", not(target_feature = "atomics"))))]
+    pub fn without_tasks() -> Self {
+        Self::with_tasks(Runtime::default(), None)
+    }
+
+    fn with_tasks(runtime: Runtime, tasks: Option<Tasks>) -> Self {
         let snapshot = runtime.input(Snapshot {
             doc: Rc::new(Document::default()),
             libraries: Libraries::default(),
@@ -66,8 +74,14 @@ impl Computations {
 
     pub fn reset(&mut self) {
         let runtime = Runtime::default();
-        let tasks = self.tasks.fresh(&runtime);
+        let tasks = self.tasks.as_ref().map(|tasks| tasks.fresh(&runtime));
         *self = Self::with_tasks(runtime, tasks);
+    }
+
+    /// Takes in what background jobs reported since the last poll; whether
+    /// anything changed.
+    pub fn poll(&self) -> bool {
+        self.tasks.as_ref().is_some_and(Tasks::poll)
     }
 
     #[cfg(any(test, feature = "cam-profile"))]

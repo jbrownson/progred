@@ -27,14 +27,21 @@ export PROGRED_COMMIT
 # This is the deliberate CI exception to the local Cargo tripwire.
 export RUSTC_WRAPPER=
 export CARGO_NET_OFFLINE=false
-export CARGO_TARGET_DIR="$project_root/target/ci-web"
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
-export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="$web_rustflags"
-# The shared argument lists are unquoted so they split into words.
-cargo +"$web_toolchain" build --locked $web_cargo_args \
-    -Z "build-std=$web_build_std" --target "$web_target"
-"$project_root/tools/wasm-bindgen" $web_bindgen_args \
-    "$CARGO_TARGET_DIR/$web_target/release/progred.wasm"
+# The threaded build, then the fallback for pages without shared memory. The
+# shared argument lists are unquoted so they split into words.
+build() {
+    target_dir=$1 rustflags=$2
+    shift 2
+    CARGO_TARGET_DIR="$project_root/target/$target_dir" \
+        CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="$rustflags" \
+        cargo +"$web_toolchain" build --locked $web_cargo_args \
+        -Z "build-std=$web_build_std" --target "$web_target"
+    "$project_root/tools/wasm-bindgen" "$@" \
+        "$project_root/target/$target_dir/$web_target/release/progred.wasm"
+}
+build ci-web "$web_rustflags" $web_bindgen_args
+build ci-web-fallback "$web_fallback_rustflags" $web_fallback_bindgen_args
 
 python3 -B -m unittest discover -s website -p 'test_*.py'
 node --test website/test_*.cjs

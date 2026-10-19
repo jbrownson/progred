@@ -6,3 +6,7 @@ web_rustflags='-C target-feature=+atomics,+bulk-memory,+simd128 -C link-arg=--sh
 # wasm-bindgen wraps it for the page.
 web_cargo_args='--release --bin progred -p progred'
 web_bindgen_args='--target web --no-typescript --out-dir web/pkg --out-name progred'
+# The fallback for pages without cross-origin isolation: no shared memory, so
+# no workers. It rebuilds std too, so it needs nothing the threaded build doesn't.
+web_fallback_rustflags='-C target-feature=+bulk-memory,+simd128'
+web_fallback_bindgen_args='--target web --no-typescript --out-dir web/pkg-fallback --out-name progred'

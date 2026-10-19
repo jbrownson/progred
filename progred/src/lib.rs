@@ -80,7 +80,7 @@ mod web_input;
 pub mod web_render;
 #[cfg(any(test, target_arch = "wasm32"))]
 mod web_scroll;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 pub mod web_worker;
 mod workspace;
 
@@ -88,6 +88,8 @@ mod workspace;
 pub use cam_profile::profile_cam;
 #[cfg(all(feature = "cam-profile", target_arch = "wasm32"))]
 pub use libraries::fidget::mesh::performance::take_profile_mesh;
+#[cfg(target_arch = "wasm32")]
+pub use web::install_panic_hook;
 
 use crate::command::Command;
 use app::App;

@@ -541,6 +541,8 @@ interrupt a single tape compilation/evaluation already in progress.
 Lighting corrects sample-space gradients for unequal axis spacing, so
 depth refinement does not change the light direction or relative axis weighting.
 Default headless contexts use inline execution; the browser uses its shared-memory worker.
+The browser's fallback build, for pages without cross-origin isolation, has no
+background tasks, so the three 3D previews draw a note in their box instead.
 
 Implicit CAM rendering uses the software renderer explicitly. Its stock
 expression spills as playback advances, which Fidget's GPU interpreter cannot

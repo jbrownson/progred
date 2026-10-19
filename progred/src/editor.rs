@@ -10,7 +10,7 @@ use crate::input::{PendingGesture, PendingPointer, PendingScroll, continuous_inp
 #[cfg(target_os = "macos")]
 use crate::macos_window;
 use crate::model::Model;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 use crate::web_worker;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog, text_store};
@@ -292,10 +292,16 @@ pub(crate) fn new_editor(
     text_binders: gid_text::Binders,
     proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
 ) -> Editor {
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
     let computations = proxy
         .as_ref()
         .map(|_| computations::Computations::new(web_worker::executor(), web_worker::wake))
+        .unwrap_or_default();
+    // Without shared memory, a browser page has no worker to run jobs on.
+    #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
+    let computations = proxy
+        .as_ref()
+        .map(|_| computations::Computations::without_tasks())
         .unwrap_or_default();
     #[cfg(not(target_arch = "wasm32"))]
     let computations = proxy

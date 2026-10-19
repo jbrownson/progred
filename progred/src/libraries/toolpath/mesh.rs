@@ -47,37 +47,42 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     };
     let drawing = Layout::program(Rc::new(move |context, build| {
         let computations = context.viewing().computations();
-        let computation = context.site().memo(computations, || {
-            computation::Computation::new(
-                computations,
-                program.clone(),
-                fuel,
-                settings.clone(),
-                depth,
-            )
-        });
-        computation.program.update(program.clone(), fuel);
-        computation.settings.set(settings.clone());
-        computation.depth.set(depth);
-        let geometry = computations.runtime.read(&computation.geometry);
-        let result = geometry
-            .as_ref()
-            .map_err(|error| memo::failure(*error))
-            .and_then(|geometry| geometry.as_ref().as_ref().map_err(Clone::clone));
-        let drawing = result.and_then(|geometry| {
-            fidget::mesh::drawing(&geometry.geometry, &model, state.as_ref(), scale)
-                .map(|drawing| {
-                    if geometry.awaiting_first_surface {
-                        crate::display::overlay([drawing, crate::display::dim("…")])
-                    } else {
-                        drawing
-                    }
-                })
-                .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))
-        });
-        drawing
-            .unwrap_or_else(presentation::result_layout)
-            .measure(context, build)
+        match &computations.tasks {
+            None => super::background_unavailable(&model),
+            Some(tasks) => {
+                let computation = context.site().memo(computations, || {
+                    computation::Computation::new(
+                        computations,
+                        tasks,
+                        program.clone(),
+                        fuel,
+                        settings.clone(),
+                        depth,
+                    )
+                });
+                computation.program.update(program.clone(), fuel);
+                computation.settings.set(settings.clone());
+                computation.depth.set(depth);
+                let geometry = computations.runtime.read(&computation.geometry);
+                let result = geometry
+                    .as_ref()
+                    .map_err(|error| memo::failure(*error))
+                    .and_then(|geometry| geometry.as_ref().as_ref().map_err(Clone::clone));
+                let drawing = result.and_then(|geometry| {
+                    fidget::mesh::drawing(&geometry.geometry, &model, state.as_ref(), scale)
+                        .map(|drawing| {
+                            if geometry.awaiting_first_surface {
+                                crate::display::overlay([drawing, crate::display::dim("…")])
+                            } else {
+                                drawing
+                            }
+                        })
+                        .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))
+                });
+                drawing.unwrap_or_else(presentation::result_layout)
+            }
+        }
+        .measure(context, build)
     }));
     Some(fidget::interactive_volume(drawing, input))
 }

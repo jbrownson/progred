@@ -185,7 +185,10 @@ one shared-memory coordinator Web Worker, which hosts a Rayon pool (see
 [the browser setup](../web/README.md)), with JS job-pointer transport and
 page-thread wake delivery; the editor starts only after worker initialization
 succeeds. Wake
-messages are coalesced to animation frames. Default headless contexts still use
+messages are coalesced to animation frames. A page without cross-origin
+isolation can't share memory with workers, so it runs a fallback build whose
+`Computations` have no `Tasks` at all, and libraries that need background jobs
+draw a note instead. Default headless contexts still use
 the inline executor. Tests can supply a controlled
 queue or the threaded executor without a windowing harness.
 

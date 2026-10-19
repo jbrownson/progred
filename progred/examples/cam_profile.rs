@@ -33,7 +33,7 @@ mod web {
     }
     #[wasm_bindgen]
     pub fn start_profile_rect(progress: f64, width: u32, height: u32, controls: bool) {
-        progred::web_worker::initialize();
+        progred::install_panic_hook();
         let runtime = Runtime::default();
         let tasks = Tasks::new(
             &runtime,

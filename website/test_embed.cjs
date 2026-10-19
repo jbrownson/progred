@@ -9,7 +9,7 @@ const bootstrap = fs.readFileSync(path.join(root, "web/index.html"), "utf8")
   .match(/<script type="module">([\s\S]*?)<\/script>/)[1]
   .replace(/^\s*import .*;$/gm, "");
 
-async function start(search, { ok = true, parseError = false, platform = "Linux x86_64", storedTheme, storageDenied = false, duringInit, capturesScroll = () => false } = {}) {
+async function start(search, { ok = true, parseError = false, platform = "Linux x86_64", storedTheme, storageDenied = false, duringInit, capturesScroll = () => false, isolated = true } = {}) {
   const { commandIsMeta } = await import("../web/platform.mjs");
   const { isTheme, savedTheme } = await import("../web/theme.mjs");
   const { forwardModifiers } = await import("../web/modifiers.mjs");
@@ -45,8 +45,23 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
   };
   const documentElement = { style: {}, dataset: {} };
   const body = { style: {} };
+  const wasm = {
+    browser_focus_changed: () => focusEvents.push("changed"),
+    browser_modifiers_changed: (...state) => modifierChanges.push(state),
+    browser_captures_scroll: capturesScroll,
+    browser_keyboard: (event) => { keyboardEvents.push(event); return false; },
+    set_theme: (theme) => themeChanges.push(theme),
+    computation_finished() {},
+    worker_threads: () => 1,
+    prepare_renderer: async (target) => { assert.equal(target, canvas); return "test"; },
+    start_editor: (...args) => {
+      if (parseError) throw "invalid document";
+      calls.push(["editor", ...args]);
+      onChange = args[2];
+    },
+  };
   await vm.runInNewContext(`(async () => { ${bootstrap} })()`, {
-    URL, URLSearchParams, Error, crossOriginIsolated: true,
+    URL, URLSearchParams, Error, crossOriginIsolated: isolated,
     JSON, commandIsMeta, isTheme, savedTheme, forwardModifiers, routeWheel, routeKeyboard, navigator: { platform },
     location: { search, href: `http://localhost/editor/${search}`, origin: "http://localhost" },
     window: host,
@@ -59,23 +74,12 @@ async function start(search, { ok = true, parseError = false, platform = "Linux 
       calls.push(["fetch", url.href]);
       return { ok, status: ok ? 200 : 404, text: async () => "example source" };
     },
-    init: async () => { calls.push(["init"]); duringInit?.(listeners, parent); },
-    startWorker: async (...args) => { calls.push(["workers", args[4]]); },
-    wasm: {
-      browser_focus_changed: () => focusEvents.push("changed"),
-      browser_modifiers_changed: (...state) => modifierChanges.push(state),
-      browser_captures_scroll: capturesScroll,
-      browser_keyboard: (event) => { keyboardEvents.push(event); return false; },
-      set_theme: (theme) => themeChanges.push(theme),
-      computation_finished() {},
-      worker_threads: () => 1,
-      prepare_renderer: async (target) => { assert.equal(target, canvas); return "test"; },
-      start_editor: (...args) => {
-        if (parseError) throw "invalid document";
-        calls.push(["editor", ...args]);
-        onChange = args[2];
-      },
+    loadEditor: async (threaded) => {
+      calls.push(["init", threaded ? "pkg" : "pkg-fallback"]);
+      duringInit?.(listeners, parent);
+      return { wasm, url: "http://localhost/editor/pkg/progred.js" };
     },
+    startWorker: async (...args) => { calls.push(["workers", args[4]]); },
   });
   return { calls, loading, messages, onChange, focusEvents, listeners, parent, themeChanges, modifierChanges, keyboardEvents,
     canvas, canvasListeners, documentElement, body };
@@ -92,7 +96,13 @@ test("browser window focus is forwarded without page click handlers", async () =
 
 test("standalone startup remains blank with its full menu and default workers", async () => {
   const { calls, loading } = await start("");
-  assert.deepEqual(calls, [["init"], ["workers", undefined], ["editor", undefined, true, undefined, undefined, undefined, false, "light"]]);
+  assert.deepEqual(calls, [["init", "pkg"], ["workers", undefined], ["editor", undefined, true, undefined, undefined, undefined, false, "light"]]);
+  assert.equal(loading.style.display, "none");
+});
+
+test("a page without cross-origin isolation starts the fallback build without workers", async () => {
+  const { calls, loading } = await start("?threads=1", { isolated: false });
+  assert.deepEqual(calls, [["init", "pkg-fallback"], ["editor", undefined, true, undefined, undefined, undefined, false, "light"]]);
   assert.equal(loading.style.display, "none");
 });
 
@@ -184,7 +194,7 @@ test("auto wheel mode consults the installed WASM probe before allowing editor d
 test("embed fetches its document and supplies ordinary startup options", async () => {
   const { calls } = await start("?document=../lessons/cells.gid&menu=hidden&threads=1");
   assert.deepEqual(calls, [
-    ["fetch", "http://localhost/lessons/cells.gid"], ["init"],
+    ["fetch", "http://localhost/lessons/cells.gid"], ["init", "pkg"],
     ["workers", 1], ["editor", "example source", false, undefined, undefined, undefined, false, "light"],
   ]);
 });

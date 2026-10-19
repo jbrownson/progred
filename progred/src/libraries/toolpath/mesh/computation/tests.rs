@@ -416,6 +416,7 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
     });
     let graph = Computation::new(
         &computations,
+        computations.tasks.as_ref().unwrap(),
         program.clone().into(),
         10000,
         settings.clone(),
@@ -456,7 +457,14 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
     graph.settings.set(settings.clone());
     graph.depth.set(3);
     let reused = computations.runtime.read(&graph.geometry).unwrap();
-    let fresh = Computation::new(&computations, program.into(), 10000, settings, 3);
+    let fresh = Computation::new(
+        &computations,
+        computations.tasks.as_ref().unwrap(),
+        program.into(),
+        10000,
+        settings,
+        3,
+    );
     let recomputed = computations.runtime.read(&fresh.geometry).unwrap();
     let a = reused.as_ref().as_ref().unwrap();
     let b = recomputed.as_ref().as_ref().unwrap();

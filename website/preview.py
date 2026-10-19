@@ -84,7 +84,8 @@ def prepare_editor(repository, reuse=False):
     """Build the browser editor, which Cargo makes quick when nothing changed.
     `reuse` keeps existing generated files, building only when they're missing."""
     editor = repository / "web"
-    required = [editor / "pkg/progred_bg.wasm", editor / "pkg/progred.js"]
+    required = [editor / package / name for package in ("pkg", "pkg-fallback")
+                for name in ("progred_bg.wasm", "progred.js")]
     if reuse and all(path.is_file() for path in required):
         print("Using the existing browser editor without checking for changes.", flush=True)
         return editor
