@@ -299,42 +299,7 @@ impl Parser<'_> {
 
 /// The canonical printer — deterministic from (document, binders).
 pub fn print(doc: &Document, binders: &Binders) -> String {
-    // Loaded binders survive for cell identities the document still mentions.
-    // Every other identity receives a deterministic binder: its
-    // simple name when available, otherwise its short id suffix.
-    let mentioned = mentioned_cell_ids(doc);
-    let mut spell: BTreeMap<CellId, String> = BTreeMap::new();
-    for (binder, cell) in binders {
-        if mentioned.contains(cell) {
-            spell.entry(*cell).or_insert_with(|| binder.clone());
-        }
-    }
-    let mut taken: HashSet<String> = spell.values().cloned().collect();
-    let mut named: Vec<(&str, CellId)> = doc
-        .cells
-        .iter()
-        .filter_map(|(cell, value)| name::read(value).map(|name| (name, *cell)))
-        .collect();
-    named.sort();
-    for (name, cell) in &named {
-        if spell.contains_key(cell) {
-            continue;
-        }
-        let candidate = unique_binder(derive_binder(name), &mut taken);
-        spell.insert(*cell, candidate);
-    }
-    let mut remaining: Vec<CellId> = mentioned
-        .iter()
-        .copied()
-        .filter(|cell| !spell.contains_key(cell))
-        .collect();
-    remaining.sort();
-    for cell in remaining {
-        let hex = cell.to_string();
-        let candidate = unique_binder(format!("_{}", &hex[hex.len() - 5..]), &mut taken);
-        spell.insert(cell, candidate);
-    }
-
+    let spell = spellings(doc, binders);
     let mut out = String::new();
     out.push_str("{\n");
     if !spell.is_empty() {
@@ -378,6 +343,46 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
     out
 }
 
+/// Each cell the document mentions, spelled: loaded binders survive for
+/// cell identities the document still mentions. Every other identity
+/// receives a deterministic binder: its simple name when available,
+/// otherwise its short id suffix.
+fn spellings(doc: &Document, binders: &Binders) -> BTreeMap<CellId, String> {
+    let mentioned = mentioned_cell_ids(doc);
+    let mut spell: BTreeMap<CellId, String> = BTreeMap::new();
+    for (binder, cell) in binders {
+        if mentioned.contains(cell) {
+            spell.entry(*cell).or_insert_with(|| binder.clone());
+        }
+    }
+    let mut taken: HashSet<String> = spell.values().cloned().collect();
+    let mut named: Vec<(&str, CellId)> = doc
+        .cells
+        .iter()
+        .filter_map(|(cell, value)| name::read(value).map(|name| (name, *cell)))
+        .collect();
+    named.sort();
+    for (name, cell) in &named {
+        if spell.contains_key(cell) {
+            continue;
+        }
+        let candidate = unique_binder(derive_binder(name), &mut taken);
+        spell.insert(*cell, candidate);
+    }
+    let mut remaining: Vec<CellId> = mentioned
+        .iter()
+        .copied()
+        .filter(|cell| !spell.contains_key(cell))
+        .collect();
+    remaining.sort();
+    for cell in remaining {
+        let hex = cell.to_string();
+        let candidate = unique_binder(format!("_{}", &hex[hex.len() - 5..]), &mut taken);
+        spell.insert(cell, candidate);
+    }
+    spell
+}
+
 fn identity(spell: &BTreeMap<CellId, String>, cell: CellId) -> String {
     match spell.get(&cell) {
         Some(binder) => binder.clone(),
@@ -410,13 +415,8 @@ fn mentioned_cell_ids(doc: &Document) -> HashSet<CellId> {
             }
         }
     }
-    for cell in doc.cells.cells().copied().collect::<Vec<_>>() {
-        if let Some(value) = doc.cells.value(cell) {
-            walk(value, &mut ids);
-        }
-    }
-    if let Some(root) = &doc.root {
-        walk(root, &mut ids);
+    for value in doc.cells.iter().map(|(_, value)| value).chain(&doc.root) {
+        walk(value, &mut ids);
     }
     ids
 }
