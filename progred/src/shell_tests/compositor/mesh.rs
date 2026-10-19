@@ -1,4 +1,4 @@
-//! Compare the direct mesh interpretation with the former image round trip.
+//! Compare the direct mesh composite with one through an intermediate image.
 use super::*;
 
 #[test]
@@ -7,7 +7,7 @@ fn cam_mesh_roundtrip_profile() {
     use crate::libraries::{
         controls::vocabulary::STATE, fidget::vocabulary as f, toolpath::vocabulary as t,
     };
-    use crate::test_examples::{cam_controls_path, cam_editor, cam_position, result_path};
+    use crate::test_examples::{cam_editor, cam_position, result_path};
     let gpu = gpu::Gpu::new();
     let size = kurbo::Size::new(2400.0, 1800.0);
     let scale = 2.0;
@@ -17,7 +17,7 @@ fn cam_mesh_roundtrip_profile() {
         let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
             .path
             .clone();
-        let controls = cam_controls_path(&path);
+        let controls = result_path(&path);
         let camera = result_path(&controls);
         editor.model.workspace.left.panes[0]
             .view

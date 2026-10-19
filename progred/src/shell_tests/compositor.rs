@@ -188,8 +188,8 @@ fn cam_hover_compositor_pixels() {
             } else {
                 // Test the same bottom control band searched above. Large mesh
                 // shading can vary by a few pixels even for identical inputs
-                // on Metal (also on the old separate-device path); the exact
-                // mesh-input checks above isolate that from hover behavior.
+                // on Metal; the exact mesh-input checks above isolate that
+                // from hover behavior.
                 let controls_changed = pixels
                     .chunks_exact(4)
                     .zip(baseline.chunks_exact(4))

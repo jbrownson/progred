@@ -1,4 +1,4 @@
-//! Stable single-shape fixtures for rendering regressions and historical
+//! Stable single-shape fixtures for rendering regressions and performance
 //! canaries, and the example editors that captures, canaries and lesson tests
 //! share.
 
@@ -45,11 +45,6 @@ pub fn result_path(path: &[Step]) -> Path {
             crate::libraries::presentation::vocabulary::RESULT,
         )])
         .collect()
-}
-
-// Preparation feeds the CAM viewport, which returns with-controls directly.
-pub fn cam_controls_path(path: &[Step]) -> Path {
-    result_path(path)
 }
 
 pub fn cam_position(progress: f64) -> Value {

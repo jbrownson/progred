@@ -156,8 +156,8 @@ fn without_removes_fields_and_elements() {
 
 #[test]
 fn emptied_containers_persist_as_values() {
-    // No sticky-kind machinery: an emptied record is still the
-    // empty record, an emptied list the empty list.
+    // An emptied record is still the empty record, an emptied list the
+    // empty list.
     let record = Value::record([(label("only"), blob("x"))]);
     assert_eq!(without(&record, &[key("only")]), Some(Value::record([])));
     let list = Value::list([blob("x")]);

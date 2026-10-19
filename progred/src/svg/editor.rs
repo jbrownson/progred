@@ -2,7 +2,7 @@
 //! preview while its computations run, and the website's images.
 
 use super::*;
-use crate::test_examples::{cam_controls_path, cam_editor, cam_position};
+use crate::test_examples::{cam_editor, cam_position, result_path};
 use gid::{CellId, Value};
 #[test]
 #[ignore = "writes full-editor captures, including Fidget rasterization"]
@@ -186,7 +186,7 @@ fn capture_cam_async(mode: CellId) {
         .path
         .clone();
     let annotations = &mut runner.editor.model.workspace.left.panes[0].view.annotations;
-    annotations.set_field(&cam_controls_path(&path), STATE, Some(cam_position(0.7)));
+    annotations.set_field(&result_path(&path), STATE, Some(cam_position(0.7)));
     capture(&mut runner, "cam_async_updating.svg");
     assert_eq!(queue.lock().unwrap().len(), 1);
     complete(&mut runner);

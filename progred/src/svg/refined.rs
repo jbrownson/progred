@@ -2,7 +2,7 @@ use super::*;
 use crate::libraries::{
     controls::vocabulary::STATE, fidget::vocabulary as f, toolpath::vocabulary as t,
 };
-use crate::test_examples::{cam_controls_path, cam_editor, cam_position, result_path};
+use crate::test_examples::{cam_editor, cam_position, result_path};
 use gid::Value;
 use incremental::background::{Executor, Job};
 use std::{
@@ -27,9 +27,9 @@ fn readme_svg_captures() {
         .clone();
     let view = &mut editor.model.workspace.left.panes[0].view;
     view.annotations
-        .set_field(&cam_controls_path(&path), STATE, Some(cam_position(0.3)));
+        .set_field(&result_path(&path), STATE, Some(cam_position(0.3)));
     view.annotations.set_field(
-        &result_path(&cam_controls_path(&path)),
+        &result_path(&result_path(&path)),
         f::CAMERA,
         Some(Value::record([
             (f::YAW, crate::libraries::f32::value(30.0)),
@@ -155,7 +155,7 @@ fn editor_toolpath_refined_svg_captures() {
         .view
         .annotations
         .set_field(
-            &result_path(&cam_controls_path(&path)),
+            &result_path(&result_path(&path)),
             f::CAMERA,
             Some(Value::record([
                 (f::YAW, crate::libraries::f32::value(55.0)),
@@ -169,7 +169,7 @@ fn editor_toolpath_refined_svg_captures() {
     runner.editor.model.workspace.left.panes[0]
         .view
         .annotations
-        .set_field(&cam_controls_path(&path), STATE, Some(cam_position(0.7)));
+        .set_field(&result_path(&path), STATE, Some(cam_position(0.7)));
     capture(&mut runner, "cam_refined_playback_pending");
     assert_eq!(queue.lock().unwrap().len(), 1);
     finish_mesh(&mut runner, 0);
