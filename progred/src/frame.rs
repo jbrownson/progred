@@ -452,16 +452,15 @@ impl Editor {
 impl EditorRunner {
     pub(crate) fn probe_pointer(&mut self, scale: f64) {
         // Retain the complete hover location throughout an active press.
-        if self.editor.pressed {
-            return;
+        if !self.editor.pressed {
+            let (hover, pointer_root) = hover_target(self.frame.dispatch.hover_geometry.probe(
+                self.editor.pointer,
+                self.frame.hover.as_ref(),
+                HOVER_REACH_POINTS * scale,
+            ));
+            self.frame.hover = hover;
+            self.frame.dispatch.pointer_root = pointer_root;
         }
-        let (hover, pointer_root) = hover_target(self.frame.dispatch.hover_geometry.probe(
-            self.editor.pointer,
-            self.frame.hover.as_ref(),
-            HOVER_REACH_POINTS * scale,
-        ));
-        self.frame.hover = hover;
-        self.frame.dispatch.pointer_root = pointer_root;
     }
 
     /// Handle an event with the installed frame. `handle_event` answers

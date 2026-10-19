@@ -385,14 +385,13 @@ impl Editor {
         }
     }
 
+    /// Advance the running gesture along `samples`; whether one is running.
     pub(crate) fn advance_gesture(&mut self, samples: &[Point]) -> bool {
-        let Some(changed) = self.session().advance_gesture(samples) else {
-            return false;
-        };
-        if changed {
+        let advanced = self.session().advance_gesture(samples);
+        if advanced == Some(true) {
             self.refresh_title();
         }
-        true
+        advanced.is_some()
     }
 
     pub(crate) fn finish_gesture(&mut self) -> bool {
@@ -437,26 +436,24 @@ impl Editor {
     /// it lives, if they changed. The shell calls this after dispatch too,
     /// since the edits handlers make can't reach the window.
     pub(crate) fn refresh_title(&mut self) {
-        let Some(window) = self.window() else {
-            return;
-        };
-        let shown = ShownTitle {
-            window: window.id(),
-            title: self.title(),
-            edited: self.model.dirty(),
-            path: self.doc_path.clone(),
-        };
-        if self.shown_title.as_ref() == Some(&shown) {
-            return;
+        if let Some(window) = self.window() {
+            let shown = ShownTitle {
+                window: window.id(),
+                title: self.title(),
+                edited: self.model.dirty(),
+                path: self.doc_path.clone(),
+            };
+            if self.shown_title.as_ref() != Some(&shown) {
+                window.set_title(&shown.title);
+                #[cfg(target_os = "macos")]
+                {
+                    use winit::platform::macos::WindowExtMacOS;
+                    window.set_document_edited(shown.edited);
+                    macos_window::set_represented(&window, shown.path.as_deref());
+                }
+                self.shown_title = Some(shown);
+            }
         }
-        window.set_title(&shown.title);
-        #[cfg(target_os = "macos")]
-        {
-            use winit::platform::macos::WindowExtMacOS;
-            window.set_document_edited(shown.edited);
-            macos_window::set_represented(&window, shown.path.as_deref());
-        }
-        self.shown_title = Some(shown);
     }
 
     pub(crate) fn menu_toggles(&self) -> command::Toggles {
@@ -628,18 +625,18 @@ impl Editor {
         geometry: Geometry<'_, Editor>,
     ) -> bool {
         let availability = self.menu_availability();
-        if let Some(command) = menu::shortcut(event, self.command_modifier)
+        let navigation = match menu::shortcut(event, self.command_modifier)
             .filter(|command| availability.enabled(*command))
         {
-            self.choose_menu(command, geometry);
-            return true;
-        }
-        match menu::navigate(
-            &mut self.menu,
-            &menu::definition(self.stack.projections().map(|(library, _)| library)),
-            availability,
-            event,
-        ) {
+            Some(command) => menu::Navigation::Activate(command),
+            None => menu::navigate(
+                &mut self.menu,
+                &menu::definition(self.stack.projections().map(|(library, _)| library)),
+                availability,
+                event,
+            ),
+        };
+        match navigation {
             menu::Navigation::Activate(command) => {
                 self.choose_menu(command, geometry);
                 true
@@ -706,22 +703,19 @@ impl Editor {
             .and_then(|path| path.file_name())
             .map(|name| name.to_string_lossy().into_owned());
         let name = match (save_as, current) {
-            (false, Some(name)) => name,
-            (_, current) => {
-                let Some(name) = crate::web::ask_name(current.as_deref().unwrap_or("untitled.gid"))
-                else {
-                    return;
-                };
-                name
-            }
+            (false, Some(name)) => Some(name),
+            (_, current) => crate::web::ask_name(current.as_deref().unwrap_or("untitled.gid")),
         };
-        match crate::web::download(&name, &gid_text::print(&self.model.doc, &self.text_binders)) {
-            Ok(()) => {
-                self.model.mark_saved();
-                self.finish_gesture();
-                self.adopt_doc_path(PathBuf::from(name));
+        if let Some(name) = name {
+            match crate::web::download(&name, &gid_text::print(&self.model.doc, &self.text_binders))
+            {
+                Ok(()) => {
+                    self.model.mark_saved();
+                    self.finish_gesture();
+                    self.adopt_doc_path(PathBuf::from(name));
+                }
+                Err(error) => web_sys::console::error_1(&error),
             }
-            Err(error) => web_sys::console::error_1(&error),
         }
     }
 

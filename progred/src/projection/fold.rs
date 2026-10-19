@@ -17,32 +17,36 @@ pub(super) fn collapsed_layout(
     value: &grap::RuntimeValue,
     default: bool,
 ) -> Option<Layout> {
-    let delim = match value.as_cell() {
-        Some(cell) => {
-            let value = cx.sources.resolve(cell)?;
-            let mut followed = path.to_vec();
-            followed.push(Step::Follow(value.resolution));
+    match value.as_cell() {
+        Some(cell) => cx.sources.resolve(cell).and_then(|definition| {
+            let followed: Vec<Step> = path
+                .iter()
+                .cloned()
+                .chain([Step::Follow(definition.resolution)])
+                .collect();
             (cx.pending_child_of(&followed).is_none() && cx.pending_edge_under(&followed).is_none())
-                .then_some(Delim::Paren)?
-        }
+                .then_some(Delim::Paren)
+        }),
         None if value.list_len().is_some_and(|len| len != 0)
             && cx.pending_child_of(path).is_none() =>
         {
-            Delim::Bracket
+            Some(Delim::Bracket)
         }
         None if value.record_len().is_some_and(|len| len != 0)
             && cx.pending_child_of(path).is_none()
             && cx.pending_edge_under(path).is_none() =>
         {
-            Delim::Brace
+            Some(Delim::Brace)
         }
-        _ => return None,
-    };
-    Some(crate::display::selectable_value(
-        selectable_bracket(delim, toggle(dim("…"), path, cx, default)),
-        &cx.site(Rc::from(path)),
-        value,
-    ))
+        None => None,
+    }
+    .map(|delim| {
+        crate::display::selectable_value(
+            selectable_bracket(delim, toggle(dim("…"), path, cx, default)),
+            &cx.site(Rc::from(path)),
+            value,
+        )
+    })
 }
 
 /// Opens the fold, selecting the occurrence first as a click on its

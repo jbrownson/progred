@@ -1031,41 +1031,42 @@ fn value_layout(
     } = scope;
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
-    if let Some(value) = value
-        && let Some(default) = fold_default
-        && crate::annotations::folded(cx.annotations.at(path), default)
-        && let Some(collapsed) = fold::collapsed_layout(cx, path, value, default)
-    {
-        return Some(collapsed);
-    }
-    let selection = cx
-        .selection
-        .filter(|current| current.path() == path)
-        .map(Selection::payload);
-    let pending = if cx.pending_edge_under(path).is_some() {
-        Some(crate::display::Pending::Field)
-    } else {
-        cx.pending_child_of(path)
-            .map(crate::display::Pending::Child)
-    };
-    let state = cx.annotations.at(path);
-    let occurrence = || cx.site(Rc::from(path));
-    let input = crate::display::ProjectionInput {
-        env: &ProjectEnv { cx, path },
-        default_projection: default_projection.clone(),
-        value,
-        scale_factor: cx.styles.scale,
-        writable: source.is_some_and(|source| crate::location::writable(&cx.sources, source)),
-        selection: selection.as_ref(),
-        pending,
-        state,
-        occurrence: &occurrence,
-    };
-    match current_projection {
-        Some(current) => current(&input),
-        None => projection.apply(&input),
-    }
-    .or_else(|| crate::display::raw::view(&input))
+    // A closed fold draws as its brackets around an ellipsis.
+    value
+        .zip(fold_default)
+        .filter(|(_, default)| crate::annotations::folded(cx.annotations.at(path), *default))
+        .and_then(|(value, default)| fold::collapsed_layout(cx, path, value, default))
+        .or_else(|| {
+            let selection = cx
+                .selection
+                .filter(|current| current.path() == path)
+                .map(Selection::payload);
+            let pending = if cx.pending_edge_under(path).is_some() {
+                Some(crate::display::Pending::Field)
+            } else {
+                cx.pending_child_of(path)
+                    .map(crate::display::Pending::Child)
+            };
+            let state = cx.annotations.at(path);
+            let occurrence = || cx.site(Rc::from(path));
+            let input = crate::display::ProjectionInput {
+                env: &ProjectEnv { cx, path },
+                default_projection: default_projection.clone(),
+                value,
+                scale_factor: cx.styles.scale,
+                writable: source
+                    .is_some_and(|source| crate::location::writable(&cx.sources, source)),
+                selection: selection.as_ref(),
+                pending,
+                state,
+                occurrence: &occurrence,
+            };
+            match current_projection {
+                Some(current) => current(&input),
+                None => projection.apply(&input),
+            }
+            .or_else(|| crate::display::raw::view(&input))
+        })
 }
 
 /// Every projected value's Pick backstop: pick the value into an open

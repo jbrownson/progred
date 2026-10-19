@@ -11,17 +11,18 @@ pub fn shortcut(
     commands: impl IntoIterator<Item = Command>,
 ) -> Option<Command> {
     let modifiers = &event.modifiers;
-    if !event.state.is_down() || !modifier.pressed(modifiers) || modifiers.alt() {
-        return None;
+    match &event.key {
+        ui_events::keyboard::Key::Character(key)
+            if event.state.is_down() && modifier.pressed(modifiers) && !modifiers.alt() =>
+        {
+            commands.into_iter().find(|command| {
+                spec(*command)
+                    .shortcut
+                    .is_some_and(|shortcut| shortcut.matches(key, modifiers.shift()))
+            })
+        }
+        _ => None,
     }
-    let ui_events::keyboard::Key::Character(key) = &event.key else {
-        return None;
-    };
-    commands.into_iter().find(|command| {
-        spec(*command)
-            .shortcut
-            .is_some_and(|shortcut| shortcut.matches(key, modifiers.shift()))
-    })
 }
 
 /// History belongs to editing, independently of whether a menu is installed.
@@ -33,22 +34,25 @@ pub(crate) fn history_handler(
         move |editor: &mut crate::Editor,
               event,
               input: &mut crate::frame::DispatchContext<crate::Editor>| {
-            let Event::Key(key) = &event else {
-                return EventOutcome::decline(event);
+            let command = match &event {
+                Event::Key(key) => shortcut(
+                    key,
+                    editor.command_modifier,
+                    [
+                        Command::Doc(DocCommand::Undo),
+                        Command::Doc(DocCommand::Redo),
+                    ],
+                )
+                .filter(|command| editor.menu_availability().enabled(*command)),
+                _ => None,
             };
-            let Some(Command::Doc(command)) = shortcut(
-                key,
-                editor.command_modifier,
-                [
-                    Command::Doc(DocCommand::Undo),
-                    Command::Doc(DocCommand::Redo),
-                ],
-            )
-            .filter(|command| editor.menu_availability().enabled(*command)) else {
-                return EventOutcome::decline(event);
-            };
-            editor.run_doc_command(command, input.geometry(scale));
-            EventOutcome::accept()
+            match command {
+                Some(Command::Doc(command)) => {
+                    editor.run_doc_command(command, input.geometry(scale));
+                    EventOutcome::accept()
+                }
+                _ => EventOutcome::decline(event),
+            }
         },
     )
 }
