@@ -26,7 +26,9 @@ pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
 pub use crate::display::widget::navigation::Landmark;
 
 /// Where the selection lands after removing `path`: the sibling after it
-/// (before it, moving backward), else the other one, else the parent.
+/// (before it, moving backward), or, when it's the last (first) of its
+/// siblings, the one after (before) its nearest ancestor that has one; else
+/// the same the other way; else its parent.
 pub fn selection_after_removing<World>(
     landmarks: &[Landmark<World>],
     root: Option<&Root>,
