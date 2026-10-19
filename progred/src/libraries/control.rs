@@ -13,14 +13,11 @@ use crate::display::{
     RecordField, activatable, alternatives, col, descend_local, dim, record_heads, row, shared,
 };
 use crate::display::{group, group_hug, hug};
-#[cfg(test)]
-use ::grap;
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
 use std::rc::Rc;
 
-mod all;
 #[cfg(test)]
 mod runtime_tests;
 
@@ -80,7 +77,7 @@ pub fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::ALL,
-            ForeignFunction::new(all::evaluate)
+            ForeignFunction::new(all_foreign)
                 .parameters([vocabulary::EXPRESSIONS])
                 .tracked(),
         )
@@ -115,6 +112,23 @@ fn do_foreign(
         result
             .unwrap_or_else(|| ::grap::absent::value(vocabulary::MISSING_FINAL_EXPRESSION).into()),
     )
+}
+
+fn all_foreign(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<RuntimeValue, Halt> {
+    let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
+        return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
+    };
+    let Some(elements) = context.elements(&expressions) else {
+        return Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into());
+    };
+    try_map_sized(elements, |expression| {
+        context.eval(expression.clone(), environment)
+    })
+    .map(RuntimeValue::list)
 }
 
 fn quote_foreign(

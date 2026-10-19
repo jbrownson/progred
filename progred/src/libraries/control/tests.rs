@@ -70,6 +70,13 @@ fn do_call(expressions: impl IntoIterator<Item = Value>) -> Value {
     )
 }
 
+fn all_call(expressions: impl IntoIterator<Item = Value>) -> Value {
+    grap::call(
+        Value::from(vocabulary::ALL),
+        [(vocabulary::EXPRESSIONS, Value::list(expressions))],
+    )
+}
+
 fn evaluate(expression: &Value) -> grap::Evaluation<gid::Value> {
     crate::test_support::test_evaluate(expression, |_| None, &functions(), 100)
 }
@@ -162,6 +169,62 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
     assert!(result.completed);
     assert_eq!(result.result, ::grap::absent::decline());
     assert!(log.borrow().is_empty());
+}
+
+#[test]
+fn all_retains_absents_and_effects_and_continues_in_order() {
+    let emit = new_cell_id();
+    let log = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let output = log.clone();
+    let functions = functions().register(
+        emit,
+        ForeignFunction::from_value(move |context, call, env| {
+            let value =
+                context.eval_to_value(context.field(call, vocabulary::VALUE).unwrap(), env)?;
+            Ok(context.effect(|| {
+                output.borrow_mut().push(value.clone());
+                value
+            }))
+        }),
+    );
+    let before = Value::from(b"before".to_vec());
+    let after = Value::from(b"after".to_vec());
+    for reason in [new_cell_id(), ::grap::absent::FUEL_EXHAUSTED] {
+        let failure = ::grap::absent::value(reason);
+        let values = [before.clone(), failure, after.clone()];
+        let expression = all_call(
+            values
+                .clone()
+                .map(|value| ::grap::call(emit.into(), [(vocabulary::VALUE, value)])),
+        );
+        log.borrow_mut().clear();
+        let result = crate::test_support::test_evaluate(&expression, |_| None, &functions, 100);
+        assert!(result.completed);
+        assert_eq!(result.result, Value::list(values.clone()));
+        assert_eq!(*log.borrow(), values);
+    }
+}
+
+#[test]
+fn all_handles_empty_and_malformed_lists_but_does_not_swallow_halts() {
+    assert_eq!(evaluate(&all_call([])).result, Value::list([]));
+    let missing = evaluate(&::grap::call(vocabulary::ALL.into(), []));
+    assert!(missing.completed);
+    assert!(::grap::absent::reason(&missing.result).is_some());
+    let invalid = ::grap::call(
+        vocabulary::ALL.into(),
+        [(vocabulary::EXPRESSIONS, Value::record([]))],
+    );
+    assert_eq!(
+        evaluate(&invalid).result,
+        ::grap::absent::value(vocabulary::INVALID_EXPRESSIONS)
+    );
+    let exhausted = evaluate_with_fuel(&all_call((0..100).map(|_| Value::record([]))), 5);
+    assert!(!exhausted.completed);
+    assert_eq!(
+        ::grap::absent::reason(&exhausted.result),
+        Some(::grap::absent::FUEL_EXHAUSTED)
+    );
 }
 
 #[test]
