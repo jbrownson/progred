@@ -105,7 +105,7 @@ pub(super) fn display<W: Host>(
     let program = fields.field(PROGRAM)?;
     let width = fields.field(layout::vocabulary::WIDTH)?.as_f64()?;
     let height = fields.field(layout::vocabulary::HEIGHT)?.as_f64()?;
-    let fuel = super::read_fuel(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
+    let fuel = ::grap::f64::to_usize(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
         return None;
     }

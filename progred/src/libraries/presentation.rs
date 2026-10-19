@@ -74,7 +74,7 @@ fn viewport_runtime_output(
     let value = match fields.get(&vocabulary::PREPARE) {
         Some(prepare) => {
             let fuel = match fields.get(&layout::vocabulary::FUEL) {
-                Some(value) => layout::fuel(f64::read(value)?)?,
+                Some(value) => ::grap::f64::to_usize(f64::read(value)?)?,
                 None => ::grap::DEFAULT_FUEL,
             };
             let prepared =
@@ -102,7 +102,7 @@ fn viewport_runtime_output(
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let expression = input.value?.field(vocabulary::RENDER)?;
     let evaluated = (|| {
-        let fuel = layout::fuel(expression.field(layout::vocabulary::FUEL)?.as_f64()?)?;
+        let fuel = ::grap::f64::to_usize(expression.field(layout::vocabulary::FUEL)?.as_f64()?)?;
         let expression = expression.field(::grap::vocabulary::EXPRESSION)?;
         Some(input.env.evaluate_runtime_memo(
             &expression,

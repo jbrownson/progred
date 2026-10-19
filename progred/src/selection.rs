@@ -620,9 +620,7 @@ pub mod payload {
 
     /// The whole, non-negative number `value` spells, as an index or offset.
     fn index(value: &Value) -> Option<usize> {
-        f64_convention::read(value)
-            .filter(|index| *index >= 0.0 && index.fract() == 0.0)
-            .map(|index| index as usize)
+        f64_convention::read(value).and_then(f64_convention::to_usize)
     }
 
     pub fn completion_scroll(payload: &Value) -> Option<f64> {

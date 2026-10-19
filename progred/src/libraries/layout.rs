@@ -503,8 +503,7 @@ pub(crate) fn decode<W: Host>(value: &Value, site: &crate::editing::Site) -> Opt
 /// Which child's baseline a column, or a row aligning tops, keeps. A
 /// container with no children has nothing to choose, so any index passes.
 fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
-    (baseline >= 0.0 && baseline.fract() == 0.0 && (children == 0 || baseline < children as f64))
-        .then_some(baseline as usize)
+    ::grap::f64::to_usize(baseline).filter(|index| children == 0 || *index < children)
 }
 
 fn decode_with<W: Host>(
@@ -619,7 +618,8 @@ fn decode_with<W: Host>(
         let ascent = read_nonnegative(content.field(vocabulary::ASCENT)?.as_value())?;
         let descent = read_nonnegative(content.field(vocabulary::DESCENT)?.as_value())?;
         if let Some(program) = content.field(vocabulary::PROGRAM) {
-            let fuel = fuel(read_number(content.field(vocabulary::FUEL)?.as_value())?)?;
+            let fuel =
+                ::grap::f64::to_usize(read_number(content.field(vocabulary::FUEL)?.as_value())?)?;
             return Some(drawing::program(
                 crate::display::widget::Extent {
                     width,
@@ -685,11 +685,6 @@ fn read_number(value: &Value) -> Option<f64> {
 }
 
 /// An explicit evaluation allowance: a nonnegative whole number of steps.
-pub(crate) fn fuel(number: f64) -> Option<usize> {
-    (number >= 0.0 && number.fract() == 0.0 && number <= usize::MAX as f64)
-        .then_some(number as usize)
-}
-
 fn read_nonnegative(value: &Value) -> Option<f64> {
     read_number(value).filter(|number| *number >= 0.0)
 }

@@ -20,6 +20,13 @@ pub fn read_record(fields: &Record) -> Option<f64> {
     fields.get(&F64).and_then(Value::as_blob).and_then(decode)
 }
 
+/// `number` as a count or an index: whole, not negative, and small
+/// enough to convert exactly.
+pub fn to_usize(number: f64) -> Option<usize> {
+    (number >= 0.0 && number.fract() == 0.0 && number < usize::MAX as f64)
+        .then_some(number as usize)
+}
+
 /// The `f64` field holding `number`.
 pub(crate) fn encode(number: f64) -> Value {
     Value::from(number.to_le_bytes().to_vec())

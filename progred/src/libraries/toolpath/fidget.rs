@@ -227,7 +227,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     read_radius(radius)?;
     let color = color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
     let fuel = fields.field(layout::vocabulary::FUEL)?.as_f64()?;
-    let fuel = super::read_fuel(fuel)?;
+    let fuel = ::grap::f64::to_usize(fuel)?;
     let request = fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?;
     let settings = computation::Settings {
         request,

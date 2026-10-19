@@ -453,9 +453,12 @@ fn controls_output<W: Host>(
                 return Ok(program);
             }
             let fuel = match context.field(call, layout::vocabulary::FUEL) {
-                Some(expression) => match context.eval_f64(expression, environment)? {
-                    Some(n) if n >= 0.0 && n <= usize::MAX as f64 && n.fract() == 0.0 => n as usize,
-                    _ => return Ok(::grap::absent::value(INVALID_INPUT).into()),
+                Some(expression) => match context
+                    .eval_f64(expression, environment)?
+                    .and_then(::grap::f64::to_usize)
+                {
+                    Some(fuel) => fuel,
+                    None => return Ok(::grap::absent::value(INVALID_INPUT).into()),
                 },
                 None => ::grap::DEFAULT_FUEL,
             };

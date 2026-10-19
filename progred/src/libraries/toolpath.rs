@@ -170,18 +170,13 @@ fn runtime_result(value: Result<RuntimeValue, Error>) -> Result<RuntimeValue, Ha
     }
 }
 
-fn read_fuel(value: f64) -> Option<usize> {
-    (value.is_finite() && value >= 0.0 && value.fract() == 0.0 && value < usize::MAX as f64)
-        .then_some(value as usize)
-}
-
 fn fuel(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
 ) -> Result<usize, Error> {
     if context.field(call, layout::vocabulary::FUEL).is_some() {
-        read_fuel(number(
+        ::grap::f64::to_usize(number(
             context,
             call,
             environment,

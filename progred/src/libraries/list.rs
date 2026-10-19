@@ -18,11 +18,7 @@ pub(crate) fn index_range(value: &Value) -> Option<std::ops::Range<usize>> {
         return None;
     }
     let mut values = list.values();
-    let mut next = || {
-        let n = f64::read(values.next()?)?;
-        (n.is_finite() && n >= 0.0 && n.fract() == 0.0 && n < usize::MAX as f64)
-            .then_some(n as usize)
-    };
+    let mut next = || ::grap::f64::to_usize(f64::read(values.next()?)?);
     let range = next()?..next()?;
     (range.start <= range.end).then_some(range)
 }
@@ -128,11 +124,7 @@ fn functions() -> ForeignFunctions {
                 if list.list_len().is_none() {
                     return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
                 }
-                let Some(index) = index
-                    .as_f64()
-                    .filter(|index| *index >= 0.0 && index.fract() == 0.0)
-                    .map(|index| index as usize)
-                else {
+                let Some(index) = index.as_f64().and_then(::grap::f64::to_usize) else {
                     return Ok(::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into());
                 };
                 Ok(list

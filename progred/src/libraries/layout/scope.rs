@@ -329,7 +329,9 @@ fn operation<W: Host>(
             if width < 0.0 || ascent < 0.0 || descent < 0.0 {
                 return Err(invalid(function));
             }
-            let Some(fuel) = super::fuel(number!(FUEL, Some(::grap::DEFAULT_FUEL as f64))) else {
+            let Some(fuel) =
+                ::grap::f64::to_usize(number!(FUEL, Some(::grap::DEFAULT_FUEL as f64)))
+            else {
                 return Err(invalid(function));
             };
             let program = context.eval(need!(context.field(call, PROGRAM)), environment)?;
