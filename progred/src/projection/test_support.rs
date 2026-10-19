@@ -4,7 +4,6 @@
 
 use super::*;
 use crate::annotations::Annotations;
-use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
 use crate::driver::Driver;
 use crate::frame::test_support::{editing_frame, settle};
@@ -75,14 +74,15 @@ pub(crate) fn make_projected_selection(
     libraries: &Libraries,
     path: Path,
 ) -> Selection {
-    let mut world = editor_over(doc, libraries);
-    let placed = editing_frame(&mut world);
-    let target = placed
-        .landmarks
-        .landmark(&path)
-        .unwrap_or_else(|| panic!("nothing drawn at {path:?}"));
-    assert!((target.select)(&mut world, None), "{path:?} refused");
-    world.model.selection.expect("a selection")
+    let mut driver = Driver::new(editor_over(doc, libraries), Driver::VIEWPORT);
+    driver.select(&path);
+    driver
+        .runner
+        .editor
+        .model
+        .selection
+        .take()
+        .expect("a selection")
 }
 
 /// What selecting the line drawn at `path` and pressing End selects: its

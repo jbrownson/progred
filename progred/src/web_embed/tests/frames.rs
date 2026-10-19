@@ -22,11 +22,12 @@ fn stop<'a>(
     frame.landmarks.landmark(path).expect("tutorial slot")
 }
 
-fn top_slots(frame: &crate::projection::test_support::HoverOutput<crate::Editor>) -> Vec<CellId> {
-    frame
-        .landmarks
-        .iter()
-        .filter_map(|target| match target.path.as_ref() {
+/// The keys of the slots drawn at the document's top, in order.
+fn top_slots(driver: &Driver) -> Vec<CellId> {
+    driver
+        .drawn_under(&[])
+        .into_iter()
+        .filter_map(|(path, _)| match path.as_ref() {
             [Step::Key(key)] => Some(*key),
             _ => None,
         })
@@ -100,16 +101,6 @@ fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
     ]));
     set_tutorial_slots(&mut editor, &slots);
     let mut driver = Driver::new(editor, Driver::VIEWPORT);
-    let top_slots = |driver: &Driver| {
-        driver
-            .drawn_under(&[])
-            .into_iter()
-            .filter_map(|(path, _)| match path.as_ref() {
-                [Step::Key(key)] => Some(*key),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-    };
     assert_eq!(top_slots(&driver), slots);
     let path = [Step::Key(slots[1])];
     driver.select(&path);
@@ -255,20 +246,15 @@ fn peeling_switches_projections_off_and_names_last() {
 #[test]
 fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
     let slots = [new_cell_id(), new_cell_id()];
-    let mut world = crate::test_editor(Document::default());
-    set_tutorial_slots(&mut world, &slots);
-    let frame = editing_frame(&mut world);
-    assert!(top_slots(&frame).is_empty());
-    assert!(world.model.doc.root.is_none());
-    assert!((stop(&frame, &[]).select)(&mut world, None));
-    assert!(editing_frame(&mut world).completion.is_some());
-    assert!(crate::completion::commit(
-        &mut world.session(),
-        Value::record([]),
-        None,
-        None
-    ));
-    assert_eq!(top_slots(&editing_frame(&mut world)), slots);
+    let mut editor = crate::test_editor(Document::default());
+    set_tutorial_slots(&mut editor, &slots);
+    let mut driver = Driver::new(editor, Driver::VIEWPORT);
+    assert!(top_slots(&driver).is_empty());
+    assert!(driver.editor().model.doc.root.is_none());
+    driver.select(&[]);
+    assert!(driver.picker_entries().is_some());
+    assert!(driver.paste(&Value::record([])));
+    assert_eq!(top_slots(&driver), slots);
 }
 
 /// A stack of `libraries` whose projection shows `slots` as a tutorial

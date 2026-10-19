@@ -255,7 +255,8 @@ impl<P> Driver<P> {
         self.landmark(path).is_some()
     }
 
-    fn landmark(
+    /// What the last frame draws at `path`, if anything.
+    pub(crate) fn landmark(
         &self,
         path: &[Step],
     ) -> Option<&crate::display::widget::navigation::Landmark<crate::Editor>> {

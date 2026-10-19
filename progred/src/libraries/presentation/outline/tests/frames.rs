@@ -93,17 +93,6 @@ fn click_heading(driver: &mut Driver, path: &[Step]) {
     click(driver, Point::new(rect.x0 + 4.0, rect.y0 + 4.0), path);
 }
 
-/// The landmark the driven frame draws at `path`.
-fn drawn<'a>(driver: &'a Driver, path: &[Step]) -> &'a Landmark<crate::Editor> {
-    driver
-        .runner
-        .frame
-        .dispatch
-        .landmarks
-        .landmark(path)
-        .expect("outline occurrence")
-}
-
 #[test]
 fn cam_outline_leaves_panes_in_the_collapsed_extras() {
     let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
@@ -372,7 +361,7 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     assert!(driver.rect(&b_path).y0 < driver.rect(&a_path).y0);
     assert!(driver.rect(&a_path).y1 < driver.rect(&[Step::Key(extra)]).y0);
     assert_eq!(
-        drawn(&driver, &b_path).scope.location(&b_path),
+        driver.landmark(&b_path).unwrap().scope.location(&b_path),
         Some(Location::root(vec![Step::Key(b)]))
     );
     driver.select(&b_path);
@@ -414,7 +403,9 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
     assert!(driver.paste(&replacement));
     for path in &bodies {
         assert_eq!(
-            drawn(&driver, path)
+            driver
+                .landmark(path)
+                .unwrap()
                 .scope
                 .view(driver.editor().sources())
                 .resolve_path(path),

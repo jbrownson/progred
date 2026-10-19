@@ -354,13 +354,7 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
         Some(&text::value("before!"))
     );
     for path in &paths {
-        let target = driver
-            .runner
-            .frame
-            .dispatch
-            .landmarks
-            .landmark(path)
-            .unwrap();
+        let target = driver.landmark(path).unwrap();
         assert_eq!(
             target.scope.view(editor.sources()).resolve_path(path),
             Some(&text::value("before!"))
