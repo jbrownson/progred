@@ -65,22 +65,22 @@ impl Recorder {
 }
 
 /// A leaf `extent` logical units big that `record` draws into. `program`
-/// locates the program below this occurrence, so the calls a fill traces back
-/// to inside it name the document.
+/// locates the program below this occurrence, when it is stored there, so the
+/// calls a fill traces back to inside it name the document.
 pub fn recorded<W: Host>(
     extent: Extent,
-    program: Vec<Step>,
+    program: Option<Vec<Step>>,
     record: Record,
 ) -> crate::display::host::Layout<W> {
     crate::display::Layout::widget(Rc::new(move |context| {
-        recorded_leaf(context.toolkit, extent, &program, record.clone())
+        recorded_leaf(context.toolkit, extent, program.as_deref(), record.clone())
     }))
 }
 
 fn recorded_leaf<W: Host>(
     toolkit: &dyn crate::display::Toolkit,
     extent: Extent,
-    program: &[Step],
+    program: Option<&[Step]>,
     record: Record,
 ) -> Measured<HoverPass<W, W::Hover>> {
     let Extent {
@@ -95,7 +95,7 @@ fn recorded_leaf<W: Host>(
         ascent: ascent * scale,
         descent: descent * scale,
     };
-    let input = toolkit.trace_below(program);
+    let input = program.and_then(|program| toolkit.trace_below(program));
     let sources = toolkit.sources();
     let document = sources.doc.clone();
     let libraries = sources.libraries.clone();

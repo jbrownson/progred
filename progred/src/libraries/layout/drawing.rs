@@ -12,17 +12,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// A drawing's program, drawn into a recorded leaf `extent` logical units
-/// big. The program is the occurrence's `program` field.
+/// big. `stored` is where the program is stored below the occurrence, if it
+/// is, so the fills it draws link to the calls that drew them there.
 pub(super) fn program<W: Host>(
     extent: measured::Extent,
     fuel: usize,
+    stored: Option<Vec<Step>>,
     program: grap::RuntimeValue,
 ) -> crate::display::host::Layout<W> {
-    crate::display::widget::recorded::recorded(
-        extent,
-        vec![Step::Key(vocabulary::PROGRAM)],
-        record(program, fuel),
-    )
+    crate::display::widget::recorded::recorded(extent, stored, record(program, fuel))
 }
 
 /// Runs `program` with the drawing functions installed, filling into the

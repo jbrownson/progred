@@ -154,3 +154,66 @@ fn recorded_hits_keep_the_executing_library_definition() {
         assert!(!drawing.highlights(&other));
     }
 }
+
+#[test]
+fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
+    use crate::libraries::{layout::test_support as stored, workspace};
+    let program = grap::call(
+        vocabulary::FILL.into(),
+        [
+            (vocabulary::SHAPE, stored::circle(20.0, 20.0, 10.0)),
+            (
+                vocabulary::PAINT,
+                crate::libraries::color::tests::value(peniko::Color::BLACK),
+            ),
+        ],
+    );
+    let picture = stored::row(
+        4.0,
+        [
+            stored::text_leaf("dot", vocabulary::NAME_FACE),
+            stored::program_drawing(40.0, 0.0, 40.0, 100, program.clone()),
+        ],
+    );
+    // A pane draws the picture; the document, read raw with its panes
+    // unfolded, draws the picture's source.
+    let mut editor = crate::test_editor(gid::Document {
+        root: Some(Value::record([(
+            workspace::vocabulary::PANES,
+            Value::record([(workspace::vocabulary::LEFT, Value::list([picture]))]),
+        )])),
+        cells: Cells::new(),
+    });
+    editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
+    crate::annotations::set_collapsed(
+        &mut editor.model.workspace.document.annotations,
+        &[Step::Key(workspace::vocabulary::PANES)],
+        false,
+        false,
+    );
+    let mut driver = crate::driver::Driver::new(editor, kurbo::Size::new(900.0, 600.0));
+    let pane = driver.element(
+        &[
+            Step::Key(workspace::vocabulary::PANES),
+            Step::Key(workspace::vocabulary::LEFT),
+        ],
+        0,
+        &[],
+    );
+    let stored_program = driver.element(
+        &[
+            pane.as_slice(),
+            &[Step::Key(vocabulary::ROW), Step::Key(vocabulary::CHILDREN)],
+        ]
+        .concat(),
+        1,
+        &[
+            Step::Key(vocabulary::DRAWING),
+            Step::Key(vocabulary::PROGRAM),
+        ],
+    );
+    assert_eq!(driver.value(&stored_program), program);
+    let [(dot, _, _)] = driver.circles().try_into().expect("the drawing's one dot");
+    driver.pick_at(dot);
+    assert_eq!(driver.selection(), stored_program);
+}

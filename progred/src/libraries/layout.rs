@@ -250,8 +250,37 @@ const MARKERS: [CellId; 18] = [
     vocabulary::ON_EVENT,
 ];
 
+/// Where a stored node sits in the value being decoded, kept as decoding
+/// descends and spelled out only for a drawing's program.
+enum Place<'a> {
+    Root,
+    Field(&'a Place<'a>, CellId),
+    /// Item `index` of `list`.
+    Item(&'a Place<'a>, &'a ::grap::RuntimeValue, usize),
+}
+
+impl Place<'_> {
+    /// The steps from the decoded value to here.
+    fn steps(&self) -> Option<Vec<Step>> {
+        Some(match *self {
+            Place::Root => Vec::new(),
+            Place::Field(parent, key) => parent
+                .steps()?
+                .into_iter()
+                .chain([Step::Key(key)])
+                .collect(),
+            Place::Item(parent, list, index) => parent
+                .steps()?
+                .into_iter()
+                .chain([Step::Element(list.list_positions()?.get(index)?.clone())])
+                .collect(),
+        })
+    }
+}
+
 fn decode_with<W: Host>(
     value: &::grap::RuntimeValue,
+    place: &Place<'_>,
     site: &impl Fn() -> crate::editing::Site,
 ) -> Option<Layout<W>> {
     use crate::libraries::path;
@@ -259,13 +288,18 @@ fn decode_with<W: Host>(
     let (marker, content) = MARKERS
         .into_iter()
         .find_map(|marker| Some((marker, value.field(marker)?)))?;
+    let place = Place::Field(place, marker);
     let number = |field| read_number(content.field(field)?.as_value());
     let nonnegative = |field| read_nonnegative(content.field(field)?.as_value());
-    let child = || decode_with(&content.field(CHILD)?, site);
+    let child = || decode_with(&content.field(CHILD)?, &Place::Field(&place, CHILD), site);
     Some(match marker {
         ROW => {
             let gap = number(GAP)?;
-            let children = children(&content.field(CHILDREN)?, site)?;
+            let children = children(
+                &content.field(CHILDREN)?,
+                &Place::Field(&place, CHILDREN),
+                site,
+            )?;
             match content.field(BASELINE) {
                 None => crate::display::row(gap, children),
                 Some(baseline) => crate::display::aligned_row(
@@ -282,21 +316,25 @@ fn decode_with<W: Host>(
         }
         COL => {
             let baseline = number(BASELINE)?;
-            let children = children(&content.field(CHILDREN)?, site)?;
+            let children = children(
+                &content.field(CHILDREN)?,
+                &Place::Field(&place, CHILDREN),
+                site,
+            )?;
             crate::display::col(
                 baseline_index(baseline, children.len())?,
                 number(GAP)?,
                 children,
             )
         }
-        OVERLAY => layout_overlay(children(&content, site)?),
+        OVERLAY => layout_overlay(children(&content, &place, site)?),
         PAD => crate::display::padding(
             (number(LEFT)?, number(TOP)?, number(RIGHT)?, number(BOTTOM)?).into(),
             child()?,
         ),
-        BORDER => border(decode_with(&content, site)?),
+        BORDER => border(decode_with(&content, &place, site)?),
         BRACKET => bracket(read_delim(&content.field(DELIM)?)?, child()?),
-        ALTERNATIVES => alternatives(children(&content, site)?),
+        ALTERNATIVES => alternatives(children(&content, &place, site)?),
         DESCEND => descend(
             [path::read_step(content.field(STEP)?.as_value())?],
             None,
@@ -323,9 +361,12 @@ fn decode_with<W: Host>(
                 descent: nonnegative(DESCENT)?,
             };
             match content.field(PROGRAM) {
-                Some(program) => {
-                    drawing::program(extent, ::grap::f64::to_usize(number(FUEL)?)?, program)
-                }
+                Some(program) => drawing::program(
+                    extent,
+                    ::grap::f64::to_usize(number(FUEL)?)?,
+                    Place::Field(&place, PROGRAM).steps(),
+                    program,
+                ),
                 None => leaf(Leaf::Drawing(Drawing {
                     width: extent.width,
                     ascent: extent.ascent,
@@ -339,13 +380,13 @@ fn decode_with<W: Host>(
             }
         }
         SLOT => slot(),
-        SELECTABLE => activatable(decode_with(&content, site)?, &site()),
+        SELECTABLE => activatable(decode_with(&content, &place, site)?, &site()),
         PICKABLE => pickable(
             child()?,
             W::Hover::from(site().hover()),
             content.field(VALUE)?,
         ),
-        HOVER_BLOCK => block_hover(decode_with(&content, site)?),
+        HOVER_BLOCK => block_hover(decode_with(&content, &place, site)?),
         ON_EVENT => on_event(child()?, content.field(HANDLER)?),
         _ => unreachable!("only the markers above are looked for"),
     })
@@ -353,10 +394,12 @@ fn decode_with<W: Host>(
 
 fn children<W: Host>(
     list: &::grap::RuntimeValue,
+    place: &Place<'_>,
     site: &impl Fn() -> crate::editing::Site,
 ) -> Option<Vec<Layout<W>>> {
     list.list_values()?
-        .map(|child| decode_with(&child, site))
+        .enumerate()
+        .map(|(index, child)| decode_with(&child, &Place::Item(place, list, index), site))
         .collect()
 }
 
@@ -583,7 +626,7 @@ fn read_point(value: &Value) -> Option<Point> {
 }
 
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    scope::display(input).or_else(|| decode_with(input.value?, &|| input.site()))
+    scope::display(input).or_else(|| decode_with(input.value?, &Place::Root, &|| input.site()))
 }
 
 pub fn library<W: Host>() -> Library<W> {

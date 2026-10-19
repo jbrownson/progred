@@ -330,6 +330,7 @@ fn operation<W: Host>(
                 return Err(invalid(function));
             };
             let program = context.eval(need!(context.field(call, PROGRAM)), environment)?;
+            // An evaluated program has no stored location.
             super::drawing::program(
                 crate::display::widget::Extent {
                     width,
@@ -337,6 +338,7 @@ fn operation<W: Host>(
                     descent,
                 },
                 fuel,
+                None,
                 program,
             )
         }

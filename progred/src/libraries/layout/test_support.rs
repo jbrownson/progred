@@ -2,7 +2,7 @@
 //! marker key and each number in the f64 convention, as the layout library
 //! decodes them.
 
-use super::{decode_with, vocabulary};
+use super::{Place, decode_with, vocabulary};
 use crate::display::host::{Host, Layout};
 use crate::libraries::f64 as f64_convention;
 use gid::{CellId, Step, Value};
@@ -249,5 +249,5 @@ pub fn bordered(child: Value) -> Value {
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
 pub fn decode<W: Host>(value: &Value, site: &crate::editing::Site) -> Option<Layout<W>> {
-    decode_with(&value.into(), &|| site.clone())
+    decode_with(&value.into(), &Place::Root, &|| site.clone())
 }

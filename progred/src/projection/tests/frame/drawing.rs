@@ -264,7 +264,12 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         }
         assert_eq!(calls.get(), expected);
         assert!(selected.borrow().is_empty());
-        let source = SourceTrace::Stored(Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]));
+        // The drawing is the root's value, so its program is at `drawing/program`.
+        let program = [
+            Step::Key(layout_data::vocabulary::DRAWING),
+            Step::Key(layout_data::vocabulary::PROGRAM),
+        ];
+        let source = SourceTrace::Stored(Rc::from(program.clone()));
         let Some((_, Claim::Direct(target))) = placed.claim.clone() else {
             panic!("expected a drawing source claim")
         };
@@ -276,7 +281,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         pointer.landmarks = Rc::from([crate::display::widget::navigation::Landmark {
             scope: Default::default(),
             root: Some(crate::test_root()),
-            path: Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]),
+            path: Rc::from(program.clone()),
             rect: bounds,
             select: Rc::new(move |_, _| {
                 picked.borrow_mut().push(source.clone());
