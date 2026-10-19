@@ -269,14 +269,11 @@ impl Edit<'_> {
         operation: &puri::edit::EditOperation<'_>,
     ) -> bool {
         let session = &mut self.session;
-        if session.model.selection.as_ref().is_none_or(|selection| {
-            !selection
+        session.model.selection.as_ref().is_some_and(|selection| {
+            selection
                 .scope()
                 .same_location(self.scope, &session.sources(), path)
-        }) {
-            return false;
-        }
-        edit_line(session, root, path, line, operation)
+        }) && edit_line(session, root, path, line, operation)
     }
 
     pub(crate) fn grap_runtime(

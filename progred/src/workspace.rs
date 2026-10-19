@@ -535,51 +535,48 @@ impl Workspace {
     }
 
     pub fn resize(&mut self, divider: &Divider, point: Vec2, size: Size) -> bool {
-        let Some(drag) = self
+        match self
             .dragging
             .as_ref()
             .filter(|drag| drag.divider == *divider)
             .cloned()
-        else {
-            return false;
-        };
-        match divider {
-            Divider::Columns(Side::Left) => {
-                self.left_width =
-                    (drag.before + ratio(point.x - drag.start.x, size.width)).clamp(0.0, 1.0);
-            }
-            Divider::Columns(Side::Right) => {
-                self.right_width =
-                    (drag.before - ratio(point.x - drag.start.x, size.width)).clamp(0.0, 1.0);
-            }
-            Divider::Panes {
-                side,
-                before,
-                after,
-            } => {
-                let column = self.column_mut(*side);
-                let before_index = column
-                    .panes
-                    .iter()
-                    .position(|pane| pane.view.root == *before);
-                let after_index = column
-                    .panes
-                    .iter()
-                    .position(|pane| pane.view.root == *after);
-                let (Some(before_index), Some(after_index)) = (before_index, after_index) else {
-                    return false;
-                };
-                if after_index != before_index + 1 {
-                    return false;
+        {
+            None => false,
+            Some(drag) => match divider {
+                Divider::Columns(Side::Left) => {
+                    self.left_width =
+                        (drag.before + ratio(point.x - drag.start.x, size.width)).clamp(0.0, 1.0);
+                    true
                 }
-                let pair = drag.before + drag.after;
-                let delta = ratio(point.y - drag.start.y, size.height);
-                let before_height = (drag.before + delta).clamp(0.0, pair);
-                column.panes[before_index].height = before_height;
-                column.panes[after_index].height = pair - before_height;
-            }
+                Divider::Columns(Side::Right) => {
+                    self.right_width =
+                        (drag.before - ratio(point.x - drag.start.x, size.width)).clamp(0.0, 1.0);
+                    true
+                }
+                Divider::Panes {
+                    side,
+                    before,
+                    after,
+                } => {
+                    let panes = &mut self.column_mut(*side).panes;
+                    // The two panes the rule divides, one right after the other.
+                    let at = panes.windows(2).position(|pair| {
+                        matches!(pair, [first, second]
+                            if first.view.root == *before && second.view.root == *after)
+                    });
+                    match at.and_then(|at| panes.get_mut(at..=at + 1)) {
+                        Some([first, second]) => {
+                            let pair = drag.before + drag.after;
+                            let delta = ratio(point.y - drag.start.y, size.height);
+                            first.height = (drag.before + delta).clamp(0.0, pair);
+                            second.height = pair - first.height;
+                            true
+                        }
+                        _ => false,
+                    }
+                }
+            },
         }
-        true
     }
 
     pub fn finish_resize(&mut self, divider: &Divider) -> bool {
