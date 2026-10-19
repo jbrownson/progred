@@ -74,33 +74,17 @@ pub fn set_projections(projections: &str, names: bool) -> Result<(), wasm_bindge
 }
 
 /// Tells an embedding page how tall the document view's content is, from the
-/// top of the editor, whenever that changes, so the page can fit its frame.
-pub(crate) fn report_content_height(
-    regions: &[crate::display::widget::frame::ViewRegion],
-    scale: f64,
-) {
-    thread_local! {
-        static REPORTED: std::cell::Cell<Option<f64>> = const { std::cell::Cell::new(None) };
+/// top of the editor, so the page can fit its frame.
+pub(crate) fn report_content_height(height: f64) {
+    if let Some(window) = web_sys::window()
+        && let Ok(Some(parent)) = window.parent()
+        && !web_sys::js_sys::Object::is(&parent, &window)
+    {
+        let message = web_sys::js_sys::Object::new();
+        let _ = web_sys::js_sys::Reflect::set(&message, &"type".into(), &"progred:size".into());
+        let _ = web_sys::js_sys::Reflect::set(&message, &"height".into(), &height.into());
+        let _ = parent.post_message(&message, &window.origin());
     }
-    let Some(height) = web_embed::content_height(regions, scale) else {
-        return;
-    };
-    if REPORTED.with(|reported| reported.replace(Some(height))) == Some(height) {
-        return;
-    }
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-    let Ok(Some(parent)) = window.parent() else {
-        return;
-    };
-    if web_sys::js_sys::Object::is(&parent, &window) {
-        return;
-    }
-    let message = web_sys::js_sys::Object::new();
-    let _ = web_sys::js_sys::Reflect::set(&message, &"type".into(), &"progred:size".into());
-    let _ = web_sys::js_sys::Reflect::set(&message, &"height".into(), &height.into());
-    let _ = parent.post_message(&message, &window.origin());
 }
 
 #[wasm_bindgen::prelude::wasm_bindgen]

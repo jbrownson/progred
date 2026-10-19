@@ -23,6 +23,7 @@ use crate::web_render;
 use crate::{canonical, text_dialog};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{display::widget::style, modifiers, platform, stack, text_store};
+#[cfg(not(target_arch = "wasm32"))]
 use kurbo::Size;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -57,6 +58,9 @@ use winit::window::{Window, WindowId};
 pub(crate) struct App {
     #[cfg(target_arch = "wasm32")]
     web_observer: Option<web_embed::Observer>,
+    /// The document's content height the embedding page was last told.
+    #[cfg(target_arch = "wasm32")]
+    reported_height: Option<f64>,
     #[cfg(target_arch = "wasm32")]
     web_renderer: web_render::Renderer,
     #[cfg(not(target_arch = "wasm32"))]
@@ -306,6 +310,8 @@ impl App {
         Self {
             #[cfg(target_arch = "wasm32")]
             web_observer: on_change.map(web_embed::Observer::new),
+            #[cfg(target_arch = "wasm32")]
+            reported_height: None,
             #[cfg(target_arch = "wasm32")]
             web_renderer: web_render::take(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -940,39 +946,42 @@ impl App {
             self.sync_menus(index);
         }
         let runner = &mut self.editors[index];
-        let RenderState::Active { canvas, window } = &runner.editor.state else {
-            return;
-        };
-        let canvas = canvas.clone();
-        let window = window.clone();
-        let scale = runner.editor.scale(&window);
-        let size = window.inner_size();
-        let width = size.width;
-        let height = size.height;
-        if width == 0 || height == 0 {
-            return;
-        }
-        if canvas.width() != width {
-            canvas.set_width(width);
-        }
-        if canvas.height() != height {
-            canvas.set_height(height);
-        }
-
-        let viewport = Size::new(width as f64, height as f64);
-        let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport);
-        runner.sync_window(&window);
-        let presented = self
-            .web_renderer
-            .render(width, height, runner.editor.palette.paper, |canvas| {
-                puri::frame::render(renders, canvas)
-            })
-            .expect("browser render failed");
-        if let Some(observer) = &mut self.web_observer {
-            observer.notify(&runner.editor);
-        }
-        if !presented || runner.frame_presented() {
-            window.request_redraw();
+        if let RenderState::Active { canvas, window } = &runner.editor.state {
+            let (canvas, window) = (canvas.clone(), window.clone());
+            let size = window.inner_size();
+            if size.width != 0 && size.height != 0 {
+                if canvas.width() != size.width {
+                    canvas.set_width(size.width);
+                }
+                if canvas.height() != size.height {
+                    canvas.set_height(size.height);
+                }
+                let scale = runner.editor.scale(&window);
+                let PendingPaint { renders, .. } = runner.prepare_paint(scale, viewport(&window));
+                runner.sync_window(&window);
+                let presented = self
+                    .web_renderer
+                    .render(
+                        size.width,
+                        size.height,
+                        runner.editor.palette.paper,
+                        |canvas| puri::frame::render(renders, canvas),
+                    )
+                    .expect("browser render failed");
+                if let Some(observer) = &mut self.web_observer {
+                    observer.notify(&runner.editor);
+                }
+                if let Some(height) =
+                    web_embed::content_height(&runner.frame.dispatch.view_regions, scale)
+                        .filter(|height| self.reported_height != Some(*height))
+                {
+                    self.reported_height = Some(height);
+                    crate::web::report_content_height(height);
+                }
+                if !presented || runner.frame_presented() {
+                    window.request_redraw();
+                }
+            }
         }
     }
 }

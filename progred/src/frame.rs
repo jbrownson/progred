@@ -542,8 +542,6 @@ impl EditorRunner {
         crate::web_scroll::install(scroll_probes, scale);
         #[cfg(not(target_arch = "wasm32"))]
         drop(scroll_probes);
-        #[cfg(target_arch = "wasm32")]
-        crate::web::report_content_height(&dispatch.view_regions, scale);
         self.frame.hover = hover;
         self.frame.dispatch = dispatch;
         self.frame.input_area = input_area;
