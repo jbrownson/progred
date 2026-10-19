@@ -133,7 +133,7 @@ impl Layers {
             };
             let mut geometry = Geometry::default();
             Ok(shape
-                .append_cancellable(&mut geometry, request.depth, cancel)?
+                .append(&mut geometry, request.depth, cancel)?
                 .map(|()| geometry.into())
                 .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
         });

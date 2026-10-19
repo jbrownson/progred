@@ -34,7 +34,7 @@ fn cancellation_does_not_publish_a_partial_mesh() {
     cancel.cancel();
     let mut geometry = Geometry::default();
     assert_eq!(
-        Shape::from(&sphere_preview()).append_cancellable(&mut geometry, 4, &cancel),
+        Shape::from(&sphere_preview()).append(&mut geometry, 4, &cancel),
         Err(incremental::Error::Cancelled)
     );
     assert!(geometry.vertices.is_empty());

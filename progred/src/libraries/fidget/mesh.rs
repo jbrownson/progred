@@ -56,12 +56,17 @@ pub(crate) use puri::mesh::{Geometry, Mesh, Normal, Surface, Vertex, View};
 
 fn generate(preview: &VolumePreview, depth: u8) -> Option<Mesh> {
     let mut geometry = Geometry::default();
-    append(&mut geometry, preview, depth)?;
-    Some(geometry.into())
-}
-
-pub(crate) fn append(out: &mut Geometry, preview: &VolumePreview, depth: u8) -> Option<()> {
-    Shape::from(preview).append(out, depth)
+    volume::mesh::append(
+        &mut geometry,
+        &preview.objects,
+        preview.min,
+        preview.max,
+        depth,
+        &incremental::Cancellation::default(),
+    )
+    .ok()
+    .flatten()
+    .map(|()| geometry.into())
 }
 
 #[derive(Clone, PartialEq)]
@@ -82,12 +87,7 @@ impl From<&VolumePreview> for Shape {
 }
 
 impl Shape {
-    pub fn append(&self, out: &mut Geometry, depth: u8) -> Option<()> {
-        self.append_cancellable(out, depth, &incremental::Cancellation::default())
-            .ok()?
-    }
-
-    pub fn append_cancellable(
+    pub fn append(
         &self,
         out: &mut Geometry,
         depth: u8,

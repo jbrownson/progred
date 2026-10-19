@@ -20,7 +20,7 @@ pub(crate) fn profile(
     let mut geometry = mesh::Geometry::default();
     let start = Instant::now();
     mesh::Shape::from(&preview)
-        .append_cancellable(&mut geometry, 6, &cancel)
+        .append(&mut geometry, 6, &cancel)
         .unwrap()
         .unwrap();
     let mesh_ms = start.elapsed().as_secs_f64() * 1000.0;

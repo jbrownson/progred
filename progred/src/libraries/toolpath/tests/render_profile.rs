@@ -380,7 +380,8 @@ fn cam_render_profile() {
                 let start = Instant::now();
                 let mut geometry = implicit::mesh::Geometry::default();
                 implicit::mesh::Shape::from(&preview(vec![object]))
-                    .append(&mut geometry, 6)
+                    .append(&mut geometry, 6, &Default::default())
+                    .unwrap()
                     .unwrap();
                 eprintln!(
                     "stock {name}: mesh {:?}, {} vertices",
@@ -443,7 +444,10 @@ fn cam_render_profile() {
         ]));
         let start = Instant::now();
         let mut geometry = implicit::mesh::Geometry::default();
-        shape.append(&mut geometry, 6).unwrap();
+        shape
+            .append(&mut geometry, 6, &Default::default())
+            .unwrap()
+            .unwrap();
         eprintln!(
             "stock mesh d6 {:?}, {} vertices",
             start.elapsed(),
