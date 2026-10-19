@@ -702,15 +702,11 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
 
 #[test]
 fn sample_text_line_claims_its_own_hover() {
-    let (doc, _) = crate::gid_text::parse(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../examples/sample.gid"
-    )))
-    .expect("the sample parses");
+    let doc = sample_document();
     let path = vec![
-        Step::Key(sample_vocabulary::STYLE),
+        key("style"),
         Step::Follow(gid::Resolution::Document),
-        Step::Key(sample_vocabulary::COLOR),
+        key("color"),
     ];
     let (bench, _) = place(&doc, None, 900.0);
     let rect = bench

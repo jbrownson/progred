@@ -7,7 +7,7 @@ use crate::libraries::layout as layout_data;
 use crate::libraries::{f64, fidget, name, text};
 use crate::library::Libraries;
 use crate::location::delete_edge;
-use crate::sample::{sample_document, sample_vocabulary};
+use crate::sample::sample_document;
 use crate::selection::payload as selection_payload;
 use crate::selection::pending_value;
 use crate::test_support::{

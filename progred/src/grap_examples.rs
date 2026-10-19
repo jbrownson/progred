@@ -24,7 +24,7 @@ fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation<gid::Value> 
 
 #[test]
 fn the_sample_contains_a_projectable_grap_computation() {
-    let (doc, _) = parse(include_str!("../../examples/sample.gid")).expect("the sample parses");
+    let doc = crate::sample::sample_document();
     let roof = doc
         .root
         .as_ref()

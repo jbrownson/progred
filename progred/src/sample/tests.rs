@@ -111,8 +111,7 @@ fn the_sample_document_shows_the_constructs() {
 
 #[test]
 fn checked_in_projection_uses_the_current_selection_capabilities() {
-    let (document, _) =
-        crate::gid_text::parse(include_str!("../../../examples/sample.gid")).unwrap();
+    let document = sample_document();
     let projection = document
         .cells
         .iter()

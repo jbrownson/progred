@@ -35,21 +35,17 @@ fn read_only_line_needs_no_selection_or_editing_capabilities() {
 
 #[test]
 fn sample_text_line_click_mounts_its_own_editor() {
-    use crate::sample::sample_vocabulary;
-    let (doc, _) = crate::gid_text::parse(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../examples/sample.gid"
-    )))
-    .expect("the sample parses");
+    use crate::test_values::key;
+    let doc = crate::sample::sample_document();
     let mut driver = crate::driver::Driver::new(
         crate::test_editor_with_stack(doc, crate::stack::load()),
         // Tall enough to show the style's color without scrolling.
         kurbo::Size::new(900.0, 1200.0),
     );
     let path = vec![
-        gid::Step::Key(sample_vocabulary::STYLE),
+        key("style"),
         gid::Step::Follow(gid::Resolution::Document),
-        gid::Step::Key(sample_vocabulary::COLOR),
+        key("color"),
     ];
     driver.click(&path);
     assert_eq!(driver.selection(), path);
