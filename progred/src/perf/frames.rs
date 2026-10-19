@@ -92,7 +92,7 @@ fn iop_tree() -> Document {
 }
 
 #[test]
-#[ignore]
+#[ignore = "IoP picture viewport, rebuilt each frame"]
 fn iop_tree_profile_loop() {
     let doc = iop_tree();
     let view = ProfileView {
@@ -109,7 +109,7 @@ fn iop_tree_profile_loop() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "IoP source view, rebuilt each frame"]
 fn iop_tree_source_profile_loop() {
     let doc = iop_tree();
     let view = ProfileView {
@@ -168,7 +168,7 @@ fn color_picker_frame() -> impl FnMut() -> Bench {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Selected color with its RGBA picker open"]
 fn color_picker_profile_loop() {
     let mut frame = color_picker_frame();
     profile(
@@ -365,37 +365,37 @@ fn fidget_orbit_profile(name: &str, source: &str) {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Spheres viewport orbit, including its controls"]
 fn fidget_orbit_profile_loop() {
     fidget_orbit_profile("spheres", crate::test_examples::SPHERES);
 }
 
 #[test]
-#[ignore]
+#[ignore = "Torus viewport orbit, including its controls"]
 fn fidget_torus_profile_loop() {
     fidget_orbit_profile("torus", crate::test_examples::TORUS);
 }
 
 #[test]
-#[ignore]
+#[ignore = "Tanglecube viewport orbit, including its controls"]
 fn fidget_tanglecube_profile_loop() {
     fidget_orbit_profile("tanglecube", crate::test_examples::TANGLECUBE);
 }
 
 #[test]
-#[ignore]
+#[ignore = "Gyroid viewport orbit, including its controls"]
 fn fidget_gyroid_profile_loop() {
     fidget_orbit_profile("gyroid", crate::test_examples::GYROID);
 }
 
 #[test]
-#[ignore]
+#[ignore = "Cube viewport orbit, remeshing each frame"]
 fn fidget_cube_profile_loop() {
     fidget_orbit_profile("cube", crate::test_examples::CUBE);
 }
 
 #[test]
-#[ignore]
+#[ignore = "Toolpath viewport orbit, including its controls"]
 fn fidget_toolpaths_profile_loop() {
     use crate::libraries::toolpath::vocabulary::{PREVIEW_MESH, PREVIEW_REFINED};
     fidget_orbit_profile(

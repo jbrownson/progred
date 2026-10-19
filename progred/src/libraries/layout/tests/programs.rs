@@ -195,7 +195,7 @@ fn returned_layout_program_uses_its_own_evaluation_allowance() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Grap layout descriptions versus layout-emitting FFIs"]
 fn grap_layout_ffi_profile_loop() {
     // The returned program has the ordinary fresh evaluation allowance,
     // independent of the explicit budget used to construct it below.

@@ -36,7 +36,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
 static ALLOCATOR: CountingAllocator = CountingAllocator;
 
 #[test]
-#[ignore]
+#[ignore = "IoP source allocation breakdown; instrumented, not a frame-time benchmark"]
 fn iop_source_form_profile() {
     let doc = iop_tree();
     let (view, mut context) = ProfileView {
@@ -51,7 +51,7 @@ fn iop_source_form_profile() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "RGBA picker allocation breakdown; instrumented, not a frame-time benchmark"]
 fn color_picker_form_profile() {
     profile_forms("RGBA picker", color_picker_frame());
 }
