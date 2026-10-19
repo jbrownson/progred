@@ -224,23 +224,7 @@ pub fn fill_height<World: 'static, Hover: 'static>(
 /// Expand before invoking the entire child's placement, including decorations.
 pub fn fill_width<W: 'static, H: 'static>(child: Layout<W, H>) -> Layout<W, H> {
     Layout::program(Rc::new(move |context, build| {
-        let child = child.measure(context, build);
-        measured::choices::ChoiceLayout::map(child, |child| {
-            measured::around_into(child, |placement, inner, output| {
-                inner.place_at_into(
-                    Placement {
-                        rect: kurbo::Rect::new(
-                            placement.available_rect.x0,
-                            placement.rect.y0,
-                            placement.available_rect.x1,
-                            placement.rect.y1,
-                        ),
-                        ..placement
-                    },
-                    output,
-                );
-            })
-        })
+        measured::choices::ChoiceLayout::map(child.measure(context, build), measured::fill_width)
     }))
 }
 
