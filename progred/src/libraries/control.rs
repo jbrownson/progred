@@ -379,99 +379,95 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
         let Some(expression) = expression.clone() else {
             return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
         };
-        let bound = match compiled {
+        let mut bound = environment.clone();
+        let outcome = match compiled {
             CompiledBindings::Bindings(bindings) => {
                 // The prepared walk skips evaluating the bindings list
                 // expression; burn its fuel so the stage stays
                 // burn-invisible.
                 context.burn()?;
-                let mut environment = environment.clone();
-                environment.reserve(bindings.len());
-                bindings
-                    .iter()
-                    .try_fold(environment, |environment, binding| match binding {
-                        CompiledBinding::Malformed(reason) => ended(*reason),
-                        CompiledBinding::Bind { binder, value } => bind(
-                            context.eval(value.clone(), &environment),
-                            Binder::Cell(*binder),
-                            environment,
-                        ),
-                        CompiledBinding::Pattern { pattern, value } => bind(
-                            context.eval(value.clone(), &environment),
-                            Binder::Pattern(pattern),
-                            environment,
-                        ),
-                    })
+                bound.reserve(bindings.len());
+                bindings.iter().try_for_each(|binding| match binding {
+                    CompiledBinding::Malformed(reason) => ended(*reason),
+                    CompiledBinding::Bind { binder, value } => {
+                        let value = context.eval(value.clone(), &bound);
+                        bind(&mut bound, *binder, value)
+                    }
+                    CompiledBinding::Pattern { pattern, value } => {
+                        let value = context.eval(value.clone(), &bound);
+                        bind_pattern(&mut bound, pattern, value)
+                    }
+                })
             }
             CompiledBindings::Deferred(bindings) => {
                 match context.eval(bindings.clone(), environment)?.list_values() {
                     None => ended(vocabulary::INVALID_BINDINGS),
-                    Some(mut bindings) => {
-                        bindings.try_fold(environment.clone(), |environment, binding| {
-                            match (
-                                binding.field(vocabulary::VALUE),
-                                binding.field(vocabulary::BIND),
-                                binding.field(vocabulary::PATTERN),
-                            ) {
-                                (Some(value), Some(binder), None) => match binder.as_cell() {
-                                    Some(binder) => bind(
-                                        context.eval_runtime_code(&value, &environment),
-                                        Binder::Cell(binder),
-                                        environment,
-                                    ),
-                                    None => ended(vocabulary::INVALID_BINDER),
-                                },
-                                (Some(value), None, Some(pattern)) => bind(
-                                    context.eval_runtime_code(&value, &environment),
-                                    Binder::Pattern(&pattern.to_value()),
-                                    environment,
-                                ),
-                                _ => ended(vocabulary::INVALID_BINDING),
+                    Some(mut bindings) => bindings.try_for_each(|binding| {
+                        match (
+                            binding.field(vocabulary::VALUE),
+                            binding.field(vocabulary::BIND),
+                            binding.field(vocabulary::PATTERN),
+                        ) {
+                            (Some(value), Some(binder), None) => match binder.as_cell() {
+                                Some(binder) => {
+                                    let value = context.eval_runtime_code(&value, &bound);
+                                    bind(&mut bound, binder, value)
+                                }
+                                None => ended(vocabulary::INVALID_BINDER),
+                            },
+                            (Some(value), None, Some(pattern)) => {
+                                let value = context.eval_runtime_code(&value, &bound);
+                                bind_pattern(&mut bound, &pattern.to_value(), value)
                             }
-                        })
-                    }
+                            _ => ended(vocabulary::INVALID_BINDING),
+                        }
+                    }),
                 }
             }
         };
-        match bound {
-            ControlFlow::Continue(environment) => context.eval(expression, &environment),
+        match outcome {
+            ControlFlow::Continue(()) => context.eval(expression, &bound),
             ControlFlow::Break(stopped) => stopped,
         }
     })
 }
 
 /// Ends the bindings in the absent `reason`.
-fn ended(reason: CellId) -> ControlFlow<Result<RuntimeValue, Halt>, Environment> {
+fn ended(reason: CellId) -> ControlFlow<Result<RuntimeValue, Halt>> {
     ControlFlow::Break(Ok(::grap::absent::value(reason).into()))
 }
 
-/// What a binding binds its value to.
-enum Binder<'a> {
-    Cell(CellId),
-    Pattern(&'a Value),
+/// Binds `value` to `binder` in `environment`, or ends the bindings with its
+/// halt.
+fn bind(
+    environment: &mut Environment,
+    binder: CellId,
+    value: Result<RuntimeValue, Halt>,
+) -> ControlFlow<Result<RuntimeValue, Halt>> {
+    match value {
+        Ok(value) => {
+            environment.push_runtime([(binder, value)]);
+            ControlFlow::Continue(())
+        }
+        Err(halt) => ControlFlow::Break(Err(halt)),
+    }
 }
 
-/// `environment` with `value` bound to `binder`, or what ends the bindings:
-/// a halt, or the absent of a pattern that doesn't match.
-fn bind(
+/// Binds `value` to `pattern`'s binders in `environment`, or ends the
+/// bindings: with a halt, or the absent of a pattern that doesn't match.
+fn bind_pattern(
+    environment: &mut Environment,
+    pattern: &Value,
     value: Result<RuntimeValue, Halt>,
-    binder: Binder<'_>,
-    mut environment: Environment,
-) -> ControlFlow<Result<RuntimeValue, Halt>, Environment> {
-    match (binder, value) {
-        (_, Err(halt)) => ControlFlow::Break(Err(halt)),
-        (Binder::Cell(binder), Ok(value)) => {
-            environment.push_runtime([(binder, value)]);
-            ControlFlow::Continue(environment)
+) -> ControlFlow<Result<RuntimeValue, Halt>> {
+    match value.map(|value| destructure(pattern, &value)) {
+        Ok(Ok(Some(bindings))) => {
+            environment.push_runtime(bindings);
+            ControlFlow::Continue(())
         }
-        (Binder::Pattern(pattern), Ok(value)) => match destructure(pattern, &value) {
-            Ok(Some(bindings)) => {
-                environment.push_runtime(bindings);
-                ControlFlow::Continue(environment)
-            }
-            Ok(None) => ControlFlow::Break(Ok(pattern_mismatch(pattern).into())),
-            Err(InvalidBinder) => ended(vocabulary::INVALID_BINDER),
-        },
+        Ok(Ok(None)) => ControlFlow::Break(Ok(pattern_mismatch(pattern).into())),
+        Ok(Err(InvalidBinder)) => ended(vocabulary::INVALID_BINDER),
+        Err(halt) => ControlFlow::Break(Err(halt)),
     }
 }
 
