@@ -6,6 +6,14 @@ use peniko::Color;
 use puri::draw::Canvas;
 use std::rc::Rc;
 
+/// The color a section of a cutter shows in, wherever the cutter is drawn.
+pub(crate) fn color(kind: SectionKind) -> [u8; 3] {
+    match kind {
+        SectionKind::Cutting => [225, 94, 58],
+        SectionKind::NonCutting => [122, 138, 153],
+    }
+}
+
 /// A picture alongside, not instead of, the editable profile data.
 pub(crate) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
@@ -76,11 +84,8 @@ pub(super) fn picture<W: Host>(tool: &Tool) -> Option<Layout<W>> {
                 let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
                     * Affine::scale(scale);
                 for (path, kind) in paths {
-                    let color = match kind {
-                        SectionKind::Cutting => Color::new([0.88, 0.37, 0.23, 1.0]),
-                        SectionKind::NonCutting => Color::new([0.48, 0.54, 0.60, 1.0]),
-                    };
-                    canvas.fill(path.clone(), color, transform);
+                    let [r, g, b] = color(kind);
+                    canvas.fill(path.clone(), Color::from_rgb8(r, g, b), transform);
                     canvas.stroke(
                         path,
                         Stroke::new(0.75),

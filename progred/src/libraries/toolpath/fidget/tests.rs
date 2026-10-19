@@ -1,4 +1,4 @@
-use super::super::cutter::{SectionKind, Tool};
+use super::super::cutter::{self, Tool};
 use super::playback::Draw;
 use super::*;
 use cam::field::{capsule, coordinate};
@@ -53,22 +53,13 @@ impl Draw for Tubes {
         Ok(())
     }
 
-    fn tool(
-        &mut self,
-        tool: &Tool,
-        pose: Pose,
-        color: [u8; 3],
-        tolerance: f64,
-    ) -> Result<(), InvalidPath> {
+    fn tool(&mut self, tool: &Tool, pose: Pose, tolerance: f64) -> Result<(), InvalidPath> {
         self.flush();
         for section in tool.sections() {
-            let field = section.sweep(tolerance, pose.tip, pose.tip, pose.axis)?;
-            let color = match section.kind {
-                SectionKind::Cutting => color,
-                SectionKind::NonCutting => [122, 138, 153],
-            };
-            self.objects
-                .push(volume::SceneObject { tree: field, color });
+            self.objects.push(volume::SceneObject {
+                tree: section.sweep(tolerance, pose.tip, pose.tip, pose.axis)?,
+                color: cutter::color(section.kind),
+            });
         }
         Ok(())
     }

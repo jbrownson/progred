@@ -1,4 +1,4 @@
-use super::super::cutter::{SectionKind, Tool};
+use super::super::cutter::{self, Tool};
 use super::*;
 
 const PATH_SIDES: usize = 12;
@@ -19,12 +19,6 @@ pub(super) struct Tubes {
 }
 
 impl Tubes {
-    pub(super) fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath> {
-        self.radius = cam::field::read_radius(radius).ok_or(InvalidPath::CoordinateRange)?;
-        self.color = color.map(|v| f32::from(v) / 255.0);
-        Ok(())
-    }
-
     pub(super) fn new(radius: f64, color: [u8; 3]) -> Option<Self> {
         Some(Self {
             geometry: Geometry::default(),
@@ -33,52 +27,6 @@ impl Tubes {
             previous: None,
             circle: circle(),
         })
-    }
-
-    pub(super) fn tool(
-        &mut self,
-        tool: &Tool,
-        pose: Pose,
-        color: [u8; 3],
-        tolerance: f64,
-    ) -> Result<(), InvalidPath> {
-        let origin = Vector3::from(coordinate(pose.tip)?);
-        let [x, y, z] = pose.axis.basis();
-        let circle = circle::<TOOL_SIDES>();
-        for section in tool.sections() {
-            let outline = section
-                .shaded_outline(tolerance)
-                .ok_or(InvalidPath::CoordinateRange)?;
-            self.color = (match section.kind {
-                SectionKind::Cutting => color,
-                SectionKind::NonCutting => [122, 138, 153],
-            })
-            .map(|v| f32::from(v) / 255.0);
-            let mut vertices = Vec::with_capacity((outline.len() + 2) * TOOL_SIDES + 2);
-            let vertex = |position, normal| Vertex {
-                position,
-                color: self.color,
-                normal: Normal::new(normal),
-            };
-            let first = outline.first().ok_or(InvalidPath::CoordinateRange)?.point;
-            let last = outline.last().ok_or(InvalidPath::CoordinateRange)?.point;
-            vertices.push(vertex(origin + z * first.axial as f32, -z));
-            for (p, [radial, axial]) in std::iter::once((first, [0.0, -1.0]))
-                .chain(outline.iter().map(|p| (p.point, p.normal)))
-                .chain(std::iter::once((last, [0.0, 1.0])))
-            {
-                for &(sin, cos) in &circle {
-                    let outward = x * cos + y * sin;
-                    vertices.push(vertex(
-                        origin + outward * p.radius as f32 + z * p.axial as f32,
-                        outward * radial as f32 + z * axial as f32,
-                    ));
-                }
-            }
-            vertices.push(vertex(origin + z * last.axial as f32, z));
-            self.append::<TOOL_SIDES>(vertices)?;
-        }
-        Ok(())
     }
 
     fn segment(&mut self, a: Vector3<f32>, b: Vector3<f32>) -> Result<(), InvalidPath> {
@@ -195,16 +143,44 @@ impl Sink for Tubes {
 
 impl playback::Draw for Tubes {
     fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath> {
-        self.style(radius, color)
+        self.radius = cam::field::read_radius(radius).ok_or(InvalidPath::CoordinateRange)?;
+        self.color = color.map(|v| f32::from(v) / 255.0);
+        Ok(())
     }
 
-    fn tool(
-        &mut self,
-        tool: &Tool,
-        pose: Pose,
-        color: [u8; 3],
-        tolerance: f64,
-    ) -> Result<(), InvalidPath> {
-        self.tool(tool, pose, color, tolerance)
+    fn tool(&mut self, tool: &Tool, pose: Pose, tolerance: f64) -> Result<(), InvalidPath> {
+        let origin = Vector3::from(coordinate(pose.tip)?);
+        let [x, y, z] = pose.axis.basis();
+        let circle = circle::<TOOL_SIDES>();
+        for section in tool.sections() {
+            let outline = section
+                .shaded_outline(tolerance)
+                .ok_or(InvalidPath::CoordinateRange)?;
+            let color = cutter::color(section.kind).map(|v| f32::from(v) / 255.0);
+            let mut vertices = Vec::with_capacity((outline.len() + 2) * TOOL_SIDES + 2);
+            let vertex = |position, normal| Vertex {
+                position,
+                color,
+                normal: Normal::new(normal),
+            };
+            let first = outline.first().ok_or(InvalidPath::CoordinateRange)?.point;
+            let last = outline.last().ok_or(InvalidPath::CoordinateRange)?.point;
+            vertices.push(vertex(origin + z * first.axial as f32, -z));
+            for (p, [radial, axial]) in std::iter::once((first, [0.0, -1.0]))
+                .chain(outline.iter().map(|p| (p.point, p.normal)))
+                .chain(std::iter::once((last, [0.0, 1.0])))
+            {
+                for &(sin, cos) in &circle {
+                    let outward = x * cos + y * sin;
+                    vertices.push(vertex(
+                        origin + outward * p.radius as f32 + z * p.axial as f32,
+                        outward * radial as f32 + z * axial as f32,
+                    ));
+                }
+            }
+            vertices.push(vertex(origin + z * last.axial as f32, z));
+            self.append::<TOOL_SIDES>(vertices)?;
+        }
+        Ok(())
     }
 }

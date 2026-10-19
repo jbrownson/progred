@@ -1,3 +1,4 @@
+use super::super::playback::Draw;
 use super::{tubes::Tubes, *};
 use gid::Value;
 
@@ -144,7 +145,6 @@ fn visible_ball_end_matches_the_subtraction_tool_dimensions() {
                 tip: [0.0, 0.0, -0.25],
                 axis: Axis::Z,
             },
-            [255; 3],
             0.001,
         )
         .unwrap();
@@ -183,7 +183,7 @@ fn tool_mesh_checks_its_vertices_not_fidget_squared_radius_limits() {
     };
     let mut tubes = Tubes::new(0.01, [255; 3]).unwrap();
     let large = Tool::square(1e20, 1e20).unwrap();
-    tubes.tool(&large, pose, [255; 3], 0.001).unwrap();
+    tubes.tool(&large, pose, 0.001).unwrap();
     assert!(!tubes.geometry.indices.is_empty());
     assert!(
         tubes
@@ -199,7 +199,7 @@ fn tool_mesh_checks_its_vertices_not_fidget_squared_radius_limits() {
 
     let overflow = Tool::square(1e50, 1e50).unwrap();
     assert!(matches!(
-        tubes.tool(&overflow, pose, [255; 3], 0.001),
+        tubes.tool(&overflow, pose, 0.001),
         Err(InvalidPath::CoordinateRange)
     ));
 }
@@ -214,7 +214,7 @@ fn tilted_tool_vertices_lie_on_the_same_implicit_cutter() {
     };
     // Line thickness is intentionally unrelated to the tool diameter.
     let mut tubes = Tubes::new(0.001, [255; 3]).unwrap();
-    tubes.tool(&tool, pose, [225, 94, 58], 0.00025).unwrap();
+    tubes.tool(&tool, pose, 0.00025).unwrap();
     let shape = VmShape::from(
         tool.sweep(pose.tip, pose.tip, pose.axis, 0.001)
             .unwrap()
@@ -261,7 +261,6 @@ fn explicit_shoulders_make_annular_faces_with_outward_winding() {
                     tip: [0.0; 3],
                     axis: Axis::Z,
                 },
-                [255; 3],
                 0.001,
             )
             .unwrap();
@@ -304,7 +303,7 @@ fn tool_normals_follow_curves_but_do_not_round_caps() {
         Tool::square(0.5, 1.0).unwrap(),
     ] {
         let mut tubes = Tubes::new(0.01, [255; 3]).unwrap();
-        tubes.tool(&tool, pose, [255; 3], 0.001).unwrap();
+        tubes.tool(&tool, pose, 0.001).unwrap();
         let outline = tool.sections()[0].outline(0.001).unwrap();
         let zero_ends = usize::from(outline.first().unwrap().radius == 0.0)
             + usize::from(outline.last().unwrap().radius == 0.0);

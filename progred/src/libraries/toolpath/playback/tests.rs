@@ -64,7 +64,7 @@ impl Draw for Drawing {
     fn style(&mut self, _: f64, _: [u8; 3]) -> Result<(), InvalidPath> {
         Ok(())
     }
-    fn tool(&mut self, tool: &Tool, pose: Pose, _: [u8; 3], _: f64) -> Result<(), InvalidPath> {
+    fn tool(&mut self, tool: &Tool, pose: Pose, _: f64) -> Result<(), InvalidPath> {
         self.tool = Some((tool.clone(), pose));
         Ok(())
     }

@@ -5,7 +5,7 @@ mod value;
 mod view;
 pub use value::{ToolValue, vocabulary};
 pub(super) use value::{functions, names};
-pub(super) use view::display;
+pub(super) use view::{color, display};
 
 #[cfg(test)]
 mod tests;

@@ -5,13 +5,8 @@ use gid::Value;
 
 pub(super) trait Draw: Sink<Error = InvalidPath> {
     fn style(&mut self, radius: f64, color: [u8; 3]) -> Result<(), InvalidPath>;
-    fn tool(
-        &mut self,
-        tool: &Tool,
-        pose: Pose,
-        color: [u8; 3],
-        tolerance: f64,
-    ) -> Result<(), InvalidPath>;
+    /// Draw `tool` at `pose`, each section in its `cutter::color`.
+    fn tool(&mut self, tool: &Tool, pose: Pose, tolerance: f64) -> Result<(), InvalidPath>;
 }
 
 #[derive(Clone, PartialEq)]
@@ -119,7 +114,7 @@ impl Settings {
             },
         )?;
         if let Some((pose, Some(tool))) = cursor {
-            tubes.tool(tool, pose, [225, 94, 58], self.profile_tolerance)?;
+            tubes.tool(tool, pose, self.profile_tolerance)?;
         }
         if self.stock_color.is_some() {
             return Ok(());
