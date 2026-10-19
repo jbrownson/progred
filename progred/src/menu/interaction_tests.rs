@@ -321,9 +321,7 @@ fn the_document_libraries_entry_switches_the_documents_own_projections() {
     let (doc, names) =
         crate::gid_text::parse(include_str!("../../../examples/libraries.gid")).unwrap();
     let mut driver = driver(doc);
-    let command = Command::Doc(DocCommand::Projection(
-        crate::libraries::workspace::vocabulary::LIBRARIES,
-    ));
+    let command = Command::Doc(DocCommand::Projection(crate::libraries::declared::ID));
     let heading = definition(
         driver
             .runner

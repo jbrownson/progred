@@ -29,13 +29,13 @@ fn explicit_order_and_empty_selection_are_preserved_and_unknown_ids_fail() {
 
 #[test]
 fn only_libraries_that_bring_a_projection_offer_one() {
-    let stack = load_selected(&[name::ID, text::ID, random::ID, color::ID]).unwrap();
+    let stack = load_selected(&[name::ID, text::ID, random::ID, color::ID, declared::ID]).unwrap();
     assert_eq!(
         stack.projections().collect::<Vec<_>>(),
         [
             (text::ID, "text"),
             (color::ID, "color"),
-            (workspace::vocabulary::LIBRARIES, "document libraries")
+            (declared::ID, "document libraries")
         ]
     );
 }

@@ -2,7 +2,7 @@
 
 use crate::frame::Hovered;
 use crate::libraries::{
-    absent, blob, color, control, controls, conversion, f32, f64, fidget, geometry,
+    absent, blob, color, control, controls, conversion, declared, f32, f64, fidget, geometry,
     grap as grap_library, layout, list, logic, name, number, png, presentation, random, selection,
     sequence, site, text, toolpath, tree, u64, workspace,
 };
@@ -37,13 +37,11 @@ pub struct Stack {
 }
 
 impl Stack {
-    /// What an area can leave off, and its name, in the order projections
-    /// are tried: each library that brings a projection, then the libraries
-    /// the document declares, which stand together under their root key.
+    /// Each library that brings a projection, and its name, in the order
+    /// projections are tried.
     pub fn projections(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
         crate::libraries::name::library_names(&self.libraries)
             .filter(|(library, _)| self.partials.iter().any(|(id, _)| id == library))
-            .chain([(workspace::vocabulary::LIBRARIES, "document libraries")])
     }
 
     /// Plain's projection, from those of its libraries this stack loads.
@@ -75,7 +73,6 @@ impl Stack {
                 .iter()
                 .filter(|(id, _)| !hidden.contains(id))
                 .map(|(_, partial)| partial.clone()),
-            !hidden.contains(&workspace::vocabulary::LIBRARIES),
         )
     }
 }
@@ -105,7 +102,7 @@ fn compose(
     let completions = crate::libraries::completion::combine(providers);
     let partials: Rc<[_]> = partials.into();
     let (projection, pane_projection) =
-        projections(partials.iter().map(|(_, partial)| partial.clone()), true);
+        projections(partials.iter().map(|(_, partial)| partial.clone()));
     Stack {
         libraries,
         pane_projection,
@@ -117,17 +114,8 @@ fn compose(
 
 /// Libraries' projections composed for the document, and for a pane, whose
 /// entry may present its value instead.
-fn projections(
-    partials: impl IntoIterator<Item = Partial>,
-    document_libraries: bool,
-) -> (Projection, Projection) {
-    let partials: Vec<_> = partials.into_iter().collect();
-    let loaded = crate::display::compose_partials(partials.clone());
-    let projection = Projection::new(
-        partials
-            .into_iter()
-            .chain(document_libraries.then(|| presentation::document_libraries(loaded))),
-    );
+fn projections(partials: impl IntoIterator<Item = Partial>) -> (Projection, Projection) {
+    let projection = Projection::new(partials);
     let pane = projection
         .clone()
         .with_entry(crate::display::runtime_partial(
@@ -167,6 +155,8 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (site::ID, site::library),
     (geometry::ID, geometry::library),
     (workspace::ID, workspace::library),
+    // Tried after every built-in library.
+    (declared::ID, declared::library),
 ];
 
 #[cfg(test)]

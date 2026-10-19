@@ -14,6 +14,7 @@ mod conformance;
 pub mod control;
 pub mod controls;
 pub mod conversion;
+pub mod declared;
 pub mod f32;
 pub mod f64;
 pub mod fidget;
