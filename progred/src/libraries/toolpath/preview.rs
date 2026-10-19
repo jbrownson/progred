@@ -74,25 +74,26 @@ fn fitted(lines: Lines2D, size: Size) -> Option<BezPath> {
     let Lines2D {
         mut path, bounds, ..
     } = lines;
-    if let Some(bounds) = bounds {
-        if !bounds.width().is_finite() || !bounds.height().is_finite() {
-            return None;
+    match bounds {
+        None => Some(path),
+        Some(bounds) if bounds.width().is_finite() && bounds.height().is_finite() => {
+            let padding = 16.0_f64.min(size.width / 4.0).min(size.height / 4.0);
+            let scale = ((size.width - 2.0 * padding) / bounds.width())
+                .min((size.height - 2.0 * padding) / bounds.height());
+            let scale = if scale.is_finite() { scale } else { 1.0 };
+            let center = (
+                bounds.x0 / 2.0 + bounds.x1 / 2.0,
+                bounds.y0 / 2.0 + bounds.y1 / 2.0,
+            );
+            path.apply_affine(
+                Affine::translate((size.width / 2.0, size.height / 2.0))
+                    * Affine::scale(scale)
+                    * Affine::translate((-center.0, -center.1)),
+            );
+            Some(path)
         }
-        let padding = 16.0_f64.min(size.width / 4.0).min(size.height / 4.0);
-        let scale = ((size.width - 2.0 * padding) / bounds.width())
-            .min((size.height - 2.0 * padding) / bounds.height());
-        let scale = if scale.is_finite() { scale } else { 1.0 };
-        let center = (
-            bounds.x0 / 2.0 + bounds.x1 / 2.0,
-            bounds.y0 / 2.0 + bounds.y1 / 2.0,
-        );
-        path.apply_affine(
-            Affine::translate((size.width / 2.0, size.height / 2.0))
-                * Affine::scale(scale)
-                * Affine::translate((-center.0, -center.1)),
-        );
+        Some(_) => None,
     }
-    Some(path)
 }
 
 /// The 2D preview's value: the program, and the size and fuel to draw it with.
@@ -130,45 +131,46 @@ pub(super) fn display<W: Host>(
     let height = fields.field(layout::vocabulary::HEIGHT)?.as_f64()?;
     let fuel = ::grap::f64::to_usize(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
-        return None;
+        None
+    } else {
+        let size = Size::new(width, height);
+        Some(Layout::program(Rc::new(move |context, build| {
+            let mut lines = projected();
+            let evaluation = run(&mut lines, |scope| {
+                ::grap::apply_expression(&program, [], context.viewing().host(), Some(scope), fuel)
+            });
+            if !evaluation.completed || evaluation.result.absent_reason().is_some() {
+                presentation::result_layout(&evaluation.result).measure(context, build)
+            } else if let Some(path) = fitted(lines.sink, size) {
+                let scale = context.viewing().scale();
+                measured::choices::ChoiceLayout::fixed(widget::paint(
+                    widget::Extent {
+                        width: width * scale,
+                        ascent: height * scale / 2.0,
+                        descent: height * scale / 2.0,
+                    },
+                    move |canvas, placement| {
+                        let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
+                            * Affine::scale(scale);
+                        canvas.fill(
+                            Rect::from_origin_size(Point::ZERO, size),
+                            Color::WHITE,
+                            transform,
+                        );
+                        canvas.stroke(
+                            path,
+                            Stroke::new(1.25),
+                            Color::new([0.08, 0.48, 0.32, 1.0]),
+                            transform,
+                        );
+                    },
+                ))
+            } else {
+                presentation::result_layout(::grap::absent::value(INVALID_INPUT))
+                    .measure(context, build)
+            }
+        })))
     }
-    let size = Size::new(width, height);
-    Some(Layout::program(Rc::new(move |context, build| {
-        let mut lines = projected();
-        let evaluation = run(&mut lines, |scope| {
-            ::grap::apply_expression(&program, [], context.viewing().host(), Some(scope), fuel)
-        });
-        if !evaluation.completed || evaluation.result.absent_reason().is_some() {
-            presentation::result_layout(&evaluation.result).measure(context, build)
-        } else if let Some(path) = fitted(lines.sink, size) {
-            let scale = context.viewing().scale();
-            measured::choices::ChoiceLayout::fixed(widget::paint(
-                widget::Extent {
-                    width: width * scale,
-                    ascent: height * scale / 2.0,
-                    descent: height * scale / 2.0,
-                },
-                move |canvas, placement| {
-                    let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
-                        * Affine::scale(scale);
-                    canvas.fill(
-                        Rect::from_origin_size(Point::ZERO, size),
-                        Color::WHITE,
-                        transform,
-                    );
-                    canvas.stroke(
-                        path,
-                        Stroke::new(1.25),
-                        Color::new([0.08, 0.48, 0.32, 1.0]),
-                        transform,
-                    );
-                },
-            ))
-        } else {
-            presentation::result_layout(::grap::absent::value(INVALID_INPUT))
-                .measure(context, build)
-        }
-    })))
 }
 
 #[cfg(test)]
