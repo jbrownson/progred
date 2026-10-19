@@ -25,13 +25,12 @@ pub(crate) fn expression<W: Host>(
 ) -> Option<Layout<W>> {
     match input.value {
         Some(_) => shallow_cell(input),
-        None => (input.default_projection)(&input.with_value(None::<&::grap::RuntimeValue>))
-            .or_else(|| {
-                Some(picker(Picker::new(
-                    CompletionKind::Value,
-                    ranked(std::rc::Rc::new(suggestions::offers)),
-                )))
-            }),
+        None => (input.default_projection)(input).or_else(|| {
+            Some(picker(Picker::new(
+                CompletionKind::Value,
+                ranked(std::rc::Rc::new(suggestions::offers)),
+            )))
+        }),
     }
 }
 
@@ -198,10 +197,6 @@ pub(crate) fn declaration_path<W: Host>(
     )
 }
 
-pub(crate) fn expression_descend<W: Host>(step: Step, default: &Partial<W>) -> Layout<W> {
-    expression_path([step], default)
-}
-
 /// Parameter order is source metadata, not an evaluation. Follow
 /// transparent cell references to a stored lambda or closure; a
 /// computed callable has no order available to the projection.
@@ -209,26 +204,39 @@ fn function_parameters<'a>(
     function: &::grap::RuntimeValue,
     resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
 ) -> Option<Vec<CellId>> {
-    let mut function = function.clone();
-    let mut followed = std::collections::BTreeSet::new();
-    while let Some(cell) = function.as_cell() {
-        if !followed.insert(cell) {
-            return None;
+    parameters_past(function, resolve, &[])
+}
+
+/// `function`'s parameters past the cells already `followed`: reaching one
+/// of them again is a cycle, with none.
+fn parameters_past<'a>(
+    function: &::grap::RuntimeValue,
+    resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
+    followed: &[CellId],
+) -> Option<Vec<CellId>> {
+    match function.as_cell() {
+        None => function.callable_parameters(),
+        Some(cell) => {
+            (!followed.contains(&cell)).then_some(())?;
+            let definition = resolve(cell)?;
+            if definition.native {
+                definition
+                    .value
+                    .as_record()?
+                    .get(&PARAMS)?
+                    .as_list()?
+                    .values()
+                    .map(Value::as_cell)
+                    .collect()
+            } else {
+                parameters_past(
+                    &definition.value.into(),
+                    resolve,
+                    &[followed, &[cell]].concat(),
+                )
+            }
         }
-        let definition = resolve(cell)?;
-        if definition.native {
-            return definition
-                .value
-                .as_record()?
-                .get(&PARAMS)?
-                .as_list()?
-                .values()
-                .map(Value::as_cell)
-                .collect();
-        }
-        function = definition.value.into();
     }
-    function.callable_parameters()
 }
 
 /// Construct a call and focus its first declared parameter, when known.
@@ -270,15 +278,18 @@ pub(crate) fn call_with_function<W: Host>(
     for (position, parameter) in parameters.iter().flatten().enumerate() {
         parameter_positions.entry(*parameter).or_insert(position);
     }
+    let argument = |field| {
+        let site = input.site().below(&[Step::Key(field)]);
+        RecordField {
+            label: activatable(field_label(input.env, field), &site),
+            value: expression_path([Step::Key(field)], &input.default_projection),
+        }
+    };
     let trailing = match &input.pending {
         Some(Pending::Child(Step::Key(field)))
             if !fields.contains_field(*field) && !parameter_positions.contains_key(field) =>
         {
-            let site = input.site().below(&[Step::Key(*field)]);
-            vec![RecordField {
-                label: activatable(field_label(input.env, *field), &site),
-                value: expression_path([Step::Key(*field)], &input.default_projection),
-            }]
+            vec![argument(*field)]
         }
         _ => Vec::new(),
     };
@@ -308,13 +319,7 @@ pub(crate) fn call_with_function<W: Host>(
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => field_order(input.env, left, right),
         },
-        |field, _| {
-            let site = input.site().below(&[Step::Key(field)]);
-            RecordField {
-                label: activatable(field_label(input.env, field), &site),
-                value: expression_path([Step::Key(field)], &input.default_projection),
-            }
-        },
+        |field, _| argument(field),
         trailing,
     );
     Some(group_hug(function, arguments, 0.0))
@@ -326,10 +331,11 @@ fn lambda_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     let fields = input.value?;
-    match &input.pending {
-        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | BODY))) => (),
-        _ => return None,
-    }
+    matches!(
+        &input.pending,
+        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | BODY)))
+    )
+    .then_some(())?;
     let params = fields.field(PARAMS)?;
     params
         .list_values()?
@@ -350,7 +356,7 @@ fn lambda_display<W: Host>(
     let head = row(3.0, [lambda, params, arrow]);
     Some(group_hug(
         head,
-        expression_descend(Step::Key(BODY), &input.default_projection),
+        expression_path([Step::Key(BODY)], &input.default_projection),
         6.0,
     ))
 }
@@ -362,10 +368,11 @@ fn value_display<W: Host>(
 ) -> Option<Layout<W>> {
     let fields = input.value?;
     fields.field(VALUE)?;
-    match &input.pending {
-        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | VALUE))) => (),
-        _ => return None,
-    }
+    matches!(
+        &input.pending,
+        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | VALUE)))
+    )
+    .then_some(())?;
     let name = descend_local(
         [Step::Key(name::vocabulary::NAME)],
         crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
@@ -374,7 +381,7 @@ fn value_display<W: Host>(
     let site = input.site().below(&[Step::Key(VALUE)]);
     Some(group_hug(
         row(3.0, [name, activatable(dim("="), &site)]),
-        expression_descend(Step::Key(VALUE), &input.default_projection),
+        expression_path([Step::Key(VALUE)], &input.default_projection),
         6.0,
     ))
 }
@@ -515,9 +522,7 @@ pub fn library<W: Host>() -> Library<W> {
 
 fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Completion>> {
     use crate::display::CompletionScope;
-    if request.kind != CompletionKind::Value {
-        return None;
-    }
+    (request.kind == CompletionKind::Value).then_some(())?;
     match request.scope {
         // An empty document can start as a program in a pane.
         CompletionScope::Start => Some(vec![new_program()]),

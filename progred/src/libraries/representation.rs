@@ -87,7 +87,7 @@ pub(crate) fn infix_display<W: Host>(
     let precedence = binds(fields)?;
     let operand = |field| {
         let child =
-            crate::libraries::grap::expression_descend(Step::Key(field), &input.default_projection);
+            crate::libraries::grap::expression_path([Step::Key(field)], &input.default_projection);
         let grouped = fields
             .field(field)
             .as_ref()
