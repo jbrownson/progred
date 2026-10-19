@@ -1,9 +1,6 @@
 use super::*;
-use crate::display::test_support::press_at;
-use crate::display::widget::style;
 use crate::projection::Layout;
 use crate::projection::test_support::ProjectionInput;
-use ui_events::keyboard::Modifiers;
 
 #[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {
@@ -56,14 +53,17 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
                     )
                 })
             })]);
-            let mut world = editing_world(
-                &Document {
-                    root: Some(root),
-                    cells: Cells::new(),
+            let mut world = crate::test_editor(Document {
+                root: Some(root),
+                cells: Cells::new(),
+            });
+            framed(
+                &mut world,
+                Framing {
+                    projection: Some(&projection),
+                    ..Framing::default()
                 },
-                &core_libraries(),
             );
-            editing_frame_with_projection(&mut world, false, Some(&projection));
             assert_eq!(
                 *seen.borrow(),
                 [Value::record([(child, Value::from(vec![1]))])]
@@ -111,14 +111,17 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
         })]);
         let mut cells = Cells::new();
         cells.set_value(cell, leaf.clone());
-        let mut world = editing_world(
-            &Document {
-                root: Some(root),
-                cells,
+        let mut world = crate::test_editor(Document {
+            root: Some(root),
+            cells,
+        });
+        framed(
+            &mut world,
+            Framing {
+                projection: Some(&projection),
+                ..Framing::default()
             },
-            &core_libraries(),
         );
-        editing_frame_with_projection(&mut world, false, Some(&projection));
         assert_eq!(
             *seen.borrow(),
             [if mode == 2 { None } else { Some(cell.into()) }]
@@ -134,20 +137,23 @@ fn pane_entry_still_follows_cells_but_stops_at_the_first_non_cell() {
     let definition = Value::record([(field, Value::from(vec![3]))]);
     let mut cells = Cells::new();
     cells.set_value(cell, definition.clone());
-    let mut world = editing_world(
-        &Document {
-            root: Some(cell.into()),
-            cells,
-        },
-        &core_libraries(),
-    );
+    let mut world = crate::test_editor(Document {
+        root: Some(cell.into()),
+        cells,
+    });
     let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
     let calls = seen.clone();
     let projection = Projection::default().with_entry(crate::display::partial(move |input| {
         calls.borrow_mut().push(input.value?.clone());
         None
     }));
-    editing_frame_with_projection(&mut world, false, Some(&projection));
+    framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
+        },
+    );
     assert_eq!(*seen.borrow(), [Value::Cell(cell), definition]);
 }
 
@@ -208,14 +214,17 @@ fn descents_replace_current_and_default_projections_independently() {
                 )
             })
         })]);
-        let mut world = editing_world(
-            &Document {
-                root: Some(root.clone()),
-                cells: Cells::new(),
+        let mut world = crate::test_editor(Document {
+            root: Some(root.clone()),
+            cells: Cells::new(),
+        });
+        framed(
+            &mut world,
+            Framing {
+                projection: Some(&projection),
+                ..Framing::default()
             },
-            &core_libraries(),
         );
-        editing_frame_with_projection(&mut world, false, Some(&projection));
         assert_eq!(
             *seen.borrow(),
             [
@@ -267,14 +276,17 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
     })]);
     let mut cells = Cells::new();
     cells.set_value(cell, Value::from(vec![2]));
-    let mut world = editing_world(
-        &Document {
-            root: Some(root),
-            cells,
+    let mut world = crate::test_editor(Document {
+        root: Some(root),
+        cells,
+    });
+    framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
         },
-        &core_libraries(),
     );
-    editing_frame_with_projection(&mut world, false, Some(&projection));
     assert_eq!(*seen.borrow(), [Value::from(vec![1]), Value::from(vec![2])]);
 }
 
@@ -311,14 +323,17 @@ fn record_combinator_chooses_a_projection_for_each_field() {
         }),
         default_projection,
     ]);
-    let mut world = editing_world(
-        &Document {
-            root: Some(root),
-            cells: Cells::new(),
+    let mut world = crate::test_editor(Document {
+        root: Some(root),
+        cells: Cells::new(),
+    });
+    framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
         },
-        &core_libraries(),
     );
-    editing_frame_with_projection(&mut world, false, Some(&projection));
     let mut actual = seen.borrow().clone();
     actual.sort();
     let mut expected = [first, second, ordinary];
@@ -341,65 +356,37 @@ fn partials_receive_selection_and_annotations_positionally() {
             },
         ))
     }
-    let doc = Document {
-        root: Some(Value::from(vec![7u8])),
-        cells: Cells::new(),
-    };
-    let lib = core_libraries();
     let projection: Projection = Projection::new([crate::display::partial(probe)]);
-    let styles = style::editor(style::Theme::Light.palette(), 1.0);
-    let mut fonts = crate::fonts::bundled_font_context();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let computations = crate::computations::Computations::from_sources(Sources {
-        doc: &doc,
-        libraries: &lib,
-    });
-    let mut width = |selection: Option<&Selection>, annotations: &Annotations| {
-        let mut tcx = TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            scale: 1.0,
-            cache: &mut cache,
-        };
-        project(
-            ProjectDescription {
-                focused: true,
-                computations: &computations,
-                view: &crate::test_root(),
-                completions: None,
-                sources: Sources {
-                    doc: &doc,
-                    libraries: &lib,
-                },
-                root: doc.root.as_ref(),
-                root_path: &[],
-                selection,
-                source_selection: selection,
-                annotations,
-                raw: false,
-                styles: &styles,
-                width: 500.0,
-
-                projection: &projection,
+    // How many glyphs the frame draws, which tells the three apart.
+    let glyphs = |selection: Option<Selection>, annotations: Annotations| {
+        let mut world = crate::editor_of(Value::from(vec![7u8]));
+        world.model.selection = selection;
+        world.model.workspace.document.annotations = annotations;
+        let frame = framed(
+            &mut world,
+            Framing {
+                projection: Some(&projection),
+                ..Framing::default()
             },
-            &mut tcx,
-        )
-        .extent
-        .width
+        );
+        crate::display::test_support::painted(&settle(frame, &world.sources()).list.0)
+            .map(|command| match command {
+                puri::draw::DrawCmd::GlyphRun(run) => run.glyphs.len(),
+                _ => 0,
+            })
+            .sum::<usize>()
     };
-    let empty = Annotations::default();
-    let cold = width(None, &empty);
-    let selected = width(
-        Some(&crate::selection::Selection::edge(
+    let cold = glyphs(None, Annotations::default());
+    let selected = glyphs(
+        Some(crate::selection::Selection::edge(
             &crate::test_root(),
             Vec::new(),
         )),
-        &empty,
+        Annotations::default(),
     );
     let mut marked = Annotations::default();
     marked.set_field(&[], crate::annotations::FOLD, Some(Value::from(vec![1u8])));
-    let annotated = width(None, &marked);
+    let annotated = glyphs(None, marked);
     assert_ne!(cold, selected);
     assert_ne!(cold, annotated);
     assert_ne!(selected, annotated);
@@ -424,63 +411,10 @@ fn a_projection_defined_as_data_realizes() {
             &input.site(),
         )
     }
-    let doc = Document {
-        root: Some(Value::from(vec![7u8])),
-        cells: Cells::new(),
-    };
-    let lib = core_libraries();
-    let projection: Projection = Projection::new([crate::display::partial(probe)]);
-    let styles = style::editor(style::Theme::Light.palette(), 1.0);
-    let mut fonts = crate::fonts::bundled_font_context();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let mut tcx = TextCtx {
-        fonts: &mut fonts,
-        layouts: &mut layouts,
-        scale: 1.0,
-        cache: &mut cache,
-    };
-    let empty = Annotations::default();
-    let computations = crate::computations::Computations::from_sources(Sources {
-        doc: &doc,
-        libraries: &lib,
-    });
-    let measured = project(
-        ProjectDescription {
-            focused: true,
-            computations: &computations,
-            view: &crate::test_root(),
-            completions: None,
-            sources: Sources {
-                doc: &doc,
-                libraries: &lib,
-            },
-            root: doc.root.as_ref(),
-            root_path: &[],
-            selection: None,
-            source_selection: None,
-            annotations: &empty,
-            raw: false,
-            styles: &styles,
-            width: 500.0,
-
-            projection: &projection,
-        },
-        &mut tcx,
-    );
-    assert!(measured.extent.width > 0.0);
-    let placed = crate::display::widget::frame::place(
-        measured,
-        uig::Placement::root(measured_rect(500.0)),
-        &Default::default(),
-    );
-    let mut pointer = crate::frame::DispatchContext::new(
-        None,
-        Some(crate::frame::Hovered::Tree(Hover::Value(Rc::from([])))),
-    );
-    assert!(placed.resolve_for_dispatch().dispatch_pointer_down_with(
-        &mut crate::test_editor(doc.clone()),
-        &press_at(Point::ZERO, Modifiers::empty()),
-        &mut pointer,
-    ));
+    let mut editor = crate::editor_of(Value::from(vec![7u8]));
+    editor.stack.projection = Projection::new([crate::display::partial(probe)]);
+    let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
+    assert!(driver.rect(&[]).width() > 0.0);
+    driver.click(&[]);
+    assert!(driver.selection().is_empty());
 }

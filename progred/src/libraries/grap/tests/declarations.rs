@@ -171,7 +171,7 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
         root: Some(Value::record([(grap::vocabulary::VALUE, cell.into())])),
         cells,
     });
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     let name_path = [Step::Key(name::vocabulary::NAME)];
     let name_slot = frame.landmarks.landmark(&name_path).unwrap();
     assert!(!frame.landmarks.iter().any(|d| d.path.as_ref()
@@ -181,7 +181,7 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
         ]));
     let before = world.model.doc.clone();
     assert!((name_slot.select)(&mut world, None));
-    assert!(editing_frame(&mut world, false).completion.is_some());
+    assert!(editing_frame(&mut world).completion.is_some());
     assert!(
         Rc::ptr_eq(&world.model.doc, &before),
         "projecting and selecting a missing name must not write one"
@@ -284,11 +284,17 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
         let rect = |path: &[Step]| bench.landmarks.landmark(path).unwrap().rect;
         let cell_rect = rect(&binder_path);
         let name_rect = rect(&name_path);
-        let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(name_rect.center()));
+        let (hovered, _) = place_with(BenchFrame {
+            pointer: Some(name_rect.center()),
+            ..BenchFrame::of(&doc, 1200.0)
+        });
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == name_path));
         let point = Point::new((cell_rect.x0 + name_rect.x0) / 2.0, cell_rect.center().y);
-        let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(point));
+        let (hovered, _) = place_with(BenchFrame {
+            pointer: Some(point),
+            ..BenchFrame::of(&doc, 1200.0)
+        });
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == binder_path));
         let mut selected = make_projected_editing_selection(&doc, &libraries, name_path.clone());
@@ -326,18 +332,24 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
         .chain([Step::Key(extra)])
         .collect::<Path>();
     let libraries = core_libraries();
-    let mut world = editing_world(&doc, &libraries);
+    let mut world = crate::test_editor(doc.clone());
     assert!(
-        !editing_frame(&mut world, false)
+        !editing_frame(&mut world)
             .landmarks
             .iter()
             .any(|d| d.path.as_ref() == extra_path)
     );
     assert!(
-        editing_frame(&mut world, true)
-            .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == extra_path)
+        framed(
+            &mut world,
+            Framing {
+                raw: true,
+                ..Framing::default()
+            }
+        )
+        .landmarks
+        .iter()
+        .any(|d| d.path.as_ref() == extra_path)
     );
     let pending = pending_edge(
         &crate::test_root(),
@@ -346,7 +358,7 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
     )
     .unwrap();
     world.model.selection = Some(pending);
-    assert!(editing_frame(&mut world, false).completion.is_some());
+    assert!(editing_frame(&mut world).completion.is_some());
 }
 
 #[test]
@@ -367,9 +379,9 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
             pending_into(&crate::test_root(), &scope.view(sources), list_path, true).unwrap();
         let missing_path = pending.path().to_vec();
         assert!(sources.resolve_path(&missing_path).is_none());
-        let mut world = editing_world(&doc, &libraries);
+        let mut world = crate::test_editor(doc.clone());
         world.model.selection = Some(pending);
-        let frame = editing_frame(&mut world, false);
+        let frame = editing_frame(&mut world);
         assert!(frame.completion.is_some());
         assert!(
             frame
@@ -385,14 +397,14 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
 
         // A new field in a compact lambda, match, or let must not disappear.
         world.model.selection = pending_edge(&crate::test_root(), &scope.view(sources), Vec::new());
-        assert!(editing_frame(&mut world, false).completion.is_some());
+        assert!(editing_frame(&mut world).completion.is_some());
         if binder_path.len() > 2 {
             world.model.selection = pending_edge(
                 &crate::test_root(),
                 &scope.view(sources),
                 binder_path[..2].to_vec(),
             );
-            assert!(editing_frame(&mut world, false).completion.is_some());
+            assert!(editing_frame(&mut world).completion.is_some());
         }
     }
 }
@@ -601,7 +613,10 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
             Point::new((wrapper.x0 + body.x0) / 2.0, wrapper.center().y)
         };
         let marker = marker_position(&bench.landmarks);
-        let (hovered, _) = place_with_pointer(&doc, None, 1200.0, Some(marker));
+        let (hovered, _) = place_with(BenchFrame {
+            pointer: Some(marker),
+            ..BenchFrame::of(&doc, 1200.0)
+        });
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found.as_ref() == &expression_path[..1]));
 
@@ -635,14 +650,20 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
                 .iter()
                 .any(|d| d.path.as_ref() == [Step::Key(extra)])
         };
-        assert!(!has_metadata(&editing_frame(&mut world, false)));
-        assert!(has_metadata(&editing_frame(&mut world, true)));
+        assert!(!has_metadata(&editing_frame(&mut world)));
+        assert!(has_metadata(&framed(
+            &mut world,
+            Framing {
+                raw: true,
+                ..Framing::default()
+            }
+        )));
         world.model.selection = pending_edge(
             &crate::test_root(),
             &crate::editing::Scope::default().view(world.sources()),
             Vec::new(),
         );
-        assert!(editing_frame(&mut world, false).completion.is_some());
+        assert!(editing_frame(&mut world).completion.is_some());
     }
 }
 
@@ -661,13 +682,13 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
         cells: Cells::new(),
         root: Some(sum.clone()),
     };
-    let mut world = editing_world(&doc, &libraries);
+    let mut world = crate::test_editor(doc.clone());
     world.model.selection = pending_edge(
         &crate::test_root(),
         &crate::editing::Scope::default().view(src(&doc, &libraries)),
         Vec::new(),
     );
-    assert!(editing_frame(&mut world, false).completion.is_some());
+    assert!(editing_frame(&mut world).completion.is_some());
     let doc = Document {
         cells: Cells::new(),
         root: Some(Value::record(
@@ -676,9 +697,9 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
                 .update(extra, text::value("metadata")),
         )),
     };
-    let mut world = editing_world(&doc, &libraries);
+    let mut world = crate::test_editor(doc.clone());
     assert!(
-        editing_frame(&mut world, false)
+        editing_frame(&mut world)
             .landmarks
             .iter()
             .any(|d| d.path.as_ref() == [Step::Key(extra)])
@@ -689,12 +710,12 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
         cells: Cells::new(),
         root: Some(grap::call(f64::vocabulary::SUM.into(), [])),
     };
-    let mut world = editing_world(&doc, &libraries);
+    let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(crate::selection::pending_value(
         &crate::test_root(),
         vec![Step::Key(number::vocabulary::LEFT)],
     ));
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     assert!(frame.completion.is_some());
     assert!(
         frame
@@ -722,13 +743,13 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
             cells: Cells::new(),
             root: Some(root.clone()),
         };
-        let mut world = editing_world(&doc, &libraries);
+        let mut world = crate::test_editor(doc.clone());
         world.model.selection = pending_edge(
             &crate::test_root(),
             &crate::editing::Scope::default().view(src(&doc, &libraries)),
             Vec::new(),
         );
-        assert!(editing_frame(&mut world, false).completion.is_some());
+        assert!(editing_frame(&mut world).completion.is_some());
 
         let doc = Document {
             cells: Cells::new(),
@@ -738,18 +759,24 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
                     .update(extra, text::value("metadata")),
             )),
         };
-        let mut world = editing_world(&doc, &libraries);
+        let mut world = crate::test_editor(doc.clone());
         assert!(
-            !editing_frame(&mut world, false)
+            !editing_frame(&mut world)
                 .landmarks
                 .iter()
                 .any(|d| d.path.as_ref() == [Step::Key(extra)])
         );
         assert!(
-            editing_frame(&mut world, true)
-                .landmarks
-                .iter()
-                .any(|d| d.path.as_ref() == [Step::Key(extra)])
+            framed(
+                &mut world,
+                Framing {
+                    raw: true,
+                    ..Framing::default()
+                }
+            )
+            .landmarks
+            .iter()
+            .any(|d| d.path.as_ref() == [Step::Key(extra)])
         );
     }
 }

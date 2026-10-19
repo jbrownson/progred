@@ -45,7 +45,10 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
             vec![],
         ),
     ] {
-        let (hovered, _) = place_with_pointer(&doc, None, 400.0, Some(point));
+        let (hovered, _) = place_with(BenchFrame {
+            pointer: Some(point),
+            ..BenchFrame::of(&doc, 400.0)
+        });
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == path));
     }

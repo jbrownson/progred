@@ -58,7 +58,13 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
         ))
     })]);
     for expected in 1..=2 {
-        let _frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+        let _frame = framed(
+            &mut world,
+            Framing {
+                projection: Some(&projection),
+                ..Framing::default()
+            },
+        );
         assert_eq!(visits.get(), expected);
     }
 }
@@ -104,7 +110,13 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
         ))
     })]);
     let mut world = crate::editor_of(Value::record([]));
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
+        },
+    );
     assert_eq!(visits.get(), 1);
     let path = vec![Step::Key(result), Step::Key(field), Step::Element(position)];
     assert!(
@@ -172,8 +184,14 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             root: Some(Value::record([])),
             cells: Cells::new(),
         };
-        let mut world = editing_world(&doc, &core_libraries());
-        let output = editing_frame_with_projection(&mut world, false, Some(&projection));
+        let mut world = crate::test_editor(doc.clone());
+        let output = framed(
+            &mut world,
+            Framing {
+                projection: Some(&projection),
+                ..Framing::default()
+            },
+        );
         let content = placements
             .borrow()
             .iter()
@@ -190,9 +208,16 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
         );
         let margin = Point::new(35.0, 25.0);
         assert_eq!(
-            editing_frame_at(&mut world, false, Some(&projection), Some(margin))
-                .claim
-                .map(|(_, claim)| claim),
+            framed(
+                &mut world,
+                Framing {
+                    projection: Some(&projection),
+                    pointer: Some(margin),
+                    ..Framing::default()
+                }
+            )
+            .claim
+            .map(|(_, claim)| claim),
             Some(if card {
                 Claim::Occludes
             } else {
@@ -200,9 +225,16 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             })
         );
         assert_eq!(
-            editing_frame_at(&mut world, false, Some(&projection), Some(content.center()))
-                .claim
-                .map(|(_, claim)| claim),
+            framed(
+                &mut world,
+                Framing {
+                    projection: Some(&projection),
+                    pointer: Some(content.center()),
+                    ..Framing::default()
+                }
+            )
+            .claim
+            .map(|(_, claim)| claim),
             Some(Claim::Direct(Hovered::Tree(Hover::Entry(1))))
         );
         let handler = output.resolve_for_dispatch();
@@ -267,15 +299,9 @@ fn native_leading_continuations_place_only_for_the_chosen_alternative() {
         (60.0, 20.0, ["before narrow", "narrow"]),
     ] {
         log.borrow_mut().clear();
-        let (_, extent) = context.place(
-            &doc,
-            None,
-            &Annotations::default(),
-            available,
-            None,
-            None,
-            None,
-        );
+        let (_, extent) = context.frame(BenchFrame {
+            ..BenchFrame::of(&doc, available)
+        });
         assert_eq!(
             extent,
             Extent {
@@ -360,8 +386,9 @@ fn stretching_widgets_receive_only_the_chosen_row_span() {
     ] {
         measured_spans.borrow_mut().clear();
         placed_spans.borrow_mut().clear();
-        let (_, extent) =
-            context.place(&doc, None, &Annotations::default(), width, None, None, None);
+        let (_, extent) = context.frame(BenchFrame {
+            ..BenchFrame::of(&doc, width)
+        });
         assert_eq!(
             &*measured_spans.borrow(),
             &[Extent {
@@ -411,15 +438,10 @@ fn decorative_and_pending_slots_share_the_active_query_frame() {
             (&empty, Some(&selected)),
         ]
         .map(|(doc, selection)| {
-            context.place(
-                doc,
-                selection,
-                &Annotations::default(),
-                600.0,
-                None,
-                None,
-                None,
-            )
+            context.frame(BenchFrame {
+                selection: selection,
+                ..BenchFrame::of(doc, 600.0)
+            })
         });
         let [
             (decorative, decorative_extent),
@@ -469,15 +491,10 @@ fn cell_parentheses_leave_a_gap_beside_empty_frames() {
             scale,
         );
         for selection in [None, Some(&selected)] {
-            let (bench, _) = context.place(
-                &doc,
-                selection,
-                &Annotations::default(),
-                600.0,
-                None,
-                None,
-                None,
-            );
+            let (bench, _) = context.frame(BenchFrame {
+                selection: selection,
+                ..BenchFrame::of(&doc, 600.0)
+            });
             let frame = bench
                 .list
                 .0
@@ -647,7 +664,10 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
             scale,
         );
         let annotations = Annotations::default();
-        let (unmarked, _) = context.place(&doc, None, &annotations, 1200.0, None, None, None);
+        let (unmarked, _) = context.frame(BenchFrame {
+            annotations: Some(&annotations),
+            ..BenchFrame::of(&doc, 1200.0)
+        });
         let rects = paths.each_ref().map(|path| {
             unmarked
                 .landmarks
@@ -659,15 +679,11 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         let outlines = rects.map(|rect| {
             RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
         });
-        let (hovered, _) = context.place(
-            &doc,
-            None,
-            &annotations,
-            1200.0,
-            Some(rects[0].center()),
-            None,
-            None,
-        );
+        let (hovered, _) = context.frame(BenchFrame {
+            annotations: Some(&annotations),
+            pointer: Some(rects[0].center()),
+            ..BenchFrame::of(&doc, 1200.0)
+        });
         assert_eq!(
             hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(Rc::from(
@@ -679,15 +695,12 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         assert_eq!(strokes(&hovered, 0.55), vec![outlines[0]]);
         assert!(strokes(&hovered, 0.25).is_empty());
         for pointer in [None, Some(rects[0].center()), Some(rects[1].center())] {
-            let (selected, _) = context.place(
-                &doc,
-                Some(&selected),
-                &annotations,
-                1200.0,
-                pointer,
-                None,
-                None,
-            );
+            let (selected, _) = context.frame(BenchFrame {
+                selection: Some(&selected),
+                annotations: Some(&annotations),
+                pointer: pointer,
+                ..BenchFrame::of(&doc, 1200.0)
+            });
             assert_eq!(fills(&selected, 0.22), vec![outlines[0]]);
             assert_eq!(strokes(&selected, 1.0), vec![outlines[0]]);
             assert_eq!(fills(&selected, 0.10), vec![outlines[1]]);
@@ -716,7 +729,10 @@ fn sample_text_line_claims_its_own_hover() {
         .landmark(&path)
         .expect("color landmark")
         .rect;
-    let (bench, _) = place_with_pointer(&doc, None, 900.0, Some(rect.center()));
+    let (bench, _) = place_with(BenchFrame {
+        pointer: Some(rect.center()),
+        ..BenchFrame::of(&doc, 900.0)
+    });
     assert_eq!(
         bench.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(Rc::from(path)))))
@@ -752,8 +768,10 @@ fn custom_match_projection_uses_the_editor_fold() {
     let (expanded, expanded_extent) = place(&doc, None, 900.0);
     let mut annotations = Annotations::default();
     crate::annotations::set_collapsed(&mut annotations, &[], false, true);
-    let (folded, folded_extent) =
-        place_with_annotations(&doc, None, &annotations, 900.0, None, None, None);
+    let (folded, folded_extent) = place_with(BenchFrame {
+        annotations: Some(&annotations),
+        ..BenchFrame::of(&doc, 900.0)
+    });
 
     assert!(folded.landmarks.len() < expanded.landmarks.len());
     assert!(folded_extent.width < expanded_extent.width);
@@ -932,27 +950,31 @@ fn placement_claims_the_hover_innermost_last() {
         .expect("the sample has a string leaf");
     let string_rect = string.rect;
     let string_path = string.path.clone();
-    let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(string_rect.center()));
+    let (bench, _) = place_with(BenchFrame {
+        pointer: Some(string_rect.center()),
+        ..BenchFrame::of(&doc, 560.0)
+    });
     assert!(matches!(
         &bench.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if *path == string_path
     ));
-    let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(Point::new(-10.0, -10.0)));
+    let (bench, _) = place_with(BenchFrame {
+        pointer: Some(Point::new(-10.0, -10.0)),
+        ..BenchFrame::of(&doc, 560.0)
+    });
     assert!(bench.hit.is_none());
 
     let center = string_rect.center();
-    let clipped = place_with_inputs(
-        &doc,
-        None,
-        560.0,
-        Some(center),
-        Some(Rect::new(
+    let clipped = place_with(BenchFrame {
+        pointer: Some(center),
+        viewport: Some(Rect::new(
             string_rect.x0,
             string_rect.y0,
             center.x - 1.0,
             string_rect.y1,
         )),
-    )
+        ..BenchFrame::of(&doc, 560.0)
+    })
     .0;
     assert!(clipped.hit.is_none());
 }
@@ -975,7 +997,10 @@ fn hovering_a_field_label_targets_its_value() {
     let mut found = None;
     while x > 0.0 {
         x -= 2.0;
-        let (bench, _) = place_with_pointer(&doc, None, 400.0, Some(Point::new(x, y)));
+        let (bench, _) = place_with(BenchFrame {
+            pointer: Some(Point::new(x, y)),
+            ..BenchFrame::of(&doc, 400.0)
+        });
         if matches!(
             &bench.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
@@ -1058,7 +1083,10 @@ fn flat_separators_claim_the_insert_between() {
         (first.rect.x1 + second.rect.x0) / 2.0,
         first.rect.center().y,
     );
-    let (bench, _) = place_with_pointer(&doc, None, width, Some(mid));
+    let (bench, _) = place_with(BenchFrame {
+        pointer: Some(mid),
+        ..BenchFrame::of(&doc, width)
+    });
     assert!(matches!(
         &bench.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
@@ -1142,7 +1170,13 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                         d::col(0, 0.0, vertical),
                     ]))
                 }));
-            let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+            let frame = framed(
+                &mut world,
+                Framing {
+                    projection: Some(&projection),
+                    ..Framing::default()
+                },
+            );
             assert_eq!(visits.get(), count, "alternatives share projected children");
             let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
             let rect = frame
@@ -1169,9 +1203,15 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
             assert!(Rc::ptr_eq(&before, &world.model.doc));
             assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
             assert!(
-                editing_frame_with_projection(&mut world, false, Some(&projection))
-                    .completion
-                    .is_some()
+                framed(
+                    &mut world,
+                    Framing {
+                        projection: Some(&projection),
+                        ..Framing::default()
+                    }
+                )
+                .completion
+                .is_some()
             );
             assert!(crate::completion::commit(
                 &mut world.session(),
@@ -1218,8 +1258,15 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
                 d::structure::list_layout(input, None)?,
             ))
         }));
-    let project =
-        |world: &mut crate::Editor| editing_frame_with_projection(world, false, Some(&projection));
+    let project = |world: &mut crate::Editor| {
+        framed(
+            world,
+            Framing {
+                projection: Some(&projection),
+                ..Framing::default()
+            },
+        )
+    };
     let between = |frame: &crate::projection::test_support::HoverOutput<crate::Editor>,
                    left: &[Step],
                    right: &[Step]| {
@@ -1312,7 +1359,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
             .unwrap(),
         )];
         let mut world = crate::test_editor(doc);
-        let frame = editing_frame(&mut world, false);
+        let frame = editing_frame(&mut world);
         let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
         let items: Vec<_> = positions
             .iter()
@@ -1338,7 +1385,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         ));
         assert!(Rc::ptr_eq(&before, &world.model.doc));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
-        let pending_frame = editing_frame(&mut world, false);
+        let pending_frame = editing_frame(&mut world);
         assert!(pending_frame.completion.is_some());
         let Step::Element(inserted) = &path[0] else {
             unreachable!()
@@ -1386,12 +1433,10 @@ fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
     let (upper, lower) = elements_of(&bench, "body", true);
     let parent = vec![key("body")];
     let gap_y = (upper.rect.y1 + lower.rect.y0) / 2.0;
-    let (gap, _) = place_with_pointer(
-        &doc,
-        None,
-        560.0,
-        Some(Point::new(upper.rect.center().x, gap_y)),
-    );
+    let (gap, _) = place_with(BenchFrame {
+        pointer: Some(Point::new(upper.rect.center().x, gap_y)),
+        ..BenchFrame::of(&doc, 560.0)
+    });
     assert!(matches!(
         &gap.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
@@ -1403,12 +1448,10 @@ fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
         .landmarks
         .landmark(&parent)
         .expect("the list has a landmark");
-    let (claimed, _) = place_with_pointer(
-        &doc,
-        None,
-        560.0,
-        Some(Point::new(list.rect.x0 + 1.0, gap_y)),
-    );
+    let (claimed, _) = place_with(BenchFrame {
+        pointer: Some(Point::new(list.rect.x0 + 1.0, gap_y)),
+        ..BenchFrame::of(&doc, 560.0)
+    });
     assert!(matches!(
         &claimed.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.as_ref() == parent
@@ -1455,19 +1498,20 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
         lower.rect,
     );
     let label_x = upper.rect.x0 - 7.0;
-    let (label, _) = place_with_pointer(
-        &doc,
-        None,
-        width,
-        Some(Point::new(label_x, upper.rect.center().y)),
-    );
+    let (label, _) = place_with(BenchFrame {
+        pointer: Some(Point::new(label_x, upper.rect.center().y)),
+        ..BenchFrame::of(&doc, width)
+    });
     assert!(matches!(
         &label.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
             if path.as_ref() == upper.path.as_ref()
     ));
     let gap_y = (upper.rect.y1 + lower.rect.y0) / 2.0;
-    let (air, _) = place_with_pointer(&doc, None, width, Some(Point::new(label_x, gap_y)));
+    let (air, _) = place_with(BenchFrame {
+        pointer: Some(Point::new(label_x, gap_y)),
+        ..BenchFrame::of(&doc, width)
+    });
     assert!(air.hit.is_none());
 
     let cell_rect = bench
@@ -1476,12 +1520,10 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
         .find(|landmark| landmark.path.is_empty())
         .expect("the root cell has a landmark")
         .rect;
-    let (paren, _) = place_with_pointer(
-        &doc,
-        None,
-        width,
-        Some(Point::new(cell_rect.x0 + 1.0, gap_y)),
-    );
+    let (paren, _) = place_with(BenchFrame {
+        pointer: Some(Point::new(cell_rect.x0 + 1.0, gap_y)),
+        ..BenchFrame::of(&doc, width)
+    });
     assert!(matches!(
         &paren.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.is_empty()

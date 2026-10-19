@@ -1,4 +1,3 @@
-use crate::annotations::Annotations;
 use crate::libraries::fidget;
 use crate::projection::test_support::*;
 use crate::test_support::root_completions;
@@ -46,15 +45,10 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
         if let Some(value) = value {
             doc.cells.set_value(cell, value);
         }
-        let (bench, _) = context.place(
-            &doc,
-            None,
-            &Annotations::default(),
-            1400.0,
-            None,
-            None,
-            Some(&pane.path),
-        );
+        let (bench, _) = context.frame(BenchFrame {
+            root: &pane.path,
+            ..BenchFrame::of(&doc, 1400.0)
+        });
         bench.list.0.iter().find_map(|command| match command {
             DrawCmd::Image { image, .. } => Some(
                 image
@@ -95,15 +89,10 @@ fn fidget_viewport_projects_an_image_at_the_assigned_size() {
         &context.stack.projection,
         kurbo::Size::new(160.0, 96.0),
     );
-    let (bench, extent) = context.place(
-        &doc,
-        None,
-        &Annotations::default(),
-        1400.0,
-        None,
-        None,
-        source,
-    );
+    let (bench, extent) = context.frame(BenchFrame {
+        root: source.unwrap_or(&[]),
+        ..BenchFrame::of(&doc, 1400.0)
+    });
     let image = bench
         .list
         .0

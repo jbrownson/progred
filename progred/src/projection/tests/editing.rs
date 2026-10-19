@@ -254,7 +254,6 @@ fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
 
 #[test]
 fn directional_line_arrival_is_distinct_from_ordinary_selection() {
-    let libraries = core_libraries();
     let doc = Document {
         root: Some(text::value("hello")),
         cells: Cells::new(),
@@ -268,8 +267,8 @@ fn directional_line_arrival_is_distinct_from_ordinary_selection() {
         Some(NavigationDirection::Right),
         Some(NavigationDirection::Left),
     ] {
-        let mut world = editing_world(&doc, &libraries);
-        let frame = editing_frame(&mut world, false);
+        let mut world = crate::test_editor(doc.clone());
+        let frame = editing_frame(&mut world);
         let target = frame
             .landmarks
             .iter()
@@ -358,13 +357,14 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
             vec![Step::Follow(gid::Resolution::Library(library))],
         ),
     ] {
-        let mut editor = editing_world(
-            &Document {
+        let mut editor = {
+            let mut editor = crate::test_editor(Document {
                 root: Some(value),
                 cells: Cells::new(),
-            },
-            &libraries,
-        );
+            });
+            editor.stack.libraries = libraries.clone();
+            editor
+        };
         if raw {
             editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
         }
@@ -716,7 +716,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
             cells: Cells::new(),
         };
         for payload in [Value::record([]), crate::selection::payload::edge()] {
-            let mut editor = editing_world(&doc, &libraries);
+            let mut editor = crate::test_editor(doc.clone());
             editor.model.selection = Some(Selection::from_scoped_payload(
                 &crate::test_root(),
                 &src(&doc, &libraries),
@@ -768,7 +768,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
         ));
         assert!(editor.sources().resolve_path(&path).is_none());
     };
-    let mut driver = Driver::new(editing_world(&doc, &lib), Driver::VIEWPORT);
+    let mut driver = Driver::new(crate::test_editor((*doc).clone()), Driver::VIEWPORT);
     let original = driver.editor().model.doc.clone();
     let point = driver.rect(&path).center();
     assert_eq!(
@@ -839,7 +839,11 @@ fn a_read_only_anonymous_lambda_cannot_open_name_entry() {
         Step::Follow(gid::Resolution::Library(library)),
         Step::Key(name::vocabulary::NAME),
     ];
-    let mut world = editing_world(&doc, &libraries);
+    let mut world = {
+        let mut editor = crate::test_editor(doc.clone());
+        editor.stack.libraries = libraries.clone();
+        editor
+    };
     world.model.selection = Some(make_projected_selection(&doc, &libraries, path));
     let original = world.model.doc.clone();
     assert_eq!(
@@ -852,7 +856,7 @@ fn a_read_only_anonymous_lambda_cannot_open_name_entry() {
         Stage::Edge
     );
     assert!(world.model.selection.as_ref().unwrap().edit().is_none());
-    let selected = editing_frame(&mut world, false);
+    let selected = editing_frame(&mut world);
     assert!(selected.completion.is_none());
     assert!(!write_text(
         &mut world.model.doc,

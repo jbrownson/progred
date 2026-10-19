@@ -7,7 +7,6 @@ use crate::annotations::Annotations;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
 use crate::driver::Driver;
-use crate::hover::hover_secondary;
 use crate::libraries::text;
 use crate::library::Libraries;
 use gid::Document;
@@ -24,40 +23,37 @@ pub(crate) type HoverOutput<C> = crate::display::widget::frame::HoverOutput<C, H
 pub(crate) type ProjectionInput<'a, V = Value> =
     crate::display::host::ProjectionInput<'a, crate::Editor, V>;
 
-pub(crate) fn editing_world(doc: &Document, libraries: &Libraries) -> crate::Editor {
-    let mut world = crate::test_editor(doc.clone());
-    world.stack.libraries = libraries.clone();
-    world
+/// How a test frame shows an editor's document: as the editor's own view
+/// would, unless a field says otherwise.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Framing<'a> {
+    /// Raw's view rather than the libraries' projections.
+    pub(crate) raw: bool,
+    /// Drawn with this projection rather than the editor's.
+    pub(crate) projection: Option<&'a Projection>,
+    /// Where the pointer rests.
+    pub(crate) pointer: Option<Point>,
+    /// Selected this way rather than as the editor is.
+    pub(crate) selection: Option<&'a Selection>,
 }
 
-pub(crate) fn editing_frame(world: &mut crate::Editor, raw: bool) -> HoverOutput<crate::Editor> {
-    editing_frame_with_projection(world, raw, None)
+/// `world`'s document view projected 500 points wide and placed, unbound.
+pub(crate) fn editing_frame(world: &mut crate::Editor) -> HoverOutput<crate::Editor> {
+    framed(world, Framing::default())
 }
 
-pub(crate) fn editing_frame_with_projection(
+/// As [`editing_frame`], framed as `framing` says.
+pub(crate) fn framed(
     world: &mut crate::Editor,
-    raw: bool,
-    projection: Option<&Projection>,
+    framing: Framing<'_>,
 ) -> HoverOutput<crate::Editor> {
-    editing_frame_at(world, raw, projection, None)
-}
-
-pub(crate) fn editing_frame_at(
-    world: &mut crate::Editor,
-    raw: bool,
-    projection: Option<&Projection>,
-    pointer: Option<Point>,
-) -> HoverOutput<crate::Editor> {
-    editing_frame_with_annotations(world, raw, projection, pointer, &Annotations::default())
-}
-
-pub(crate) fn editing_frame_with_annotations(
-    world: &mut crate::Editor,
-    raw: bool,
-    projection: Option<&Projection>,
-    pointer: Option<Point>,
-    annotations: &Annotations,
-) -> HoverOutput<crate::Editor> {
+    let Framing {
+        raw,
+        projection,
+        pointer,
+        selection,
+    } = framing;
+    let selection = selection.or(world.model.selection.as_ref());
     let stack = &world.stack;
     let styles = crate::display::widget::style::editor(world.palette, 1.0);
     let raw_projection = Projection::default();
@@ -70,21 +66,22 @@ pub(crate) fn editing_frame_with_annotations(
         scale: 1.0,
         cache: &mut world.text_cache,
     };
+    let view = &world.model.workspace.document;
     let measured = project(
         ProjectDescription {
             focused: world.focused,
             computations: &world.computations,
-            view: &crate::test_root(),
+            view: &view.root,
             completions: Some(&stack.completions),
             sources: Sources {
                 doc: &world.model.doc,
-                libraries: &world.stack.libraries,
+                libraries: &stack.libraries,
             },
             root: world.model.doc.root.as_ref(),
             root_path: &[],
-            selection: world.model.selection.as_ref(),
-            source_selection: world.model.selection.as_ref(),
-            annotations,
+            selection,
+            source_selection: selection,
+            annotations: &view.annotations,
             raw,
             styles: &styles,
             width: 500.0,
@@ -112,6 +109,31 @@ pub(crate) fn editing_frame_with_annotations(
     )
 }
 
+/// The entries the picker open at `selection` offers in `world`.
+pub(crate) fn offered(
+    world: &mut crate::Editor,
+    selection: &Selection,
+) -> Vec<crate::display::widget::offers::Entry<crate::Editor>> {
+    framed(
+        world,
+        Framing {
+            selection: Some(selection),
+            ..Framing::default()
+        },
+    )
+    .completion
+    .expect("the selected pending emits its offers")
+    .entries
+    .to_vec()
+}
+
+/// An editor of `doc` reading through `libraries`.
+fn editor_over(doc: &Document, libraries: &Libraries) -> crate::Editor {
+    let mut world = crate::test_editor(doc.clone());
+    world.stack.libraries = libraries.clone();
+    world
+}
+
 /// Select what the current projection draws at `path`, without an editing
 /// interaction.
 pub(crate) fn make_projected_selection(
@@ -119,8 +141,8 @@ pub(crate) fn make_projected_selection(
     libraries: &Libraries,
     path: Path,
 ) -> Selection {
-    let mut world = editing_world(doc, libraries);
-    let placed = editing_frame(&mut world, false);
+    let mut world = editor_over(doc, libraries);
+    let placed = editing_frame(&mut world);
     let target = placed
         .landmarks
         .landmark(&path)
@@ -136,7 +158,7 @@ pub(crate) fn make_projected_editing_selection(
     libraries: &Libraries,
     path: Path,
 ) -> Selection {
-    let mut driver = Driver::new(editing_world(doc, libraries), Driver::VIEWPORT);
+    let mut driver = Driver::new(editor_over(doc, libraries), Driver::VIEWPORT);
     driver.select(&path);
     driver.press(NamedKey::End);
     driver
@@ -183,36 +205,24 @@ pub(crate) struct Bench {
     pub(crate) frame_elapsed: std::time::Duration,
 }
 
-/// Paint and unpack the output of the completed hover pass.
-pub(crate) fn settle(mut placed: HoverOutput<crate::Editor>) -> Bench {
+/// Bind `placed` as the frame does, attributing what the pointer rests on
+/// through `sources`, then paint and unpack it.
+pub(crate) fn settle(mut placed: HoverOutput<crate::Editor>, sources: &Sources<'_>) -> Bench {
     let binding = std::time::Instant::now();
     #[cfg(feature = "layout-profile")]
     let profile = crate::display::profile::enter(crate::display::profile::Kind::Hover);
-    let hit = placed.claim.take();
-    let hit = hit.map(|(_, claim)| claim);
-    let hovered = match &hit {
-        Some(Claim::Direct(hover)) => Some(hover.clone()),
-        _ => None,
-    };
-    let landmark = match &hovered {
-        Some(Hovered::Tree(Hover::Value(path))) => placed
-            .landmarks
-            .iter()
-            .find(|landmark| landmark.path == *path),
-        _ => None,
-    };
-    let hovered_secondary = match &hovered {
-        Some(Hovered::Tree(hover)) => hover_secondary(landmark, placed.completion.as_ref(), hover),
-        _ => None,
-    };
-    let selected_secondary =
-        crate::display::widget::navigation::selected_secondary(&placed.landmarks);
-    let frame = placed.bind(crate::frame::Attribution {
+    let claim = placed.claim.take();
+    let hit = claim.as_ref().map(|(_, claim)| claim.clone());
+    let (hovered, root) = crate::frame::hover_target(claim);
+    let attribution = crate::frame::attribute(
+        sources,
+        &placed.landmarks,
+        root.as_ref(),
+        placed.completion.as_ref(),
         hovered,
-        hovered_secondary,
-        selected_secondary,
-        hovered_trace: None,
-    });
+        false,
+    );
+    let frame = placed.bind(attribution);
     let hover = binding.elapsed();
     #[cfg(feature = "layout-profile")]
     drop(profile);
@@ -259,45 +269,6 @@ impl puri::draw::CanvasSink for Bench {
     }
 }
 
-pub(crate) fn place_with_pointer(
-    doc: &Document,
-    selection: Option<&Selection>,
-    width: f64,
-    pointer: Option<Point>,
-) -> (Bench, Extent) {
-    place_with_inputs(doc, selection, width, pointer, None)
-}
-
-pub(crate) fn place_with_inputs(
-    doc: &Document,
-    selection: Option<&Selection>,
-    width: f64,
-    pointer: Option<Point>,
-    viewport: Option<Rect>,
-) -> (Bench, Extent) {
-    place_with_annotations(
-        doc,
-        selection,
-        &Annotations::default(),
-        width,
-        pointer,
-        viewport,
-        None,
-    )
-}
-
-pub(crate) fn place_with_annotations(
-    doc: &Document,
-    selection: Option<&Selection>,
-    annotations: &Annotations,
-    width: f64,
-    pointer: Option<Point>,
-    viewport: Option<Rect>,
-    root: Option<&[Step]>,
-) -> (Bench, Extent) {
-    BenchContext::new().place(doc, selection, annotations, width, pointer, viewport, root)
-}
-
 pub(crate) struct BenchContext {
     pub(crate) computations: crate::computations::Computations,
     pub(crate) stack: crate::stack::Stack,
@@ -307,15 +278,34 @@ pub(crate) struct BenchContext {
     pub(crate) cache: puri::text::TextCache,
 }
 
+/// What a bench frame draws and where: `root` within `doc`, `width` wide at
+/// `origin`, clipped to `viewport` when given.
+#[derive(Clone, Copy)]
 pub(crate) struct BenchFrame<'a> {
     pub(crate) doc: &'a Document,
     pub(crate) selection: Option<&'a Selection>,
-    pub(crate) annotations: &'a Annotations,
+    pub(crate) annotations: Option<&'a Annotations>,
     pub(crate) width: f64,
     pub(crate) origin: Point,
     pub(crate) pointer: Option<Point>,
     pub(crate) viewport: Option<Rect>,
     pub(crate) root: &'a [Step],
+}
+
+impl<'a> BenchFrame<'a> {
+    /// `doc`'s root in a window `width` wide, 24 points in from its edges.
+    pub(crate) fn of(doc: &'a Document, width: f64) -> Self {
+        Self {
+            doc,
+            selection: None,
+            annotations: None,
+            width: width - 48.0,
+            origin: Point::new(24.0, 24.0),
+            pointer: None,
+            viewport: None,
+            root: &[],
+        }
+    }
 }
 
 impl BenchContext {
@@ -331,34 +321,6 @@ impl BenchContext {
             layouts: parley::LayoutContext::new(),
             cache: puri::text::TextCache::default(),
         }
-    }
-
-    pub(crate) fn place(
-        &mut self,
-        doc: &Document,
-        selection: Option<&Selection>,
-        annotations: &Annotations,
-        width: f64,
-        pointer: Option<Point>,
-        viewport: Option<Rect>,
-        root: Option<&[Step]>,
-    ) -> (Bench, Extent) {
-        let (bench, extent) = self.frame(BenchFrame {
-            doc,
-            selection,
-            annotations,
-            width: width - 48.0,
-            origin: Point::new(24.0, 24.0),
-            pointer,
-            viewport,
-            root: root.unwrap_or(&[]),
-        });
-        eprintln!(
-            "frame at {width:.0}px: {:.1?} (project {:.1?})",
-            bench.frame_elapsed,
-            bench.times.prepare + bench.times.choices,
-        );
-        (bench, extent)
     }
 
     pub(crate) fn frame(&mut self, input: BenchFrame<'_>) -> (Bench, Extent) {
@@ -381,6 +343,8 @@ impl BenchContext {
             cache,
         } = self;
         computations.begin(Rc::new(doc.clone()), stack.libraries.clone());
+        let unannotated = Annotations::default();
+        let annotations = annotations.unwrap_or(&unannotated);
         let sources = Sources {
             doc,
             libraries: &stack.libraries,
@@ -450,7 +414,7 @@ impl BenchContext {
         let phase = std::time::Instant::now();
         #[cfg(feature = "layout-profile")]
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Paint);
-        let mut settled = settle(placed);
+        let mut settled = settle(placed, &sources);
         #[cfg(feature = "layout-profile")]
         drop(profile);
         settled.times = FrameTimes {
@@ -491,18 +455,34 @@ impl ProfileView {
             crate::display::widget::style::Theme::Light.palette(),
             self.scale,
         );
-        if let Some(path) = &self.root {
-            let sources = Sources {
-                doc,
-                libraries: &context.stack.libraries,
-            };
-            self.root = Some(
-                viewport::entry(sources, path)
-                    .expect("profile target must be a viewport declaration")
-                    .path,
-            );
-            context.stack.projection = viewport::projection(&context.stack.projection, self.size);
-        }
+        let view = crate::workspace::View {
+            root: self.root.clone().map_or_else(
+                crate::display::widget::view::Root::document,
+                crate::display::widget::view::Root::pane,
+            ),
+            projection: crate::workspace::Projection::Standard,
+            hidden: Vec::new(),
+            annotations: Annotations::default(),
+            scroll: kurbo::Vec2::ZERO,
+        };
+        let sources = Sources {
+            doc,
+            libraries: &context.stack.libraries,
+        };
+        let shown = crate::frame::view_content(
+            &context.stack,
+            sources,
+            &view,
+            self.size * self.scale,
+            self.scale,
+        );
+        assert!(
+            self.root.is_none() || shown.viewport,
+            "profile target must be a viewport declaration"
+        );
+        let (root, projection) = (shown.root_path.into_owned(), shown.projection.into_owned());
+        self.root = self.root.map(|_| root);
+        context.stack.projection = projection;
         (self, context)
     }
 
@@ -512,15 +492,11 @@ impl ProfileView {
         annotations: &'a Annotations,
     ) -> BenchFrame<'a> {
         let size = self.size * self.scale;
-        let margin = if self.root.is_some() {
-            0.0
-        } else {
-            12.0 * self.scale
-        };
+        let margin = crate::frame::content_margin(self.root.is_some(), self.scale);
         BenchFrame {
             doc,
             selection: None,
-            annotations,
+            annotations: Some(annotations),
             width: size.width - 2.0 * margin,
             origin: Point::new(margin, margin),
             pointer: None,
@@ -552,6 +528,15 @@ impl Bench {
     }
 }
 
+/// `doc` placed in a window `width` wide, `selection` selected.
 pub(crate) fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {
-    place_with_pointer(doc, selection, width, None)
+    place_with(BenchFrame {
+        selection,
+        ..BenchFrame::of(doc, width)
+    })
+}
+
+/// What `frame` draws, on a bench of its own.
+pub(crate) fn place_with(frame: BenchFrame<'_>) -> (Bench, Extent) {
+    BenchContext::new().frame(frame)
 }

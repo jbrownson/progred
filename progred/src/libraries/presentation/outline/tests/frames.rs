@@ -38,11 +38,6 @@ fn document() -> (Document, CellId, CellId, CellId) {
     )
 }
 
-fn frame(world: &mut crate::Editor) -> crate::projection::test_support::HoverOutput<crate::Editor> {
-    let annotations = world.model.workspace.document.annotations.clone();
-    editing_frame_with_annotations(world, false, None, None, &annotations)
-}
-
 fn stop<'a>(
     frame: &'a crate::projection::test_support::HoverOutput<crate::Editor>,
     path: &[Step],
@@ -329,7 +324,7 @@ fn outline_library_tint_stops_at_the_heading() {
     world
         .session()
         .set_collapsed(&crate::test_root(), &body_path, false, Some(false));
-    let f = frame(&mut world);
+    let f = editing_frame(&mut world);
     let heading_rect = stop(&f, &heading_path).rect;
     let body_rect = stop(&f, &body_path).rect;
     assert!(heading_rect.y1 < body_rect.y0);
@@ -358,7 +353,7 @@ fn outline_library_tint_stops_at_the_heading() {
             })
             .collect()
     }
-    let drawing = settle(f).list;
+    let drawing = settle(f, &world.sources()).list;
     let tints = tints(&drawing.0);
     assert_eq!(tints.len(), 1);
     assert!(tints[0].contains(heading_rect.center()));
@@ -382,7 +377,13 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     driver.select(&b_path);
     driver.type_text("5");
     assert_eq!(driver.value(&[Step::Key(b)]), f64::value(35.0));
-    let raw = editing_frame(&mut driver.runner.editor, true);
+    let raw = framed(
+        &mut driver.runner.editor,
+        Framing {
+            raw: true,
+            ..Framing::default()
+        },
+    );
     for field in [a, b, extra, OUTLINE] {
         stop(&raw, &[Step::Key(field)]);
     }
@@ -663,9 +664,9 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     let a = new_cell_id();
     let mut world = crate::editor_of(Value::record([(OUTLINE, Value::list([a.into()]))]));
     let p = body(&entry(&world, &[], a), a);
-    let f = frame(&mut world);
+    let f = editing_frame(&mut world);
     assert!((stop(&f, &p).select)(&mut world, None));
-    assert!(frame(&mut world).completion.is_some());
+    assert!(editing_frame(&mut world).completion.is_some());
     assert!(crate::completion::commit(
         &mut world.session(),
         f64::value(4.0),
@@ -682,13 +683,13 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
         &crate::editing::Scope::default().view(world.sources()),
         Vec::new(),
     );
-    assert!(frame(&mut world).completion.is_some());
+    assert!(editing_frame(&mut world).completion.is_some());
     let Value::Record(fields) = Rc::make_mut(&mut world.model.doc).root.as_mut().unwrap() else {
         unreachable!()
     };
     fields.insert(OUTLINE, Value::list([]));
     world.model.selection = None;
-    let f = frame(&mut world);
+    let f = editing_frame(&mut world);
     let empty = stop(&f, &[Step::Key(OUTLINE)]);
     assert!(empty.rect.width() > 0.0 && empty.rect.height() > 0.0);
 }

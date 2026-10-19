@@ -51,10 +51,10 @@ fn evaluated_output_is_tinted_without_tinting_its_expression() {
     let child = new_cell_id();
     let value = Value::record([(child, Value::list([text::value("result")]))]);
     let mut world = world(Value::record([(grap::vocabulary::EVALUATE, value)]));
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     let result = stop(&frame, &[Step::Key(RESULT)]).rect;
     let expression = stop(&frame, &[Step::Key(grap::vocabulary::EVALUATE)]).rect;
-    let drawing = settle(frame).list;
+    let drawing = settle(frame, &world.sources()).list;
     let tints = grounds(&drawing.0, style::Theme::Light.palette().readonly_ground);
     assert_eq!(tints, [result.inset(3.0)]);
     assert!(!tints[0].contains(expression.center()));
@@ -67,7 +67,7 @@ fn nested_computed_results_do_not_stack_readonly_tints() {
         grap::vocabulary::EVALUATE,
         Value::record([(grap::vocabulary::EVALUATE, text::value("nested"))]),
     )]));
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     let outer = stop(&frame, &[Step::Key(RESULT)]).rect;
     let source_result = stop(
         &frame,
@@ -75,7 +75,7 @@ fn nested_computed_results_do_not_stack_readonly_tints() {
     )
     .rect;
     stop(&frame, &[Step::Key(RESULT), Step::Key(RESULT)]);
-    let drawing = settle(frame).list;
+    let drawing = settle(frame, &world.sources()).list;
     let tints = grounds(&drawing.0, style::Theme::Light.palette().readonly_ground);
     assert_eq!(tints, [source_result.inset(3.0), outer.inset(3.0)]);
 }
@@ -389,11 +389,23 @@ fn missing_jump_target_is_a_real_editable_location() {
             Some(d::jump([Step::Key(occurrence)], [Step::Key(missing)]))
         }),
     );
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
+        },
+    );
     assert!((stop(&frame, &[Step::Key(occurrence)]).select)(
         &mut world, None
     ));
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
+        },
+    );
     assert!(frame.completion.is_some());
     assert!(crate::completion::commit(
         &mut world.session(),
@@ -444,7 +456,13 @@ fn at_and_its_descendants_have_no_source_even_when_their_paths_exist() {
         vec![Step::Key(source)],
         vec![Step::Key(source), Step::Key(field)],
     ] {
-        let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+        let frame = framed(
+            &mut world,
+            Framing {
+                projection: Some(&projection),
+                ..Framing::default()
+            },
+        );
         assert!((stop(&frame, &path).select)(&mut world, None));
         let selected = world.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), path);
@@ -469,7 +487,13 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
         }),
     );
     let before = world.model.doc.clone();
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
+        },
+    );
     let definition = gid::Resolution::Library(text::ID);
     let path = [
         Step::Key(source),
@@ -492,7 +516,13 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
 #[test]
 fn a_cell_followed_from_a_computed_value_is_its_stored_definition() {
     let (mut world, projection, [source, field, cell]) = computed_reference();
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
+        },
+    );
     let path = [
         Step::Key(source),
         Step::Key(field),
@@ -549,7 +579,13 @@ fn explicit_jump_can_establish_a_source_below_at() {
             }
         }),
     );
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
+        },
+    );
     let path = [Step::Key(computed), Step::Key(occurrence)];
     let jumped = stop(&frame, &path).rect;
     let computed_rect = stop(&frame, &[Step::Key(computed)]).rect;
@@ -567,7 +603,7 @@ fn explicit_jump_can_establish_a_source_below_at() {
         world.sources().resolve_path(&[Step::Key(source)]),
         Some(&text::value("changed"))
     );
-    let drawing = settle(frame).list;
+    let drawing = settle(frame, &world.sources()).list;
     let palette = style::Theme::Light.palette();
     assert_eq!(
         grounds(&drawing.0, palette.readonly_ground),
@@ -594,7 +630,13 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
             ))
         }),
     );
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+    let frame = framed(
+        &mut world,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
+        },
+    );
     assert!(
         !frame
             .landmarks

@@ -14,7 +14,7 @@ use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 type World = crate::Editor;
 
 fn step(world: &mut World, direction: NavigationDirection) -> bool {
-    editing_frame(world, false).navigate(world, direction)
+    editing_frame(world).navigate(world, direction)
 }
 
 /// Exercise the actual document-authored layouts, not Rust substitutes for them.
@@ -38,7 +38,7 @@ fn example_section(section: &str) -> (World, crate::gid_text::Binders) {
 fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
     let (mut world, binders) = example_section("side_by_side");
     let field = |name: &str| vec![Step::Key(binders[name])];
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     for name in ["a", "b", "c", "d", "e"] {
         assert!(
             frame
@@ -67,7 +67,7 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
         Some(Location::root(field("d")))
     );
     assert!(
-        editing_frame(&mut world, false)
+        editing_frame(&mut world)
             .resolve_for_dispatch()
             .dispatch_key(
                 &mut world,
@@ -96,7 +96,7 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
 fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
     let (mut world, binders) = example_section("baseline_case");
     let field = |name: &str| vec![Step::Key(binders[name])];
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     let rect = |name: &str| {
         frame
             .landmarks
@@ -245,7 +245,7 @@ fn logical_down_enters_an_anonymous_lambda_without_opening_name_completion() {
             world.model.selection.as_ref().unwrap().path(),
             [Step::Key(field)]
         );
-        assert!(editing_frame(&mut world, false).completion.is_none());
+        assert!(editing_frame(&mut world).completion.is_none());
     }
 }
 

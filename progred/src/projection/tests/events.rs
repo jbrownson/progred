@@ -10,11 +10,6 @@ fn native_annotation_handler_retains_the_projected_site() {
         root: Some(cell.into()),
         cells,
     };
-    let libraries = Libraries::default();
-    let styles = crate::display::widget::style::editor(
-        crate::display::widget::style::Theme::Light.palette(),
-        1.0,
-    );
     let projection = Projection::new([crate::display::partial(|input| {
         input.value?.as_blob()?;
         Some(crate::display::widget::before(
@@ -34,47 +29,25 @@ fn native_annotation_handler_retains_the_projected_site() {
             }),
         ))
     })]);
-    let mut fonts = crate::fonts::bundled_font_context();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let computations = crate::computations::Computations::from_sources(Sources {
-        doc: &doc,
-        libraries: &libraries,
-    });
-    let measured = project(
-        ProjectDescription {
-            focused: true,
-            computations: &computations,
-            view: &crate::test_root(),
-            completions: None,
-            sources: Sources {
-                doc: &doc,
-                libraries: &libraries,
-            },
-            root: doc.cells.value(cell),
-            root_path: &path,
-            selection: None,
-            source_selection: None,
-            annotations: &Annotations::default(),
-            raw: false,
-            styles: &styles,
-            width: 500.0,
-            projection: &projection,
-        },
-        &mut TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            cache: &mut cache,
-            scale: 1.0,
+    let mut writes = crate::test_editor(doc);
+    writes.stack.libraries = Libraries::default();
+    let placed = framed(
+        &mut writes,
+        Framing {
+            projection: Some(&projection),
+            ..Framing::default()
         },
     );
-    let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let placed = crate::display::widget::frame::place(measured, placement, &Default::default());
-    let mut writes = crate::test_editor(doc.clone());
+    let center = placed
+        .landmarks
+        .landmark(&path)
+        .expect("the cell's value is drawn")
+        .rect
+        .center();
     let event = PointerScrollEvent {
         pointer: crate::display::test_support::mouse(),
         state: PointerState {
-            position: (placement.rect.center().x, placement.rect.center().y).into(),
+            position: (center.x, center.y).into(),
             ..Default::default()
         },
         delta: ScrollDelta::LineDelta(0.0, 1.0),

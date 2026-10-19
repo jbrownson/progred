@@ -62,15 +62,10 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
         let expression = grap::call(function.into(), arguments.clone());
         doc.cells.set_value(cell, expression.clone());
         displayed.borrow_mut().clear();
-        context.place(
-            &doc,
-            None,
-            &Annotations::default(),
-            600.0,
-            None,
-            None,
-            Some(&pane.path),
-        );
+        context.frame(BenchFrame {
+            root: &pane.path,
+            ..BenchFrame::of(&doc, 600.0)
+        });
         assert!(displayed.borrow().contains(&result));
         assert!(!displayed.borrow().contains(&expression));
     }
@@ -101,24 +96,14 @@ fn iop_tree_at_size(size: kurbo::Size) {
     let mut context = BenchContext::new();
     context.stack.projection =
         crate::projection::viewport::projection(&context.stack.projection, size);
-    let (bench, extent) = context.place(
-        &doc,
-        None,
-        &Annotations::default(),
-        1400.0,
-        None,
-        None,
-        source,
-    );
-    let (rebuilt, _) = context.place(
-        &doc,
-        None,
-        &Annotations::default(),
-        1400.0,
-        None,
-        None,
-        source,
-    );
+    let (bench, extent) = context.frame(BenchFrame {
+        root: source.unwrap_or(&[]),
+        ..BenchFrame::of(&doc, 1400.0)
+    });
+    let (rebuilt, _) = context.frame(BenchFrame {
+        root: source.unwrap_or(&[]),
+        ..BenchFrame::of(&doc, 1400.0)
+    });
     assert_eq!(rebuilt.list.0.len(), bench.list.0.len());
     let (ground, scene) = bench.list.0.split_first().expect("the pane paints");
     assert!(matches!(
@@ -133,15 +118,11 @@ fn iop_tree_at_size(size: kurbo::Size) {
         Some(DrawCmd::Fill { transform, .. }) => *transform,
         _ => panic!("the scene starts with the sky fill"),
     };
-    let (linked, _) = context.place(
-        &doc,
-        None,
-        &Annotations::default(),
-        1400.0,
-        Some(outer * Point::new(10.0, 10.0)),
-        None,
-        source,
-    );
+    let (linked, _) = context.frame(BenchFrame {
+        pointer: Some(outer * Point::new(10.0, 10.0)),
+        root: source.unwrap_or(&[]),
+        ..BenchFrame::of(&doc, 1400.0)
+    });
     assert!(
         matches!(
             &linked.hit,
@@ -322,7 +303,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         Placement::new(bounds, Rect::new(50.0, 50.0, 60.0, 60.0)),
         &Default::default(),
     );
-    settle(clipped);
+    settle(clipped, &src(&doc, &libraries));
     assert_eq!(calls.get(), 2);
 }
 
@@ -365,7 +346,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
             Placement::root(Rect::new(0.0, 0.0, 40.0, 40.0)),
             &Default::default(),
         );
-        let drawing = settle(placed);
+        let drawing = settle(placed, &src(&doc, &libraries));
         let widths: Vec<_> = drawing
             .list
             .0

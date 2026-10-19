@@ -28,7 +28,7 @@ fn space(driver: &mut Driver, path: &[Step]) -> Annotations {
 }
 
 fn driver_of(doc: &Document) -> Driver {
-    Driver::new(editing_world(doc, &core_libraries()), Driver::VIEWPORT)
+    Driver::new(crate::test_editor((doc).clone()), Driver::VIEWPORT)
 }
 
 #[test]
@@ -128,7 +128,13 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
         cells,
     });
     let follow = Step::Follow(gid::Resolution::Document);
-    let frame = editing_frame(&mut world, true);
+    let frame = framed(
+        &mut world,
+        Framing {
+            raw: true,
+            ..Framing::default()
+        },
+    );
     let drawn = |path: &[Step]| {
         frame
             .landmarks

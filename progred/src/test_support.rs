@@ -2,19 +2,14 @@
 //! libraries, small documents, key events, and completion offers, read
 //! directly or through a projection.
 
-use crate::annotations::Annotations;
 use crate::display::CompletionKind;
 use crate::display::widget::offers::Entry;
 use crate::library::Libraries;
-use crate::projection::{ProjectDescription, Projection, project};
 use crate::selection::{Selection, pending_edge};
 use crate::sources::Sources;
 use gid::{CellId, Cells, Document, Path, Position, Step, Value, new_cell_id};
-use kurbo::{Point, Rect};
-use puri::text::TextCtx;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
-use uig::Placement;
 
 pub(crate) fn core_libraries() -> Libraries {
     crate::stack::load().libraries
@@ -366,74 +361,12 @@ pub(crate) fn test_entry(
     }
 }
 
+/// What the picker open at `selection` offers in an editor of `doc`.
 pub(crate) fn projected_completion_entries(
     doc: &Document,
     selection: &Selection,
 ) -> Vec<Entry<crate::Editor>> {
-    projected_completion_entries_with(doc, selection, None, None)
-}
-
-pub(crate) fn projected_completion_entries_with(
-    doc: &Document,
-    selection: &Selection,
-    projection: Option<&Projection>,
-    provider: Option<&crate::display::CompletionProvider>,
-) -> Vec<Entry<crate::Editor>> {
-    projected_completion_entries_in(&crate::stack::load(), doc, selection, projection, provider)
-}
-
-pub(crate) fn projected_completion_entries_in(
-    stack: &crate::stack::Stack,
-    doc: &Document,
-    selection: &Selection,
-    projection: Option<&Projection>,
-    provider: Option<&crate::display::CompletionProvider>,
-) -> Vec<Entry<crate::Editor>> {
-    let styles = crate::display::widget::style::editor(
-        crate::display::widget::style::Theme::Light.palette(),
-        1.0,
-    );
-    let annotations = Annotations::default();
-    let mut fonts = crate::fonts::bundled_font_context();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let mut tcx = TextCtx {
-        fonts: &mut fonts,
-        layouts: &mut layouts,
-        scale: 1.0,
-        cache: &mut cache,
-    };
-    let computations = crate::computations::Computations::from_sources(src(doc, &stack.libraries));
-    let measured = project(
-        ProjectDescription {
-            focused: true,
-            computations: &computations,
-            view: &crate::test_root(),
-            completions: provider.or(Some(&stack.completions)),
-            sources: src(doc, &stack.libraries),
-            root: doc.root.as_ref(),
-            root_path: &[],
-            selection: Some(selection),
-            source_selection: Some(selection),
-            annotations: &annotations,
-            raw: false,
-            styles: &styles,
-            width: 500.0,
-
-            projection: projection.unwrap_or(&stack.projection),
-        },
-        &mut tcx,
-    );
-    let extent = measured.extent;
-    crate::display::widget::frame::place(
-        measured,
-        Placement::root(Rect::from_origin_size(Point::ZERO, extent.size())),
-        &Default::default(),
-    )
-    .completion
-    .expect("the selected pending emits its offers")
-    .entries
-    .to_vec()
+    crate::projection::test_support::offered(&mut test_editor(doc.clone()), selection)
 }
 
 pub(crate) fn activate_projected(

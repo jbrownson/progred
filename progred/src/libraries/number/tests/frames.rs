@@ -31,10 +31,10 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
             cells,
         });
         for (path, typed) in [(&name_path[..], " angle"), (&number_path[..], "5")] {
-            let frame = editing_frame(&mut world, false);
+            let frame = editing_frame(&mut world);
             let target = frame.landmarks.landmark(path).unwrap();
             assert!((target.select)(&mut world, None));
-            let frame = editing_frame(&mut world, false);
+            let frame = editing_frame(&mut world);
             assert!(frame.resolve_for_dispatch().dispatch_key(
                 &mut world,
                 &key_down(Key::Character(typed.into()), Modifiers::empty()),
@@ -69,7 +69,7 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 root: Some(cell.into()),
                 cells,
             });
-            let frame = editing_frame(&mut world, false);
+            let frame = editing_frame(&mut world);
             let path = if name_contact {
                 name_path.clone()
             } else {
@@ -82,7 +82,13 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 "digits" => Point::new(rect.x1 + 8.0, rect.center().y),
                 _ => Point::new(number_rect.x1 - 0.5, number_rect.y1 - 0.5),
             };
-            let frame = editing_frame_at(&mut world, false, None, Some(point));
+            let frame = framed(
+                &mut world,
+                Framing {
+                    pointer: Some(point),
+                    ..Framing::default()
+                },
+            );
             let Some((_, Claim::Direct(hovered))) = frame.claim.as_ref() else {
                 panic!("direct hover on {contact}")
             };
@@ -128,15 +134,15 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
         u64::value(1),
     ] {
         let mut world = crate::editor_of(number.clone());
-        let plain = editing_frame(&mut world, false);
+        let plain = editing_frame(&mut world);
         assert!(!plain.landmarks.iter().any(|d| d.path.as_ref() == path));
         world.model.selection = Some(pending_value(&crate::test_root(), path.to_vec()));
-        assert!(editing_frame(&mut world, false).completion.is_some());
+        assert!(editing_frame(&mut world).completion.is_some());
         world.model.selection = None;
         for name in [text::value(""), Value::list([text::value("unusual name")])] {
             Rc::make_mut(&mut world.model.doc).root =
                 Some(number.overlaid(Value::record([(name::vocabulary::NAME, name)])));
-            let frame = editing_frame(&mut world, false);
+            let frame = editing_frame(&mut world);
             assert!(frame.landmarks.iter().any(|d| d.path.as_ref() == path));
         }
     }
@@ -159,8 +165,10 @@ fn numeric_operation_labels_preserve_function_hover_and_selection() {
                 .any(|d| d.path.iter().any(|s| matches!(s, Step::Follow(_))))
         );
         for x in [head.rect.x0 + 0.5, head.rect.x1 - 0.5] {
-            let (hovered, _) =
-                place_with_pointer(&doc, None, 900.0, Some(Point::new(x, head.rect.center().y)));
+            let (hovered, _) = place_with(BenchFrame {
+                pointer: Some(Point::new(x, head.rect.center().y)),
+                ..BenchFrame::of(&doc, 900.0)
+            });
             assert!(matches!(hovered.hit,
                 Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found.as_ref() == function_path));
         }
@@ -221,7 +229,13 @@ fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
         };
         let (bench, _) = place(&doc, None, 900.0);
         let mut world = crate::test_editor(doc.clone());
-        let raw = editing_frame(&mut world, true);
+        let raw = framed(
+            &mut world,
+            Framing {
+                raw: true,
+                ..Framing::default()
+            },
+        );
         for field in doc.root.as_ref().unwrap().as_record().unwrap().keys() {
             if *field != extra {
                 assert!(

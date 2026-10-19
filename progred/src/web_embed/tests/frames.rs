@@ -148,7 +148,7 @@ fn tutorial_slots_have_no_gap_insertions_and_do_not_override_children() {
         cells,
     });
     set_tutorial_slots(&mut world, &slots);
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     let first = stop(&frame, &[Step::Key(slots[0])]).rect;
     let second = stop(&frame, &[Step::Key(slots[1])]).rect;
     assert!(first.y1 < second.y0);
@@ -179,7 +179,7 @@ fn tutorial_slots_have_no_gap_insertions_and_do_not_override_children() {
     let position = gid::position::between(positions.first(), positions.get(1)).unwrap();
     let path = vec![Step::Key(slots[0]), Step::Element(position)];
     world.model.selection = Some(pending_value(&crate::test_root(), path.clone()));
-    assert!(editing_frame(&mut world, false).completion.is_some());
+    assert!(editing_frame(&mut world).completion.is_some());
     assert!(crate::completion::commit(
         &mut world.session(),
         f64::value(5.0),
@@ -213,7 +213,7 @@ fn peeling_switches_projections_off_and_names_last() {
         )
         .unwrap();
         let mut world = crate::test_editor_with_stack(doc.clone(), stack);
-        let frame = settle(editing_frame(&mut world, false));
+        let frame = settle(editing_frame(&mut world), &world.sources());
         (world, frame)
     };
     let bytes = [Step::Key(slot), Step::Key(f64::vocabulary::F64)];
@@ -252,18 +252,18 @@ fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
     let slots = [new_cell_id(), new_cell_id()];
     let mut world = crate::test_editor(Document::default());
     set_tutorial_slots(&mut world, &slots);
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     assert!(top_slots(&frame).is_empty());
     assert!(world.model.doc.root.is_none());
     assert!((stop(&frame, &[]).select)(&mut world, None));
-    assert!(editing_frame(&mut world, false).completion.is_some());
+    assert!(editing_frame(&mut world).completion.is_some());
     assert!(crate::completion::commit(
         &mut world.session(),
         Value::record([]),
         None,
         None
     ));
-    assert_eq!(top_slots(&editing_frame(&mut world, false)), slots);
+    assert_eq!(top_slots(&editing_frame(&mut world)), slots);
 }
 
 /// A stack of `libraries` whose projection shows `slots` as a tutorial
@@ -321,7 +321,7 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
             ),
         ),
     );
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     let placed = |path: &[Step]| frame.landmarks.iter().any(|d| d.path.as_ref() == path);
     let opened = |path: &[Step]| {
         frame
@@ -360,7 +360,7 @@ fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
             &names["second"].to_string(),
         ),
     );
-    let frame = editing_frame(&mut world, false);
+    let frame = editing_frame(&mut world);
     let callee = [
         Step::Key(names["second"]),
         Step::Key(::grap::vocabulary::EVALUATE),

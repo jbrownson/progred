@@ -44,15 +44,10 @@ impl Fixture {
     fn check(&mut self, width: f64, from: &Path, direction: NavigationDirection, to: &Path) {
         let document = self.world.model.doc.clone();
         self.world.model.selection = Some(make_selection(from.clone()));
-        let (frame, _) = self.context.place(
-            &document,
-            self.world.model.selection.as_ref(),
-            &Annotations::default(),
-            width,
-            None,
-            None,
-            None,
-        );
+        let (frame, _) = self.context.frame(BenchFrame {
+            selection: self.world.model.selection.as_ref(),
+            ..BenchFrame::of(&document, width)
+        });
         assert!(
             frame
                 .handler
@@ -486,7 +481,13 @@ fn tutorial_slots_use_vertical_flow_including_missing_slots() {
         (vec![Step::Key(first)], Right, vec![Step::Key(missing)]),
     ] {
         world.model.selection = Some(make_selection(from.clone()));
-        let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
+        let frame = framed(
+            &mut world,
+            Framing {
+                projection: Some(&projection),
+                ..Framing::default()
+            },
+        );
         assert!(
             frame.navigate(&mut world, direction),
             "{direction:?} from {from:?}"

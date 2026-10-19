@@ -9,7 +9,6 @@ use crate::frame::Hovered;
 use gid::{CellId, Position, Step, Value};
 use kurbo::{Point, Rect, Size};
 use puri::draw::{DrawCmd, Shape};
-use puri::hover::Claim;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 use winit::keyboard::ModifiersState;
@@ -197,9 +196,11 @@ impl<P> Driver<P> {
             .and_then(|(_, detail)| detail)
     }
 
-    /// The open picker's entries and the details beside them.
+    /// The open picker's entries and the details beside them. They're read
+    /// from the document view framed again, the shown frame keeping no
+    /// offers, so a picker open in a pane isn't found.
     fn offers(&mut self) -> Option<Vec<(String, Option<String>)>> {
-        let frame = crate::projection::test_support::editing_frame(&mut self.runner.editor, false);
+        let frame = crate::projection::test_support::editing_frame(&mut self.runner.editor);
         frame.completion.map(|offers| {
             offers
                 .entries
@@ -379,16 +380,12 @@ impl<P> Driver<P> {
 
     /// What the pointer would land on at `point`.
     pub(crate) fn hover_at(&self, point: Point) -> Option<Hovered> {
-        match self
-            .runner
-            .frame
-            .dispatch
-            .hover_geometry
-            .probe(Some(point), None, 0.0)?
-        {
-            (_, Claim::Direct(hover) | Claim::Extended(hover)) => Some(hover),
-            (_, Claim::Occludes) => Some(Hovered::Blocked),
-        }
+        crate::frame::hover_target(self.runner.frame.dispatch.hover_geometry.probe(
+            Some(point),
+            None,
+            0.0,
+        ))
+        .0
     }
 
     /// The first point, scanning the window on a 4-pixel grid, where the

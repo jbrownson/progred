@@ -2,7 +2,7 @@ use super::*;
 use crate::sample::{PLANET_VIEW, planets};
 
 fn drawn(world: &mut crate::Editor, path: &[Step]) -> bool {
-    editing_frame(world, false)
+    editing_frame(world)
         .landmarks
         .iter()
         .any(|landmark| landmark.path.as_ref() == path)
@@ -90,7 +90,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
     }
     // Stacked: each part centered over the other, with a rule as wide as
     // the wider part between them.
-    let frame = settle(editing_frame(&mut world, false));
+    let frame = settle(editing_frame(&mut world), &world.sources());
     let ink = crate::display::widget::style::editor(
         crate::display::widget::style::Theme::Light.palette(),
         1.0,
@@ -168,7 +168,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
         ));
     }
     // Each dial: a gray zero line, and a dark line turned by its angle.
-    let frame = settle(editing_frame(&mut world, false));
+    let frame = settle(editing_frame(&mut world), &world.sources());
     let lines = |within: Rect, [r, g, b]: [u8; 3]| {
         let brush = Brush::from(peniko::Color::from_rgb8(r, g, b));
         frame

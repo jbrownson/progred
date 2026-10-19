@@ -27,7 +27,3 @@ mod display;
 mod editing;
 mod events;
 mod frame;
-
-fn measured_rect(width: f64) -> kurbo::Rect {
-    kurbo::Rect::new(0.0, 0.0, width, 100.0)
-}

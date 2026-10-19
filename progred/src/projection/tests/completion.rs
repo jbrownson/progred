@@ -1,10 +1,7 @@
 use super::*;
 use crate::display::CompletionKind;
 use crate::libraries::control;
-use crate::test_support::{
-    activate_projected, inserted_value, projected_completion_entries,
-    projected_completion_entries_in, projected_completion_entries_with,
-};
+use crate::test_support::{activate_projected, inserted_value, projected_completion_entries};
 use gid::Resolution;
 
 #[test]
@@ -110,7 +107,7 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
         assert_eq!(selected.stage(&world.sources()), Stage::Pending);
         assert!(world.sources().resolve_path(&body_path).is_none());
         assert!(world.sources().resolve_path(&name_path).is_none());
-        assert!(editing_frame(&mut world, false).completion.is_some());
+        assert!(editing_frame(&mut world).completion.is_some());
 
         let name_selection = make_projected_selection(&world.model.doc, &libraries, name_path);
         let names = projected_completion_entries(&world.model.doc, &name_selection);
@@ -203,7 +200,10 @@ fn without_the_text_library_nothing_offers_a_string() {
         for query in ["\"hello", "hello"] {
             let selected =
                 crate::selection::pending_with_query(&crate::test_root(), path.clone(), query);
-            let entries = projected_completion_entries_in(&stack, document, &selected, None, None);
+            let entries = offered(
+                &mut crate::test_editor_with_stack(document.clone(), stack.clone()),
+                &selected,
+            );
             assert!(
                 entries
                     .iter()
@@ -307,7 +307,7 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
         assert!(opened.path().starts_with(&path), "{display}");
         assert_eq!(opened.path().len(), depth, "{display}");
         assert!(
-            editing_frame(&mut world, false).completion.is_some(),
+            editing_frame(&mut world).completion.is_some(),
             "{display} shows its picker"
         );
     }
@@ -518,7 +518,9 @@ fn only_the_active_empty_requests_completion_offers() {
         cells: Cells::new(),
     };
     let selection = pending_value(&crate::test_root(), vec![Step::Key(fields[12])]);
-    let entries = projected_completion_entries_with(&document, &selection, Some(&projection), None);
+    let mut world = crate::test_editor(document);
+    world.stack.projection = projection;
+    let entries = offered(&mut world, &selection);
     assert_eq!(requests.get(), 1);
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].display, "offered");

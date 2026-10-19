@@ -81,7 +81,7 @@ fn fidget_example_shows_each_preview_beside_its_code() {
     assert!(crate::workspace::declarations(doc.root.as_ref()).is_empty());
     let figures = figures(&doc, &names);
     let mut world = crate::test_editor(doc);
-    let frame = settle(editing_frame(&mut world, false));
+    let frame = settle(editing_frame(&mut world), &world.sources());
     let landmark = |path: &[Step]| frame.landmarks.landmark(path).map(|landmark| landmark.rect);
     let figure =
         |position: &Position| vec![Step::Key(names["figures"]), Step::Element(position.clone())];
