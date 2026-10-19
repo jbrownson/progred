@@ -349,37 +349,39 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
 /// otherwise its short id suffix.
 fn spellings(doc: &Document, binders: &Binders) -> BTreeMap<CellId, String> {
     let mentioned = mentioned_cell_ids(doc);
-    let mut spell: BTreeMap<CellId, String> = BTreeMap::new();
-    for (binder, cell) in binders {
-        if mentioned.contains(cell) {
+    let mut spell = binders
+        .iter()
+        .filter(|(_, cell)| mentioned.contains(cell))
+        .fold(BTreeMap::new(), |mut spell, (binder, cell)| {
             spell.entry(*cell).or_insert_with(|| binder.clone());
-        }
-    }
+            spell
+        });
     let mut taken: HashSet<String> = spell.values().cloned().collect();
     let mut named: Vec<(&str, CellId)> = doc
         .cells
         .iter()
+        .filter(|(cell, _)| !spell.contains_key(*cell))
         .filter_map(|(cell, value)| name::read(value).map(|name| (name, *cell)))
         .collect();
     named.sort();
-    for (name, cell) in &named {
-        if spell.contains_key(cell) {
-            continue;
-        }
-        let candidate = unique_binder(derive_binder(name), &mut taken);
-        spell.insert(*cell, candidate);
-    }
+    spell.extend(
+        named
+            .into_iter()
+            .map(|(name, cell)| (cell, unique_binder(derive_binder(name), &mut taken))),
+    );
     let mut remaining: Vec<CellId> = mentioned
         .iter()
         .copied()
         .filter(|cell| !spell.contains_key(cell))
         .collect();
     remaining.sort();
-    for cell in remaining {
+    spell.extend(remaining.into_iter().map(|cell| {
         let hex = cell.to_string();
-        let candidate = unique_binder(format!("_{}", &hex[hex.len() - 5..]), &mut taken);
-        spell.insert(cell, candidate);
-    }
+        (
+            cell,
+            unique_binder(format!("_{}", &hex[hex.len() - 5..]), &mut taken),
+        )
+    }));
     spell
 }
 
