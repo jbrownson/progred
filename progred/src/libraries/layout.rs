@@ -257,21 +257,22 @@ enum Place<'a> {
 }
 
 impl Place<'_> {
-    /// The steps from the decoded value to here.
+    /// The steps from the decoded value to here, each pushed onto its
+    /// parent's.
     fn steps(&self) -> Option<Vec<Step>> {
-        Some(match *self {
-            Place::Root => Vec::new(),
-            Place::Field(parent, key) => parent
-                .steps()?
-                .into_iter()
-                .chain([Step::Key(key)])
-                .collect(),
-            Place::Item(parent, list, index) => parent
-                .steps()?
-                .into_iter()
-                .chain([Step::Element(list.list_positions()?.get(index)?.clone())])
-                .collect(),
-        })
+        let below = |parent: &Place<'_>, step| {
+            let mut steps = parent.steps()?;
+            steps.push(step);
+            Some(steps)
+        };
+        match *self {
+            Place::Root => Some(Vec::new()),
+            Place::Field(parent, key) => below(parent, Step::Key(key)),
+            Place::Item(parent, list, index) => below(
+                parent,
+                Step::Element(list.list_positions()?.get(index)?.clone()),
+            ),
+        }
     }
 }
 
