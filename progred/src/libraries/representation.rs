@@ -85,37 +85,53 @@ pub(crate) fn infix_display<W: Host>(
     };
     let fields = input.value?;
     let precedence = binds(fields)?;
-    let operand = |field| {
-        let child =
-            crate::libraries::grap::expression_path([Step::Key(field)], &input.default_projection);
-        let grouped = fields
-            .field(field)
-            .as_ref()
-            .and_then(binds)
-            .is_some_and(|operand| precedence.groups(operand, field == RIGHT));
-        if grouped {
-            selectable_bracket(Delim::Paren, child)
-        } else {
-            child
-        }
-    };
-    let left = shared(operand(LEFT));
-    let operator = shared(crate::display::descend_local(
-        [Step::Key(FUNCTION)],
-        operation(representation),
-        &input.default_projection,
-    ));
-    let right = shared(operand(RIGHT));
-    // Too narrow for one line, the operator starts the second.
-    let infix = group(alternatives([
-        row(6.0, [left.clone(), operator.clone(), right.clone()]),
-        col(0, 2.0, [left, row(6.0, [operator, right])]),
-    ]));
+    let layout = infix(
+        crate::display::descend_local(
+            [Step::Key(FUNCTION)],
+            operation(representation),
+            &input.default_projection,
+        ),
+        |field| {
+            (
+                crate::libraries::grap::expression_path(
+                    [Step::Key(field)],
+                    &input.default_projection,
+                ),
+                fields
+                    .field(field)
+                    .as_ref()
+                    .and_then(binds)
+                    .is_some_and(|operand| precedence.groups(operand, field == RIGHT)),
+            )
+        },
+    );
     Some(crate::display::structure::with_extra_fields(
         input,
         |key| key == FUNCTION || key == LEFT || key == RIGHT,
-        infix,
+        group(layout),
     ))
+}
+
+/// `left operator right`, with `operand` giving the layout under each of
+/// `LEFT` and `RIGHT` and whether it needs parentheses. Too narrow for one
+/// line, the operator starts the second.
+pub(crate) fn infix<W: Host>(
+    operator: Layout<W>,
+    operand: impl Fn(CellId) -> (Layout<W>, bool),
+) -> Layout<W> {
+    let [left, right] = [LEFT, RIGHT].map(|field| {
+        let (child, grouped) = operand(field);
+        shared(if grouped {
+            selectable_bracket(Delim::Paren, child)
+        } else {
+            child
+        })
+    });
+    let operator = shared(operator);
+    alternatives([
+        row(6.0, [left.clone(), operator.clone(), right.clone()]),
+        col(0, 2.0, [left, row(6.0, [operator, right])]),
+    ])
 }
 
 /// Calls of `operations`, headed by the operator with its tag.

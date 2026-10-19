@@ -5,7 +5,7 @@ use crate::display::{
 };
 use crate::display::{group, group_hug, hug};
 use crate::libraries::name;
-use crate::libraries::representation::Precedence;
+use crate::libraries::representation::{self, Precedence};
 use gid::{CellId, Step, Value};
 
 #[cfg(test)]
@@ -35,9 +35,10 @@ fn form(value: &Value) -> Option<(CellId, &Value)> {
     Some((marker, content))
 }
 
-fn operand<W: Host>(marker: CellId, key: CellId, value: &Value) -> Layout<W> {
-    let child = descend([Step::Key(marker), Step::Key(key)], None, None);
-    let needs_group = value
+/// Whether `value`, under `marker`'s `key`, needs parentheses: when it's
+/// named, so reads as `name = …`, or binds too loosely to stand there bare.
+fn grouped(marker: CellId, key: CellId, value: &Value) -> bool {
+    value
         .as_record()
         .is_some_and(|fields| fields.contains_key(&name::vocabulary::NAME))
         || match (
@@ -46,22 +47,7 @@ fn operand<W: Host>(marker: CellId, key: CellId, value: &Value) -> Layout<W> {
         ) {
             (Some(parent), Some(nested)) => parent.groups(nested, key == RIGHT),
             _ => false,
-        };
-    if needs_group {
-        selectable_bracket(Delim::Paren, child)
-    } else {
-        child
-    }
-}
-
-fn infix<W: Host>(marker: CellId, left: &Value, right: &Value, operator: Layout<W>) -> Layout<W> {
-    let left = shared(operand(marker, LEFT, left));
-    let right = shared(operand(marker, RIGHT, right));
-    let operator = shared(operator);
-    alternatives([
-        row(6.0, [left.clone(), operator.clone(), right.clone()]),
-        col(0, 2.0, [left, row(6.0, [operator, right])]),
-    ])
+        }
 }
 
 fn arguments<W: Host>(children: impl IntoIterator<Item = Layout<W>>) -> Layout<W> {
@@ -114,7 +100,14 @@ pub(super) fn field<W: Host>(
         );
         let fields = content.as_record()?;
         if precedence(marker).is_some() {
-            infix(marker, fields.get(&LEFT)?, fields.get(&RIGHT)?, operator)
+            representation::infix(operator, |key| {
+                (
+                    descend([Step::Key(marker), Step::Key(key)], None, None),
+                    fields
+                        .get(&key)
+                        .is_some_and(|value| grouped(marker, key, value)),
+                )
+            })
         } else {
             hug(
                 operator,

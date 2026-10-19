@@ -98,20 +98,14 @@ fn operands_keep_their_paths_and_operator_targets_the_expression() {
 fn grouping_preserves_the_expression_tree_without_reassociating() {
     let sum = binary(SUM, number(1.0), number(2.0));
     let product = binary(MULTIPLY, number(1.0), number(2.0));
-    for (parent, key, child, grouped) in [
+    for (parent, key, child, expected) in [
         (MULTIPLY, LEFT, &sum, true),
         (SUM, LEFT, &product, false),
         (SUM, LEFT, &sum, false),
         (SUM, RIGHT, &sum, true),
         (DIVIDE, RIGHT, &product, true),
     ] {
-        assert_eq!(
-            matches!(
-                operand::<crate::Editor>(parent, key, child).record(),
-                Recorded::Row { .. }
-            ),
-            grouped
-        );
+        assert_eq!(grouped(parent, key, child), expected);
     }
 }
 
@@ -136,18 +130,12 @@ fn unrelated_fields_do_not_block_notation_or_change_grouping() {
         ),
     ] {
         assert!(field(&projection_input(&Names, &value)).is_some());
-        for (parent, key, grouped) in [
+        for (parent, key, expected) in [
             (MULTIPLY, LEFT, true),
             (SUM, LEFT, false),
             (SUM, RIGHT, true),
         ] {
-            assert_eq!(
-                matches!(
-                    operand::<crate::Editor>(parent, key, &value).record(),
-                    Recorded::Row { .. }
-                ),
-                grouped,
-            );
+            assert_eq!(grouped(parent, key, &value), expected);
         }
     }
     for value in [unary(SIN, number(1.0)), node(AXIS, X.into())] {
