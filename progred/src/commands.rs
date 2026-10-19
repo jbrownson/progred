@@ -2,31 +2,30 @@
 
 use crate::Editor;
 use crate::display::widget::navigation::{Geometry, landmark_at};
+use crate::display::widget::view::Root;
 use crate::location::Location;
 use crate::modifiers;
 use crate::navigate;
-use crate::selection;
-use gid::Value;
+use crate::selection::{self, Selection};
+use gid::{Path, Step, Value};
 use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl Editor {
+    /// Select what this frame draws at `path` in `root`'s view, else the
+    /// edge there, read through `scope`.
     fn select_landmark_or_edge(
         &mut self,
         geometry: Geometry<'_, Editor>,
-        root: &crate::display::widget::view::Root,
-        path: gid::Path,
+        root: &Root,
+        path: Path,
+        scope: crate::editing::Scope,
     ) {
-        if let Some(target) = landmark_at(geometry.landmarks, Some(root), &path) {
-            (target.select)(self, None);
-        } else {
-            let scope = self
-                .model
-                .selection
-                .as_ref()
-                .map(|selection| selection.scope().clone())
-                .unwrap_or_default();
-            self.model.selection = Some(selection::Selection::edge(root, path).with_scope(scope));
+        match landmark_at(geometry.landmarks, Some(root), &path) {
+            Some(target) => {
+                (target.select)(self, None);
+            }
+            None => self.model.selection = Some(Selection::edge(root, path).with_scope(scope)),
         }
     }
 
@@ -59,26 +58,31 @@ impl Editor {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
                 let scope = current.scope().clone();
-                let Some(location) = current.location().map(Location::into_owned) else {
-                    return false;
-                };
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
                 // the open run, its frame (pre-run document, edge
                 // intact) already covers the deletion.
                 let covered = current.recorded();
-                let before = self.model.snapshot();
-                crate::location::delete_edge(&mut self.model.doc, &self.stack.libraries, &location)
-                    && {
-                        if !covered {
-                            self.model.history.record(before);
-                            self.refresh_title();
+                current
+                    .location()
+                    .map(Location::into_owned)
+                    .is_some_and(|location| {
+                        let before = self.model.snapshot();
+                        crate::location::delete_edge(
+                            &mut self.model.doc,
+                            &self.stack.libraries,
+                            &location,
+                        ) && {
+                            if !covered {
+                                self.model.history.record(before);
+                                self.refresh_title();
+                            }
+                            self.model.selection =
+                                Some(selection::pending_value(&root, path).with_scope(scope));
+                            geometry.reveal_selection(&mut self.model);
+                            true
                         }
-                        self.model.selection =
-                            Some(selection::pending_value(&root, path).with_scope(scope));
-                        geometry.reveal_selection(&mut self.model);
-                        true
-                    }
+                    })
             }
             _ => false,
         }
@@ -89,13 +93,7 @@ impl Editor {
     /// NOT menu items — native menu accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
     pub(crate) fn paste_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !self.command_modifier.pressed(&event.modifiers) {
-            return false;
-        }
-        let Key::Character(c) = &event.key else {
-            return false;
-        };
-        c.eq_ignore_ascii_case("v") && self.paste_clipboard()
+        modifiers::chord(self.command_modifier, event, "v") && self.paste_clipboard()
     }
 
     /// Copies the supplied projected value — SHALLOW: a link is its identity
@@ -106,11 +104,6 @@ impl Editor {
         self.text_clipboard.copy(text, structural.then_some(value))
     }
 
-    /// The structure a structural copy left, when the clipboard carries one.
-    pub(crate) fn clipboard_structure(&mut self) -> Option<Value> {
-        self.text_clipboard.structure()
-    }
-
     /// Cmd+V while a pending is open and the clipboard CARRIES
     /// STRUCTURE — the private format, not a text shape — commits the
     /// value into the pending, ahead of the focused query's own text
@@ -119,25 +112,17 @@ impl Editor {
     /// the query as characters. Claims the chord even when the pick
     /// declines (the label stage takes only what can label).
     pub(crate) fn pending_paste_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !self.command_modifier.pressed(&event.modifiers) {
-            return false;
-        }
-        if !matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "v") {
-            return false;
-        }
-        if !matches!(
-            &self.model.selection,
-            Some(current) if current.stage(&self.sources()) != selection::Stage::Edge
-        ) {
-            return false;
-        }
-        let Some(value) = self.clipboard_structure() else {
-            return false;
-        };
-        if let Some(picking) = self.session().pending() {
-            picking.pick(value);
-        }
-        true
+        modifiers::chord(self.command_modifier, event, "v")
+            && matches!(
+                &self.model.selection,
+                Some(current) if current.stage(&self.sources()) != selection::Stage::Edge
+            )
+            && self.text_clipboard.structure().is_some_and(|value| {
+                if let Some(picking) = self.session().pending() {
+                    picking.pick(value);
+                }
+                true
+            })
     }
 
     /// Pastes the clipboard's value — the private format's structure
@@ -146,49 +131,38 @@ impl Editor {
     /// the pick), else over the selected edge — one undo step,
     /// retaining ordinary structural selection at the changed site.
     pub(crate) fn paste_clipboard(&mut self) -> bool {
-        let value = match self.clipboard_structure() {
-            Some(value) => value,
-            None => {
-                let Some(text) = self.text_clipboard.get_text() else {
-                    return false;
-                };
-                if text.is_empty() {
-                    return false;
-                }
-                selection::resolve_query(&text)
-            }
-        };
-        self.paste_value(value)
+        self.text_clipboard
+            .structure()
+            .or_else(|| {
+                self.text_clipboard
+                    .get_text()
+                    .filter(|text| !text.is_empty())
+                    .map(|text| selection::resolve_query(&text))
+            })
+            .is_some_and(|value| self.paste_value(value))
     }
 
     pub(crate) fn paste_value(&mut self, value: Value) -> bool {
-        if self
-            .session()
+        self.session()
             .pending()
             .is_some_and(|picking| picking.pick(value.clone()))
-        {
-            return true;
-        }
-        let Some(current) = &self.model.selection else {
-            return false;
-        };
-        if current.stage(&self.sources()) != selection::Stage::Edge {
-            return false;
-        }
-        let root = current.root().clone();
-        let path = current.path().to_vec();
-        let scope = current.scope().clone();
-        // Pasting what's there already stays off the undo stack, as every
-        // write that changes nothing does.
-        if current.value(&self.sources()) == Some(&value) {
-            return true;
-        }
-        if scope.open(self.session()).replace(&path, value) {
-            self.model.selection = Some(selection::Selection::edge(&root, path).with_scope(scope));
-            true
-        } else {
-            false
-        }
+            || match &self.model.selection {
+                Some(current) if current.stage(&self.sources()) == selection::Stage::Edge => {
+                    // Pasting what's there already stays off the undo stack, as
+                    // every write that changes nothing does.
+                    current.value(&self.sources()) == Some(&value) || {
+                        let root = current.root().clone();
+                        let path = current.path().to_vec();
+                        let scope = current.scope().clone();
+                        scope.open(self.session()).replace(&path, value) && {
+                            self.model.selection =
+                                Some(Selection::edge(&root, path).with_scope(scope));
+                            true
+                        }
+                    }
+                }
+                _ => false,
+            }
     }
 
     /// Completion handlers own committing their query, and Enter while
@@ -250,37 +224,34 @@ impl Editor {
     /// where it was opened, so a replacement gets its value back; anything
     /// else clears the selection.
     fn escape(&mut self, geometry: Geometry<'_, Editor>) -> bool {
-        let Some(current) = &self.model.selection else {
-            return false;
-        };
-        if current.stage(&self.sources()) != selection::Stage::Edge && current.origin().is_some() {
-            self.return_to_origin(geometry);
-        } else {
-            self.model.selection = None;
+        match self.model.selection.take() {
+            Some(current) => {
+                if current.stage(&self.sources()) != selection::Stage::Edge
+                    && let Some(origin) = current.origin().map(<[Step]>::to_vec)
+                {
+                    self.return_to_origin(geometry, current, origin);
+                }
+                true
+            }
+            None => false,
         }
-        true
     }
 
-    /// Leaves a picker for the selection it was opened from. A replacement's
-    /// origin is its own place, where this frame draws the hole, so that
-    /// value is selected afresh rather than through the frame.
-    fn return_to_origin(&mut self, geometry: Geometry<'_, Editor>) {
-        let Some(current) = self.model.selection.take() else {
-            return;
-        };
-        let Some(origin) = current.origin().map(<[gid::Step]>::to_vec) else {
-            return;
-        };
-        let root = current.root().clone();
+    /// Leaves `current`, a picker, for the selection it was opened from at
+    /// `origin`. A replacement's origin is its own place, where this frame
+    /// draws the hole, so that value is selected afresh rather than through
+    /// the frame.
+    fn return_to_origin(
+        &mut self,
+        geometry: Geometry<'_, Editor>,
+        current: Selection,
+        origin: Path,
+    ) {
+        let scope = current.scope().clone();
         if origin == current.path() {
-            current
-                .scope()
-                .clone()
-                .open(self.session())
-                .select(&root, &origin);
+            scope.open(self.session()).select(current.root(), &origin);
         } else {
-            self.model.selection = Some(current);
-            self.select_landmark_or_edge(geometry, &root, origin);
+            self.select_landmark_or_edge(geometry, current.root(), origin, scope);
         }
         geometry.reveal_selection(&mut self.model);
     }
@@ -291,36 +262,45 @@ impl Editor {
     /// sibling before it or else its container, Delete on the stop after
     /// it. A label goes back to its record.
     fn cancel_pending(&mut self, geometry: Geometry<'_, Editor>, forward: bool) -> bool {
-        let Some(current) = &self.model.selection else {
-            return false;
+        let sources = crate::sources::Sources {
+            doc: &self.model.doc,
+            libraries: &self.stack.libraries,
         };
-        let stage = current.stage(&self.sources());
-        if stage == selection::Stage::Edge {
-            return false;
+        let picker = self
+            .model
+            .selection
+            .take_if(|current| current.stage(&sources) != selection::Stage::Edge);
+        match picker {
+            Some(current) => {
+                match current.origin().map(<[Step]>::to_vec) {
+                    Some(origin) => self.return_to_origin(geometry, current, origin),
+                    None => {
+                        let back = match current.stage(&self.sources()) {
+                            selection::Stage::Label => current.path().to_vec(),
+                            _ => navigate::selection_after_removing(
+                                geometry.landmarks,
+                                Some(current.root()),
+                                current.path(),
+                                forward,
+                            ),
+                        };
+                        // Cancelling the empty document's root pending
+                        // deselects: reselecting it would pend again.
+                        if !back.is_empty() || self.model.doc.root.is_some() {
+                            self.select_landmark_or_edge(
+                                geometry,
+                                current.root(),
+                                back,
+                                current.scope().clone(),
+                            );
+                        }
+                        geometry.reveal_selection(&mut self.model);
+                    }
+                }
+                true
+            }
+            None => false,
         }
-        if current.origin().is_some() {
-            self.return_to_origin(geometry);
-            return true;
-        }
-        let root = current.root().clone();
-        let back = match stage {
-            selection::Stage::Label => current.path().to_vec(),
-            _ => navigate::selection_after_removing(
-                geometry.landmarks,
-                Some(&root),
-                current.path(),
-                forward,
-            ),
-        };
-        // Cancelling the empty document's root pending deselects —
-        // reselecting it would pend again.
-        if back.is_empty() && self.model.doc.root.is_none() {
-            self.model.selection = None;
-        } else {
-            self.select_landmark_or_edge(geometry, &root, back);
-        }
-        geometry.reveal_selection(&mut self.model);
-        true
     }
 
     /// Typing over a selected value starts replacing it: a picker in its
@@ -331,34 +311,31 @@ impl Editor {
         geometry: Geometry<'_, Editor>,
         event: &KeyboardEvent,
     ) -> bool {
-        if !event.state.is_down()
-            || event.modifiers.ctrl()
-            || event.modifiers.meta()
-            || event.modifiers.alt()
-        {
-            return false;
-        }
-        let Key::Character(typed) = &event.key else {
-            return false;
-        };
-        let Some(current) = &self.model.selection else {
-            return false;
-        };
         let sources = self.sources();
-        if typed.trim().is_empty()
-            || current.stage(&sources) != selection::Stage::Edge
-            || current.value(&sources).is_none()
-            || !current.writable(&sources)
-        {
-            return false;
-        }
-        let path = current.path().to_vec();
-        let replacing = selection::pending_with_query(current.root(), path.clone(), typed)
-            .with_origin(Some(path))
-            .with_scope(current.scope().clone());
-        self.model.selection = Some(replacing);
-        geometry.reveal_selection(&mut self.model);
-        true
+        let replacing = match (&event.key, &self.model.selection) {
+            (Key::Character(typed), Some(current))
+                if event.state.is_down()
+                    && !(event.modifiers.ctrl()
+                        || event.modifiers.meta()
+                        || event.modifiers.alt())
+                    && !typed.trim().is_empty()
+                    && current.stage(&sources) == selection::Stage::Edge
+                    && current.value(&sources).is_some()
+                    && current.writable(&sources) =>
+            {
+                Some(
+                    selection::pending_with_query(current.root(), current.path().to_vec(), typed)
+                        .with_origin(Some(current.path().to_vec()))
+                        .with_scope(current.scope().clone()),
+                )
+            }
+            _ => None,
+        };
+        replacing.is_some_and(|replacing| {
+            self.model.selection = Some(replacing);
+            geometry.reveal_selection(&mut self.model);
+            true
+        })
     }
 }
 

@@ -557,7 +557,7 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
             .resolve_for_dispatch()
             .dispatch_key(&mut world, &copy)
     );
-    assert_eq!(world.clipboard_structure(), Some(expected));
+    assert_eq!(world.text_clipboard.structure(), Some(expected));
     click_heading(&mut world, &e, Modifiers::empty());
     let f = frame(&mut world);
     assert!(!f.landmarks.iter().any(|d| d.path.as_ref() == result_body));

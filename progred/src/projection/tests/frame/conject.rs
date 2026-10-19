@@ -111,7 +111,7 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
             .dispatch_key(&mut world, &command(Key::Character("c".into())))
     );
     assert_eq!(
-        world.clipboard_structure(),
+        world.text_clipboard.structure(),
         value.as_record().unwrap().get(&child).cloned()
     );
 
@@ -178,7 +178,7 @@ fn nested_result_evaluations_use_their_own_allowance() {
                 .resolve_for_dispatch()
                 .dispatch_key(&mut world, &command(Key::Character("c".into())))
         );
-        assert_eq!(world.clipboard_structure(), Some(value.clone()));
+        assert_eq!(world.text_clipboard.structure(), Some(value.clone()));
     }
 }
 
@@ -208,7 +208,7 @@ fn at_copies_the_displayed_value_not_a_coincident_document_path() {
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     let handler = frame.resolve_for_dispatch();
     assert!(handler.dispatch_key(&mut world, &command(Key::Character("c".into()))));
-    assert_eq!(world.clipboard_structure(), Some(displayed));
+    assert_eq!(world.text_clipboard.structure(), Some(displayed));
     // A cut can copy read-only data but must never delete a coincident source.
     assert!(handler.dispatch_key(&mut world, &command(Key::Character("x".into()))));
     assert!(Rc::ptr_eq(&before, &world.model.doc));
@@ -227,7 +227,7 @@ fn at_copies_the_displayed_value_not_a_coincident_document_path() {
         world.text_clipboard.get_text().as_deref(),
         Some("\"computed\"")
     );
-    assert_eq!(world.clipboard_structure(), None);
+    assert_eq!(world.text_clipboard.structure(), None);
 }
 
 #[test]
@@ -255,7 +255,7 @@ fn copying_a_stored_or_jumped_cell_keeps_the_reference_shallow() {
         let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
         let handler = frame.resolve_for_dispatch();
         assert!(handler.dispatch_key(&mut world, &command(Key::Character("c".into())),));
-        assert_eq!(world.clipboard_structure(), Some(Value::Cell(cell)));
+        assert_eq!(world.text_clipboard.structure(), Some(Value::Cell(cell)));
         assert!(handler.dispatch_key(&mut world, &command(Key::Character("x".into())),));
         assert!(world.sources().resolve_path(&[Step::Key(source)]).is_none());
         assert_eq!(
