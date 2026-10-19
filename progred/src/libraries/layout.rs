@@ -290,7 +290,7 @@ fn decode_with<W: Host>(
     let number = |field| read_number(content.field(field)?.as_value());
     let nonnegative = |field| read_nonnegative(content.field(field)?.as_value());
     let child = || decode_with(&content.field(CHILD)?, &Place::Field(&place, CHILD), site);
-    Some(match marker {
+    match marker {
         ROW => {
             let gap = number(GAP)?;
             let children = children(
@@ -298,7 +298,7 @@ fn decode_with<W: Host>(
                 &Place::Field(&place, CHILDREN),
                 site,
             )?;
-            match content.field(BASELINE) {
+            Some(match content.field(BASELINE) {
                 None => crate::display::row(gap, children),
                 Some(baseline) => crate::display::aligned_row(
                     RowAlignment::Top {
@@ -310,7 +310,7 @@ fn decode_with<W: Host>(
                     gap,
                     children,
                 ),
-            }
+            })
         }
         COL => {
             let baseline = number(BASELINE)?;
@@ -319,46 +319,46 @@ fn decode_with<W: Host>(
                 &Place::Field(&place, CHILDREN),
                 site,
             )?;
-            crate::display::col(
+            Some(crate::display::col(
                 baseline_index(baseline, children.len())?,
                 number(GAP)?,
                 children,
-            )
+            ))
         }
-        OVERLAY => layout_overlay(children(&content, &place, site)?),
-        PAD => crate::display::padding(
+        OVERLAY => Some(layout_overlay(children(&content, &place, site)?)),
+        PAD => Some(crate::display::padding(
             (number(LEFT)?, number(TOP)?, number(RIGHT)?, number(BOTTOM)?).into(),
             child()?,
-        ),
-        BORDER => border(decode_with(&content, &place, site)?),
-        BRACKET => bracket(read_delim(&content.field(DELIM)?)?, child()?),
-        ALTERNATIVES => alternatives(children(&content, &place, site)?),
-        DESCEND => descend(
+        )),
+        BORDER => Some(border(decode_with(&content, &place, site)?)),
+        BRACKET => Some(bracket(read_delim(&content.field(DELIM)?)?, child()?)),
+        ALTERNATIVES => Some(alternatives(children(&content, &place, site)?)),
+        DESCEND => Some(descend(
             [path::read_step(content.field(STEP)?.as_value())?],
             None,
             None,
-        ),
-        DESCEND_PATH => descend(path::read(content.as_value())?, None, None),
-        JUMP => crate::display::jump(
+        )),
+        DESCEND_PATH => Some(descend(path::read(content.as_value())?, None, None)),
+        JUMP => Some(crate::display::jump(
             path::read(content.field(STEPS)?.as_value())?,
             path::read(content.field(DOCUMENT_PATH)?.as_value())?,
-        ),
-        AT => crate::display::at(
+        )),
+        AT => Some(crate::display::at(
             path::read(content.field(STEPS)?.as_value())?,
             content.field(VALUE)?,
-        ),
-        TEXT => leaf(Leaf::Text {
+        )),
+        TEXT => Some(leaf(Leaf::Text {
             text: content.field(CONTENT)?.as_text()?.to_string(),
             paint: Paint::Face(read_face(content.field(PAINT)?.as_value())?),
             script: puri::text::Script::Normal,
-        }),
+        })),
         DRAWING => {
             let extent = crate::display::widget::Extent {
                 width: nonnegative(WIDTH)?,
                 ascent: nonnegative(ASCENT)?,
                 descent: nonnegative(DESCENT)?,
             };
-            match content.field(PROGRAM) {
+            Some(match content.field(PROGRAM) {
                 Some(program) => drawing::program(
                     extent,
                     ::grap::f64::to_usize(number(FUEL)?)?,
@@ -375,19 +375,21 @@ fn decode_with<W: Host>(
                         .map(|command| read_command(command.as_value()))
                         .collect::<Option<Vec<_>>>()?,
                 })),
-            }
+            })
         }
-        SLOT => slot(),
-        SELECTABLE => activatable(decode_with(&content, &place, site)?, &site()),
-        PICKABLE => pickable(
+        SLOT => Some(slot()),
+        SELECTABLE => Some(activatable(decode_with(&content, &place, site)?, &site())),
+        PICKABLE => Some(pickable(
             child()?,
             W::Hover::from(site().hover()),
             content.field(VALUE)?,
-        ),
-        HOVER_BLOCK => block_hover(decode_with(&content, &place, site)?),
-        ON_EVENT => on_event(child()?, content.field(HANDLER)?),
-        _ => unreachable!("only the markers above are looked for"),
-    })
+        )),
+        HOVER_BLOCK => Some(block_hover(decode_with(&content, &place, site)?)),
+        ON_EVENT => Some(on_event(child()?, content.field(HANDLER)?)),
+        // A marker MARKERS lists without an arm here declines, as a
+        // malformed node does.
+        _ => None,
+    }
 }
 
 fn children<W: Host>(
