@@ -238,9 +238,12 @@ impl Editor {
                         false
                     }
                     None => {
-                        let command = self.command_modifier;
-                        let started =
-                            crate::editing::enter_pending(&self.session(), None, command, event);
+                        let within = self.command_modifier.pressed(&event.modifiers);
+                        let started = crate::editing::enter_pending(
+                            &self.session(),
+                            within,
+                            event.modifiers.shift(),
+                        );
                         let began = started.is_some();
                         self.model.selection = started;
                         if began {

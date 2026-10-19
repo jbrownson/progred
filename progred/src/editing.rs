@@ -141,35 +141,32 @@ fn line_edit(
     (handled, record)
 }
 
-/// What Enter would start from `selection`, leaving it as it is: a peer
-/// beside it (a sibling element in a list, with Shift before it, or a new
-/// field on the record holding it, the root taking one on itself), with
-/// the command chord something within it (a field on a record or cell, an
-/// element appended to a list, with Shift at the front), or with no
-/// selection an empty document's root value. Labels author first, then
-/// values; list elements are one-stage value pendings, the projection
-/// minting the position.
+/// What Enter would start from the selection, leaving it as it is: a peer
+/// beside it (a sibling element in a list, with `shift` before it, or a new
+/// field on the record holding it, the root taking one on itself), or
+/// `within` it, as the command chord asks, something inside it (a field on
+/// a record or cell, an element appended to a list, with `shift` at the
+/// front); with no selection, an empty document's root value. Labels author
+/// first, then values; list elements are one-stage value pendings, the
+/// projection minting the position.
 pub(crate) fn enter_pending(
     session: &Session<'_>,
-    selection: Option<&selection::Selection>,
-    command: CommandModifier,
-    event: &KeyboardEvent,
+    within: bool,
+    shift: bool,
 ) -> Option<selection::Selection> {
     let sources = session.sources();
-    let shift = event.modifiers.shift();
-    let root = selection
-        .map(|current| current.root().clone())
-        .unwrap_or_else(|| session.model.workspace.document_root().clone());
-    match selection {
-        Some(current) if command.pressed(&event.modifiers) => {
-            selection::pending_insert(&root, &current.scope().view(sources), current.path(), shift)
-        }
+    match &session.model.selection {
         Some(current) => {
-            selection::pending_enter(&root, &current.scope().view(sources), current.path(), shift)
+            let read = current.scope().view(sources);
+            if within {
+                selection::pending_insert(current.root(), &read, current.path(), shift)
+            } else {
+                selection::pending_enter(current.root(), &read, current.path(), shift)
+            }
+            .map(|pending| pending.with_origin(Some(current.path().to_vec())))
         }
-        None => selection::pending_root(&root, &sources),
+        None => selection::pending_root(session.model.workspace.document_root(), &sources),
     }
-    .map(|pending| pending.with_origin(selection.map(|current| current.path().to_vec())))
 }
 
 /// Starts what Enter would author from the selected value in the view
@@ -205,7 +202,11 @@ pub(crate) fn author_in<W>(
     {
         return false;
     }
-    let Some(pending) = enter_pending(session, Some(current), command, event) else {
+    let Some(pending) = enter_pending(
+        session,
+        command.pressed(&event.modifiers),
+        event.modifiers.shift(),
+    ) else {
         return false;
     };
     let lands = match pending.stage(&sources) {

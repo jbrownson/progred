@@ -203,20 +203,9 @@ impl Picking<'_, '_> {
     }
 }
 
-/// Opens the selected container for what goes inside it, as Cmd+Enter would.
+/// Opens the selected container for what goes inside it, as Cmd+Enter does.
 fn open_within(session: &mut Session<'_>) {
-    let Some(current) = &session.model.selection else {
-        return;
-    };
-    let scope = current.scope().clone();
-    let origin = current.path().to_vec();
-    let Some(within) = selection::pending_insert(
-        current.root(),
-        &scope.view(session.sources()),
-        &origin,
-        false,
-    ) else {
-        return;
-    };
-    session.model.selection = Some(within.with_origin(Some(origin)));
+    if let Some(within) = super::enter_pending(session, true, false) {
+        session.model.selection = Some(within);
+    }
 }
