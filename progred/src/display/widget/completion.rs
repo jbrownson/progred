@@ -82,23 +82,19 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
         },
     );
     let set_view = Rc::new(set_view);
-    let items = widget_rows
+    let count = entries.len();
+    let choice = choice.min(count.saturating_sub(1));
+    let activate = entries.get(choice).map(|entry| entry.activate.clone());
+    let rows = widget_rows
         .into_iter()
         .zip(entries)
         .enumerate()
-        .map(|(index, (row, entry))| (row, H::from(Hover::Entry(index)), entry.activate.clone()))
-        .collect::<Vec<_>>();
-    let count = items.len();
-    let choice = choice.min(count.saturating_sub(1));
-    let activate = items.get(choice).map(|(_, _, activate)| activate.clone());
-    let rows = items
-        .into_iter()
-        .enumerate()
-        .map(|(index, (row, hover, activate))| {
+        .map(|(index, (row, entry))| {
             let set_view = set_view.clone();
+            let activate = entry.activate.clone();
             completion_row(
                 row,
-                hover,
+                H::from(Hover::Entry(index)),
                 index == choice,
                 move |world| set_view(world, scroll, index),
                 move |world| activate(world),
