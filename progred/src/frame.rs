@@ -212,8 +212,6 @@ pub(crate) fn frame_disposition(handled: bool, frame_input_changed: bool) -> Fra
     }
 }
 
-pub(crate) use crate::display::widget::scroll::offset as scroll_offset;
-
 /// Interpret the winning claim as an editor target and its owning view.
 fn hover_target(
     claim: Option<(Option<crate::display::widget::view::Root>, Claim<Hovered>)>,
@@ -373,24 +371,17 @@ impl Editor {
         update: &ui_events::pointer::PointerScrollEvent,
         scale: f64,
         viewport: Size,
-        max_scroll: f64,
-        max_scroll_x: f64,
+        maximum: Vec2,
     ) -> ScrollOutcome {
-        // ScrollDelta documents positive as viewport-down/right, but
-        // ui-events-winit passes winit deltas through raw, where
-        // positive is scroll-up/left; subtract to match reality.
-        // Stepping from the clamped position keeps the first tick
-        // responsive when a resize left the stored offset out of
-        // bounds.
         // A retained handler can outlive its view; decline rather than panic.
         match self.model.workspace.view_mut(&root) {
             Some(view) => {
-                let (next, outcome) = scroll_offset(
+                let (next, outcome) = crate::display::widget::scroll::offset(
                     view.scroll,
                     update,
                     scale,
                     viewport,
-                    Vec2::new(max_scroll_x, max_scroll),
+                    maximum,
                 );
                 view.scroll = next;
                 outcome
@@ -660,10 +651,7 @@ fn project_workspace_view(
     let content = if viewport.is_some() {
         view::viewport(content, root.clone())
     } else {
-        let maximum = Vec2::new(
-            ((content.extent.width - size.width) / scale).max(0.0),
-            ((content.extent.height() - size.height) / scale).max(0.0),
-        );
+        let maximum = crate::display::widget::scroll::maximum(content.extent, size, scale);
         let offset = Vec2::new(
             view.scroll.x.clamp(0.0, maximum.x) * scale,
             view.scroll.y.clamp(0.0, maximum.y) * scale,
@@ -672,16 +660,10 @@ fn project_workspace_view(
         view::scrolled_at(
             content,
             offset,
-            Some((root.clone(), scale)),
+            root.clone(),
+            scale,
             move |app: &mut Editor, update| {
-                app.scroll_view(
-                    scroll_root.clone(),
-                    update,
-                    scale,
-                    size,
-                    maximum.y,
-                    maximum.x,
-                )
+                app.scroll_view(scroll_root.clone(), update, scale, size, maximum)
             },
         )
     };

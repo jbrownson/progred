@@ -1,5 +1,6 @@
 use super::HoverCallback;
 use kurbo::{Point, Size, Vec2};
+use measured::Extent;
 use puri::handler::{HasHandler, ScrollOutcome};
 
 // Shared frame output; only the browser needs synchronous wheel admission.
@@ -29,6 +30,20 @@ impl Probe {
     }
 }
 
+/// How far `content` scrolls in a `viewport`, in logical units.
+pub fn maximum(content: Extent, viewport: Size, scale: f64) -> Vec2 {
+    Vec2::new(
+        ((content.width - viewport.width) / scale).max(0.0),
+        ((content.height() - viewport.height) / scale).max(0.0),
+    )
+}
+
+/// Where `update` scrolls `stored`, within `maximum`, and what of it is left
+/// over. ScrollDelta documents positive as viewport-down/right, but
+/// ui-events-winit passes winit deltas through raw, where positive is
+/// scroll-up/left; subtract to match reality. Stepping from the clamped
+/// position keeps the first tick responsive when a resize left the stored
+/// offset out of bounds.
 pub fn offset(
     stored: Vec2,
     update: &ui_events::pointer::PointerScrollEvent,

@@ -1,7 +1,8 @@
 use super::*;
 use crate::display::widget::container::floating;
+use crate::display::widget::container::scrolled;
 use crate::display::widget::placed::leaf;
-use crate::display::widget::view::{in_view, scrolled_at};
+use crate::display::widget::view::in_view;
 use crate::display::widget::{HoverContext, HoverInput};
 use kurbo::{Affine, Point, Rect, Stroke};
 use measured::{Extent, Measured};
@@ -475,7 +476,7 @@ fn scrolled_content_shifts_inside_the_viewport_clip() {
         },
     );
     let placed = crate::display::widget::frame::place(
-        scrolled_at(probe, Vec2::new(5.0, 40.0), None, |_, event| {
+        scrolled(probe, Vec2::new(5.0, 40.0), 1.0, |_, event| {
             ScrollOutcome::pass(event)
         }),
         Placement::new(
@@ -533,10 +534,10 @@ fn scroll_viewport_bounds_starts_and_not_active_motion_or_release() {
         },
     );
     let placed = crate::display::widget::frame::place(
-        scrolled_at(
+        scrolled(
             child,
             Vec2::ZERO,
-            None,
+            1.0,
             |log: &mut Vec<&'static str>, event| {
                 log.push("scroll");
                 ScrollOutcome::consume(event)
@@ -799,7 +800,7 @@ fn semantic_actions_obey_scroll_clips_even_when_the_target_matches() {
         },
     );
     let placed = crate::display::widget::frame::place(
-        scrolled_at(child, Vec2::ZERO, None, |_, event| {
+        scrolled(child, Vec2::ZERO, 1.0, |_, event| {
             ScrollOutcome::pass(event)
         }),
         Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),

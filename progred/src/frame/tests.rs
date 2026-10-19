@@ -19,7 +19,13 @@ fn scrolling_a_view_that_no_longer_exists_declines() {
         delta: ui_events::ScrollDelta::LineDelta(0.0, 1.0),
         state: Default::default(),
     };
-    let outcome = editor.scroll_view(gone, &event, 1.0, Size::new(100.0, 100.0), 50.0, 0.0);
+    let outcome = editor.scroll_view(
+        gone,
+        &event,
+        1.0,
+        Size::new(100.0, 100.0),
+        Vec2::new(0.0, 50.0),
+    );
     assert!(!outcome.handled());
 }
 

@@ -42,10 +42,7 @@ pub fn scrolled<World: 'static, H: 'static>(
                 base.scroll_probe(super::scroll::Probe {
                     placement,
                     offset: offset / scale,
-                    maximum: Vec2::new(
-                        ((extent.width - placement.rect.width()) / scale).max(0.0),
-                        ((extent.height() - placement.rect.height()) / scale).max(0.0),
-                    ),
+                    maximum: super::scroll::maximum(extent, placement.rect.size(), scale),
                     scale,
                 });
                 base.handler().on_scroll(move |state, event| {

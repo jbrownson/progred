@@ -60,30 +60,25 @@ impl std::fmt::Debug for Root {
     }
 }
 
-/// A scroll viewport, tagged as an editor view when it has an owner. The
-/// settled region is frame output, not retained widget state; input and
-/// keyboard reveal use it to update the same caller-owned view.
+/// A scroll viewport, tagged as the editor view `root`. The settled region
+/// is frame output, not retained widget state; input and keyboard reveal use
+/// it to update the same caller-owned view.
 pub fn scrolled_at<C: 'static, H: 'static>(
     child: Measured<HoverPass<C, H>>,
     offset: Vec2,
-    owner: Option<(Root, f64)>,
+    root: Root,
+    scale: f64,
     on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
 ) -> Measured<HoverPass<C, H>> {
     let extent = child.extent;
-    let scale = owner.as_ref().map(|(_, scale)| *scale).unwrap_or(1.0);
     let scrolled = container::scrolled(child, offset, scale, on_scroll);
     before(scrolled, move |output, placement| {
-        if let Some((root, scale)) = owner {
-            output.placed.view_region(ViewRegion {
-                root,
-                rect: placement.rect,
-                maximum: Vec2::new(
-                    ((extent.width - placement.rect.width()) / scale).max(0.0),
-                    ((extent.height() - placement.rect.height()) / scale).max(0.0),
-                ),
-                content: Some(Vec2::new(extent.width, extent.height()) / scale),
-            });
-        }
+        output.placed.view_region(ViewRegion {
+            root,
+            rect: placement.rect,
+            maximum: super::scroll::maximum(extent, placement.rect.size(), scale),
+            content: Some(Vec2::new(extent.width, extent.height()) / scale),
+        });
     })
 }
 
