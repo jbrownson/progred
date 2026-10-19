@@ -170,8 +170,6 @@ pub struct ResolvedCell<'a> {
 /// the cell it's in. Reads use that same context, so a cell's definition is
 /// read as its own, however it was reached.
 pub struct CompletionRequest<'a> {
-    /// Raw projection has no library-specific interaction presentations.
-    pub raw: bool,
     pub query: &'a str,
     pub kind: CompletionKind,
     pub scope: CompletionScope,

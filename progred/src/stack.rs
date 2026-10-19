@@ -82,14 +82,20 @@ impl Stack {
     }
 
     /// The document and pane projections with `hidden` libraries' own
-    /// projections left off.
+    /// projections left off, a pane's presentation among them.
     pub fn without(&self, hidden: &[gid::CellId]) -> (Projection, Projection) {
-        projections(
+        let document = Projection::new(
             self.partials
                 .iter()
                 .filter(|(id, _)| !hidden.contains(id))
                 .map(|(_, partial)| partial.clone()),
-        )
+        );
+        let pane = if hidden.contains(&presentation::ID) {
+            document.clone()
+        } else {
+            pane(document.clone())
+        };
+        (document, pane)
     }
 }
 
@@ -120,8 +126,8 @@ fn compose(
         providers.iter().map(|(_, provider)| provider.clone()),
     );
     let partials: Rc<[_]> = partials.into();
-    let (projection, pane_projection) =
-        projections(partials.iter().map(|(_, partial)| partial.clone()));
+    let projection = Projection::new(partials.iter().map(|(_, partial)| partial.clone()));
+    let pane_projection = pane(projection.clone());
     Stack {
         libraries,
         pane_projection,
@@ -132,16 +138,11 @@ fn compose(
     }
 }
 
-/// Libraries' projections composed for the document, and for a pane, whose
-/// entry may present its value instead.
-fn projections(partials: impl IntoIterator<Item = Partial>) -> (Projection, Projection) {
-    let projection = Projection::new(partials);
-    let pane = projection
-        .clone()
-        .with_entry(crate::display::runtime_partial(
-            presentation::projected_display,
-        ));
-    (projection, pane)
+/// `projection` for a pane, whose entry may present its value instead.
+fn pane(projection: Projection) -> Projection {
+    projection.with_entry(crate::display::runtime_partial(
+        presentation::projected_display,
+    ))
 }
 
 type BuildLibrary = fn() -> Library<crate::Editor, Hovered>;

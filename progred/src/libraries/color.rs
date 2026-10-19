@@ -152,8 +152,7 @@ fn new_color() -> crate::display::Completion {
 fn completions(
     request: &crate::display::CompletionRequest<'_>,
 ) -> Option<Vec<crate::display::Completion>> {
-    (!request.raw
-        && request.kind == crate::display::CompletionKind::Value
+    (request.kind == crate::display::CompletionKind::Value
         && request.scope == crate::display::CompletionScope::Everything
         && request.value().is_none())
     .then(|| vec![new_color()])

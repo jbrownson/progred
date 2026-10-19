@@ -46,8 +46,9 @@ pub enum Side {
 pub struct View {
     pub root: Root,
     pub projection: Projection,
-    /// Libraries whose projections this area leaves off. Their
-    /// definitions stay loaded, so code still runs and keys keep names.
+    /// Libraries switched off in this area: their projections, offers and,
+    /// for the name library, names. Their definitions stay loaded, so code
+    /// still runs.
     pub hidden: Vec<CellId>,
     /// Sparse projection-local state. Two views over the same GID
     /// location deliberately do not share folds or other annotations.

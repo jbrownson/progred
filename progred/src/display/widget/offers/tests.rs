@@ -41,7 +41,6 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
         let sources = src(&document, &stack.libraries);
         for query in ["", display.as_str(), "unrelated query", "sphere"] {
             let entries = ranked(provider.clone())(&CompletionRequest {
-                raw: false,
                 query,
                 kind: CompletionKind::Value,
                 scope: CompletionScope::Everything,
@@ -150,7 +149,6 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
     assert!(
         !crate::test_support::completion_entries_with(
             &sources,
-            false,
             &CompletionKind::Field,
             "offered",
             Some(&crate::stack::load().completions),

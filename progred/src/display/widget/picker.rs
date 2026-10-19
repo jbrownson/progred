@@ -184,7 +184,6 @@ fn located_query<W: Host>(
     let value_at = move |path: &[Step]| sources.read_from(start, path);
     let resolve = |cell| sources.resolve(cell);
     let request = CompletionRequest {
-        raw: toolkit.raw(),
         query: query.text(),
         kind: picker.kind,
         scope: CompletionScope::Everything,

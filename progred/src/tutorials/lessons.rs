@@ -260,7 +260,6 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
     let (editor, names) = website_growing_forest_editor();
     let offers = completion_entries_with(
         &editor.sources(),
-        false,
         &crate::display::CompletionKind::Value,
         "clouds",
         None,

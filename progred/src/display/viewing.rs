@@ -46,8 +46,6 @@ pub(crate) trait Toolkit: Viewing {
     fn location(&self) -> Option<Location<'_>>;
     /// Whether the window has focus.
     fn focused(&self) -> bool;
-    /// Whether this view draws Raw.
-    fn raw(&self) -> bool;
     /// The selection, while this view has it.
     fn selection(&self) -> Option<&Selection>;
     /// Whether the primary highlight is on this occurrence.

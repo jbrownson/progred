@@ -998,7 +998,6 @@ fn document_function_completion_inserts_a_call_and_opens_its_first_argument() {
     );
     let entries = completion_entries_with(
         &sources,
-        false,
         &CompletionKind::Value,
         "clouds",
         None,
@@ -1051,7 +1050,6 @@ fn call_offers_follow_resolved_definitions_without_evaluating_them() {
     let offers = |document: &Document| {
         completion_entries_with(
             &src(document, &libraries),
-            false,
             &CompletionKind::Value,
             "probe",
             None,
@@ -1084,7 +1082,6 @@ fn built_in_call_completion_opens_its_first_argument() {
     );
     let entries = completion_entries_with(
         &src(&document, &libraries),
-        false,
         &CompletionKind::Value,
         "+",
         None,

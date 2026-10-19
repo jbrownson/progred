@@ -345,9 +345,6 @@ impl crate::display::Toolkit for NoSite<'_> {
     fn focused(&self) -> bool {
         self.0.focused()
     }
-    fn raw(&self) -> bool {
-        self.0.raw()
-    }
     fn selection(&self) -> Option<&crate::selection::Selection> {
         self.0.selection()
     }
@@ -469,7 +466,6 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
         view: &root,
         completions: None,
         sources,
-        raw: false,
         names: true,
         annotations: &annotations,
         styles: &styles,

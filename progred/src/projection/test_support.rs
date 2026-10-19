@@ -261,7 +261,6 @@ impl BenchContext {
                 selection,
                 source_selection: selection,
                 annotations,
-                raw: false,
                 names: true,
                 styles,
                 width,

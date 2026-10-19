@@ -286,9 +286,10 @@ libraries read the query as, such as a number, then text, or for a field the
 name library's new label named as typed, and bytes typed in GID's own `0x`
 spelling. It offers no existing cells. An existing cell
 is reused by pointing at it (Cmd+click) or pasting it; typing makes something
-new. Outside Raw, the hole at a document's root starts the document: it leads
-with what the libraries start one as, such as a Grap program or a Fidget scene,
-then offers Raw's. A picker can also take keys that choose an offer at once
+new. The hole at a document's root starts the document: it leads with what the
+libraries switched on there start one as, such as a Grap program or a Fidget
+scene, then offers Raw's. The Raw view switches every library off, so its holes
+offer only GID's own kinds: the constructors and `0x` bytes. A picker can also take keys that choose an offer at once
 from an empty query, as Raw's brackets do. No provider is hidden in traversal
 context. Only the active picker asks for offers.
 
@@ -297,9 +298,7 @@ completion may add.
 
 Each request includes the query, field/value kind, the question asked of a
 library (what it offers anywhere, what it reads the query as, or what a document
-can start as), Raw mode
-(so providers can omit interactions whose presentation needs a library
-projection), the hole's path, read-only path and cell lookups, lazy enumeration
+can start as), the hole's path, read-only path and cell lookups, lazy enumeration
 of defined cells, the document's names for cells, and the loaded libraries'
 provider. Cell lookup exposes the selected definition's
 value, source, and whether it has a native implementation, without evaluating
@@ -423,8 +422,8 @@ first picker interaction. List insertion positions remain stable through that
 transition. The existing point-control gesture writes the selected color and
 groups the drag into one undo step. Escape before choosing returns to completion;
 leaving the location discards the picker without an edit. The seed color belongs
-only to the picker. Raw mode omits this offer because it does not render the
-color library's picker; ordinary value-inserting offers remain available.
+only to the picker. An area with the color library switched off, Raw among
+them, offers none of the library's offers, this one included.
 
 Root `grap` and `fidget` offers create a fresh bare
 cell shared by their domain field and a left pane. Fidget's pane applies

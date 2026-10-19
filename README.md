@@ -143,8 +143,9 @@ or F10 opens it from the keyboard.
   it; Command-click selects it. Hovering the drawing calls in the source
   highlights their output without the modifier.
 - Click an empty location to choose a completion: what's drawing it decides
-  what fits there. The **Raw** view exposes the underlying structure; its holes
-  offer a new cell, list or record, and what you type. The **Plain** view shows
+  what fits there. The **Raw** view switches every library off and exposes the
+  underlying structure; its holes offer a new cell, list or record, and bytes
+  typed as `0x…`. The **Plain** view shows
   the same structure with names, text and numbers readable.
 - The **Projections** menu switches one library's projection and offers off
   or back on in the selected pane or the document, the way the home page peels

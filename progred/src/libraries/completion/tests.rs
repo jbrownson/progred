@@ -60,7 +60,6 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
     });
     let entries = completion_entries_with(
         &sources,
-        false,
         &CompletionKind::Value,
         "generated",
         None,
@@ -68,7 +67,6 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
     );
     let labels = completion_entries_with(
         &sources,
-        false,
         &CompletionKind::Field,
         "generated",
         None,
@@ -85,7 +83,6 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
     ] {
         let entry = completion_entries_with(
             &sources,
-            false,
             &CompletionKind::Value,
             "",
             None,

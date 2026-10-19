@@ -11,18 +11,13 @@ pub(crate) fn value(color: Color) -> Value {
 
 #[test]
 fn new_color_is_only_offered_where_its_picker_can_be_presented() {
-    use crate::display::{CompletionKind, CompletionRequest, CompletionScope};
-    for raw in [false, true] {
-        for kind in [CompletionKind::Value, CompletionKind::Field] {
-            let request = CompletionRequest {
-                raw,
-                ..crate::test_support::bare_request(kind, CompletionScope::Everything, "color")
-            };
-            assert_eq!(
-                completions(&request).is_some(),
-                !raw && kind == CompletionKind::Value
-            );
-        }
+    use crate::display::{CompletionKind, CompletionScope};
+    for kind in [CompletionKind::Value, CompletionKind::Field] {
+        let request = crate::test_support::bare_request(kind, CompletionScope::Everything, "color");
+        assert_eq!(
+            completions(&request).is_some(),
+            kind == CompletionKind::Value
+        );
     }
 }
 use crate::display::recording::{Recordable, Recorded};

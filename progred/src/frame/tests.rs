@@ -739,6 +739,38 @@ fn raw_shortcut_is_contributed_only_by_the_menu() {
 }
 
 #[test]
+fn raw_switches_every_library_off() {
+    let stack = crate::stack::load();
+    let document = Document::default();
+    let view = |projection| workspace::View {
+        root: crate::test_root(),
+        projection,
+        hidden: Vec::new(),
+        annotations: Default::default(),
+        scroll: Vec2::ZERO,
+    };
+    let starters = |view: &workspace::View| {
+        let provider = completions(&stack, view);
+        crate::test_support::ask_over(
+            &crate::test_support::src(&document, &stack.libraries),
+            crate::display::CompletionKind::Value,
+            crate::display::CompletionScope::Start,
+            "",
+            &[],
+            |request| (**provider)(request),
+        )
+        .unwrap_or_default()
+        .len()
+    };
+    let standard = view(workspace::Projection::Standard);
+    assert!(names(&stack, &standard));
+    assert!(starters(&standard) > 0);
+    let raw = view(workspace::Projection::Raw);
+    assert!(!names(&stack, &raw));
+    assert_eq!(starters(&raw), 0);
+}
+
+#[test]
 fn native_and_drawn_history_commands_reveal_even_the_same_selection() {
     use ui_events::keyboard::{Key, Modifiers};
     for drawn in [false, true] {

@@ -560,18 +560,43 @@ fn view_projection<'a>(
     view: &workspace::View,
     pane: bool,
 ) -> Cow<'a, projection::Projection> {
-    match view.projection {
-        workspace::Projection::Plain => Cow::Owned(stack.plain()),
-        workspace::Projection::Raw => Cow::Owned(projection::Projection::default()),
-        workspace::Projection::Standard if view.hidden.is_empty() => Cow::Borrowed(if pane {
+    if view.projection == workspace::Projection::Plain {
+        return Cow::Owned(stack.plain());
+    }
+    match &*hidden(stack, view) {
+        [] => Cow::Borrowed(if pane {
             &stack.pane_projection
         } else {
             &stack.projection
         }),
-        workspace::Projection::Standard => {
-            let (document, pane_projection) = stack.without(&view.hidden);
+        hidden => {
+            let (document, pane_projection) = stack.without(hidden);
             Cow::Owned(if pane { pane_projection } else { document })
         }
+    }
+}
+
+/// The libraries switched off in `view`: Raw is every library off.
+pub(crate) fn hidden<'a>(
+    stack: &stack::Stack,
+    view: &'a workspace::View,
+) -> Cow<'a, [gid::CellId]> {
+    match view.projection {
+        workspace::Projection::Raw => {
+            Cow::Owned(stack.libraries.iter().map(|(id, _)| id).collect())
+        }
+        _ => Cow::Borrowed(&view.hidden),
+    }
+}
+
+/// What `view` offers: none of what its libraries switched off offer.
+pub(crate) fn completions<'a>(
+    stack: &'a stack::Stack,
+    view: &workspace::View,
+) -> Cow<'a, crate::display::CompletionProvider> {
+    match &*hidden(stack, view) {
+        [] => Cow::Borrowed(&stack.completions),
+        hidden => Cow::Owned(stack.completions_without(hidden)),
     }
 }
 
@@ -625,11 +650,10 @@ fn view_content<'a>(
     }
 }
 
-/// Whether `view` labels cells with their names: Raw interprets no naming
-/// convention, and neither does an area with the name library off.
-pub(crate) fn names(view: &workspace::View) -> bool {
-    view.projection != workspace::Projection::Raw
-        && !view.hidden.contains(&crate::libraries::name::ID)
+/// Whether `view` labels cells with their names: only with the name library
+/// on.
+pub(crate) fn names(stack: &stack::Stack, view: &workspace::View) -> bool {
+    !hidden(stack, view).contains(&crate::libraries::name::ID)
 }
 
 /// The margin around a view's content: none for a viewport filling its pane.
@@ -670,11 +694,7 @@ fn project_workspace_view(
     };
     let shown = view_content(stack, sources, view, size, scale);
     let margin = content_margin(shown.viewport, scale);
-    // A library switched off in this area offers nothing here either.
-    let completions = match view.hidden.as_slice() {
-        [] => Cow::Borrowed(&stack.completions),
-        hidden => Cow::Owned(stack.completions_without(hidden)),
-    };
+    let completions = completions(stack, view);
     let projected = projection::project(
         projection::ProjectDescription {
             computations,
@@ -690,8 +710,7 @@ fn project_workspace_view(
                 .filter(|selection| selection.root() == &view.root),
             source_selection: model.selection.as_ref(),
             annotations: &view.annotations,
-            raw: view.projection == workspace::Projection::Raw,
-            names: crate::frame::names(view),
+            names: names(stack, view),
             styles,
             width: (size.width - 2.0 * margin).max(0.0),
             projection: &shown.projection,

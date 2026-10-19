@@ -145,7 +145,6 @@ pub(crate) fn bare_request(
     query: &str,
 ) -> crate::display::CompletionRequest<'_> {
     crate::display::CompletionRequest {
-        raw: false,
         query,
         kind,
         scope,
@@ -169,7 +168,6 @@ pub(crate) fn ask_over<R>(
     ask: impl FnOnce(&crate::display::CompletionRequest<'_>) -> R,
 ) -> R {
     ask(&crate::display::CompletionRequest {
-        raw: false,
         query,
         kind,
         scope,
@@ -210,7 +208,6 @@ pub(crate) fn library_offers(
 /// them Raw's, reading what's typed through `providers`.
 pub(crate) fn completion_entries_with(
     sources: &Sources,
-    raw: bool,
     kind: &crate::display::CompletionKind,
     query: &str,
     providers: Option<&crate::display::CompletionProvider>,
@@ -221,7 +218,6 @@ pub(crate) fn completion_entries_with(
         |provider| crate::display::ranked(provider.clone()),
     );
     offers(&crate::display::CompletionRequest {
-        raw,
         query,
         kind: *kind,
         scope: crate::display::CompletionScope::Everything,

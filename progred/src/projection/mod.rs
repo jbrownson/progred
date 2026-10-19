@@ -109,9 +109,7 @@ pub(crate) struct Cx<'a> {
     /// The reading context: the document read over its library.
     pub(crate) sources: Sources<'a>,
     pub(crate) edits: crate::editing::Scope,
-    /// Names and field order derive from this view bit.
-    pub(crate) raw: bool,
-    /// Whether the name library labels cells here.
+    /// Whether the name library labels cells here; field order follows.
     pub(crate) names: bool,
     pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
@@ -199,10 +197,6 @@ impl crate::display::Toolkit for Occurrence<'_> {
 
     fn focused(&self) -> bool {
         self.cx.focused
-    }
-
-    fn raw(&self) -> bool {
-        self.cx.raw
     }
 
     fn selection(&self) -> Option<&Selection> {
@@ -446,9 +440,10 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         step: Step,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
+        // Raw, with every library off: no names and no library's offers.
         let cx = Cx {
-            raw: true,
             names: false,
+            completions: None,
             ..self.cx.clone()
         };
         let nothing = crate::display::partial(|_| None);
@@ -632,7 +627,6 @@ pub struct ProjectDescription<'a> {
     /// back to its structural source.
     pub source_selection: Option<&'a Selection>,
     pub annotations: &'a Annotations,
-    pub raw: bool,
     pub names: bool,
     pub styles: &'a Styles,
     pub width: f64,
@@ -662,7 +656,6 @@ fn prepare_project(
         selection,
         source_selection,
         annotations,
-        raw,
         names,
         styles,
         width: _,
@@ -687,7 +680,6 @@ fn prepare_project(
         edits: followed.map_or_else(Default::default, |(cell, source, start)| {
             crate::editing::Scope::default().in_cell(root_path[..start].to_vec(), cell, source)
         }),
-        raw,
         names,
         annotations,
         styles,
@@ -889,9 +881,9 @@ fn prepare_value(
     );
     let prepared = match layout {
         None => {
-            // A document's root is where the document starts: outside Raw,
-            // its hole leads with what the libraries start one as.
-            let picker = if path.is_empty() && !cx.raw {
+            // A document's root is where the document starts: its hole
+            // leads with what the libraries on here start one as.
+            let picker = if path.is_empty() {
                 crate::display::raw::start_picker()
             } else {
                 crate::display::raw::picker(crate::display::CompletionKind::Value)

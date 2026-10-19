@@ -46,13 +46,13 @@ metadata side channel.
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections and contextual completion providers. A completion provider
 receives the query, field/value kind, scope (`Everything`, `Literal` or `Start`),
-the hole's path from where its location starts, Raw mode, read-only path and cell
+the hole's path from where its location starts, read-only path and cell
 lookups from that same start, lazy enumeration of defined cells, the document's
 names for cells, and the loaded libraries' provider.
 Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
-An empty document root, outside Raw, first asks providers with `Start` what a
-document can start as. A Grap function stored in a document is
+An empty document root first asks providers with `Start` what a document can
+start as; an area leaves out the providers of libraries switched off there. A Grap function stored in a document is
 ordinary reachable data; configuration is never discovered through a reserved
 cell address or other data outside ordinary root reachability.
 
@@ -101,9 +101,10 @@ tracked reads; unknown calls and unrecorded effects prevent reuse.
 Normal display uses one composition of ordered partial functions, followed
 by a total structural fallback. A partial checks its preconditions and fails
 closed by declining; malformed shapes must remain accessible through a later
-projection or Raw. Raw uses the structural fallback alone, in the same `Layout`
-language: it declines only at a missing location, draws a cell as its definition
-between parentheses, and shows labels as short ids. Plain is Raw with names,
+projection or Raw. Raw is every library switched off: the structural fallback
+alone, in the same `Layout` language, with no library's offers or names. It
+declines only at a missing location, draws a cell as its definition between
+parentheses, and shows labels as short ids. Plain is Raw with names,
 text, bytes, absent values and numbers reading as themselves through their
 libraries; calls, arithmetic included, stay the records
 they are. One list in stack.rs defines it for the editor and the tutorial page
@@ -290,7 +291,8 @@ the pointer over it is a left-right arrow, which a drag keeps until release.
 This is
 opt-in library composition, not automatic merging of every matching facet's projection.
 Normal record order is named fields alphabetically by display name, with cell
-identity breaking ties, then unnamed fields by identity. Raw uses identity order.
+identity breaking ties, then unnamed fields by identity. With the name library
+off, Raw among those, every field is unnamed, so order is by identity.
 
 Grap's `{name: text, value: expression}` wrapper projects as `name = expression`.
 The name slot is always present: a missing name uses Raw's ordinary empty

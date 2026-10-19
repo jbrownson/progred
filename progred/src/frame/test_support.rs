@@ -34,7 +34,7 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
         libraries: &world.stack.libraries,
     };
     let shown = view_content(&world.stack, sources, view, Size::new(500.0, 500.0), 1.0);
-    let completions = world.stack.completions_without(&view.hidden);
+    let completions = crate::frame::completions(&world.stack, view);
     let selection = world.model.selection.as_ref();
     let measured = projection::project(
         projection::ProjectDescription {
@@ -48,8 +48,7 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
             selection,
             source_selection: selection,
             annotations: &view.annotations,
-            raw: view.projection == workspace::Projection::Raw,
-            names: crate::frame::names(view),
+            names: crate::frame::names(&world.stack, view),
             styles: &styles,
             width: 500.0,
             projection: &shown.projection,
