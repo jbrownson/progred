@@ -97,7 +97,10 @@ fn pending_view<W: Host>(
         .filter(|current| current.edit().is_none())
         .map(Selection::initial_query);
     let engaged = selected.and_then(Selection::edit).or(default.as_ref());
-    let content = placeholder(toolkit, tcx, engaged, picker);
+    let content = match engaged {
+        Some(query) => query_content(toolkit, tcx, query, picker),
+        None => crate::display::widget::empty(tcx, toolkit.styles()),
+    };
     // Selection draws the same outline as the inactive frame.
     pending_target(toolkit, content)
 }
@@ -146,18 +149,6 @@ fn pending_target<W: Host>(
             select(&mut world.session())
         });
     })
-}
-
-fn placeholder<W: Host>(
-    toolkit: &dyn Toolkit,
-    tcx: &mut TextCtx,
-    engaged: Option<&LineEditState>,
-    picker: &Picker<W>,
-) -> Measured<HoverPass<W, W::Hover>> {
-    match engaged {
-        Some(query) => query_content(toolkit, tcx, query, picker),
-        None => crate::display::widget::empty(tcx, toolkit.styles()),
-    }
 }
 
 /// A focused completion query: the editor plus an ordinary floating
@@ -345,7 +336,7 @@ fn label_query<W: Host>(
     picker: &Picker<W>,
 ) -> Measured<HoverPass<W, W::Hover>> {
     let scale = toolkit.styles().scale;
-    let content = placeholder(toolkit, tcx, Some(query), picker);
+    let content = query_content(toolkit, tcx, query, picker);
     let palette = toolkit.styles().palette;
     let ringed = decorate(content, move |p, rect| {
         crate::display::widget::style::primary_highlight(

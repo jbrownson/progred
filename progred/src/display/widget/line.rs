@@ -28,8 +28,6 @@ pub struct LineEdit {
 pub type LineUpdate = Rc<dyn Fn(&dyn Env, &str, Option<&Value>) -> Option<Value>>;
 
 pub fn line_edit<W: Host>(line: LineEdit) -> crate::display::host::Layout<W> {
-    #[cfg(all(test, feature = "layout-profile"))]
-    let _profile = crate::display::profile::enter(crate::display::profile::Kind::LineEdit);
     Layout::widget(Rc::new(move |context| view(context, line.clone())))
 }
 
@@ -58,8 +56,8 @@ pub fn view<W: Host>(
         family: style.family,
         ..context.toolkit.styles().dim.clone()
     };
-    let content = match active.zip(editing) {
-        Some((_, state)) => {
+    let content = match editing {
+        Some(state) => {
             let widget = puri::edit::text_edit(
                 LineEditDescription {
                     state,
