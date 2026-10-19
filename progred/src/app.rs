@@ -155,24 +155,19 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             #[cfg(target_arch = "wasm32")]
-            UserEvent::ProjectionsChanged { projections, names } => {
-                match crate::web::stack(&projections, names) {
-                    Ok(stack) => {
-                        for runner in &mut self.editors {
-                            if let RenderState::Active { window, .. } = &runner.editor.state {
-                                let window = window.clone();
-                                runner.stack_changed(
-                                    stack.clone(),
-                                    runner.editor.scale(&window),
-                                    viewport(&window),
-                                );
-                                window.request_redraw();
-                            } else {
-                                runner.editor.replace_stack(stack.clone());
-                            }
-                        }
+            UserEvent::ProjectionsChanged(stack) => {
+                for runner in &mut self.editors {
+                    if let RenderState::Active { window, .. } = &runner.editor.state {
+                        let window = window.clone();
+                        runner.stack_changed(
+                            stack.clone(),
+                            runner.editor.scale(&window),
+                            viewport(&window),
+                        );
+                        window.request_redraw();
+                    } else {
+                        runner.editor.replace_stack(stack.clone());
                     }
-                    Err(error) => web_sys::console::error_1(&error.into()),
                 }
             }
             #[cfg(target_arch = "wasm32")]

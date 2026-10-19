@@ -10,6 +10,15 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+/// Sends `event` into the editor's loop, once there is one.
+fn send(event: UserEvent) {
+    WEB_PROXY.with(|proxy| {
+        if let Some(proxy) = &*proxy.borrow() {
+            let _ = proxy.send_event(event);
+        }
+    });
+}
+
 pub(crate) fn browser_editor_focused(window: &Window) -> bool {
     window.canvas().is_some_and(|canvas| {
         canvas.owner_document().is_some_and(|document| {
@@ -21,11 +30,7 @@ pub(crate) fn browser_editor_focused(window: &Window) -> bool {
 
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn browser_focus_changed() {
-    WEB_PROXY.with(|proxy| {
-        if let Some(proxy) = &*proxy.borrow() {
-            let _ = proxy.send_event(UserEvent::BrowserFocusChanged);
-        }
-    });
+    send(UserEvent::BrowserFocusChanged);
 }
 
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -36,11 +41,7 @@ pub fn browser_modifiers_changed(shift: bool, control: bool, alt: bool, meta: bo
     modifiers.set(ModifiersState::CONTROL, control);
     modifiers.set(ModifiersState::ALT, alt);
     modifiers.set(ModifiersState::SUPER, meta);
-    WEB_PROXY.with(|proxy| {
-        if let Some(proxy) = &*proxy.borrow() {
-            let _ = proxy.send_event(UserEvent::BrowserModifiersChanged(modifiers));
-        }
-    });
+    send(UserEvent::BrowserModifiersChanged(modifiers));
 }
 
 thread_local! {
@@ -50,27 +51,16 @@ thread_local! {
         const { std::cell::RefCell::new((None, None)) };
 }
 
-pub(crate) fn stack(projections: &str, names: bool) -> Result<crate::stack::Stack, String> {
-    PAGE.with(|page| {
-        let (libraries, slots) = &*page.borrow();
-        web_embed::peeled(libraries.as_deref(), projections, slots.as_deref(), names)
-    })
-}
-
 /// Draw with only some libraries' projections, keeping every definition,
 /// the document, and the selection.
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn set_projections(projections: &str, names: bool) -> Result<(), wasm_bindgen::JsValue> {
-    stack(projections, names).map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
-    WEB_PROXY.with(|proxy| {
-        if let Some(proxy) = &*proxy.borrow() {
-            let _ = proxy.send_event(UserEvent::ProjectionsChanged {
-                projections: projections.to_owned(),
-                names,
-            });
-        }
-    });
-    Ok(())
+    PAGE.with(|page| {
+        let (libraries, slots) = &*page.borrow();
+        web_embed::peeled(libraries.as_deref(), projections, slots.as_deref(), names)
+    })
+    .map(|stack| send(UserEvent::ProjectionsChanged(stack)))
+    .map_err(|error| wasm_bindgen::JsValue::from_str(&error))
 }
 
 /// Tells an embedding page how tall the document view's content is, from the
@@ -93,22 +83,14 @@ pub fn set_theme(theme: &str) -> Result<(), wasm_bindgen::JsValue> {
         .parse::<style::Theme>()
         .map_err(wasm_bindgen::JsValue::from_str)?
         .palette();
-    WEB_PROXY.with(|proxy| {
-        if let Some(proxy) = &*proxy.borrow() {
-            let _ = proxy.send_event(UserEvent::PaletteChanged(palette));
-        }
-    });
+    send(UserEvent::PaletteChanged(palette));
     Ok(())
 }
 
 /// Called by the JS host on the page thread, never on the computation worker.
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn computation_finished() {
-    WEB_PROXY.with(|proxy| {
-        if let Some(proxy) = &*proxy.borrow() {
-            let _ = proxy.send_event(UserEvent::ComputationFinished);
-        }
-    });
+    send(UserEvent::ComputationFinished);
 }
 
 /// Ask what to call a saved file; `None` is a cancelled prompt. A name
