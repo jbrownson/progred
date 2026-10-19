@@ -108,8 +108,8 @@ impl<World, Hover> Library<World, Hover> {
     }
 }
 
-/// The ordered loaded-library set. A library identity is unique for
-/// now; insertion replaces that identity in place.
+/// The ordered loaded-library set. A library identity is unique:
+/// insertion replaces that identity in place.
 #[derive(Clone, Default)]
 pub struct Libraries {
     entries: Rc<Vec<(gid::CellId, Definitions)>>,

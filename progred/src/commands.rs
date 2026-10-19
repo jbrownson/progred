@@ -190,8 +190,8 @@ impl Editor {
         let root = current.root().clone();
         let path = current.path().to_vec();
         let scope = current.scope().clone();
-        // Idempotent pastes stay off the undo stack, as write_through
-        // keeps no-op rewrites off it.
+        // Pasting what's there already stays off the undo stack, as every
+        // write that changes nothing does.
         if current.value(&self.sources()) == Some(&value) {
             return true;
         }

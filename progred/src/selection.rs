@@ -10,7 +10,7 @@ use gid::{Path, Position, Resolution, Step, Value, position};
 use puri::edit::LineEditState;
 use std::rc::Rc;
 
-/// Tier-2 editing state beside the selection: the live line editor
+/// Editing state beside the selection: the live line editor
 /// (caret, anchor, IME preedit, drag — and the text in motion), plus
 /// whether that state is a query and its undo grouping.
 pub(crate) struct Editor {
@@ -315,8 +315,8 @@ pub fn pending_value(root: &Root, path: Path) -> Selection {
     pending_with_query(root, path, "")
 }
 
-/// A value pending with a seeded query — the clipboard, replacement, and
-/// test paths.
+/// A value pending with `seed` already typed as its query, as typing over a
+/// selected value opens one.
 pub(crate) fn pending_with_query(root: &Root, path: Path, seed: &str) -> Selection {
     query_selection(root, Scope::default(), path, payload::pending(seed))
 }

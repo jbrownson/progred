@@ -1,5 +1,7 @@
 //! Caller-owned continuations for projection gestures. The accepting
-//! press installs one; it owns motion until release or cancellation.
+//! press installs one; it owns motion until release or cancellation. A
+//! gesture writes through an edit run, which records its writes as one undo
+//! step.
 
 use crate::display::widget::gesture::Gesture;
 use crate::display::widget::view::Root;
@@ -8,7 +10,7 @@ use crate::selection::{self, Selection};
 use crate::sources::Sources;
 use gid::{Path, Value};
 
-// Logical pixels; replace when the input adapter exposes the platform threshold.
+/// How far a press moves, in logical pixels, before it drags.
 pub(crate) const DRAG_THRESHOLD: f64 = 3.0;
 
 pub(crate) type Active = Box<dyn Gesture>;

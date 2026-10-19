@@ -828,6 +828,12 @@ selection and manipulation, and how existing source-to-output provenance maps
 onto three-dimensional geometry. None requires changing the GID or Grap model
 in advance.
 
+### The platform's drag threshold
+
+A press starts dragging once it moves 3 logical pixels
+(`gesture::DRAG_THRESHOLD`). Each platform has its own threshold; take it from
+the input adapter once that exposes one.
+
 ## Directions
 
 Larger directions from brainstorming in October 2026, written down so they
