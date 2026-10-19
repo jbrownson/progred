@@ -179,66 +179,38 @@ fn root_reachable_cells(doc: &Document) -> HashSet<CellId> {
     reached
 }
 
-/// The checked-in sample is canonical: it parses, and printing
-/// it back is the identity — the printer's golden fixture.
+/// Every checked-in example parses and defines only cells its root reaches,
+/// and those the printer laid out print back unchanged; libraries.gid and
+/// navigation.gid are laid out by hand. The sample is the printer's golden
+/// fixture.
 #[test]
-fn the_sample_file_is_a_fixed_point() {
-    let text = include_str!("../../../examples/sample.gid");
-    let (doc, binders) = parse(text).expect("the sample parses");
-    assert!(doc.root.is_some());
-    assert_eq!(print(&doc, &binders), text);
-}
-
-#[test]
-fn every_sample_cell_definition_is_root_reachable() {
-    let (doc, _) = parse(include_str!("../../../examples/sample.gid")).expect("the sample parses");
-    let reached = root_reachable_cells(&doc);
-    let mut orphans: Vec<_> = doc
-        .cells
-        .cells()
-        .filter(|cell| !reached.contains(cell))
-        .copied()
-        .collect();
-    orphans.sort();
-    assert!(orphans.is_empty(), "orphan cell definitions: {orphans:?}");
-}
-
-#[test]
-fn the_grap_demo_is_a_fixed_point() {
-    let text = include_str!("../../../examples/grap-demo.gid");
-    let (doc, binders) = parse(text).expect("the Grap demo parses");
-    assert_eq!(print(&doc, &binders), text);
-}
-
-#[test]
-fn the_iop_tree_demo_is_a_fixed_point_without_orphans() {
-    let text = include_str!("../../../examples/iop-tree.gid");
-    let (doc, binders) = parse(text).expect("the IoP tree demo parses");
-    assert_eq!(print(&doc, &binders), text);
-    let reached = root_reachable_cells(&doc);
-    assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
-}
-
-#[test]
-fn the_fidget_demo_is_a_fixed_point() {
-    let text = include_str!("../../../examples/fidget.gid");
-    let (doc, binders) = parse(text).expect("the Fidget demo parses");
-    assert_eq!(print(&doc, &binders), text);
-}
-
-#[test]
-fn complex_fidget_examples_are_fixed_points_without_orphans() {
+fn checked_in_examples_have_no_orphans_and_printed_ones_are_fixed_points() {
     use crate::command::Example;
-    for (name, source) in crate::test_examples::FIDGET.into_iter().chain([
-        ("shapes", Example::Fidget.source()),
-        ("toolpaths", Example::Toolpaths.source()),
-    ]) {
-        let (doc, binders) = parse(source).expect("the example parses");
-        assert_eq!(print(&doc, &binders), source, "{name}");
+    use crate::test_examples::{FIDGET, NAVIGATION};
+    let hand_laid_out = [Example::Libraries.source(), NAVIGATION];
+    for (name, source) in Example::ALL
+        .map(|example| (example.file_stem(), example.source()))
+        .into_iter()
+        .chain(FIDGET)
+        .chain([
+            ("navigation", NAVIGATION),
+            ("sample", include_str!("../../../examples/sample.gid")),
+        ])
+    {
+        let (doc, binders) = parse(source).unwrap_or_else(|error| panic!("{name}: {error:?}"));
+        assert!(doc.root.is_some(), "{name}");
+        if !hand_laid_out.contains(&source) {
+            assert_eq!(print(&doc, &binders), source, "{name}");
+        }
         let reached = root_reachable_cells(&doc);
+        let orphans: Vec<_> = doc
+            .cells
+            .cells()
+            .filter(|cell| !reached.contains(cell))
+            .collect();
         assert!(
-            doc.cells.cells().all(|cell| reached.contains(cell)),
-            "{name}"
+            orphans.is_empty(),
+            "{name} defines unreached cells: {orphans:?}"
         );
     }
 }

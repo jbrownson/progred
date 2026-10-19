@@ -5,8 +5,7 @@ use crate::library::Libraries;
 use crate::selection::payload as selection_payload;
 use crate::sources::Sources;
 use crate::test_support::{
-    CompletionResult, activated, completion_entries_with, core_libraries, doc_of, library_offers,
-    src,
+    CompletionResult, activated, completion_entries_with, core_libraries, library_offers, src,
 };
 use gid::{Cells, Document, Step};
 use ui_events::keyboard::NamedKey;
@@ -81,40 +80,11 @@ fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary()
 }
 
 #[test]
-fn completion_offers_follow_the_stage() {
+fn a_typed_blob_leads_the_value_offers_and_names_a_new_label() {
     let lib = crate::stack::load().libraries;
-    let (doc, _) = doc_of(vec![
-        name::field("roof"),
-        (
-            crate::test_values::label("kind"),
-            crate::test_values::text("building"),
-        ),
-    ]);
+    let doc = Document::default();
     let sources = src(&doc, &lib);
-    let displays = |labels: bool, query: &str| -> Vec<String> {
-        completion_entries(&sources, false, labels, query)
-            .into_iter()
-            .map(|entry| entry.display)
-            .collect()
-    };
 
-    // The value stage offers the value constructors and what's typed, and
-    // no references.
-    let value_stage = displays(false, "");
-    assert!(value_stage.iter().all(|d| d != "roof"));
-    assert!(
-        value_stage.iter().any(|d| d == "new list"),
-        "{value_stage:?}"
-    );
-    assert!(value_stage.iter().any(|d| d == "new record"));
-    assert!(value_stage.iter().any(|d| d == "new cell"));
-
-    // The label stage narrows to what can label: no list, record,
-    // or blob offers.
-    let label_stage = displays(true, "");
-    assert!(label_stage.iter().all(|d| d != "new list"));
-    assert!(label_stage.iter().all(|d| d != "new record"));
-    assert!(label_stage.iter().any(|d| d == "new cell"));
     let label_blob = completion_entries(&sources, false, true, "0xff");
     assert_eq!(label_blob[0].display, "0xff");
     assert_eq!(label_blob[0].detail.as_deref(), Some("new label"));
@@ -124,7 +94,10 @@ fn completion_offers_follow_the_stage() {
     );
 
     // A blob query leads with the blob, its string form below.
-    let value_blob = displays(false, "0xff");
+    let value_blob: Vec<_> = completion_entries(&sources, false, false, "0xff")
+        .into_iter()
+        .map(|entry| entry.display)
+        .collect();
     assert_eq!(value_blob[0], "0xff");
     assert_eq!(value_blob[1], "\"0xff\"");
 }

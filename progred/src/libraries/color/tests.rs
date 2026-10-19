@@ -153,12 +153,16 @@ fn projection_is_a_swatch_and_editable_spelling() {
     };
 
     assert!(matches!(alignment, RowAlignment::Center));
+    let [swatch, spelling] = children.as_slice() else {
+        panic!("a swatch beside its spelling")
+    };
     assert!(matches!(
-        children[0],
-        Recorded::Before { ref child, .. }
+        swatch,
+        Recorded::Before { child, .. }
             if matches!(child.as_ref(), Recorded::Before { child, .. }
                 if matches!(child.as_ref(), Recorded::Widget(_)))
     ));
+    assert!(matches!(spelling, Recorded::Widget(_)));
     assert!(matches!(
         hex_editor(encoded(&color).unwrap()),
         line
@@ -170,7 +174,7 @@ fn projection_is_a_swatch_and_editable_spelling() {
 }
 
 #[test]
-fn a_read_only_color_selects_without_a_picker_or_popup() {
+fn a_read_only_color_draws_no_picker_for_a_picker_selection() {
     let color = value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff));
     let selection = picker_selection(0.1);
     let layout = display(&ProjectionInput {
@@ -206,13 +210,17 @@ fn a_named_color_projects_its_editable_name_and_hex() {
     let Recorded::Row { children, .. } = layout.record() else {
         panic!("named color projection is one row")
     };
+    let [_, name_field, spelling] = children.as_slice() else {
+        panic!("a swatch, its name and its spelling")
+    };
 
-    assert!(matches!(&inspect(&(children[1])),
+    assert!(matches!(&inspect(name_field),
         ProjectionCall::Descend {
             steps,
             ..
         } if *steps == [Step::Key(name::vocabulary::NAME)]
     ));
+    assert!(matches!(spelling, Recorded::Widget(_)));
     assert!(matches!(
         hex_editor(encoded(&color).unwrap()),
         line if line.text == "663399"

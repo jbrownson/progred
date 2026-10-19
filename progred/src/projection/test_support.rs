@@ -9,7 +9,7 @@ use crate::display::widget::navigation::Landmark;
 use crate::hover::hover_secondary;
 use crate::libraries::text;
 use crate::library::Libraries;
-use crate::test_support::{arrow, make_selection};
+use crate::test_support::arrow;
 use gid::Document;
 use kurbo::{Point, Rect, Stroke};
 use measured::Extent;
@@ -142,7 +142,8 @@ pub(crate) fn click_at(world: &mut crate::Editor, point: Point) -> Option<Hovere
     Some(target)
 }
 
-/// Select through the current projection, without an editing interaction.
+/// Select what the current projection draws at `path`, without an editing
+/// interaction.
 pub(crate) fn make_projected_selection(
     doc: &Document,
     libraries: &Libraries,
@@ -150,13 +151,12 @@ pub(crate) fn make_projected_selection(
 ) -> Selection {
     let mut world = editing_world(doc, libraries);
     let placed = editing_frame(&mut world, false);
-    if let Some(target) = placed.landmarks.landmark(&path) {
-        (target.select)(&mut world, None);
-    }
-    world
-        .model
-        .selection
-        .unwrap_or_else(|| make_selection(path))
+    let target = placed
+        .landmarks
+        .landmark(&path)
+        .unwrap_or_else(|| panic!("nothing drawn at {path:?}"));
+    assert!((target.select)(&mut world, None), "{path:?} refused");
+    world.model.selection.expect("a selection")
 }
 
 pub(crate) fn make_projected_editing_selection(

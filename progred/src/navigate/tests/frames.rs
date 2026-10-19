@@ -389,9 +389,20 @@ fn navigation_named_number_hands_off_from_name_at_text_boundary() {
 fn navigation_example_projects_and_navigates_without_an_app_window() {
     let (doc, _) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     let mut driver = Driver::new(crate::test_editor(doc), VIEWPORT);
-    for _ in 0..5 {
-        assert!(driver.keystroke(Key::Named(NamedKey::ArrowDown), Modifiers::empty()));
-    }
+    let selections: Vec<Path> = (0..5)
+        .map(|_| {
+            driver.press(NamedKey::ArrowDown);
+            driver.selection()
+        })
+        .collect();
+    // Each press moves on to a stop not selected before.
+    assert!(
+        selections
+            .iter()
+            .enumerate()
+            .all(|(index, path)| !selections[..index].contains(path)),
+        "{selections:?}"
+    );
 }
 
 fn navigation_example_cells() -> (World, Vec<Path>) {

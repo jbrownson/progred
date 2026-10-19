@@ -27,6 +27,7 @@ fn list_insertion_through_a_comma_and_whole_list_selection() {
             .collect::<Vec<_>>(),
         ["apples", "peaches", "pears", "plums"]
     );
-    driver.select(&[]);
-    assert!(driver.selection().is_empty());
+    let list = driver.rect(&[]);
+    driver.click_at(kurbo::Point::new(list.x0 + 2.0, list.center().y));
+    assert!(driver.selection().is_empty(), "{:?}", driver.selection());
 }
