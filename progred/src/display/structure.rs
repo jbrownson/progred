@@ -2,7 +2,6 @@
 //! immediate child; recursion is a choice made by that projection.
 
 use super::host::{Layout, Partial, ProjectionInput};
-use super::projection::group;
 use super::*;
 use puri::handler::HasHandler;
 use ui_events::keyboard::{Key, NamedKey};
@@ -281,7 +280,7 @@ pub(crate) fn with_extra_fields<W: Host>(
     content: Layout<W>,
 ) -> Layout<W> {
     match extra_fields(input, drawn) {
-        Some(extras) => super::projection::group_hug(content, extras, 0.0, 20.0),
+        Some(extras) => group_hug(content, extras, 0.0),
         None => content,
     }
 }

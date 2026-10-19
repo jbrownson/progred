@@ -45,7 +45,7 @@ same stop, not a second one.
 
 ## Projection stops
 
-`display::projection::group(content)` adds the whole-value stop before its
+`display::group(content)` adds the whole-value stop before its
 contents; cells, lists, records, and custom forms all use it. `group_hug`
 combines a selectable whole with inline or indented head-body alternatives;
 ordinary `row` and `col` need no navigation-specific counterpart. A call groups

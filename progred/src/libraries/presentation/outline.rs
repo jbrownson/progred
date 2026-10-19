@@ -1,8 +1,8 @@
 //! Outline entries own their UI state; their bodies jump to shared record fields.
 
 use super::vocabulary::OUTLINE;
+use crate::display::group;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-use crate::display::projection::group;
 use crate::display::{self as d, col};
 use gid::{CellId, Step, Value};
 use std::rc::Rc;

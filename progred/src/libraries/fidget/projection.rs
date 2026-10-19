@@ -1,10 +1,10 @@
 use super::{one_marker, parameters, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::display::projection::{group, group_hug, hug};
 use crate::display::{
     Delim, Face, activatable, alternatives, col, descend, dim, faced, row, selectable_bracket,
     shared,
 };
+use crate::display::{group, group_hug, hug};
 use crate::libraries::name;
 use crate::libraries::representation::Precedence;
 use gid::{CellId, Step, Value};
@@ -131,7 +131,6 @@ pub(super) fn field<W: Host>(
                         .collect::<Option<Vec<_>>>()?,
                 ),
                 0.0,
-                20.0,
             )
         }
     };
@@ -147,7 +146,6 @@ pub(super) fn field<W: Host>(
                 ),
                 body,
                 6.0,
-                20.0,
             ),
             None => group(body),
         },

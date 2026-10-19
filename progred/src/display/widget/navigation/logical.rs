@@ -286,14 +286,14 @@ impl Accumulator {
 }
 
 #[derive(Default)]
-pub(crate) struct Construction {
+pub(crate) struct Collector {
     current: Accumulator,
     parents: Vec<Accumulator>,
     /// Open whole-value stops; `None` marks one that refined an outer stop.
     containers: Vec<Option<Stop>>,
 }
 
-impl Construction {
+impl Collector {
     /// A repeated declaration of the innermost open whole value's occurrence
     /// is the same stop, not a second one.
     fn refine(&mut self, stop: Stop) -> Option<Stop> {

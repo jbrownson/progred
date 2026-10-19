@@ -9,7 +9,7 @@ use std::rc::Rc;
 mod geometry;
 mod logical;
 pub(crate) use geometry::{Geometry, advance};
-pub(crate) use logical::Construction;
+pub(crate) use logical::Collector;
 
 pub use puri::handler::NavigationDirection as Direction;
 const DIRECTIONS: [Direction; 4] = [
@@ -37,7 +37,7 @@ pub(crate) fn arrival<W: crate::display::Host>(site: crate::editing::Site) -> Se
 }
 
 /// A native control supplies its entry without introducing child routing.
-pub fn target<W: 'static, H: 'static>(
+pub fn stop<W: 'static, H: 'static>(
     child: crate::display::Layout<W, H>,
 ) -> crate::display::Layout<W, H> {
     super::before(
@@ -50,7 +50,7 @@ pub fn target<W: 'static, H: 'static>(
     )
 }
 
-pub fn nav_group<W: 'static, H: 'static>(
+pub fn group<W: 'static, H: 'static>(
     child: crate::display::Layout<W, H>,
 ) -> crate::display::Layout<W, H> {
     super::around(

@@ -22,8 +22,8 @@ fn sample_projection() -> Projection<World> {
         if let Some(items) = d::structure::list_items(input, None) {
             let items: Vec<_> = items.into_iter().map(|(_, layout)| layout).collect();
             Some(d::alternatives([
-                nav::nav_group(d::row(8.0, items.clone())),
-                nav::nav_group(d::col(0, 8.0, items)),
+                d::group(d::row(8.0, items.clone())),
+                d::group(d::col(0, 8.0, items)),
             ]))
         } else {
             crate::libraries::text::display(input)
@@ -313,7 +313,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
         let projection = Projection::new([
             d::runtime_partial(move |input| {
                 input.value?.field(source)?;
-                Some(nav::nav_group(d::row(
+                Some(d::group(d::row(
                     8.0,
                     [
                         d::jump([Step::Key(first)], [Step::Key(source)]),
@@ -797,7 +797,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
     });
     let ordinary = sample_projection();
     let projection = Projection::new([
-        d::runtime_partial(|input| crate::libraries::text::display(input).map(nav::nav_group)),
+        d::runtime_partial(|input| crate::libraries::text::display(input).map(d::group)),
         ordinary.partial().clone(),
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));

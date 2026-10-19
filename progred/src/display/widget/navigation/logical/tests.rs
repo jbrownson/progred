@@ -37,39 +37,39 @@ fn index(path: &Rc<[Step]>) -> usize {
     }
 }
 
-fn build(shape: &Shape, selected: usize, construction: &mut Construction) {
-    let layout = |composition, children: &[Shape], construction: &mut Construction| {
-        construction.begin(composition);
+fn build(shape: &Shape, selected: usize, collector: &mut Collector) {
+    let layout = |composition, children: &[Shape], collector: &mut Collector| {
+        collector.begin(composition);
         for child in children {
-            construction.begin(Composition::Row(RowAlignment::Baseline));
-            build(child, selected, construction);
-            construction.end();
+            collector.begin(Composition::Row(RowAlignment::Baseline));
+            build(child, selected, collector);
+            collector.end();
         }
-        construction.end();
+        collector.end();
     };
     match shape {
         Empty => {}
-        Stop(stop) => construction.stop(path(*stop), *stop == selected),
-        Row(alignment, children) => layout(Composition::Row(*alignment), children, construction),
+        Stop(stop) => collector.stop(path(*stop), *stop == selected),
+        Row(alignment, children) => layout(Composition::Row(*alignment), children, collector),
         Column(baseline, children) => layout(
             Composition::Column {
                 baseline: *baseline,
             },
             children,
-            construction,
+            collector,
         ),
         Enclosed(stop, child) => {
-            construction.begin_container(path(*stop), *stop == selected);
-            build(child, selected, construction);
-            construction.end_container();
+            collector.begin_container(path(*stop), *stop == selected);
+            build(child, selected, collector);
+            collector.end_container();
         }
     }
 }
 
 fn destinations(shape: &Shape, selected: usize) -> [Option<usize>; 4] {
-    let mut construction = Construction::default();
-    build(shape, selected, &mut construction);
-    construction
+    let mut collector = Collector::default();
+    build(shape, selected, &mut collector);
+    collector
         .current
         .lines
         .destinations()
@@ -117,11 +117,11 @@ fn lines(shape: &Shape) -> Vec<Vec<usize>> {
 
 #[test]
 fn long_single_line_keeps_only_boundaries_and_the_selected_neighbors() {
-    let mut construction = Construction::default();
+    let mut collector = Collector::default();
     for stop in 0..10_000 {
-        construction.stop(path(stop), stop == 5000);
+        collector.stop(path(stop), stop == 5000);
     }
-    let lines = construction.current.lines;
+    let lines = collector.current.lines;
     assert_eq!(lines.rows.len(), 1);
     assert!(lines.rows[0].block.is_none());
     assert_eq!(
@@ -356,14 +356,14 @@ fn a_row_with_multiline_content_is_multiline_but_empty_decorations_add_no_lines(
 
 #[test]
 fn a_repeated_declaration_is_the_same_stop() {
-    let mut construction = Construction::default();
-    construction.stop(path(0), false);
-    construction.begin_container(path(1), false);
-    construction.stop(path(1), true);
-    construction.stop(path(2), false);
-    construction.end_container();
+    let mut collector = Collector::default();
+    collector.stop(path(0), false);
+    collector.begin_container(path(1), false);
+    collector.stop(path(1), true);
+    collector.stop(path(2), false);
+    collector.end_container();
     assert_eq!(
-        construction
+        collector
             .current
             .lines
             .destinations()

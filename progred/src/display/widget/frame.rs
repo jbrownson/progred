@@ -1,7 +1,7 @@
 //! Placement runs hover probes and returns continuations for the resolved hover.
 use super::{
     container::{self, Layers},
-    navigation::{Construction, Landmark, Select},
+    navigation::{Collector, Landmark, Select},
     offers::Offers,
     source::{Secondary, SourceTrace},
     view::Root,
@@ -42,14 +42,14 @@ pub struct HoverContext<'a, C, H> {
     pub input: HoverInput<'a, H>,
     pub(super) output: &'a mut HoverOutput<C, H>,
     root: Option<Root>,
-    navigation: &'a mut Construction,
+    navigation: &'a mut Collector,
 }
 
 impl<'a, C, H> HoverContext<'a, C, H> {
     pub(crate) fn new(
         input: HoverInput<'a, H>,
         output: &'a mut HoverOutput<C, H>,
-        navigation: &'a mut Construction,
+        navigation: &'a mut Collector,
     ) -> Self {
         Self {
             input,
@@ -211,7 +211,7 @@ pub struct HoverPass<C, H> {
     root: Option<Root>,
     output: HoverOutput<C, H>,
     floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
-    pub(super) navigation: Construction,
+    pub(super) navigation: Collector,
 }
 
 impl<C: 'static, H: 'static> HoverPass<C, H> {
@@ -228,7 +228,7 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             root: None,
             output: HoverOutput::default(),
             floaters: Vec::new(),
-            navigation: Construction::default(),
+            navigation: Collector::default(),
         }
     }
 

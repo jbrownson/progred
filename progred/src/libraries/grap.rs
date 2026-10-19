@@ -9,12 +9,12 @@ use crate::libraries::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
-use crate::display::projection::{group, group_hug};
 use crate::display::{
     Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
     activatable, alternatives, at, col, descend_local, dim, faced, pad, picker, ranked,
     record_fragment_with, row, selectable_bracket, shared,
 };
+use crate::display::{group, group_hug};
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
@@ -58,7 +58,7 @@ pub(crate) fn shallow_cell_with<W: Host>(
     let cell = input.value?.as_cell()?;
     let name = input.env.name(cell)?;
     let site = input.site();
-    Some(crate::display::projection::target(activatable(
+    Some(crate::display::stop(activatable(
         decorate(faced(name, Face::Name)),
         &site,
     )))
@@ -339,7 +339,7 @@ pub(crate) fn call_with_function<W: Host>(
         },
         trailing,
     );
-    Some(group_hug(function, arguments, 0.0, 20.0))
+    Some(group_hug(function, arguments, 0.0))
 }
 
 /// A stored lambda exposes its parameter declarations deeply and
@@ -374,7 +374,6 @@ pub fn lambda_display<W: Host>(
         head,
         expression_descend(Step::Key(BODY), &input.default_projection),
         6.0,
-        20.0,
     ))
 }
 
@@ -399,7 +398,6 @@ pub fn value_display<W: Host>(
         row(3.0, [name, activatable(dim("="), &site)]),
         expression_descend(Step::Key(VALUE), &input.default_projection),
         6.0,
-        20.0,
     ))
 }
 

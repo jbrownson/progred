@@ -3,8 +3,8 @@
 //! or as calls headed by the tagged operator, and how tightly infix binds.
 
 use crate::display::Pending;
+use crate::display::group;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-use crate::display::projection::group;
 use crate::display::{Delim, Face, alternatives, col, row, selectable_bracket, shared, subscript};
 use crate::libraries::number::vocabulary::{LEFT, RIGHT};
 use ::grap::RuntimeValue;

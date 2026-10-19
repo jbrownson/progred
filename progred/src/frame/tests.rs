@@ -450,8 +450,8 @@ fn scrolling_runner(projected: &Rc<std::cell::Cell<usize>>) -> EditorRunner {
         projection::Projection::new([crate::display::partial(move |input| {
             crate::libraries::f64::read(input.value?)?;
             projected.set(projected.get() + 1);
-            Some(crate::display::widget::navigation::target(
-                crate::display::Layout::widget(Rc::new(|_| {
+            Some(crate::display::stop(crate::display::Layout::widget(
+                Rc::new(|_| {
                     crate::display::widget::leaf(
                         measured::Extent {
                             width: 100.0,
@@ -460,8 +460,8 @@ fn scrolling_runner(projected: &Rc<std::cell::Cell<usize>>) -> EditorRunner {
                         },
                         |_, _| {},
                     )
-                })),
-            ))
+                }),
+            )))
         })]);
     EditorRunner::new(editor)
 }

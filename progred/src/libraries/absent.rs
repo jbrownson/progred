@@ -56,7 +56,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
         .map(str::to_owned)
         .unwrap_or_else(|| crate::identity::short_id(reason));
     let site = input.site();
-    let head = crate::display::projection::target(crate::display::activatable(
+    let head = crate::display::stop(crate::display::activatable(
         crate::display::faced(name, crate::display::Face::Ink),
         &site,
     ));

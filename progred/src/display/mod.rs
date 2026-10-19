@@ -17,7 +17,6 @@ pub use host::Host;
 mod measure;
 #[cfg(all(test, feature = "layout-profile"))]
 pub mod profile;
-pub mod projection;
 pub mod raw;
 #[cfg(test)]
 pub mod recording;
@@ -61,7 +60,7 @@ pub enum Paint {
     Brush(Brush),
 }
 
-pub use widget::line::{LineEdit, LineUpdate, layout as line_edit};
+pub use widget::line::{LineEdit, LineUpdate, line_edit};
 
 pub use widget::delimiter::{bracket, selectable_bracket};
 
@@ -465,6 +464,7 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, pickable};
+pub use widget::navigation::{group, stop};
 
 /// `child`, which hovers `site` and selects it when activated.
 pub(crate) fn activatable<W: Host>(
@@ -483,7 +483,7 @@ pub(crate) fn selectable_value<W: Host>(
     site: &crate::editing::Site,
     value: &grap::RuntimeValue,
 ) -> host::Layout<W> {
-    let child = projection::target(child);
+    let child = stop(child);
     activatable(
         pickable(child, W::Hover::from(site.hover()), value.clone()),
         site,
@@ -528,6 +528,33 @@ pub fn col<World: 'static, Hover: 'static>(
         let children = children.iter().map(|child| child.run(builder)).collect();
         builder.col(baseline, gap, children)
     })
+}
+
+/// How far a body below its head is indented.
+const TAB: f64 = 20.0;
+
+/// Prefer head beside body; otherwise put an indented body below the head.
+/// Navigation follows only the chosen presentation, never both alternatives.
+pub fn hug<World: 'static, Hover: Clone + 'static>(
+    head: Layout<World, Hover>,
+    child: Layout<World, Hover>,
+    gap: f64,
+) -> Layout<World, Hover> {
+    let head = shared(head);
+    let child = shared(child);
+    alternatives([
+        row(gap, [head.clone(), child.clone()]),
+        col(0, 2.0, [head, pad(TAB, child)]),
+    ])
+}
+
+/// A selectable whole around either head/body presentation.
+pub fn group_hug<World: 'static, Hover: Clone + 'static>(
+    head: Layout<World, Hover>,
+    child: Layout<World, Hover>,
+    gap: f64,
+) -> Layout<World, Hover> {
+    group(hug(head, child, gap))
 }
 
 pub fn overlay<World: 'static, Hover: 'static>(
@@ -722,10 +749,7 @@ pub fn record_heads<W: Host>(
     trailing: impl IntoIterator<Item = host::Layout<W>>,
 ) -> host::Layout<W> {
     let [horizontal, vertical] = record_forms(fields, trailing);
-    selectable_bracket(
-        Delim::Brace,
-        projection::group(alternatives([horizontal, vertical])),
-    )
+    selectable_bracket(Delim::Brace, group(alternatives([horizontal, vertical])))
 }
 
 /// A record-shaped fragment of a larger projection. Its fields compose their
@@ -760,7 +784,7 @@ fn record_forms<W: 'static, H: Clone + 'static>(
     }
     let mut rows = fields
         .into_iter()
-        .map(|field| projection::hug(field.label, field.value, 6.0, 20.0))
+        .map(|field| hug(field.label, field.value, 6.0))
         .collect::<Vec<_>>();
     for tail in trailing {
         let tail = shared(tail);

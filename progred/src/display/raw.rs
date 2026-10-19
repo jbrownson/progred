@@ -52,12 +52,10 @@ fn cell_view<W: Host>(
         .env
         .resolve(cell)
         .map_or(gid::Resolution::Document, |cell| cell.resolution);
-    crate::display::structure::authoring(crate::display::projection::group(
-        crate::display::selectable_bracket(
-            crate::display::Delim::Paren,
-            crate::display::descend([gid::Step::Follow(resolution)], None, None),
-        ),
-    ))
+    crate::display::structure::authoring(crate::display::group(crate::display::selectable_bracket(
+        crate::display::Delim::Paren,
+        crate::display::descend([gid::Step::Follow(resolution)], None, None),
+    )))
 }
 
 /// Raw's picker for a hole of `kind`, its brackets making its constructors.

@@ -9,10 +9,10 @@ use crate::libraries::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
-use crate::display::projection::{group, group_hug, hug};
 use crate::display::{
     RecordField, activatable, alternatives, col, descend_local, dim, record_heads, row, shared,
 };
+use crate::display::{group, group_hug, hug};
 #[cfg(test)]
 use ::grap;
 use ::grap::{
@@ -579,7 +579,6 @@ pub fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> O
             &input.default_projection,
         ),
         4.0,
-        20.0,
     ))
 }
 
@@ -629,7 +628,6 @@ fn case_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option
             &input.default_projection,
         ),
         6.0,
-        20.0,
     ))
 }
 
@@ -689,8 +687,8 @@ pub fn bindings_display<W: Host>(
                     0,
                     2.0,
                     [
-                        hug(function, bindings, 4.0, 20.0),
-                        hug(in_marker, expression, 4.0, 20.0),
+                        hug(function, bindings, 4.0),
+                        hug(in_marker, expression, 4.0),
                     ],
                 ),
             ])))
@@ -700,7 +698,7 @@ pub fn bindings_display<W: Host>(
                 4.0,
                 [expression.clone(), function.clone(), bindings.clone()],
             ),
-            col(0, 2.0, [expression, hug(function, bindings, 4.0, 20.0)]),
+            col(0, 2.0, [expression, hug(function, bindings, 4.0)]),
         ]))),
     }
 }
@@ -734,14 +732,13 @@ fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
             &input.default_projection,
         ),
         6.0,
-        20.0,
     ))
 }
 
 fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
         let site = input.site();
-        crate::display::projection::target(activatable(dim("\""), &site))
+        crate::display::stop(activatable(dim("\""), &site))
     })
 }
 
