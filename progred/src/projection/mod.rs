@@ -1108,7 +1108,7 @@ fn value_layout(
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
     if let Some(value) = value
         && let Some(default) = fold_default
-        && crate::annotations::collapsed(cx.annotations, path, default)
+        && crate::annotations::folded(cx.annotations.at(path), default)
         && let Some(collapsed) = fold::collapsed_layout(cx, path, value, default)
     {
         return Some(collapsed);

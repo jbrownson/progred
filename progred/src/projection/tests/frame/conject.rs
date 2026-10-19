@@ -313,10 +313,9 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
         .unwrap()
         .annotations
         .clone();
-    assert!(crate::annotations::collapsed(&annotations, &path, false));
-    assert!(!crate::annotations::collapsed(
-        &annotations,
-        &[Step::Key(second)],
+    assert!(crate::annotations::folded(annotations.at(&path), false));
+    assert!(!crate::annotations::folded(
+        annotations.at(&[Step::Key(second)]),
         false
     ));
     assert!(Rc::ptr_eq(&before, &world.model.doc));
@@ -353,21 +352,36 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
         },
         &mut crate::frame::DispatchContext::new(Some(root.clone()), Some(target)),
     ));
-    assert!(!crate::annotations::collapsed(
-        &world.model.workspace.view(&root).unwrap().annotations,
-        &path,
+    assert!(!crate::annotations::folded(
+        world
+            .model
+            .workspace
+            .view(&root)
+            .unwrap()
+            .annotations
+            .at(&path),
         false
     ));
     assert!(world.model.step_history(true));
-    assert!(crate::annotations::collapsed(
-        &world.model.workspace.view(&root).unwrap().annotations,
-        &path,
+    assert!(crate::annotations::folded(
+        world
+            .model
+            .workspace
+            .view(&root)
+            .unwrap()
+            .annotations
+            .at(&path),
         false
     ));
     assert!(world.model.step_history(true));
-    assert!(!crate::annotations::collapsed(
-        &world.model.workspace.view(&root).unwrap().annotations,
-        &path,
+    assert!(!crate::annotations::folded(
+        world
+            .model
+            .workspace
+            .view(&root)
+            .unwrap()
+            .annotations
+            .at(&path),
         false
     ));
     assert!(!world.model.dirty());

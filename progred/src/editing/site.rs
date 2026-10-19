@@ -63,7 +63,7 @@ impl Site {
 
     /// A drag's writes to the value here, recorded as one undo step.
     pub(crate) fn edit_run(&self) -> crate::gesture::EditRun {
-        crate::gesture::scoped_value_edit(self.root.clone(), self.path.to_vec(), self.scope.clone())
+        crate::gesture::EditRun::new(self.root.clone(), self.path.to_vec(), self.scope.clone())
     }
 
     /// Edits of this occurrence, through the session a dispatch lends.

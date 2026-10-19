@@ -71,16 +71,16 @@ fn cycles_collapse_by_default_and_expand_turn_by_turn() {
     let reentry = vec![Step::Follow(gid::Resolution::Document), key("next")];
     // Space expands the default-collapsed re-entry.
     let folds = press(&mut world, &reentry, space());
-    assert!(!crate::annotations::collapsed(&folds, &reentry, true));
+    assert!(!crate::annotations::folded(folds.at(&reentry), true));
     // The next turn defaults collapsed at its own deeper path and
     // expands the same way — follow the cycle as far as wanted.
     let deeper: Vec<Step> = reentry.iter().chain(reentry.iter()).cloned().collect();
-    assert!(crate::annotations::collapsed(&folds, &deeper, true));
+    assert!(crate::annotations::folded(folds.at(&deeper), true));
     let folds = press(&mut world, &deeper, space());
-    assert!(!crate::annotations::collapsed(&folds, &deeper, true));
+    assert!(!crate::annotations::folded(folds.at(&deeper), true));
     // Toggling back restores the default (the override is sparse).
     let folds = press(&mut world, &deeper, space());
-    assert!(crate::annotations::collapsed(&folds, &deeper, true));
+    assert!(crate::annotations::folded(folds.at(&deeper), true));
     assert!(folds.at(&deeper).is_none());
 }
 
@@ -93,13 +93,13 @@ fn any_valued_cell_and_any_container_collapse() {
     let mut world = world_of(&doc);
     // A plain (non-cycle) cell collapses to ( … ) via the same toggle.
     let folds = press(&mut world, &[], space());
-    assert!(crate::annotations::collapsed(&folds, &[], false));
+    assert!(crate::annotations::folded(folds.at(&[]), false));
     // Its record collapses too — layout never enters into it, so inline
     // literals toggle exactly like block forms.
     let record = [Step::Follow(gid::Resolution::Document)];
     press(&mut world, &[], space());
     let folds = press(&mut world, &record, space());
-    assert!(crate::annotations::collapsed(&folds, &record, false));
+    assert!(crate::annotations::folded(folds.at(&record), false));
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn fold_keys_are_directional_and_stay_sparse() {
         (NamedKey::ArrowDown, false),
     ] {
         let folds = press(&mut world, &[], command(key));
-        assert_eq!(crate::annotations::collapsed(&folds, &[], false), closed);
+        assert_eq!(crate::annotations::folded(folds.at(&[]), false), closed);
     }
     // Matching the default stores nothing.
     assert!(view_annotations(&world).at(&[]).is_none());

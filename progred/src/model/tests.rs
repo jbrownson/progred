@@ -162,9 +162,8 @@ fn folds_undo_independently_of_document_edits_and_never_dirty_the_document() {
     assert!(Rc::ptr_eq(&model.doc, &edited));
     model.mark_saved();
     assert!(model.step_history(true));
-    assert!(!annotations::collapsed(
-        &model.workspace.document.annotations,
-        &[],
+    assert!(!annotations::folded(
+        model.workspace.document.annotations.at(&[]),
         false
     ));
     assert!(!model.dirty());
@@ -173,9 +172,8 @@ fn folds_undo_independently_of_document_edits_and_never_dirty_the_document() {
     assert!(model.step_history(false));
     assert!(!model.dirty());
     assert!(model.step_history(false));
-    assert!(annotations::collapsed(
-        &model.workspace.document.annotations,
-        &[],
+    assert!(annotations::folded(
+        model.workspace.document.annotations.at(&[]),
         false
     ));
     assert!(!model.dirty());
@@ -223,16 +221,24 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
     assert!(model.workspace.view(&first_root).is_none());
     assert!(model.step_history(true));
     assert_eq!(model.selection.as_ref().unwrap().root(), &first_root);
-    assert!(annotations::collapsed(
-        &model.workspace.view(&first_root).unwrap().annotations,
-        &first.1,
+    assert!(annotations::folded(
+        model
+            .workspace
+            .view(&first_root)
+            .unwrap()
+            .annotations
+            .at(&first.1),
         false
     ));
     assert!(!model.dirty());
     assert!(model.step_history(true));
-    assert!(!annotations::collapsed(
-        &model.workspace.view(&first_root).unwrap().annotations,
-        &first.1,
+    assert!(!annotations::folded(
+        model
+            .workspace
+            .view(&first_root)
+            .unwrap()
+            .annotations
+            .at(&first.1),
         false
     ));
     assert!(model.workspace.view(&second_root).is_some());
@@ -375,16 +381,14 @@ fn saving_and_folding_break_typing_runs() {
     type_text(&mut model, "abcde");
     assert!(model.step_history(true));
     assert_eq!(spelling(&model), "abcd");
-    assert!(annotations::collapsed(
-        &model.workspace.document.annotations,
-        &[],
+    assert!(annotations::folded(
+        model.workspace.document.annotations.at(&[]),
         false
     ));
     assert!(model.step_history(true));
     assert_eq!(spelling(&model), "abcd");
-    assert!(!annotations::collapsed(
-        &model.workspace.document.annotations,
-        &[],
+    assert!(!annotations::folded(
+        model.workspace.document.annotations.at(&[]),
         false
     ));
     assert!(model.dirty());

@@ -18,7 +18,7 @@ fn model(value: Value) -> Editor {
 }
 
 fn scrub(origin: Point, scale: f64, root: Root, path: Path, handler: ScrubHandler) -> Active {
-    let edit = value_edit(root.clone(), path.clone());
+    let edit = EditRun::new(root.clone(), path.clone(), Default::default());
     crate::libraries::number::scrub::scrub(
         Drag::new(origin, scale, DRAG_THRESHOLD),
         handler(),
@@ -50,7 +50,7 @@ fn state_drag(
 }
 
 fn point(root: Root, path: Path, rect: Rect, handler: PointHandler) -> Active {
-    let edit = value_edit(root.clone(), path.clone());
+    let edit = EditRun::new(root.clone(), path.clone(), Default::default());
     native::point(rect, handler, edit)
 }
 
@@ -61,7 +61,7 @@ fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
     let root = world.model.workspace.document_root().clone();
     let other_path = vec![Step::Key(gid::new_cell_id())];
     world.model.selection = Some(Selection::edge(&root, other_path.clone()));
-    let mut edit = value_edit(root, vec![]);
+    let mut edit = EditRun::new(root, vec![], Default::default());
     assert!(Rc::ptr_eq(&original, &world.model.doc));
     assert!(!edit.write(&mut world.session(), f64::value(10.0)));
     assert!(Rc::ptr_eq(&original, &world.model.doc));

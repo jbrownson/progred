@@ -287,8 +287,8 @@ fn folds_are_occurrence_local_and_undoable_without_dirtying_the_document() {
             .set_collapsed(&root, &first, false, Some(true))
     );
     let annotations = &editor.model.workspace.view(&root).unwrap().annotations;
-    assert!(crate::annotations::collapsed(annotations, &first, false));
-    assert!(!crate::annotations::collapsed(annotations, &second, false));
+    assert!(crate::annotations::folded(annotations.at(&first), false));
+    assert!(!crate::annotations::folded(annotations.at(&second), false));
     assert!(Rc::ptr_eq(&document, &editor.model.doc));
     assert!(editor.model.step_history(true));
     assert!(
@@ -301,7 +301,7 @@ fn folds_are_occurrence_local_and_undoable_without_dirtying_the_document() {
 #[test]
 fn gesture_writes_share_the_scope_and_one_undo_step() {
     let (mut editor, root, source, occurrence, scope) = fixture(text::value("before"));
-    let mut run = crate::gesture::scoped_value_edit(root, occurrence, scope.clone());
+    let mut run = crate::gesture::EditRun::new(root, occurrence, scope.clone());
     assert!(run.select(&mut editor.session()));
     assert!(run.write(&mut editor.session(), text::value("first")));
     assert!(run.write(&mut editor.session(), text::value("second")));

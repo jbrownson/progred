@@ -90,7 +90,7 @@ fn key(key: Key) -> KeyboardEvent {
 }
 
 fn hidden(world: &crate::Editor, path: &[Step]) -> bool {
-    crate::annotations::collapsed(&world.model.workspace.document.annotations, path, false)
+    crate::annotations::folded(world.model.workspace.document.annotations.at(path), false)
 }
 
 fn click_heading(world: &mut crate::Editor, path: &[Step], modifiers: Modifiers) {

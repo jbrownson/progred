@@ -88,10 +88,6 @@ impl Annotations {
     }
 }
 
-pub fn collapsed(annotations: &Annotations, path: &[Step], in_cycle: bool) -> bool {
-    folded(annotations.at(path), in_cycle)
-}
-
 /// Whether a path's `state` says it's folded, or `default` where it
 /// says nothing.
 pub fn folded(state: Option<&Value>, default: bool) -> bool {

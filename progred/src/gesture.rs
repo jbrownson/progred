@@ -15,6 +15,7 @@ pub(crate) const DRAG_THRESHOLD: f64 = 3.0;
 
 pub(crate) type Active = Box<dyn Gesture>;
 
+/// A gesture's writes to the value at one place, recorded as one undo step.
 pub(crate) struct EditRun {
     root: Root,
     path: Path,
@@ -22,21 +23,18 @@ pub(crate) struct EditRun {
     recorded: bool,
 }
 
-#[cfg(test)]
-pub(crate) fn value_edit(root: Root, path: Path) -> EditRun {
-    scoped_value_edit(root, path, Default::default())
-}
-
-pub(crate) fn scoped_value_edit(root: Root, path: Path, scope: crate::editing::Scope) -> EditRun {
-    EditRun {
-        root,
-        path,
-        scope,
-        recorded: false,
-    }
-}
-
 impl EditRun {
+    /// The run of writes to the value at `path` in `root`'s view, read
+    /// through `scope`.
+    pub(crate) fn new(root: Root, path: Path, scope: crate::editing::Scope) -> Self {
+        Self {
+            root,
+            path,
+            scope,
+            recorded: false,
+        }
+    }
+
     pub(crate) fn selected<'a>(&self, session: &'a mut Session<'_>) -> Option<&'a mut Selection> {
         session
             .model

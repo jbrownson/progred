@@ -105,7 +105,7 @@ impl Model {
     ) -> bool {
         let before = self.snapshot();
         let changed = self.workspace.view_mut(root).is_some_and(|view| {
-            let previous = crate::annotations::collapsed(&view.annotations, path, default);
+            let previous = crate::annotations::folded(view.annotations.at(path), default);
             let next = closed.unwrap_or(!previous);
             if previous == next {
                 return false;

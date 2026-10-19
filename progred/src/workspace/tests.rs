@@ -66,20 +66,17 @@ fn duplicate_views_keep_independent_projection_state() {
         true,
     );
 
-    assert!(crate::annotations::collapsed(
-        &workspace.view(&one).unwrap().annotations,
-        &[],
-        false,
+    assert!(crate::annotations::folded(
+        workspace.view(&one).unwrap().annotations.at(&[]),
+        false
     ));
-    assert!(!crate::annotations::collapsed(
-        &workspace.view(&other).unwrap().annotations,
-        &[],
-        false,
+    assert!(!crate::annotations::folded(
+        workspace.view(&other).unwrap().annotations.at(&[]),
+        false
     ));
-    assert!(!crate::annotations::collapsed(
-        &workspace.document.annotations,
-        &[],
-        false,
+    assert!(!crate::annotations::folded(
+        workspace.document.annotations.at(&[]),
+        false
     ));
 }
 
@@ -156,10 +153,9 @@ fn declared_panes_reconcile_without_losing_view_state() {
     let mut workspace = Workspace::default();
     let panes_path = [Step::Key(vocabulary::PANES)];
     workspace.sync_declared(&[one.clone(), two.clone()]);
-    assert!(crate::annotations::collapsed(
-        &workspace.document.annotations,
-        &panes_path,
-        false,
+    assert!(crate::annotations::folded(
+        workspace.document.annotations.at(&panes_path),
+        false
     ));
     assert!(workspace.document.annotations.at(&one.path).is_none());
     assert!(workspace.document.annotations.at(&two.path).is_none());
@@ -178,20 +174,18 @@ fn declared_panes_reconcile_without_losing_view_state() {
     assert_eq!(moved.root, root);
     assert_eq!(moved.scroll, Vec2::new(4.0, 9.0));
     assert_eq!(moved.projection, Projection::Raw);
-    assert!(!crate::annotations::collapsed(
-        &workspace.document.annotations,
-        &panes_path,
-        false,
+    assert!(!crate::annotations::folded(
+        workspace.document.annotations.at(&panes_path),
+        false
     ));
     assert!(workspace.can_move(&root, Move::Up));
 
     workspace.sync_declared(&[]);
     assert!(workspace.left.panes.is_empty());
     workspace.sync_declared(&[one]);
-    assert!(!crate::annotations::collapsed(
-        &workspace.document.annotations,
-        &panes_path,
-        false,
+    assert!(!crate::annotations::folded(
+        workspace.document.annotations.at(&panes_path),
+        false
     ));
 }
 
