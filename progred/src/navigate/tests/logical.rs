@@ -2,9 +2,9 @@
 
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::driver::Driver;
+use crate::frame::test_support::editing_frame;
 use crate::libraries::{name, text};
 use crate::location::Location;
-use crate::projection::test_support::editing_frame;
 use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value};
 use puri::handler::NavigationDirection;

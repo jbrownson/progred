@@ -1,12 +1,12 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
 use crate::display::test_support::mouse;
+use crate::frame::test_support::editing_frame;
 use crate::libraries::layout as layout_data;
 use crate::libraries::{f64 as f64_convention, text};
 use crate::projection::Layout;
 use crate::projection::Projection;
 use crate::projection::test_support::ProjectionInput;
-use crate::projection::test_support::{Framing, framed};
 use gid::{CellId, Record, Value};
 use layout_data::vocabulary as event_fields;
 use puri::handler::ImeEvent;
@@ -59,14 +59,8 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
         )
     }
     let mut events = crate::editor_of(Value::from(vec![7u8]));
-    let projection = Projection::new([crate::display::partial(probe)]);
-    let placed = framed(
-        &mut events,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    events.stack.projection = Projection::new([crate::display::partial(probe)]);
+    let placed = editing_frame(&mut events);
     let handler = placed.resolve_for_dispatch();
     let mut state = PointerState::default();
     state.position.x = 1.0;

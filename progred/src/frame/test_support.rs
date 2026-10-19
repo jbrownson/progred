@@ -1,6 +1,6 @@
-//! The frame's own rules, for test harnesses: a placed frame bound with
-//! its hover attributed, what the pointer lands on, and what a bench
-//! window's view shows.
+//! The frame's own rules, for test harnesses: the editor's document view
+//! framed headlessly, a placed frame bound with its hover attributed, what
+//! the pointer lands on, and what a bench window's view shows.
 
 use super::*;
 use crate::annotations::Annotations;
@@ -8,6 +8,67 @@ use crate::projection::test_support::{Bench, BenchContext, BenchFrame, FrameTime
 use crate::sources::Sources;
 use gid::Document;
 use puri::draw::DrawList;
+
+/// `world`'s document view projected 500 points wide and placed, unbound.
+pub(crate) fn editing_frame(world: &mut Editor) -> HoverOutput<Editor> {
+    framed(world, None)
+}
+
+/// As [`editing_frame`], the pointer resting at `pointer`. The view draws
+/// its document as the editor's would: with Plain's or Raw's projection, or
+/// the libraries' less those it hides.
+pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<Editor> {
+    let styles = style::editor(world.palette, 1.0);
+    world
+        .computations
+        .begin(world.model.doc.clone(), world.stack.libraries.clone());
+    let mut tcx = TextCtx {
+        fonts: &mut world.font_cx,
+        layouts: &mut world.layout_cx,
+        scale: 1.0,
+        cache: &mut world.text_cache,
+    };
+    let view = &world.model.workspace.document;
+    let sources = Sources {
+        doc: &world.model.doc,
+        libraries: &world.stack.libraries,
+    };
+    let shown = view_content(&world.stack, sources, view, Size::new(500.0, 500.0), 1.0);
+    let selection = world.model.selection.as_ref();
+    let measured = projection::project(
+        projection::ProjectDescription {
+            focused: world.focused,
+            computations: &world.computations,
+            view: &view.root,
+            completions: Some(&world.stack.completions),
+            sources,
+            root: shown.root,
+            root_path: &shown.root_path,
+            selection,
+            source_selection: selection,
+            annotations: &view.annotations,
+            raw: view.projection == workspace::Projection::Raw,
+            styles: &styles,
+            width: 500.0,
+            projection: &shown.projection,
+        },
+        &mut tcx,
+    );
+    let height = measured.extent.height().max(1.0);
+    crate::display::widget::frame::place(
+        measured,
+        // A short document still has a viewport below it for completion popups.
+        Placement::new(
+            Rect::new(0.0, 0.0, 500.0, height),
+            Rect::new(0.0, 0.0, 500.0, height.max(500.0)),
+        ),
+        &crate::display::widget::HoverInput {
+            command_modifier: world.command_modifier,
+            pointer,
+            ..Default::default()
+        },
+    )
+}
 
 /// What the pointer would land on at `point` in `dispatch`'s frame.
 pub(crate) fn hover_at(dispatch: &Dispatch, point: Point) -> Option<Hovered> {

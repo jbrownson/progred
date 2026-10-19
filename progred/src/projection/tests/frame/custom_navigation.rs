@@ -466,12 +466,7 @@ fn tutorial_slots_use_vertical_flow_including_missing_slots() {
         (first, text::value("first")),
         (last, f64::value(3.0)),
     ]));
-    let projection = crate::web_embed::tutorial_slots(
-        Some(&format!("{first},{missing},{last}")),
-        world.stack.projection.clone(),
-        &world.stack.libraries,
-    )
-    .unwrap();
+    crate::test_support::set_tutorial_slots(&mut world, &[first, missing, last]);
     for (from, direction, to) in [
         (vec![], Down, vec![Step::Key(first)]),
         (vec![Step::Key(first)], Down, vec![Step::Key(missing)]),
@@ -481,13 +476,7 @@ fn tutorial_slots_use_vertical_flow_including_missing_slots() {
         (vec![Step::Key(first)], Right, vec![Step::Key(missing)]),
     ] {
         world.model.selection = Some(make_selection(from.clone()));
-        let frame = framed(
-            &mut world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        );
+        let frame = editing_frame(&mut world);
         assert!(
             frame.navigate(&mut world, direction),
             "{direction:?} from {from:?}"

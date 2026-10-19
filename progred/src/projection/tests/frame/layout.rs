@@ -46,7 +46,7 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
             })
         }
     });
-    let projection = Projection::new([d::runtime_partial(move |_| {
+    world.stack.projection = Projection::new([d::runtime_partial(move |_| {
         let children = d::compose_partials([
             d::runtime_partial(crate::libraries::presentation::display),
             child.clone(),
@@ -59,13 +59,7 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
         ))
     })]);
     for expected in 1..=2 {
-        let _frame = framed(
-            &mut world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        );
+        let _frame = editing_frame(&mut world);
         assert_eq!(visits.get(), expected);
     }
 }
@@ -111,13 +105,8 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
         ))
     })]);
     let mut world = crate::editor_of(Value::record([]));
-    let frame = framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    world.stack.projection = projection;
+    let frame = editing_frame(&mut world);
     assert_eq!(visits.get(), 1);
     let path = vec![Step::Key(result), Step::Key(field), Step::Element(position)];
     assert!(frame.landmarks.landmark(&path.as_slice()).is_some());
@@ -181,13 +170,8 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             cells: Cells::new(),
         };
         let mut world = crate::test_editor(doc.clone());
-        let output = framed(
-            &mut world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        );
+        world.stack.projection = projection;
+        let output = editing_frame(&mut world);
         let content = placements
             .borrow()
             .iter()
@@ -204,16 +188,9 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
         );
         let margin = Point::new(35.0, 25.0);
         assert_eq!(
-            framed(
-                &mut world,
-                Framing {
-                    projection: Some(&projection),
-                    pointer: Some(margin),
-                    ..Framing::default()
-                }
-            )
-            .claim
-            .map(|(_, claim)| claim),
+            framed(&mut world, Some(margin))
+                .claim
+                .map(|(_, claim)| claim),
             Some(if card {
                 Claim::Occludes
             } else {
@@ -221,16 +198,9 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             })
         );
         assert_eq!(
-            framed(
-                &mut world,
-                Framing {
-                    projection: Some(&projection),
-                    pointer: Some(content.center()),
-                    ..Framing::default()
-                }
-            )
-            .claim
-            .map(|(_, claim)| claim),
+            framed(&mut world, Some(content.center()))
+                .claim
+                .map(|(_, claim)| claim),
             Some(Claim::Direct(Hovered::Tree(Hover::Entry(1))))
         );
         let handler = output.resolve_for_dispatch();
@@ -1122,7 +1092,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                     Some(d::test_support::text("value"))
                 }
             });
-            let projection = world
+            world.stack.projection = world
                 .stack
                 .projection
                 .clone()
@@ -1145,13 +1115,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                         d::col(0, 0.0, vertical),
                     ]))
                 }));
-            let frame = framed(
-                &mut world,
-                Framing {
-                    projection: Some(&projection),
-                    ..Framing::default()
-                },
-            );
+            let frame = editing_frame(&mut world);
             assert_eq!(visits.get(), count, "alternatives share projected children");
             let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
             let rect = frame
@@ -1177,17 +1141,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
             ));
             assert!(Rc::ptr_eq(&before, &world.model.doc));
             assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
-            assert!(
-                framed(
-                    &mut world,
-                    Framing {
-                        projection: Some(&projection),
-                        ..Framing::default()
-                    }
-                )
-                .completion
-                .is_some()
-            );
+            assert!(editing_frame(&mut world).completion.is_some());
             assert!(crate::completion::commit(
                 &mut world.session(),
                 f64::value(9.0),
@@ -1223,7 +1177,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     let mut world = crate::test_editor(doc);
     // This fixture's viewport follows its content height. Leave room below
     // the list so the completion popup does not cover the trailing comma.
-    let projection = world
+    world.stack.projection = world
         .stack
         .projection
         .clone()
@@ -1233,15 +1187,6 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
                 d::structure::list_layout(input, None)?,
             ))
         }));
-    let project = |world: &mut crate::Editor| {
-        framed(
-            world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        )
-    };
     let between = |frame: &crate::projection::test_support::HoverOutput<crate::Editor>,
                    left: &[Step],
                    right: &[Step]| {
@@ -1263,7 +1208,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
             &mut input,
         )
     };
-    let frame = project(&mut world);
+    let frame = editing_frame(&mut world);
     let point = between(&frame, &paths[1], &paths[2]);
     assert!(click(
         &mut world,
@@ -1279,7 +1224,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         "x",
     ));
     for (left, right) in [(&paths[1], &pending), (&pending, &paths[2])] {
-        let frame = project(&mut world);
+        let frame = editing_frame(&mut world);
         let point = between(&frame, left, right);
         let target = insertion_between(left, right);
         assert!(!matches!(
@@ -1292,7 +1237,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         assert_eq!(world.model.selection.as_ref().unwrap().payload(), payload);
     }
 
-    let frame = project(&mut world);
+    let frame = editing_frame(&mut world);
     let point = between(&frame, &paths[0], &paths[1]);
     assert!(matches!(
         frame.hover_geometry.probe(Some(point), None, 0.0),

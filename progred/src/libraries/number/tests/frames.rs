@@ -2,6 +2,7 @@ use super::*;
 use crate::display::test_support::press_at;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::frame::Hovered;
+use crate::frame::test_support::{editing_frame, framed};
 use crate::hover::Hover;
 use crate::libraries::{f32, f64, text, u64};
 use crate::projection::test_support::*;
@@ -83,13 +84,7 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 "digits" => Point::new(rect.x1 + 8.0, rect.center().y),
                 _ => Point::new(number_rect.x1 - 0.5, number_rect.y1 - 0.5),
             };
-            let frame = framed(
-                &mut world,
-                Framing {
-                    pointer: Some(point),
-                    ..Framing::default()
-                },
-            );
+            let frame = framed(&mut world, Some(point));
             let Some((_, Claim::Direct(hovered))) = frame.claim.as_ref() else {
                 panic!("direct hover on {contact}")
             };
@@ -234,13 +229,8 @@ fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
         };
         let (bench, _) = place(&doc, None, 900.0);
         let mut world = crate::test_editor(doc.clone());
-        let raw = framed(
-            &mut world,
-            Framing {
-                raw: true,
-                ..Framing::default()
-            },
-        );
+        world.model.workspace.document.projection = crate::workspace::Projection::Raw;
+        let raw = editing_frame(&mut world);
         for field in doc.root.as_ref().unwrap().as_record().unwrap().keys() {
             if *field != extra {
                 assert!(bench.landmarks.landmark(&[Step::Key(*field)]).is_some());

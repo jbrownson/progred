@@ -32,13 +32,8 @@ fn native_annotation_handler_retains_the_projected_site() {
     })]);
     let mut writes = crate::test_editor(doc);
     writes.stack.libraries = Libraries::default();
-    let placed = framed(
-        &mut writes,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    writes.stack.projection = projection;
+    let placed = editing_frame(&mut writes);
     let center = placed
         .landmarks
         .landmark(&path)

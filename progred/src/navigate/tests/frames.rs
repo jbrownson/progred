@@ -3,10 +3,10 @@
 use crate::display as d;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::driver::Driver;
+use crate::frame::test_support::editing_frame;
 use crate::libraries::{f64, name, text};
 use crate::location::{Location, Start};
 use crate::projection::Projection;
-use crate::projection::test_support::{Framing, editing_frame, framed};
 use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value, new_cell_id};
 use puri::handler::test_support::DispatchShorthands;
@@ -72,7 +72,7 @@ fn navigation_destinations_follow_nested_container_boundaries_and_chosen_layout(
     use NavigationDirection::*;
     for wide in [false, true] {
         let (mut world, paths) = fixture(wide);
-        let projection = sample_projection();
+        world.stack.projection = sample_projection();
         let expected = if wide {
             [
                 [None, Some(1), None, Some(1)],
@@ -93,13 +93,7 @@ fn navigation_destinations_follow_nested_container_boundaries_and_chosen_layout(
         for (from, destinations) in expected.iter().enumerate() {
             for (direction, to) in [Left, Right, Up, Down].into_iter().zip(destinations) {
                 world.model.selection = Some(make_selection(paths[from].clone()));
-                let frame = framed(
-                    &mut world,
-                    Framing {
-                        projection: Some(&projection),
-                        ..Framing::default()
-                    },
-                );
+                let frame = editing_frame(&mut world);
                 let handled = frame.navigate(&mut world, direction);
                 assert_eq!(
                     handled,
@@ -169,7 +163,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                     cells,
                 });
                 let ordinary = world.stack.projection.partial().clone();
-                let projection = Projection::new([
+                world.stack.projection = Projection::new([
                     d::runtime_partial(move |input| {
                         input.value?.field(wrapper)?;
                         Some(d::descend(
@@ -180,13 +174,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                     }),
                     ordinary,
                 ]);
-                let frame = framed(
-                    &mut world,
-                    Framing {
-                        projection: Some(&projection),
-                        ..Framing::default()
-                    },
-                );
+                let frame = editing_frame(&mut world);
                 let rect = |path: &Path| frame.landmarks.landmark(path).unwrap().rect;
                 assert_eq!(rect(&children[1]).y0 > rect(&children[0]).y1, vertical);
                 let (forward, backward, across) = if vertical {
@@ -235,13 +223,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                 let before = world.model.doc.clone();
                 for (from, direction, to) in checks {
                     world.model.selection = Some(make_selection(from.clone()));
-                    let frame = framed(
-                        &mut world,
-                        Framing {
-                            projection: Some(&projection),
-                            ..Framing::default()
-                        },
-                    );
+                    let frame = editing_frame(&mut world);
                     let handled = frame.navigate(&mut world, direction);
                     assert_eq!(
                         handled,
@@ -279,15 +261,9 @@ fn navigation_raw_text_has_first_refusal_and_successors_need_no_paint() {
         (NamedKey::ArrowRight, 3, true),
         (NamedKey::ArrowRight, 4, false),
     ];
+    world.stack.projection = sample_projection();
     for (key, expected, raw_handles) in steps {
-        let projection = sample_projection();
-        let frame = framed(
-            &mut world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        );
+        let frame = editing_frame(&mut world);
         let event = KeyboardEvent {
             key: Key::Named(key),
             state: KeyState::Down,
@@ -324,7 +300,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
     world.model.selection = Some(make_selection(vec![Step::Key(first)]));
     let build = |world: &mut World| {
         let ordinary = sample_projection();
-        let projection = Projection::new([
+        world.stack.projection = Projection::new([
             d::runtime_partial(move |input| {
                 input.value?.field(source)?;
                 Some(d::group(d::row(
@@ -338,13 +314,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
             ordinary.partial().clone(),
         ]);
 
-        framed(
-            world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        )
+        editing_frame(world)
     };
     let frame = build(&mut world);
     assert!(frame.navigate(&mut world, NavigationDirection::Right));
@@ -811,18 +781,12 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
         .collect();
     let mut world = crate::editor_of(root);
     let ordinary = sample_projection();
-    let projection = Projection::new([
+    world.stack.projection = Projection::new([
         d::runtime_partial(|input| crate::libraries::text::display(input).map(d::group)),
         ordinary.partial().clone(),
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));
-    let frame = framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    let frame = editing_frame(&mut world);
     assert!(frame.navigate(&mut world, NavigationDirection::Left));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), paths[0]);
 }

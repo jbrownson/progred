@@ -205,7 +205,7 @@ impl<P> Driver<P> {
     /// from the document view framed again, the shown frame keeping no
     /// offers, so a picker open in a pane isn't found.
     fn offers(&mut self) -> Option<Vec<(String, Option<String>)>> {
-        let frame = crate::projection::test_support::editing_frame(&mut self.runner.editor);
+        let frame = crate::frame::test_support::editing_frame(&mut self.runner.editor);
         frame.completion.map(|offers| {
             offers
                 .entries

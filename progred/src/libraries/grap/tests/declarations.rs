@@ -3,6 +3,7 @@ use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
 use crate::driver::Driver;
 use crate::frame::Hovered;
+use crate::frame::test_support::editing_frame;
 use crate::hover::Hover;
 use crate::libraries::control::vocabulary as control;
 use crate::libraries::{f64, number, text};
@@ -331,18 +332,14 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
             .landmark(&extra_path)
             .is_some()
     );
+    world.model.workspace.document.projection = crate::workspace::Projection::Raw;
     assert!(
-        framed(
-            &mut world,
-            Framing {
-                raw: true,
-                ..Framing::default()
-            }
-        )
-        .landmarks
-        .landmark(&extra_path)
-        .is_some()
+        editing_frame(&mut world)
+            .landmarks
+            .landmark(&extra_path)
+            .is_some()
     );
+    world.model.workspace.document.projection = crate::workspace::Projection::Standard;
     let pending = pending_edge(
         &crate::test_root(),
         &crate::editing::Scope::default().view(src(&doc, &libraries)),
@@ -627,13 +624,9 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
             frame.landmarks.landmark(&[Step::Key(extra)]).is_some()
         };
         assert!(!has_metadata(&editing_frame(&mut world)));
-        assert!(has_metadata(&framed(
-            &mut world,
-            Framing {
-                raw: true,
-                ..Framing::default()
-            }
-        )));
+        world.model.workspace.document.projection = crate::workspace::Projection::Raw;
+        assert!(has_metadata(&editing_frame(&mut world)));
+        world.model.workspace.document.projection = crate::workspace::Projection::Standard;
         world.model.selection = pending_edge(
             &crate::test_root(),
             &crate::editing::Scope::default().view(world.sources()),
@@ -743,17 +736,12 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
                 .landmark(&[Step::Key(extra)])
                 .is_some()
         );
+        world.model.workspace.document.projection = crate::workspace::Projection::Raw;
         assert!(
-            framed(
-                &mut world,
-                Framing {
-                    raw: true,
-                    ..Framing::default()
-                }
-            )
-            .landmarks
-            .landmark(&[Step::Key(extra)])
-            .is_some()
+            editing_frame(&mut world)
+                .landmarks
+                .landmark(&[Step::Key(extra)])
+                .is_some()
         );
     }
 }

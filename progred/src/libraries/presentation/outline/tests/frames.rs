@@ -3,7 +3,7 @@ use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
 use crate::driver::Driver;
 use crate::frame::Hovered;
-use crate::frame::test_support::settle;
+use crate::frame::test_support::{editing_frame, settle};
 use crate::hover::Hover;
 use crate::libraries::presentation::vocabulary::{OUTLINE, RESULT};
 use crate::libraries::{f64, name};
@@ -378,13 +378,8 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     driver.select(&b_path);
     driver.type_text("5");
     assert_eq!(driver.value(&[Step::Key(b)]), f64::value(35.0));
-    let raw = framed(
-        &mut driver.runner.editor,
-        Framing {
-            raw: true,
-            ..Framing::default()
-        },
-    );
+    driver.runner.editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
+    let raw = editing_frame(&mut driver.runner.editor);
     for field in [a, b, extra, OUTLINE] {
         stop(&raw, &[Step::Key(field)]);
     }

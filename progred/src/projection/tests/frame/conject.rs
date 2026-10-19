@@ -382,30 +382,18 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
 fn missing_jump_target_is_a_real_editable_location() {
     let (marker, missing, occurrence) = (new_cell_id(), new_cell_id(), new_cell_id());
     let mut world = world(Value::record([(marker, Value::record([]))]));
-    let projection = projection(
+    world.stack.projection = projection(
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&marker)?;
             Some(d::jump([Step::Key(occurrence)], [Step::Key(missing)]))
         }),
     );
-    let frame = framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    let frame = editing_frame(&mut world);
     assert!((stop(&frame, &[Step::Key(occurrence)]).select)(
         &mut world, None
     ));
-    let frame = framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    let frame = editing_frame(&mut world);
     assert!(frame.completion.is_some());
     assert!(crate::completion::commit(
         &mut world.session(),
@@ -427,7 +415,7 @@ fn missing_jump_target_is_a_real_editable_location() {
 
 /// A computed record holding a reference, drawn by `at` where the same path
 /// also names stored data.
-fn computed_reference() -> (crate::Editor, Projection, [CellId; 3]) {
+fn computed_reference() -> (crate::Editor, [CellId; 3]) {
     let (marker, source, field, cell) =
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let mut world = world(Value::record([
@@ -438,31 +426,25 @@ fn computed_reference() -> (crate::Editor, Projection, [CellId; 3]) {
         .cells
         .set_value(cell, text::value("real"));
     let value = Value::record([(field, cell.into())]);
-    let projection = projection(
+    world.stack.projection = projection(
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&marker)?;
             Some(d::at([Step::Key(source)], &value))
         }),
     );
-    (world, projection, [source, field, cell])
+    (world, [source, field, cell])
 }
 
 #[test]
 fn at_and_its_descendants_have_no_source_even_when_their_paths_exist() {
-    let (mut world, projection, [source, field, _]) = computed_reference();
+    let (mut world, [source, field, _]) = computed_reference();
     let before = world.model.doc.clone();
     for path in [
         vec![Step::Key(source)],
         vec![Step::Key(source), Step::Key(field)],
     ] {
-        let frame = framed(
-            &mut world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        );
+        let frame = editing_frame(&mut world);
         assert!((stop(&frame, &path).select)(&mut world, None));
         let selected = world.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), path);
@@ -479,7 +461,7 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
     let (marker, source, field) = (new_cell_id(), new_cell_id(), new_cell_id());
     let mut world = world(Value::record([(marker, Value::record([]))]));
     let value = Value::record([(field, text::ID.into())]);
-    let projection = projection(
+    world.stack.projection = projection(
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&marker)?;
@@ -487,13 +469,7 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
         }),
     );
     let before = world.model.doc.clone();
-    let frame = framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    let frame = editing_frame(&mut world);
     let definition = gid::Resolution::Library(text::ID);
     let path = [
         Step::Key(source),
@@ -515,14 +491,8 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
 
 #[test]
 fn a_cell_followed_from_a_computed_value_is_its_stored_definition() {
-    let (mut world, projection, [source, field, cell]) = computed_reference();
-    let frame = framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    let (mut world, [source, field, cell]) = computed_reference();
+    let frame = editing_frame(&mut world);
     let path = [
         Step::Key(source),
         Step::Key(field),
@@ -563,7 +533,7 @@ fn explicit_jump_can_establish_a_source_below_at() {
         (marker, Value::record([])),
         (source, text::value("source")),
     ]));
-    let projection = projection(
+    world.stack.projection = projection(
         &world,
         d::partial(move |input| {
             let fields = input.value?.as_record()?;
@@ -579,13 +549,7 @@ fn explicit_jump_can_establish_a_source_below_at() {
             }
         }),
     );
-    let frame = framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    let frame = editing_frame(&mut world);
     let path = [Step::Key(computed), Step::Key(occurrence)];
     let jumped = stop(&frame, &path).rect;
     let computed_rect = stop(&frame, &[Step::Key(computed)]).rect;
@@ -619,7 +583,7 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
         source,
         Value::record([(child, text::value("deep"))]),
     )]));
-    let projection = projection(
+    world.stack.projection = projection(
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&source)?;
@@ -630,13 +594,7 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
             ))
         }),
     );
-    let frame = framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    let frame = editing_frame(&mut world);
     assert!(!frame.landmarks.landmark(&[Step::Key(source)]).is_some());
     let path = [Step::Key(source), Step::Key(child)];
     assert!((stop(&frame, &path).select)(&mut world, None));

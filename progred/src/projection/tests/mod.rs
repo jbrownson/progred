@@ -3,7 +3,7 @@ use super::*;
 use crate::annotations::Annotations;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::display::widget::navigation::Landmark;
-use crate::frame::test_support::settle;
+use crate::frame::test_support::{editing_frame, framed, settle};
 use crate::libraries::layout as layout_data;
 use crate::libraries::{f64, fidget, name, text};
 use crate::library::Libraries;

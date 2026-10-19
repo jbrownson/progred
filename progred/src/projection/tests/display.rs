@@ -57,13 +57,8 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
                 root: Some(root),
                 cells: Cells::new(),
             });
-            framed(
-                &mut world,
-                Framing {
-                    projection: Some(&projection),
-                    ..Framing::default()
-                },
-            );
+            world.stack.projection = projection;
+            editing_frame(&mut world);
             assert_eq!(
                 *seen.borrow(),
                 [Value::record([(child, Value::from(vec![1]))])]
@@ -115,13 +110,8 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
             root: Some(root),
             cells,
         });
-        framed(
-            &mut world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        );
+        world.stack.projection = projection;
+        editing_frame(&mut world);
         assert_eq!(
             *seen.borrow(),
             [if mode == 2 { None } else { Some(cell.into()) }]
@@ -147,13 +137,8 @@ fn pane_entry_still_follows_cells_but_stops_at_the_first_non_cell() {
         calls.borrow_mut().push(input.value?.clone());
         None
     }));
-    framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    world.stack.projection = projection;
+    editing_frame(&mut world);
     assert_eq!(*seen.borrow(), [Value::Cell(cell), definition]);
 }
 
@@ -218,13 +203,8 @@ fn descents_replace_current_and_default_projections_independently() {
             root: Some(root.clone()),
             cells: Cells::new(),
         });
-        framed(
-            &mut world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        );
+        world.stack.projection = projection;
+        editing_frame(&mut world);
         assert_eq!(
             *seen.borrow(),
             [
@@ -280,13 +260,8 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
         root: Some(root),
         cells,
     });
-    framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    world.stack.projection = projection;
+    editing_frame(&mut world);
     assert_eq!(*seen.borrow(), [Value::from(vec![1]), Value::from(vec![2])]);
 }
 
@@ -327,13 +302,8 @@ fn record_combinator_chooses_a_projection_for_each_field() {
         root: Some(root),
         cells: Cells::new(),
     });
-    framed(
-        &mut world,
-        Framing {
-            projection: Some(&projection),
-            ..Framing::default()
-        },
-    );
+    world.stack.projection = projection;
+    editing_frame(&mut world);
     let mut actual = seen.borrow().clone();
     actual.sort();
     let mut expected = [first, second, ordinary];
@@ -362,13 +332,8 @@ fn partials_receive_selection_and_annotations_positionally() {
         let mut world = crate::editor_of(Value::from(vec![7u8]));
         world.model.selection = selection;
         world.model.workspace.document.annotations = annotations;
-        let frame = framed(
-            &mut world,
-            Framing {
-                projection: Some(&projection),
-                ..Framing::default()
-            },
-        );
+        world.stack.projection = projection.clone();
+        let frame = editing_frame(&mut world);
         crate::display::test_support::painted(&settle(frame, &world.sources()).list.0)
             .map(|command| match command {
                 puri::draw::DrawCmd::GlyphRun(run) => run.glyphs.len(),

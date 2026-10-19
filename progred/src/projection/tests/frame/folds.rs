@@ -128,13 +128,8 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
         cells,
     });
     let follow = Step::Follow(gid::Resolution::Document);
-    let frame = framed(
-        &mut world,
-        Framing {
-            raw: true,
-            ..Framing::default()
-        },
-    );
+    world.model.workspace.document.projection = crate::workspace::Projection::Raw;
+    let frame = editing_frame(&mut world);
     let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
     // The cell the document reaches opens, and a reference inside it stays
     // folded, so a shared cell isn't expanded again at every use.

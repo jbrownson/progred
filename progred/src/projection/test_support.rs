@@ -1,13 +1,13 @@
-//! The frame harness tests share: editors framed headlessly, projected
-//! selections, line writes, and a bench that times a frame's phases in a
-//! window of a given size.
+//! The frame harness tests share, beside the editor frames of
+//! `frame::test_support`: a picker's offers, projected selections, line
+//! writes, and a bench that times a frame's phases.
 
 use super::*;
 use crate::annotations::Annotations;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
 use crate::driver::Driver;
-use crate::frame::test_support::settle;
+use crate::frame::test_support::{editing_frame, settle};
 use crate::libraries::text;
 use crate::library::Libraries;
 use gid::Document;
@@ -23,92 +23,6 @@ use uig::Placement;
 pub(crate) type HoverOutput<C> = crate::display::widget::frame::HoverOutput<C, Hovered>;
 pub(crate) type ProjectionInput<'a, V = Value> =
     crate::display::host::ProjectionInput<'a, crate::Editor, V>;
-
-/// How a test frame shows an editor's document: as the editor's own view
-/// would, unless a field says otherwise.
-#[derive(Clone, Copy, Default)]
-pub(crate) struct Framing<'a> {
-    /// Raw's view rather than the libraries' projections.
-    pub(crate) raw: bool,
-    /// Drawn with this projection rather than the editor's.
-    pub(crate) projection: Option<&'a Projection>,
-    /// Where the pointer rests.
-    pub(crate) pointer: Option<Point>,
-    /// Selected this way rather than as the editor is.
-    pub(crate) selection: Option<&'a Selection>,
-}
-
-/// `world`'s document view projected 500 points wide and placed, unbound.
-pub(crate) fn editing_frame(world: &mut crate::Editor) -> HoverOutput<crate::Editor> {
-    framed(world, Framing::default())
-}
-
-/// As [`editing_frame`], framed as `framing` says.
-pub(crate) fn framed(
-    world: &mut crate::Editor,
-    framing: Framing<'_>,
-) -> HoverOutput<crate::Editor> {
-    let Framing {
-        raw,
-        projection,
-        pointer,
-        selection,
-    } = framing;
-    let selection = selection.or(world.model.selection.as_ref());
-    let stack = &world.stack;
-    let styles = crate::display::widget::style::editor(world.palette, 1.0);
-    let raw_projection = Projection::default();
-    world
-        .computations
-        .begin(world.model.doc.clone(), stack.libraries.clone());
-    let mut tcx = TextCtx {
-        fonts: &mut world.font_cx,
-        layouts: &mut world.layout_cx,
-        scale: 1.0,
-        cache: &mut world.text_cache,
-    };
-    let view = &world.model.workspace.document;
-    let measured = project(
-        ProjectDescription {
-            focused: world.focused,
-            computations: &world.computations,
-            view: &view.root,
-            completions: Some(&stack.completions),
-            sources: Sources {
-                doc: &world.model.doc,
-                libraries: &stack.libraries,
-            },
-            root: world.model.doc.root.as_ref(),
-            root_path: &[],
-            selection,
-            source_selection: selection,
-            annotations: &view.annotations,
-            raw,
-            styles: &styles,
-            width: 500.0,
-            projection: if raw {
-                &raw_projection
-            } else {
-                projection.unwrap_or(&stack.projection)
-            },
-        },
-        &mut tcx,
-    );
-    let height = measured.extent.height().max(1.0);
-    crate::display::widget::frame::place(
-        measured,
-        // A short document still has a viewport below it for completion popups.
-        Placement::new(
-            Rect::new(0.0, 0.0, 500.0, height),
-            Rect::new(0.0, 0.0, 500.0, height.max(500.0)),
-        ),
-        &crate::display::widget::HoverInput {
-            command_modifier: world.command_modifier,
-            pointer,
-            ..Default::default()
-        },
-    )
-}
 
 /// What `run` makes of a widget context at the root of the view `cx`,
 /// drawing `value` when given.
@@ -127,22 +41,24 @@ pub(crate) fn at_root<W: 'static, H: 'static, R>(
     })
 }
 
-/// The entries the picker open at `selection` offers in `world`.
+/// The entries the picker open at `selection` offers in `world`, once
+/// `world` selects it again from its payload.
 pub(crate) fn offered(
     world: &mut crate::Editor,
     selection: &Selection,
 ) -> Vec<crate::display::widget::offers::Entry<crate::Editor>> {
-    framed(
-        world,
-        Framing {
-            selection: Some(selection),
-            ..Framing::default()
-        },
-    )
-    .completion
-    .expect("the selected pending emits its offers")
-    .entries
-    .to_vec()
+    world.model.selection = Some(Selection::from_payload(
+        selection.root(),
+        &world.sources(),
+        selection.scope().clone(),
+        selection.path().to_vec(),
+        selection.payload(),
+    ));
+    editing_frame(world)
+        .completion
+        .expect("the selected pending emits its offers")
+        .entries
+        .to_vec()
 }
 
 /// An editor of `doc` reading through `libraries`.
