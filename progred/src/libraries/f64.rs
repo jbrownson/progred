@@ -188,12 +188,10 @@ fn lerp(
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    convention()
-        .library(ID, parts(), std::iter::empty())
-        .with_values([(
-            vocabulary::PI,
-            value(std::f64::consts::PI).overlaid(name::record("π", [])),
-        )])
+    convention().library(ID, parts()).with_values([(
+        vocabulary::PI,
+        value(std::f64::consts::PI).overlaid(name::record("π", [])),
+    )])
 }
 
 #[cfg(test)]

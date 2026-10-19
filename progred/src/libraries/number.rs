@@ -4,7 +4,7 @@
 //! evaluates arguments once per call.
 
 use crate::display::activatable;
-use crate::display::host::{Host, Layout, Partial, ProjectionInput};
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::representation::{Precedence, calls, infix_display, tagged};
 use crate::libraries::{Library, line_edit, logic, name};
 use ::grap::{
@@ -57,24 +57,6 @@ pub(crate) fn le_runtime_bytes<const N: usize>(
     tag: CellId,
 ) -> Option<[u8; N]> {
     value.field(tag)?.as_blob()?.try_into().ok()
-}
-
-pub(crate) fn completions<N: std::str::FromStr + Display>(
-    query: &str,
-    representation: CellId,
-    encode: impl FnOnce(N) -> Value,
-) -> Vec<crate::display::Completion> {
-    query
-        .trim()
-        .parse::<N>()
-        .ok()
-        .map(|number| {
-            crate::libraries::completion::select(number.to_string(), encode(number))
-                .with_aliases([query])
-                .with_detail(representation)
-        })
-        .into_iter()
-        .collect()
 }
 
 const PIXELS_PER_STEP: f64 = 4.0;
@@ -157,12 +139,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         )
     }
 
-    pub fn library<W: Host>(
-        self,
-        id: CellId,
-        parts: Parts,
-        before: impl IntoIterator<Item = Partial<W>>,
-    ) -> Library<W> {
+    pub fn library<W: Host>(self, id: CellId, parts: Parts) -> Library<W> {
         let Parts {
             names,
             functions,
@@ -190,22 +167,18 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                 .chain(names),
             functions,
         )
-        .with_projection(crate::display::compose_partials(before.into_iter().chain(
-            [
-                crate::display::runtime_partial(move |input| {
-                    infix_display(self.tag, &infix, input)
-                }),
-                calls(self.tag, operations),
-                crate::display::runtime_partial(move |input| {
-                    let layout = self.display(input)?;
-                    Some(if input.writable && input.selection.is_some() {
-                        typed_operators::<_, N>(layout, symbols.clone())
-                    } else {
-                        layout
-                    })
-                }),
-            ],
-        )))
+        .with_projection(crate::display::compose_partials([
+            crate::display::runtime_partial(move |input| infix_display(self.tag, &infix, input)),
+            calls(self.tag, operations),
+            crate::display::runtime_partial(move |input| {
+                let layout = self.display(input)?;
+                Some(if input.writable && input.selection.is_some() {
+                    typed_operators::<_, N>(layout, symbols.clone())
+                } else {
+                    layout
+                })
+            }),
+        ]))
         .with_completions(move |request| {
             (request.scope == crate::display::CompletionScope::Literal
                 && request.kind == crate::display::CompletionKind::Value)
@@ -219,11 +192,58 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         self,
         input: &ProjectionInput<'_, W, RuntimeValue>,
     ) -> Option<Layout<W>> {
-        layout(input, (self.read)(input.value?)?, self.tag, self.encode)
+        let original = input.value?;
+        let number = (self.read)(original)?;
+        let encode = self.encode;
+        let digits = line_edit::layout(
+            number.to_string(),
+            line_edit::native(move |spelling, current| edit(spelling, current, encode)),
+            "",
+            "",
+        );
+        let line = tagged(input, digits, self.tag);
+        let site = input.site();
+        let line = activatable(line, &site);
+        let line = if number.scrubbable() {
+            let original = original.clone();
+            // Outlined where it drags: the whole number, its tag too.
+            on_scrub(
+                crate::display::drag_outlined(line),
+                W::Hover::from(site.hover()),
+                Rc::new(move || {
+                    let original = original.to_value();
+                    let mut scrub = NumberScrub::new(number);
+                    Box::new(move |event| {
+                        let scrubbed = scrub.update(event);
+                        ScrubUpdate {
+                            value: original.overlaid(encode(scrubbed.value)),
+                            spelling: Some(scrubbed.value.spelling(scrubbed.precision)),
+                        }
+                    })
+                }),
+            )
+        } else {
+            line
+        };
+        Some(crate::display::structure::with_extra_fields(
+            input,
+            |key| key == self.tag || key == name::vocabulary::NAME,
+            name::with_name(input, line),
+        ))
     }
 
     pub fn completions(self, query: &str) -> Vec<crate::display::Completion> {
-        completions(query, self.tag, self.encode)
+        query
+            .trim()
+            .parse::<N>()
+            .ok()
+            .map(|number| {
+                crate::libraries::completion::select(number.to_string(), (self.encode)(number))
+                    .with_aliases([query])
+                    .with_detail(self.tag)
+            })
+            .into_iter()
+            .collect()
     }
 
     fn operation(self, operation: Operation<N>) -> ForeignFunction {
@@ -401,50 +421,6 @@ pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {
     fn scrubbable(self) -> bool;
     fn from_offset(start: Self, offset: f64, precision: f64) -> Self;
     fn spelling(self, precision: f64) -> String;
-}
-
-pub(crate) fn layout<W: Host, N: Scrubbable + std::str::FromStr>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    number: N,
-    representation: CellId,
-    encode: fn(N) -> Value,
-) -> Option<Layout<W>> {
-    let original = input.value?;
-    let digits = line_edit::layout(
-        number.to_string(),
-        line_edit::native(move |spelling, current| edit(spelling, current, encode)),
-        "",
-        "",
-    );
-    let line = tagged(input, digits, representation);
-    let site = input.site();
-    let line = activatable(line, &site);
-    let line = if number.scrubbable() {
-        let original = original.clone();
-        // Outlined where it drags: the whole number, its tag too.
-        on_scrub(
-            crate::display::drag_outlined(line),
-            W::Hover::from(site.hover()),
-            Rc::new(move || {
-                let original = original.to_value();
-                let mut scrub = NumberScrub::new(number);
-                Box::new(move |event| {
-                    let scrubbed = scrub.update(event);
-                    ScrubUpdate {
-                        value: original.overlaid(encode(scrubbed.value)),
-                        spelling: Some(scrubbed.value.spelling(scrubbed.precision)),
-                    }
-                })
-            }),
-        )
-    } else {
-        line
-    };
-    Some(crate::display::structure::with_extra_fields(
-        input,
-        |key| key == representation || key == name::vocabulary::NAME,
-        name::with_name(input, line),
-    ))
 }
 
 pub(crate) fn edit<N: std::str::FromStr>(

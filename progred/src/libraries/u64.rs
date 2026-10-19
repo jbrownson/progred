@@ -130,7 +130,7 @@ fn functions() -> ::grap::ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    convention().library(ID, parts(), std::iter::empty())
+    convention().library(ID, parts())
 }
 
 #[cfg(test)]
