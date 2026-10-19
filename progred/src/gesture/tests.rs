@@ -7,7 +7,7 @@ use std::rc::Rc;
 use crate::display::widget::gesture as native;
 use crate::display::{PointHandler, StateDragHandler};
 use crate::libraries::number::scrub::{ScrubHandler, ScrubUpdate};
-use kurbo::Rect;
+use kurbo::{Point, Rect};
 use puri::drag::Drag;
 
 fn model(value: Value) -> Editor {

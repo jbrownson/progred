@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::value_at;
 use gid::{CellId, position};
 
 fn label(name: &str) -> CellId {
@@ -35,7 +36,7 @@ fn sample() -> Value {
 
 fn element_at(value: &Value, spine: &[Step], index: usize) -> Step {
     Step::Element(
-        get(value, spine)
+        value_at(value, spine)
             .unwrap()
             .as_list()
             .unwrap()
@@ -47,17 +48,17 @@ fn element_at(value: &Value, spine: &[Step], index: usize) -> Step {
 }
 
 #[test]
-fn get_walks_keys_and_elements() {
+fn value_at_walks_keys_and_elements() {
     let value = sample();
     let first = element_at(&value, &[key("points")], 0);
     assert_eq!(
-        get(&value, &[key("points"), first.clone(), key("row")]),
+        value_at(&value, &[key("points"), first.clone(), key("row")]),
         Some(&blob("top"))
     );
-    assert_eq!(get(&value, &[key("missing")]), None);
-    assert_eq!(get(&value, &[key("name"), key("deeper")]), None);
+    assert_eq!(value_at(&value, &[key("missing")]), None);
+    assert_eq!(value_at(&value, &[key("name"), key("deeper")]), None);
     assert_eq!(
-        get(&value, &[Step::Follow(gid::Resolution::Document)]),
+        value_at(&value, &[Step::Follow(gid::Resolution::Document)]),
         None
     );
 }
@@ -70,16 +71,16 @@ fn set_replaces_inserts_and_rebuilds_deeply() {
     // Replace a leaf deep inside; siblings and positions survive.
     let deep = [key("points"), first.clone(), key("row")];
     let rebuilt = set(Some(&value), &deep, blob("bottom")).unwrap();
-    assert_eq!(get(&rebuilt, &deep), Some(&blob("bottom")));
-    assert_eq!(get(&rebuilt, &[key("name")]), Some(&blob("roof")));
+    assert_eq!(value_at(&rebuilt, &deep), Some(&blob("bottom")));
+    assert_eq!(value_at(&rebuilt, &[key("name")]), Some(&blob("roof")));
     assert_eq!(
-        get(&value, &[key("points")])
+        value_at(&value, &[key("points")])
             .unwrap()
             .as_list()
             .unwrap()
             .keys()
             .collect::<Vec<_>>(),
-        get(&rebuilt, &[key("points")])
+        value_at(&rebuilt, &[key("points")])
             .unwrap()
             .as_list()
             .unwrap()
@@ -89,7 +90,7 @@ fn set_replaces_inserts_and_rebuilds_deeply() {
 
     // The final step inserts: a fresh field, a fresh position.
     let added = set(Some(&value), &[key("color")], blob("red")).unwrap();
-    assert_eq!(get(&added, &[key("color")]), Some(&blob("red")));
+    assert_eq!(value_at(&added, &[key("color")]), Some(&blob("red")));
     let last = match element_at(&value, &[key("points")], 1) {
         Step::Element(p) => p,
         _ => unreachable!(),
@@ -102,7 +103,7 @@ fn set_replaces_inserts_and_rebuilds_deeply() {
     )
     .unwrap();
     assert_eq!(
-        get(&appended, &[key("points"), Step::Element(fresh)]),
+        value_at(&appended, &[key("points"), Step::Element(fresh)]),
         Some(&blob("tail"))
     );
 
@@ -130,12 +131,12 @@ fn without_removes_fields_and_elements() {
     let first = element_at(&value, &[key("points")], 0);
 
     let no_name = without(&value, &[key("name")]).unwrap();
-    assert_eq!(get(&no_name, &[key("name")]), None);
-    assert!(get(&no_name, &[key("points")]).is_some());
+    assert_eq!(value_at(&no_name, &[key("name")]), None);
+    assert!(value_at(&no_name, &[key("points")]).is_some());
 
     let no_first = without(&value, &[key("points"), first.clone()]).unwrap();
     assert_eq!(
-        get(&no_first, &[key("points")])
+        value_at(&no_first, &[key("points")])
             .unwrap()
             .as_list()
             .unwrap()
@@ -145,8 +146,8 @@ fn without_removes_fields_and_elements() {
 
     // Removing inside a nested record rebuilds the spine above.
     let no_row = without(&value, &[key("points"), first.clone(), key("row")]).unwrap();
-    assert_eq!(get(&no_row, &[key("points"), first, key("row")]), None);
-    assert!(get(&no_row, &[key("name")]).is_some());
+    assert_eq!(value_at(&no_row, &[key("points"), first, key("row")]), None);
+    assert!(value_at(&no_row, &[key("name")]).is_some());
 
     assert!(without(&value, &[]).is_none());
     assert!(without(&value, &[key("missing")]).is_none());

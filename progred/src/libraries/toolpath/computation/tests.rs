@@ -37,7 +37,8 @@ impl crate::display::Env for ViewportEnv<'_> {
         fuel: usize,
     ) -> Value {
         self.computations
-            .apply(self.root, &[], function, arguments, fuel)
+            .apply_runtime(self.root, &[], function, arguments, fuel)
+            .into_value()
     }
 }
 

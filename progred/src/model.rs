@@ -3,8 +3,6 @@
 
 use crate::display::widget::view::Root;
 use crate::history;
-#[cfg(test)]
-use crate::library::Libraries;
 use crate::selection;
 use crate::workspace;
 use gid::{Document, Path, Step};

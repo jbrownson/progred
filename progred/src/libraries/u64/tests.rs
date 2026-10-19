@@ -147,11 +147,17 @@ fn operands_of_other_representations_decline() {
 fn library_names_are_ordinary_facts_for_random_identities() {
     let library = library::<crate::Editor>();
     assert_eq!(
-        library.value(vocabulary::SUM).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::SUM)
+            .and_then(name::read),
         Some("+")
     );
     assert_eq!(
-        library.value(vocabulary::OVERFLOW).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::OVERFLOW)
+            .and_then(name::read),
         Some("u64 overflow")
     );
     assert_eq!(

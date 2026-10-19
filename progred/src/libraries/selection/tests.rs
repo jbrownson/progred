@@ -50,7 +50,7 @@ fn the_vocabulary_alone_grants_no_selection_access() {
     assert_eq!(
         crate::libraries::test_evaluate(
             &::grap::call(Value::from(vocabulary::GET), []),
-            |cell| library.value(cell).cloned(),
+            |cell| library.definitions.value(cell).cloned(),
             &library.functions(),
             10,
         )
@@ -58,7 +58,7 @@ fn the_vocabulary_alone_grants_no_selection_access() {
         ::grap::absent::with_detail(
             ::grap::absent::NOT_CALLABLE,
             ::grap::absent::VALUE,
-            library.value(vocabulary::GET).unwrap().clone()
+            library.definitions.value(vocabulary::GET).unwrap().clone()
         )
     );
 }

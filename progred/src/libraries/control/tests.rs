@@ -1030,15 +1030,24 @@ fn malformed_let_data_returns_library_absents() {
 fn library_describes_control_forms_and_absence_reasons() {
     let library = library::<crate::Editor>();
     assert_eq!(
-        library.value(vocabulary::QUOTE).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::QUOTE)
+            .and_then(name::read),
         Some("quote")
     );
     assert_eq!(
-        library.value(vocabulary::UNQUOTE).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::UNQUOTE)
+            .and_then(name::read),
         Some("unquote")
     );
     assert_eq!(
-        library.value(vocabulary::DO).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::DO)
+            .and_then(name::read),
         Some("do")
     );
     for cell in [
@@ -1049,7 +1058,7 @@ fn library_describes_control_forms_and_absence_reasons() {
         vocabulary::INVALID_BINDING,
         vocabulary::INVALID_EXPRESSIONS,
     ] {
-        assert!(name::read(library.value(cell).unwrap()).is_some());
+        assert!(name::read(library.definitions.value(cell).unwrap()).is_some());
         assert_eq!(absent::reason(&absent::with_reason(cell)), Some(cell));
     }
 }

@@ -7,8 +7,6 @@ use crate::editing::Session;
 use crate::selection::{self, Selection};
 use crate::sources::Sources;
 use gid::{Path, Value};
-#[cfg(test)]
-use kurbo::Point;
 
 // Logical pixels; replace when the input adapter exposes the platform threshold.
 pub(crate) const DRAG_THRESHOLD: f64 = 3.0;

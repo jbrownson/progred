@@ -1,6 +1,13 @@
 use super::*;
 use crate::sample::{PLANET_VIEW, planets};
 use gid::Cells;
+use std::rc::Rc;
+
+impl Workspace {
+    fn side(&self, root: &Root) -> Option<Side> {
+        self.pane(root).map(|(side, ..)| side)
+    }
+}
 
 fn add_pane(workspace: &mut Workspace, side: Side) -> Root {
     let column = workspace.column_mut(side);
@@ -95,14 +102,20 @@ fn panes_are_values_and_their_edits_are_document_edits() {
     let locations = declarations(Some(&root));
     assert_eq!(locations.len(), values.len());
     for (location, value) in locations.iter().zip(&values) {
-        assert_eq!(crate::spine::get(&root, &location.path), Some(value));
+        assert_eq!(
+            crate::test_support::value_at(&root, &location.path),
+            Some(value)
+        );
         assert!(matches!(location.path.last(), Some(Step::Element(_))));
     }
     let (moved, path) = move_value(&root, &locations[1].path, Move::Up).unwrap();
     assert_eq!(declarations(Some(&moved))[0].path, path);
-    assert_eq!(crate::spine::get(&moved, &path), Some(&values[1]));
     assert_eq!(
-        crate::spine::get(&moved, &locations[0].path),
+        crate::test_support::value_at(&moved, &path),
+        Some(&values[1])
+    );
+    assert_eq!(
+        crate::test_support::value_at(&moved, &locations[0].path),
         Some(&values[0])
     );
     let (moved, path) = move_value(&moved, &path, Move::Right).unwrap();

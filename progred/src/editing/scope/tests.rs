@@ -20,6 +20,15 @@ impl Scope {
     }
 }
 
+impl Edit<'_> {
+    /// Runs the Grap handler `function` evaluates to at `path`.
+    fn grap(&mut self, root: Root, path: Path, function: Value, event: Value) -> bool {
+        let function =
+            grap::evaluate(&function, &self.session.sources(), grap::DEFAULT_FUEL).result;
+        self.grap_runtime(root, path, function, event)
+    }
+}
+
 fn fixture(value: Value) -> (crate::Editor, Root, Path, Path, Scope) {
     let source = path();
     let occurrence = path();

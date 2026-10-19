@@ -25,12 +25,6 @@ impl Annotations {
         self.values.get(path)
     }
 
-    /// One convention field at a path.
-    #[cfg(test)]
-    pub fn field(&self, path: &[Step], key: CellId) -> Option<&Value> {
-        self.at(path)?.as_record()?.get(&key)
-    }
-
     /// Replace or clear the whole value at a path. Empty records prune.
     pub fn set(&mut self, path: &[Step], value: Option<Value>) {
         match value {

@@ -113,7 +113,7 @@ fn drawing_is_an_ordinary_projection_function() {
     let evaluation = crate::libraries::test_apply(
         &Value::from(vocabulary::DRAWING),
         [(presentation::vocabulary::VALUE, configuration.clone())],
-        |cell| library.value(cell).cloned(),
+        |cell| library.definitions.value(cell).cloned(),
         &library.functions(),
         20,
     );
@@ -365,7 +365,7 @@ fn border_composes_with_an_ordinary_projection() {
                 ::grap::ffi(vocabulary::DRAWING),
             )],
         ),
-        |cell| library.value(cell).cloned(),
+        |cell| library.definitions.value(cell).cloned(),
         &library.functions(),
         20,
     );
@@ -378,7 +378,7 @@ fn border_composes_with_an_ordinary_projection() {
     let evaluation = crate::libraries::test_apply(
         &composition.result,
         [(presentation::vocabulary::VALUE, configuration.clone())],
-        |cell| library.value(cell).cloned(),
+        |cell| library.definitions.value(cell).cloned(),
         &library.functions(),
         50,
     );

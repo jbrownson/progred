@@ -20,6 +20,31 @@ pub(crate) fn core_libraries() -> Libraries {
     crate::stack::load().libraries
 }
 
+impl<World, Hover> crate::library::Library<World, Hover> {
+    /// The foreign functions this library defines, to evaluate with apart
+    /// from its other definitions.
+    pub(crate) fn functions(&self) -> grap::ForeignFunctions {
+        self.definitions.iter().fold(
+            grap::ForeignFunctions::default(),
+            |functions, (cell, definition)| match definition {
+                grap::Definition::Value(_) => functions,
+                grap::Definition::Foreign(native) => {
+                    functions.register(cell, native.implementation.clone())
+                }
+            },
+        )
+    }
+}
+
+impl Libraries {
+    /// The value of the first loaded library's definition of `cell`.
+    pub(crate) fn first_value(&self, cell: CellId) -> Option<&Value> {
+        self.definitions(cell)
+            .next()
+            .map(|(_, definition)| definition.value())
+    }
+}
+
 pub(crate) fn root_completions<World>(
     stack: &crate::stack::Stack<World>,
 ) -> Vec<crate::display::Completion> {
@@ -106,6 +131,16 @@ pub(crate) fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a
 
 pub(crate) fn make_selection(path: Path) -> Selection {
     Selection::edge(&crate::test_root(), path)
+}
+
+/// The value `spine`'s Key and Element steps reach within `value`; a Follow
+/// declines, as the lens does.
+pub(crate) fn value_at<'a>(value: &'a Value, spine: &[Step]) -> Option<&'a Value> {
+    spine.iter().try_fold(value, |value, step| match step {
+        Step::Key(label) => value.as_record()?.get(label),
+        Step::Element(position) => value.as_list()?.get(position),
+        Step::Follow(_) => None,
+    })
 }
 
 /// A one-cell document: the root links a cell holding `fields`.

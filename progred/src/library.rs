@@ -48,14 +48,11 @@ impl Definitions {
         self.get(cell).map(Definition::value)
     }
 
-    pub fn insert(&mut self, cell: gid::CellId, definition: Definition) -> Option<Definition> {
+    pub fn insert(&mut self, cell: gid::CellId, definition: Definition) {
         let entries = Rc::make_mut(&mut self.entries);
         match entries.binary_search_by_key(&cell, |(cell, _)| *cell) {
-            Ok(index) => Some(std::mem::replace(&mut entries[index].1, definition)),
-            Err(index) => {
-                entries.insert(index, (cell, definition));
-                None
-            }
+            Ok(index) => entries[index].1 = definition,
+            Err(index) => entries.insert(index, (cell, definition)),
         }
     }
 
@@ -63,19 +60,6 @@ impl Definitions {
         self.entries
             .iter()
             .map(|(cell, definition)| (*cell, definition))
-    }
-
-    #[cfg(test)]
-    pub fn functions(&self) -> ForeignFunctions {
-        self.iter().fold(
-            ForeignFunctions::default(),
-            |functions, (cell, definition)| match definition {
-                Definition::Value(_) => functions,
-                Definition::Foreign(native) => {
-                    functions.register(cell, native.implementation.clone())
-                }
-            },
-        )
     }
 }
 
@@ -122,16 +106,6 @@ impl<World, Hover> Library<World, Hover> {
         self.completions = Some(Rc::new(completions));
         self
     }
-
-    #[cfg(test)]
-    pub fn value(&self, cell: gid::CellId) -> Option<&gid::Value> {
-        self.definitions.value(cell)
-    }
-
-    #[cfg(test)]
-    pub fn functions(&self) -> ForeignFunctions {
-        self.definitions.functions()
-    }
 }
 
 /// The ordered loaded-library set. A library identity is unique for
@@ -171,26 +145,12 @@ impl Libraries {
         )
     }
 
-    pub fn insert(&mut self, id: gid::CellId, definitions: Definitions) -> Option<Definitions> {
+    pub fn insert(&mut self, id: gid::CellId, definitions: Definitions) {
         let entries = Rc::make_mut(&mut self.entries);
-        match entries.iter().position(|(candidate, _)| *candidate == id) {
-            Some(index) => {
-                let entry = &mut entries[index];
-                Some(std::mem::replace(&mut entry.1, definitions))
-            }
-            None => {
-                entries.push((id, definitions));
-                None
-            }
+        match entries.iter_mut().find(|(candidate, _)| *candidate == id) {
+            Some((_, existing)) => *existing = definitions,
+            None => entries.push((id, definitions)),
         }
-    }
-
-    #[cfg(test)]
-    pub fn get(&self, id: gid::CellId) -> Option<&Definitions> {
-        self.entries
-            .iter()
-            .find(|(candidate, _)| *candidate == id)
-            .map(|(_, definitions)| definitions)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (gid::CellId, &Definitions)> {
@@ -211,22 +171,6 @@ impl Libraries {
                     .get(cell)
                     .map(|definition| (*library, definition))
             })
-    }
-
-    #[cfg(test)]
-    pub fn foreign_sources(&self, cell: gid::CellId) -> impl Iterator<Item = gid::CellId> + '_ {
-        self.entries
-            .iter()
-            .filter_map(move |(library, definitions)| {
-                matches!(definitions.get(cell), Some(Definition::Foreign(_))).then_some(*library)
-            })
-    }
-
-    #[cfg(test)]
-    pub fn first_value(&self, cell: gid::CellId) -> Option<&gid::Value> {
-        self.definitions(cell)
-            .next()
-            .map(|(_, definition)| definition.value())
     }
 
     pub fn resolve(&self, cell: gid::CellId) -> Option<(gid::Resolution, ::grap::Definition)> {

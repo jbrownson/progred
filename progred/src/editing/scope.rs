@@ -258,9 +258,17 @@ impl Edit<'_> {
             Some(selection::pending_value(root, path).with_scope(self.scope.clone()));
     }
 
+    /// Replaces the state of the occurrence at `path` in `root`'s view; false
+    /// when it was already `value`. UI state belongs to the displayed
+    /// occurrence, not the shared source.
     pub(crate) fn annotate(&mut self, root: &Root, path: &[Step], value: Value) -> bool {
-        // UI state belongs to the displayed occurrence, not the shared source.
-        annotate(&mut self.session, root, path, value)
+        match self.session.model.workspace.view_mut(root) {
+            Some(view) if view.annotations.at(path) != Some(&value) => {
+                view.annotations.set(path, Some(value));
+                true
+            }
+            _ => false,
+        }
     }
 
     pub(crate) fn edit_line(
@@ -279,13 +287,6 @@ impl Edit<'_> {
             return false;
         }
         edit_line(session, root, path, line, operation)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn grap(&mut self, root: Root, path: Path, function: Value, event: Value) -> bool {
-        let function =
-            grap::evaluate(&function, &self.session.sources(), grap::DEFAULT_FUEL).result;
-        self.grap_runtime(root, path, function, event)
     }
 
     pub(crate) fn grap_runtime(

@@ -38,22 +38,7 @@ pub(crate) fn write(
     }
 }
 
-pub(crate) fn annotate(
-    session: &mut Session<'_>,
-    root: &Root,
-    path: &[Step],
-    state: Value,
-) -> bool {
-    match session.model.workspace.view_mut(root) {
-        Some(view) if view.annotations.at(path) != Some(&state) => {
-            view.annotations.set(path, Some(state));
-            true
-        }
-        _ => false,
-    }
-}
-
-pub(crate) fn edit_line(
+fn edit_line(
     session: &mut Session<'_>,
     root: &Root,
     path: &[Step],

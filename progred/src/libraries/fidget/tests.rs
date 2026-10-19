@@ -13,7 +13,7 @@ fn evaluate(expression: &Value) -> Value {
     let library = library::<crate::Editor>();
     crate::libraries::test_evaluate(
         expression,
-        |cell| library.value(cell).cloned(),
+        |cell| library.definitions.value(cell).cloned(),
         &library.functions().merge(control::functions()),
         200,
     )
@@ -296,7 +296,7 @@ fn radial_shapes_are_grap_functions_returning_fidget_arithmetic() {
         (vocabulary::SPHERE, "sphere", 10.0),
     ] {
         assert!(library.functions().get(shape).is_none());
-        let definition = library.value(shape).unwrap();
+        let definition = library.definitions.value(shape).unwrap();
         assert_eq!(name::read(definition), Some(spelling));
         let definition = definition.as_record().unwrap();
         assert_eq!(

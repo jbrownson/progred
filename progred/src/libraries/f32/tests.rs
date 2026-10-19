@@ -108,15 +108,24 @@ fn operands_of_other_representations_decline() {
 fn library_names_are_ordinary_facts_for_random_identities() {
     let library = library::<crate::Editor>();
     assert_eq!(
-        library.value(vocabulary::SUM).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::SUM)
+            .and_then(name::read),
         Some("+")
     );
     assert_eq!(
-        library.value(vocabulary::EQUAL).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::EQUAL)
+            .and_then(name::read),
         Some("==")
     );
     assert_eq!(
-        library.value(vocabulary::LEFT_NOT_F32).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::LEFT_NOT_F32)
+            .and_then(name::read),
         Some("left is not f32")
     );
     assert_eq!(

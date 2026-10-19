@@ -498,12 +498,9 @@ fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
     });
     let root = editor.model.workspace.document_root().clone();
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
-    crate::editing::annotate(
-        &mut editor.session(),
-        &root,
-        &[],
-        Value::record([(camera, A.into())]),
-    );
+    crate::editing::Scope::default()
+        .open(editor.session())
+        .annotate(&root, &[], Value::record([(camera, A.into())]));
     let doc = editor.model.doc.clone();
     let control = slider_widget(
         Slider::new(0.0, 1.0, 0.2).unwrap(),
@@ -704,7 +701,9 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
         let root = crate::display::widget::view::Root::document();
         let evaluate = |doc: &gid::Document| {
             computations.begin(Rc::new(doc.clone()), libraries.clone());
-            let result = computations.evaluate(&root, &[], &expression, 1000);
+            let result = computations
+                .evaluate_runtime(&root, &[], &(&expression).into(), 1000, None)
+                .into_value();
             result
                 .as_record()
                 .unwrap()
@@ -883,15 +882,16 @@ fn radio_dispatch_updates_value_without_touching_playback_camera_or_document() {
     let root = editor.model.workspace.document_root().clone();
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
     let camera_value = Value::record([(A, f64::value(0.3))]);
-    crate::editing::annotate(
-        &mut editor.session(),
-        &root,
-        &[],
-        Value::record([
-            (camera, camera_value.clone()),
-            (STATE, Value::record([(A, f64::value(0.35))])),
-        ]),
-    );
+    crate::editing::Scope::default()
+        .open(editor.session())
+        .annotate(
+            &root,
+            &[],
+            Value::record([
+                (camera, camera_value.clone()),
+                (STATE, Value::record([(A, f64::value(0.35))])),
+            ]),
+        );
     let first = Value::record([(::grap::vocabulary::FFI, SLIDER.into())]);
     let second = Value::record([(::grap::vocabulary::FFI, RADIO.into())]);
     let control = radio_widget(
@@ -947,12 +947,9 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
     let original = editor.model.doc.clone();
     let root = editor.model.workspace.document_root().clone();
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
-    crate::editing::annotate(
-        &mut editor.session(),
-        &root,
-        &[],
-        Value::record([(camera, Value::record([]))]),
-    );
+    crate::editing::Scope::default()
+        .open(editor.session())
+        .annotate(&root, &[], Value::record([(camera, Value::record([]))]));
     let control = slider_widget_with(
         A,
         Slider::new(0.0, 1.0, 0.2).unwrap(),
@@ -1354,7 +1351,9 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
             Value::record([(A, old.clone()), (B, f64::value(0.35))]),
         ),
     ]);
-    crate::editing::annotate(&mut editor.session(), &root, &[], annotation);
+    crate::editing::Scope::default()
+        .open(editor.session())
+        .annotate(&root, &[], annotation);
     let selection = tree_range::Selection::new(&tree, Some(&old));
     let control = selection.widgets(A, 180.0, None).last().unwrap();
     let measured = with_context(&Output::default(), |context| control(context));
@@ -1425,18 +1424,19 @@ fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() 
                 ranges.clone()
             };
             let camera = crate::libraries::fidget::vocabulary::CAMERA;
-            crate::editing::annotate(
-                &mut editor.session(),
-                &root,
-                &[],
-                Value::record([
-                    (camera, Value::record([])),
-                    (
-                        STATE,
-                        Value::record([(A, old.clone()), (B, f64::value(0.35))]),
-                    ),
-                ]),
-            );
+            crate::editing::Scope::default()
+                .open(editor.session())
+                .annotate(
+                    &root,
+                    &[],
+                    Value::record([
+                        (camera, Value::record([])),
+                        (
+                            STATE,
+                            Value::record([(A, old.clone()), (B, f64::value(0.35))]),
+                        ),
+                    ]),
+                );
             let selection = tree_range::Selection::new(&tree, Some(&ranges));
             let widgets: Vec<_> = if cursor {
                 tree_range::cursor::<crate::Editor>(&tree, Some(&old), 0.0, A, 180.0, None).0
@@ -1510,7 +1510,9 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
                 .select(0, 1..2, None);
             let old = tree_range::cursor_state(&selection, position);
             let annotation = set_state(None, A, old.clone());
-            crate::editing::annotate(&mut editor.session(), &root, &[], annotation.clone());
+            crate::editing::Scope::default()
+                .open(editor.session())
+                .annotate(&root, &[], annotation.clone());
             let (widgets, before) =
                 tree_range::cursor::<crate::Editor>(&tree, Some(&old), 0.0, A, 180.0, None);
             let control = widgets.last().unwrap();

@@ -442,7 +442,7 @@ fn profile_viewport_uses_size_scale_and_camera_state() {
     let mut doc = fidget_example();
     let path = first_viewport(&doc);
     let cell = gid::new_cell_id();
-    let declaration = crate::spine::get(doc.root.as_ref().unwrap(), &path)
+    let declaration = crate::test_support::value_at(doc.root.as_ref().unwrap(), &path)
         .unwrap()
         .clone();
     doc.cells.set_value(cell, declaration);

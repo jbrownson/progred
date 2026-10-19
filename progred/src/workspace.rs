@@ -8,8 +8,6 @@ use crate::annotations::Annotations;
 use crate::display::widget::view::{Root, Target};
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
-#[cfg(test)]
-use std::rc::Rc;
 
 /// The root's workspace declarations, which this module interprets: its
 /// panes, on the left or the right, and its own libraries. The workspace and
@@ -490,11 +488,6 @@ impl Workspace {
                 .position(|pane| pane.view.root == *root)
                 .map(|index| (side, column, index))
         })
-    }
-
-    #[cfg(test)]
-    pub fn side(&self, root: &Root) -> Option<Side> {
-        self.pane(root).map(|(side, ..)| side)
     }
 
     pub fn can_move(&self, root: &Root, direction: Move) -> bool {

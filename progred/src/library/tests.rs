@@ -32,6 +32,15 @@ fn right_projection(_: &ProjectionInput<'_>) -> Option<Layout> {
     Some(text_layout("right"))
 }
 
+/// The libraries defining `cell` as a foreign function, in load order.
+fn foreign_sources(libraries: &Libraries, cell: CellId) -> Vec<CellId> {
+    libraries
+        .definitions(cell)
+        .filter(|(_, definition)| matches!(definition, Definition::Foreign(_)))
+        .map(|(library, _)| library)
+        .collect()
+}
+
 #[test]
 fn library_definitions_and_projections_compose_in_order() {
     let mut left_cells = Cells::new();
@@ -128,12 +137,7 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
             .collect::<Vec<_>>(),
         [&name]
     );
-    assert_eq!(
-        libraries
-            .foreign_sources(SHARED_FUNCTION)
-            .collect::<Vec<_>>(),
-        [LEFT_LIBRARY]
-    );
+    assert_eq!(foreign_sources(&libraries, SHARED_FUNCTION), [LEFT_LIBRARY]);
     assert_eq!(
         libraries
             .definitions(SHARED_FUNCTION)
@@ -332,17 +336,14 @@ fn libraries_are_an_ordered_unique_map_without_hashing() {
         Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);
     let replacement = Definitions::default();
 
-    assert!(libraries.get(LEFT_LIBRARY).is_some());
+    assert!(libraries.iter().any(|(id, _)| id == LEFT_LIBRARY));
     assert_eq!(
         libraries
             .first_value(LEFT_LIBRARY)
             .and_then(crate::libraries::name::read),
         Some("left")
     );
-    assert_eq!(
-        libraries.foreign_sources(SHARED_CELL).collect::<Vec<_>>(),
-        [LEFT_LIBRARY]
-    );
+    assert_eq!(foreign_sources(&libraries, SHARED_CELL), [LEFT_LIBRARY]);
     assert_eq!(
         libraries
             .definitions(SHARED_CELL)
@@ -350,9 +351,16 @@ fn libraries_are_an_ordered_unique_map_without_hashing() {
             .collect::<Vec<_>>(),
         [LEFT_LIBRARY, RIGHT_LIBRARY]
     );
-    assert!(libraries.insert(LEFT_LIBRARY, replacement).is_some());
+    libraries.insert(LEFT_LIBRARY, replacement);
     assert_eq!(
         libraries.iter().map(|(id, _)| id).collect::<Vec<_>>(),
         [LEFT_LIBRARY, RIGHT_LIBRARY]
+    );
+    assert_eq!(
+        libraries
+            .definitions(SHARED_CELL)
+            .map(|(library, _)| library)
+            .collect::<Vec<_>>(),
+        [RIGHT_LIBRARY]
     );
 }

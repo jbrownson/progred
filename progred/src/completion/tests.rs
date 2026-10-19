@@ -134,7 +134,8 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
         let panes = crate::workspace::declarations(document.root.as_ref());
         assert_eq!(panes.len(), 1);
         assert_eq!(panes[0].side, crate::workspace::Side::Left);
-        let pane = crate::spine::get(document.root.as_ref().unwrap(), &panes[0].path).unwrap();
+        let pane =
+            crate::test_support::value_at(document.root.as_ref().unwrap(), &panes[0].path).unwrap();
         assert_eq!(
             pane,
             &if field == fidget::vocabulary::FIDGET {

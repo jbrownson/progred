@@ -51,7 +51,9 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
         let data = grap::call(unrelated.into(), []);
         let run = |doc: &Document, data: &Value| {
             computations.begin(Rc::new(doc.clone()), libraries.clone());
-            computations.apply(&root, &[], &callable, &[(argument, data.clone())], 100)
+            computations
+                .apply_runtime(&root, &[], &callable, &[(argument, data.clone())], 100)
+                .into_value()
         };
         let first = run(&doc, &data);
         let values: Vec<_> = first.as_list().unwrap().values().collect();
@@ -118,7 +120,9 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     let expression = grap::call(function.into(), [(input, input.into())]);
     let run = |doc: &Document| {
         computations.begin(Rc::new(doc.clone()), libraries.clone());
-        computations.evaluate(&view, &[], &expression, 100)
+        computations
+            .evaluate_runtime(&view, &[], &(&expression).into(), 100, None)
+            .into_value()
     };
     let missing = run(&doc);
     assert_eq!(
@@ -140,16 +144,24 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     assert_eq!(runs.get(), 2);
     let other_expression = grap::call(function.into(), [(input, Value::record([]))]);
     assert_eq!(
-        computations.evaluate(&view, &[], &other_expression, 100),
+        computations
+            .evaluate_runtime(&view, &[], &(&other_expression).into(), 100, None)
+            .into_value(),
         Value::record([])
     );
     assert_eq!(runs.get(), 3);
     assert_eq!(
-        grap::absent::reason(&computations.evaluate(&view, &[], &other_expression, 0)),
+        grap::absent::reason(
+            &computations
+                .evaluate_runtime(&view, &[], &(&other_expression).into(), 0, None)
+                .into_value()
+        ),
         Some(grap::absent::FUEL_EXHAUSTED)
     );
     assert_eq!(
-        computations.evaluate(&view, &[], &other_expression, 100),
+        computations
+            .evaluate_runtime(&view, &[], &(&other_expression).into(), 100, None)
+            .into_value(),
         Value::record([])
     );
     assert_eq!(runs.get(), 4);

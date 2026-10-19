@@ -424,27 +424,40 @@ fn type_absences_are_library_values() {
 fn library_names_are_ordinary_facts_for_random_identities() {
     let library = library::<crate::Editor>();
     assert_eq!(
-        library.value(vocabulary::F64).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::F64)
+            .and_then(name::read),
         Some("f64")
     );
     assert_eq!(
-        library.value(vocabulary::SUM).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::SUM)
+            .and_then(name::read),
         Some("+")
     );
     assert_eq!(
-        library.value(vocabulary::PI).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::PI)
+            .and_then(name::read),
         Some("π")
     );
     assert_eq!(
-        library.value(vocabulary::PI).and_then(read),
+        library.definitions.value(vocabulary::PI).and_then(read),
         Some(std::f64::consts::PI)
     );
     assert_eq!(
-        library.value(vocabulary::LEFT_NOT_F64).and_then(name::read),
+        library
+            .definitions
+            .value(vocabulary::LEFT_NOT_F64)
+            .and_then(name::read),
         Some("left is not f64")
     );
     assert_eq!(
         library
+            .definitions
             .value(vocabulary::RIGHT_NOT_F64)
             .and_then(name::read),
         Some("right is not f64")
@@ -457,5 +470,5 @@ fn library_names_are_ordinary_facts_for_random_identities() {
         absent::reason(&absent::with_reason(vocabulary::RIGHT_NOT_F64)),
         Some(vocabulary::RIGHT_NOT_F64)
     );
-    assert!(library.value(vocabulary::SUM).is_some());
+    assert!(library.definitions.value(vocabulary::SUM).is_some());
 }

@@ -88,12 +88,6 @@ impl Computations {
         self.roots.get((view.clone(), path.to_vec()), create)
     }
 
-    #[cfg(test)]
-    pub fn evaluate(&self, view: &Root, path: &[Step], expression: &Value, fuel: usize) -> Value {
-        self.evaluate_runtime(view, path, &expression.into(), fuel, None)
-            .into_value()
-    }
-
     pub fn evaluate_runtime(
         &self,
         view: &Root,
@@ -111,19 +105,6 @@ impl Computations {
                 grap::evaluate_runtime_at(expression, origin.clone(), host, *fuel)
             },
         )
-    }
-
-    #[cfg(test)]
-    pub fn apply(
-        &self,
-        view: &Root,
-        path: &[Step],
-        function: &Value,
-        arguments: &[(gid::CellId, Value)],
-        fuel: usize,
-    ) -> Value {
-        self.apply_runtime(view, path, function, arguments, fuel)
-            .into_value()
     }
 
     pub fn apply_runtime(

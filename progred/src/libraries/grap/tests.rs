@@ -891,12 +891,14 @@ fn the_library_describes_grap_and_owns_evaluate() {
     let library = library::<crate::Editor>();
     assert_eq!(
         library
+            .definitions
             .value(::grap::vocabulary::FUNCTION)
             .and_then(name::read),
         Some("function")
     );
     assert_eq!(
         library
+            .definitions
             .value(::grap::absent::MISSING_CELL)
             .and_then(name::read),
         Some("missing cell")

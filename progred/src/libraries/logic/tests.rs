@@ -14,7 +14,7 @@ fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
         assert_eq!(read(&boolean), Some(expected));
         let evaluated = crate::libraries::test_evaluate(
             &boolean,
-            |id| library.value(id).cloned(),
+            |id| library.definitions.value(id).cloned(),
             &functions(),
             10,
         );
@@ -25,7 +25,7 @@ fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
             vocabulary::FALSE
         };
         assert_eq!(read(&cell.into()), None);
-        assert_eq!(read(library.value(cell).unwrap()), None);
+        assert_eq!(read(library.definitions.value(cell).unwrap()), None);
     }
     assert_eq!(
         read(&Value::record([(

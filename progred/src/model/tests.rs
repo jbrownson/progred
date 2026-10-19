@@ -1,5 +1,6 @@
 use super::*;
 use crate::annotations;
+use crate::library::Libraries;
 use crate::sources::Sources;
 use gid::{Cells, Value};
 use kurbo::Vec2;
@@ -275,7 +276,13 @@ fn undo_does_not_restore_scroll_projection_or_unrelated_annotations() {
         workspace::Projection::Raw
     );
     assert_eq!(
-        model.workspace.document.annotations.field(&[], state),
+        model
+            .workspace
+            .document
+            .annotations
+            .at(&[])
+            .and_then(Value::as_record)
+            .and_then(|fields| fields.get(&state)),
         Some(&Value::from(vec![5]))
     );
     assert_eq!(
