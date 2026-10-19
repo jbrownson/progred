@@ -19,6 +19,16 @@ empty.
 - **The control session.** `make check` now builds the `control` feature. Run
   `make control ARGS='--document examples/grap-demo.gid'`, then
   `tools/control screenshot` and a click.
+- **The 18–19 October cleanup's macOS-only code.** It was checked with
+  `--target aarch64-apple-darwin` but not run: `native_menu.rs`, whose
+  `Menu::new` takes the app's stack's projections and whose View menu's pane
+  commands carry their side or direction; the `ns_view` helper through which
+  `macos_window.rs` and `macos_surface.rs` read a window's AppKit view; and
+  app.rs's macOS branches: `App::new`'s menu and window cascade,
+  `create_window`, `activate`, `change_palette`, and theme changes. Open
+  several windows, open and move panes from the View menu, switch a library's
+  projection off and on from the Projections menu, and switch between Light,
+  Dark and Follow System Appearance.
 
 ## Later
 
