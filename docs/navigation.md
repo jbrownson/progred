@@ -3,8 +3,8 @@
 Projections declare selectable stops by occurrence path. While the
 chosen layout alternative is placed, the collector folds those stops into
 temporary line summaries. No coordinates, distances, or measured-height
-thresholds choose destinations. Selection paths, conjects, and editing
-capabilities are unchanged.
+thresholds choose arrow destinations; Tab's order (below) comes from painted
+rectangles. Selection paths, conjects, and editing capabilities are unchanged.
 
 ## Structure
 
@@ -118,10 +118,7 @@ The anonymous lambda's `λ` marker is clickable to name the function but is
 neither an arrow stop nor a tab stop; the whole lambda, parameter list, and
 body remain navigable.
 
-Revealing a destination uses its full painted rectangle, independently of its
-navigation position. A fully visible selection stays put; a clipped selection
-scrolls into view with a small landing margin. When it cannot fit, the top/left
-edge takes precedence. The margin is not itself a scroll trigger.
+Revealing a destination follows [selection and reveal](puri.md#selection-and-reveal).
 
 ## Layout interaction
 
@@ -139,13 +136,6 @@ to try. Collector tests in `navigation/logical/tests.rs` drive the collector
 through shapes mirroring the layout traversal; frame tests exercise the same
 policies through real projections and the navigation example document.
 
-The timing canary for navigation's frame cost:
-
-```sh
-./tools/sandbox-cargo test --release -p progred --lib \
-  --config 'env.FRAME_PROFILE_ITERATIONS="480"' \
-  cam_source_scroll_profile_loop -- --ignored --nocapture --test-threads=1
-```
-
-Earlier measurements and prototype notes are in
-[history](history/navigation-layout-2026-09.md).
+Navigation's frame cost shows in `make perf`'s `cam_source_scroll_profile_loop`
+canary; see [performance checks](performance.md). Earlier measurements and
+prototype notes are in [history](history/navigation-layout-2026-09.md).
