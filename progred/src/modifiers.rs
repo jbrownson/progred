@@ -18,15 +18,6 @@ pub(crate) fn primary_edit(command: CommandModifier, event: &PointerButtonEvent)
     puri::interact::is_primary_contact(event) && !command.pressed(&event.state.modifiers)
 }
 
-/// The keys of [`native`]'s modifier, for tests that press it.
-#[cfg(test)]
-pub(crate) fn command() -> Modifiers {
-    match native() {
-        CommandModifier::Meta => Modifiers::META,
-        CommandModifier::Control => Modifiers::CONTROL,
-    }
-}
-
 /// Whether `event` presses `key` with the `command` modifier held.
 pub(crate) fn chord(command: CommandModifier, event: &KeyboardEvent, key: &str) -> bool {
     event.state.is_down()

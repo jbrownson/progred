@@ -176,7 +176,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
                 .handler
                 .is_some_and(|handler| handler.dispatch_pointer_down_with(
                     &mut world,
-                    &press_at(Point::new(5.0, 5.0), crate::modifiers::command()),
+                    &press_at(Point::new(5.0, 5.0), crate::test_support::command()),
                     &mut crate::frame::DispatchContext::new(
                         Some(crate::test_root()),
                         Some(hover(vec![]))

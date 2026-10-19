@@ -54,7 +54,7 @@ fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
     // beside one of the others it has; a rawer view of it can add one.
     let before = driver.value(&[]);
     for (path, modifiers) in [
-        (vec![Step::Key(x)], crate::modifiers::command()),
+        (vec![Step::Key(x)], crate::test_support::command()),
         (vec![Step::Key(x), Step::Key(note)], Modifiers::empty()),
     ] {
         driver.select(&path);
@@ -74,7 +74,7 @@ fn enter_adds_no_field_within_a_number_unless_its_view_shows_a_record() {
         let mut driver = Driver::new(editor, Driver::VIEWPORT);
         driver.select(&[]);
         let modifiers = if command {
-            crate::modifiers::command()
+            crate::test_support::command()
         } else {
             Modifiers::empty()
         };

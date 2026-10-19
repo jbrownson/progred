@@ -127,7 +127,7 @@ fn cam_hover_compositor_pixels() {
     for hovered in [false, true, false] {
         runner.editor.pointer = hovered.then_some(point);
         runner.editor.modifiers = if hovered {
-            crate::modifiers::command()
+            crate::test_support::command()
         } else {
             Default::default()
         };

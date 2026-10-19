@@ -274,7 +274,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         let mut state = ui_events::pointer::PointerState::default();
         state.position.x = 5.0;
         state.position.y = 5.0;
-        state.modifiers = crate::modifiers::command();
+        state.modifiers = crate::test_support::command();
         let event = ui_events::pointer::PointerButtonEvent {
             button: Some(PointerButton::Primary),
             pointer: mouse(),
@@ -425,7 +425,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         0.0
     );
 
-    let modifiers = crate::modifiers::command();
+    let modifiers = crate::test_support::command();
     input.modifiers = modifiers;
     for event in [Event::HoverChanged, Event::ModifiersChanged(&modifiers)] {
         editor

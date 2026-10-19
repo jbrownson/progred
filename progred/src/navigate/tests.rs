@@ -82,7 +82,7 @@ fn command_a_selects_the_current_views_root() {
         ..stop(path, 0.0, 0.0, 100.0, 20.0)
     })
     .collect();
-    let event = key_down(Key::Character("a".into()), crate::modifiers::command());
+    let event = key_down(Key::Character("a".into()), crate::test_support::command());
     for (root, path) in [(&document, vec![]), (&pane, pane_path)] {
         let target = select_all(crate::modifiers::native(), &landmarks, root, &event)
             .expect("Select All reaches the view root");

@@ -330,6 +330,14 @@ pub(crate) fn positions(value: &Value) -> Vec<Position> {
     value.as_list().unwrap().keys().cloned().collect()
 }
 
+/// The keys of the platform's command modifier, for tests that press it.
+pub(crate) fn command() -> Modifiers {
+    match crate::modifiers::native() {
+        puri::keyboard::CommandModifier::Meta => Modifiers::META,
+        puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
+    }
+}
+
 /// `key` going down with `modifiers` held.
 pub(crate) fn key_down(key: impl Into<Key>, modifiers: Modifiers) -> KeyboardEvent {
     KeyboardEvent {

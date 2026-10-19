@@ -25,7 +25,7 @@ fn stop<'a>(
 
 /// Press `key` with the command key held; whether the editor took it.
 fn command(driver: &mut Driver, key: Key) -> bool {
-    driver.keystroke(key, crate::modifiers::command())
+    driver.keystroke(key, crate::test_support::command())
 }
 
 fn copy(driver: &mut Driver) -> bool {

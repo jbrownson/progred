@@ -224,7 +224,7 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
         let event = press_at(
             point,
             if picking {
-                crate::modifiers::command()
+                crate::test_support::command()
             } else {
                 ui_events::keyboard::Modifiers::empty()
             },
@@ -702,7 +702,7 @@ fn a_floater_keeps_its_view_when_it_covers_another_view() {
     assert!(root.as_ref() == Some(&owner));
     for modifiers in [
         ui_events::keyboard::Modifiers::empty(),
-        crate::modifiers::command(),
+        crate::test_support::command(),
     ] {
         let mut pointer = DispatchContext::new(root.clone(), Some(hit.clone()));
         let event = press_at(point, modifiers);
@@ -922,7 +922,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
             selected: false,
             tab_stop: false,
         }]);
-        let event = press_at(Point::new(5.0, 5.0), crate::modifiers::command());
+        let event = press_at(Point::new(5.0, 5.0), crate::test_support::command());
         assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(
             &mut editor,
             &event,

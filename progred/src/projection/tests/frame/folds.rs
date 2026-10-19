@@ -96,7 +96,7 @@ fn fold_keys_are_directional_and_stay_sparse() {
             &mut driver,
             &[],
             Key::Named(key),
-            crate::modifiers::command(),
+            crate::test_support::command(),
         );
         assert_eq!(crate::annotations::folded(folds.at(&[]), false), closed);
     }
@@ -108,7 +108,7 @@ fn fold_keys_are_directional_and_stay_sparse() {
         &mut driver,
         &leaf,
         Key::Named(NamedKey::ArrowUp),
-        crate::modifiers::command(),
+        crate::test_support::command(),
     );
     assert!(folds.at(&leaf).is_none());
 }

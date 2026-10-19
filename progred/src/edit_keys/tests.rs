@@ -104,7 +104,7 @@ fn typing_over_a_value_replaces_it_and_escape_brings_it_back() {
         driver.press(NamedKey::Enter);
     }
     assert_eq!(driver.value(&paths[1]), Value::record([]));
-    assert!(driver.keystroke(Key::Character("z".into()), crate::modifiers::command()));
+    assert!(driver.keystroke(Key::Character("z".into()), crate::test_support::command()));
     assert_eq!(
         driver.value(&paths[1]),
         Value::list([]),
@@ -192,7 +192,7 @@ fn enter_beside_text_in_a_list_adds_an_element_but_nothing_within_the_text() {
         ([Step::Element(position)], [Step::Element(text)]) if position > text
     ));
     // The text, drawn as one piece, takes nothing within it.
-    assert!(!enter(&mut driver, crate::modifiers::command()));
+    assert!(!enter(&mut driver, crate::test_support::command()));
     assert_eq!(driver.selection(), first);
 }
 
@@ -204,7 +204,7 @@ fn pasting_a_copied_value_over_a_number_or_text_replaces_it() {
         text::value("hello"),
     ]));
     let chord = |driver: &mut Driver, key: &str| {
-        driver.keystroke(Key::Character(key.into()), crate::modifiers::command())
+        driver.keystroke(Key::Character(key.into()), crate::test_support::command())
     };
     driver.select(&driver.element(&[], 0, &[]));
     assert!(chord(&mut driver, "c"));

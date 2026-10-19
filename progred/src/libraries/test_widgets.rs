@@ -208,7 +208,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
     let mut world = pending_root();
     output.handler?.dispatch_pointer_down_with(
         &mut world,
-        &press_at(Point::ZERO, crate::modifiers::command()),
+        &press_at(Point::ZERO, crate::test_support::command()),
         &mut widget::frame::DispatchContext::new(None, Some(hover(vec![]))),
     );
     world.model.doc.root.clone()

@@ -104,7 +104,7 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 &press_at(
                     point,
                     if pick {
-                        crate::modifiers::command()
+                        crate::test_support::command()
                     } else {
                         Modifiers::empty()
                     },

@@ -1171,7 +1171,7 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
         Step::Key(PARAMS),
     ];
     driver.select(&params);
-    assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::modifiers::command()));
+    assert!(driver.keystroke(Key::Named(NamedKey::Enter), crate::test_support::command()));
     driver.type_text("x");
     let entries = driver
         .picker_entries()

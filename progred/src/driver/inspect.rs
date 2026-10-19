@@ -145,19 +145,19 @@ impl<P> Driver<P> {
             .editor
             .text_clipboard
             .copy(value.to_string(), Some(value));
-        self.keystroke(Key::Character("v".into()), crate::modifiers::command())
+        self.keystroke(Key::Character("v".into()), crate::test_support::command())
     }
 
     /// The command key's Z; whether there was anything to undo.
     pub(crate) fn undo(&mut self) -> bool {
-        self.keystroke(Key::Character("z".into()), crate::modifiers::command())
+        self.keystroke(Key::Character("z".into()), crate::test_support::command())
     }
 
     /// The command key's Shift-Z; whether there was anything to redo.
     pub(crate) fn redo(&mut self) -> bool {
         self.keystroke(
             Key::Character("z".into()),
-            crate::modifiers::command() | Modifiers::SHIFT,
+            crate::test_support::command() | Modifiers::SHIFT,
         )
     }
 

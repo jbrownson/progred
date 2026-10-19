@@ -1117,7 +1117,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         ))),
     );
     // No visible source: Cmd-click still belongs to the source link and must not move the range.
-    let mut event = press_at(point, crate::modifiers::command());
+    let mut event = press_at(point, crate::test_support::command());
     let handler = frame.handler.unwrap();
     assert!(handler.dispatch_pointer_down_with(&mut editor, &event, &mut input));
     assert!(

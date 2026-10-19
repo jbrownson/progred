@@ -52,7 +52,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
             &press_at(
                 Point::new(x, 5.0),
                 if pick {
-                    crate::modifiers::command()
+                    crate::test_support::command()
                 } else {
                     Modifiers::empty()
                 },
@@ -140,7 +140,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         );
         assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
-            &press_at(Point::new(5.0, 5.0), crate::modifiers::command()),
+            &press_at(Point::new(5.0, 5.0), crate::test_support::command()),
             &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hover(vec![]))),
         ));
         assert_eq!(raw_contacts.get(), usize::from(raw));

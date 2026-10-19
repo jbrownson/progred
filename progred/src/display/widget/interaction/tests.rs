@@ -33,7 +33,7 @@ fn presses_use_settled_hover_not_a_second_hit_test() {
         // Holding the frame's command key is what makes a press pick.
         let mut event = press_at(Point::new(25.0, 5.0), Modifiers::empty());
         if picking {
-            event.state.modifiers = crate::modifiers::command();
+            event.state.modifiers = crate::test_support::command();
         }
         for (hovered, expected) in [(None, false), (Some(8), false), (Some(7), true)] {
             assert_eq!(

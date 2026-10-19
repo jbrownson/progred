@@ -470,7 +470,7 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
             .is_none()
     );
     assert!(!driver.paste(&Value::record([])));
-    assert!(driver.keystroke(Key::Character("c".into()), crate::modifiers::command()));
+    assert!(driver.keystroke(Key::Character("c".into()), crate::test_support::command()));
     assert_eq!(driver.copied(), Some(expected));
     click_heading(&mut driver, &e);
     assert!(!driver.drawn(&result_body));

@@ -376,7 +376,7 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
     assert_eq!(driver.stage(), Some(Stage::Edge));
     assert!(driver.picker_entries().is_none());
     assert!(
-        driver.keystroke(Key::Character("z".into()), crate::modifiers::command()),
+        driver.keystroke(Key::Character("z".into()), crate::test_support::command()),
         "one undo for the whole drag"
     );
     assert_eq!(driver.editor().model.doc.root, Some(root));

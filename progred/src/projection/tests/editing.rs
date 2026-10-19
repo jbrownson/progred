@@ -226,7 +226,7 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
         assert!(if ime {
             driver.ime(ImeEvent::Commit(" world".into()))
         } else {
-            driver.keystroke(Key::Character("v".into()), crate::modifiers::command())
+            driver.keystroke(Key::Character("v".into()), crate::test_support::command())
         });
         assert_eq!(driver.line(), Some("hello world"));
     }
@@ -505,7 +505,7 @@ fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
         );
     }
     // The whole run of edits is one undo step.
-    assert!(driver.keystroke(Key::Character("z".into()), crate::modifiers::command()));
+    assert!(driver.keystroke(Key::Character("z".into()), crate::test_support::command()));
     assert_eq!(
         driver.editor().model.doc.cells.value(cell),
         Some(&Value::from(bytes))

@@ -165,7 +165,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
     );
 
     let key = KeyboardEvent {
-        modifiers: crate::modifiers::command(),
+        modifiers: crate::test_support::command(),
         ..Default::default()
     };
     assert!(handler.dispatch_key(&mut events, &key));
