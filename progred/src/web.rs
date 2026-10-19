@@ -213,7 +213,6 @@ pub fn start_editor(
     command_is_meta: bool,
     theme: Option<String>,
 ) -> Result<(), wasm_bindgen::JsValue> {
-    console_error_panic_hook::set_once();
     let (doc, binders) = gid_text::parse(source.as_deref().unwrap_or("{}"))
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
     let mut stack = web_embed::libraries(libraries.as_deref())

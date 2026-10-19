@@ -2,7 +2,9 @@ use puri::keyboard::CommandModifier;
 use ui_events::keyboard::{Key, KeyboardEvent, Modifiers};
 use ui_events::pointer::PointerButtonEvent;
 
-/// The platform's primary application-command modifier.
+/// The platform's primary application-command modifier. A browser page
+/// says which its platform uses; only the orbit profile asks there.
+#[cfg(any(not(target_arch = "wasm32"), feature = "cam-profile"))]
 pub(crate) fn native() -> CommandModifier {
     if cfg!(target_os = "macos") {
         CommandModifier::Meta

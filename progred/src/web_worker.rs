@@ -19,7 +19,8 @@ pub fn worker_threads() -> usize {
     rayon::current_num_threads()
 }
 
-pub fn initialize() {
+/// Report panics on the browser's console, in the page and each worker.
+pub fn install_panic_hook() {
     console_error_panic_hook::set_once();
 }
 

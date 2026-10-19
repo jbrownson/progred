@@ -45,6 +45,7 @@ mod navigate;
 pub mod orbit_profile;
 #[cfg(test)]
 mod perf;
+#[cfg(not(target_arch = "wasm32"))]
 mod platform;
 mod projection;
 #[cfg(test)]
@@ -64,6 +65,7 @@ mod test_examples;
 mod test_support;
 #[cfg(test)]
 mod test_values;
+#[cfg(not(target_arch = "wasm32"))]
 mod text_store;
 mod timers;
 #[cfg(test)]
@@ -168,14 +170,11 @@ pub(crate) fn text_dialog() -> rfd::FileDialog {
     rfd::FileDialog::new().add_filter("GID", &["gid"])
 }
 
+/// Opens the document the command line names, or an untitled one, in the
+/// desktop app. The browser starts its editor through `web::start_editor`.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn run() {
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
-
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let doc_path = std::env::args().nth(1).map(PathBuf::from).map(canonical);
-    #[cfg(target_arch = "wasm32")]
-    let doc_path: Option<PathBuf> = None;
     // A given-but-missing path is a new document there; no path is
     // untitled until the first save asks. A file that exists but does
     // not parse is refused, so no save replaces it.
@@ -186,11 +185,7 @@ pub fn run() {
         }),
         _ => (gid::Document::default(), gid_text::Binders::new()),
     };
-
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let drawn_menu = platform::DRAWN_MENU || std::env::var_os("PROGRED_DRAWN_MENU").is_some();
-    #[cfg(target_arch = "wasm32")]
-    let drawn_menu = platform::DRAWN_MENU;
     run_document(
         doc,
         binders,
@@ -199,8 +194,6 @@ pub fn run() {
         stack::load(),
         modifiers::native(),
         display::widget::style::Theme::Light.palette(),
-        #[cfg(target_arch = "wasm32")]
-        None,
     );
 }
 

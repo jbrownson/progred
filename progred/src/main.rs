@@ -4,5 +4,5 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     progred::run();
     #[cfg(target_arch = "wasm32")]
-    progred::web_worker::initialize();
+    progred::web_worker::install_panic_hook();
 }
