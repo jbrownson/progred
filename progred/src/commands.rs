@@ -29,8 +29,7 @@ impl Editor {
                 .as_ref()
                 .map(|selection| selection.scope().clone())
                 .unwrap_or_default();
-            self.model.selection = None;
-            scope.open(self.session()).select(root, &path);
+            self.model.selection = Some(selection::Selection::edge(root, path).with_scope(scope));
         }
     }
 
@@ -80,9 +79,8 @@ impl Editor {
                         self.model.history.record(before);
                         self.refresh_title();
                     }
-                    let mut hole = selection::pending_value(&root, path);
-                    hole.set_scope(scope);
-                    self.model.selection = Some(hole);
+                    self.model.selection =
+                        Some(selection::pending_value(&root, path).with_scope(scope));
                     geometry.reveal_selection(&mut self.model);
                     true
                 }
@@ -197,8 +195,7 @@ impl Editor {
             return true;
         }
         if scope.open(self.session()).replace(&path, value) {
-            self.model.selection = None;
-            scope.open(self.session()).select(&root, &path);
+            self.model.selection = Some(selection::Selection::edge(&root, path).with_scope(scope));
             true
         } else {
             false
@@ -365,9 +362,9 @@ impl Editor {
             return false;
         }
         let path = current.path().to_vec();
-        let mut replacing = selection::pending_with_query(current.root(), path.clone(), typed)
-            .with_origin(Some(path));
-        replacing.set_scope(current.scope().clone());
+        let replacing = selection::pending_with_query(current.root(), path.clone(), typed)
+            .with_origin(Some(path))
+            .with_scope(current.scope().clone());
         self.model.selection = Some(replacing);
         geometry.reveal_selection(&mut self.model);
         true

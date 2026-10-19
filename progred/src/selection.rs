@@ -121,8 +121,9 @@ impl Selection {
         &self.scope
     }
 
-    pub(crate) fn set_scope(&mut self, scope: Scope) {
+    pub(crate) fn with_scope(mut self, scope: Scope) -> Self {
         self.scope = scope;
+        self
     }
 
     pub(crate) fn origin(&self) -> Option<&[Step]> {

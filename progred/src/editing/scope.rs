@@ -203,21 +203,36 @@ impl Edit<'_> {
         true
     }
 
+    /// Selects the value at `path` in `root`'s view. Selecting what is
+    /// selected already, at the same location, keeps it and moves its line's
+    /// caret to the end; anything else, a label being authored included,
+    /// starts afresh.
     pub(crate) fn select(&mut self, root: &Root, path: &[Step]) {
-        let session = &mut self.session;
-        if session.model.selection.as_ref().is_some_and(|selection| {
-            selection.root() == root
-                && selection.path() == path
-                && !selection
-                    .scope()
-                    .same_location(self.scope, &session.sources(), path)
-        }) {
-            session.model.selection = None;
-        }
-        select(session, root, path);
-        if let Some(selection) = &mut session.model.selection {
-            selection.set_scope(self.scope.clone());
-        }
+        let sources = self.session.sources();
+        let reselected = self
+            .session
+            .model
+            .selection
+            .as_ref()
+            .is_some_and(|current| {
+                current.root() == root
+                    && current.path() == path
+                    && current.stage(&sources) != selection::Stage::Label
+                    && current.scope().same_location(self.scope, &sources, path)
+            });
+        let current = self.session.model.selection.take().filter(|_| reselected);
+        self.session.model.selection = Some(
+            match current {
+                Some(mut current) => {
+                    if let Some(line) = current.edit_mut() {
+                        line.cursor_to_end();
+                    }
+                    current
+                }
+                None => selection::Selection::edge(root, path.to_vec()),
+            }
+            .with_scope(self.scope.clone()),
+        );
     }
 
     pub(crate) fn select_payload(&mut self, root: &Root, path: Path, payload: Value) {
@@ -246,9 +261,8 @@ impl Edit<'_> {
 
     /// Leaves the value at `path` pending, for the picker to fill.
     pub(crate) fn pend(&mut self, root: &Root, path: Path) {
-        let mut pending = selection::pending_value(root, path);
-        pending.set_scope(self.scope.clone());
-        self.session.model.selection = Some(pending);
+        self.session.model.selection =
+            Some(selection::pending_value(root, path).with_scope(self.scope.clone()));
     }
 
     pub(crate) fn annotate(&mut self, root: &Root, path: &[Step], value: Value) -> bool {

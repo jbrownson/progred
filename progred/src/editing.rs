@@ -16,24 +16,6 @@ pub(crate) use scope::{Edit, Scope};
 pub(crate) use session::{Session, TextTools};
 pub(crate) use site::{Selected, Site};
 
-pub(crate) fn select(session: &mut Session<'_>, root: &Root, path: &[Step]) {
-    let fresh = session.model.selection.as_ref().is_none_or(|current| {
-        current.root() != root
-            || current.stage(&session.sources()) == selection::Stage::Label
-            || current.path() != path
-    });
-    if fresh {
-        session.model.selection = Some(selection::Selection::edge(root, path.to_vec()));
-    } else if let Some(line) = session
-        .model
-        .selection
-        .as_mut()
-        .and_then(selection::Selection::edit_mut)
-    {
-        line.cursor_to_end();
-    }
-}
-
 pub(crate) fn annotate(
     session: &mut Session<'_>,
     root: &Root,
