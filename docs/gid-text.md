@@ -3,10 +3,10 @@
 GID is the native data model and, eventually, its own binary storage
 stack. This document specifies a temporary textual import/export
 notation, close to Raw's, for hand authoring, LLM authoring, Git, and
-other text-based tools while projectional authoring matures. It does not define GID semantics and is not an
-intermediate representation from which the native binary format will be
-compiled. Binders, textual layout, and parser leniencies exist only at
-this bridge.
+other text-based tools while projectional authoring matures. It does not
+define GID semantics and is not an intermediate representation from which
+the native binary format will be compiled. Binders, textual layout, and
+parser leniencies exist only at this bridge.
 
 No version field, migration branch, or compatibility reader exists, and
 none should be added, while these text fixtures remain internal to the
