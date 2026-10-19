@@ -797,7 +797,7 @@ impl Editor {
         }
     }
 
-    pub(crate) fn adopt_doc_path(&mut self, path: PathBuf) {
+    fn adopt_doc_path(&mut self, path: PathBuf) {
         // An in-place save keeps its frame claim; only a new document
         // identity renames it.
         #[cfg(target_os = "macos")]
