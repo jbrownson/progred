@@ -69,12 +69,8 @@ chamfer strokes emit from `iterate`, without first constructing an unfold list.
 This preserves the existing generated-position limitation: regeneration assigns
 positions by emission order, not by persistent identity of loop iterations.
 
-The migration's release-build comparison on 2026-09-18 checked the complete
-hierarchy and all 6,588 tool segments against the previous example. Uncached
-construction measured roughly 7 ms before and 9 ms with source-linked emission
-(three runs each). This is a provenance/composition change, not a speedup.
-Tests separately verify that resize reuses both the exact collected tree and the
-downstream path recording. The real CAM controls rebuilt in about 0.23–0.26 ms
-after that collection, including source-link decorations (release build, three
-pane widths; not a whole-frame timing). `profile_program_tree_construction` remains an ignored
-manual benchmark for construction and reuse.
+Tests verify that resize reuses both the exact collected tree and the
+downstream path recording, and `profile_program_tree_construction` is an
+ignored manual benchmark for construction and reuse. The migration's
+measurements are in
+[history](history/performance-log-2026-09.md#source-linked-cam-tree-emission--2026-09-18).

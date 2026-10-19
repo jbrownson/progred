@@ -57,6 +57,17 @@ and camera-sized implicit images still have their normal resize costs.
 ./tools/sandbox-cargo test --release -p progred --lib cam_resize_retains -- --nocapture
 ```
 
+## Source-linked CAM tree emission — 2026-09-18
+
+The CAM example builds its hierarchy by scoped emission, as [trees](../trees.md)
+describes; this note moved here from there on 2026-10-19. The migration's
+release-build comparison on 2026-09-18 checked the complete hierarchy and all
+6,588 tool segments against the previous example. Uncached construction measured
+roughly 7 ms before and 9 ms with source-linked emission (three runs each). This
+is a provenance/composition change, not a speedup. The real CAM controls rebuilt
+in about 0.23–0.26 ms after that collection, including source-link decorations
+(release build, three pane widths; not a whole-frame timing).
+
 ## Uncached CAM program construction — 2026-09-17
 
 The 504-leaf, five-level toolpath example exposed repeated expansion of shared
