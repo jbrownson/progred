@@ -19,7 +19,6 @@ fn read_only_line_needs_no_selection_or_editing_capabilities() {
                 &mut context,
                 LineEdit {
                     text: "read only".into(),
-                    placeholder: None,
                     update: Rc::new(|_, _| panic!("read-only line cannot write")),
                     prefix: String::new(),
                     suffix: String::new(),

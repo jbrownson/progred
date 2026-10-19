@@ -195,12 +195,13 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         let original = input.value?;
         let number = (self.read)(original)?;
         let encode = self.encode;
-        let digits = line_edit::layout(
-            number.to_string(),
-            line_edit::native(move |spelling, current| edit(spelling, current, encode)),
-            "",
-            "",
-        );
+        let digits = crate::display::line_edit(crate::display::LineEdit {
+            text: number.to_string(),
+            update: line_edit::native(move |spelling, current| edit(spelling, current, encode)),
+            prefix: String::new(),
+            suffix: String::new(),
+            family: crate::display::TextFamily::SystemUi,
+        });
         let line = tagged(input, digits, self.tag);
         let site = input.site();
         let line = activatable(line, &site);

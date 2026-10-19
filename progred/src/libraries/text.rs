@@ -57,14 +57,13 @@ pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
 }
 
 fn editor_for_text(text: &str) -> crate::display::LineEdit {
-    line_edit::description(
-        text,
-        None::<String>,
-        line_edit::native(edit),
-        "\"",
-        "\"",
-        crate::display::TextFamily::SystemUi,
-    )
+    crate::display::LineEdit {
+        text: text.into(),
+        update: line_edit::native(edit),
+        prefix: "\"".into(),
+        suffix: "\"".into(),
+        family: crate::display::TextFamily::SystemUi,
+    }
 }
 
 pub fn library<W: Host>() -> Library<W> {

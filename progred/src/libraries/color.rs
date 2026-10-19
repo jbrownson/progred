@@ -401,14 +401,13 @@ pub fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<
 }
 
 fn hex_editor(color: Encoded) -> crate::display::LineEdit {
-    line_edit::description(
-        spelling(color),
-        None::<String>,
-        line_edit::native(edit),
-        "#",
-        "",
-        TextFamily::Monospace,
-    )
+    crate::display::LineEdit {
+        text: spelling(color),
+        update: line_edit::native(edit),
+        prefix: "#".into(),
+        suffix: String::new(),
+        family: TextFamily::Monospace,
+    }
 }
 
 pub fn library<W: Host>() -> Library<W> {

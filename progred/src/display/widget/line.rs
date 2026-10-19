@@ -10,7 +10,6 @@ use kurbo::Point;
 use measured::Measured;
 use puri::edit::LineEditDescription;
 use puri::handler::{HasHandler, NavigationDirection};
-use puri::text::TextStyle;
 use std::rc::Rc;
 use uig::Placement;
 
@@ -18,7 +17,6 @@ use uig::Placement;
 #[derive(Clone)]
 pub struct LineEdit {
     pub text: String,
-    pub placeholder: Option<String>,
     pub update: LineUpdate,
     pub prefix: String,
     pub suffix: String,
@@ -51,11 +49,6 @@ pub fn view<W: Host>(
     let editing = active.and_then(|selection| selection.edit().or(default.as_ref()));
     let site = context.site();
     let path: Rc<[gid::Step]> = Rc::from(path);
-    let style = context.toolkit.styles().line_style(&line);
-    let placeholder_style = TextStyle {
-        family: style.family,
-        ..context.toolkit.styles().dim.clone()
-    };
     let content = match editing {
         Some(state) => {
             let widget = puri::edit::text_edit(
@@ -64,10 +57,7 @@ pub fn view<W: Host>(
                     focused: toolkit.focused(),
                     presentation: context.toolkit.styles().line_presentation(&line),
                     style: &context.toolkit.styles().edit,
-                    placeholder: line
-                        .placeholder
-                        .as_deref()
-                        .map(|text| (text, &placeholder_style)),
+                    placeholder: None,
                 },
                 context.text,
             );
@@ -80,20 +70,10 @@ pub fn view<W: Host>(
             })
         }
         None => {
-            let placeholder = line.placeholder.as_deref().filter(|_| line.text.is_empty());
             let text = puri::text::text(
                 context.text,
-                &format!(
-                    "{}{}{}",
-                    line.prefix,
-                    placeholder.unwrap_or(&line.text),
-                    line.suffix
-                ),
-                if placeholder.is_some() {
-                    &placeholder_style
-                } else {
-                    &style
-                },
+                &format!("{}{}{}", line.prefix, line.text, line.suffix),
+                &context.toolkit.styles().line_style(&line),
             );
             leaf(extent(text.metrics()), move |output, placement| {
                 output.render(move |canvas, _| text.place(canvas, placement));

@@ -43,7 +43,6 @@ fn fixture(value: Value) -> (crate::Editor, Root, Path, Path, Scope) {
 fn line(spelling: &str) -> crate::display::LineEdit {
     crate::display::LineEdit {
         text: spelling.into(),
-        placeholder: None,
         update: line_edit::native(text::edit),
         prefix: String::new(),
         suffix: String::new(),

@@ -6,9 +6,9 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
     fn projection(marker: CellId) -> Projection<EditingWorld> {
         Projection::new([crate::display::partial(move |input| {
             let spelling = text::read(input.value?)?;
-            Some(crate::libraries::line_edit::layout(
-                spelling,
-                crate::libraries::line_edit::native(move |spelling, _| {
+            Some(crate::display::line_edit(crate::display::LineEdit {
+                text: spelling.into(),
+                update: crate::libraries::line_edit::native(move |spelling, _| {
                     Some(Value::record([
                         (
                             text::vocabulary::UTF8,
@@ -17,9 +17,10 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
                         (marker, Value::record([])),
                     ]))
                 }),
-                "",
-                "",
-            ))
+                prefix: String::new(),
+                suffix: String::new(),
+                family: Default::default(),
+            }))
         })])
     }
     let first = new_cell_id();
@@ -68,18 +69,19 @@ fn caret_motion_does_not_run_a_line_conversion() {
     let projection = Projection::new([crate::display::partial({
         let calls = calls.clone();
         move |input| {
-            Some(crate::libraries::line_edit::layout(
-                text::read(input.value?)?,
-                crate::libraries::line_edit::native({
+            Some(crate::display::line_edit(crate::display::LineEdit {
+                text: text::read(input.value?)?.into(),
+                update: crate::libraries::line_edit::native({
                     let calls = calls.clone();
                     move |spelling, current| {
                         calls.set(calls.get() + 1);
                         text::edit(spelling, current)
                     }
                 }),
-                "",
-                "",
-            ))
+                prefix: String::new(),
+                suffix: String::new(),
+                family: Default::default(),
+            }))
         }
     })]);
     let libraries = core_libraries();

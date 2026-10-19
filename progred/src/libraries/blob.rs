@@ -12,13 +12,13 @@ pub fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
 }
 
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    Some(line_edit::layout_with_family(
-        gid::hex_string(input.value?.as_blob()?),
-        line_edit::native(edit),
-        "0x",
-        "",
-        TextFamily::Monospace,
-    ))
+    Some(crate::display::line_edit(crate::display::LineEdit {
+        text: gid::hex_string(input.value?.as_blob()?),
+        update: line_edit::native(edit),
+        prefix: "0x".into(),
+        suffix: String::new(),
+        family: TextFamily::Monospace,
+    }))
 }
 
 pub fn library<W: Host>() -> Library<W> {

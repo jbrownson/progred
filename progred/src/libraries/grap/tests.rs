@@ -942,7 +942,6 @@ fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
     assert!(projection(&projection_input(&env(), value).with_value(Some(&value.into()))).is_some());
     let line = name::editor(value).unwrap();
     assert_eq!(line.text, "");
-    assert_eq!(line.placeholder, None);
     assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
 }
 
