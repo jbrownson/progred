@@ -4,9 +4,6 @@
 use crate::display::widget::gesture::Gesture;
 use crate::display::widget::view::Root;
 use crate::editing::Session;
-use crate::library::Libraries;
-use crate::location::Location;
-use crate::model::Model;
 use crate::selection::{self, Selection};
 use crate::sources::Sources;
 use gid::{Path, Value};
@@ -64,16 +61,9 @@ impl EditRun {
     }
 
     pub(crate) fn write(&mut self, session: &mut Session<'_>, value: Value) -> bool {
-        let Some(source) = self.scope.location(&self.path) else {
-            return false;
-        };
-        write_value(
-            session.model,
-            session.libraries,
-            &source,
-            value,
-            &mut self.recorded,
-        )
+        self.scope.location(&self.path).is_some_and(|location| {
+            crate::editing::write(session, &location, value, &mut self.recorded)
+        })
     }
 
     pub(crate) fn selection(&self, session: &mut Session<'_>, payload: Value) {
@@ -98,32 +88,6 @@ impl EditRun {
             next.set_recorded(recorded);
             model.selection = Some(next);
         }
-    }
-}
-
-fn write_value(
-    model: &mut Model,
-    libraries: &Libraries,
-    location: &Location,
-    replacement: Value,
-    recorded: &mut bool,
-) -> bool {
-    if (Sources {
-        doc: &model.doc,
-        libraries,
-    })
-    .read(location)
-        == Some(&replacement)
-    {
-        false
-    } else {
-        let before = (!*recorded).then(|| model.snapshot());
-        let wrote = crate::location::set_value(&mut model.doc, libraries, location, replacement);
-        if wrote && let Some(before) = before {
-            model.history.record(before);
-            *recorded = true;
-        }
-        wrote
     }
 }
 

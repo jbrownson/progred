@@ -187,20 +187,13 @@ impl Edit<'_> {
             .at(path)
     }
 
+    /// Writes `value` at `path` as an undo step of its own; true, writing
+    /// nothing, where it's there already.
     pub(crate) fn replace(&mut self, path: &[Step], value: Value) -> bool {
-        let session = &mut self.session;
-        let Some(source) = self.scope.location(path) else {
-            return false;
-        };
-        if self.scope.view(session.sources()).resolve_path(path) == Some(&value) {
-            return true;
-        }
-        let before = session.model.snapshot();
-        if !crate::location::set_value(&mut session.model.doc, session.libraries, &source, value) {
-            return false;
-        }
-        session.model.history.record(before);
-        true
+        self.scope.location(path).is_some_and(|location| {
+            self.session.sources().read(&location) == Some(&value)
+                || write(&mut self.session, &location, value, &mut false)
+        })
     }
 
     /// Selects the value at `path` in `root`'s view. Selecting what is
