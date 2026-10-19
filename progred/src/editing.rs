@@ -17,24 +17,15 @@ pub(crate) use scope::{Edit, Scope};
 pub(crate) use session::{Session, TextTools};
 pub(crate) use site::{Selected, Site};
 
-/// Writes `value` at `location`, unless it's there already, as the next
-/// write of an edit run, whose undo step `recorded` says it has recorded:
-/// the run's first write records it. Whether the document changed.
-pub(crate) fn write(
-    session: &mut Session<'_>,
-    location: &Location,
-    value: Value,
-    recorded: &mut bool,
-) -> bool {
-    session.sources().read(location) != Some(&value) && {
-        let before = (!*recorded).then(|| session.model.snapshot());
-        let wrote =
-            crate::location::set_value(&mut session.model.doc, session.libraries, location, value);
-        if wrote && let Some(before) = before {
-            session.model.history.record(before);
-            *recorded = true;
-        }
-        wrote
+/// Writes `value` at `location` as an undo step of its own; whether the
+/// document changed.
+pub(crate) fn write(session: &mut Session<'_>, location: &Location, value: Value) -> bool {
+    let before = session.model.snapshot();
+    if crate::location::set_value(&mut session.model.doc, session.libraries, location, value) {
+        session.model.history.record(before);
+        true
+    } else {
+        false
     }
 }
 

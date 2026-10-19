@@ -50,9 +50,24 @@ impl EditRun {
         }
     }
 
+    /// Writes `value` here, unless it's there already: the run's first
+    /// write records its undo step, and the rest join it. Whether the
+    /// document changed.
     pub(crate) fn write(&mut self, session: &mut Session<'_>, value: Value) -> bool {
         self.site.location().is_some_and(|location| {
-            crate::editing::write(session, &location, value, &mut self.recorded)
+            if session.sources().read(&location) == Some(&value) {
+                false
+            } else if self.recorded {
+                crate::location::set_value(
+                    &mut session.model.doc,
+                    session.libraries,
+                    &location,
+                    value,
+                )
+            } else {
+                self.recorded = crate::editing::write(session, &location, value);
+                self.recorded
+            }
         })
     }
 

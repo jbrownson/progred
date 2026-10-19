@@ -182,7 +182,7 @@ impl Edit<'_> {
     pub(crate) fn replace(&mut self, path: &[Step], value: Value) -> bool {
         self.scope.location(path).is_some_and(|location| {
             self.session.sources().read(&location) == Some(&value)
-                || write(&mut self.session, &location, value, &mut false)
+                || write(&mut self.session, &location, value)
         })
     }
 
