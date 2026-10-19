@@ -4,8 +4,9 @@
 platform's Cargo wrapper (see [build security](build-security.md)), except the
 vendored Fidget packages'. Those are upstream's tests of code we rarely change;
 `make test-vendor` runs them, optimized, after a patch changes or Fidget is
-upgraded. Only progred's library has tests, so it compiles once, as its test
-harness; `make check` compiles the binaries and examples. Development builds
+upgraded. Of progred's targets only the library has tests (its binaries set
+`test = false`), so it compiles once, as its test harness; `make check`
+compiles the binaries and examples. Development builds
 optimize every crate except progred, which stays quick to rebuild, so tests
 spend little time in Fidget, Vello, text shaping, Grap, or Puri; once built,
 `make test` takes about 40 s on a 4-core Linux VM. Progred's tests lay out text
@@ -15,8 +16,8 @@ usual arguments through `./tools/sandbox-cargo test` on macOS or
 `./tools/linux-cargo test` on Linux, for example
 `./tools/linux-cargo test -p progred --lib tutorials`, and leave `make test` for
 before pushing. Each feature set and profile keeps its own build of progred, and
-the builds pile up. On 17 October 2026 they filled a cloud session's disk with
-16 GB. `./tools/linux-cargo clean -p progred` removes them and leaves the
+the builds pile up; they can fill a small disk (16 GB on one cloud session).
+`./tools/linux-cargo clean -p progred` removes them and leaves the
 optimized dependencies in place. Nothing here needs a window; the owner does the
 visual testing.
 
@@ -143,9 +144,11 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
   provides no GPU, so [`tools/test_binaries.py`](../tools/test_binaries.py)
   builds the tests through the wrapper and runs the executables outside it; it
   takes `cargo test` arguments, then test arguments after `--`. On Linux
-  without a GPU, Mesa's lavapipe driver works. The readback helpers, and the
-  image round trip meshes took before the compositor drew them directly, are
-  `puri-vello`'s `capture` module, behind its `capture` feature.
+  without a GPU, Mesa's lavapipe driver works. `puri-vello`'s `capture`
+  module, behind its `capture` feature, holds the headless rendering and
+  readback helpers, including `mesh_images`, which renders each mesh and
+  reads it back as an image: the baseline direct mesh composition is measured
+  against.
 - **Browser presentation** has its own pixel test: `make test-web-gpu` builds the
   GPU probe, then drives the installed Chrome headlessly through the
   `playwright-core` pinned in `tools/package.json`, on WebGPU and on the
