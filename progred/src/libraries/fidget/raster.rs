@@ -6,8 +6,6 @@ use incremental::background::Progress;
 mod partial;
 #[cfg(feature = "cam-profile")]
 pub(crate) mod performance;
-#[cfg(test)]
-mod reference;
 use puri::mesh::DepthImage;
 
 // Software rendering evaluates with Fidget's VM, on every platform. Its JIT
@@ -79,28 +77,13 @@ impl SoftwareScene {
         view: &VolumeView,
         cancellation: &incremental::Cancellation,
     ) -> Option<Vec<u8>> {
-        self.render_with_progress(view, cancellation, None)
-    }
-
-    fn render_with_progress(
-        &self,
-        view: &VolumeView,
-        cancellation: &incremental::Cancellation,
-        progress: Option<&(dyn Fn(Progress) + Sync)>,
-    ) -> Option<Vec<u8>> {
         let config = VoxelRenderConfig {
             world_to_model: view.world_to_model,
             ..VoxelRenderConfig::from_size(view.size)
         };
-        let report = |completed, total| {
-            if let Some(progress) = progress {
-                progress(Progress { completed, total });
-            }
-        };
         let eval = fidget_engine::raster::voxel::EvalConfig {
             cancel: render_cancel(cancellation),
             tile_sizes: software_tiles(),
-            progress: progress.map(|_| &report as &(dyn Fn(usize, usize) + Sync)),
             ..Default::default()
         };
         let pixels = self.scene.render(&config, &eval, None)?;

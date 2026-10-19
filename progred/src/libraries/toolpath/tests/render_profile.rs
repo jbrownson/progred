@@ -92,7 +92,7 @@ fn stock_render_profile() {
     let request = implicit::raster::Request::new(volume(vec![stock], 188.0), None, 1.0).unwrap();
     let start = Instant::now();
     let image = request
-        .render_software_progressive(512, 4, &Default::default(), &mut |_| Ok(()), None)
+        .render_software_progressive(512, 4, &Default::default(), &mut |_| Ok(()))
         .unwrap()
         .unwrap();
     let elapsed = start.elapsed();
@@ -357,7 +357,7 @@ fn cam_render_profile() {
                 implicit::raster::Request::new(preview(vec![object.clone()]), None, 1.0).unwrap();
             let start = Instant::now();
             let image = request
-                .render_software_progressive(u32::MAX, 1, &cancel, &mut |_| unreachable!(), None)
+                .render_software_progressive(u32::MAX, 1, &cancel, &mut |_| unreachable!())
                 .unwrap()
                 .unwrap();
             let differences = reference
@@ -415,23 +415,17 @@ fn cam_render_profile() {
         let start = Instant::now();
         let mut prior = start;
         let result = request
-            .render_software_progressive(
-                512,
-                4,
-                &cancel,
-                &mut |image| {
-                    eprintln!(
-                        "{label}: {}x{} stage {:?}, cumulative {:?}",
-                        image.width,
-                        image.height,
-                        prior.elapsed(),
-                        start.elapsed()
-                    );
-                    prior = Instant::now();
-                    Ok(())
-                },
-                None,
-            )
+            .render_software_progressive(512, 4, &cancel, &mut |image| {
+                eprintln!(
+                    "{label}: {}x{} stage {:?}, cumulative {:?}",
+                    image.width,
+                    image.height,
+                    prior.elapsed(),
+                    start.elapsed()
+                );
+                prior = Instant::now();
+                Ok(())
+            })
             .unwrap()
             .unwrap();
         eprintln!(
@@ -470,7 +464,7 @@ fn cam_render_profile() {
             let request = implicit::raster::Request::new(preview(objects), None, 1.0).unwrap();
             let start = Instant::now();
             let result = request
-                .render_software_progressive(u32::MAX, 1, &cancel, &mut |_| unreachable!(), None)
+                .render_software_progressive(u32::MAX, 1, &cancel, &mut |_| unreachable!())
                 .unwrap()
                 .unwrap();
             let bytes = result.data.data();

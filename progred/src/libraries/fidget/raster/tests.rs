@@ -1,5 +1,7 @@
 use super::*;
 
+mod reference;
+
 #[test]
 fn render_cancellation_shares_the_callers_flag() {
     let cancel = incremental::Cancellation::default();
@@ -119,16 +121,10 @@ fn progressive_images_match_final_quality_and_stop_on_cancellation() {
     let cancel = incremental::Cancellation::default();
     let mut stages = Vec::new();
     let final_image = request
-        .render_software_progressive(
-            12,
-            1,
-            &cancel,
-            &mut |image| {
-                stages.push((image.width, image.height));
-                Ok(())
-            },
-            None,
-        )
+        .render_software_progressive(12, 1, &cancel, &mut |image| {
+            stages.push((image.width, image.height));
+            Ok(())
+        })
         .unwrap()
         .unwrap();
     assert_eq!(stages, [(11, 7), (21, 14)]);
@@ -143,17 +139,11 @@ fn progressive_images_match_final_quality_and_stop_on_cancellation() {
         .unwrap()
     );
     let mut published = 0;
-    let cancelled = request.render_software_progressive(
-        12,
-        4,
-        &cancel,
-        &mut |_| {
-            published += 1;
-            cancel.cancel();
-            Ok(())
-        },
-        None,
-    );
+    let cancelled = request.render_software_progressive(12, 4, &cancel, &mut |_| {
+        published += 1;
+        cancel.cancel();
+        Ok(())
+    });
     assert!(matches!(cancelled, Err(incremental::Error::Cancelled)));
     assert_eq!(published, 1);
 }
@@ -170,7 +160,13 @@ fn progress_counts_finished_scene_pixels_and_resets_for_each_refinement() {
     let reports = Mutex::new(Vec::new());
     let progress = |p| reports.lock().unwrap().push(p);
     let image = request
-        .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()), Some(&progress))
+        .render_software_tiles(
+            Passes::Progressive { first_max_edge: 12 },
+            4,
+            &cancel,
+            &mut |_| Ok(()),
+            Some(&progress),
+        )
         .unwrap()
         .unwrap();
     let reports = reports.into_inner().unwrap();
@@ -196,10 +192,10 @@ fn progress_counts_finished_scene_pixels_and_resets_for_each_refinement() {
     assert_eq!(stages, views.len());
     assert_eq!(previous, Some(1.0));
     let expected = request
-        .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()), None)
+        .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()))
         .unwrap()
         .unwrap();
-    assert_eq!(image.data.data(), expected.data.data());
+    assert_eq!(image.image.data.data(), expected.data.data());
 }
 
 #[test]
@@ -208,16 +204,10 @@ fn native_image_is_published_before_depth_refinement_and_can_cancel_it() {
     let cancel = incremental::Cancellation::default();
     let mut stages = Vec::new();
     let final_image = request
-        .render_software_progressive(
-            12,
-            4,
-            &cancel,
-            &mut |image| {
-                stages.push((image.width, image.height));
-                Ok(())
-            },
-            None,
-        )
+        .render_software_progressive(12, 4, &cancel, &mut |image| {
+            stages.push((image.width, image.height));
+            Ok(())
+        })
         .unwrap()
         .unwrap();
     assert_eq!(stages, [(11, 7), (21, 14), (41, 27)]);
@@ -227,17 +217,11 @@ fn native_image_is_published_before_depth_refinement_and_can_cancel_it() {
         cpu_volume(&request.preview.objects, &refined, &cancel).unwrap()
     );
 
-    let cancelled = request.render_software_progressive(
-        128,
-        4,
-        &cancel,
-        &mut |image| {
-            assert_eq!((image.width, image.height), (41, 27));
-            cancel.cancel();
-            Ok(())
-        },
-        None,
-    );
+    let cancelled = request.render_software_progressive(128, 4, &cancel, &mut |image| {
+        assert_eq!((image.width, image.height), (41, 27));
+        cancel.cancel();
+        Ok(())
+    });
     assert!(matches!(cancelled, Err(incremental::Error::Cancelled)));
 }
 
@@ -329,13 +313,9 @@ fn software_request_renders_on_a_worker_and_honors_cancellation() {
     std::thread::spawn(move || {
         let cancel = incremental::Cancellation::default();
         let render = |request: &Request| {
-            request.render_software_progressive(
-                u32::MAX,
-                1,
-                &cancel,
-                &mut |_| panic!("no intermediate resolution requested"),
-                None,
-            )
+            request.render_software_progressive(u32::MAX, 1, &cancel, &mut |_| {
+                panic!("no intermediate resolution requested")
+            })
         };
         let image = render(&request).unwrap().unwrap();
         assert_eq!((image.width, image.height), (48, 32));

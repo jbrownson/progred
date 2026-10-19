@@ -80,7 +80,7 @@ fn tiled_progression_matches_whole_pass_reference_and_propagates_cancellation() 
     let request = super::super::tests::request(41.0, 27.0);
     let cancel = incremental::Cancellation::default();
     let reference = request
-        .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()), None)
+        .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()))
         .unwrap()
         .unwrap();
     let result = request
@@ -126,7 +126,7 @@ fn final_only_tiles_keep_final_quality_with_one_progress_interval() {
     ];
     let cancel = incremental::Cancellation::default();
     let reference = request
-        .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()), None)
+        .render_software_progressive(12, 4, &cancel, &mut |_| Ok(()))
         .unwrap()
         .unwrap();
     let reports = Mutex::new(Vec::new());
