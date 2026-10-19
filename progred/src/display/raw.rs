@@ -60,7 +60,7 @@ fn cell_view<W: Host>(
 
 /// Raw's picker for a hole of `kind`, its brackets making its constructors.
 pub fn picker<W: Host>(kind: CompletionKind) -> Picker<W> {
-    Picker::new(kind, offers()).with_keys(keys(kind))
+    Picker::new(kind, Rc::new(entries)).with_keys(keys(kind))
 }
 
 /// The picker of a document's empty root: Raw's, led by what the libraries
@@ -69,30 +69,21 @@ pub fn start_picker<W: Host>() -> Picker<W> {
     Picker::new(CompletionKind::Value, start()).with_keys(keys(CompletionKind::Value))
 }
 
-/// Raw's offers: the editor's constructors, and what the libraries read the
-/// query as, a value or a field's label, such as the name library's new cell
-/// named as typed. An empty query reads as nothing; a projection that expects
-/// a value can offer one for it. Quoted text and bytes lead; otherwise a
-/// reading that spells the query exactly comes first, then the constructors
-/// the query names, then the other readings and the text or new label.
-fn offers<W: Host>() -> HoleOffers<W> {
-    Rc::new(entries)
-}
-
-/// What the libraries start a document as, then [`offers`].
+/// What the libraries start a document as, then Raw's [`entries`].
 fn start<W: Host>() -> HoleOffers<W> {
     Rc::new(|request| {
         let start = CompletionRequest {
             scope: CompletionScope::Start,
             ..*request
         };
-        let mut starts = request
+        request
             .libraries
             .and_then(|provider| provider(&start))
             .map(|offers| rank(offers, request))
-            .unwrap_or_default();
-        starts.extend(entries(request));
-        starts
+            .unwrap_or_default()
+            .into_iter()
+            .chain(entries(request))
+            .collect()
     })
 }
 
@@ -108,15 +99,16 @@ pub fn constructors(kind: CompletionKind) -> Vec<Completion> {
 /// delimiter is typed into an empty query.
 fn keys(kind: CompletionKind) -> Vec<(&'static str, Completion)> {
     let cell = Completion::new("new cell", move |session| {
-        let Some(picking) = session.pending() else {
-            return;
-        };
-        match kind {
-            CompletionKind::Value => picking.commit_container(new_cell_id().into()),
-            CompletionKind::Field => {
-                picking.commit_label(new_cell_id(), None, Some(crate::selection::pending_at(&[])))
-            }
-        };
+        if let Some(picking) = session.pending() {
+            match kind {
+                CompletionKind::Value => picking.commit_container(new_cell_id().into()),
+                CompletionKind::Field => picking.commit_label(
+                    new_cell_id(),
+                    None,
+                    Some(crate::selection::pending_at(&[])),
+                ),
+            };
+        }
     });
     let containers = [
         ("[", "new list", Value::list([])),
@@ -190,6 +182,12 @@ fn literals(request: &CompletionRequest<'_>) -> (Vec<Completion>, Vec<Completion
     (readings, strings)
 }
 
+/// Raw's offers: the editor's constructors, and what the libraries read the
+/// query as, a value or a field's label, such as the name library's new cell
+/// named as typed. An empty query reads as nothing; a projection that expects
+/// a value can offer one for it. Quoted text and bytes lead; otherwise a
+/// reading that spells the query exactly comes first, then the constructors
+/// the query names, then the other readings and the text or new label.
 fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
     let kind = request.kind;
     let query = request.query;
@@ -225,8 +223,34 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
             (entries(readings), atoms)
         }
     };
-    let constructors: Vec<_> = crate::filter::rank_with_aliases(
-        constructors(kind)
+    let constructors = ranked_constructors(request);
+    if atom_leads {
+        atoms
+            .into_iter()
+            .chain(readings)
+            .chain(constructors.into_iter().map(|(entry, _)| entry))
+            .collect()
+    } else {
+        let (weak, strong): (Vec<_>, Vec<_>) =
+            constructors.into_iter().partition(|(_, fuzzy)| *fuzzy);
+        let (exact, other): (Vec<_>, Vec<_>) = readings
+            .into_iter()
+            .partition(|entry| !query.is_empty() && entry.display.eq_ignore_ascii_case(query));
+        exact
+            .into_iter()
+            .chain(strong.into_iter().map(|(entry, _)| entry))
+            .chain(other)
+            .chain(atoms)
+            .chain(weak.into_iter().map(|(entry, _)| entry))
+            .collect()
+    }
+}
+
+/// The [`constructors`] the query names, best first, each with whether it
+/// matched only fuzzily.
+fn ranked_constructors<W: Host>(request: &CompletionRequest<'_>) -> Vec<(Entry<W>, bool)> {
+    crate::filter::rank_with_aliases(
+        constructors(request.kind)
             .into_iter()
             .map(|offer| {
                 let aliases = offer.aliases.clone();
@@ -235,38 +259,19 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
             .collect(),
         |(entry, _)| &entry.display,
         |(_, aliases)| aliases.as_slice(),
-        query,
+        request.query,
     )
     .into_iter()
     .map(|ranked| {
-        let fuzzy = ranked.fuzzy;
         (
             Entry {
                 matches: ranked.matches,
                 ..ranked.item.0
             },
-            fuzzy,
+            ranked.fuzzy,
         )
     })
-    .collect();
-    if atom_leads {
-        return atoms
-            .into_iter()
-            .chain(readings)
-            .chain(constructors.into_iter().map(|(entry, _)| entry))
-            .collect();
-    }
-    let (weak, strong): (Vec<_>, Vec<_>) = constructors.into_iter().partition(|(_, fuzzy)| *fuzzy);
-    let (exact, other): (Vec<_>, Vec<_>) = readings
-        .into_iter()
-        .partition(|entry| !query.is_empty() && entry.display.eq_ignore_ascii_case(query));
-    exact
-        .into_iter()
-        .chain(strong.into_iter().map(|(entry, _)| entry))
-        .chain(other)
-        .chain(atoms)
-        .chain(weak.into_iter().map(|(entry, _)| entry))
-        .collect()
+    .collect()
 }
 
 #[cfg(test)]
