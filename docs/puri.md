@@ -620,9 +620,9 @@ lifetimes. `draw_mesh` carries shared triangle geometry, an orthographic view,
 and optionally depth-image replacement of a draft surface. The native compositor
 draws it on the same device and consumes the resulting premultiplied texture
 without a CPU round trip. Its renderer retains one mesh upload and surface
-color/depth upload, not evaluated widgets or raster results. `DrawList` and the
-initial `Drawing` representation retain the mesh operation; the default canvas
-interpretation rasterizes it on the CPU for browser/export consumers.
+color/depth upload, not evaluated widgets or raster results. `DrawList` retains
+the mesh operation; the default canvas interpretation rasterizes it on the CPU
+for browser/export consumers.
 See [image composition measurements](history/vello-compositor-experiment-2026-09-18.md)
 and [direct mesh measurements](history/fidget-hybrid-2026-09-18.md#direct-mesh-composition).
 

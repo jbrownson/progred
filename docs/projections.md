@@ -665,8 +665,8 @@ its starting count. This includes effects in strict arguments and nested calls,
 but excludes effects performed before that call began.
 
 A function must explicitly decline before performing effects. A decline after
-an effect halts evaluation with `{absent: effectful-decline, value: cause}` and
-prints an error to stderr. This contract remains useful to explicit compositions
+an effect halts evaluation with `{absent: effectful-decline, value: cause}`.
+This contract remains useful to explicit compositions
 and event handlers, independently of cell resolution. It applies to Grap and Rust
 functions alike. Other absents remain ordinary results, including a non-callable
 result. Effect-only commands, including selection and site-state setters, return

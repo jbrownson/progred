@@ -45,7 +45,7 @@ the tool is at the first selected cut, not the end of the preceding operation.
 Changing focus retains the camera. It changes view
 state, not document history. Op 2 consequently retains the work of Op 1.
 
-The recording retains small segment-boundary ranges for its program leaves.
+The recording retains its program leaves' segment boundaries.
 Focus is a playback input, separate from path generation, so selector changes
 reuse the observed recording. Stock meshing and implicit rendering use the
 existing dependency-tracked async pipeline. Focusing an early group can avoid

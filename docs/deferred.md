@@ -466,8 +466,8 @@ first:
       and the edited line's caret, reads and chooses the picker's entries, and
       takes input-method text and the window's focus, appearance and
       libraries. Each flow went to the code it exercises, not to a suite of
-      its own. Reading the clipboard, resizing and stepping background work
-      wait for a test that needs them. The runner's own tests, the Fidget
+      its own. Resizing and stepping background work wait for a test that
+      needs them. The runner's own tests, the Fidget
       interaction's timer tests and one navigation test still drive the
       runner: that one checks the next key's handlers are installed without
       a paint, which the driver always does.
@@ -572,8 +572,8 @@ first:
 Offer construction decides applicability; activating an offered completion
 consumes the input. Its Grap continuation can still fail at runtime. For now,
 unsuccessful preparation installs neither the insertion nor its staged
-selection/annotation changes. Declining after an effect is now an evaluator
-contract error and prints to stderr; other completion failures remain silent.
+selection/annotation changes. Declining after an effect is an evaluator
+contract error, and like other completion failures it is silent.
 
 Later, design an editor-owned way to surface these failures, such as alerts or
 notifications, using the failure details in GID values. Do not add that machinery
