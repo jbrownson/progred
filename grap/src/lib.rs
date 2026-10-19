@@ -673,6 +673,10 @@ struct CellIndexTable {
     by_cell:
         std::collections::HashMap<CellId, CellIndex, std::hash::BuildHasherDefault<FoldHasher>>,
     cells: Vec<CellId>,
+    /// Whether an environment over this table has bound each index. A
+    /// reference to a cell nothing binds, a global's, misses at once
+    /// instead of searching every frame.
+    bound: Vec<bool>,
 }
 
 impl CellIndexTable {
@@ -682,6 +686,7 @@ impl CellIndexTable {
         } else {
             let index = CellIndex(self.cells.len());
             self.cells.push(cell);
+            self.bound.push(false);
             self.by_cell.insert(cell, index);
             index
         }
@@ -700,6 +705,14 @@ type CellIndices = Rc<RefCell<CellIndexTable>>;
 
 fn cell_index(indices: &CellIndices, cell: CellId) -> CellIndex {
     indices.borrow_mut().intern(cell)
+}
+
+/// `cell`'s index in `indices`, marked bound, for a binding.
+fn binding_index(indices: &CellIndices, cell: CellId) -> CellIndex {
+    let mut table = indices.borrow_mut();
+    let index = table.intern(cell);
+    table.bound[index.0] = true;
+    index
 }
 
 /// A runtime record's fields, sorted by label; a repeated label keeps its
@@ -780,13 +793,17 @@ impl Environment {
     }
 
     fn get_index(&self, index: CellIndex) -> Option<&RuntimeValue> {
-        frames(self).find_map(|frame| {
-            frame
-                .bindings
-                .iter()
-                .rev()
-                .find_map(|(binding, value)| (*binding == index).then_some(value))
-        })
+        if self.indices.borrow().bound[index.0] {
+            frames(self).find_map(|frame| {
+                frame
+                    .bindings
+                    .iter()
+                    .rev()
+                    .find_map(|(binding, value)| (*binding == index).then_some(value))
+            })
+        } else {
+            None
+        }
     }
 
     fn extended(&self, bindings: impl IntoIterator<Item = (CellId, Value)>) -> Self {
@@ -804,7 +821,7 @@ impl Environment {
         self.extended_indexed(
             bindings
                 .into_iter()
-                .map(|(cell, value)| (cell_index(&self.indices, cell), value)),
+                .map(|(cell, value)| (binding_index(&self.indices, cell), value)),
         )
     }
 
@@ -817,7 +834,7 @@ impl Environment {
         self.push_indexed(
             bindings
                 .into_iter()
-                .map(|(cell, value)| (cell_index(&indices, cell), value)),
+                .map(|(cell, value)| (binding_index(&indices, cell), value)),
         );
     }
 

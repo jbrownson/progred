@@ -55,7 +55,7 @@ fn closures_share_captured_data_with_each_other_and_the_explicit_value() {
     let mut context = crate::context(&host, None, 100);
     let data = RuntimeValue::list([RuntimeValue::f64(42.0)]);
     let environment = Environment::with_indices(context.indices.clone())
-        .extended_indexed([(cell_index(&context.indices, captured), data.clone())]);
+        .extended_runtime([(captured, data.clone())]);
     let first = context.closure_value([], captured.into(), &environment);
     let second = context.closure_value([], Value::record([]), &environment);
     let result = RuntimeValue::list([first, second, data]).into_value();
@@ -156,12 +156,10 @@ fn different_closure_environments_preserve_shared_outer_containers() {
 #[test]
 fn shadowed_bindings_are_not_materialized() {
     let key = gid::new_cell_id();
-    let environment = Environment::default();
-    let index = cell_index(&environment.indices, key);
     let old = RuntimeValue::list([RuntimeValue::f64(1.0)]);
-    let environment = environment
-        .extended_indexed([(index, old.clone())])
-        .extended_indexed([(index, RuntimeValue::f64(2.0))]);
+    let environment = Environment::default()
+        .extended_runtime([(key, old.clone())])
+        .extended_runtime([(key, RuntimeValue::f64(2.0))]);
     let mut reify = Reify::default();
     let result = reify.environment(&environment);
     assert_eq!(result, Value::record([(key, f64::value(2.0))]));
