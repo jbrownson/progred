@@ -6,5 +6,8 @@
   "assets": {
     "directory": "../target/website",
     "not_found_handling": "404-page"
+  },
+  "env": {
+    "dev": {}
   }
 }

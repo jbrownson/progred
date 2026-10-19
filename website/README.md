@@ -38,7 +38,8 @@ API, without credentials, retries, or a third-party widget. Until it succeeds
 only changes CSS. The icon's MIT license is included in `public/octicons-LICENSE.txt`.
 
 Cloudflare Web Analytics counts visits. `public/analytics.js` loads Cloudflare's
-beacon only on prog.red and its subdomains, and only in a top-level page, so a
+beacon only on prog.red and its subdomains other than dev.prog.red, and only in
+a top-level page, so a
 tutorial's embedded editors don't each count as a page view; the full editor
 counts when opened on its own. The beacon sets no cookies and stores nothing in
 the browser, and its token is public by design. In the Cloudflare dashboard,
@@ -276,6 +277,40 @@ intentionally requested); commits/pushes to `master` alone don't publish.
 Don't force-push to undo a release: use Cloudflare's deployment rollback for an
 immediate rollback, then fix/revert the source and publish a new commit.
 No credentials belong in this repository.
+
+### Trying a release on dev.prog.red first
+
+dev.prog.red serves the same site from a second Worker, `progred-dev`, the
+`dev` environment in `wrangler.jsonc`, built from the `website-dev` branch. To
+try a commit there:
+
+```sh
+git push origin HEAD:website-dev
+```
+
+Once it looks right, publish that same commit:
+
+```sh
+git push origin website-dev:website-live
+```
+
+Production builds the commit again rather than copying dev's files. The build
+is pinned (the Rust nightly, wasm-bindgen and the npm lockfile), so the same
+commit makes the same site, and the full editor's menu bar shows which commit
+each site runs. Visits to dev.prog.red aren't counted in Web Analytics. It is
+public, like prog.red, though nothing links to it; Cloudflare Access can put a
+login in front of it if it should be private.
+
+One-time setup, as for production:
+
+1. In Workers & Pages, create a second Worker from `jbrownson/progred`, named
+   **progred-dev**.
+2. Set its production branch to **website-dev**, root directory to
+   **website**, build command to **npm run build**, and deploy command to
+   **npm run deploy:dev**.
+3. Leave non-production branch builds disabled.
+4. Push a commit to `website-dev`, check the Worker's `workers.dev` address,
+   then add **dev.prog.red** as its custom domain.
 
 The hosted Linux build and public site were verified on September 21, 2026.
 The generated build directory and npm dependencies are ignored by Git.
