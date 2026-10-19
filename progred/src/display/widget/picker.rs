@@ -203,7 +203,6 @@ fn located_query<W: Host>(
             focused: toolkit.focused(),
             presentation: presentation.clone(),
             style: &styles.edit,
-            placeholder: None,
         },
         tcx,
         edit_query::<W>,

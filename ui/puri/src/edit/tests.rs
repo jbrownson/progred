@@ -621,7 +621,6 @@ fn recorder_exposes_selection_and_caret_geometry() {
             focused: true,
             presentation: presentation(),
             style: &style,
-            placeholder: None,
         },
         &mut tcx,
     );
@@ -676,7 +675,6 @@ fn a_focused_editor_reports_its_caret_for_composition() {
                 focused,
                 presentation: presentation(),
                 style: &style,
-                placeholder: None,
             },
             &mut tcx,
         )
@@ -706,7 +704,6 @@ fn a_focused_editor_reports_its_caret_for_composition() {
             focused: true,
             presentation: presentation(),
             style: &style,
-            placeholder: None,
         },
         &mut tcx,
     );
@@ -739,7 +736,6 @@ fn the_field_draws_its_affixes_and_preedit_around_the_text() {
             focused: true,
             presentation: affixed("[", "]"),
             style: &style,
-            placeholder: None,
         },
         &mut tcx,
     );

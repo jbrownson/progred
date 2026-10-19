@@ -24,7 +24,7 @@ The caller owns focus, any focus order, and durable interaction state; a
 description receives focus as an input. Durable helper state holds only
 caller-owned content and cross-frame interaction data. `LineEditState` contains
 text and cross-frame editing state; `LineEditDescription` supplies font, paint,
-affixes, focus, placeholder, and chrome for this description, and its transient
+affixes, focus, and chrome for this description, and its transient
 handlers capture those presentation inputs. `EditCtx` supplies
 mutable state, Parley contexts, a clipboard capability, and the host's command
 modifier at dispatch. A WebAssembly host chooses that modifier from the browser's

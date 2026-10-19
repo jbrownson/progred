@@ -57,7 +57,6 @@ pub fn view<W: Host>(
                     focused: toolkit.focused(),
                     presentation: context.toolkit.styles().line_presentation(&line),
                     style: &context.toolkit.styles().edit,
-                    placeholder: None,
                 },
                 context.text,
             );

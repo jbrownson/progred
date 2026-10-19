@@ -21,13 +21,12 @@
 use crate::draw::CanvasSink;
 use crate::handler::{HasHandler, ImeEvent};
 use crate::interact::is_primary_contact_move;
-use crate::text::{TextCtx, TextMetrics, TextStyle, draw_layout, line_layout, line_metrics};
+use crate::text::{TextCtx, TextMetrics, draw_layout, line_metrics};
 use kurbo::{Affine, Point, Rect};
 use parley::Layout;
 use parley::style::GenericFamily;
 use parley::{FontContext, LayoutContext, PlainEditor, StyleProperty};
 use peniko::Brush;
-use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButtonEvent;
 use uig::Placement;
@@ -121,7 +120,6 @@ pub struct LineEditDescription<'a> {
     pub focused: bool,
     pub presentation: LineEditPresentation,
     pub style: &'a EditStyle,
-    pub placeholder: Option<(&'a str, &'a TextStyle)>,
 }
 
 /// The text-only pasteboard capability line editing needs. The
@@ -580,9 +578,7 @@ impl LineEditState {
 pub struct LineEdit {
     metrics: TextMetrics,
     scale: f32,
-    ghost: Option<Rc<Layout<Brush>>>,
     layout: Option<Layout<Brush>>,
-    editor_baseline: f64,
     selection: Vec<Rect>,
     cursor: Option<Rect>,
     composition: Option<Rect>,
@@ -597,42 +593,26 @@ impl LineEdit {
         self.metrics
     }
 
-    /// Where the editor's layout starts at `placement`: its baseline on
-    /// the field's. The ghost's metrics may size the field while it shows.
-    fn editor_origin(&self, placement: Placement) -> Point {
-        Point::new(
-            placement.rect.x0,
-            placement.rect.y0 + self.metrics.ascent - self.editor_baseline,
-        )
-    }
-
     /// While focused, the area at `placement`, in its coordinates, that
     /// platform composition candidates should keep clear: the preedit, or
     /// the caret with some context. It exists even while a preedit hides
     /// the caret.
     pub fn input_area(&self, placement: Placement) -> Option<Rect> {
         self.composition
-            .map(|area| area + self.editor_origin(placement).to_vec2())
+            .map(|area| area + placement.rect.origin().to_vec2())
     }
 
-    /// The paint half: selection, ghost, content, caret.
+    /// The paint half: selection, content, caret.
     pub fn draw(&self, canvas: &mut (impl CanvasSink + ?Sized), placement: Placement) {
         let transform = Affine::translate(placement.rect.origin().to_vec2());
         for rect in &self.selection {
             canvas.fill_shape((*rect).into(), self.selection_brush.clone(), transform);
         }
-        if let Some(ghost) = &self.ghost {
-            draw_layout(canvas, ghost, transform);
-        }
         if let Some(layout) = &self.layout {
             draw_layout(canvas, layout, transform);
         }
         if let Some(cursor) = self.cursor {
-            canvas.fill_shape(
-                cursor.into(),
-                self.cursor_brush.clone(),
-                Affine::translate(self.editor_origin(placement).to_vec2()),
-            );
+            canvas.fill_shape(cursor.into(), self.cursor_brush.clone(), transform);
         }
     }
 
@@ -653,7 +633,7 @@ impl LineEdit {
         let scale = self.scale;
         let presentation = self.presentation.clone();
         if self.focused {
-            let text_origin = self.editor_origin(placement);
+            let text_origin = placement.rect.origin();
             let with_key = with.clone();
             let key_presentation = presentation.clone();
             p.handler().on_key(move |ctx, event| {
@@ -697,36 +677,19 @@ impl LineEdit {
     }
 }
 
-/// Build bare editable text from current state and presentation. While
-/// empty, an optional placeholder supplies the measured and drawn ghost
-/// content. Pointer-down policy remains with the caller.
+/// Build bare editable text from current state and presentation.
+/// Pointer-down policy remains with the caller.
 pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> LineEdit {
     let LineEditDescription {
         state,
         focused,
         presentation,
         style,
-        placeholder,
     } = description;
     let scale = tcx.scale;
-    let ghost = placeholder
-        .filter(|_| {
-            state.text.is_empty()
-                && state.preedit.is_none()
-                && presentation.prefix.is_empty()
-                && presentation.suffix.is_empty()
-        })
-        .map(|(text, style)| line_layout(tcx, text, style));
     let editor = state.editor(&presentation, tcx.fonts, tcx.layouts, scale);
     let layout = editor.try_layout().cloned();
-    let editor_metrics = layout.as_ref().and_then(line_metrics);
-    // The ghost's metrics size the field while it shows; both it and
-    // the cursor hang from the shared visual baseline.
-    let metrics = ghost
-        .as_deref()
-        .and_then(line_metrics)
-        .or(editor_metrics)
-        .unwrap_or_default();
+    let metrics = layout.as_ref().and_then(line_metrics).unwrap_or_default();
     let selection = if focused {
         editor
             .selection_geometry()
@@ -761,9 +724,7 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
     LineEdit {
         metrics,
         scale,
-        ghost,
         layout,
-        editor_baseline: editor_metrics.map_or(0.0, |metrics| metrics.ascent),
         selection,
         cursor,
         composition,
