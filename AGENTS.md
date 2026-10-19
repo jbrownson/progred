@@ -124,6 +124,8 @@ upstream when it can be.
 - No hidden caches. Reuse across frames goes through the dependency-tracked
   computations in `incremental`, never an ad-hoc cache or an event-specific
   relevance test. If something is too slow, improve that general mechanism.
+  A caller-owned memo of a pure function, keyed by its whole input and swept
+  each frame, like puri's `TextCache` for text shaping, isn't hidden.
 - Event handling is distributed and compositional: handlers describe what
   happened and decide for themselves whether to act. There is no central action
   enum or single reducer.

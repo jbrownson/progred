@@ -667,9 +667,9 @@ the bytes each frame, which is small next to decoding; keying by the blob's
 shared allocation, while holding a reference to it, avoids even that but needs
 an accessor in `gid`. The projection would then decide from the header alone,
 so a valid header with a corrupt body draws a placeholder instead of declining
-to the record view. This would be a second exception to reusing work across
-frames only through `incremental`; when it lands, AGENTS.md should name the
-pattern it allows: caller-owned, swept memos of pure functions.
+to the record view. It would be the second memo of the kind AGENTS.md allows
+beside `incremental`: caller-owned, keyed by its whole input and swept each
+frame.
 
 ## Report Vello image-atlas flashing
 
