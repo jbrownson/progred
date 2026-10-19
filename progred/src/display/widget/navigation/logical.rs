@@ -378,28 +378,30 @@ impl Collector {
         view: Option<Root>,
     ) -> Option<Handler<C, DispatchContext<C, H>>> {
         debug_assert!(self.parents.is_empty() && self.containers.is_empty());
-        let destinations = self.current.lines.destinations()?;
-        let mut handler = Handler::new();
-        handler.on(
-            move |world, event, input: &mut DispatchContext<C, H>| match event {
-                Event::Navigate(direction) => {
-                    let arrive = destinations
-                        .toward(direction)
-                        .and_then(|path| {
-                            let landmark = landmark_at(&input.landmarks, view.as_ref(), path);
-                            debug_assert!(landmark.is_some(), "navigation stop without a landmark");
-                            landmark
-                        })
-                        .map(|landmark| landmark.select.clone());
-                    EventOutcome::from_handled(
-                        event,
-                        arrive.is_some_and(|arrive| arrive(world, Some(direction))),
-                    )
+        self.current.lines.destinations().map(|destinations| {
+            Handler::from_function(move |world, event, input: &mut DispatchContext<C, H>| {
+                match event {
+                    Event::Navigate(direction) => {
+                        let arrive = destinations
+                            .toward(direction)
+                            .and_then(|path| {
+                                let landmark = landmark_at(&input.landmarks, view.as_ref(), path);
+                                debug_assert!(
+                                    landmark.is_some(),
+                                    "navigation stop without a landmark"
+                                );
+                                landmark
+                            })
+                            .map(|landmark| landmark.select.clone());
+                        EventOutcome::from_handled(
+                            event,
+                            arrive.is_some_and(|arrive| arrive(world, Some(direction))),
+                        )
+                    }
+                    _ => EventOutcome::decline(event),
                 }
-                _ => EventOutcome::decline(event),
-            },
-        );
-        Some(handler)
+            })
+        })
     }
 }
 
