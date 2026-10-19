@@ -84,7 +84,7 @@ fn scroll_handlers_receive_whole_batches_and_forward_ordered_remainders() {
             if y < 0.0 {
                 ScrollOutcome::consume(event)
             } else {
-                ScrollOutcome::with_remainder(ScrollDelta::LineDelta(x, y / 2.0))
+                ScrollOutcome::handled_leaving(ScrollDelta::LineDelta(x, y / 2.0))
             }
         })
     });
@@ -132,7 +132,7 @@ fn scroll_event_conversion_preserves_acceptance_without_a_phantom_remainder() {
         Some(Event::Scroll(Cow::Borrowed(_)))
     ));
     let outcome = crate::scroll::each(Cow::Borrowed(std::slice::from_ref(&event)), |_| {
-        ScrollOutcome::with_remainder(ScrollDelta::LineDelta(0.0, 2.0))
+        ScrollOutcome::handled_leaving(ScrollDelta::LineDelta(0.0, 2.0))
     });
     assert!(outcome.handled());
     assert!(
@@ -186,7 +186,7 @@ fn scroll_remainder_flows_to_the_next_handler() {
             unreachable!()
         };
         log.push(("inner", y));
-        ScrollOutcome::with_remainder(ScrollDelta::LineDelta(x, y / 2.0))
+        ScrollOutcome::handled_leaving(ScrollDelta::LineDelta(x, y / 2.0))
     });
 
     let event = scroll(4.0);
@@ -301,7 +301,7 @@ fn composition_preserves_acceptance_and_the_last_remainder() {
             panic!("expected lines")
         };
         log.push(y);
-        ScrollOutcome::with_remainder(ScrollDelta::LineDelta(x, y / 2.0))
+        ScrollOutcome::handled_leaving(ScrollDelta::LineDelta(x, y / 2.0))
     });
     let mut outer = Handler::new();
     outer.on_scroll(|log: &mut Vec<f32>, event| {

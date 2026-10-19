@@ -19,7 +19,7 @@ pub fn each<'a>(
     }
     match remaining {
         None => EventOutcome::decline(Event::Gesture(events)),
-        Some(remaining) => EventOutcome::with_remainder(
+        Some(remaining) => EventOutcome::handled_leaving(
             (!remaining.is_empty()).then_some(Event::Gesture(Cow::Owned(remaining))),
         ),
     }

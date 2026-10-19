@@ -62,7 +62,7 @@ pub fn offset(
             (current.y - delta.y).clamp(0.0, maximum.y),
         );
         if next != stored {
-            ScrollOutcome::with_remainder(delta - (current - next))
+            ScrollOutcome::handled_leaving(delta - (current - next))
         } else {
             ScrollOutcome::unhandled(delta)
         }

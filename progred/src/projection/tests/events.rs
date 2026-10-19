@@ -28,7 +28,7 @@ fn native_annotation_handler_retains_the_projected_site() {
                         crate::editing::Scope::default()
                             .open(world.session())
                             .annotate(&root, &path, f64::value(delta.y));
-                        puri::handler::ScrollOutcome::with_remainder(Default::default())
+                        puri::handler::ScrollOutcome::handled_leaving(Default::default())
                     },
                 )
             }),

@@ -25,7 +25,7 @@ impl<Remainder> Outcome<Remainder> {
         Self { remaining, handled }
     }
 
-    pub fn with_remainder(remaining: Remainder) -> Self {
+    pub fn handled_leaving(remaining: Remainder) -> Self {
         Self {
             remaining,
             handled: true,
@@ -57,7 +57,7 @@ impl ScrollOutcome {
     }
 
     pub fn consume(event: &PointerScrollEvent) -> Self {
-        Self::with_remainder(match event.delta {
+        Self::handled_leaving(match event.delta {
             ScrollDelta::PageDelta(_, _) => ScrollDelta::PageDelta(0.0, 0.0),
             ScrollDelta::LineDelta(_, _) => ScrollDelta::LineDelta(0.0, 0.0),
             ScrollDelta::PixelDelta(_) => ScrollDelta::PixelDelta(Default::default()),
@@ -119,7 +119,7 @@ impl<'a> EventOutcome<'a> {
     }
 
     pub fn accept() -> Self {
-        Self::with_remainder(None)
+        Self::handled_leaving(None)
     }
 
     pub fn from_handled(event: Event<'a>, handled: bool) -> Self {

@@ -25,7 +25,7 @@ fn acceptance_does_not_require_a_state_write() {
         );
         scroll(1.0, move |_, delta| {
             if accepts {
-                ScrollOutcome::with_remainder(Vec2::ZERO)
+                ScrollOutcome::handled_leaving(Vec2::ZERO)
             } else {
                 ScrollOutcome::unhandled(delta)
             }
@@ -75,7 +75,7 @@ fn partial_consumption_round_trips_all_units() {
         );
         scroll(2.0, move |_, input| {
             assert_eq!(input, expected);
-            ScrollOutcome::with_remainder(Vec2::new(input.x, input.y / 2.0))
+            ScrollOutcome::handled_leaving(Vec2::new(input.x, input.y / 2.0))
         })(
             &mut output,
             Placement::root(Rect::new(0.0, 0.0, 20.0, 30.0)),
@@ -102,11 +102,11 @@ fn nested_handlers_receive_only_unused_scroll_and_respect_clipping() {
     let outer = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
     scroll(2.0, |log: &mut Vec<Vec2>, delta| {
         log.push(delta);
-        ScrollOutcome::with_remainder(Vec2::ZERO)
+        ScrollOutcome::handled_leaving(Vec2::ZERO)
     })(&mut output, outer);
     scroll(2.0, |log: &mut Vec<Vec2>, delta| {
         log.push(delta);
-        ScrollOutcome::with_remainder(Vec2::new(delta.x, delta.y / 2.0))
+        ScrollOutcome::handled_leaving(Vec2::new(delta.x, delta.y / 2.0))
     })(
         &mut output,
         Placement::new(

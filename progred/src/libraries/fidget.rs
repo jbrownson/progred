@@ -681,7 +681,7 @@ fn scroll_zoom(
     } else {
         (
             Some(with_camera(state, Camera { zoom, ..initial })),
-            puri::handler::ScrollOutcome::with_remainder(Vec2::new(
+            puri::handler::ScrollOutcome::handled_leaving(Vec2::new(
                 delta.x,
                 if zoom == requested {
                     0.0

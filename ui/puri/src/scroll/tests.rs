@@ -26,7 +26,7 @@ fn sample_adapter_preserves_metadata_and_borrows_untouched_batches() {
         matches!(result.remaining,Some(Event::Scroll(Cow::Borrowed(events))) if std::ptr::eq(events.as_ptr(),packets.as_ptr()))
     );
     let result = each(Cow::Borrowed(&packets), |_| {
-        ScrollOutcome::with_remainder(ScrollDelta::LineDelta(0.0, 1.0))
+        ScrollOutcome::handled_leaving(ScrollDelta::LineDelta(0.0, 1.0))
     });
     let Some(Event::Scroll(events)) = result.remaining else {
         panic!("expected remainder")
@@ -57,7 +57,7 @@ fn clipping_preserves_in_bounds_batches_and_ordered_remainders() {
                 if event.state.time == 30 {
                     ScrollOutcome::consume(event)
                 } else {
-                    ScrollOutcome::with_remainder(ScrollDelta::LineDelta(0.0, 0.5))
+                    ScrollOutcome::handled_leaving(ScrollDelta::LineDelta(0.0, 0.5))
                 }
             })
         },
