@@ -14,21 +14,19 @@ hierarchy, mints no identity, and owns no global clipboard, window, clock, or
 focus service. Platform services arrive only as caller-supplied capabilities in
 the dispatch context. Puri grows only as Progred needs it.
 
-Masonry is a quarry, not a foundation: Puri inherits none of its widget tree,
-pods, or context protocol. Code taken from it is vendored with attribution and
-purified in place; trivial widgets are rewritten instead. None is vendored
-today: line editing borrows Parley's `PlainEditor` behavior, constructed
-transiently for each pass and dispatch.
+Line editing borrows Parley's `PlainEditor` behavior, constructed transiently
+for each pass and dispatch.
 
 The caller owns focus, any focus order, and durable interaction state; a
 description receives focus as an input. Durable helper state holds only
 caller-owned content and cross-frame interaction data. `LineEditState` contains
 text and cross-frame editing state; `LineEditDescription` supplies font, paint,
-affixes, focus, and chrome for this description, and its transient
-handlers capture those presentation inputs. `EditCtx` supplies
-mutable state, Parley contexts, a clipboard capability, and the host's command
-modifier at dispatch. A WebAssembly host chooses that modifier from the browser's
-platform rather than the compilation target. A focused editor
+affixes, focus, and selection and caret brushes for this description, and its
+transient handlers capture those presentation inputs. `EditCtx` lends
+mutable state, Parley contexts, and a clipboard capability at dispatch; the
+host's command modifier comes with the placement to `install`. A WebAssembly
+host chooses that modifier from the browser's platform rather than the
+compilation target. A focused editor
 reports its caret as the frame's input area. The native shell allows platform
 IME only while a frame has one and places composition candidates there; the
 browser host does not enable IME yet.
@@ -39,11 +37,11 @@ borrows, then apply a document conversion and record undo as one interaction.
 Puri does not know about those document operations. Progred captures conversion
 in the current line handler, never in persistent selection state.
 
-At Progred's line-control boundary, missing editing state has a defined default:
+At Progred's line-editor boundary, missing editing state has a defined default:
 the current spelling with the caret at its end. The frame uses that state without
 persisting it; dispatch materializes it on access for an editing interaction.
 Selection operations need not eagerly construct widget state. This policy belongs
-to the line control, not to generic selection or the data model.
+to the line editor, not to generic selection or the data model.
 
 The package boundaries are:
 
@@ -64,7 +62,8 @@ a pure consumer of it.
 
 ## Measurement and placement
 
-Puri owns `Placement { rect, available_rect, clip_rect }`, not a layout algebra.
+Puri re-exports uig's `Placement { rect, available_rect, clip_rect }` and owns
+no layout algebra.
 Measurement composition, layout nodes, containers, and traversal belong to the
 consumer. Puri text and editor descriptions expose metrics and accept a settled
 placement; interaction helpers register against one.
@@ -108,8 +107,8 @@ The choice engine has no GID, editor, or Puri dependency. `ChoiceBuild` owns
 per-frame sharing and choice bookkeeping; `resolve_choices` returns a
 `Measured<Out>`: an extent and placement callback. The selected choice graph
 places directly, without building a second measured container tree. Plain
-measured combinators compose callbacks using the same geometry helpers, not a
-`Kind` enum. `ObserveLayout` exposes the chosen row/column/layers and direct-child
+measured combinators compose callbacks using the same geometry helpers.
+`ObserveLayout` exposes the chosen row/column/layers and direct-child
 boundaries during that placement, for consumers that need structural traversal.
 It does not expose discarded alternatives or require another tree. Wrappers do
 not interpret their output. Out-of-flow
@@ -160,8 +159,9 @@ contain no document or interaction information.
 Each leaf answers hover immediately and contributes a continuation for after
 hover settles; there is no catalogue of ordinary hover callbacks. `HoverContext`
 is the transient interface a widget uses to answer probes, declare navigation,
-and supply `after_hover` continuations. `render` is a combinator over that boundary: native handlers that don't need the
-winner are lifted into it at the end of the widget's contribution, and handlers
+and supply `after_hover` continuations. `render` is an `after_hover`
+continuation that paints. Handlers a widget registers directly, which don't need
+the winner, are lifted into an `after_hover` at the end of its visit; handlers
 that do are constructed inside `after_hover`. `finish` runs floating placements
 and returns `HoverOutput`. Its consuming `bind` uses `Attribution` to assemble
 `Effects` and returns a distinct `FrameOutput`: canvas-only renders, one
@@ -196,17 +196,17 @@ Document-aware widgets live inside Progred. During preparation they borrow
 the current sources, selection, view, and path, requesting document-site state
 only when needed; inert decorators construct no editing state or capabilities.
 Their handlers capture only
-the props and location they need, receive `&mut Editor` at dispatch, and call
-ordinary [editing helpers](../progred/src/editing.rs). There is no per-widget
+the props and [`Site`](../progred/src/editing/site.rs) they need, act through
+the `Session` the host lends at dispatch, and call ordinary
+[editing helpers](../progred/src/editing.rs). There is no per-widget
 dictionary of editor callbacks. A read-only line installs no editing handlers.
 Puri's text editor remains independent of these document operations.
-The location-facing callbacks capture an
-[editing scope](../progred/src/editing/scope.rs). At dispatch, the scope opens
-an `Edit` interface over the session the dispatch lends. Opening it
-neither allocates nor copies the editor. The scope interprets locations
-through conjects, a jump's location or a computed value's none, not arbitrary
-replacements of every editor operation; the normal projection uses its
-allocation-free identity case.
+A site carries an [editing scope](../progred/src/editing/scope.rs):
+`site.open(session)` opens an `Edit` over that session, reading and writing
+through the scope. Opening it neither allocates nor copies the editor. The scope
+interprets locations through conjects, a jump's location or a computed value's
+none, not arbitrary replacements of every editor operation; the normal
+projection uses its allocation-free identity case.
 Selection and annotations remain local to the occurrence, while document reads
 and mutations resolve through the same conject. Document-editing shell commands
 use the scope retained by the selection too. Copy and fold are instead supplied
@@ -268,46 +268,17 @@ consumer's layout composition, not to a Puri widget's return type.
 `descend`, `at`, and `jump` build ordinary preparation functions using an
 explicit [projection scope](../progred/src/display/widget/project.rs). The app
 supplies source lookup, cycle detection, conject, and the selected current and
-descendant partials. There are no path-bearing layout operations, and the editor
-doesn't interpret layouts; native widgets and the editor share one placement
-output.
-
-Preparation interleaves projection and measurement. These functions run before
-choice resolution and placement, not eagerly while a partial first constructs
-its description. That retains sharing: a descendant referenced by several
-alternatives prepares once in that frame. The next frame starts a fresh builder.
-
-`current` and `default` remain separate explicit projection inputs. Missing
-locations pass `None` to the chosen partial and fall back to the ordinary
-pending widget; computed roots remain read-only. The GID layout library's
-path-bearing forms decode through the common path library into these functions,
-not a second path opcode interpreter.
-
-Grap can return stored GID layout forms for decoding, or produce an explicit
-`layout program`. The latter holds an ordinary Grap closure; its partial applies
-that closure with borrowed FFIs closed over a Rust output buffer. Box and widget
-calls emit native layouts into that buffer, never native objects or handles into
-Grap. Grouping calls evaluate a raw body while collecting its children, then
-emit their parent. The buffer is evaluation-local, and a halt or invalid builder
-call discards it. See [the scoped interface](../progred/src/libraries/layout/scope.rs).
-
-The effect boundary is explicit so existing value-returning projection
-combinators keep their semantics. For example, `border` can wrap a returned
-layout program just as it wraps another projected value. It does not inspect
-or intercept the builder's effects. Native widgets do not take either GID path,
-and neither path encodes every drawing operation as GID before painting.
-`libraries::layout::on_event` is the Grap adapter for handlers: it installs one
-native handler that encodes each event as the core's `site::event` record and
-calls the site-scoped interpreter directly. Layout has no Grap-event
-constructor or interpretation arm.
+descendant partials. They run during preparation, interleaved with measurement
+and before choices resolve, so a descendant several alternatives share prepares
+once in the frame; the next frame starts a fresh builder. Grap's stored layout
+forms, its [layout programs](../progred/src/libraries/layout/scope.rs), and its
+`on_event` adapter produce the same native layouts and handlers.
+[Grap and projections](projections.md#lowering-and-interaction) describes the
+recursion and [layout programs](projections.md#scoped-layout-programs).
 
 Line editing, delimiters, pointer actions, hover feedback, scrubbing, state
-scrolling, borders, and popovers are native widget functions and combinators.
-Completion and drawing-program functions call app adapters during preparation;
-the adapters own document-specific offers, evaluation, and source attribution,
-and return the same measured widget output. They are not operations of the box
-interpreter. Completion providers remain explicit lazy inputs and run only for
-the active picker.
+scrolling, borders, and popovers are native widget functions and combinators,
+not operations of the box interpreter.
 
 ## Dispatch and hover
 
@@ -379,9 +350,11 @@ The [application shell](../progred/src/app.rs) adapts Winit events, supplies
 platform capabilities, and schedules painting; it contains no keyboard chain or
 pointer selection rules. Each window owns an `EditorRunner`: the mutable
 `Editor` beside its `FrameState` (dispatch, settled hover, and optional pending
-painting), plus queued continuous input. Widget handlers receive only
-`&mut Editor`; the saved handler is never part of the state passed back to
-itself.
+painting), plus queued continuous input. Handlers receive the mutable `Editor`
+and a `DispatchContext`, whose `handler` is the frame's whole handler, so a
+handler can lower its input into another event that every handler sees, as an
+unclaimed arrow becomes `Event::Navigate`. The handler stays in `FrameState`;
+the editor never stores it.
 
 [`input.rs`](../progred/src/input.rs) interprets keyboard, pointer, and IME
 events. Its `update_frame` calls run the installed frame's handler, then build
@@ -465,6 +438,10 @@ selects and reveals; deletion, pending insertion/cancellation, and Undo/Redo
 explicitly reveal their resulting selection. Native and drawn menus use the same
 commands. Navigation's [`Geometry`](../progred/src/display/widget/navigation/geometry.rs)
 borrows the installed frame's landmarks, view regions, and scale; a reveal immediately adjusts the appropriate view's offset.
+It uses the destination's full painted rectangle, independently of its
+navigation position. A fully visible selection stays put; a clipped selection
+scrolls into view with a small landing margin. When it cannot fit, the top/left
+edge takes precedence. The margin is not itself a scroll trigger.
 Ordinary pointer selection, completion, and low-level selection/payload setters
 do not implicitly scroll. Widgets that navigate elsewhere can compose selection
 with `reveal_path` or `reveal_selection`, as canvas picking does through `arrive`.
@@ -600,7 +577,9 @@ invalidation system, observing missing definitions and ordered definition sets
 too, not event-specific special cases.
 
 Cross-frame reuse consists of caller-threaded text shaping and the explicit
-caller-owned [computation graph](incremental.md), currently used by CAM geometry.
+caller-owned [computation graph](incremental.md), which holds
+`{render: expression}` evaluations, viewport preparation, tree preparation,
+preview interaction state, and CAM geometry.
 Visible Grap canvas programs record once per frame, sharing commands and
 source hits between hit-testing and painting. This within-frame sharing and
 the layout DAG do not reuse computation to construct later frames. The installed
@@ -620,7 +599,7 @@ there is no backend-specific fragment conversion or new GID drawing list.
 rectangles in recordings rather than becoming paths merely for transport.
 Parley owns text shaping. Puri does not depend on a platform clipboard library.
 
-The native canvas now groups contiguous vector operations into Vello scenes,
+The native canvas groups contiguous vector operations into Vello scenes,
 interleaved with independent image textures and mesh viewports in painting order. This policy
 belongs to the [compositor](../ui/puri-vello/src/compositor.rs), not panes,
 widgets, or layout. Vector-only frames keep a single Vello call. Mixed clipping
@@ -655,15 +634,15 @@ does not build an intermediate drawing-command list; clipped or skipped paint
 does not construct a path. Its width is fixed by text size; only the vertical
 shape stretches. Progred's `bracket` combines two ordinary
 fixed-width widgets and a child in a row, with `fill_height` on the sides.
-There is no `Surround` operation, maximum-width reservation, or child-dependent
-remeasurement. `selectable_bracket` explicitly composes `selectable_widget`
+There is no maximum-width reservation or child-dependent remeasurement.
+`selectable_bracket` explicitly composes `selectable_widget`
 inside the stretching wrapper, so its handlers use the expanded rectangle too.
 Structural cell/list/record and expression projections opt into that behavior;
 Grap's low-level bracket layout is inert unless explicitly wrapped.
 
-`puri-widgets::panel` supplies the common fill/border painter for popup cards
-and projection borders. Colors, stroke, radius, placement, paint order, and
-whether the surface blocks input are supplied by the host. Panel drawing owns
+`puri-widgets::panel` supplies the common fill/border painter for popup cards:
+the popover and the completion card. Colors, stroke, radius, placement, paint
+order, and whether the surface blocks input are supplied by the host. Panel drawing owns
 no child layout, popup policy, or document state.
 
 Color controls likewise paint directly through `CanvasSink`: their gradients,
