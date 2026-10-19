@@ -558,9 +558,6 @@ pub struct HoverOutput<C, Hover> {
 /// and element moves when an empty parent can simply take ownership of
 /// its first child's buffer.
 fn append<T>(base: &mut Vec<T>, mut above: Vec<T>) {
-    if above.is_empty() {
-        return;
-    }
     if base.is_empty() {
         *base = above;
     } else {
@@ -611,9 +608,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         self.after_hover.append(above.after_hover);
         self
     }
-}
 
-impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
     pub fn attribute_view(&mut self, root: &Root) {
         if let Some((owner, _)) = &mut self.claim {
             *owner = Some(root.clone());
@@ -637,11 +632,8 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             let mut child = Effects::default();
             after.bind(hover, &mut child);
             output.renders.append(&mut child.renders);
-            if let Some(handler) = &mut child.handler {
-                *handler = view_handler(std::mem::take(handler), root.clone());
-            }
             if let Some(handler) = child.handler {
-                output.handler().stack(handler);
+                output.handler().stack(view_handler(handler, root.clone()));
             }
         });
     }
@@ -665,6 +657,35 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
             hover_geometry: self.hover_geometry,
             input_area: self.input_area,
         }
+    }
+
+    fn clipped(mut self, placement: Placement) -> Self {
+        for probe in &mut self.scroll_probes {
+            probe.placement.clip_rect = probe
+                .placement
+                .clip_rect
+                .intersect(placement.rect)
+                .intersect(placement.clip_rect);
+        }
+        let after = std::mem::take(&mut self.after_hover);
+        self.after_hover.push(move |hover, output| {
+            let mut child = Effects::default();
+            after.bind(hover, &mut child);
+            output.renders.push(Box::new(move |canvas| {
+                canvas.clip(placement.rect, Affine::IDENTITY, |canvas| {
+                    puri::frame::render(child.renders, canvas)
+                })
+            }));
+            if let Some(handler) = child.handler {
+                output
+                    .handler()
+                    .stack(container::gate_starts(handler, placement));
+            }
+        });
+        self.handler = self
+            .handler
+            .map(|handler| container::gate_starts(handler, placement));
+        self
     }
 }
 
@@ -697,36 +718,5 @@ impl<C: 'static, H: 'static> HasHandler<C> for HoverOutput<C, H> {
         self.handler_mut()
     }
 }
-impl<C: 'static, H: 'static> HoverOutput<C, H> {
-    fn clipped(mut self, placement: Placement) -> Self {
-        for probe in &mut self.scroll_probes {
-            probe.placement.clip_rect = probe
-                .placement
-                .clip_rect
-                .intersect(placement.rect)
-                .intersect(placement.clip_rect);
-        }
-        let after = std::mem::take(&mut self.after_hover);
-        self.after_hover.push(move |hover, output| {
-            let mut child = Effects::default();
-            after.bind(hover, &mut child);
-            output.renders.push(Box::new(move |canvas| {
-                canvas.clip(placement.rect, Affine::IDENTITY, |canvas| {
-                    puri::frame::render(child.renders, canvas)
-                })
-            }));
-            if let Some(handler) = child.handler {
-                output
-                    .handler()
-                    .stack(container::gate_starts(handler, placement));
-            }
-        });
-        self.handler = self
-            .handler
-            .map(|handler| container::gate_starts(handler, placement));
-        self
-    }
-}
-
 #[cfg(test)]
 mod tests;
