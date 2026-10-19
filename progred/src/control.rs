@@ -14,7 +14,7 @@ use crate::driver::{Driver, keystroke_for};
 use crate::gid_text::{self, Binders};
 use crate::library::Libraries;
 use crate::sources::Sources;
-use gid::{CellId, Cells, Document};
+use gid::{CellId, Document};
 use kurbo::{Point, Size, Vec2};
 use puri::draw::DrawList;
 use puri_vello::capture::Gpu;
@@ -245,7 +245,7 @@ fn respond(libraries: &Libraries, binders: &Binders, request: &[u8]) -> String {
     gid_text::print(
         &Document {
             root: Some(result),
-            cells: Cells::new(),
+            ..Document::default()
         },
         binders,
     )

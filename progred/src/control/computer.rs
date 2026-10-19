@@ -10,7 +10,7 @@ use crate::gid_text::Binders;
 use crate::libraries::Library;
 use crate::libraries::{name, png, text};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 use kurbo::{Point, Vec2};
 use std::{cell::RefCell, rc::Rc};
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
@@ -112,7 +112,7 @@ pub(super) fn vocabulary_document(binders: &Binders) -> String {
     crate::gid_text::print(
         &gid::Document {
             root: Some(Value::list(binders.values().map(|cell| Value::from(*cell)))),
-            cells: Cells::new(),
+            ..gid::Document::default()
         },
         binders,
     )

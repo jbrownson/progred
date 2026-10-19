@@ -1,7 +1,7 @@
 use super::computer::vocabulary::*;
 use super::*;
 use crate::libraries::{f64, text};
-use gid::{Step, Value};
+use gid::{Cells, Step, Value};
 use puri::keyboard::CommandModifier;
 
 fn session(root: Value) -> Rc<RefCell<Session>> {
