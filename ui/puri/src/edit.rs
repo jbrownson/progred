@@ -1,9 +1,9 @@
 //! Bare editable text over parley, custody split at true state: the
 //! caller-owned `LineEditState` holds text and interaction state;
-//! font, paint, affixes, focus, and chrome belong to the ephemeral
-//! `LineEditDescription`. A transient `PlainEditor` is
-//! constructed from that state for each pass (drawing) and each
-//! dispatch (editing semantics), then discarded — parley's
+//! font, paint, affixes, focus, and the selection and caret brushes
+//! belong to the ephemeral `LineEditDescription`. A transient
+//! `PlainEditor` is constructed from that state for each pass (drawing)
+//! and each dispatch (editing semantics), then discarded — parley's
 //! retained-mode machinery (cached layout, dirty flag, driver-gated
 //! writes) lives and dies inside those moments, while its editing
 //! behavior is borrowed whole. Word- and line-anchored drag extension

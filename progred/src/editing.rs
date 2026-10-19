@@ -80,7 +80,9 @@ fn edit_line(
 }
 
 /// Apply this line's conversion of what was typed, and report whether it
-/// opens an undo step.
+/// opens an undo step. It writes apart from [`write`] because its caller
+/// takes the undo snapshot before the keystroke changes the line, and the
+/// edit run's flag lives on the selection.
 pub(crate) fn commit_line(
     doc: &mut std::rc::Rc<gid::Document>,
     libraries: &crate::library::Libraries,

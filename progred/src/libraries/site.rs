@@ -1,6 +1,7 @@
-//! Per-site access to the editor's annotation trie. GET and SET never
+//! Per-site access to the editor's annotations. GET and SET never
 //! take a path: the host supplies them while dispatching an event
-//! at a projection site. PATH exposes that site's document path as data.
+//! at a projection site. PATH exposes the site's occurrence path in its
+//! view as data.
 //! The editor defines these cells and the fold states beside the code
 //! that interprets them; this library names them.
 

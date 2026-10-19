@@ -1,5 +1,5 @@
-//! Per-path editor state as data: one UI trie belongs to each workspace
-//! view. Each path holds one open record under convention keys, so
+//! Per-path editor state as data: each workspace view holds one map of it
+//! by path. Each path holds one open record under convention keys, so
 //! independent concerns compose at a node without owning it. The runtime
 //! uses typed paths; the path library exposes their GID representation.
 

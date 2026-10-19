@@ -63,8 +63,8 @@ pub(crate) fn shallow_cell_with<W: Host>(
     )))
 }
 
-/// A parameter is a cell. An empty slot offers a new one named as typed,
-/// ahead of existing cells that happen to share the name.
+/// A parameter is a cell. An empty slot offers only a new one, named as
+/// typed.
 fn parameter<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     match input.value {
         Some(_) => declaration_cell(input),
