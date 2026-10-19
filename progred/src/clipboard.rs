@@ -87,7 +87,7 @@ impl TextClipboard for Clipboard {
 /// that spelling under the private clipboard format too, whose
 /// presence is what says "structure" — never the text's shape, so
 /// text that happens to spell Value JSON stays text.
-pub(crate) fn to_clipboard(value: &Value) -> (String, bool) {
+pub(crate) fn spelling(value: &Value) -> (String, bool) {
     match (text::read(value), value.as_blob()) {
         (Some(text), _) => (format!("\"{text}\""), false),
         (_, Some(_)) => (value.to_string(), false),

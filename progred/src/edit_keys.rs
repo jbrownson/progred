@@ -101,7 +101,7 @@ impl Editor {
     /// alone, no cell values travel; the value carries its own inline
     /// structure.
     pub(crate) fn copy_value(&mut self, value: &Value) -> bool {
-        let (text, structural) = crate::clipboard::to_clipboard(value);
+        let (text, structural) = crate::clipboard::spelling(value);
         self.text_clipboard.copy(text, structural.then_some(value))
     }
 

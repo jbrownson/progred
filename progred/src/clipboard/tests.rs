@@ -13,7 +13,7 @@ fn clipboard_spellings_round_trip() {
         Value::from(vec![0xde, 0xad]),
     ];
     for value in atoms {
-        let (text, structural) = to_clipboard(&value);
+        let (text, structural) = spelling(&value);
         assert!(!structural);
         assert_eq!(resolve_query(&text), value);
     }
@@ -27,19 +27,19 @@ fn clipboard_spellings_round_trip() {
         Value::record([(cell, Value::from(vec![0x00_u8]))]),
     ];
     for value in structures {
-        let (text, structural) = to_clipboard(&value);
+        let (text, structural) = spelling(&value);
         assert!(structural);
         assert_eq!(from_structure(text.as_bytes()), Some(value));
     }
     // Atoms read in other apps; alien text pastes sensibly — and
     // TEXT IS NEVER STRUCTURE: characters that happen to spell
     // Value JSON read as the string they are.
-    assert_eq!(to_clipboard(&crate::test_values::text("hi")).0, "\"hi\"");
-    assert_eq!(to_clipboard(&Value::from(vec![0xff_u8])).0, "0xff");
+    assert_eq!(spelling(&crate::test_values::text("hi")).0, "\"hi\"");
+    assert_eq!(spelling(&Value::from(vec![0xff_u8])).0, "0xff");
     assert_eq!(
         resolve_query("loose text"),
         crate::test_values::text("loose text")
     );
-    let spelled = to_clipboard(&Value::record([])).0;
+    let spelled = spelling(&Value::record([])).0;
     assert_eq!(resolve_query(&spelled), crate::test_values::text(&spelled));
 }
