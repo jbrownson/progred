@@ -356,17 +356,10 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     );
 
     let f = frame(&mut world);
-    let select_all = KeyboardEvent {
-        modifiers: crate::modifiers::command(),
-        ..key(Key::Character("a".into()))
-    };
-    let target = crate::navigate::select_all(
-        crate::modifiers::native(),
-        &f.landmarks,
-        None, // This fixture places one projection without the pane wrapper.
-        &select_all,
-    )
-    .expect("select all reaches the root");
+    // This fixture places one projection without the pane wrapper, so what
+    // it draws belongs to no view.
+    let target = crate::display::widget::navigation::landmark_at(&f.landmarks, None, &[])
+        .expect("the root is drawn");
     assert!((target.select)(&mut world, None));
     assert!(world.model.selection.as_ref().unwrap().path().is_empty());
 

@@ -41,9 +41,9 @@ pub fn selection_after_removing<World>(
         })
 }
 
-/// Handle Select All after focused controls decline the raw key. Arrow routing
-/// is supplied separately by the projection's ordinary navigation handlers.
-pub(crate) fn keyboard(
+/// Select All, once focused controls decline the raw key, selects the root
+/// of the selection's view, else the document's.
+pub(crate) fn select_all_key(
     editor: &mut crate::Editor,
     geometry: Geometry<'_, crate::Editor>,
     event: &KeyboardEvent,
@@ -54,15 +54,8 @@ pub(crate) fn keyboard(
         .as_ref()
         .map(Selection::root)
         .unwrap_or_else(|| editor.model.workspace.document_root());
-    if let Some(target) = select_all(
-        editor.command_modifier,
-        geometry.landmarks,
-        Some(root),
-        event,
-    ) {
-        return geometry.arrive(editor, target, None);
-    }
-    false
+    select_all(editor.command_modifier, geometry.landmarks, root, event)
+        .is_some_and(|target| geometry.arrive(editor, target, None))
 }
 
 /// Tab moves to the next place to fill in, in reading order, and Shift+Tab
@@ -75,25 +68,18 @@ pub(crate) fn tab(
     geometry: Geometry<'_, crate::Editor>,
     event: &KeyboardEvent,
 ) -> bool {
-    if !event.state.is_down()
-        || event.key != Key::Named(NamedKey::Tab)
-        || event.modifiers.ctrl()
-        || event.modifiers.meta()
-        || event.modifiers.alt()
-    {
-        return false;
-    }
-    if advance(editor, geometry, event.modifiers.shift()) {
-        return true;
-    }
-    !cfg!(target_arch = "wasm32") && editor.model.selection.take().is_some()
+    event.state.is_down()
+        && event.key == Key::Named(NamedKey::Tab)
+        && !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.alt())
+        && (advance(editor, geometry, event.modifiers.shift())
+            || !cfg!(target_arch = "wasm32") && editor.model.selection.take().is_some())
 }
 
 pub(crate) fn initial_navigation(
     root: &Root,
     landmarks: &[Landmark<crate::Editor>],
 ) -> Option<puri::handler::Handler<crate::Editor, crate::frame::DispatchContext<crate::Editor>>> {
-    let target = root_target(landmarks, Some(root))?;
+    let target = root_target(landmarks, root)?;
     let root = root.clone();
     let path = target.path.clone();
     let scope = target.scope.clone();
@@ -111,29 +97,29 @@ pub(crate) fn initial_navigation(
     ))
 }
 
+/// The root of `root`'s view, when `event` is Select All.
 pub fn select_all<'a, World>(
     command: puri::keyboard::CommandModifier,
     landmarks: &'a [Landmark<World>],
-    root: Option<&Root>,
+    root: &Root,
     event: &KeyboardEvent,
 ) -> Option<&'a Landmark<World>> {
-    (event.state.is_down()
-        && command.pressed(&event.modifiers)
-        && !(event.modifiers.shift() || event.modifiers.alt())
-        && matches!(&event.key, Key::Character(key) if key.eq_ignore_ascii_case("a")))
+    (crate::modifiers::chord(command, event, "a")
+        && !(event.modifiers.shift() || event.modifiers.alt()))
     .then(|| root_target(landmarks, root))
     .flatten()
 }
 
+/// What's drawn at the root of `root`'s view.
 fn root_target<'a, World>(
     landmarks: &'a [Landmark<World>],
-    root: Option<&Root>,
+    root: &Root,
 ) -> Option<&'a Landmark<World>> {
-    let path = match root.map(Root::target) {
-        Some(Target::Pane { path }) => path.as_slice(),
-        _ => &[],
+    let path = match root.target() {
+        Target::Pane { path } => path.as_slice(),
+        Target::Document => &[],
     };
-    landmark_at(landmarks, root, path)
+    landmark_at(landmarks, Some(root), path)
 }
 
 /// The stop after the drawn `path`: its next sibling, else the one after its

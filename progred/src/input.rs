@@ -109,7 +109,7 @@ pub(crate) fn structural_keys(scale: f64) -> Handler<Editor, DispatchContext<Edi
             || editor.insert_key(geometry, event)
             || editor.replace_key(geometry, event)
             || navigate::tab(editor, geometry, event)
-            || navigate::keyboard(editor, geometry, event)
+            || navigate::select_all_key(editor, geometry, event)
             || navigate::direction(event)
                 .is_some_and(|direction| navigate_frame(editor, direction, input, scale))
     });
