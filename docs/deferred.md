@@ -880,6 +880,13 @@ This is the biggest weak spot.
   in always keeps its caret, unlike a spreadsheet's cell, and that stays; Enter
   there only re-spells it and returns the caret to its default, where it could
   move on to the next thing, or in a list select an insertion after.
+  What either adds is also decided in one place, `pending_enter` and
+  `pending_insert` in selection.rs, by the kind of value: beside an element a
+  sibling, on a record or a cell holding one a field, on a bare cell a value.
+  A container's view only accepts or refuses it, so a Grap call can't make
+  Enter add its next argument, nor a match its next case. It belongs with the
+  projections that draw those containers, Raw's list, record and cell views by
+  default, asked by the container when the selection is inside it.
 - A raw view of one value in place, as the document-wide Raw view shows
   everything. Structure a projection hides, such as a field on a number, would
   be authored there; today only a whole view can be raw.
