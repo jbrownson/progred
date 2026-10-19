@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::Face;
+use crate::display::test_support::Fonts;
 use crate::display::test_support::mouse;
 use crate::display::test_support::{ResolveForDispatch, painted};
 use crate::display::widget::frame::{Attribution, DispatchContext, HoverInput, HoverOutput, place};
@@ -11,39 +12,12 @@ use kurbo::Rect;
 use peniko::Brush;
 use puri::draw::{DrawCmd, DrawList, Shape};
 use puri::hover::Claim;
-use puri::text::TextCache;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::Modifiers;
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
     PointerUpdate,
 };
-
-/// What measuring a card's text needs, as a frame lends it.
-struct Fonts {
-    fonts: parley::FontContext,
-    layouts: parley::LayoutContext<Brush>,
-    cache: TextCache,
-}
-
-impl Fonts {
-    fn new() -> Self {
-        Self {
-            fonts: crate::fonts::bundled_font_context(),
-            layouts: parley::LayoutContext::new(),
-            cache: TextCache::default(),
-        }
-    }
-
-    fn text(&mut self, scale: f64) -> TextCtx<'_> {
-        TextCtx {
-            fonts: &mut self.fonts,
-            layouts: &mut self.layouts,
-            cache: &mut self.cache,
-            scale: scale as f32,
-        }
-    }
-}
 
 /// What a placed card paints with nothing hovered.
 fn paint<C: 'static>(placed: HoverOutput<C, Hovered>) -> DrawList {

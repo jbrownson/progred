@@ -217,7 +217,7 @@ fn peeling_switches_projections_off_and_names_last() {
         (world, frame)
     };
     let bytes = [Step::Key(slot), Step::Key(f64::vocabulary::F64)];
-    let shown = |frame: &Bench| frame.landmarks.iter().any(|d| d.path.as_ref() == bytes);
+    let shown = |frame: &Bench| frame.landmarks.landmark(&bytes).is_some();
     let glyphs = |frame: &Bench| {
         frame
             .list
@@ -322,7 +322,7 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
         ),
     );
     let frame = editing_frame(&mut world);
-    let placed = |path: &[Step]| frame.landmarks.iter().any(|d| d.path.as_ref() == path);
+    let placed = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
     let opened = |path: &[Step]| {
         frame
             .landmarks
@@ -366,7 +366,7 @@ fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
         Step::Key(::grap::vocabulary::EVALUATE),
         Step::Key(FUNCTION),
     ];
-    assert!(frame.landmarks.iter().any(|d| d.path.as_ref() == callee));
+    assert!(frame.landmarks.landmark(&callee).is_some());
     assert!(
         !frame
             .landmarks

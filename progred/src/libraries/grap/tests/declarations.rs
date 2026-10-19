@@ -61,17 +61,9 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
                 .cloned()
                 .chain([Step::Follow(gid::Resolution::Document)])
                 .collect::<Path>();
-            assert!(
-                frame
-                    .landmarks
-                    .iter()
-                    .any(|target| target.path.as_ref() == path)
-            );
+            assert!(frame.landmarks.landmark(&path).is_some());
             assert_eq!(
-                frame
-                    .landmarks
-                    .iter()
-                    .any(|target| target.path.as_ref() == followed),
+                frame.landmarks.landmark(&followed).is_some(),
                 !(expression && named),
                 "named={named}, expression={expression}, path={path:?}",
             );
@@ -336,8 +328,8 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
     assert!(
         !editing_frame(&mut world)
             .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == extra_path)
+            .landmark(&extra_path)
+            .is_some()
     );
     assert!(
         framed(
@@ -348,8 +340,8 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
             }
         )
         .landmarks
-        .iter()
-        .any(|d| d.path.as_ref() == extra_path)
+        .landmark(&extra_path)
+        .is_some()
     );
     let pending = pending_edge(
         &crate::test_root(),
@@ -383,12 +375,7 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
         world.model.selection = Some(pending);
         let frame = editing_frame(&mut world);
         assert!(frame.completion.is_some());
-        assert!(
-            frame
-                .landmarks
-                .iter()
-                .any(|d| d.path.as_ref() == missing_path)
-        );
+        assert!(frame.landmarks.landmark(&missing_path).is_some());
         assert!(
             src(&world.model.doc, &libraries)
                 .resolve_path(&missing_path)
@@ -447,7 +434,7 @@ fn use_site_overrides_do_not_hide_definitions_inside_inert_arguments() {
         cells,
     };
     let (bench, _) = place(&doc, None, 1200.0);
-    let has = |path: &[Step]| bench.landmarks.iter().any(|d| d.path.as_ref() == path);
+    let has = |path: &[Step]| bench.landmarks.landmark(&path).is_some();
     let body = Step::Key(grap::vocabulary::BODY);
     let follow = Step::Follow(gid::Resolution::Document);
     assert!(!has(&[body.clone(), Step::Key(direct), follow.clone()]));
@@ -547,7 +534,7 @@ fn recursive_patterns_keep_text_and_number_facets() {
             .cloned()
             .chain([Step::Element(position.clone())])
             .collect::<Path>();
-        assert!(bench.landmarks.iter().any(|d| d.path.as_ref() == path));
+        assert!(bench.landmarks.landmark(&path).is_some());
         assert!(
             !bench
                 .landmarks
@@ -564,7 +551,7 @@ fn recursive_patterns_keep_text_and_number_facets() {
             Step::Key(name::vocabulary::NAME),
         ])
         .collect::<Path>();
-    assert!(bench.landmarks.iter().any(|d| d.path.as_ref() == name_path));
+    assert!(bench.landmarks.landmark(&name_path).is_some());
 }
 
 #[test]
@@ -590,7 +577,7 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
             cells: cells.clone(),
         };
         let (bench, _) = place(&doc, None, 1200.0);
-        let has = |path: &[Step]| bench.landmarks.iter().any(|d| d.path.as_ref() == path);
+        let has = |path: &[Step]| bench.landmarks.landmark(&path).is_some();
         assert!(has(&expression_path));
         let mut followed = expression_path.clone();
         if !direct_reference {
@@ -600,16 +587,8 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
         assert_eq!(has(&followed), !direct_reference);
 
         let marker_position = |landmarks: &[Landmark<crate::Editor>]| {
-            let wrapper = landmarks
-                .iter()
-                .find(|d| d.path.as_ref() == &expression_path[..1])
-                .unwrap()
-                .rect;
-            let body = landmarks
-                .iter()
-                .find(|d| d.path.as_ref() == expression_path)
-                .unwrap()
-                .rect;
+            let wrapper = landmarks.landmark(&expression_path[..1]).unwrap().rect;
+            let body = landmarks.landmark(&expression_path).unwrap().rect;
             Point::new((wrapper.x0 + body.x0) / 2.0, wrapper.center().y)
         };
         let marker = marker_position(&bench.landmarks);
@@ -645,10 +624,7 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
             )),
         });
         let has_metadata = |frame: &crate::projection::test_support::HoverOutput<crate::Editor>| {
-            frame
-                .landmarks
-                .iter()
-                .any(|d| d.path.as_ref() == [Step::Key(extra)])
+            frame.landmarks.landmark(&[Step::Key(extra)]).is_some()
         };
         assert!(!has_metadata(&editing_frame(&mut world)));
         assert!(has_metadata(&framed(
@@ -701,8 +677,8 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     assert!(
         editing_frame(&mut world)
             .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == [Step::Key(extra)])
+            .landmark(&[Step::Key(extra)])
+            .is_some()
     );
     // Chosen alone, the operator reads infix with its operands as slots and
     // the first one's picker open.
@@ -720,8 +696,8 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     assert!(
         frame
             .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == [Step::Key(number::vocabulary::RIGHT)])
+            .landmark(&[Step::Key(number::vocabulary::RIGHT)])
+            .is_some()
     );
 }
 
@@ -763,8 +739,8 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
         assert!(
             !editing_frame(&mut world)
                 .landmarks
-                .iter()
-                .any(|d| d.path.as_ref() == [Step::Key(extra)])
+                .landmark(&[Step::Key(extra)])
+                .is_some()
         );
         assert!(
             framed(
@@ -775,8 +751,8 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
                 }
             )
             .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == [Step::Key(extra)])
+            .landmark(&[Step::Key(extra)])
+            .is_some()
         );
     }
 }

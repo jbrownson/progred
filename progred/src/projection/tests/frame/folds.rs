@@ -135,12 +135,7 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
             ..Framing::default()
         },
     );
-    let drawn = |path: &[Step]| {
-        frame
-            .landmarks
-            .iter()
-            .any(|landmark| landmark.path.as_ref() == path)
-    };
+    let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
     // The cell the document reaches opens, and a reference inside it stays
     // folded, so a shared cell isn't expanded again at every use.
     assert!(drawn(&[Step::Key(first), follow.clone(), Step::Key(uses)]));

@@ -1,6 +1,6 @@
 //! Arrows over document-authored layouts.
 
-use crate::display::test_support::ResolveForDispatch;
+use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::driver::Driver;
 use crate::libraries::{name, text};
 use crate::location::Location;
@@ -40,12 +40,7 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
     let field = |name: &str| vec![Step::Key(binders[name])];
     let frame = editing_frame(&mut world);
     for name in ["a", "b", "c", "d", "e"] {
-        assert!(
-            frame
-                .landmarks
-                .iter()
-                .any(|d| d.path.as_ref() == field(name))
-        );
+        assert!(frame.landmarks.landmark(&field(name)).is_some());
     }
     // Two columns of unequal length; the second left item has nested containers.
     world.model.selection = Some(make_selection(field("a")));
@@ -97,14 +92,7 @@ fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
     let (mut world, binders) = example_section("baseline_case");
     let field = |name: &str| vec![Step::Key(binders[name])];
     let frame = editing_frame(&mut world);
-    let rect = |name: &str| {
-        frame
-            .landmarks
-            .iter()
-            .find(|d| d.path.as_ref() == field(name))
-            .unwrap()
-            .rect
-    };
+    let rect = |name: &str| frame.landmarks.landmark(&field(name)).unwrap().rect;
     assert!((rect("c").y0 - rect("d").y0).abs() < 0.01);
     assert!(rect("a").y1 < rect("b").y0);
     assert!(rect("b").y1 < rect("d").y0);

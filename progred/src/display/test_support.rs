@@ -399,6 +399,34 @@ pub(crate) fn with_empty_view<W: 'static, H: 'static, R>(
     with_empty(|sources| with_view(sources, project, run))
 }
 
+/// The fonts, layouts and shaping cache text is measured with, as a frame
+/// lends them.
+pub(crate) struct Fonts {
+    fonts: parley::FontContext,
+    layouts: LayoutContext<peniko::Brush>,
+    cache: TextCache,
+}
+
+impl Fonts {
+    pub(crate) fn new() -> Self {
+        Self {
+            fonts: crate::fonts::bundled_font_context(),
+            layouts: LayoutContext::new(),
+            cache: TextCache::default(),
+        }
+    }
+
+    /// A text context over these at `scale`.
+    pub(crate) fn text(&mut self, scale: f64) -> TextCtx<'_> {
+        TextCtx {
+            fonts: &mut self.fonts,
+            layouts: &mut self.layouts,
+            cache: &mut self.cache,
+            scale: scale as f32,
+        }
+    }
+}
+
 /// An empty document read over no libraries.
 fn with_empty<R>(run: impl FnOnce(crate::sources::Sources<'_>) -> R) -> R {
     let document = gid::Document::default();
@@ -420,9 +448,7 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
         &dyn widget::project::Project<W, H>,
     ) -> R,
 ) -> R {
-    let mut fonts = crate::fonts::bundled_font_context();
-    let mut layouts = LayoutContext::new();
-    let mut cache = TextCache::default();
+    let mut fonts = Fonts::new();
     let root = crate::test_root();
     let annotations = crate::annotations::Annotations::default();
     let styles = widget::style::editor(widget::style::Theme::Light.palette(), 1.0);
@@ -440,16 +466,7 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
         selection: None,
         selected_trace: None,
     };
-    run(
-        &cx,
-        &mut TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            cache: &mut cache,
-            scale: 1.0,
-        },
-        project,
-    )
+    run(&cx, &mut fonts.text(1.0), project)
 }
 
 pub fn inspect<W: 'static, H: 'static>(layout: &impl Recordable<W, H>) -> ProjectionCall<W, H> {

@@ -119,12 +119,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
     );
     assert_eq!(visits.get(), 1);
     let path = vec![Step::Key(result), Step::Key(field), Step::Element(position)];
-    assert!(
-        frame
-            .landmarks
-            .iter()
-            .any(|item| item.path.as_ref() == path.as_slice())
-    );
+    assert!(frame.landmarks.landmark(&path.as_slice()).is_some());
 }
 
 #[test]
@@ -562,8 +557,7 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         let (bench, _) = place(&doc, Some(&selected), 900.0);
         let target = bench
             .landmarks
-            .iter()
-            .find(|landmark| landmark.path.as_ref() == path(1, gid::Resolution::Document))
+            .landmark(&path(1, gid::Resolution::Document))
             .unwrap();
         let marks: Vec<_> = bench
             .list
@@ -668,14 +662,9 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
             annotations: Some(&annotations),
             ..BenchFrame::of(&doc, 1200.0)
         });
-        let rects = paths.each_ref().map(|path| {
-            unmarked
-                .landmarks
-                .iter()
-                .find(|landmark| landmark.path.as_ref() == path.as_slice())
-                .unwrap()
-                .rect
-        });
+        let rects = paths
+            .each_ref()
+            .map(|path| unmarked.landmarks.landmark(&path.as_slice()).unwrap().rect);
         let outlines = rects.map(|rect| {
             RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
         });
@@ -837,24 +826,9 @@ fn expression_children_are_real() {
     let mut source_note = result.clone();
     source_note.push(Step::Key(binders["note"]));
     let (bench, _) = place(&doc, None, 560.0);
-    assert!(
-        bench
-            .landmarks
-            .iter()
-            .any(|landmark| landmark.path.as_ref() == record)
-    );
-    assert!(
-        bench
-            .landmarks
-            .iter()
-            .any(|landmark| landmark.path.as_ref() == result)
-    );
-    assert!(
-        bench
-            .landmarks
-            .iter()
-            .any(|landmark| landmark.path.as_ref() == source_note)
-    );
+    assert!(bench.landmarks.landmark(&record).is_some());
+    assert!(bench.landmarks.landmark(&result).is_some());
+    assert!(bench.landmarks.landmark(&source_note).is_some());
 }
 
 /// The chosen presentation supplies routing, independently of font metrics.
@@ -1398,8 +1372,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
             if let Some(neighbor) = neighbor {
                 let neighbor_rect = pending_frame
                     .landmarks
-                    .iter()
-                    .find(|d| d.path.as_ref() == [Step::Element(neighbor.clone())])
+                    .landmark(&[Step::Element(neighbor.clone())])
                     .unwrap()
                     .rect;
                 let (low, high, y) = if before {

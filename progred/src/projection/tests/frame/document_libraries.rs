@@ -2,10 +2,7 @@ use super::*;
 use crate::sample::{PLANET_VIEW, planets};
 
 fn drawn(world: &mut crate::Editor, path: &[Step]) -> bool {
-    editing_frame(world)
-        .landmarks
-        .iter()
-        .any(|landmark| landmark.path.as_ref() == path)
+    editing_frame(world).landmarks.landmark(&path).is_some()
 }
 
 #[test]
@@ -226,13 +223,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
                 Step::Follow(gid::Resolution::Document),
                 Step::Key(::grap::vocabulary::BODY),
             ];
-            assert!(
-                frame
-                    .landmarks
-                    .iter()
-                    .any(|landmark| landmark.path.as_ref() == body),
-                "{body:?}"
-            );
+            assert!(frame.landmarks.landmark(&body).is_some(), "{body:?}");
         }
     }
 }

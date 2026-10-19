@@ -637,12 +637,7 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
             ..Framing::default()
         },
     );
-    assert!(
-        !frame
-            .landmarks
-            .iter()
-            .any(|d| d.path.as_ref() == [Step::Key(source)])
-    );
+    assert!(!frame.landmarks.landmark(&[Step::Key(source)]).is_some());
     let path = [Step::Key(source), Step::Key(child)];
     assert!((stop(&frame, &path).select)(&mut world, None));
     assert_eq!(

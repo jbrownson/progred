@@ -135,7 +135,7 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
     ] {
         let mut world = crate::editor_of(number.clone());
         let plain = editing_frame(&mut world);
-        assert!(!plain.landmarks.iter().any(|d| d.path.as_ref() == path));
+        assert!(!plain.landmarks.landmark(&path).is_some());
         world.model.selection = Some(pending_value(&crate::test_root(), path.to_vec()));
         assert!(editing_frame(&mut world).completion.is_some());
         world.model.selection = None;
@@ -143,7 +143,7 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
             Rc::make_mut(&mut world.model.doc).root =
                 Some(number.overlaid(Value::record([(name::vocabulary::NAME, name)])));
             let frame = editing_frame(&mut world);
-            assert!(frame.landmarks.iter().any(|d| d.path.as_ref() == path));
+            assert!(frame.landmarks.landmark(&path).is_some());
         }
     }
 }
@@ -238,18 +238,9 @@ fn numeric_calls_keep_consumed_fields_projected_and_extras_available_in_raw() {
         );
         for field in doc.root.as_ref().unwrap().as_record().unwrap().keys() {
             if *field != extra {
-                assert!(
-                    bench
-                        .landmarks
-                        .iter()
-                        .any(|d| d.path.as_ref() == [Step::Key(*field)])
-                );
+                assert!(bench.landmarks.landmark(&[Step::Key(*field)]).is_some());
             }
-            assert!(
-                raw.landmarks
-                    .iter()
-                    .any(|d| d.path.as_ref() == [Step::Key(*field)])
-            );
+            assert!(raw.landmarks.landmark(&[Step::Key(*field)]).is_some());
         }
     }
 }

@@ -787,14 +787,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
     let position = gid::position::between(content.keys().last(), None).unwrap();
     let path = vec![Step::Element(position.clone())];
     let content = Value::List(content.update(position, crate::libraries::f64::value(40.0)));
-    assert!(
-        !runner
-            .frame
-            .dispatch
-            .landmarks
-            .iter()
-            .any(|stop| stop.path.as_ref() == path)
-    );
+    assert!(!runner.frame.dispatch.landmarks.landmark(&path).is_some());
     runner.update_frame(1.0, viewport, |editor, dispatch, _| {
         Rc::make_mut(&mut editor.model.doc).root = Some(content);
         editor.model.selection = Some(crate::selection::Selection::edge(
@@ -984,15 +977,8 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         ),
     );
     let styles = style::editor(style::Theme::Light.palette(), 1.0);
-    let mut fonts = crate::fonts::bundled_font_context();
-    let mut layouts = LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let mut tcx = TextCtx {
-        fonts: &mut fonts,
-        layouts: &mut layouts,
-        scale: 1.0,
-        cache: &mut cache,
-    };
+    let mut fonts = crate::display::test_support::Fonts::new();
+    let mut tcx = fonts.text(1.0);
     let size = Size::new(1200.0, 1000.0);
     let computations = crate::computations::Computations::default();
     let mut place = |model: &Model| {
@@ -1176,15 +1162,8 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         (Size::new(700.0, 400.0), 2.0),
     ] {
         let styles = style::editor(style::Theme::Light.palette(), scale);
-        let mut fonts = crate::fonts::bundled_font_context();
-        let mut layouts = LayoutContext::new();
-        let mut cache = puri::text::TextCache::default();
-        let mut tcx = TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            scale: scale as f32,
-            cache: &mut cache,
-        };
+        let mut fonts = crate::display::test_support::Fonts::new();
+        let mut tcx = fonts.text(scale);
         let computations = crate::computations::Computations::default();
         let mut place = |view, pointer| {
             crate::display::widget::frame::place(
@@ -1238,12 +1217,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
             .cloned()
             .chain([Step::Key(presentation::vocabulary::VIEWPORT)])
             .collect();
-        assert!(
-            placed
-                .landmarks
-                .iter()
-                .any(|node| node.path.as_ref() == field_path)
-        );
+        assert!(placed.landmarks.landmark(&field_path).is_some());
         place(&model.workspace.document, None);
         assert!(
             calls.borrow().is_empty(),
@@ -1280,15 +1254,8 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
     let lower = model.workspace.left.panes[1].view.root.clone();
     let stack = crate::stack::load();
     let styles = style::editor(style::Theme::Light.palette(), 1.0);
-    let mut fonts = crate::fonts::bundled_font_context();
-    let mut layouts = LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let mut tcx = TextCtx {
-        fonts: &mut fonts,
-        layouts: &mut layouts,
-        scale: 1.0,
-        cache: &mut cache,
-    };
+    let mut fonts = crate::display::test_support::Fonts::new();
+    let mut tcx = fonts.text(1.0);
     let size = Size::new(801.0, 600.0);
     let placed = crate::display::widget::frame::place(
         project_workspace(

@@ -290,9 +290,7 @@ pub(crate) struct BenchContext {
     pub(crate) computations: crate::computations::Computations,
     pub(crate) stack: crate::stack::Stack,
     pub(crate) styles: crate::display::widget::style::Styles,
-    pub(crate) fonts: parley::FontContext,
-    pub(crate) layouts: parley::LayoutContext<Brush>,
-    pub(crate) cache: puri::text::TextCache,
+    pub(crate) fonts: crate::display::test_support::Fonts,
 }
 
 /// What a bench frame draws and where: `root` within `doc`, `width` wide at
@@ -334,9 +332,7 @@ impl BenchContext {
                 crate::display::widget::style::Theme::Light.palette(),
                 1.0,
             ),
-            fonts: crate::fonts::bundled_font_context(),
-            layouts: parley::LayoutContext::new(),
-            cache: puri::text::TextCache::default(),
+            fonts: crate::display::test_support::Fonts::new(),
         }
     }
 
@@ -356,8 +352,6 @@ impl BenchContext {
             stack,
             styles,
             fonts,
-            layouts,
-            cache,
         } = self;
         computations.begin(Rc::new(doc.clone()), stack.libraries.clone());
         let unannotated = Annotations::default();
@@ -366,12 +360,7 @@ impl BenchContext {
             doc,
             libraries: &stack.libraries,
         };
-        let mut tcx = TextCtx {
-            fonts,
-            layouts,
-            scale: styles.scale as f32,
-            cache,
-        };
+        let mut tcx = fonts.text(styles.scale);
 
         // Test-only phase timings; normal frames contain no timers.
         let start = std::time::Instant::now();
