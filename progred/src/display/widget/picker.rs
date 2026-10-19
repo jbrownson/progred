@@ -5,7 +5,7 @@
 
 use crate::display::host::Layout;
 use crate::display::widget::HoverPass;
-use crate::display::widget::offers::{HoleOffers, Offers};
+use crate::display::widget::offers::{Entry, HoleOffers, Offers};
 use crate::display::widget::placed::{before, decorate, on_key, text, text_edit};
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
 use crate::display::{Host, Toolkit};
@@ -192,7 +192,7 @@ fn query_content<W: Host>(
         name: &|cell| toolkit.name(cell),
         libraries: toolkit.completions(),
     };
-    let entries = (picker.offers)(&request);
+    let entries: Rc<[Entry<W>]> = (picker.offers)(&request).into();
     let presentation = LineEditPresentation::new(styles.label.size, styles.label.brush.clone());
     let content = text_edit(
         LineEditDescription {

@@ -199,14 +199,14 @@ fn nested_values_match_by_cell_and_relative_path() {
 fn entry_hover_marks_follow_the_visible_offers() {
     let cell = new_cell_id();
     let offers = |value: Value| Offers {
-        entries: vec![Entry {
+        entries: Rc::from([Entry {
             display: "offer".to_string(),
             detail: None,
             matches: vec![],
             face: crate::display::Face::Label,
             source: value.as_cell(),
             activate: Rc::new(|_: &mut crate::Editor| {}),
-        }],
+        }]),
     };
 
     assert_eq!(

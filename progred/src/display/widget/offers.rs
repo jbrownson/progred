@@ -29,7 +29,7 @@ impl<C> Clone for Entry<C> {
 
 /// Retained in the placed frame for attribution to the exact visible offers.
 pub struct Offers<C> {
-    pub entries: Vec<Entry<C>>,
+    pub entries: Rc<[Entry<C>]>,
 }
 
 /// A hole's list for a query, in the order shown, with the spans that matched.
@@ -52,17 +52,18 @@ pub(crate) fn rank<W: Host>(
         offers
             .into_iter()
             .filter(|offer| {
-                request.kind != CompletionKind::Field
-                    || !offer
-                        .preview
-                        .as_ref()
-                        .and_then(Value::as_cell)
-                        .is_some_and(|cell| {
-                            request
-                                .value()
-                                .and_then(Value::as_record)
-                                .is_some_and(|fields| fields.contains_key(&cell))
-                        })
+                fits(request, offer)
+                    && (request.kind != CompletionKind::Field
+                        || !offer
+                            .preview
+                            .as_ref()
+                            .and_then(Value::as_cell)
+                            .is_some_and(|cell| {
+                                request
+                                    .value()
+                                    .and_then(Value::as_record)
+                                    .is_some_and(|fields| fields.contains_key(&cell))
+                            }))
             })
             .map(|offer| (text(request, &offer.display), offer))
             .collect(),
@@ -71,36 +72,49 @@ pub(crate) fn rank<W: Host>(
         request.query,
     )
     .into_iter()
-    .filter_map(|ranked| {
-        let (_, completion) = ranked.item;
-        fitting(request, completion).map(|entry| Entry {
+    .map(|ranked| {
+        let (display, completion) = ranked.item;
+        Entry {
             matches: ranked.matches,
-            ..entry
-        })
+            ..listed(request, display, completion)
+        }
     })
     .collect()
 }
 
-/// `offer` as listed, if it fits the hole: labels can only be cells, so an
-/// offer advertising another value is not one.
+/// Whether `offer` fits the hole: labels can only be cells, so an offer
+/// advertising another value is not one.
+fn fits(request: &CompletionRequest<'_>, offer: &Completion) -> bool {
+    request.kind == CompletionKind::Value
+        || offer
+            .preview
+            .as_ref()
+            .is_none_or(|value| value.as_cell().is_some())
+}
+
+/// `offer` as listed, if it fits the hole.
 pub(crate) fn fitting<W: Host>(
     request: &CompletionRequest<'_>,
     offer: Completion,
 ) -> Option<Entry<W>> {
-    (request.kind == CompletionKind::Value
-        || offer
-            .preview
-            .as_ref()
-            .is_none_or(|value| value.as_cell().is_some()))
-    .then(|| entry(request, offer))
+    fits(request, &offer).then(|| entry(request, offer))
 }
 
 /// `offer` as listed, unmatched, choosing it through the session the
 /// dispatching world lends.
 pub(crate) fn entry<W: Host>(request: &CompletionRequest<'_>, offer: Completion) -> Entry<W> {
+    listed(request, text(request, &offer.display), offer)
+}
+
+/// `offer` listed as `display`.
+fn listed<W: Host>(
+    request: &CompletionRequest<'_>,
+    display: String,
+    offer: Completion,
+) -> Entry<W> {
     let activate = offer.activate;
     Entry {
-        display: text(request, &offer.display),
+        display,
         detail: offer.detail.as_ref().map(|detail| text(request, detail)),
         matches: Vec::new(),
         face: offer.face,

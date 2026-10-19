@@ -324,6 +324,7 @@ pub(crate) fn projected_completion_entries_in(
     .completion
     .expect("the selected pending emits its offers")
     .entries
+    .to_vec()
 }
 
 pub(crate) fn activate_projected(
