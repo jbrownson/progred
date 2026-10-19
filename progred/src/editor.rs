@@ -84,6 +84,12 @@ pub(crate) fn stage() -> String {
     }
 }
 
+/// What `window` draws into, in physical pixels.
+pub(crate) fn viewport(window: &Window) -> Size {
+    let size = window.inner_size();
+    Size::new(size.width.into(), size.height.into())
+}
+
 /// One window editing one document: its own CellId universe, model,
 /// history, interaction state, and measurement caches (the font
 /// context is a cheap clone over shared font data). The dispatch
@@ -268,11 +274,7 @@ impl EditorRunner {
         editor.replace_document(doc, path, text_binders);
         if let RenderState::Active { window, .. } = &editor.state {
             let window = window.clone();
-            let size = window.inner_size();
-            self.refresh_frame(
-                self.editor.scale(&window),
-                Size::new(size.width as f64, size.height as f64),
-            );
+            self.refresh_frame(self.editor.scale(&window), viewport(&window));
             self.sync_window(&window);
             window.request_redraw();
         }

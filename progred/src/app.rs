@@ -4,7 +4,7 @@ use crate::UserEvent;
 use crate::command::{AppCommand, Command};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::editor::new_editor;
-use crate::editor::{AfterDiscard, Editor, EditorRunner, RenderState};
+use crate::editor::{AfterDiscard, Editor, EditorRunner, RenderState, viewport};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::frame::Paint;
 use crate::frame::PendingPaint;
@@ -109,13 +109,9 @@ impl ApplicationHandler<UserEvent> for App {
         for runner in &mut self.editors {
             if let RenderState::Active { window, .. } = &runner.editor.state {
                 let window = window.clone();
-                let size = window.inner_size();
                 if runner.editor.timers.fire_due(now) {
                     if !runner.flush_pending_continuous() {
-                        runner.refresh_frame(
-                            runner.editor.scale(&window),
-                            Size::new(size.width as f64, size.height as f64),
-                        );
+                        runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
                     }
                     runner.sync_window(&window);
                     window.request_redraw();
@@ -156,11 +152,10 @@ impl ApplicationHandler<UserEvent> for App {
                 for runner in &mut self.editors {
                     if let RenderState::Active { window, .. } = &runner.editor.state {
                         let window = window.clone();
-                        let size = window.inner_size();
                         if runner.palette_changed(
                             palette,
                             runner.editor.scale(&window),
-                            Size::new(size.width as f64, size.height as f64),
+                            viewport(&window),
                         ) {
                             window.request_redraw();
                         }
@@ -176,11 +171,10 @@ impl ApplicationHandler<UserEvent> for App {
                         for runner in &mut self.editors {
                             if let RenderState::Active { window, .. } = &runner.editor.state {
                                 let window = window.clone();
-                                let size = window.inner_size();
                                 runner.stack_changed(
                                     stack.clone(),
                                     runner.editor.scale(&window),
-                                    Size::new(size.width as f64, size.height as f64),
+                                    viewport(&window),
                                 );
                                 window.request_redraw();
                             } else {
@@ -197,11 +191,10 @@ impl ApplicationHandler<UserEvent> for App {
                     && let RenderState::Active { window, .. } = &runner.editor.state
                 {
                     let window = window.clone();
-                    let size = window.inner_size();
                     if runner.focus_changed(
                         browser_editor_focused(&window),
                         runner.editor.scale(&window),
-                        Size::new(size.width as f64, size.height as f64),
+                        viewport(&window),
                     ) {
                         window.request_redraw();
                     }
@@ -213,11 +206,7 @@ impl ApplicationHandler<UserEvent> for App {
                         && let RenderState::Active { window, .. } = &runner.editor.state
                     {
                         let window = window.clone();
-                        let size = window.inner_size();
-                        runner.refresh_frame(
-                            runner.editor.scale(&window),
-                            Size::new(f64::from(size.width), f64::from(size.height)),
-                        );
+                        runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
                         runner.sync_window(&window);
                         window.request_redraw();
                     }
@@ -569,11 +558,7 @@ impl App {
             {
                 runner.editor.focused = browser_editor_focused(&window);
             }
-            let size = window.inner_size();
-            runner.refresh_frame(
-                runner.editor.scale(&window),
-                Size::new(size.width as f64, size.height as f64),
-            );
+            runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
             runner.sync_window(&window);
             window.request_redraw();
         }
@@ -591,6 +576,7 @@ impl App {
             RenderState::Suspended(_) => return,
         };
         let scale = runner.editor.scale(&window);
+        let viewport = viewport(&window);
         // Preserve motion samples without minting intermediate frames.
         // Discrete input (including release/cancel) first settles the batch.
         if runner.flush_before_window_event(&event) {
@@ -599,11 +585,10 @@ impl App {
 
         #[cfg(target_os = "macos")]
         if matches!(event, WindowEvent::ThemeChanged(_)) {
-            let size = window.inner_size();
             if runner.palette_changed(
                 macos_window::palette(self.appearance, window.theme()),
                 scale,
-                Size::new(size.width as f64, size.height as f64),
+                viewport,
             ) {
                 window.request_redraw();
             }
@@ -614,23 +599,17 @@ impl App {
             let focused = _focused;
             #[cfg(target_arch = "wasm32")]
             let focused = browser_editor_focused(&window);
-            let size = window.inner_size();
-            if runner.focus_changed(
-                focused,
-                scale,
-                Size::new(size.width as f64, size.height as f64),
-            ) {
+            if runner.focus_changed(focused, scale, viewport) {
                 window.request_redraw();
             }
             return;
         }
 
         if let WindowEvent::ModifiersChanged(state) = &event {
-            let size = window.inner_size();
             runner.modifiers_changed(
                 ui_events_winit::keyboard::from_winit_modifier_state(state.state()),
                 scale,
-                Size::new(size.width as f64, size.height as f64),
+                viewport,
             );
             window.request_redraw();
         }
@@ -652,8 +631,6 @@ impl App {
                 _ => None,
             };
             let translation = runner.editor.reducer.reduce(scale, &event);
-            let size = window.inner_size();
-            let viewport = Size::new(size.width as f64, size.height as f64);
             let redraw = match (ime, translation) {
                 (Some(ime), _) => runner.ime_event(&ime, scale, viewport),
                 (None, Some(WindowEventTranslation::Keyboard(event))) => {
@@ -708,9 +685,7 @@ impl App {
             // say where the pointer now sits). The honest state is
             // unknown until the next move.
             WindowEvent::Moved(_) => {
-                let runner = &mut self.editors[index];
-                let size = window.inner_size();
-                if runner.window_moved(scale, Size::new(size.width as f64, size.height as f64)) {
+                if self.editors[index].window_moved(scale, viewport) {
                     window.request_redraw();
                 }
             }
@@ -749,14 +724,10 @@ impl App {
                 if let Some(runner) = self.focused_index().map(|index| &mut self.editors[index])
                     && let Some(window) = runner.editor.window()
                 {
-                    let size = window.inner_size();
                     let geometry = runner.frame.dispatch.geometry(runner.editor.scale(&window));
                     runner.editor.run_doc_command(command, geometry);
                     // After the command, which may have zoomed.
-                    runner.refresh_frame(
-                        runner.editor.scale(&window),
-                        Size::new(size.width as f64, size.height as f64),
-                    );
+                    runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
                     window.request_redraw();
                 }
             }
@@ -818,11 +789,10 @@ impl App {
                         window.set_theme(appearance);
                         let palette = macos_window::palette(appearance, window.theme());
                         if matches!(runner.editor.state, RenderState::Active { .. }) {
-                            let size = window.inner_size();
                             if runner.palette_changed(
                                 palette,
                                 runner.editor.scale(&window),
-                                Size::new(size.width as f64, size.height as f64),
+                                viewport(&window),
                             ) {
                                 window.request_redraw();
                             }

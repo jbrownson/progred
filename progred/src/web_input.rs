@@ -106,8 +106,7 @@ pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
             return false;
         };
         let scale = runner.editor.scale(&window);
-        let size = window.inner_size();
-        let viewport = kurbo::Size::new(size.width as f64, size.height as f64);
+        let viewport = crate::editor::viewport(&window);
         let flushed = runner.flush_pending_continuous();
         let focus_changed =
             runner.focus_changed(crate::web::browser_editor_focused(&window), scale, viewport);
