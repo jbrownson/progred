@@ -588,13 +588,13 @@ impl Editor {
     pub(crate) fn run_doc_command(&mut self, command: DocCommand, geometry: Geometry<'_, Editor>) {
         match command {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            DocCommand::Save => self.menu_save(false),
+            DocCommand::Save => self.desktop_save(false),
             #[cfg(target_arch = "wasm32")]
             DocCommand::Save => self.web_save(false),
             #[cfg(target_arch = "wasm32")]
             DocCommand::SaveAs => self.web_save(true),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
-            DocCommand::SaveAs => self.menu_save(true),
+            DocCommand::SaveAs => self.desktop_save(true),
             DocCommand::Undo => self.step_history(true, geometry),
             DocCommand::Redo => self.step_history(false, geometry),
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
@@ -664,7 +664,7 @@ impl Editor {
     /// current, so there is nothing to flush first. A cancelled dialog
     /// saves nothing.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pub(crate) fn menu_save(&mut self, save_as: bool) {
+    fn desktop_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
         let target = in_place.or_else(|| {
             self.file_dialogs

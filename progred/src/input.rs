@@ -12,12 +12,6 @@ use ui_events::pointer::{
 use ui_events_winit::WindowEventReducer;
 use winit::event::WindowEvent;
 
-pub(crate) struct PendingPaint {
-    pub(crate) scale: f64,
-    pub(crate) viewport: Size,
-    pub(crate) renders: Vec<puri::frame::Render>,
-}
-
 pub(crate) type PendingScroll = PendingBatch<PointerScrollEvent>;
 pub(crate) type PendingGesture = PendingBatch<PointerGestureEvent>;
 

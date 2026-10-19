@@ -8,7 +8,6 @@ use crate::display::widget::source::SourceTrace;
 use crate::display::widget::view::{Root, Target};
 use crate::display::widget::{container, placed, style, view};
 use crate::hover;
-use crate::input::PendingPaint;
 use crate::menu;
 use crate::model::Model;
 use crate::navigate;
@@ -49,6 +48,14 @@ pub(crate) struct Frame {
     pub(crate) dispatch: Dispatch,
     pub(crate) renders: Vec<Render>,
     pub(crate) input_area: Option<Rect>,
+}
+
+/// An installed frame's paint, waiting to be presented at the scale and
+/// viewport it was laid out for.
+pub(crate) struct PendingPaint {
+    pub(crate) scale: f64,
+    pub(crate) viewport: Size,
+    pub(crate) renders: Vec<Render>,
 }
 
 #[derive(Default)]

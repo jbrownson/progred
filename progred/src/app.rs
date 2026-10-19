@@ -7,7 +7,7 @@ use crate::editor::new_editor;
 use crate::editor::{AfterDiscard, EditorRunner, RenderState};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::frame::Paint;
-use crate::input::PendingPaint;
+use crate::frame::PendingPaint;
 #[cfg(target_os = "macos")]
 use crate::macos_surface;
 #[cfg(target_os = "macos")]

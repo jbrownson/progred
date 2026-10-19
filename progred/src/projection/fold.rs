@@ -9,8 +9,6 @@ use crate::hover::Hover;
 use gid::Step;
 use std::rc::Rc;
 
-type View = Layout;
-
 /// The editor-owned folded form shared by raw and custom projections.
 /// Active structural editors keep their containing value open.
 pub(super) fn collapsed_layout(
@@ -18,7 +16,7 @@ pub(super) fn collapsed_layout(
     path: &[Step],
     value: &grap::RuntimeValue,
     default: bool,
-) -> Option<View> {
+) -> Option<Layout> {
     let delim = match value.as_cell() {
         Some(cell) => {
             let value = cx.sources.resolve(cell)?;
@@ -49,7 +47,7 @@ pub(super) fn collapsed_layout(
 
 /// Opens the fold, selecting the occurrence first as a click on its
 /// brackets would, so Space closes it again.
-fn toggle(child: View, path: &[Step], cx: &Cx, default: bool) -> View {
+fn toggle(child: Layout, path: &[Step], cx: &Cx, default: bool) -> Layout {
     let target: Rc<[Step]> = Rc::from(path);
     let site = cx.site(target.clone());
     let hover = Hovered::Tree(Hover::Toggle(target));

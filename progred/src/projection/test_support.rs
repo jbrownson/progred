@@ -22,47 +22,43 @@ use ui_events::pointer::{
 };
 use uig::Placement;
 
-type World = crate::Editor;
-
-pub(crate) type EditingWorld = crate::Editor;
-
-pub(crate) fn editing_world(doc: &Document, libraries: &Libraries) -> EditingWorld {
+pub(crate) fn editing_world(doc: &Document, libraries: &Libraries) -> crate::Editor {
     let mut world = crate::test_editor(doc.clone());
     world.stack.libraries = libraries.clone();
     world
 }
 
 pub(crate) fn editing_frame(
-    world: &mut EditingWorld,
+    world: &mut crate::Editor,
     raw: bool,
-) -> crate::frame::HoverOutput<EditingWorld> {
+) -> crate::frame::HoverOutput<crate::Editor> {
     editing_frame_with_projection(world, raw, None)
 }
 
 pub(crate) fn editing_frame_with_projection(
-    world: &mut EditingWorld,
+    world: &mut crate::Editor,
     raw: bool,
     projection: Option<&Projection>,
-) -> crate::frame::HoverOutput<EditingWorld> {
+) -> crate::frame::HoverOutput<crate::Editor> {
     editing_frame_at(world, raw, projection, None)
 }
 
 pub(crate) fn editing_frame_at(
-    world: &mut EditingWorld,
+    world: &mut crate::Editor,
     raw: bool,
     projection: Option<&Projection>,
     pointer: Option<Point>,
-) -> crate::frame::HoverOutput<EditingWorld> {
+) -> crate::frame::HoverOutput<crate::Editor> {
     editing_frame_with_annotations(world, raw, projection, pointer, &Annotations::default())
 }
 
 pub(crate) fn editing_frame_with_annotations(
-    world: &mut EditingWorld,
+    world: &mut crate::Editor,
     raw: bool,
     projection: Option<&Projection>,
     pointer: Option<Point>,
     annotations: &Annotations,
-) -> crate::frame::HoverOutput<EditingWorld> {
+) -> crate::frame::HoverOutput<crate::Editor> {
     let stack = &world.stack;
     let styles = crate::display::widget::style::editor(world.palette, 1.0);
     let raw_projection = Projection::default();
@@ -119,7 +115,7 @@ pub(crate) fn editing_frame_with_annotations(
 
 /// Press the primary button at `point` in a fresh frame, answering what the
 /// press landed on.
-pub(crate) fn click_at(world: &mut EditingWorld, point: Point) -> Option<Hovered> {
+pub(crate) fn click_at(world: &mut crate::Editor, point: Point) -> Option<Hovered> {
     let frame = editing_frame(world, false);
     let Some((_, Claim::Direct(target))) = frame.hover_geometry.probe(Some(point), None, 0.0)
     else {
@@ -208,9 +204,10 @@ pub(crate) struct FrameTimes {
 }
 
 pub(crate) struct Bench {
-    pub(crate) handler: puri::handler::Handler<World, crate::frame::DispatchContext<World>>,
+    pub(crate) handler:
+        puri::handler::Handler<crate::Editor, crate::frame::DispatchContext<crate::Editor>>,
     pub(crate) list: DrawList,
-    pub(crate) landmarks: Vec<Landmark<World>>,
+    pub(crate) landmarks: Vec<Landmark<crate::Editor>>,
     /// What the probe answered for the pass's pointer input.
     pub(crate) hit: Option<Claim<Hovered>>,
     pub(crate) times: FrameTimes,
@@ -218,7 +215,7 @@ pub(crate) struct Bench {
 }
 
 /// Paint and unpack the output of the completed hover pass.
-pub(crate) fn settle(mut placed: crate::frame::HoverOutput<World>) -> Bench {
+pub(crate) fn settle(mut placed: crate::frame::HoverOutput<crate::Editor>) -> Bench {
     let binding = std::time::Instant::now();
     #[cfg(feature = "layout-profile")]
     let profile = crate::display::profile::enter(crate::display::profile::Kind::Hover);

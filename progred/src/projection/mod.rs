@@ -740,7 +740,7 @@ fn prepare_project(
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
 #[allow(clippy::too_many_arguments)]
-fn descend_landmark_with(
+fn descend_landmark(
     palette: crate::display::widget::style::Palette,
     selected: bool,
     scale: f64,
@@ -840,15 +840,6 @@ fn ground(cx: &Cx, source: Option<&Location>, value: Option<&grap::RuntimeValue>
         }
         (Some(_), None) => Ground::Readonly,
     }
-}
-
-/// Read-only appearance; document permissions remain in the editing scope.
-fn readonly(
-    scale: f64,
-    palette: crate::display::widget::style::Palette,
-    content: Measured<HoverPass<crate::Editor>>,
-) -> Measured<HoverPass<crate::Editor>> {
-    ground_with(scale, palette.readonly_ground, content)
 }
 
 fn ground_with(
@@ -979,7 +970,7 @@ fn prepare_value(
             });
             let edits = cx.edits.clone();
             ChoiceLayout::map(inner, move |inner| {
-                let placed = descend_landmark_with(
+                let placed = descend_landmark(
                     palette,
                     selected,
                     scale,
@@ -1001,7 +992,7 @@ fn prepare_value(
                     None => placed,
                 };
                 match target {
-                    Some((value, select)) => pick_target_with(landmark_path, value, select, placed),
+                    Some((value, select)) => pick_target(landmark_path, value, select, placed),
                     None => placed,
                 }
             })
@@ -1010,9 +1001,11 @@ fn prepare_value(
     let scale = cx.styles.scale;
     let palette = cx.styles.palette;
     match changed_ground {
-        Some(Ground::Readonly) => {
-            ChoiceLayout::map(prepared, move |content| readonly(scale, palette, content))
-        }
+        // Read-only appearance; document permissions remain in the editing
+        // scope.
+        Some(Ground::Readonly) => ChoiceLayout::map(prepared, move |content| {
+            ground_with(scale, palette.readonly_ground, content)
+        }),
         Some(Ground::Writable) => ChoiceLayout::map(prepared, move |content| {
             ground_with(scale, palette.paper, content)
         }),
@@ -1079,7 +1072,7 @@ fn value_layout(
 /// pending, or — nothing pending — select it like Activate, so a stray
 /// modifier never deadens the gesture. Inner Pick registrations answer
 /// first and this catches what they refused.
-fn pick_target_with(
+fn pick_target(
     path: SharedPath,
     value: grap::RuntimeValue,
     select: crate::display::Action,

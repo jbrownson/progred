@@ -17,7 +17,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
             let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
             let calls = seen.clone();
             let local = partial(
-                move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
+                move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
                     calls.borrow_mut().push(input.value?.clone());
                     accepts.then(|| descend([Step::Key(child)], None, None))
                 },
@@ -83,7 +83,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let calls = seen.clone();
         let local = partial(
-            move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
+            move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
                 calls.borrow_mut().push(input.value.cloned());
                 match mode {
                     0 => Some(descend(
@@ -160,7 +160,7 @@ fn descents_replace_current_and_default_projections_independently() {
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let current_seen = seen.clone();
         let current = partial(
-            move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
+            move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
                 current_seen
                     .borrow_mut()
                     .push(("current", input.value?.clone()));
@@ -169,7 +169,7 @@ fn descents_replace_current_and_default_projections_independently() {
         );
         let child_seen = seen.clone();
         let children = partial(
-            move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
+            move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
                 child_seen
                     .borrow_mut()
                     .push(("children", input.value?.clone()));
@@ -237,7 +237,7 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
     let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
     let calls = seen.clone();
     let special = partial(
-        move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
+        move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
             input.value?.as_blob()?;
             calls.borrow_mut().push(input.value?.clone());
             Some(dim("scoped"))
@@ -291,7 +291,7 @@ fn record_combinator_chooses_a_projection_for_each_field() {
     let observe = |key| {
         let seen = seen.clone();
         partial(
-            move |_: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
+            move |_: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
                 seen.borrow_mut().push(key);
                 Some(dim("field"))
             },

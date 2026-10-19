@@ -1,4 +1,5 @@
-//! Editor commands: insert, delete, and the clipboard.
+//! The editor's editing keys, and what they do: insert, delete, replace,
+//! and the clipboard.
 
 use crate::Editor;
 use crate::display::widget::navigation::{Geometry, landmark_at};

@@ -7,7 +7,6 @@ mod app;
 mod cam_profile;
 mod clipboard;
 mod command;
-mod commands;
 mod completion;
 mod computations;
 #[cfg(any(test, feature = "control"))]
@@ -15,6 +14,7 @@ pub mod control;
 mod display;
 #[cfg(any(test, feature = "control"))]
 mod driver;
+mod edit_keys;
 mod editing;
 mod editor;
 mod filter;

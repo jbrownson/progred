@@ -138,7 +138,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                             ascent: 0.0,
                             descent: height,
                         },
-                        move |output: &mut widget::HoverContext<'_, EditingWorld, Hovered>,
+                        move |output: &mut widget::HoverContext<'_, crate::Editor, Hovered>,
                               placement| {
                             placements.borrow_mut().push((id, placement.rect));
                             output.claim(crate::display::widget::frame::Probe::exact(
