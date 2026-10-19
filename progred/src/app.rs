@@ -68,7 +68,7 @@ pub(crate) struct App {
     #[cfg(not(target_arch = "wasm32"))]
     renderers: Vec<Option<Compositor>>,
     /// The libraries, with their Rust functions and composed projection,
-    /// that a new window's editor starts with, as its own cheap clone.
+    /// a new window's editor starts with; each editor holds a cheap clone.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     stack: stack::Stack,
     /// The font database master; editors hold cheap clones over the
