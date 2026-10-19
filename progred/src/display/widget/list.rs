@@ -22,7 +22,9 @@ pub fn insertion_gap<W: 'static, H: Clone + PartialEq + 'static>(
                 descent: height * scale,
             },
             move |output, placement| {
-                if let Some(hover) = target.filter(|_| !placement.clipped_out()) {
+                if !placement.clipped_out()
+                    && let Some(hover) = target
+                {
                     output.render(move |canvas, resolved| {
                         if resolved.hovered.as_ref() == Some(&hover) {
                             let rect = placement.visible_rect();
