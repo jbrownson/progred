@@ -150,18 +150,7 @@ impl ApplicationHandler<UserEvent> for App {
             #[cfg(target_arch = "wasm32")]
             UserEvent::PaletteChanged(palette) => {
                 for runner in &mut self.editors {
-                    if let RenderState::Active { window, .. } = &runner.editor.state {
-                        let window = window.clone();
-                        if runner.palette_changed(
-                            palette,
-                            runner.editor.scale(&window),
-                            viewport(&window),
-                        ) {
-                            window.request_redraw();
-                        }
-                    } else {
-                        runner.editor.palette = palette;
-                    }
+                    change_palette(runner, palette);
                 }
             }
             #[cfg(target_arch = "wasm32")]
@@ -585,13 +574,10 @@ impl App {
 
         #[cfg(target_os = "macos")]
         if matches!(event, WindowEvent::ThemeChanged(_)) {
-            if runner.palette_changed(
+            change_palette(
+                runner,
                 macos_window::palette(self.appearance, window.theme()),
-                scale,
-                viewport,
-            ) {
-                window.request_redraw();
-            }
+            );
         }
 
         if let WindowEvent::Focused(_focused) = event {
@@ -696,6 +682,21 @@ impl App {
     }
 }
 
+/// Draws `runner`'s editor in `palette` from now on: an active window
+/// repaints now, a suspended one when it resumes.
+#[cfg(any(target_os = "macos", target_arch = "wasm32"))]
+fn change_palette(runner: &mut EditorRunner, palette: crate::display::widget::style::Palette) {
+    match &runner.editor.state {
+        RenderState::Active { window, .. } => {
+            let window = window.clone();
+            if runner.palette_changed(palette, runner.editor.scale(&window), viewport(&window)) {
+                window.request_redraw();
+            }
+        }
+        RenderState::Suspended(_) => runner.editor.palette = palette,
+    }
+}
+
 impl App {
     /// Menu enablement follows the model: gray what can't act. Save
     /// stays live for untitled documents — it defers to the save
@@ -787,18 +788,7 @@ impl App {
                 for runner in &mut self.editors {
                     if let Some(window) = runner.editor.window() {
                         window.set_theme(appearance);
-                        let palette = macos_window::palette(appearance, window.theme());
-                        if matches!(runner.editor.state, RenderState::Active { .. }) {
-                            if runner.palette_changed(
-                                palette,
-                                runner.editor.scale(&window),
-                                viewport(&window),
-                            ) {
-                                window.request_redraw();
-                            }
-                        } else {
-                            runner.editor.palette = palette;
-                        }
+                        change_palette(runner, macos_window::palette(appearance, window.theme()));
                     }
                 }
                 if let Some(index) = self.focused_index() {
