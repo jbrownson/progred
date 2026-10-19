@@ -68,31 +68,22 @@ impl Selection {
         path: Path,
         payload: Value,
     ) -> Self {
-        let mut selection = match payload::stage(&payload) {
-            Some(stage) if stage == payload::vocabulary::PENDING => {
-                query_selection(root, scope, path, payload)
-            }
-            Some(stage) if stage == payload::vocabulary::LABEL => {
-                query_selection(root, scope, path, payload)
-            }
-            _ => {
+        let mut selection = match stage_of(&payload) {
+            Stage::Pending | Stage::Label => query_selection(root, scope, path, payload),
+            Stage::Edge => {
                 let read = scope.view(*sources);
-                let editor = payload::editor_text(&payload)
+                let mounted = payload::editor_text(&payload)
                     .filter(|_| read.writable(&path))
-                    .map(|fallback| Editor {
-                        line: payload::editor_line(&payload, fallback),
-                        query: read.resolve_path(&path).is_none(),
-                        recorded: false,
-                    });
+                    .map(|text| mount(&payload, text, read.resolve_path(&path).is_none()));
+                let (payload, editor) = match mounted {
+                    Some((payload, editor)) => (payload, Some(editor)),
+                    None => (payload, None),
+                };
                 Self {
                     root: root.clone(),
                     path,
                     scope,
-                    payload: if editor.is_some() {
-                        payload::without_editor(&payload)
-                    } else {
-                        payload
-                    },
+                    payload,
                     editor,
                     origin: None,
                 }
@@ -167,11 +158,7 @@ impl Selection {
     }
 
     pub(crate) fn explicit_stage(&self) -> Stage {
-        match payload::stage(&self.payload) {
-            Some(stage) if stage == payload::vocabulary::PENDING => Stage::Pending,
-            Some(stage) if stage == payload::vocabulary::LABEL => Stage::Label,
-            _ => Stage::Edge,
-        }
+        stage_of(&self.payload)
     }
 
     pub fn stage(&self, sources: &Sources) -> Stage {
@@ -267,29 +254,23 @@ impl Selection {
         &mut self
             .editor
             .get_or_insert_with(|| {
-                let line = payload::editor_line(payload, payload::query(payload).unwrap_or(""));
-                *payload = payload::without_editor(payload);
-                Editor {
-                    line,
-                    query: true,
-                    recorded: false,
-                }
+                let (rest, editor) = mount(payload, payload::query(payload).unwrap_or(""), true);
+                *payload = rest;
+                editor
             })
             .line
     }
 
     pub(crate) fn edit_line_mut(&mut self, spelling: &str) -> &mut LineEditState {
         let payload = &mut self.payload;
-        let editor = self.editor.get_or_insert_with(|| {
-            let state = payload::editor_line(payload, spelling);
-            *payload = payload::without_editor(payload);
-            Editor {
-                line: state,
-                query: false,
-                recorded: false,
-            }
-        });
-        &mut editor.line
+        &mut self
+            .editor
+            .get_or_insert_with(|| {
+                let (rest, editor) = mount(payload, spelling, false);
+                *payload = rest;
+                editor
+            })
+            .line
     }
 
     fn query_changed(&self) -> bool {
@@ -305,6 +286,29 @@ impl Selection {
             self.payload = payload::with_completion_query(&self.payload, editor.line.text());
         }
     }
+}
+
+/// The stage `payload` names, an edge's unless it names another.
+fn stage_of(payload: &Value) -> Stage {
+    match payload::stage(payload) {
+        Some(stage) if stage == payload::vocabulary::PENDING => Stage::Pending,
+        Some(stage) if stage == payload::vocabulary::LABEL => Stage::Label,
+        _ => Stage::Edge,
+    }
+}
+
+/// The live editor `payload` describes over `text`, a query's or a value's,
+/// and the payload without that description: the editor owns it once
+/// mounted.
+fn mount(payload: &Value, text: &str, query: bool) -> (Value, Editor) {
+    (
+        payload::without_editor(payload),
+        Editor {
+            line: payload::editor_line(payload, text),
+            query,
+            recorded: false,
+        },
+    )
 }
 
 /// Deletes the value at `location`, where it's stored. Within a value it
@@ -355,28 +359,24 @@ pub fn pending_value(root: &Root, path: Path) -> Selection {
 /// A value pending with a seeded query — the clipboard, replacement, and
 /// test paths.
 pub(crate) fn pending_with_query(root: &Root, path: Path, seed: &str) -> Selection {
-    query_selection(root, Scope::default(), path, payload::pending(seed, 0))
+    query_selection(root, Scope::default(), path, payload::pending(seed))
 }
 
 /// A value pending at `path`, in the scope `read` reads it through.
 fn pending_in(root: &Root, read: &Read, path: Path) -> Selection {
-    query_selection(root, read.scope.clone(), path, payload::pending("", 0))
+    query_selection(root, read.scope.clone(), path, payload::pending(""))
 }
 
 /// Decode an incoming pending selection. The caret defaults to the
 /// end of the query when no offset was supplied.
 fn query_selection(root: &Root, scope: Scope, path: Path, payload: Value) -> Selection {
-    let line = payload::editor_line(&payload, payload::query(&payload).unwrap_or(""));
+    let (payload, editor) = mount(&payload, payload::query(&payload).unwrap_or(""), true);
     Selection {
         root: root.clone(),
         path,
         scope,
-        payload: payload::without_editor(&payload),
-        editor: Some(Editor {
-            line,
-            query: true,
-            recorded: false,
-        }),
+        payload,
+        editor: Some(editor),
         origin: None,
     }
 }
@@ -400,7 +400,7 @@ pub(crate) fn pending_edge(root: &Root, read: &Read, parent: Path) -> Option<Sel
         root,
         read.scope.clone(),
         parent,
-        payload::label("", 0),
+        payload::label(""),
     ))
 }
 
@@ -685,19 +685,21 @@ pub mod payload {
         Value::record([(vocabulary::STAGE, Value::Cell(vocabulary::PENDING))])
     }
 
-    pub fn pending(query: &str, choice: usize) -> Value {
+    /// A pending value with `query` typed, its first offer chosen.
+    pub fn pending(query: &str) -> Value {
         Value::record([
             (vocabulary::STAGE, Value::Cell(vocabulary::PENDING)),
             (vocabulary::QUERY, text::value(query)),
-            (vocabulary::CHOICE, f64_convention::value(choice as f64)),
+            (vocabulary::CHOICE, f64_convention::value(0.0)),
         ])
     }
 
-    pub fn label(query: &str, choice: usize) -> Value {
+    /// A new field's label with `query` typed, its first offer chosen.
+    pub fn label(query: &str) -> Value {
         Value::record([
             (vocabulary::STAGE, Value::Cell(vocabulary::LABEL)),
             (vocabulary::QUERY, text::value(query)),
-            (vocabulary::CHOICE, f64_convention::value(choice as f64)),
+            (vocabulary::CHOICE, f64_convention::value(0.0)),
         ])
     }
 
@@ -710,8 +712,14 @@ pub mod payload {
     }
 
     pub fn choice(payload: &Value) -> Option<usize> {
-        let choice = f64_convention::read(payload.as_record()?.get(&vocabulary::CHOICE)?)?;
-        (choice >= 0.0 && choice.fract() == 0.0).then_some(choice as usize)
+        index(payload.as_record()?.get(&vocabulary::CHOICE)?)
+    }
+
+    /// The whole, non-negative number `value` spells, as an index or offset.
+    fn index(value: &Value) -> Option<usize> {
+        f64_convention::read(value)
+            .filter(|index| *index >= 0.0 && index.fract() == 0.0)
+            .map(|index| index as usize)
     }
 
     pub fn completion_scroll(payload: &Value) -> Option<f64> {
@@ -817,10 +825,7 @@ pub mod payload {
     /// junk clamps, per [`LineEditState::from_parts`].
     pub fn editor_line(payload: &Value, text: &str) -> LineEditState {
         let text = editor_text(payload).unwrap_or(text);
-        let field_index = |key: CellId| {
-            let index = f64_convention::read(payload.as_record()?.get(&key)?)?;
-            (index >= 0.0 && index.fract() == 0.0).then_some(index as usize)
-        };
+        let field_index = |key: CellId| index(payload.as_record()?.get(&key)?);
         let anchor = field_index(vocabulary::ANCHOR).unwrap_or(text.len());
         let focus = field_index(vocabulary::FOCUS).unwrap_or(text.len());
         let preedit = payload
@@ -828,11 +833,8 @@ pub mod payload {
             .and_then(|fields| fields.get(&vocabulary::PREEDIT))
             .and_then(|composed| {
                 let cursor = composed.as_record().and_then(|fields| {
-                    let index = |key: CellId| {
-                        let index = f64_convention::read(fields.get(&key)?)?;
-                        (index >= 0.0 && index.fract() == 0.0).then_some(index as usize)
-                    };
-                    Some((index(vocabulary::START)?, index(vocabulary::END)?))
+                    let offset = |key: CellId| index(fields.get(&key)?);
+                    Some((offset(vocabulary::START)?, offset(vocabulary::END)?))
                 });
                 Some((text::read(composed)?.to_string(), cursor))
             });

@@ -229,7 +229,7 @@ fn declining_after_editing_discards_the_whole_editor_operation() {
         sequence([
             set_selection(
                 Value::list([]),
-                crate::selection::payload::pending("discarded", 0),
+                crate::selection::payload::pending("discarded"),
             ),
             grap::call(
                 site::vocabulary::SET.into(),
@@ -294,7 +294,7 @@ fn selection_effect_moves_to_a_full_path_and_local_reads_observe_the_move() {
         gid::Step::Follow(gid::Resolution::Library(gid::new_cell_id())),
         gid::Step::Element(gid::position::between(None, None).unwrap()),
     ];
-    let payload = crate::selection::payload::pending("", 0);
+    let payload = crate::selection::payload::pending("");
     let handler = sequence([
         set_selection(path_data::value(&target), payload.clone()),
         grap::call(
@@ -376,7 +376,7 @@ fn malformed_paths_do_not_stage_selection_effects() {
     let handler = sequence([
         set_selection(
             Value::list([Value::record([])]),
-            crate::selection::payload::pending("", 0),
+            crate::selection::payload::pending(""),
         ),
         Value::record([]),
     ]);

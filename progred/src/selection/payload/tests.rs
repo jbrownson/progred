@@ -6,12 +6,12 @@ fn payloads_round_trip_by_stage() {
     assert_eq!(stage(&edge), Some(vocabulary::EDGE));
     assert_eq!(query(&edge), None);
 
-    let pending = pending("asd", 2);
+    let pending = with_completion_view(&pending("asd"), 0.0, 2);
     assert_eq!(stage(&pending), Some(vocabulary::PENDING));
     assert_eq!(query(&pending), Some("asd"));
     assert_eq!(choice(&pending), Some(2));
 
-    let label = label("nm", 0);
+    let label = label("nm");
     assert_eq!(stage(&label), Some(vocabulary::LABEL));
     assert_eq!(label.as_record().unwrap().len(), 3);
 }
@@ -27,7 +27,7 @@ fn the_whole_editor_round_trips_through_the_payload() {
     );
     // 2 is inside ë (bytes 1..3): clamps back to its boundary.
     assert_eq!(line.selection_offsets(), (1, 4));
-    let encoded = with_editor(&pending("", 0), &line, true);
+    let encoded = with_editor(&pending(""), &line, true);
     let decoded = editor_line(&encoded, query(&encoded).unwrap_or(""));
     assert_eq!(decoded.text(), "hëllo");
     assert_eq!(decoded.selection_offsets(), line.selection_offsets());
@@ -45,7 +45,7 @@ fn the_whole_editor_round_trips_through_the_payload() {
 #[test]
 fn changing_an_owned_query_resets_position() {
     let changed = with_editor(
-        &with_completion_view(&pending("old", 2), 24.0, 2),
+        &with_completion_view(&pending("old"), 24.0, 2),
         &LineEditState::from_parts("new", 3, 3, None, None),
         true,
     );
@@ -54,7 +54,7 @@ fn changing_an_owned_query_resets_position() {
     assert_eq!(completion_scroll(&changed), Some(0.0));
 
     let unchanged = with_editor(
-        &with_completion_view(&pending("same", 2), 24.0, 2),
+        &with_completion_view(&pending("same"), 24.0, 2),
         &LineEditState::from_parts("same", 4, 4, None, None),
         true,
     );
