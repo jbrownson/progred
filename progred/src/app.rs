@@ -143,15 +143,10 @@ impl ApplicationHandler<UserEvent> for App {
         match event {
             #[cfg(target_arch = "wasm32")]
             UserEvent::BrowserModifiersChanged(modifiers) => {
-                if let Some(id) = self
-                    .editors
-                    .first()
-                    .and_then(|runner| runner.editor.window_id())
-                {
+                if !self.editors.is_empty() {
                     self.editor_window_event(
                         event_loop,
                         0,
-                        id,
                         WindowEvent::ModifiersChanged(modifiers.into()),
                     );
                 }
@@ -248,7 +243,6 @@ impl ApplicationHandler<UserEvent> for App {
             },
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             UserEvent::Discard { window, accepted } => {
-                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 if self.quit
                     == (QuitState::Draining {
                         awaiting: Some(window),
@@ -260,12 +254,11 @@ impl ApplicationHandler<UserEvent> for App {
                         QuitState::Idle
                     };
                 }
-                let Some(index) = self.editor_index(window) else {
-                    return;
-                };
-                let pending = self.editors[index].editor.pending_discard.take();
-                if accepted && let Some(then) = pending {
-                    self.proceed(event_loop, index, then);
+                if let Some(index) = self.editor_index(window) {
+                    let pending = self.editors[index].editor.pending_discard.take();
+                    if accepted && let Some(then) = pending {
+                        self.proceed(event_loop, index, then);
+                    }
                 }
             }
         }
@@ -310,16 +303,16 @@ impl ApplicationHandler<UserEvent> for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if let WindowEvent::Focused(true) = &event {
+        let focused = matches!(event, WindowEvent::Focused(true));
+        if focused {
             self.focused = Some(window_id);
-            if let Some(index) = self.editor_index(window_id) {
+        }
+        if let Some(index) = self.editor_index(window_id) {
+            if focused {
                 self.sync_menus(index);
             }
+            self.editor_window_event(event_loop, index, event);
         }
-        let Some(index) = self.editor_index(window_id) else {
-            return;
-        };
-        self.editor_window_event(event_loop, index, window_id, event);
     }
 }
 
@@ -438,23 +431,23 @@ impl App {
     /// again. An empty list ends the process.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn advance_quit(&mut self, event_loop: &ActiveEventLoop) {
-        while self.quit == (QuitState::Draining { awaiting: None }) {
-            if self.editors.is_empty() {
-                event_loop.exit();
-                return;
-            }
-            let index = self.focused_index().unwrap_or(0);
-            if self.editors[index].editor.model.dirty() {
-                if let RenderState::Active { window, .. } = &self.editors[index].editor.state {
-                    window.focus_window();
-                    self.quit = QuitState::Draining {
-                        awaiting: Some(window.id()),
-                    };
+        if self.quit == (QuitState::Draining { awaiting: None }) {
+            match self.focused_index() {
+                None => event_loop.exit(),
+                Some(index) if self.editors[index].editor.model.dirty() => {
+                    if let RenderState::Active { window, .. } = &self.editors[index].editor.state {
+                        window.focus_window();
+                        self.quit = QuitState::Draining {
+                            awaiting: Some(window.id()),
+                        };
+                    }
+                    self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
                 }
-                self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
-                return;
+                Some(index) => {
+                    self.close_editor(event_loop, index);
+                    self.advance_quit(event_loop);
+                }
             }
-            self.close_editor(event_loop, index);
         }
     }
 
@@ -590,13 +583,12 @@ impl App {
         &mut self,
         event_loop: &ActiveEventLoop,
         index: usize,
-        window_id: WindowId,
         event: WindowEvent,
     ) {
         let runner = &mut self.editors[index];
         let window = match &runner.editor.state {
-            RenderState::Active { window, .. } if window.id() == window_id => window.clone(),
-            _ => return,
+            RenderState::Active { window, .. } => window.clone(),
+            RenderState::Suspended(_) => return,
         };
         let scale = runner.editor.scale(&window);
         // Preserve motion samples without minting intermediate frames.
@@ -754,23 +746,18 @@ impl App {
         match command {
             Command::App(command) => self.run_app_command(event_loop, command),
             Command::Doc(command) => {
-                if let Some(index) = self.focused_index() {
-                    let runner = &mut self.editors[index];
-                    if let Some(window) = runner.editor.window() {
-                        let size = window.inner_size();
-                        let geometry = runner.frame.dispatch.geometry(runner.editor.scale(&window));
-                        runner.editor.run_doc_command(command, geometry);
-                        // After the command, which may have zoomed.
-                        runner.refresh_frame(
-                            runner.editor.scale(&window),
-                            Size::new(size.width as f64, size.height as f64),
-                        );
-                        window.request_redraw();
-                    } else {
-                        runner
-                            .editor
-                            .run_doc_command(command, runner.frame.dispatch.geometry(1.0));
-                    }
+                if let Some(runner) = self.focused_index().map(|index| &mut self.editors[index])
+                    && let Some(window) = runner.editor.window()
+                {
+                    let size = window.inner_size();
+                    let geometry = runner.frame.dispatch.geometry(runner.editor.scale(&window));
+                    runner.editor.run_doc_command(command, geometry);
+                    // After the command, which may have zoomed.
+                    runner.refresh_frame(
+                        runner.editor.scale(&window),
+                        Size::new(size.width as f64, size.height as f64),
+                    );
+                    window.request_redraw();
                 }
             }
         }
