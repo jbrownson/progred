@@ -11,8 +11,7 @@ use gid::{CellId, Cells, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
 use crate::display::projection::{group, group_hug, hug};
 use crate::display::{
-    Face, RecordField, activatable, alternatives, col, descend_local, dim, faced, record_with, row,
-    shared,
+    RecordField, activatable, alternatives, col, descend_local, dim, record_heads, row, shared,
 };
 #[cfg(test)]
 use ::grap;
@@ -597,25 +596,14 @@ fn pattern_binder<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opti
     let fields = input.value?;
     let binder = fields.field(vocabulary::BIND)?;
     binder.as_cell()?;
-    Some(record_with(
-        [(vocabulary::BIND, binder)],
-        CellId::cmp,
-        |key, _| {
-            let site = input.site().below(&[Step::Key(key)]);
-            RecordField {
-                label: activatable(
-                    match input.env.name(key) {
-                        Some(name) => faced(name, Face::Label),
-                        None => faced(crate::identity::short_id(key), Face::Id),
-                    },
-                    &site,
-                ),
-                value: crate::libraries::grap::declaration_path(
-                    [Step::Key(key)],
-                    &input.default_projection,
-                ),
-            }
-        },
+    Some(record_heads(
+        [RecordField {
+            label: crate::display::structure::record_label(input, vocabulary::BIND),
+            value: crate::libraries::grap::declaration_path(
+                [Step::Key(vocabulary::BIND)],
+                &input.default_projection,
+            ),
+        }],
         [],
     ))
 }

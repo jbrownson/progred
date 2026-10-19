@@ -210,15 +210,26 @@ fn ordered_keys<W: Host>(
     {
         keys.push(*key);
     }
-    keys.sort_by(
-        |left, right| match (input.env.name(*left), input.env.name(*right)) {
-            (Some(a), Some(b)) => a.cmp(b).then(left.cmp(right)),
-            (Some(_), None) => Ordering::Less,
-            (None, Some(_)) => Ordering::Greater,
-            (None, None) => left.cmp(right),
-        },
-    );
+    keys.sort_by(|left, right| field_order(input.env, left, right));
     keys
+}
+
+/// Named fields first, by name, then the others by id.
+pub(crate) fn field_order(env: &dyn Env, left: &CellId, right: &CellId) -> Ordering {
+    match (env.name(*left), env.name(*right)) {
+        (Some(a), Some(b)) => a.cmp(b).then(left.cmp(right)),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => left.cmp(right),
+    }
+}
+
+/// A field's name, or its short id where it has none.
+pub(crate) fn field_label<W: Host>(env: &dyn Env, key: CellId) -> Layout<W> {
+    match env.name(key) {
+        Some(name) => faced(name, Face::Label),
+        None => faced(crate::identity::short_id(key), Face::Id),
+    }
 }
 
 pub(crate) fn record_field<W: Host>(
@@ -242,12 +253,8 @@ pub(crate) fn record_label<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     key: CellId,
 ) -> Layout<W> {
-    let label = match input.env.name(key) {
-        Some(name) => faced(name, Face::Label),
-        None => faced(crate::identity::short_id(key), Face::Id),
-    };
     let site = input.site().below(&[Step::Key(key)]);
-    let head = row(0.0, [label, dim(":")]);
+    let head = row(0.0, [field_label(input.env, key), dim(":")]);
     if input.value.is_some_and(|value| value.contains_field(key)) {
         activatable(head, &site)
     } else {

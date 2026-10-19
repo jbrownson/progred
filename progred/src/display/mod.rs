@@ -686,33 +686,9 @@ pub struct RecordField<World, Hover> {
     pub value: Layout<World, Hover>,
 }
 
-#[cfg(test)]
-pub fn record<'a, W: Host>(
-    fields: impl IntoIterator<Item = (CellId, &'a Value)>,
-    order: impl FnMut(&CellId, &CellId) -> Ordering,
-    field: impl FnMut(CellId, &'a Value) -> RecordField<W, W::Hover>,
-) -> host::Layout<W> {
-    record_with(fields, order, field, [])
-}
-
-/// The record layout with explicit trailing fields, such as the one
-/// pending field currently being authored. They participate in both
-/// responsive forms but not in sorting the stored fields.
-pub fn record_with<W: Host, T>(
-    fields: impl IntoIterator<Item = (CellId, T)>,
-    order: impl FnMut(&CellId, &CellId) -> Ordering,
-    field: impl FnMut(CellId, T) -> RecordField<W, W::Hover>,
-    trailing: impl IntoIterator<Item = RecordField<W, W::Hover>>,
-) -> host::Layout<W> {
-    record_heads(
-        ordered_record_fields(fields, order, field)
-            .chain(trailing)
-            .map(record_colon),
-        [],
-    )
-}
-
 /// Ordered fields without a whole-value stop; the enclosing form owns it.
+/// Trailing fields, such as one being authored, follow in both responsive
+/// forms but take no part in sorting the stored fields.
 pub fn record_fragment_with<W: Host, T>(
     fields: impl IntoIterator<Item = (CellId, T)>,
     order: impl FnMut(&CellId, &CellId) -> Ordering,

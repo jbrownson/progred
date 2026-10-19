@@ -112,18 +112,19 @@ fn all_declining_partials_leave_fallback_to_the_caller() {
 }
 
 #[test]
-fn record_uses_the_supplied_order_in_both_responsive_forms() {
+fn a_record_fragment_uses_the_supplied_order_in_both_responsive_forms() {
     const FIRST: CellId = CellId::from_u128(1);
     const SECOND: CellId = CellId::from_u128(2);
     let first = Value::from(vec![1]);
     let second = Value::from(vec![2]);
-    let layout: crate::projection::Layout = crate::display::record(
+    let layout: crate::projection::Layout = record_fragment_with(
         [(FIRST, &first), (SECOND, &second)],
         |left, right| right.cmp(left),
         |key, value| RecordField {
             label: dim("field"),
             value: at([Step::Key(key)], value),
         },
+        [],
     );
     let layout = record(&layout);
     let (_, child, _) = crate::display::test_support::delimited(&layout);
