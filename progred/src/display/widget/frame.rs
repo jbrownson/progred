@@ -622,20 +622,11 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         for landmark in &mut self.landmarks {
             landmark.root = Some(root.clone());
         }
-        self.handler = self
-            .handler
-            .take()
-            .map(|handler| view_handler(handler, root.clone()));
-        let after = std::mem::take(&mut self.after_hover);
         let root = root.clone();
-        self.after_hover.push(move |hover, output| {
-            let mut child = Effects::default();
-            after.bind(hover, &mut child);
-            output.renders.append(&mut child.renders);
-            if let Some(handler) = child.handler {
-                output.handler().stack(view_handler(handler, root.clone()));
-            }
-        });
+        self.map_effects(
+            move |handler| view_handler(handler, root.clone()),
+            |mut renders, frame| frame.append(&mut renders),
+        );
     }
 
     pub fn handler_mut(&mut self) -> &mut Handler<C, DispatchContext<C, Hover>> {
@@ -667,25 +658,40 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
                 .intersect(placement.rect)
                 .intersect(placement.clip_rect);
         }
+        self.map_effects(
+            move |handler| container::gate_starts(handler, placement),
+            move |renders, frame| {
+                frame.push(Box::new(move |canvas| {
+                    canvas.clip(placement.rect, Affine::IDENTITY, |canvas| {
+                        puri::frame::render(renders, canvas)
+                    })
+                }))
+            },
+        );
+        self
+    }
+
+    /// Passes this output's handler through `handler`, and, once hover
+    /// settles, the handler its continuations add too; `renders` adds their
+    /// renders to the frame's.
+    fn map_effects<Map>(
+        &mut self,
+        handler: Map,
+        renders: impl FnOnce(Vec<Render>, &mut Vec<Render>) + 'static,
+    ) where
+        Map: Fn(Handler<C, DispatchContext<C, Hover>>) -> Handler<C, DispatchContext<C, Hover>>,
+        Map: 'static,
+    {
+        self.handler = self.handler.take().map(&handler);
         let after = std::mem::take(&mut self.after_hover);
         self.after_hover.push(move |hover, output| {
             let mut child = Effects::default();
             after.bind(hover, &mut child);
-            output.renders.push(Box::new(move |canvas| {
-                canvas.clip(placement.rect, Affine::IDENTITY, |canvas| {
-                    puri::frame::render(child.renders, canvas)
-                })
-            }));
-            if let Some(handler) = child.handler {
-                output
-                    .handler()
-                    .stack(container::gate_starts(handler, placement));
+            renders(child.renders, &mut output.renders);
+            if let Some(child) = child.handler {
+                output.handler().stack(handler(child));
             }
         });
-        self.handler = self
-            .handler
-            .map(|handler| container::gate_starts(handler, placement));
-        self
     }
 }
 
