@@ -31,9 +31,10 @@ pub struct Stack {
     pub projection: Projection,
     pub pane_projection: Projection,
     pub completions: crate::display::CompletionProvider,
-    /// The projections libraries bring, in load order, so an area can leave
-    /// some of them off.
+    /// The projections and completion providers libraries bring, in load
+    /// order, so an area can leave some of them off.
     partials: Rc<[(gid::CellId, Partial)]>,
+    providers: Rc<[(gid::CellId, crate::display::CompletionProvider)]>,
 }
 
 impl Stack {
@@ -63,6 +64,19 @@ impl Stack {
             u64::ID => crate::display::runtime_partial(|input| u64::convention().display(input)),
             _ => partial.clone(),
         })
+    }
+
+    /// The completions offered with `hidden` libraries' own left off.
+    pub fn completions_without(
+        &self,
+        hidden: &[gid::CellId],
+    ) -> crate::display::CompletionProvider {
+        crate::libraries::completion::combine(
+            self.providers
+                .iter()
+                .filter(|(id, _)| !hidden.contains(id))
+                .map(|(_, provider)| provider.clone()),
+        )
     }
 
     /// The document and pane projections with `hidden` libraries' own
@@ -99,7 +113,10 @@ fn compose(
     contributions: impl IntoIterator<Item = (gid::CellId, Library<crate::Editor, Hovered>)>,
 ) -> Stack {
     let (libraries, partials, providers) = Libraries::from_contributions(contributions);
-    let completions = crate::libraries::completion::combine(providers);
+    let providers: Rc<[_]> = providers.into();
+    let completions = crate::libraries::completion::combine(
+        providers.iter().map(|(_, provider)| provider.clone()),
+    );
     let partials: Rc<[_]> = partials.into();
     let (projection, pane_projection) =
         projections(partials.iter().map(|(_, partial)| partial.clone()));
@@ -109,6 +126,7 @@ fn compose(
         projection,
         completions,
         partials,
+        providers,
     }
 }
 

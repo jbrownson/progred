@@ -34,13 +34,14 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
         libraries: &world.stack.libraries,
     };
     let shown = view_content(&world.stack, sources, view, Size::new(500.0, 500.0), 1.0);
+    let completions = world.stack.completions_without(&view.hidden);
     let selection = world.model.selection.as_ref();
     let measured = projection::project(
         projection::ProjectDescription {
             focused: world.focused,
             computations: &world.computations,
             view: &view.root,
-            completions: Some(&world.stack.completions),
+            completions: Some(&completions),
             sources,
             root: shown.root,
             root_path: &shown.root_path,

@@ -146,9 +146,9 @@ or F10 opens it from the keyboard.
   what fits there. The **Raw** view exposes the underlying structure; its holes
   offer a new cell, list or record, and what you type. The **Plain** view shows
   the same structure with names, text and numbers readable.
-- The **Projections** menu switches one library's projection off or back on
-  in the selected pane or the document, the way the home page peels its
-  forest; its last entry does the same for the libraries the document
+- The **Projections** menu switches one library's projection and offers off
+  or back on in the selected pane or the document, the way the home page peels
+  its forest; its last entry does the same for the libraries the document
   declares. The library stays loaded, so code still runs and keys keep their
   names.
 - **Zoom In**, **Zoom Out**, and **Actual Size** in the View menu

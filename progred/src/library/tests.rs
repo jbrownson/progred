@@ -254,7 +254,7 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
         crate::display::CompletionKind::Field,
     ] {
         assert_eq!(
-            providers[0](&crate::test_support::bare_request(
+            providers[0].1(&crate::test_support::bare_request(
                 kind,
                 crate::display::CompletionScope::Everything,
                 "query"

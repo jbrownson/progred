@@ -663,12 +663,17 @@ fn project_workspace_view(
     };
     let shown = view_content(stack, sources, view, size, scale);
     let margin = content_margin(shown.viewport, scale);
+    // A library switched off in this area offers nothing here either.
+    let completions = match view.hidden.as_slice() {
+        [] => Cow::Borrowed(&stack.completions),
+        hidden => Cow::Owned(stack.completions_without(hidden)),
+    };
     let projected = projection::project(
         projection::ProjectDescription {
             computations,
             focused,
             view: &view.root,
-            completions: Some(&stack.completions),
+            completions: Some(&completions),
             sources,
             root: shown.root,
             root_path: &shown.root_path,

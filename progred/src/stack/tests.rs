@@ -39,3 +39,21 @@ fn only_libraries_that_bring_a_projection_offer_one() {
         ]
     );
 }
+
+#[test]
+fn a_library_switched_off_offers_nothing() {
+    let stack = load_selected(&[name::ID, text::ID, color::ID]).unwrap();
+    let offered = |provider: &crate::display::CompletionProvider| {
+        provider(&crate::test_support::bare_request(
+            crate::display::CompletionKind::Value,
+            crate::display::CompletionScope::Everything,
+            "",
+        ))
+        .unwrap_or_default()
+        .iter()
+        .any(|offer| offer.display == "new color".into())
+    };
+    assert!(offered(&stack.completions));
+    assert!(offered(&stack.completions_without(&[])));
+    assert!(!offered(&stack.completions_without(&[color::ID])));
+}

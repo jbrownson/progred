@@ -135,7 +135,7 @@ impl Libraries {
     ) -> (
         Self,
         Vec<(gid::CellId, Partial<World, Hover>)>,
-        Vec<CompletionProvider>,
+        Vec<(gid::CellId, CompletionProvider)>,
     ) {
         let mut unique: Vec<(gid::CellId, Library<World, Hover>)> = Vec::new();
         for (id, library) in entries {
@@ -150,7 +150,7 @@ impl Libraries {
             |(mut libraries, mut projections, mut completions), (id, library)| {
                 libraries.insert(id, library.definitions);
                 projections.extend(library.projection.map(|projection| (id, projection)));
-                completions.extend(library.completions);
+                completions.extend(library.completions.map(|provider| (id, provider)));
                 (libraries, projections, completions)
             },
         )
