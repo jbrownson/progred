@@ -246,6 +246,27 @@ impl EditorRunner {
             })
     }
 
+    /// A key as a page forwards it, with the modifiers it holds: pending
+    /// motion and changed modifiers settle first, and a key the input
+    /// method is composing never executes a shortcut or inserts its
+    /// preedit. Whether the editor took the key, and whether anything else
+    /// changed.
+    #[cfg(any(test, feature = "control", target_arch = "wasm32"))]
+    pub(crate) fn forwarded_key(
+        &mut self,
+        event: &KeyboardEvent,
+        scale: f64,
+        viewport: Size,
+    ) -> (bool, bool) {
+        let flushed = self.flush_pending_continuous();
+        let modifiers_changed = self.editor.modifiers != event.modifiers;
+        if modifiers_changed {
+            self.modifiers_changed(event.modifiers, scale, viewport);
+        }
+        let handled = !event.is_composing && self.keyboard_event(event, scale, viewport);
+        (handled, flushed || modifiers_changed)
+    }
+
     pub(crate) fn ime_event(&mut self, event: &ImeEvent, scale: f64, viewport: Size) -> bool {
         self.editor.focused
             && self.update_frame(scale, viewport, |editor, dispatch, hover| {

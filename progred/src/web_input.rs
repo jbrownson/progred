@@ -107,16 +107,10 @@ pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
         };
         let scale = runner.editor.scale(&window);
         let viewport = crate::editor::viewport(&window);
-        let flushed = runner.flush_pending_continuous();
         let focus_changed =
             runner.focus_changed(crate::web::browser_editor_focused(&window), scale, viewport);
-        let modifiers_changed = runner.editor.modifiers != modifiers;
-        if modifiers_changed {
-            runner.modifiers_changed(modifiers, scale, viewport);
-        }
-        // IME-owned keys must not execute shortcuts or insert preedit text.
-        let handled = !key.is_composing && runner.keyboard_event(&key, scale, viewport);
-        if handled || flushed || focus_changed || modifiers_changed {
+        let (handled, changed) = runner.forwarded_key(&key, scale, viewport);
+        if handled || changed || focus_changed {
             runner.sync_window(&window);
             window.request_redraw();
         }

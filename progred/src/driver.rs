@@ -198,22 +198,17 @@ impl<P> Driver<P> {
     /// One key, down and up, as the page forwards it; whether the editor
     /// took the press.
     pub(crate) fn keystroke(&mut self, key: Key, modifiers: Modifiers) -> bool {
-        self.runner.flush_pending_continuous();
-        if self.runner.editor.modifiers != modifiers {
-            self.runner
-                .modifiers_changed(modifiers, self.scale(), self.viewport);
-        }
         let event = |state| KeyboardEvent {
             state,
             key: key.clone(),
             modifiers,
             ..Default::default()
         };
-        let handled =
+        let (handled, _) =
             self.runner
-                .keyboard_event(&event(KeyState::Down), self.scale(), self.viewport);
+                .forwarded_key(&event(KeyState::Down), self.scale(), self.viewport);
         self.runner
-            .keyboard_event(&event(KeyState::Up), self.scale(), self.viewport);
+            .forwarded_key(&event(KeyState::Up), self.scale(), self.viewport);
         if !modifiers.is_empty() {
             self.runner
                 .modifiers_changed(Modifiers::empty(), self.scale(), self.viewport);
