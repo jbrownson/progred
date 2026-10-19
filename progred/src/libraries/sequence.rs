@@ -172,7 +172,7 @@ fn functions() -> ForeignFunctions {
         .register(
             COLLECT,
             ForeignFunction::new(|cx, call, env| consume(cx, call, env, true))
-                .parameters([ITEMS, ACTION])
+                .parameters([ITEMS])
                 .tracked(),
         )
 }
