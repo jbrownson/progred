@@ -1,9 +1,10 @@
 //! The form a value takes while its fold is closed, in Raw and the other
-//! projections alike: its brackets around an ellipsis, which opens it.
+//! projections alike: its brackets around an ellipsis, which opens it, and a
+//! cell's name before the ellipsis.
 
 use super::Cx;
 use super::Layout;
-use crate::display::{Delim, dim, on_activate, on_hover, selectable_bracket};
+use crate::display::{Delim, Face, dim, faced, on_activate, on_hover, row, selectable_bracket};
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use gid::Step;
@@ -25,24 +26,38 @@ pub(super) fn collapsed_layout(
                 .chain([Step::Follow(definition.resolution)])
                 .collect();
             (cx.pending_child_of(&followed).is_none() && cx.pending_edge_under(&followed).is_none())
-                .then_some(Delim::Paren)
+                .then(|| (Delim::Paren, Some(cell)))
         }),
         None if value.list_len().is_some_and(|len| len != 0)
             && cx.pending_child_of(path).is_none() =>
         {
-            Some(Delim::Bracket)
+            Some((Delim::Bracket, None))
         }
         None if value.record_len().is_some_and(|len| len != 0)
             && cx.pending_child_of(path).is_none()
             && cx.pending_edge_under(path).is_none() =>
         {
-            Some(Delim::Brace)
+            Some((Delim::Brace, None))
         }
         None => None,
     }
-    .map(|delim| {
+    .map(|(delim, cell)| {
+        let ellipsis = toggle(dim("…"), path, cx, default);
+        let content = match cell {
+            Some(cell) => row(
+                4.0,
+                [
+                    match cx.name(cell) {
+                        Some(name) => faced(name, Face::Name),
+                        None => faced(crate::identity::short_id(cell), Face::Id),
+                    },
+                    ellipsis,
+                ],
+            ),
+            None => ellipsis,
+        };
         crate::display::selectable_value(
-            selectable_bracket(delim, toggle(dim("…"), path, cx, default)),
+            selectable_bracket(delim, content),
             &cx.site(Rc::from(path)),
             value,
         )

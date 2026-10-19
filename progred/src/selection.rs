@@ -511,13 +511,31 @@ pub(crate) fn collapse_default_for_value(
     let collapsible = value.as_text().is_none()
         && value.as_f64().is_none()
         && match value.as_cell() {
-            Some(cell) => sources.resolve(cell).is_some(),
+            Some(cell) => sources
+                .resolve(cell)
+                .is_some_and(|definition| !plain(definition.value)),
             None => value
                 .list_len()
                 .or_else(|| value.record_len())
                 .is_some_and(|len| len != 0),
         };
     collapsible.then_some(folded)
+}
+
+/// A single plain value, such as a number, text or a color: bytes, or a
+/// record whose one field besides its name holds bytes. A cell holding one
+/// shows it whole, so it never folds.
+fn plain(value: &Value) -> bool {
+    value.as_blob().is_some()
+        || value.as_record().is_some_and(|fields| {
+            let mut kept = fields
+                .iter()
+                .filter(|(key, _)| *key != crate::libraries::name::vocabulary::NAME);
+            matches!(
+                (kept.next(), kept.next()),
+                (Some((_, field)), None) if field.as_blob().is_some()
+            )
+        })
 }
 
 /// After a commit, select `path` below the committing site, with `payload`.

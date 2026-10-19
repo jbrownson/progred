@@ -149,3 +149,42 @@ fn raw_opens_only_the_cells_it_reaches_directly() {
         Step::Key(inner),
     ]));
 }
+
+#[test]
+fn a_cell_holding_one_plain_value_never_folds() {
+    let [compound, number, user, inner, uses, count, first] = [(); 7].map(|_| new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(compound, Value::record([(inner, f64::value(1.0))]));
+    let mut named_number = f64::value(2.0).as_record().unwrap().clone();
+    named_number.insert(
+        crate::libraries::name::vocabulary::NAME,
+        crate::libraries::text::value("count"),
+    );
+    cells.set_value(number, Value::Record(named_number));
+    cells.set_value(
+        user,
+        Value::record([(uses, Value::Cell(compound)), (count, Value::Cell(number))]),
+    );
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([(first, user.into())])),
+        cells,
+    });
+    let follow = Step::Follow(gid::Resolution::Document);
+    world.model.workspace.document.projection = crate::workspace::Projection::Raw;
+    let frame = editing_frame(&mut world);
+    let drawn = |path: &[Step]| frame.landmarks.landmark(&path).is_some();
+    let inside = |key| {
+        [
+            Step::Key(first),
+            follow.clone(),
+            Step::Key(key),
+            follow.clone(),
+        ]
+    };
+    // Nested in a definition, a compound cell stays folded, but one holding
+    // a single number shows it, name or not.
+    assert!(!drawn(
+        &[inside(uses).as_slice(), &[Step::Key(inner)]].concat()
+    ));
+    assert!(drawn(&inside(count)));
+}
