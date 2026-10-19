@@ -79,14 +79,14 @@ pub(crate) fn prepare(
     definition: Option<Value>,
     on_commit: Option<&Continuation>,
 ) -> Option<Prepared> {
-    use crate::selection::{self, Stage};
+    use crate::selection::Stage;
     selection.writable(sources).then_some(())?;
     let mut document = std::rc::Rc::new(sources.doc.clone());
     let mut path = selection.path().to_vec();
     let document_changed = match selection.stage(sources) {
         Stage::Pending => {
             let defined = definition.zip(value.as_cell());
-            selection::set_value(
+            crate::location::set_value(
                 &mut document,
                 sources.libraries,
                 &selection.location()?,

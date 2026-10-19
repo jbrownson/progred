@@ -118,7 +118,7 @@ fn write_value(
         false
     } else {
         let before = (!*recorded).then(|| model.snapshot());
-        let wrote = selection::set_value(&mut model.doc, libraries, location, replacement);
+        let wrote = crate::location::set_value(&mut model.doc, libraries, location, replacement);
         if wrote && let Some(before) = before {
             model.history.record(before);
             *recorded = true;

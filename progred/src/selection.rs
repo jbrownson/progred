@@ -1,14 +1,12 @@
-//! Selection, collapse, and the writes they drive. Selection paths name
-//! projected occurrences; their conject locates document data for mutations.
+//! Selection and collapse. Selection paths name projected occurrences; their
+//! conject locates document data for mutations.
 
 use crate::display::widget::view::Root;
 use crate::editing::{Read, Scope};
-use crate::library::Libraries;
-use crate::location::{Location, Start};
+use crate::location::Location;
 use crate::sources::Sources;
-use crate::spine;
 use ::grap::text;
-use gid::{Document, Path, Position, Resolution, Step, Value, position};
+use gid::{Path, Position, Resolution, Step, Value, position};
 use puri::edit::LineEditState;
 use std::rc::Rc;
 
@@ -311,45 +309,6 @@ fn mount(payload: &Value, text: &str, query: bool) -> (Value, Editor) {
     )
 }
 
-/// Deletes the value at `location`, where it's stored. Within a value it
-/// rebuilds the owner without it — unlinking; anything the dropped value
-/// linked stays in the table for the orphan pool. At a definition's own
-/// start it removes the cell's value: bare again, the symmetric partner of
-/// authoring a value into one. At the root's own start it empties the
-/// document; locations that no longer resolve decline.
-pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, location: &Location) -> bool {
-    let deletion = {
-        let sources = Sources {
-            doc: &*doc,
-            libraries,
-        };
-        location
-            .stored(&sources)
-            .filter(|stored| crate::location::owned(stored.start))
-            .and_then(|stored| {
-                let owner = sources.read_from(stored.start, &[])?;
-                if stored.path.is_empty() {
-                    Some((stored.start, None))
-                } else {
-                    spine::without(owner, &stored.path).map(|rebuilt| (stored.start, Some(rebuilt)))
-                }
-            })
-    };
-    deletion
-        .map(|(start, value)| store(doc, start, value))
-        .is_some()
-}
-
-/// Replace, or with None remove, the value stored at `start`.
-fn store(doc: &mut Rc<Document>, start: Start, value: Option<Value>) {
-    let doc = Rc::make_mut(doc);
-    match (start, value) {
-        (Start::Root, value) => doc.root = value,
-        (Start::Cell { cell, .. }, Some(value)) => doc.cells.set_value(cell, value),
-        (Start::Cell { cell, .. }, None) => doc.cells.clear_value(cell),
-    }
-}
-
 /// A value-stage pending: the location named by `path` does not
 /// exist, and its value is being authored.
 pub fn pending_value(root: &Root, path: Path) -> Selection {
@@ -539,62 +498,6 @@ pub fn resolve_query(text: &str) -> Value {
             .map(Value::from)
             .unwrap_or_else(|| text::value(text)),
     }
-}
-
-/// The clipboard spelling of a value, and whether it is STRUCTURE.
-/// Values carry their own inline structure, and cell copies are
-/// ALWAYS SHALLOW — a link is its identity alone, no cell values
-/// travel: the value/cell boundary IS the copy boundary. Compact text
-/// and blobs spell as the query language — quoted text and `0x` hex —
-/// and are not structure: their text is their faithful form. Links,
-/// lists, and records spell as Value JSON and ARE: the shell writes
-/// that spelling under the private clipboard format too, whose
-/// presence is what says "structure" — never the text's shape, so
-/// text that happens to spell Value JSON stays text.
-pub fn to_clipboard(value: &Value) -> (String, bool) {
-    match (text::read(value), value.as_blob()) {
-        (Some(text), _) => (format!("\"{text}\""), false),
-        (_, Some(_)) => (value.to_string(), false),
-        _ => (
-            serde_json::to_string(value).expect("values serialize"),
-            true,
-        ),
-    }
-}
-
-/// The value the private clipboard format's bytes denote.
-#[cfg(any(test, target_os = "macos", target_os = "linux"))]
-pub fn from_structure(bytes: &[u8]) -> Option<Value> {
-    serde_json::from_slice(bytes).ok()
-}
-
-/// Writes `value` at `location`, where it's stored: the definition its last
-/// Follow enters, or else its start. The single write every edit reduces
-/// to: the steps from there are a value spine, rebuilt around the new leaf
-/// through the lens. A bare cell takes its first value through the empty
-/// spine.
-pub fn set_value(
-    doc: &mut Rc<Document>,
-    libraries: &Libraries,
-    location: &Location,
-    value: Value,
-) -> bool {
-    let write = {
-        let sources = Sources {
-            doc: &*doc,
-            libraries,
-        };
-        location
-            .stored(&sources)
-            .filter(|stored| crate::location::owned(stored.start))
-            .and_then(|stored| {
-                spine::set(sources.read_from(stored.start, &[]), &stored.path, value)
-                    .map(|rebuilt| (stored.start, rebuilt))
-            })
-    };
-    write
-        .map(|(start, rebuilt)| store(doc, start, Some(rebuilt)))
-        .is_some()
 }
 
 /// The collapse class of an already-resolved value. Projection has

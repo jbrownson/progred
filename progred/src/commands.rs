@@ -74,16 +74,17 @@ impl Editor {
                 // intact) already covers the deletion.
                 let covered = current.recorded();
                 let before = self.model.snapshot();
-                selection::delete_edge(&mut self.model.doc, &self.stack.libraries, &location) && {
-                    if !covered {
-                        self.model.history.record(before);
-                        self.refresh_title();
+                crate::location::delete_edge(&mut self.model.doc, &self.stack.libraries, &location)
+                    && {
+                        if !covered {
+                            self.model.history.record(before);
+                            self.refresh_title();
+                        }
+                        self.model.selection =
+                            Some(selection::pending_value(&root, path).with_scope(scope));
+                        geometry.reveal_selection(&mut self.model);
+                        true
                     }
-                    self.model.selection =
-                        Some(selection::pending_value(&root, path).with_scope(scope));
-                    geometry.reveal_selection(&mut self.model);
-                    true
-                }
             }
             _ => false,
         }
@@ -113,7 +114,7 @@ impl Editor {
     /// alone, no cell values travel; the value carries its own inline
     /// structure.
     pub(crate) fn copy_value(&mut self, value: &Value) -> bool {
-        let (text, structural) = selection::to_clipboard(value);
+        let (text, structural) = crate::clipboard::to_clipboard(value);
         self.text_clipboard.copy(text, structural.then_some(value))
     }
 

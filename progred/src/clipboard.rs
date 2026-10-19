@@ -1,5 +1,7 @@
-//! Where copies go: the system clipboard, or one the editor keeps to itself.
+//! Where copies go: the system clipboard, or one the editor keeps to itself,
+//! and how a value spells there.
 
+use ::grap::text;
 use gid::Value;
 use puri::edit::TextClipboard;
 
@@ -75,6 +77,33 @@ impl TextClipboard for Clipboard {
     }
 }
 
+/// The clipboard spelling of a value, and whether it is STRUCTURE.
+/// Values carry their own inline structure, and cell copies are
+/// ALWAYS SHALLOW — a link is its identity alone, no cell values
+/// travel: the value/cell boundary IS the copy boundary. Compact text
+/// and blobs spell as the query language — quoted text and `0x` hex —
+/// and are not structure: their text is their faithful form. Links,
+/// lists, and records spell as Value JSON and ARE: the shell writes
+/// that spelling under the private clipboard format too, whose
+/// presence is what says "structure" — never the text's shape, so
+/// text that happens to spell Value JSON stays text.
+pub(crate) fn to_clipboard(value: &Value) -> (String, bool) {
+    match (text::read(value), value.as_blob()) {
+        (Some(text), _) => (format!("\"{text}\""), false),
+        (_, Some(_)) => (value.to_string(), false),
+        _ => (
+            serde_json::to_string(value).expect("values serialize"),
+            true,
+        ),
+    }
+}
+
+/// The value the private clipboard format's bytes denote.
+#[cfg(any(test, target_os = "macos", target_os = "linux"))]
+fn from_structure(bytes: &[u8]) -> Option<Value> {
+    serde_json::from_slice(bytes).ok()
+}
+
 #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
 mod system {
     use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext, ContentFormat};
@@ -116,6 +145,9 @@ mod system {
         ClipboardContext::new()
             .ok()
             .and_then(|cb| cb.get_buffer(FORMAT).ok())
-            .and_then(|bytes| crate::selection::from_structure(&bytes))
+            .and_then(|bytes| super::from_structure(&bytes))
     }
 }
+
+#[cfg(test)]
+mod tests;

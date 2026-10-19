@@ -13,7 +13,7 @@ fn model() -> Model {
 
 fn edit(model: &mut Model, value: u8) {
     let before = model.snapshot();
-    assert!(selection::set_value(
+    assert!(crate::location::set_value(
         &mut model.doc,
         &Libraries::default(),
         &crate::location::Location::root(&[]),
@@ -210,7 +210,7 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
     assert!(model.set_collapsed(&first_root, &first.1, false, None));
     assert!(!model.dirty());
     let before = model.snapshot();
-    assert!(selection::delete_edge(
+    assert!(crate::location::delete_edge(
         &mut model.doc,
         &Libraries::default(),
         &crate::location::Location::root(&first.1)
@@ -283,13 +283,13 @@ fn undo_does_not_restore_scroll_projection_or_unrelated_annotations() {
 fn rejected_writes_do_not_detach_the_saved_snapshot() {
     let mut model = model();
     let bad_path = [Step::Key(gid::new_cell_id()), Step::Key(gid::new_cell_id())];
-    assert!(!selection::set_value(
+    assert!(!crate::location::set_value(
         &mut model.doc,
         &Libraries::default(),
         &crate::location::Location::root(&bad_path),
         Value::record([])
     ));
-    assert!(!selection::delete_edge(
+    assert!(!crate::location::delete_edge(
         &mut model.doc,
         &Libraries::default(),
         &crate::location::Location::root(&bad_path)
@@ -299,7 +299,7 @@ fn rejected_writes_do_not_detach_the_saved_snapshot() {
         root: None,
         cells: Cells::new(),
     });
-    assert!(!selection::delete_edge(
+    assert!(!crate::location::delete_edge(
         &mut empty.doc,
         &Libraries::default(),
         &crate::location::Location::root(&[])
@@ -317,7 +317,7 @@ fn cell_writes_preserve_the_saved_document_without_needing_a_history_record() {
         cells,
     });
     let saved = model.doc.clone();
-    assert!(selection::set_value(
+    assert!(crate::location::set_value(
         &mut model.doc,
         &Libraries::default(),
         &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)]),

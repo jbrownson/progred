@@ -196,7 +196,7 @@ impl Edit<'_> {
             return true;
         }
         let before = session.model.snapshot();
-        if !selection::set_value(&mut session.model.doc, session.libraries, &source, value) {
+        if !crate::location::set_value(&mut session.model.doc, session.libraries, &source, value) {
             return false;
         }
         session.model.history.record(before);

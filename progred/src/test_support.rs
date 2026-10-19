@@ -87,6 +87,19 @@ pub(crate) fn completion_entries_with(
     .collect()
 }
 
+/// The loaded libraries of one library, `test` with the id 1, defining `cells`.
+pub(crate) fn library_of(cells: Cells) -> Libraries {
+    Libraries::from_contributions([(
+        CellId::from_u128(1),
+        crate::libraries::name::named_library::<crate::Editor>(
+            CellId::from_u128(1),
+            "test",
+            crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+        ),
+    )])
+    .0
+}
+
 pub(crate) fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
     Sources { doc, libraries }
 }

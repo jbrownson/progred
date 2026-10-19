@@ -118,7 +118,7 @@ fn panes_are_values_and_their_edits_are_document_edits() {
         .set_value(cell, Value::from(b"definition".to_vec()));
     let mut doc = Rc::new(doc);
     let before = doc.clone();
-    assert!(crate::selection::delete_edge(
+    assert!(crate::location::delete_edge(
         &mut doc,
         &Default::default(),
         &crate::location::Location::root(&path)

@@ -3,11 +3,15 @@
 //! cell starts a new location at its definition, however the cell was reached,
 //! so whether something can be edited depends on where it's stored, not on
 //! the route to it. A computed value isn't stored, so it has no location of
-//! its own, but a cell inside one still starts one.
+//! its own, but a cell inside one still starts one. Every edit writes where
+//! its location is stored.
 
+use crate::library::Libraries;
 use crate::sources::Sources;
-use gid::{CellId, Resolution, Step};
+use crate::spine;
+use gid::{CellId, Document, Resolution, Step, Value};
 use std::borrow::Cow;
+use std::rc::Rc;
 
 /// Where a location starts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,6 +92,74 @@ pub fn writable(sources: &Sources, location: &Location) -> bool {
     location
         .stored(sources)
         .is_some_and(|stored| owned(stored.start))
+}
+
+/// Writes `value` at `location`, where it's stored: the definition its last
+/// Follow enters, or else its start. The single write every edit reduces
+/// to: the steps from there are a value spine, rebuilt around the new leaf
+/// through the lens. A bare cell takes its first value through the empty
+/// spine.
+pub fn set_value(
+    doc: &mut Rc<Document>,
+    libraries: &Libraries,
+    location: &Location,
+    value: Value,
+) -> bool {
+    let write = {
+        let sources = Sources {
+            doc: &*doc,
+            libraries,
+        };
+        location
+            .stored(&sources)
+            .filter(|stored| owned(stored.start))
+            .and_then(|stored| {
+                spine::set(sources.read_from(stored.start, &[]), &stored.path, value)
+                    .map(|rebuilt| (stored.start, rebuilt))
+            })
+    };
+    write
+        .map(|(start, rebuilt)| store(doc, start, Some(rebuilt)))
+        .is_some()
+}
+
+/// Deletes the value at `location`, where it's stored. Within a value it
+/// rebuilds the owner without it — unlinking; anything the dropped value
+/// linked stays in the table for the orphan pool. At a definition's own
+/// start it removes the cell's value: bare again, the symmetric partner of
+/// authoring a value into one. At the root's own start it empties the
+/// document; locations that no longer resolve decline.
+pub fn delete_edge(doc: &mut Rc<Document>, libraries: &Libraries, location: &Location) -> bool {
+    let deletion = {
+        let sources = Sources {
+            doc: &*doc,
+            libraries,
+        };
+        location
+            .stored(&sources)
+            .filter(|stored| owned(stored.start))
+            .and_then(|stored| {
+                let owner = sources.read_from(stored.start, &[])?;
+                if stored.path.is_empty() {
+                    Some((stored.start, None))
+                } else {
+                    spine::without(owner, &stored.path).map(|rebuilt| (stored.start, Some(rebuilt)))
+                }
+            })
+    };
+    deletion
+        .map(|(start, value)| store(doc, start, value))
+        .is_some()
+}
+
+/// Replace, or with None remove, the value stored at `start`.
+fn store(doc: &mut Rc<Document>, start: Start, value: Option<Value>) {
+    let doc = Rc::make_mut(doc);
+    match (start, value) {
+        (Start::Root, value) => doc.root = value,
+        (Start::Cell { cell, .. }, Some(value)) => doc.cells.set_value(cell, value),
+        (Start::Cell { cell, .. }, None) => doc.cells.clear_value(cell),
+    }
 }
 
 /// The path's last Follow, between the steps before and after it.
