@@ -231,7 +231,7 @@ impl Edit<'_> {
         default: bool,
         closed: Option<bool>,
     ) -> bool {
-        self.session.set_collapsed(root, path, default, closed)
+        self.session.set_folded(root, path, default, closed)
     }
 
     /// Leaves the value at `path` pending, for the picker to fill.

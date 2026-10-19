@@ -754,7 +754,7 @@ fn custom_match_projection_uses_the_editor_fold() {
     };
     let (expanded, expanded_extent) = place(&doc, None, 900.0);
     let mut annotations = Annotations::default();
-    crate::annotations::set_collapsed(&mut annotations, &[], false, true);
+    crate::annotations::set_folded(&mut annotations, &[], false, true);
     let (folded, folded_extent) = place_with(BenchFrame {
         annotations: Some(&annotations),
         ..BenchFrame::of(&doc, 900.0)

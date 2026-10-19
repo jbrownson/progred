@@ -156,11 +156,11 @@ fn folds_undo_independently_of_document_edits_and_never_dirty_the_document() {
     let mut model = model();
     let root = model.workspace.document_root().clone();
     select(&mut model, &root, vec![]);
-    assert!(!model.set_collapsed(&root, &[], false, Some(false)));
+    assert!(!model.set_folded(&root, &[], false, Some(false)));
     assert!(!model.history.can_undo());
     edit(&mut model, 2);
     let edited = model.doc.clone();
-    assert!(model.set_collapsed(&root, &[], false, None));
+    assert!(model.set_folded(&root, &[], false, None));
     assert!(Rc::ptr_eq(&model.doc, &edited));
     model.mark_saved();
     assert!(model.step_history(true));
@@ -179,7 +179,7 @@ fn folds_undo_independently_of_document_edits_and_never_dirty_the_document() {
         false
     ));
     assert!(!model.dirty());
-    assert!(model.set_collapsed(&root, &[], false, Some(false)));
+    assert!(model.set_folded(&root, &[], false, Some(false)));
     assert!(!model.dirty());
 }
 
@@ -207,7 +207,7 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
     let first_root = model.workspace.left.panes[0].view.root.clone();
     let second_root = model.workspace.left.panes[1].view.root.clone();
     select(&mut model, &first_root, first.1.clone());
-    assert!(model.set_collapsed(&first_root, &first.1, false, None));
+    assert!(model.set_folded(&first_root, &first.1, false, None));
     assert!(!model.dirty());
     let before = model.snapshot();
     assert!(crate::location::delete_edge(
@@ -256,7 +256,7 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
 fn undo_does_not_restore_scroll_projection_or_unrelated_annotations() {
     let mut model = model();
     let root = model.workspace.document_root().clone();
-    assert!(model.set_collapsed(&root, &[], false, None));
+    assert!(model.set_folded(&root, &[], false, None));
     let state = gid::new_cell_id();
     model
         .workspace
@@ -382,7 +382,7 @@ fn saving_and_folding_break_typing_runs() {
     type_text(&mut model, "abc");
     model.mark_saved();
     type_text(&mut model, "abcd");
-    assert!(model.set_collapsed(&root, &[], false, None));
+    assert!(model.set_folded(&root, &[], false, None));
     type_text(&mut model, "abcde");
     assert!(model.step_history(true));
     assert_eq!(spelling(&model), "abcd");

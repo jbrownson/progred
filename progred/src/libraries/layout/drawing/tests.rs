@@ -182,7 +182,7 @@ fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
         Value::record([(workspace::vocabulary::LEFT, Value::list([picture]))]),
     )]));
     editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
-    crate::annotations::set_collapsed(
+    crate::annotations::set_folded(
         &mut editor.model.workspace.document.annotations,
         &[Step::Key(workspace::vocabulary::PANES)],
         false,

@@ -284,7 +284,7 @@ fn folds_are_occurrence_local_and_undoable_without_dirtying_the_document() {
     assert!(
         editor
             .session()
-            .set_collapsed(&root, &first, false, Some(true))
+            .set_folded(&root, &first, false, Some(true))
     );
     let annotations = &editor.model.workspace.view(&root).unwrap().annotations;
     assert!(crate::annotations::folded(annotations.at(&first), false));
@@ -294,7 +294,7 @@ fn folds_are_occurrence_local_and_undoable_without_dirtying_the_document() {
     assert!(
         editor
             .session()
-            .set_collapsed(&root, &second, false, Some(true))
+            .set_folded(&root, &second, false, Some(true))
     );
 }
 

@@ -946,7 +946,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     model
         .workspace
         .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
-    crate::annotations::set_collapsed(
+    crate::annotations::set_folded(
         &mut model.workspace.document.annotations,
         &[Step::Key(workspace::vocabulary::PANES)],
         false,

@@ -66,7 +66,7 @@ fn duplicate_views_keep_independent_projection_state() {
     let one = add_pane(&mut workspace, Side::Left);
     let other = add_pane(&mut workspace, Side::Right);
 
-    crate::annotations::set_collapsed(
+    crate::annotations::set_folded(
         &mut workspace.view_mut(&one).unwrap().annotations,
         &[],
         false,
@@ -172,7 +172,7 @@ fn declared_panes_reconcile_without_losing_view_state() {
     ));
     assert!(workspace.document.annotations.at(&one.path).is_none());
     assert!(workspace.document.annotations.at(&two.path).is_none());
-    crate::annotations::set_collapsed(
+    crate::annotations::set_folded(
         &mut workspace.document.annotations,
         &panes_path,
         false,

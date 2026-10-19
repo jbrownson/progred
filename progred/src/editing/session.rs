@@ -86,14 +86,14 @@ impl Session<'_> {
     /// without `closed`. Fold state belongs to an occurrence: projection
     /// supplies its default, and no document lookup or writable source is
     /// needed to change it. A change ends any drag.
-    pub(crate) fn set_collapsed(
+    pub(crate) fn set_folded(
         &mut self,
         root: &Root,
         path: &[Step],
         default: bool,
         closed: Option<bool>,
     ) -> bool {
-        let changed = self.model.set_collapsed(root, path, default, closed);
+        let changed = self.model.set_folded(root, path, default, closed);
         if changed {
             self.finish_gesture();
         }

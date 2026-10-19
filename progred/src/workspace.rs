@@ -325,7 +325,7 @@ struct Drag {
 impl Default for Workspace {
     fn default() -> Self {
         let mut document = View::new(Root::document());
-        crate::annotations::set_collapsed(
+        crate::annotations::set_folded(
             &mut document.annotations,
             &[Step::Key(vocabulary::PANES)],
             false,

@@ -122,7 +122,7 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
         Step::Element(entries.keys().next().unwrap().clone()),
     ];
     for (position, value) in entries {
-        world.session().set_collapsed(
+        world.session().set_folded(
             &crate::test_root(),
             &[
                 Step::Key(OUTLINE),
@@ -207,7 +207,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             for (path, folded) in [(&a_body, false), (&b_body, b_folded)] {
                 editor
                     .session()
-                    .set_collapsed(&root, path, false, Some(folded));
+                    .set_folded(&root, path, false, Some(folded));
             }
             Driver::new(editor, kurbo::Size::new(700.0, 600.0))
         };
@@ -323,7 +323,7 @@ fn outline_library_tint_stops_at_the_heading() {
     let body_path = body(&heading_path, key);
     world
         .session()
-        .set_collapsed(&crate::test_root(), &body_path, false, Some(false));
+        .set_folded(&crate::test_root(), &body_path, false, Some(false));
     let f = editing_frame(&mut world);
     let heading_rect = stop(&f, &heading_path).rect;
     let body_rect = stop(&f, &body_path).rect;

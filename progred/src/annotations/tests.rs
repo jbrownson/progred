@@ -10,12 +10,12 @@ fn fields_compose_at_a_path_and_prune_when_cleared() {
     let other = CellId::from_u128(7);
     let mut annotations = Annotations::default();
     let path = [Step::Follow(gid::Resolution::Document)];
-    set_collapsed(&mut annotations, &path, false, true);
+    set_folded(&mut annotations, &path, false, true);
     annotations.set_field(&path, other, Some(Value::from(vec![9u8])));
     assert!(folded(annotations.at(&path), false));
     assert!(field(&annotations, &path, other).is_some());
 
-    set_collapsed(&mut annotations, &path, false, false);
+    set_folded(&mut annotations, &path, false, false);
     assert!(!folded(annotations.at(&path), false));
     assert!(field(&annotations, &path, other).is_some());
 

@@ -94,7 +94,7 @@ impl Model {
         }
     }
 
-    pub(crate) fn set_collapsed(
+    pub(crate) fn set_folded(
         &mut self,
         root: &Root,
         path: &[Step],
@@ -108,7 +108,7 @@ impl Model {
             if previous == next {
                 false
             } else {
-                crate::annotations::set_collapsed(&mut view.annotations, path, default, next);
+                crate::annotations::set_folded(&mut view.annotations, path, default, next);
                 true
             }
         });

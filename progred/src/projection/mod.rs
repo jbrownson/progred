@@ -802,9 +802,9 @@ fn bind_selection(
                     }
                 } else {
                     match fold_default.zip(fold_key(command, event)) {
-                        Some((default, closed)) => editor
-                            .session()
-                            .set_collapsed(&root, &path, default, closed),
+                        Some((default, closed)) => {
+                            editor.session().set_folded(&root, &path, default, closed)
+                        }
                         None => editor.delete_key(input.geometry(scale), event),
                     }
                 }

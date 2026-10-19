@@ -99,7 +99,7 @@ impl OrbitProfile {
                 .collect();
             let root = editor.model.workspace.document_root().clone();
             for (position, key) in sections {
-                editor.session().set_collapsed(
+                editor.session().set_folded(
                     &root,
                     &[Step::Key(outline), Step::Element(position), Step::Key(key)],
                     false,
