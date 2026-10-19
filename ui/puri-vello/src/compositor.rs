@@ -467,7 +467,10 @@ impl Compositor {
                         .get_or_insert_with(|| crate::mesh::Renderer::new(gpu.device, gpu.queue));
                     let texture = renderer
                         .render(&scene.geometry, &scene.view, scene.surface.as_ref())
-                        .ok_or(Error::Image("invalid or oversized mesh viewport"))?;
+                        .ok_or(Error::Image(
+                            "empty or oversized mesh viewport, oversized mesh or surface image, \
+                             or out-of-range mesh indices",
+                        ))?;
                     // Render and composite in order: the renderer may reuse this
                     // target for the next viewport, including another same-size pane.
                     self.image(gpu, resources, &texture, *transform, true, target, scissor)?;

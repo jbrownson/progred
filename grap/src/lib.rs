@@ -827,8 +827,8 @@ impl Environment {
     }
 
     /// Add bindings at the innermost level in place, copying the frame
-    /// only while another environment still shares it. Lookup, equality,
-    /// and reification are the same as through [`Self::extended_runtime`];
+    /// only while another environment still shares it. Lookup and
+    /// reification are the same as through [`Self::extended_runtime`];
     /// sequential binders avoid a frame allocation per binding.
     pub fn push_runtime(&mut self, bindings: impl IntoIterator<Item = (CellId, RuntimeValue)>) {
         let indices = self.indices.clone();

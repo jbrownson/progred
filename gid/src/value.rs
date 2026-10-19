@@ -354,8 +354,8 @@ pub fn hex_string(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-/// The bytes hex digit pairs spell, in either case, as someone types a
-/// blob; [`hex_string`] writes them.
+/// The bytes that hex digit pairs spell, in either case; [`hex_string`]
+/// writes them.
 pub fn read_hex(hex: &str) -> Option<Vec<u8>> {
     let digit = |c: u8| match c {
         b'0'..=b'9' => Some(c - b'0'),

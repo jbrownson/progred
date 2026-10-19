@@ -508,10 +508,11 @@ impl LineEditState {
         origin: Point,
     ) {
         if self.preedit.is_none() {
-            let point = Point::new(event.state.position.x, event.state.position.y) - origin;
+            let point =
+                (Point::new(event.state.position.x, event.state.position.y) - origin).to_point();
             let count = event.state.count.max(1);
             self.drag = Some(Drag {
-                origin: point.to_point(),
+                origin: point,
                 count,
             });
             let (x, y) = (point.x as f32, point.y as f32);
