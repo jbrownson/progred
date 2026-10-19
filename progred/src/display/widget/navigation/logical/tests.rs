@@ -66,15 +66,21 @@ fn build(shape: &Shape, selected: usize, collector: &mut Collector) {
     }
 }
 
+/// The stops `destinations` lead to, left, right, up and down.
+fn indices(destinations: Destinations) -> [Option<usize>; 4] {
+    [
+        destinations.left,
+        destinations.right,
+        destinations.up,
+        destinations.down,
+    ]
+    .map(|target| target.as_ref().map(index))
+}
+
 fn destinations(shape: &Shape, selected: usize) -> [Option<usize>; 4] {
     let mut collector = Collector::default();
     build(shape, selected, &mut collector);
-    collector
-        .current
-        .lines
-        .destinations()
-        .unwrap()
-        .map(|target| target.as_ref().map(index))
+    indices(collector.current.lines.destinations().unwrap())
 }
 
 fn stops(shape: &Shape) -> Vec<usize> {
@@ -125,7 +131,7 @@ fn long_single_line_keeps_only_boundaries_and_the_selected_neighbors() {
     assert_eq!(lines.rows.len(), 1);
     assert!(lines.rows[0].block.is_none());
     assert_eq!(
-        lines.destinations().unwrap().map(|t| t.as_ref().map(index)),
+        indices(lines.destinations().unwrap()),
         [Some(4999), Some(5001), None, None]
     );
 }
@@ -363,12 +369,7 @@ fn a_repeated_declaration_is_the_same_stop() {
     collector.stop(path(2), false);
     collector.end_container();
     assert_eq!(
-        collector
-            .current
-            .lines
-            .destinations()
-            .unwrap()
-            .map(|path| path.as_ref().map(index)),
+        indices(collector.current.lines.destinations().unwrap()),
         [Some(0), Some(2), None, None]
     );
 }

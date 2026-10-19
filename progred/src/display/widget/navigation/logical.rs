@@ -1,8 +1,10 @@
 //! Fold the chosen layout traversal into line boundaries and local neighbors.
+use super::super::frame::DispatchContext;
 use super::super::view::Root;
-use super::{DIRECTIONS, DispatchContext, Event, EventOutcome, Handler};
+use super::landmark_at;
 use gid::Step;
 use measured::{Composition, RowAlignment};
+use puri::handler::{Event, EventOutcome, Handler, NavigationDirection};
 use std::rc::Rc;
 
 /// A stop names its occurrence by path; arriving there is the occurrence's
@@ -187,32 +189,51 @@ impl Lines {
         }
     }
 
-    fn destinations(self) -> Option<[Option<OccurrencePath>; 4]> {
+    fn destinations(self) -> Option<Destinations> {
         let (mut previous_first, mut previous_last) = (None, None);
-        let mut result: Option<[Option<OccurrencePath>; 4]> = None;
+        let mut result: Option<Destinations> = None;
         for line in self
             .rows
             .into_iter()
             .flat_map(Row::lines)
             .filter(|line| line.first.is_some())
         {
-            if let Some([_, right, _, down]) = &mut result {
+            if let Some(Destinations { right, down, .. }) = &mut result {
                 *right = right.take().or_else(|| line.first.clone());
                 *down = line.first;
                 break;
             }
             if let Some(selected) = line.selected {
-                result = Some([
-                    selected.left.or(previous_last.take()),
-                    selected.right,
-                    previous_first.take(),
-                    None,
-                ]);
+                result = Some(Destinations {
+                    left: selected.left.or(previous_last.take()),
+                    right: selected.right,
+                    up: previous_first.take(),
+                    down: None,
+                });
             }
             previous_first = line.first;
             previous_last = line.last;
         }
         result
+    }
+}
+
+/// Where each arrow leads from the selected stop.
+struct Destinations {
+    left: Option<OccurrencePath>,
+    right: Option<OccurrencePath>,
+    up: Option<OccurrencePath>,
+    down: Option<OccurrencePath>,
+}
+
+impl Destinations {
+    fn toward(&self, direction: NavigationDirection) -> Option<&OccurrencePath> {
+        match direction {
+            NavigationDirection::Left => self.left.as_ref(),
+            NavigationDirection::Right => self.right.as_ref(),
+            NavigationDirection::Up => self.up.as_ref(),
+            NavigationDirection::Down => self.down.as_ref(),
+        }
     }
 }
 
@@ -358,15 +379,10 @@ impl Collector {
         handler.on(
             move |world, event, input: &mut DispatchContext<C, H>| match event {
                 Event::Navigate(direction) => {
-                    let arrive = DIRECTIONS
-                        .iter()
-                        .position(|d| *d == direction)
-                        .and_then(|index| destinations[index].as_ref())
+                    let arrive = destinations
+                        .toward(direction)
                         .and_then(|path| {
-                            let landmark = input
-                                .landmarks
-                                .iter()
-                                .find(|landmark| landmark.root == view && landmark.path == *path);
+                            let landmark = landmark_at(&input.landmarks, view.as_ref(), path);
                             debug_assert!(landmark.is_some(), "navigation stop without a landmark");
                             landmark
                         })

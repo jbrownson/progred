@@ -2,7 +2,7 @@
 //! selection lands when what it was on goes away. They act through the
 //! installed frame's [`Geometry`].
 
-use crate::display::widget::navigation::{Geometry, Landmark, advance};
+use crate::display::widget::navigation::{Geometry, Landmark, advance, landmark_at};
 use crate::display::widget::view::{Root, Target};
 use crate::selection::Selection;
 use gid::{Path, Step};
@@ -131,10 +131,7 @@ fn root_target<'a, World>(
         Some(Target::Pane { path }) => path.as_slice(),
         _ => &[],
     };
-    landmarks.iter().find(|landmark| {
-        root.is_none_or(|root| landmark.root.as_ref() == Some(root))
-            && landmark.path.as_ref() == path
-    })
+    landmark_at(landmarks, root, path)
 }
 
 /// The neighboring sibling in placement order, continuing through

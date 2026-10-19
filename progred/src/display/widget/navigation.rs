@@ -1,22 +1,15 @@
 //! Layout collects selectable stops; only the current selection's destinations survive.
-use super::{HoverPass, frame::DispatchContext, source::Secondary};
+use super::{HoverPass, source::Secondary, view::Root};
 use gid::Step;
 use kurbo::Rect;
 use measured::Measured;
-use puri::handler::{Event, EventOutcome, Handler, NavigationDirection};
+use puri::handler::NavigationDirection;
 use std::rc::Rc;
 
 mod geometry;
 mod logical;
 pub(crate) use geometry::{Geometry, advance};
 pub(crate) use logical::Collector;
-
-const DIRECTIONS: [NavigationDirection; 4] = [
-    NavigationDirection::Left,
-    NavigationDirection::Right,
-    NavigationDirection::Up,
-    NavigationDirection::Down,
-];
 
 // Pointer/source selection and Select All also use these direct selection helpers.
 pub type Select<World> = Rc<dyn Fn(&mut World, Option<NavigationDirection>) -> bool>;
@@ -69,7 +62,7 @@ pub fn group<W: 'static, H: 'static>(
 }
 
 pub struct Landmark<World> {
-    pub root: Option<super::view::Root>,
+    pub root: Option<Root>,
     pub path: Rc<[Step]>,
     pub rect: Rect,
     pub select: Select<World>,
@@ -96,6 +89,17 @@ impl<World> Clone for Landmark<World> {
             tab_stop: self.tab_stop,
         }
     }
+}
+
+/// The landmark drawn at `path` in the view `root`.
+pub(crate) fn landmark_at<'a, World>(
+    landmarks: &'a [Landmark<World>],
+    root: Option<&Root>,
+    path: &[Step],
+) -> Option<&'a Landmark<World>> {
+    landmarks
+        .iter()
+        .find(|landmark| landmark.root.as_ref() == root && landmark.path.as_ref() == path)
 }
 
 /// What the selected occurrence shares with the projections that carry the

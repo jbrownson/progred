@@ -1,7 +1,7 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
 use crate::Editor;
-use crate::display::widget::navigation::Geometry;
+use crate::display::widget::navigation::{Geometry, landmark_at};
 use crate::location::Location;
 use crate::modifiers;
 use crate::navigate;
@@ -17,11 +17,7 @@ impl Editor {
         root: &crate::display::widget::view::Root,
         path: gid::Path,
     ) {
-        if let Some(target) = geometry
-            .landmarks
-            .iter()
-            .find(|target| target.root.as_ref() == Some(root) && target.path.as_ref() == path)
-        {
+        if let Some(target) = landmark_at(geometry.landmarks, Some(root), &path) {
             (target.select)(self, None);
         } else {
             let scope = self

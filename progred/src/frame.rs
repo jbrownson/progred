@@ -3,7 +3,7 @@
 //! caller's choice, so a silent mint never draws.
 
 use crate::display::widget::frame::{Cursor, ViewRegion};
-use crate::display::widget::navigation::{Geometry, Landmark};
+use crate::display::widget::navigation::{Geometry, Landmark, landmark_at};
 use crate::display::widget::source::SourceTrace;
 use crate::display::widget::view::{Root, Target};
 use crate::display::widget::{container, placed, style, view};
@@ -170,9 +170,7 @@ fn attribute(
     };
     let visible = source_hover_visible(hovered.as_ref(), link);
     let landmark = match &hovered {
-        Some(Hovered::Tree(hover::Hover::Value(path))) => landmarks
-            .iter()
-            .find(|d| d.root.as_ref() == root && d.path == *path),
+        Some(Hovered::Tree(hover::Hover::Value(path))) => landmark_at(landmarks, root, path),
         _ => None,
     };
     let hovered_secondary = match &hovered {

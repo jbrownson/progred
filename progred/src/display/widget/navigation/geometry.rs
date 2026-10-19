@@ -2,7 +2,7 @@
 //! once the frame is placed: scrolling a view to show a place, arriving at a
 //! landmark, and Tab's search for the next place to fill in.
 
-use super::Landmark;
+use super::{Landmark, landmark_at};
 use crate::display::Host;
 use crate::display::widget::frame::ViewRegion;
 use crate::display::widget::view::Root;
@@ -40,11 +40,7 @@ impl<W> Default for Geometry<'_, W> {
 impl<W> Geometry<'_, W> {
     /// Missing paths do nothing; new geometry does not retry the request.
     pub fn reveal_path(self, model: &mut Model, root: &Root, path: &[Step]) {
-        if let Some(target) = self
-            .landmarks
-            .iter()
-            .find(|target| target.root.as_ref() == Some(root) && target.path.as_ref() == path)
-        {
+        if let Some(target) = landmark_at(self.landmarks, Some(root), path) {
             self.reveal_rect(model, root, target.rect);
         }
     }
@@ -143,13 +139,7 @@ pub(crate) fn advance<W: Host>(world: &mut W, geometry: Geometry<'_, W>, back: b
             .unwrap_or_else(|| session.model.workspace.document_root())
             .clone();
         let anchor = selection.and_then(|selection| {
-            geometry
-                .landmarks
-                .iter()
-                .find(|landmark| {
-                    landmark.root.as_ref() == Some(&root)
-                        && landmark.path.as_ref() == selection.path()
-                })
+            landmark_at(geometry.landmarks, Some(&root), selection.path())
                 .map(|landmark| landmark.rect)
         });
         let stops = tab_stops(geometry.landmarks, &root);
