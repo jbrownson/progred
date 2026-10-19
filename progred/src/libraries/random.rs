@@ -1,7 +1,7 @@
 //! Deterministic random sampling inside an explicit Grap evaluation scope.
 
 use crate::display::Host;
-use crate::libraries::{Library, f64, name, u64};
+use crate::libraries::{Library, absent, f64, name, u64};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
@@ -68,10 +68,10 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::BETWEEN,
-            ForeignFunction::from_value(|_, _, _| {
-                Ok(::grap::absent::value(vocabulary::OUTSIDE_SCOPE))
-            })
-            .parameters([vocabulary::MIN, vocabulary::MAX]),
+            absent::outside_scope(
+                vocabulary::OUTSIDE_SCOPE,
+                [vocabulary::MIN, vocabulary::MAX],
+            ),
         )
         .register(
             vocabulary::WITH_RANDOM,

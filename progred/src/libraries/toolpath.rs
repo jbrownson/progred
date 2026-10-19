@@ -2,7 +2,7 @@
 //! through a sink; recording is one consumer, not the program representation.
 
 use crate::display::Host;
-use crate::libraries::{Library, f64, layout, name, presentation};
+use crate::libraries::{Library, absent, f64, layout, name, presentation};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
     RuntimeValue,
@@ -369,22 +369,25 @@ const PATH_PREVIEW_PARAMETERS: [CellId; 4] = [
 ];
 
 fn functions() -> ForeignFunctions {
-    let functions = EMITTERS
-        .iter()
-        .fold(ForeignFunctions::default(), |functions, &cell| {
-            functions.register(
-                cell,
-                ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
-                    .parameters(match cell {
-                        START_AT | LINE_TO => vec![X, Y, Z],
-                        WITH_TOOL => vec![cutter::vocabulary::TOOL, ::grap::vocabulary::EXPRESSION],
-                        SEQUENCE => vec![PROGRAM],
-                        _ => vec![MAPPER, ::grap::vocabulary::EXPRESSION],
-                    })
-                    .tracked(),
-            )
-        });
-    functions
+    ForeignFunctions::default()
+        .register(START_AT, absent::outside_scope(OUTPUT_REQUIRED, [X, Y, Z]))
+        .register(LINE_TO, absent::outside_scope(OUTPUT_REQUIRED, [X, Y, Z]))
+        .register(
+            MAP_POINTS,
+            absent::outside_scope(OUTPUT_REQUIRED, [MAPPER, ::grap::vocabulary::EXPRESSION]),
+        )
+        .register(
+            MAP_AXES,
+            absent::outside_scope(OUTPUT_REQUIRED, [MAPPER, ::grap::vocabulary::EXPRESSION]),
+        )
+        .register(
+            WITH_TOOL,
+            absent::outside_scope(
+                OUTPUT_REQUIRED,
+                [cutter::vocabulary::TOOL, ::grap::vocabulary::EXPRESSION],
+            ),
+        )
+        .register(SEQUENCE, absent::outside_scope(OUTPUT_REQUIRED, [PROGRAM]))
         .register(
             PREVIEW_3D,
             ForeignFunction::new(fidget::preview)

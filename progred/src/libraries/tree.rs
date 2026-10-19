@@ -1,5 +1,5 @@
 //! Final-encoded trees. Consumers choose what to retain; source links are not GID fields.
-use super::{Library, layout, name, presentation};
+use super::{Library, absent, layout, name, presentation};
 use crate::computations::memo;
 use crate::display::Host;
 use ::grap::{
@@ -355,18 +355,15 @@ fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>)
     }
 }
 
-/// A tree constructor outside a collection, which has nowhere to emit.
-fn output_required(parameters: impl IntoIterator<Item = CellId>) -> ForeignFunction {
-    ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
-        .parameters(parameters)
-        .tracked()
-}
-
 pub fn library<W: Host>() -> Library<W> {
+    // Outside a collection, a tree constructor has nowhere to emit.
     let functions = ForeignFunctions::default()
-        .register(GROUP, output_required([CHILDREN]))
-        .register(LEAF, output_required([VALUE]))
-        .register(MAP, output_required([CHILDREN, MAPPING]))
+        .register(GROUP, absent::outside_scope(OUTPUT_REQUIRED, [CHILDREN]))
+        .register(LEAF, absent::outside_scope(OUTPUT_REQUIRED, [VALUE]))
+        .register(
+            MAP,
+            absent::outside_scope(OUTPUT_REQUIRED, [CHILDREN, MAPPING]),
+        )
         .register(
             COLLECT,
             ForeignFunction::new(|context, call, environment| {

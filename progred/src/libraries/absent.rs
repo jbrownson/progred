@@ -45,6 +45,17 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
     ))
 }
 
+/// A function whose implementation a scope supplies, as called outside that
+/// scope: it answers only `reason`.
+pub fn outside_scope(
+    reason: CellId,
+    parameters: impl IntoIterator<Item = CellId>,
+) -> ForeignFunction {
+    ForeignFunction::from_value(move |_, _, _| Ok(::grap::absent::value(reason)))
+        .parameters(parameters)
+        .tracked()
+}
+
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::OR_DEFAULT,

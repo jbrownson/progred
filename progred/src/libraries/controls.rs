@@ -1,5 +1,5 @@
 //! Evaluation-local controls: native widgets emit alongside ordinary Grap values.
-use super::{Library, f64, layout, name, presentation, tree};
+use super::{Library, absent, f64, layout, name, presentation, tree};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{self, widget};
 use ::grap::{
@@ -716,39 +716,24 @@ pub fn library<W: Host>() -> Library<W> {
         )
         .register(
             SLIDER,
-            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
-                .parameters([VALUE, ON_CHANGE])
-                .tracked(),
+            absent::outside_scope(OUTPUT_REQUIRED, [VALUE, ON_CHANGE]),
         )
-        .register(
-            UPDATE,
-            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
-                .parameters([VALUE])
-                .tracked(),
-        )
+        .register(UPDATE, absent::outside_scope(OUTPUT_REQUIRED, [VALUE]))
         .register(
             RADIO,
-            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
-                .parameters([KEY, OPTIONS])
-                .tracked(),
+            absent::outside_scope(OUTPUT_REQUIRED, [KEY, OPTIONS]),
         )
         .register(
             TREE_RANGE,
-            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
-                .parameters([KEY, ITEMS])
-                .tracked(),
+            absent::outside_scope(OUTPUT_REQUIRED, [KEY, ITEMS]),
         )
         .register(
             TREE_CURSOR,
-            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
-                .parameters([KEY, ITEMS])
-                .tracked(),
+            absent::outside_scope(OUTPUT_REQUIRED, [KEY, ITEMS]),
         )
         .register(
             TREE_PROGRAM_CURSOR,
-            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
-                .parameters([KEY, tree::vocabulary::PROGRAM])
-                .tracked(),
+            absent::outside_scope(OUTPUT_REQUIRED, [KEY, tree::vocabulary::PROGRAM]),
         );
     name::named_library(
         ID,
