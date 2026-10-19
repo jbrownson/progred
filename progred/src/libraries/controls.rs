@@ -350,8 +350,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
     let state = input.state.cloned();
     Some(Layout::program(Rc::new(
         move |context, build| match controls_output(&controls, state.as_ref(), width, context) {
-            Err(error) => display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &error)
-                .measure(context, build),
+            Err(error) => presentation::result_layout(&error).measure(context, build),
             Ok((widgets, parameters)) => {
                 let controls: Vec<_> = widgets.iter().map(|widget| widget(context)).collect();
                 let result = ::grap::apply(
@@ -366,11 +365,7 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
                     None,
                     ::grap::DEFAULT_FUEL,
                 );
-                let content = display::at(
-                    [gid::Step::Key(presentation::vocabulary::RESULT)],
-                    &result.result,
-                )
-                .measure(context, build);
+                let content = presentation::result_layout(&result.result).measure(context, build);
                 if controls.is_empty() {
                     content
                 } else {

@@ -345,13 +345,6 @@ fn operation(
     Ok(RuntimeValue::record([]))
 }
 
-/// `value`, an absence, shown where a preview's drawing would be.
-fn result_layout<W: Host>(
-    value: impl Clone + Into<RuntimeValue>,
-) -> crate::display::host::Layout<W> {
-    crate::display::at([gid::Step::Key(presentation::vocabulary::RESULT)], value)
-}
-
 /// Run with caller-owned output. Consumers that need atomic results stage their
 /// sink and discard it on failure; the preview does this for each frame.
 pub fn run<T>(

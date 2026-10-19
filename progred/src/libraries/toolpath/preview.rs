@@ -1,4 +1,4 @@
-use super::{Error, argument, fuel, invalid, number, result_layout, run, vocabulary::*};
+use super::{Error, argument, fuel, invalid, number, run, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::widget;
 use crate::libraries::{layout, presentation};
@@ -139,7 +139,7 @@ pub(super) fn display<W: Host>(
             ::grap::apply_expression(&program, [], context.viewing().host(), Some(scope), fuel)
         });
         if !evaluation.completed || evaluation.result.absent_reason().is_some() {
-            result_layout(&evaluation.result).measure(context, build)
+            presentation::result_layout(&evaluation.result).measure(context, build)
         } else if let Some(path) = fitted(lines.sink, size) {
             let scale = context.viewing().scale();
             measured::choices::ChoiceLayout::fixed(widget::paint(
@@ -165,7 +165,8 @@ pub(super) fn display<W: Host>(
                 },
             ))
         } else {
-            result_layout(::grap::absent::value(INVALID_INPUT)).measure(context, build)
+            presentation::result_layout(::grap::absent::value(INVALID_INPUT))
+                .measure(context, build)
         }
     })))
 }

@@ -211,7 +211,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                 }
             });
         drawing
-            .unwrap_or_else(super::result_layout)
+            .unwrap_or_else(presentation::result_layout)
             .measure(context, build)
     }));
     Some(fidget::interactive_volume(drawing, input))

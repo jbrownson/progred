@@ -11,7 +11,7 @@ pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::structure::{field_label, field_order};
 use crate::display::{
     Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
-    activatable, alternatives, at, col, descend_local, dim, faced, indent, picker, ranked,
+    activatable, alternatives, col, descend_local, dim, faced, indent, picker, ranked,
     record_fragment_with, row, selectable_bracket, shared,
 };
 use crate::display::{group, group_hug};
@@ -411,12 +411,7 @@ fn evaluate_display<W: Host>(
     ));
     let shaft_site = input.site();
     let shaft = shared(activatable(crate::display::arrow(), &shaft_site));
-    let result = shared(at(
-        [Step::Key(
-            crate::libraries::presentation::vocabulary::RESULT,
-        )],
-        &result,
-    ));
+    let result = shared(crate::libraries::presentation::result_layout(&result));
     Some(group(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
         col(

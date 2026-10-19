@@ -105,11 +105,8 @@ pub(super) fn display<W: Host>(
         |scope| input.env.apply_runtime_scoped(&function, &[], Some(scope)),
     );
     Some(layout.unwrap_or_else(|| {
-        crate::display::at(
-            [gid::Step::Key(
-                crate::libraries::presentation::vocabulary::RESULT,
-            )],
-            &if evaluation.result.absent_reason().is_some() {
+        crate::libraries::presentation::result_layout(
+            if evaluation.result.absent_reason().is_some() {
                 evaluation.result
             } else {
                 RuntimeValue::record([
