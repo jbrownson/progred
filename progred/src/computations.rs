@@ -134,14 +134,15 @@ impl Computations {
 
     /// `run` over `input`, kept for the occurrence at `path` in `view`: it
     /// runs again only when the input changes, as `same` compares it, or a
-    /// definition it resolved does.
+    /// definition it resolved does. `run` is a plain function, since the
+    /// occurrence's memo keeps the first call's.
     fn memoized<I: Clone + 'static>(
         &self,
         view: &Root,
         path: &[Step],
         input: I,
         same: fn(&I, &I) -> bool,
-        run: impl Fn(&I, &dyn Host) -> grap::Evaluation + 'static,
+        run: fn(&I, &dyn Host) -> grap::Evaluation,
     ) -> grap::RuntimeValue {
         struct Memoized<I> {
             input: Input<I>,
