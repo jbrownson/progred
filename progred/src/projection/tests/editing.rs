@@ -25,7 +25,7 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
             let spelling = text::read(input.value?)?;
             Some(crate::display::line_edit(crate::display::LineEdit {
                 text: spelling.into(),
-                update: crate::libraries::line_edit::native(move |spelling, _| {
+                update: Rc::new(move |spelling: &str, _: Option<&Value>| {
                     Some(Value::record([
                         (
                             text::vocabulary::UTF8,
@@ -75,9 +75,9 @@ fn caret_motion_does_not_run_a_line_conversion() {
         move |input| {
             Some(crate::display::line_edit(crate::display::LineEdit {
                 text: text::read(input.value?)?.into(),
-                update: crate::libraries::line_edit::native({
+                update: Rc::new({
                     let calls = calls.clone();
-                    move |spelling, current| {
+                    move |spelling: &str, current: Option<&Value>| {
                         calls.set(calls.get() + 1);
                         text::edit(spelling, current)
                     }

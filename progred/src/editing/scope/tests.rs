@@ -1,7 +1,5 @@
 use super::*;
-use crate::libraries::{
-    control, line_edit, path as path_data, selection as selection_data, site, text,
-};
+use crate::libraries::{control, path as path_data, selection as selection_data, site, text};
 use crate::location::Location;
 use gid::{Cells, Document, new_cell_id};
 use std::borrow::Cow;
@@ -40,7 +38,7 @@ fn fixture(value: Value) -> (crate::Editor, Root, Path, Path, Scope) {
 fn line(spelling: &str) -> crate::display::LineEdit {
     crate::display::LineEdit {
         text: spelling.into(),
-        update: line_edit::native(text::edit),
+        update: Rc::new(text::edit),
         prefix: String::new(),
         suffix: String::new(),
         family: Default::default(),

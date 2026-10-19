@@ -5,7 +5,7 @@ use crate::display::{
     PointEvent, PointUpdate, TextFamily, centered_row, col, descend, on_activate, on_hover,
     on_point, popover, widget,
 };
-use crate::libraries::{Library, f64, line_edit, name};
+use crate::libraries::{Library, f64, name};
 use ::grap::RuntimeValue;
 use gid::{Step, Value};
 use kurbo::{Affine, Rect, RoundedRect, Stroke};
@@ -399,7 +399,7 @@ fn present<W: Host>(
 fn hex_editor(color: Encoded) -> crate::display::LineEdit {
     crate::display::LineEdit {
         text: spelling(color),
-        update: line_edit::native(edit),
+        update: Rc::new(edit),
         prefix: "#".into(),
         suffix: String::new(),
         family: TextFamily::Monospace,

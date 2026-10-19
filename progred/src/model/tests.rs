@@ -363,7 +363,7 @@ fn saving_and_folding_break_typing_runs() {
             &mut model.doc,
             &libraries,
             selection,
-            &crate::libraries::line_edit::native(crate::libraries::text::edit),
+            &(Rc::new(crate::libraries::text::edit) as crate::display::LineUpdate),
         ) {
             model.history.record(before);
         }

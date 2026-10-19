@@ -1,6 +1,6 @@
 //! Progred's built-in libraries. Most modules are one library's complete
 //! contribution to the editor, through the interface in [`crate::library`];
-//! `completion`, `line_edit` and `representation` are helpers several share.
+//! `completion` and `representation` are helpers several share.
 
 /// A built-in library's contribution, over a world that hosts the toolkit.
 pub type Library<W> = crate::library::Library<W, <W as crate::display::Host>::Hover>;
@@ -20,7 +20,6 @@ pub mod fidget;
 pub mod geometry;
 pub mod grap;
 pub mod layout;
-pub mod line_edit;
 pub mod list;
 pub mod logic;
 pub mod name;

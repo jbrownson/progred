@@ -198,7 +198,7 @@ pub(crate) fn write_text(
         doc,
         libraries,
         selected,
-        &crate::libraries::line_edit::native(text::edit),
+        &(Rc::new(text::edit) as crate::display::LineUpdate),
     )
 }
 

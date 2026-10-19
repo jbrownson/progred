@@ -3,8 +3,9 @@
 //! beside f64's, and keeps text unboxed as it does numbers.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, line_edit, name};
+use crate::libraries::{Library, name};
 use gid::Value;
+use std::rc::Rc;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xeaaf309c36a65d2811083944da29aec9);
 
@@ -57,7 +58,7 @@ pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
 fn editor_for_text(text: &str) -> crate::display::LineEdit {
     crate::display::LineEdit {
         text: text.into(),
-        update: line_edit::native(edit),
+        update: Rc::new(edit),
         prefix: "\"".into(),
         suffix: "\"".into(),
         family: crate::display::TextFamily::SystemUi,

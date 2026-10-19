@@ -6,7 +6,7 @@
 use crate::display::activatable;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::representation::{Precedence, calls, infix_display, tagged};
-use crate::libraries::{Library, line_edit, logic, name};
+use crate::libraries::{Library, logic, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
@@ -195,7 +195,9 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         let encode = self.encode;
         let digits = crate::display::line_edit(crate::display::LineEdit {
             text: number.to_string(),
-            update: line_edit::native(move |spelling, current| edit(spelling, current, encode)),
+            update: Rc::new(move |spelling: &str, current: Option<&Value>| {
+                edit(spelling, current, encode)
+            }),
             prefix: String::new(),
             suffix: String::new(),
             family: crate::display::TextFamily::SystemUi,

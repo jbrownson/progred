@@ -2,8 +2,9 @@
 
 use crate::display::TextFamily;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, line_edit, name};
+use crate::libraries::{Library, name};
 use gid::Value;
+use std::rc::Rc;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x4ab5da466a7c5f1202f5ef862f5ff915);
 
@@ -14,7 +15,7 @@ pub fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     Some(crate::display::line_edit(crate::display::LineEdit {
         text: gid::hex_string(input.value?.as_blob()?),
-        update: line_edit::native(edit),
+        update: Rc::new(edit),
         prefix: "0x".into(),
         suffix: String::new(),
         family: TextFamily::Monospace,
