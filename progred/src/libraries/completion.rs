@@ -1,6 +1,6 @@
 //! Small combinators for a projection's completion vocabulary.
 
-use crate::display::{Completion, CompletionProvider, CompletionText, Face};
+use crate::display::{Completion, CompletionProvider, CompletionText};
 use gid::Value;
 use std::rc::Rc;
 
@@ -39,29 +39,21 @@ fn insertion(
     create: impl Fn() -> Value + 'static,
     on_commit: Option<crate::site::Continuation>,
 ) -> Completion {
-    let face = if preview.as_ref().and_then(super::text::read).is_some() {
-        Face::String
-    } else if preview.as_ref().and_then(Value::as_blob).is_some() {
-        Face::Id
-    } else {
-        Face::Label
-    };
-    let mut offer = Completion::new(display, move |session| {
-        let Some(picking) = session.pending() else {
-            return;
-        };
-        let value = create();
-        if picking.stage() == crate::selection::Stage::Label {
-            if let Some(cell) = value.as_cell() {
-                picking.commit_label(cell, None, on_commit.clone());
+    Completion {
+        preview,
+        ..Completion::new(display, move |session| {
+            if let Some(picking) = session.pending() {
+                let value = create();
+                if picking.stage() == crate::selection::Stage::Label {
+                    if let Some(cell) = value.as_cell() {
+                        picking.commit_label(cell, None, on_commit.clone());
+                    }
+                } else {
+                    picking.commit(value, on_commit.clone());
+                }
             }
-        } else {
-            picking.commit(value, on_commit.clone());
-        }
-    });
-    offer.preview = preview;
-    offer.face = face;
-    offer
+        })
+    }
 }
 
 /// Combine applicable providers in order. An explicit empty vocabulary stays
@@ -72,10 +64,9 @@ pub fn combine(providers: impl IntoIterator<Item = CompletionProvider>) -> Compl
         providers
             .iter()
             .filter_map(|provider| provider(request))
-            .fold(None, |offers, next| {
-                let mut offers = offers.unwrap_or_else(Vec::new);
+            .reduce(|mut offers, next| {
                 offers.extend(next);
-                Some(offers)
+                offers
             })
     })
 }

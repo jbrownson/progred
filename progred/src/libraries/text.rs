@@ -30,7 +30,10 @@ pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
 }
 
 pub fn completion(spelling: &str) -> crate::display::Completion {
-    crate::libraries::completion::select(format!("\"{spelling}\""), value(spelling))
+    crate::display::Completion {
+        face: crate::display::Face::String,
+        ..crate::libraries::completion::select(format!("\"{spelling}\""), value(spelling))
+    }
 }
 
 pub fn query_spelling(query: &str) -> &str {
