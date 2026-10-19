@@ -8,7 +8,8 @@ use kurbo::{Point, Size};
 use ui_events::keyboard::{KeyState, KeyboardEvent, Modifiers, NamedKey};
 use ui_events::pointer::PointerEvent;
 
-const VIEWPORT: Size = Size::new(640.0, 480.0);
+// Tall enough for the whole Projections menu.
+const VIEWPORT: Size = Size::new(640.0, 720.0);
 
 fn driver(doc: Document) -> Driver {
     let mut editor = crate::test_editor(doc);
@@ -362,4 +363,54 @@ fn the_document_libraries_entry_switches_the_documents_own_projections() {
         assert_eq!(driver.runner.editor.menu_toggles().checked(command), on);
         assert_eq!(stacked(&driver), on);
     }
+}
+
+#[test]
+fn the_name_entry_switches_labels_to_identities() {
+    use crate::libraries::{f64, layout, name};
+    let mut driver = driver(Document {
+        root: Some(gid::Value::record([(
+            layout::vocabulary::WIDTH,
+            f64::value(2.0),
+        )])),
+        cells: Cells::new(),
+    });
+    let command = Command::Doc(DocCommand::Projection(name::ID));
+    let heading = definition(
+        driver
+            .runner
+            .editor
+            .stack
+            .projections()
+            .map(|(library, _)| library),
+    )
+    .iter()
+    .position(|menu| menu.label == "Projections")
+    .unwrap();
+    let glyphs = |driver: &Driver| {
+        crate::display::test_support::painted(&driver.painted().0)
+            .map(|command| match command {
+                puri::draw::DrawCmd::GlyphRun(run) => run.glyphs.len(),
+                _ => 0,
+            })
+            .sum::<usize>()
+    };
+    let named = glyphs(&driver);
+    let projections = point_for(&driver, Hover::Heading(heading));
+    driver.click_at(projections);
+    let entry = point_for(&driver, Hover::Item(command));
+    driver.click_at(entry);
+    driver.runner.refresh_frame(1.0, VIEWPORT);
+    driver.present();
+    assert!(!driver.runner.editor.menu_toggles().checked(command));
+    // The field's label and the number's representation tag both give way
+    // to their identities.
+    let lengthened = [
+        (layout::vocabulary::WIDTH, "width"),
+        (f64::vocabulary::F64, "f64"),
+    ]
+    .map(|(cell, name)| crate::identity::short_id(cell).chars().count() - name.len())
+    .iter()
+    .sum::<usize>();
+    assert_eq!(glyphs(&driver) - named, lengthened);
 }

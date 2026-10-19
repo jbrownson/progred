@@ -49,6 +49,7 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
             source_selection: selection,
             annotations: &view.annotations,
             raw: view.projection == workspace::Projection::Raw,
+            names: crate::frame::names(view),
             styles: &styles,
             width: 500.0,
             projection: &shown.projection,

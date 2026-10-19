@@ -470,6 +470,7 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
         completions: None,
         sources,
         raw: false,
+        names: true,
         annotations: &annotations,
         styles: &styles,
         selection: None,

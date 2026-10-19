@@ -39,10 +39,12 @@ pub struct Stack {
 
 impl Stack {
     /// Each library that brings a projection, and its name, in the order
-    /// projections are tried.
+    /// projections are tried. The name library's is the labels the core
+    /// still draws for it.
     pub fn projections(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
-        crate::libraries::name::library_names(&self.libraries)
-            .filter(|(library, _)| self.partials.iter().any(|(id, _)| id == library))
+        crate::libraries::name::library_names(&self.libraries).filter(|(library, _)| {
+            *library == name::ID || self.partials.iter().any(|(id, _)| id == library)
+        })
     }
 
     /// Plain's projection, from those of its libraries this stack loads.

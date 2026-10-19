@@ -262,6 +262,7 @@ impl BenchContext {
                 source_selection: selection,
                 annotations,
                 raw: false,
+                names: true,
                 styles,
                 width,
                 projection: &stack.projection,

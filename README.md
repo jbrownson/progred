@@ -149,8 +149,8 @@ or F10 opens it from the keyboard.
 - The **Projections** menu switches one library's projection and offers off
   or back on in the selected pane or the document, the way the home page peels
   its forest; its last entry does the same for the libraries the document
-  declares. The library stays loaded, so code still runs and keys keep their
-  names.
+  declares. The library stays loaded, so code still runs; with **name** off,
+  labels show identities instead of names.
 - **Zoom In**, **Zoom Out**, and **Actual Size** in the View menu
   (Command-+, Command-−, Command-0) scale everything in the window, as the
   browser's zoom does on the web.

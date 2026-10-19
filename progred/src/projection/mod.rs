@@ -111,6 +111,8 @@ pub(crate) struct Cx<'a> {
     pub(crate) edits: crate::editing::Scope,
     /// Names and field order derive from this view bit.
     pub(crate) raw: bool,
+    /// Whether the name library labels cells here.
+    pub(crate) names: bool,
     pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
     pub(crate) selection: Option<&'a Selection>,
@@ -446,6 +448,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let cx = Cx {
             raw: true,
+            names: false,
             ..self.cx.clone()
         };
         let nothing = crate::display::partial(|_| None);
@@ -562,10 +565,10 @@ impl Cx<'_> {
         crate::editing::Site::new(self.view.clone(), path, self.edits.clone())
     }
 
-    /// The display name at this projection. Raw interprets no naming
-    /// convention and therefore falls back to the short id.
+    /// The display name at this projection; with the name library off,
+    /// labels fall back to the short id.
     fn name(&self, cell: CellId) -> Option<&str> {
-        (!self.raw)
+        self.names
             .then(|| crate::libraries::name::of(&self.sources, cell))
             .flatten()
     }
@@ -630,6 +633,7 @@ pub struct ProjectDescription<'a> {
     pub source_selection: Option<&'a Selection>,
     pub annotations: &'a Annotations,
     pub raw: bool,
+    pub names: bool,
     pub styles: &'a Styles,
     pub width: f64,
     pub projection: &'a Projection,
@@ -659,6 +663,7 @@ fn prepare_project(
         source_selection,
         annotations,
         raw,
+        names,
         styles,
         width: _,
         projection,
@@ -683,6 +688,7 @@ fn prepare_project(
             crate::editing::Scope::default().in_cell(root_path[..start].to_vec(), cell, source)
         }),
         raw,
+        names,
         annotations,
         styles,
         selection,

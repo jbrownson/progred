@@ -33,6 +33,7 @@ fn only_libraries_that_bring_a_projection_offer_one() {
     assert_eq!(
         stack.projections().collect::<Vec<_>>(),
         [
+            (name::ID, "name"),
             (text::ID, "text"),
             (color::ID, "color"),
             (declared::ID, "document libraries")

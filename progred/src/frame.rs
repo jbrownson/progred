@@ -625,6 +625,13 @@ fn view_content<'a>(
     }
 }
 
+/// Whether `view` labels cells with their names: Raw interprets no naming
+/// convention, and neither does an area with the name library off.
+pub(crate) fn names(view: &workspace::View) -> bool {
+    view.projection != workspace::Projection::Raw
+        && !view.hidden.contains(&crate::libraries::name::ID)
+}
+
 /// The margin around a view's content: none for a viewport filling its pane.
 fn content_margin(viewport: bool, scale: f64) -> f64 {
     if viewport { 0.0 } else { 12.0 * scale }
@@ -684,6 +691,7 @@ fn project_workspace_view(
             source_selection: model.selection.as_ref(),
             annotations: &view.annotations,
             raw: view.projection == workspace::Projection::Raw,
+            names: crate::frame::names(view),
             styles,
             width: (size.width - 2.0 * margin).max(0.0),
             projection: &shown.projection,
