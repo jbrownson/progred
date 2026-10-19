@@ -73,7 +73,7 @@ pub fn scrolled_at<C: 'static, H: 'static>(
     let extent = child.extent;
     let scrolled = container::scrolled(child, offset, scale, on_scroll);
     before(scrolled, move |output, placement| {
-        output.placed.view_region(ViewRegion {
+        output.context.view_region(ViewRegion {
             root,
             rect: placement.rect,
             maximum: super::scroll::maximum(extent, placement.rect.size(), scale),

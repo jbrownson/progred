@@ -16,25 +16,22 @@ use puri::text::{TextCtx, TextStyle};
 use ui_events::keyboard::KeyboardEvent;
 use uig::Placement;
 
-pub struct Builder<'a, 'input, C: 'static, H: 'static> {
-    pub(crate) placed: &'a mut HoverContext<'input, C, H>,
+pub struct Placed<'a, 'input, C: 'static, H: 'static> {
+    pub(crate) context: &'a mut HoverContext<'input, C, H>,
     visible: bool,
 }
 
-impl<'builder, 'input, C: 'static, H: 'static> Builder<'builder, 'input, C, H> {
-    pub(crate) fn new(
-        placed: &'builder mut HoverContext<'input, C, H>,
-        placement: Placement,
-    ) -> Self {
+impl<'a, 'input, C: 'static, H: 'static> Placed<'a, 'input, C, H> {
+    pub(crate) fn new(context: &'a mut HoverContext<'input, C, H>, placement: Placement) -> Self {
         Self {
-            placed,
+            context,
             visible: !placement.clipped_out(),
         }
     }
 
-    /// The platform's command key, for the handlers this builder installs.
+    /// The platform's command key, for the handlers installed here.
     pub fn command_modifier(&self) -> puri::keyboard::CommandModifier {
-        self.placed.input.command_modifier
+        self.context.input.command_modifier
     }
 
     /// Defer painting until this frame's hover has settled.
@@ -43,20 +40,20 @@ impl<'builder, 'input, C: 'static, H: 'static> Builder<'builder, 'input, C, H> {
         render: impl FnOnce(&mut dyn puri::draw::CanvasSink, &Attribution<H>) + 'static,
     ) {
         if self.visible {
-            self.placed.render(render);
+            self.context.render(render);
         }
     }
 
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
-        self.placed.completion()
+        self.context.completion()
     }
 }
 
-impl<C: 'static, H: Clone + PartialEq + 'static> Builder<'_, '_, C, H> {
+impl<C: 'static, H: Clone + PartialEq + 'static> Placed<'_, '_, C, H> {
     /// Contribute a named hover region.
     pub fn claim(&mut self, placement: Placement, target: H) {
         if !placement.clipped_out() {
-            self.placed.claim(Probe::retaining(placement, target));
+            self.context.claim(Probe::retaining(placement, target));
         }
     }
 
@@ -65,13 +62,13 @@ impl<C: 'static, H: Clone + PartialEq + 'static> Builder<'_, '_, C, H> {
     /// its hit geometry exactly.
     pub fn claim_exact(&mut self, placement: Placement, target: H) {
         if !placement.clipped_out() {
-            self.placed.claim(Probe::exact(placement, target));
+            self.context.claim(Probe::exact(placement, target));
         }
     }
 
     /// Show `cursor` while `target` is hovered.
     pub fn cursor(&mut self, target: H, cursor: Cursor) {
-        self.placed.cursor(target, cursor);
+        self.context.cursor(target, cursor);
     }
 
     pub fn claim_dynamic(
@@ -80,19 +77,19 @@ impl<C: 'static, H: Clone + PartialEq + 'static> Builder<'_, '_, C, H> {
         target_at: impl Fn(Point) -> Option<H> + 'static,
     ) {
         if !placement.clipped_out() {
-            self.placed.claim(Probe::dynamic(placement, target_at));
+            self.context.claim(Probe::dynamic(placement, target_at));
         }
     }
 
     /// Contribute an unnamed region that blocks targets below it.
     pub fn occlude(&mut self, placement: Placement) {
-        self.placed.occlude(placement);
+        self.context.occlude(placement);
     }
 
     /// Run `action` on a primary press over `target`.
     pub fn activate(&mut self, target: H, action: impl Fn(&mut C) -> bool + 'static) {
         if self.visible {
-            self.placed
+            self.context
                 .on_press(target, move |world, _| action(world), |_, _| false);
         }
     }
@@ -100,43 +97,43 @@ impl<C: 'static, H: Clone + PartialEq + 'static> Builder<'_, '_, C, H> {
     /// Run `action` on a primary press over `target` with the command key held.
     pub fn pick(&mut self, target: H, action: impl Fn(&mut C) -> bool + 'static) {
         if self.visible {
-            self.placed
+            self.context
                 .on_press(target, |_, _| false, move |world, _| action(world));
         }
     }
 }
 
-impl<C: 'static, H: 'static> puri::draw::CanvasSink for Builder<'_, '_, C, H> {
+impl<C: 'static, H: 'static> puri::draw::CanvasSink for Placed<'_, '_, C, H> {
     fn draw_mesh(&mut self, scene: puri::mesh::Scene, transform: Affine) {
         if self.visible {
-            self.placed
+            self.context
                 .render(move |cv, _| cv.draw_mesh(scene, transform));
         }
     }
     fn draw_image(&mut self, image: ImageData, transform: Affine) {
         if self.visible {
-            self.placed
+            self.context
                 .render(move |cv, _| cv.draw_image(image, transform));
         }
     }
 
     fn fill_shape(&mut self, shape: Shape, brush: Brush, transform: Affine) {
         if self.visible {
-            self.placed
+            self.context
                 .render(move |cv, _| cv.fill(shape, brush, transform));
         }
     }
 
     fn stroke_shape(&mut self, shape: Shape, style: Stroke, brush: Brush, transform: Affine) {
         if self.visible {
-            self.placed
+            self.context
                 .render(move |cv, _| cv.stroke(shape, style, brush, transform));
         }
     }
 
     fn draw_glyphs(&mut self, run: GlyphRun) {
         if self.visible {
-            self.placed.render(move |cv, _| cv.draw_glyphs(run));
+            self.context.render(move |cv, _| cv.draw_glyphs(run));
         }
     }
 
@@ -147,9 +144,9 @@ impl<C: 'static, H: 'static> puri::draw::CanvasSink for Builder<'_, '_, C, H> {
         content: Box<dyn FnOnce(&mut dyn puri::draw::CanvasSink) + '_>,
     ) {
         if self.visible {
-            self.placed.with_clip(shape, transform, |output| {
-                content(&mut Builder {
-                    placed: output,
+            self.context.with_clip(shape, transform, |output| {
+                content(&mut Placed {
+                    context: output,
                     visible: true,
                 });
             });
@@ -157,39 +154,39 @@ impl<C: 'static, H: 'static> puri::draw::CanvasSink for Builder<'_, '_, C, H> {
     }
 }
 
-impl<C: 'static, H: 'static> HasHandler<C> for Builder<'_, '_, C, H> {
+impl<C: 'static, H: 'static> HasHandler<C> for Placed<'_, '_, C, H> {
     type Input = DispatchContext<C, H>;
 
     fn handler(&mut self) -> &mut Handler<C, DispatchContext<C, H>> {
-        self.placed.handler()
+        self.context.handler()
     }
 }
 
-fn built_into<C: 'static, H: 'static>(
-    f: impl FnOnce(&mut Builder<'_, '_, C, H>, Placement) + 'static,
+fn placed_into<C: 'static, H: 'static>(
+    f: impl FnOnce(&mut Placed<'_, '_, C, H>, Placement) + 'static,
 ) -> impl FnOnce(Placement, &mut HoverContext<'_, C, H>) + 'static {
-    move |placement, placed| f(&mut Builder::new(placed, placement), placement)
+    move |placement, context| f(&mut Placed::new(context, placement), placement)
 }
 
 pub fn leaf<C: 'static, H: 'static>(
     extent: Extent,
-    place: impl FnOnce(&mut Builder<'_, '_, C, H>, Placement) + 'static,
+    place: impl FnOnce(&mut Placed<'_, '_, C, H>, Placement) + 'static,
 ) -> Measured<HoverPass<C, H>> {
     super::leaf(extent, move |output, placement| {
-        built_into(place)(placement, output)
+        placed_into(place)(placement, output)
     })
 }
 
 pub fn before<C: 'static, H: 'static>(
     child: Measured<HoverPass<C, H>>,
-    place_before: impl FnOnce(&mut Builder<'_, '_, C, H>, Placement) + 'static,
+    place_before: impl FnOnce(&mut Placed<'_, '_, C, H>, Placement) + 'static,
 ) -> Measured<HoverPass<C, H>> {
-    super::before_place(child, built_into(place_before))
+    super::before_place(child, placed_into(place_before))
 }
 
 pub fn decorate<C: 'static, H: 'static>(
     child: Measured<HoverPass<C, H>>,
-    draw: impl FnOnce(&mut Builder<'_, '_, C, H>, Rect) + 'static,
+    draw: impl FnOnce(&mut Placed<'_, '_, C, H>, Rect) + 'static,
 ) -> Measured<HoverPass<C, H>> {
     before(child, move |p, placement| draw(p, placement.rect))
 }

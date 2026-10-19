@@ -544,7 +544,7 @@ pub fn hug<World: 'static, Hover: Clone + 'static>(
     let child = shared(child);
     alternatives([
         row(gap, [head.clone(), child.clone()]),
-        col(0, 2.0, [head, pad(TAB, child)]),
+        col(0, 2.0, [head, indent(TAB, child)]),
     ])
 }
 
@@ -688,7 +688,7 @@ pub fn rule<World: 'static, Hover: 'static>() -> Layout<World, Hover> {
     }))
 }
 
-pub fn pad<World: 'static, Hover: 'static>(
+pub fn indent<World: 'static, Hover: 'static>(
     left: f64,
     child: Layout<World, Hover>,
 ) -> Layout<World, Hover> {

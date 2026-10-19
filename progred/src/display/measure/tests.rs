@@ -24,7 +24,8 @@ fn shared_program_prepares_once_per_frame_and_places_only_the_chosen_use() {
             move |_: &mut HoverContext<'_, (), ()>, _| placed.set(placed.get() + 1),
         ))
     })));
-    let layout = crate::display::alternatives([crate::display::pad(100.0, child.clone()), child]);
+    let layout =
+        crate::display::alternatives([crate::display::indent(100.0, child.clone()), child]);
     for (frame, width, expected_width) in [(1, 120.0, 110.0), (2, 20.0, 10.0)] {
         let mut build = ChoiceBuild::default();
         let prepared = with_context(&NoProject, |context| {

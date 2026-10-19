@@ -308,7 +308,7 @@ fn target_actions_and_raw_handlers_share_visual_precedence() {
         &mut frame,
         &mut navigation,
     );
-    let mut p = Builder::new(&mut placed, placement);
+    let mut p = Placed::new(&mut placed, placement);
     p.handler().on_pointer_down(|log, _| {
         log.push("raw below");
         true
@@ -340,13 +340,13 @@ fn direct_placement_preserves_handler_precedence() {
         ascent: 5.0,
         descent: 5.0,
     };
-    let lower = leaf(extent, |p: &mut Builder<'_, '_, Vec<&'static str>>, _| {
+    let lower = leaf(extent, |p: &mut Placed<'_, '_, Vec<&'static str>>, _| {
         p.handler().on_pointer_down(|log, _| {
             log.push("lower");
             true
         });
     });
-    let upper = leaf(extent, |p: &mut Builder<'_, '_, Vec<&'static str>>, _| {
+    let upper = leaf(extent, |p: &mut Placed<'_, '_, Vec<&'static str>>, _| {
         p.handler().on_pointer_down(|log, _| {
             log.push("upper");
             false
@@ -373,7 +373,7 @@ fn popover_content_is_out_of_flow_and_raised_over_the_frame() {
             ascent: 0.0,
             descent: 10.0,
         },
-        |p: &mut Builder<'_, '_, ()>, placement| {
+        |p: &mut Placed<'_, '_, ()>, placement| {
             p.fill(placement.rect, Color::BLACK, Affine::IDENTITY);
         },
     );
@@ -383,7 +383,7 @@ fn popover_content_is_out_of_flow_and_raised_over_the_frame() {
             ascent: 0.0,
             descent: 20.0,
         },
-        |p: &mut Builder<'_, '_, ()>, placement| {
+        |p: &mut Placed<'_, '_, ()>, placement| {
             p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
         },
     );
@@ -430,7 +430,7 @@ fn clipped_leaves_keep_handlers_but_contribute_no_visible_work() {
             ascent: 5.0,
             descent: 5.0,
         },
-        move |p: &mut Builder<'_, '_, ()>, placement| {
+        move |p: &mut Placed<'_, '_, ()>, placement| {
             p.claim(placement, target.clone());
             p.activate(target.clone(), |_| true);
             p.pick(target, |_| true);
@@ -461,7 +461,7 @@ fn scrolled_content_shifts_inside_the_viewport_clip() {
             ascent: 0.0,
             descent: 300.0,
         },
-        |p: &mut Builder<'_, '_, ()>, placement| {
+        |p: &mut Placed<'_, '_, ()>, placement| {
             assert_eq!(placement.clip_rect, Rect::new(10.0, 20.0, 90.0, 70.0));
             p.fill(
                 Rect::new(
@@ -518,7 +518,7 @@ fn scroll_viewport_bounds_starts_and_not_active_motion_or_release() {
             ascent: 0.0,
             descent: 30.0,
         },
-        |p: &mut Builder<'_, '_, Vec<&'static str>>, _| {
+        |p: &mut Placed<'_, '_, Vec<&'static str>>, _| {
             p.handler().on_pointer_down(|log, _| {
                 log.push("down");
                 true
@@ -578,7 +578,7 @@ fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
         &mut navigation,
     );
     let full = Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0));
-    let mut p = Builder::new(&mut placed, full);
+    let mut p = Placed::new(&mut placed, full);
     p.handler().on_pointer_down(|log, _| {
         log.push("covered");
         true
@@ -622,7 +622,7 @@ fn a_floater_keeps_its_view_when_it_covers_another_view() {
         let target = target.clone();
         leaf(
             extent,
-            move |p: &mut Builder<'_, '_, Vec<&'static str>>, placement| {
+            move |p: &mut Placed<'_, '_, Vec<&'static str>>, placement| {
                 p.claim(placement, target.clone());
                 p.activate(target.clone(), move |log| {
                     log.push(label);
@@ -639,7 +639,7 @@ fn a_floater_keeps_its_view_when_it_covers_another_view() {
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let owner_view = in_view(
         floating(
-            leaf(extent, |_: &mut Builder<'_, '_, Vec<&'static str>>, _| {}),
+            leaf(extent, |_: &mut Placed<'_, '_, Vec<&'static str>>, _| {}),
             row("popup"),
             move |_, _| Some(Placement::new(popup_rect, bounds)),
         ),
@@ -791,7 +791,7 @@ fn semantic_actions_obey_scroll_clips_even_when_the_target_matches() {
             ascent: 0.0,
             descent: 30.0,
         },
-        move |p: &mut Builder<'_, '_, usize>, placement| {
+        move |p: &mut Placed<'_, '_, usize>, placement| {
             p.claim(placement, claimed.clone());
             p.activate(claimed, |count| {
                 *count += 1;
@@ -837,7 +837,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
             &mut frame,
             &mut navigation,
         );
-        let mut p = Builder::new(&mut placed, placement);
+        let mut p = Placed::new(&mut placed, placement);
         p.handler()
             .on_pointer_down(|_, _| panic!("covered raw handler"));
         p.occlude(placement);

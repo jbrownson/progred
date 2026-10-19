@@ -99,7 +99,7 @@ fn section<W: Host>(
             8.0,
             [heading.clone()]
                 .into_iter()
-                .chain(visible.then(|| d::pad(18.0, body.clone()))),
+                .chain(visible.then(|| d::indent(18.0, body.clone()))),
         )
         .measure(context, build)
     }))

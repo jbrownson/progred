@@ -128,8 +128,8 @@ pub(crate) type HoverOutput<C> = crate::display::widget::frame::HoverOutput<C, H
 #[cfg(test)]
 pub(crate) type Probe = crate::display::widget::frame::Probe<Hovered>;
 #[cfg(test)]
-pub(crate) type Builder<'a, 'input, C> =
-    crate::display::widget::placed::Builder<'a, 'input, C, Hovered>;
+pub(crate) type Placed<'a, 'input, C> =
+    crate::display::widget::placed::Placed<'a, 'input, C, Hovered>;
 
 /// The editor hosts the toolkit: its pointer rests on what the frame draws,
 /// trees and chrome alike, and its dispatches act through its session.

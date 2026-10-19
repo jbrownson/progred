@@ -11,7 +11,7 @@ use gid::{CellId, Cells, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::{
     Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
-    activatable, alternatives, at, col, descend_local, dim, faced, pad, picker, ranked,
+    activatable, alternatives, at, col, descend_local, dim, faced, indent, picker, ranked,
     record_fragment_with, row, selectable_bracket, shared,
 };
 use crate::display::{group, group_hug};
@@ -436,7 +436,11 @@ pub fn evaluate_display<W: Host>(
     ));
     Some(group(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
-        col(0, 2.0, [row(6.0, [expression, shaft]), pad(20.0, result)]),
+        col(
+            0,
+            2.0,
+            [row(6.0, [expression, shaft]), indent(20.0, result)],
+        ),
     ])))
 }
 
