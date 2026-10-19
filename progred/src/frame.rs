@@ -15,7 +15,7 @@ use crate::projection;
 use crate::sources;
 use crate::stack;
 use crate::workspace;
-use crate::{Editor, EditorRunner, content_viewport};
+use crate::{Editor, EditorRunner};
 use kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 use parley::{FontContext, LayoutContext};
 use peniko::Brush;
@@ -817,6 +817,21 @@ fn project_workspace(
                 Some(Placement::new(rect, placement.clip_rect))
             })
         })
+}
+
+/// What the workspace fills: the viewport below the drawn menu bar, if any.
+fn content_viewport(drawn_menu: bool, viewport: Size, scale: f64) -> Rect {
+    let menu_height = if drawn_menu {
+        menu::bar_height(scale)
+    } else {
+        0.0
+    };
+    Rect::new(
+        0.0,
+        menu_height.min(viewport.height),
+        viewport.width,
+        viewport.height,
+    )
 }
 
 fn project_frame(

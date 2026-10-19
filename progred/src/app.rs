@@ -4,10 +4,11 @@ use crate::UserEvent;
 use crate::command::{AppCommand, Command};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::editor::new_editor;
-use crate::editor::{AfterDiscard, EditorRunner, RenderState};
+use crate::editor::{AfterDiscard, Editor, EditorRunner, RenderState};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::frame::Paint;
 use crate::frame::PendingPaint;
+use crate::gid_text;
 #[cfg(target_os = "macos")]
 use crate::macos_surface;
 #[cfg(target_os = "macos")]
@@ -23,13 +24,13 @@ use crate::web_render;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-use crate::{display::widget::style, modifiers, platform, text_store};
-use crate::{gid_text, stack};
+use crate::{display::widget::style, modifiers, platform, stack, text_store};
 use kurbo::Size;
 use std::path::PathBuf;
 use std::sync::Arc;
 use web_time::Instant;
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use parley::FontContext;
 use puri::handler::ImeEvent;
 #[cfg(not(target_arch = "wasm32"))]
@@ -54,45 +55,42 @@ use winit::platform::web::{WindowAttributesExtWebSys, WindowExtWebSys};
 use winit::platform::x11::WindowAttributesExtX11;
 use winit::window::{Window, WindowId};
 
-/// Process-wide state: the GPU, the shared caches, and the editors.
+/// Process-wide state: the GPU, the editors, and what a new window's
+/// editor starts from.
 pub(crate) struct App {
     #[cfg(target_arch = "wasm32")]
-    pub(crate) web_observer: Option<web_embed::Observer>,
+    web_observer: Option<web_embed::Observer>,
     #[cfg(target_arch = "wasm32")]
-    pub(crate) web_renderer: web_render::Renderer,
+    web_renderer: web_render::Renderer,
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) context: RenderContext,
+    context: RenderContext,
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) renderers: Vec<Option<Compositor>>,
-    /// Editor configuration shared by every document loaded into the
-    /// app: library cells, Rust functions, and composed projection.
-    /// Each editor holds its own (cheap) clone, so a window can later
-    /// filter or extend its libraries independently; this master copy
-    /// seeds new editors.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) stack: stack::Stack,
+    renderers: Vec<Option<Compositor>>,
+    /// The libraries, with their Rust functions and composed projection,
+    /// that a new window's editor starts with, as its own cheap clone.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    stack: stack::Stack,
     /// The font database master; editors hold cheap clones over the
     /// same shared font data.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) fonts: FontContext,
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fonts: FontContext,
     #[cfg(target_os = "macos")]
-    pub(crate) native_menu: native_menu::Menu,
+    native_menu: native_menu::Menu,
     #[cfg(target_os = "macos")]
-    pub(crate) appearance: Option<winit::window::Theme>,
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
+    appearance: Option<winit::window::Theme>,
+    proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     /// New windows draw the in-window menu system.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pub(crate) drawn_menu: bool,
+    drawn_menu: bool,
     pub(crate) editors: Vec<EditorRunner>,
     /// The window whose editor application-level commands target.
-    pub(crate) focused: Option<WindowId>,
+    focused: Option<WindowId>,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pub(crate) quit: QuitState,
+    quit: QuitState,
     /// AppKit's running cascade origin for windows without a saved
     /// frame.
     #[cfg(target_os = "macos")]
-    pub(crate) cascade: macos_window::CascadePoint,
+    cascade: macos_window::CascadePoint,
 }
 
 /// Quit reviews windows one at a time, focused first, each through its
@@ -100,7 +98,7 @@ pub(crate) struct App {
 /// abandons the quit.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum QuitState {
+enum QuitState {
     Idle,
     Draining { awaiting: Option<WindowId> },
 }
@@ -326,6 +324,46 @@ impl ApplicationHandler<UserEvent> for App {
 }
 
 impl App {
+    /// The app before any window opens, `editor` to be its first window's.
+    /// A new desktop window's editor starts from `stack` and `fonts`, and
+    /// draws its own menu when `drawn_menu`.
+    pub(crate) fn new(
+        proxy: winit::event_loop::EventLoopProxy<UserEvent>,
+        editor: Editor,
+        #[cfg(any(target_os = "macos", target_os = "linux"))] stack: stack::Stack,
+        #[cfg(any(target_os = "macos", target_os = "linux"))] fonts: FontContext,
+        #[cfg(any(target_os = "macos", target_os = "linux"))] drawn_menu: bool,
+        #[cfg(target_arch = "wasm32")] on_change: Option<web_sys::js_sys::Function>,
+    ) -> Self {
+        Self {
+            #[cfg(target_arch = "wasm32")]
+            web_observer: on_change.map(web_embed::Observer::new),
+            #[cfg(target_arch = "wasm32")]
+            web_renderer: web_render::take(),
+            #[cfg(not(target_arch = "wasm32"))]
+            context: RenderContext::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            renderers: vec![],
+            #[cfg(target_os = "macos")]
+            native_menu: native_menu::Menu::new(proxy.clone(), stack.projections()),
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            stack,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            fonts,
+            #[cfg(target_os = "macos")]
+            appearance: None,
+            proxy,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            drawn_menu,
+            editors: vec![EditorRunner::new(editor)],
+            focused: None,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            quit: QuitState::Idle,
+            #[cfg(target_os = "macos")]
+            cascade: macos_window::initial_cascade(),
+        }
+    }
+
     fn editor_index(&self, id: WindowId) -> Option<usize> {
         self.editors
             .iter()
@@ -695,7 +733,7 @@ impl App {
     /// Menu enablement follows the model: gray what can't act. Save
     /// stays live for untitled documents — it defers to the save
     /// panel, per platform convention.
-    pub(crate) fn sync_menus(&self, index: usize) {
+    fn sync_menus(&self, index: usize) {
         #[cfg(target_os = "macos")]
         {
             let editor = &self.editors[index].editor;
@@ -712,7 +750,7 @@ impl App {
     /// the focused window's editor (the native menu's routing — the
     /// drawn menu dispatches document commands to its own editor
     /// directly).
-    pub(crate) fn run_command(&mut self, event_loop: &ActiveEventLoop, command: Command) {
+    fn run_command(&mut self, event_loop: &ActiveEventLoop, command: Command) {
         match command {
             Command::App(command) => self.run_app_command(event_loop, command),
             Command::Doc(command) => {
@@ -840,12 +878,7 @@ impl App {
     /// loop. The sheet's completion lands on the main run loop, so the
     /// answer is awaited on a throwaway thread and routed back through the
     /// proxy; blocking here would deadlock the loop the sheet needs.
-    pub(crate) fn request_discard(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        index: usize,
-        then: AfterDiscard,
-    ) {
+    fn request_discard(&mut self, event_loop: &ActiveEventLoop, index: usize, then: AfterDiscard) {
         if self.editors[index].editor.pending_discard.is_some() {
             return;
         }
@@ -896,12 +929,7 @@ impl App {
     }
 
     /// The action a confirmed (or unneeded) discard proceeds to.
-    pub(crate) fn proceed(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        index: usize,
-        then: AfterDiscard,
-    ) {
+    fn proceed(&mut self, event_loop: &ActiveEventLoop, index: usize, then: AfterDiscard) {
         match then {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             AfterDiscard::CloseWindow => {
@@ -923,7 +951,7 @@ impl App {
 
     /// Renders the current model to the surface, from `RedrawRequested`.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn redraw(&mut self, index: usize) {
+    fn redraw(&mut self, index: usize) {
         // The menu bar mirrors the focused window's editor only; an
         // unfocused window's redraw must not relabel it.
         if self.focused_index() == Some(index) {
@@ -1017,7 +1045,7 @@ impl App {
     /// Browser presentation uses the same GPU compositor as native when
     /// available. Only setup/presentation differs; widgets remain unchanged.
     #[cfg(target_arch = "wasm32")]
-    pub(crate) fn redraw(&mut self, index: usize) {
+    fn redraw(&mut self, index: usize) {
         if self.focused_index() == Some(index) {
             self.sync_menus(index);
         }

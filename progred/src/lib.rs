@@ -91,20 +91,15 @@ pub use libraries::fidget::mesh::performance::take_profile_mesh;
 
 use crate::command::Command;
 use app::App;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-use app::QuitState;
 use editor::new_editor;
 pub(crate) use editor::{Editor, EditorRunner};
 use fonts::font_context;
-use kurbo::{Rect, Size};
 use std::path::PathBuf;
 #[cfg(test)]
 pub(crate) use test_support::{test_editor, test_editor_with_stack, test_root};
 #[cfg(target_arch = "wasm32")]
 use web::WEB_PROXY;
 
-#[cfg(not(target_arch = "wasm32"))]
-use vello::util::RenderContext;
 use winit::event_loop::EventLoop;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use winit::window::WindowId;
@@ -146,23 +141,6 @@ pub(crate) enum UserEvent {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn canonical(path: PathBuf) -> PathBuf {
     path.canonicalize().unwrap_or(path)
-}
-
-pub(crate) fn menu_height(drawn_menu: bool, scale: f64) -> f64 {
-    if drawn_menu {
-        menu::bar_height(scale)
-    } else {
-        0.0
-    }
-}
-
-pub(crate) fn content_viewport(drawn_menu: bool, viewport: Size, scale: f64) -> Rect {
-    Rect::new(
-        0.0,
-        menu_height(drawn_menu, scale).min(viewport.height),
-        viewport.width,
-        viewport.height,
-    )
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -217,46 +195,30 @@ fn run_document(
     let proxy = event_loop.create_proxy();
     #[cfg(target_arch = "wasm32")]
     WEB_PROXY.with(|slot| *slot.borrow_mut() = Some(proxy.clone()));
-    #[cfg(target_os = "macos")]
-    let native_menu = native_menu::Menu::new(proxy.clone(), stack.projections());
-
     let fonts = font_context();
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
-    let mut app = App {
-        #[cfg(target_arch = "wasm32")]
-        web_observer: on_change.map(web_embed::Observer::new),
-        #[cfg(target_arch = "wasm32")]
-        web_renderer: web_render::take(),
-        #[cfg(not(target_arch = "wasm32"))]
-        context: RenderContext::new(),
-        #[cfg(not(target_arch = "wasm32"))]
-        renderers: vec![],
-        stack: stack.clone(),
-        fonts: fonts.clone(),
-        #[cfg(target_os = "macos")]
-        native_menu,
-        #[cfg(target_os = "macos")]
-        appearance: None,
-        proxy: proxy.clone(),
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        drawn_menu,
-        focused: None,
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        quit: QuitState::Idle,
-        #[cfg(target_os = "macos")]
-        cascade: macos_window::initial_cascade(),
-        editors: vec![EditorRunner::new(new_editor(
+    let mut app = App::new(
+        proxy.clone(),
+        new_editor(
             palette,
             command_modifier,
             drawn_menu,
-            stack,
-            fonts,
+            stack.clone(),
+            fonts.clone(),
             doc,
             doc_path,
             binders,
             Some(proxy),
-        ))],
-    };
+        ),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        stack,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        fonts,
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        drawn_menu,
+        #[cfg(target_arch = "wasm32")]
+        on_change,
+    );
 
     #[cfg(not(target_arch = "wasm32"))]
     event_loop
