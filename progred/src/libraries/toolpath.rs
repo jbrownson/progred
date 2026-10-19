@@ -28,7 +28,6 @@ pub const ID: CellId = CellId::from_u128(0xa3f84c8e8c0930058475518fe17bf84a);
 
 pub mod vocabulary {
     use gid::CellId;
-    pub const TOOLPATH: CellId = CellId::from_u128(0xfaaa4df9bd9bc104fc05c09a722f1ae9);
     pub const TOOL_AXIS: CellId = CellId::from_u128(0xc674bd24061031aff48153e907df4d59);
     pub const START_AT: CellId = CellId::from_u128(0x0b3ea6a88bdb8a105704e4af8b7950a5);
     pub const LINE_TO: CellId = CellId::from_u128(0xe88873219d230571430941334a51600f);
@@ -444,7 +443,6 @@ pub fn library<W: Host>() -> Library<W> {
         ID,
         "toolpaths",
         [
-            (TOOLPATH, "toolpaths"),
             (START_AT, "start at"),
             (TOOL_AXIS, "tool axis"),
             (LINE_TO, "line to"),
