@@ -7,6 +7,7 @@ use puri::drag::Drag;
 use puri::handler::HasHandler;
 use puri::interact::is_primary_contact;
 use std::rc::Rc;
+use ui_events::pointer::PointerButtonEvent;
 
 /// Displacement from the drag's origin, in logical display units.
 /// The caller supplies threshold policy and retains the active continuation.
@@ -52,26 +53,23 @@ pub trait Gesture {
     }
 }
 
-pub fn targeted<World: 'static, Hover: 'static>(
+/// A drag that `start`s where a primary press over `target` lands inside the
+/// visible placement, the command key held exactly if `pick`.
+pub fn targeted<World: 'static, Hover: Clone + PartialEq + 'static>(
     target: Hover,
     pick: bool,
-    same_target: fn(&Hover, &Hover) -> bool,
     start: impl Fn(&mut World, Point) -> bool + 'static,
 ) -> HoverCallback<World, Hover> {
     Box::new(move |output, placement| {
-        let picking = crate::modifiers::picking(output.input.command_modifier);
-        output
-            .handler()
-            .on_pointer_down_with(move |world, event, hovered| {
-                let point = Point::new(event.state.position.x, event.state.position.y);
-                is_primary_contact(event)
-                    && picking(event) == pick
-                    && placement.contains(point)
-                    && hovered
-                        .hovered()
-                        .is_some_and(|hover| same_target(hover, &target))
-                    && start(world, point)
-            });
+        let start = move |world: &mut World, event: &PointerButtonEvent| {
+            let point = Point::new(event.state.position.x, event.state.position.y);
+            placement.contains(point) && start(world, point)
+        };
+        if pick {
+            output.on_press(target, |_, _| false, start);
+        } else {
+            output.on_press(target, start, |_, _| false);
+        }
     })
 }
 
@@ -91,27 +89,22 @@ pub fn on_state_drag<W: Host>(
             let on_press = on_press.clone();
             let scale = context.toolkit.styles().scale;
             let threshold = crate::gesture::DRAG_THRESHOLD;
-            targeted(
-                target.clone(),
-                false,
-                PartialEq::eq,
-                move |world: &mut W, point| {
-                    let mut session = world.session();
-                    if on_press(&mut session) {
-                        session.start_gesture(
-                            state_drag(
-                                Drag::new(point, scale, threshold),
-                                handler(),
-                                annotate.clone(),
-                            ),
-                            &[],
-                        );
-                        true
-                    } else {
-                        false
-                    }
-                },
-            )
+            targeted(target.clone(), false, move |world: &mut W, point| {
+                let mut session = world.session();
+                if on_press(&mut session) {
+                    session.start_gesture(
+                        state_drag(
+                            Drag::new(point, scale, threshold),
+                            handler(),
+                            annotate.clone(),
+                        ),
+                        &[],
+                    );
+                    true
+                } else {
+                    false
+                }
+            })
         }),
     )
 }

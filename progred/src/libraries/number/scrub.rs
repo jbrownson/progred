@@ -35,11 +35,8 @@ pub(crate) fn on_scrub<W: Host>(
                 let handler = handler.clone();
                 let scale = context.viewing().scale();
                 let target = target.clone();
-                let drag = widget::gesture::targeted(
-                    target.clone(),
-                    true,
-                    PartialEq::eq,
-                    move |world: &mut W, point| {
+                let drag =
+                    widget::gesture::targeted(target.clone(), true, move |world: &mut W, point| {
                         let edit = site.edit_run();
                         let mut session = world.session();
                         if edit.select(&mut session) {
@@ -55,8 +52,7 @@ pub(crate) fn on_scrub<W: Host>(
                         } else {
                             false
                         }
-                    },
-                );
+                    });
                 Box::new(move |output, placement| {
                     if output.input.picking && !placement.clipped_out() {
                         output.cursor(target, Cursor::HorizontalDrag);

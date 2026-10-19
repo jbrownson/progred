@@ -2,7 +2,7 @@ use super::*;
 use crate::display::recording::{Recorded, record};
 use crate::display::widget::HoverOutput;
 use crate::display::widget::{HoverContext, HoverInput};
-use kurbo::Rect;
+use kurbo::{Point, Rect};
 use puri::draw::DrawList;
 use puri::hover::Claim;
 use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerState, PointerType};

@@ -11,28 +11,9 @@ pub(crate) fn native() -> CommandModifier {
     }
 }
 
-/// Which pointer presses count, given the platform's command key.
-pub(crate) type PressRule = fn(CommandModifier) -> fn(&PointerButtonEvent) -> bool;
-
-/// Picking activates a nonlocal graph relationship while the command
-/// modifier is held.
-pub(crate) fn picking(command: CommandModifier) -> fn(&PointerButtonEvent) -> bool {
-    match command {
-        CommandModifier::Meta => |event| event.state.modifiers.meta(),
-        CommandModifier::Control => |event| event.state.modifiers.ctrl(),
-    }
-}
-
 /// Ordinary editing uses a primary contact outside source-picking mode.
-pub(crate) fn primary_edit(command: CommandModifier) -> fn(&PointerButtonEvent) -> bool {
-    match command {
-        CommandModifier::Meta => {
-            |event| puri::interact::is_primary_contact(event) && !event.state.modifiers.meta()
-        }
-        CommandModifier::Control => {
-            |event| puri::interact::is_primary_contact(event) && !event.state.modifiers.ctrl()
-        }
-    }
+pub(crate) fn primary_edit(command: CommandModifier, event: &PointerButtonEvent) -> bool {
+    puri::interact::is_primary_contact(event) && !command.pressed(&event.state.modifiers)
 }
 
 /// The keys of [`native`]'s modifier, for tests that press it.

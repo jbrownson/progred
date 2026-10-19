@@ -14,7 +14,9 @@ pub use puri::frame::Render;
 use puri::handler::{Handler, HasHandler};
 use puri::hover::Claim;
 pub use puri::hover::Probe;
+use puri::interact::is_primary_contact;
 use std::rc::Rc;
+use ui_events::pointer::PointerButtonEvent;
 use uig::Placement;
 
 pub struct HoverInput<'a, H> {
@@ -169,6 +171,37 @@ impl<C: 'static, H: Clone + PartialEq + 'static> HoverContext<'_, C, H> {
             .hover_geometry
             .probes
             .push((self.root.clone(), probe));
+    }
+
+    /// Blocks the targets below `placement`, and the presses there.
+    pub fn occlude(&mut self, placement: Placement) {
+        if !placement.clipped_out() {
+            self.claim(Probe::occludes(placement));
+            self.handler().on_pointer_down(move |_, event| {
+                placement.contains(Point::new(event.state.position.x, event.state.position.y))
+            });
+        }
+    }
+
+    /// A primary press over `target`, as this frame's hover settled, runs
+    /// `activate`, or `pick` while the command key is held.
+    pub fn on_press(
+        &mut self,
+        target: H,
+        activate: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
+        pick: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
+    ) {
+        let command = self.input.command_modifier;
+        self.handler()
+            .on_pointer_down_with(move |world, event, input| {
+                is_primary_contact(event)
+                    && input.hovered() == Some(&target)
+                    && if command.pressed(&event.state.modifiers) {
+                        pick(world, event)
+                    } else {
+                        activate(world, event)
+                    }
+            });
     }
 }
 impl<C: 'static, H: 'static> HasHandler<C> for HoverContext<'_, C, H> {
@@ -440,12 +473,6 @@ impl<C, Hover> DispatchContext<C, Hover> {
         }
     }
 
-    pub fn matches(&self, target: &Hover) -> bool
-    where
-        Hover: PartialEq,
-    {
-        !self.outside_view && self.hovered.as_ref() == Some(target)
-    }
     /// The geometry of the frame this dispatch runs in, at `scale`.
     pub(crate) fn geometry(&self, scale: f64) -> super::navigation::Geometry<'_, C> {
         super::navigation::Geometry {

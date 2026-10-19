@@ -39,8 +39,8 @@ fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
         for (pressed, expected) in [(modifiers, true), (other, false)] {
             let mut event = press(0.0, false);
             event.state.modifiers = pressed;
-            assert_eq!(picking(command)(&event), expected);
-            assert_eq!(primary_edit(command)(&event), !expected);
+            assert_eq!(command.pressed(&event.state.modifiers), expected);
+            assert_eq!(primary_edit(command, &event), !expected);
             let undo = KeyboardEvent {
                 key: Key::Character("z".into()),
                 modifiers: pressed,

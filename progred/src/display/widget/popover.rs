@@ -1,5 +1,6 @@
 //! The editor's standard card policy, composed above out-of-flow box placement.
 
+use super::style::Styles;
 use super::{before, hover::block_hover};
 use crate::display::{Layout, floating};
 use kurbo::{Point, Rect, Size, Stroke};
@@ -23,14 +24,7 @@ fn card<World: 'static, Hover: Clone + PartialEq + 'static>(
     block_hover(before(
         crate::display::padding((10.0, 10.0, 10.0, 10.0).into(), content),
         Rc::new(|context| {
-            let panel = Panel {
-                fill: Some(context.toolkit.styles().palette.panel.into()),
-                border: Some((
-                    Stroke::new(context.toolkit.styles().scale),
-                    context.toolkit.styles().palette.border.into(),
-                )),
-                radius: 6.0 * context.toolkit.styles().scale,
-            };
+            let panel = card_panel(context.toolkit.styles());
             Box::new(move |output, placement| {
                 if !placement.clipped_out() {
                     output.render(move |canvas, _| panel.place(canvas, placement));
@@ -38,6 +32,19 @@ fn card<World: 'static, Hover: Clone + PartialEq + 'static>(
             })
         }),
     ))
+}
+
+/// A card's ground: the palette's panel, bordered, its corners rounded.
+pub fn card_panel(styles: &Styles) -> Panel {
+    Panel {
+        fill: Some(styles.palette.panel.into()),
+        border: Some((card_border(styles.scale), styles.palette.border.into())),
+        radius: 6.0 * styles.scale,
+    }
+}
+
+pub fn card_border(scale: f64) -> Stroke {
+    Stroke::new(scale)
 }
 
 pub fn position(anchor: Placement, extent: Extent, gap: f64) -> Option<Placement> {

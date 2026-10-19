@@ -62,7 +62,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
 
 #[test]
 fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
-    use crate::display::widget::{before_place, interaction::target_action};
+    use crate::display::widget::before_place;
 
     for (pending, raw) in [(false, false), (true, false), (false, true), (true, true)] {
         let field = new_cell_id();
@@ -91,17 +91,6 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             ),
             false,
         );
-        let pick = target_action(
-            target(),
-            Rc::new(move |world: &mut crate::Editor| {
-                world
-                    .session()
-                    .pending()
-                    .is_some_and(|picking| picking.pick(value.clone()))
-            }),
-            true,
-            PartialEq::eq,
-        );
         let extent = Extent {
             width: 20.0,
             ascent: 0.0,
@@ -119,7 +108,18 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
                 }),
                 move |placement, output| scrub(output, placement),
             ),
-            move |placement, output| pick(output, placement),
+            move |_, output| {
+                output.on_press(
+                    target(),
+                    |_, _| false,
+                    move |world: &mut crate::Editor, _| {
+                        world
+                            .session()
+                            .pending()
+                            .is_some_and(|picking| picking.pick(value.clone()))
+                    },
+                )
+            },
         );
         let frame = crate::display::widget::frame::place(
             crate::display::widget::view::in_view(node, crate::test_root()),

@@ -471,7 +471,7 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
 }
 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
-pub use widget::interaction::{on_activate, on_click, pickable, pickable_runtime};
+pub use widget::interaction::{on_activate, pickable};
 
 /// `child`, which hovers `site` and selects it when activated.
 pub(crate) fn activatable<W: Host>(
@@ -492,7 +492,7 @@ pub(crate) fn selectable_value<W: Host>(
 ) -> host::Layout<W> {
     let child = projection::target(child);
     activatable(
-        pickable_runtime(child, W::Hover::from(site.hover()), value.clone()),
+        pickable(child, W::Hover::from(site.hover()), value.clone()),
         site,
     )
 }

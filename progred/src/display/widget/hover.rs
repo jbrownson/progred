@@ -3,8 +3,6 @@
 use super::frame::Probe;
 use super::{before, style};
 use crate::display::Layout;
-use kurbo::Point;
-use puri::handler::HasHandler;
 use std::rc::Rc;
 
 pub fn on_hover<World: 'static, Hover: Clone + PartialEq + 'static>(
@@ -29,17 +27,7 @@ pub fn block_hover<World: 'static, Hover: Clone + PartialEq + 'static>(
 ) -> Layout<World, Hover> {
     before(
         child,
-        Rc::new(|_| {
-            Box::new(|output, placement| {
-                if !placement.clipped_out() {
-                    output.claim(Probe::occludes(placement));
-                    output.handler().on_pointer_down(move |_, event| {
-                        placement
-                            .contains(Point::new(event.state.position.x, event.state.position.y))
-                    });
-                }
-            })
-        }),
+        Rc::new(|_| Box::new(|output, placement| output.occlude(placement))),
     )
 }
 

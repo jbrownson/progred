@@ -258,7 +258,7 @@ pub(crate) fn record_label<W: Host>(
     if input.value.is_some_and(|value| value.contains_field(key)) {
         activatable(head, &site)
     } else {
-        pickable(head, W::Hover::from(site.hover()), key.into())
+        pickable(head, W::Hover::from(site.hover()), Value::from(key))
     }
 }
 
@@ -328,16 +328,13 @@ pub(crate) fn pending_field<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     matches!(input.pending, Some(Pending::Field)).then(|| {
-        block_hover(on_click(
-            row(
-                0.0,
-                [
-                    picker(raw::picker(CompletionKind::Field)),
-                    dim(": "),
-                    slot(),
-                ],
-            ),
-            Rc::new(|_| true),
+        block_hover(row(
+            0.0,
+            [
+                picker(raw::picker(CompletionKind::Field)),
+                dim(": "),
+                slot(),
+            ],
         ))
     })
 }

@@ -10,7 +10,6 @@ pub use frame::{HoverContext, HoverInput, HoverPass, Probe};
 use gid::Value;
 pub use measured::Extent;
 use measured::Measured;
-use puri::handler::HasHandler;
 use puri::text::{TextCtx, TextMetrics};
 use std::rc::Rc;
 use uig::Placement;
@@ -189,28 +188,20 @@ pub fn selectable<W: Host>(
     let select = navigation::selecting(site);
     let value = context.value.cloned();
     move |child| {
-        crate::display::widget::before_place(
+        before_place(
             child,
             move |placement, output: &mut HoverContext<'_, W, W::Hover>| {
                 if !placement.clipped_out() {
-                    let command = output.input.command_modifier;
                     output.claim(Probe::retaining(placement, target.clone()));
-                    output
-                        .handler()
-                        .on_pointer_down_with(move |world, event, hovered| {
-                            puri::interact::is_primary_contact(event)
-                                && hovered.hovered().is_some_and(|hovered| hovered == &target)
-                                && if command.pressed(&event.state.modifiers) {
-                                    value.as_ref().is_some_and(|value| {
-                                        world
-                                            .session()
-                                            .pending()
-                                            .is_some_and(|picking| picking.pick(value.to_value()))
-                                    })
-                                } else {
-                                    select(&mut world.session())
-                                }
-                        });
+                    output.on_press(
+                        target,
+                        move |world, _| select(&mut world.session()),
+                        move |world, _| {
+                            value
+                                .as_ref()
+                                .is_some_and(|value| interaction::pick(world, value))
+                        },
+                    );
                 }
             },
         )

@@ -7,11 +7,10 @@ use super::frame::Probe;
 use super::offers::Entry;
 use super::style::{Styles, face_style, primary_highlight_stroke};
 use super::{container, extent, leaf, popover, scroll};
-use kurbo::{Insets, Point, Size, Stroke, Vec2};
+use kurbo::{Insets, Point, Size, Vec2};
 use measured::{Extent, Measured, col, pad};
 use puri::handler::HasHandler;
 use puri::text::TextCtx;
-use puri_widgets::panel::Panel;
 use puri_widgets::text_frame;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, NamedKey};
@@ -24,10 +23,6 @@ pub struct State {
     pub scroll: f64,
 }
 
-fn border(scale: f64) -> Stroke {
-    Stroke::new(scale)
-}
-
 /// Where the card for a query drawn in `field` floats: against the field's
 /// selection ring, below it or above, as [`popover::shortened`] decides.
 /// None when the field is clipped out.
@@ -37,7 +32,7 @@ pub fn placement(field: Placement, extent: Extent, scale: f64) -> Option<Placeme
         let anchor = text_frame::outline(scale, field.rect)
             .rect()
             .inflate(ring_outset, ring_outset);
-        let border_outset = border(scale).width / 2.0;
+        let border_outset = popover::card_border(scale).width / 2.0;
         // Shortened, the card scrolls what it can't show; it keeps at least
         // about a row, the field's own height.
         let outer = popover::shortened(
@@ -123,11 +118,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
         ascent: tallest_extent.ascent + inset,
         descent: tallest_extent.descent + inset,
     };
-    let panel = Panel {
-        fill: Some(styles.palette.panel.into()),
-        border: Some((border(scale), styles.palette.border.into())),
-        radius: 6.0 * scale,
-    };
+    let panel = popover::card_panel(styles);
     measured::leaf_into(extent, move |placement, pass| {
         let viewport_height = ((placement.rect.height() - 2.0 * inset) / scale).clamp(0.0, tallest);
         let maximum = (content.extent.height() / scale - viewport_height).max(0.0);
@@ -200,11 +191,8 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
         let card = crate::display::widget::before_place(card, move |placement, output| {
             if !placement.clipped_out() {
                 output.render(move |canvas, _| panel.place(canvas, placement));
-                output.claim(Probe::occludes(placement));
-                output.handler().on_pointer_down(move |_, event| {
-                    placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                });
             }
+            output.occlude(placement);
         });
         measured::place_into(card, placement, pass);
     })

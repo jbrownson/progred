@@ -361,7 +361,7 @@ fn operation<W: Host>(
             match function {
                 SELECTABLE => activatable(child, &site()),
                 HOVER_BLOCK => block_hover(child),
-                PICKABLE => pickable_runtime(child, W::Hover::from(site().hover()), need!(value)),
+                PICKABLE => pickable(child, W::Hover::from(site().hover()), need!(value)),
                 ON_EVENT => on_event(child, need!(handler)),
                 _ => unreachable!(),
             }

@@ -14,7 +14,6 @@ use puri::edit::LineEditDescription;
 use puri::handler::{Handler, HasHandler};
 use puri::text::{TextCtx, TextStyle};
 use ui_events::keyboard::KeyboardEvent;
-use ui_events::pointer::PointerButtonEvent;
 use uig::Placement;
 
 pub struct Builder<'a, 'input, C: 'static, H: 'static> {
@@ -87,53 +86,22 @@ impl<C: 'static, H: Clone + PartialEq + 'static> Builder<'_, '_, C, H> {
 
     /// Contribute an unnamed region that blocks targets below it.
     pub fn occlude(&mut self, placement: Placement) {
-        if !placement.clipped_out() {
-            self.placed.claim(Probe::occludes(placement));
-            self.handler().on_pointer_down(move |_, event| {
-                placement.contains(Point::new(event.state.position.x, event.state.position.y))
-            });
+        self.placed.occlude(placement);
+    }
+
+    /// Run `action` on a primary press over `target`.
+    pub fn activate(&mut self, target: H, action: impl Fn(&mut C) -> bool + 'static) {
+        if self.visible {
+            self.placed
+                .on_press(target, move |world, _| action(world), |_, _| false);
         }
     }
 
-    pub fn activate(&mut self, target: H, action: impl Fn(&mut C) -> bool + 'static) {
-        self.activate_with(target, move |ctx, _| action(ctx));
-    }
-
+    /// Run `action` on a primary press over `target` with the command key held.
     pub fn pick(&mut self, target: H, action: impl Fn(&mut C) -> bool + 'static) {
-        self.pick_with(target, move |ctx, _| action(ctx));
-    }
-
-    pub fn pick_with(
-        &mut self,
-        target: H,
-        action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-    ) {
-        self.target_action(target, true, action);
-    }
-
-    pub fn activate_with(
-        &mut self,
-        target: H,
-        action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-    ) {
-        self.target_action(target, false, action);
-    }
-
-    fn target_action(
-        &mut self,
-        target: H,
-        pick: bool,
-        action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-    ) {
         if self.visible {
-            let command = self.placed.input.command_modifier;
-            self.handler()
-                .on_pointer_down_with(move |ctx, event, pointer| {
-                    puri::interact::is_primary_contact(event)
-                        && command.pressed(&event.state.modifiers) == pick
-                        && pointer.matches(&target)
-                        && action(ctx, event)
-                });
+            self.placed
+                .on_press(target, |_, _| false, move |world, _| action(world));
         }
     }
 }

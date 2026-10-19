@@ -388,7 +388,7 @@ mod view {
             p.claim_exact(placement, target.clone());
             p.handler().on(move |app: &mut Editor, event, input| {
                 let handled = !placement.clipped_out()
-                    && input.matches(&target)
+                    && input.hovered() == Some(&target)
                     && match &event {
                         Event::PointerDown(event) => {
                             puri::interact::is_primary_contact(event) && press(app, input)

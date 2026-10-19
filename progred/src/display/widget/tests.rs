@@ -5,6 +5,7 @@ use gid::{Cells, Document};
 use kurbo::{Affine, Point, Rect, Stroke};
 use peniko::Color;
 use puri::draw::{DrawCmd, DrawList, Shape};
+use puri::handler::HasHandler;
 use ui_events::keyboard::KeyboardEvent;
 
 #[test]
@@ -260,7 +261,6 @@ fn inert_widgets_and_pointer_wrappers_do_not_request_site_state() {
                 1
             );
             for layout in [
-                interaction::on_click(crate::display::text("click"), Rc::new(|_| true)),
                 interaction::on_activate(
                     crate::display::text("activate"),
                     crate::libraries::test_widgets::hover(vec![]),

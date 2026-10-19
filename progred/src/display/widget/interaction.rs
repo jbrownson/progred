@@ -1,119 +1,60 @@
-use super::{HoverCallback, before};
-use crate::display::widget::HoverContext;
+use super::before;
 use crate::display::{Action, Host, Layout};
-use gid::Value;
-use kurbo::Point;
-use puri::handler::HasHandler;
 use std::rc::Rc;
-use uig::Placement;
-
-/// What a press runs on the world it's dispatched to.
-pub type WorldHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
-
-/// `action`, run through the session the world lends.
-fn lent<World: Host>(action: Action) -> WorldHandler<World> {
-    Rc::new(move |world| action(&mut world.session()))
-}
-
-/// Run `handler` on a press inside the placement that `primary` accepts,
-/// given the frame's command key.
-pub fn click<World: 'static, Hover: 'static>(
-    handler: WorldHandler<World>,
-    primary: crate::modifiers::PressRule,
-) -> HoverCallback<World, Hover> {
-    Box::new(
-        move |output: &mut HoverContext<'_, World, Hover>, placement| {
-            let primary = primary(output.input.command_modifier);
-            output.handler().on_pointer_down(move |world, event| {
-                primary(event)
-                    && placement
-                        .contains(Point::new(event.state.position.x, event.state.position.y))
-                    && handler(world)
-            });
-        },
-    )
-}
-
-/// Run `handler` on a primary press over `target`, when the frame's command
-/// key is held exactly if `pick`.
-pub fn target_action<World: 'static, Hover: 'static>(
-    target: Hover,
-    handler: WorldHandler<World>,
-    pick: bool,
-    same_target: fn(&Hover, &Hover) -> bool,
-) -> HoverCallback<World, Hover> {
-    Box::new(
-        move |output: &mut HoverContext<'_, World, Hover>, placement: Placement| {
-            let picking = crate::modifiers::picking(output.input.command_modifier);
-            if !placement.clipped_out() {
-                output
-                    .handler()
-                    .on_pointer_down_with(move |world, event, hovered| {
-                        puri::interact::is_primary_contact(event)
-                            && picking(event) == pick
-                            && hovered
-                                .hovered()
-                                .is_some_and(|hover| same_target(hover, &target))
-                            && handler(world)
-                    });
-            }
-        },
-    )
-}
-
-pub fn on_click<World: Host, Hover: 'static>(
-    child: Layout<World, Hover>,
-    action: Action,
-) -> Layout<World, Hover> {
-    let handler = lent(action);
-    before(
-        child,
-        Rc::new(move |_| click(handler.clone(), crate::modifiers::primary_edit)),
-    )
-}
 
 pub fn on_activate<World: Host, Hover: Clone + PartialEq + 'static>(
     child: Layout<World, Hover>,
     target: Hover,
     action: Action,
 ) -> Layout<World, Hover> {
-    let handler = lent(action);
     before(
         child,
-        Rc::new(move |_| target_action(target.clone(), handler.clone(), false, PartialEq::eq)),
+        Rc::new(move |_| {
+            let target = target.clone();
+            let action = action.clone();
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    output.on_press(
+                        target,
+                        move |world: &mut World, _| action(&mut world.session()),
+                        |_, _| false,
+                    );
+                }
+            })
+        }),
     )
 }
 
 pub fn pickable<W: Host>(
     child: crate::display::host::Layout<W>,
     target: W::Hover,
-    value: Value,
+    value: impl Into<grap::RuntimeValue>,
 ) -> crate::display::host::Layout<W> {
-    pickable_runtime(child, target, value.into())
-}
-
-pub fn pickable_runtime<W: Host>(
-    child: crate::display::host::Layout<W>,
-    target: W::Hover,
-    value: grap::RuntimeValue,
-) -> crate::display::host::Layout<W> {
+    let value = value.into();
     before(
         child,
         Rc::new(move |_| {
+            let target = target.clone();
             let value = value.clone();
-            target_action(
-                target.clone(),
-                Rc::new(move |world: &mut W| {
-                    world
-                        .session()
-                        .pending()
-                        .is_some_and(|picking| picking.pick(value.to_value()))
-                }),
-                true,
-                PartialEq::eq,
-            )
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    output.on_press(
+                        target,
+                        |_, _| false,
+                        move |world: &mut W, _| pick(world, &value),
+                    );
+                }
+            })
         }),
     )
+}
+
+/// Picks `value` into the open pending, if there's one.
+pub(crate) fn pick<W: Host>(world: &mut W, value: &grap::RuntimeValue) -> bool {
+    world
+        .session()
+        .pending()
+        .is_some_and(|picking| picking.pick(value.to_value()))
 }
 
 #[cfg(test)]

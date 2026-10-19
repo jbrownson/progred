@@ -16,7 +16,7 @@ use gid::{CellId, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
     Delim, Face, Paint, RowAlignment, activatable, alternatives, block_hover, border, bracket,
-    descend, leaf, overlay as layout_overlay, pickable_runtime, slot,
+    descend, leaf, overlay as layout_overlay, pickable, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Stroke};
@@ -652,7 +652,7 @@ fn decode_with<W: Host>(
     if let Some(content) = value.field(vocabulary::PICKABLE) {
         content.record_len()?;
         let child = decode_with(&content.field(vocabulary::CHILD)?, site)?;
-        return Some(pickable_runtime(
+        return Some(pickable(
             child,
             W::Hover::from(site().hover()),
             content.field(vocabulary::VALUE)?,
