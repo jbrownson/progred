@@ -1,4 +1,5 @@
 use super::*;
+use peniko::ImageData;
 
 fn raster(preview: &VolumePreview, state: Option<&Value>) -> puri::mesh::DepthImage {
     raster::Request::new(preview.clone(), state, 1.0)

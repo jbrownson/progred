@@ -28,11 +28,11 @@ mod projection;
 pub(crate) mod raster;
 
 pub const ID: CellId = CellId::from_u128(0x5ccd78c1d555d14f55996f549d69f58a);
+use crate::display::widget::image::rgba_image;
 use crate::display::{on_hover, on_state_drag, widget};
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use kurbo::{Affine, Size, Vec2};
 use nalgebra::{Matrix4, Rotation3, Scale3, Translation3, Vector3};
-use peniko::{ImageAlphaType, ImageData, ImageFormat};
 use std::{cell::RefCell, rc::Rc};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -597,17 +597,6 @@ fn raster_size(size: Size, scale: f64) -> Option<PixelRenderSize> {
         dimension(size.width)?,
         dimension(size.height)?,
     ))
-}
-
-/// An image of straight-alpha RGBA8 pixels.
-fn rgba_image(width: u32, height: u32, rgba: Vec<u8>) -> ImageData {
-    ImageData {
-        data: rgba.into(),
-        format: ImageFormat::Rgba8,
-        alpha_type: ImageAlphaType::Alpha,
-        width,
-        height,
-    }
 }
 
 fn image_layout<W: Host>(size: Size, raster_size: PixelRenderSize, rgba: Vec<u8>) -> Layout<W> {

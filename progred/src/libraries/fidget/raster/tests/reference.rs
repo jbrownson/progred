@@ -1,5 +1,6 @@
 //! Whole-pass reference for pixel and timing comparisons, without tile publications.
 use super::*;
+use peniko::ImageData;
 
 impl Request {
     /// Publish up to native image resolution, then optionally refine depth in one final pass.

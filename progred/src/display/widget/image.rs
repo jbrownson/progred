@@ -2,8 +2,19 @@
 
 use crate::display::{Layout, widget};
 use kurbo::{Affine, Size};
-use peniko::ImageData;
+use peniko::{ImageAlphaType, ImageData, ImageFormat};
 use std::rc::Rc;
+
+/// An image of straight-alpha RGBA8 pixels.
+pub fn rgba_image(width: u32, height: u32, rgba: Vec<u8>) -> ImageData {
+    ImageData {
+        data: rgba.into(),
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::Alpha,
+        width,
+        height,
+    }
+}
 
 /// `image` stretched over `size`, which is in logical units.
 pub fn image<World: 'static, Hover: 'static>(size: Size, image: ImageData) -> Layout<World, Hover> {

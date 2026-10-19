@@ -1,6 +1,7 @@
 //! Readback adapter for headless GPU assertions and round-trip comparisons only.
 use super::*;
 
+use peniko::{ImageAlphaType, ImageData, ImageFormat};
 use puri_vello::capture;
 
 pub(crate) struct Renderer {

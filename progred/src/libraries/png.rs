@@ -6,7 +6,7 @@ use crate::libraries::{Library, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{CellId, Value};
 use kurbo::Size;
-use peniko::{ImageAlphaType, ImageData, ImageFormat};
+use peniko::ImageData;
 
 pub const ID: CellId = CellId::from_u128(0x40322c0867ad9170420d563b8b15aa55);
 
@@ -69,13 +69,11 @@ pub fn decode(bytes: &[u8]) -> Option<ImageData> {
     let mut samples = vec![0; reader.output_buffer_size()?];
     let frame = reader.next_frame(&mut samples).ok()?;
     samples.truncate(frame.buffer_size());
-    Some(ImageData {
-        data: rgba(frame.color_type, samples)?.into(),
-        format: ImageFormat::Rgba8,
-        alpha_type: ImageAlphaType::Alpha,
-        width: frame.width,
-        height: frame.height,
-    })
+    Some(crate::display::widget::image::rgba_image(
+        frame.width,
+        frame.height,
+        rgba(frame.color_type, samples)?,
+    ))
 }
 
 fn fits((width, height): (u32, u32)) -> bool {
