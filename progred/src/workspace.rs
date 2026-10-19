@@ -105,9 +105,28 @@ pub struct DividerPlacement {
     pub rect: Rect,
 }
 
+#[derive(Default)]
 pub struct Geometry<'a> {
     pub views: Vec<ViewPlacement<'a>>,
     pub dividers: Vec<DividerPlacement>,
+}
+
+impl<'a> Geometry<'a> {
+    fn with_view(mut self, view: &'a View, rect: Rect) -> Self {
+        self.views.push(ViewPlacement { view, rect });
+        self
+    }
+
+    fn with_divider(mut self, divider: Divider, rect: Rect) -> Self {
+        self.dividers.push(DividerPlacement { divider, rect });
+        self
+    }
+
+    fn and(mut self, other: Self) -> Self {
+        self.views.extend(other.views);
+        self.dividers.extend(other.dividers);
+        self
+    }
 }
 
 pub struct Workspace {
@@ -326,29 +345,37 @@ impl Default for Workspace {
 }
 
 impl Workspace {
+    /// The document's view, then each pane's, the left column's first.
+    fn views(&self) -> impl Iterator<Item = &View> {
+        std::iter::once(&self.document).chain(
+            self.left
+                .panes
+                .iter()
+                .chain(&self.right.panes)
+                .map(|pane| &pane.view),
+        )
+    }
+
+    fn views_mut(&mut self) -> impl Iterator<Item = &mut View> {
+        std::iter::once(&mut self.document).chain(
+            self.left
+                .panes
+                .iter_mut()
+                .chain(&mut self.right.panes)
+                .map(|pane| &mut pane.view),
+        )
+    }
+
     pub(crate) fn folds(&self) -> Folds {
         Folds(
-            std::iter::once(&self.document)
-                .chain(
-                    self.left
-                        .panes
-                        .iter()
-                        .chain(&self.right.panes)
-                        .map(|pane| &pane.view),
-                )
+            self.views()
                 .map(|view| (view.root.clone(), view.annotations.clone()))
                 .collect(),
         )
     }
 
     pub(crate) fn restore_folds(&mut self, saved: Folds) {
-        for view in std::iter::once(&mut self.document).chain(
-            self.left
-                .panes
-                .iter_mut()
-                .chain(&mut self.right.panes)
-                .map(|pane| &mut pane.view),
-        ) {
+        for view in self.views_mut() {
             if let Some((root, annotations)) = saved
                 .0
                 .iter()
@@ -367,27 +394,11 @@ impl Workspace {
     }
 
     pub fn view(&self, root: &Root) -> Option<&View> {
-        if self.document.root == *root {
-            return Some(&self.document);
-        }
-        self.left
-            .panes
-            .iter()
-            .chain(&self.right.panes)
-            .find(|pane| pane.view.root == *root)
-            .map(|pane| &pane.view)
+        self.views().find(|view| view.root == *root)
     }
 
     pub fn view_mut(&mut self, root: &Root) -> Option<&mut View> {
-        if self.document.root == *root {
-            return Some(&mut self.document);
-        }
-        self.left
-            .panes
-            .iter_mut()
-            .chain(&mut self.right.panes)
-            .find(|pane| pane.view.root == *root)
-            .map(|pane| &mut pane.view)
+        self.views_mut().find(|view| view.root == *root)
     }
 
     pub fn selected_or_document(&self, selected: Option<&Root>) -> &View {
@@ -601,79 +612,67 @@ impl Workspace {
         self.dragging.take().is_some()
     }
 
+    /// The columns side by side, a rule apart: the left, the document and
+    /// the right. A side column takes its requested fraction and the
+    /// document the rest, any of them raised to a minimum where all fit.
     pub fn geometry(&self, size: Size, scale: f64) -> Geometry<'_> {
-        let divider = scale.max(1.0);
-        let left_present = !self.left.panes.is_empty();
-        let right_present = !self.right.panes.is_empty();
-        let column_count = 1 + usize::from(left_present) + usize::from(right_present);
-        let usable_width = (size.width - divider * (column_count - 1) as f64).max(0.0);
-        let document_weight = match (left_present, right_present) {
-            (true, true) => (1.0 - self.left_width - self.right_width).max(0.0),
-            (true, false) => (1.0 - self.left_width).max(0.0),
-            (false, true) => (1.0 - self.right_width).max(0.0),
-            (false, false) => 1.0,
+        let rule = scale.max(1.0);
+        let side = |side: Side, width: f64| {
+            Some((Some(side), width)).filter(|_| !self.column(side).panes.is_empty())
         };
-        let requested: Vec<f64> = [
-            left_present.then_some(self.left_width),
-            Some(document_weight),
-            right_present.then_some(self.right_width),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        let widths = allocate(&requested, usable_width, 180.0 * scale);
-        let mut width_index = 0;
-        let mut x = 0.0;
-        let mut views = Vec::new();
-        let mut dividers = Vec::new();
-
-        if left_present {
-            let width = widths[width_index];
-            width_index += 1;
-            column_geometry(
-                &self.left,
-                Side::Left,
-                Rect::new(x, 0.0, x + width, size.height),
-                divider,
-                scale,
-                &mut views,
-                &mut dividers,
-            );
-            x += width;
-            dividers.push(DividerPlacement {
-                divider: Divider::Columns(Side::Left),
-                rect: Rect::new(x, 0.0, x + divider, size.height),
-            });
-            x += divider;
-        }
-
-        let document_width = widths[width_index];
-        width_index += 1;
-        views.push(ViewPlacement {
-            view: &self.document,
-            rect: Rect::new(x, 0.0, x + document_width, size.height),
-        });
-        x += document_width;
-
-        if right_present {
-            dividers.push(DividerPlacement {
-                divider: Divider::Columns(Side::Right),
-                rect: Rect::new(x, 0.0, x + divider, size.height),
-            });
-            x += divider;
-            let width = widths[width_index];
-            column_geometry(
-                &self.right,
-                Side::Right,
-                Rect::new(x, 0.0, x + width, size.height),
-                divider,
-                scale,
-                &mut views,
-                &mut dividers,
-            );
-        }
-
-        Geometry { views, dividers }
+        let (left, right) = (
+            side(Side::Left, self.left_width),
+            side(Side::Right, self.right_width),
+        );
+        let document_weight = left
+            .into_iter()
+            .chain(right)
+            .fold(1.0, |rest, (_, width)| rest - width)
+            .max(0.0);
+        let areas: Vec<_> = [left, Some((None, document_weight)), right]
+            .into_iter()
+            .flatten()
+            .collect();
+        let usable_width = (size.width - rule * (areas.len() - 1) as f64).max(0.0);
+        let weights: Vec<f64> = areas.iter().map(|(_, weight)| *weight).collect();
+        let strip = |x: f64, width: f64| Rect::new(x, 0.0, x + width, size.height);
+        areas
+            .into_iter()
+            .zip(allocate(&weights, usable_width, 180.0 * scale))
+            .fold(
+                (0.0, Geometry::default()),
+                |(x, geometry), ((area, _), width)| match area {
+                    None => (
+                        x + width,
+                        geometry.with_view(&self.document, strip(x, width)),
+                    ),
+                    Some(Side::Left) => (
+                        x + width + rule,
+                        geometry
+                            .and(column_geometry(
+                                &self.left,
+                                Side::Left,
+                                strip(x, width),
+                                rule,
+                                scale,
+                            ))
+                            .with_divider(Divider::Columns(Side::Left), strip(x + width, rule)),
+                    ),
+                    Some(Side::Right) => (
+                        x + rule + width,
+                        geometry
+                            .with_divider(Divider::Columns(Side::Right), strip(x, rule))
+                            .and(column_geometry(
+                                &self.right,
+                                Side::Right,
+                                strip(x + rule, width),
+                                rule,
+                                scale,
+                            )),
+                    ),
+                },
+            )
+            .1
     }
 
     pub fn column(&self, side: Side) -> &Column {
@@ -785,38 +784,39 @@ fn allocate(weights: &[f64], total: f64, minimum: f64) -> Vec<f64> {
     result
 }
 
-#[allow(clippy::too_many_arguments)]
-fn column_geometry<'a>(
-    column: &'a Column,
-    side: Side,
-    rect: Rect,
-    divider: f64,
-    scale: f64,
-    views: &mut Vec<ViewPlacement<'a>>,
-    dividers: &mut Vec<DividerPlacement>,
-) {
-    let usable = (rect.height() - divider * column.panes.len().saturating_sub(1) as f64).max(0.0);
+/// The column's panes stacked in `rect`, a rule apart, at their requested
+/// shares of its height, any of them raised to a minimum where all fit.
+fn column_geometry(column: &Column, side: Side, rect: Rect, rule: f64, scale: f64) -> Geometry<'_> {
+    let usable = (rect.height() - rule * column.panes.len().saturating_sub(1) as f64).max(0.0);
     let weights: Vec<f64> = column.panes.iter().map(|pane| pane.height).collect();
-    let heights = allocate(&weights, usable, 96.0 * scale);
-    let mut y = rect.y0;
-    for (index, (pane, height)) in column.panes.iter().zip(heights).enumerate() {
-        views.push(ViewPlacement {
-            view: &pane.view,
-            rect: Rect::new(rect.x0, y, rect.x1, y + height),
-        });
-        y += height;
-        if let Some(next) = column.panes.get(index + 1) {
-            dividers.push(DividerPlacement {
-                divider: Divider::Panes {
-                    side,
-                    before: pane.view.root.clone(),
-                    after: next.view.root.clone(),
-                },
-                rect: Rect::new(rect.x0, y, rect.x1, y + divider),
-            });
-            y += divider;
-        }
-    }
+    let band = |y: f64, height: f64| Rect::new(rect.x0, y, rect.x1, y + height);
+    let successors = column.panes.iter().skip(1).map(Some).chain([None]);
+    column
+        .panes
+        .iter()
+        .zip(allocate(&weights, usable, 96.0 * scale))
+        .zip(successors)
+        .fold(
+            (rect.y0, Geometry::default()),
+            |(y, geometry), ((pane, height), next)| {
+                let geometry = geometry.with_view(&pane.view, band(y, height));
+                match next {
+                    Some(next) => (
+                        y + height + rule,
+                        geometry.with_divider(
+                            Divider::Panes {
+                                side,
+                                before: pane.view.root.clone(),
+                                after: next.view.root.clone(),
+                            },
+                            band(y + height, rule),
+                        ),
+                    ),
+                    None => (y + height, geometry),
+                }
+            },
+        )
+        .1
 }
 
 #[cfg(test)]
