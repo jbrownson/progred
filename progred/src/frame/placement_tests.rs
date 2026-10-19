@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::test_support::{mouse, press_at};
+use crate::display::test_support::{mouse, primary_press};
 use crate::display::widget::container::floating;
 use crate::display::widget::container::scrolled;
 use crate::display::widget::placed::leaf;
@@ -221,7 +221,7 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
         (Some(other), Some(target.clone()), false, None),
         (Some(owner), None, false, None),
     ] {
-        let event = press_at(
+        let event = primary_press(
             point,
             if picking {
                 crate::test_support::command()
@@ -317,7 +317,7 @@ fn target_actions_and_raw_handlers_share_visual_precedence() {
     let mut log = Vec::new();
     assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(
         &mut log,
-        &press_at(
+        &primary_press(
             Point::new(5.0, 5.0),
             ui_events::keyboard::Modifiers::empty()
         ),
@@ -356,7 +356,7 @@ fn direct_placement_preserves_handler_precedence() {
 
     assert!(handler.dispatch_pointer_down(
         &mut log,
-        &press_at(
+        &primary_press(
             Point::new(5.0, 5.0),
             ui_events::keyboard::Modifiers::empty()
         )
@@ -550,7 +550,7 @@ fn scroll_viewport_bounds_starts_and_not_active_motion_or_release() {
     let mut log = Vec::new();
     assert!(!handler.dispatch_pointer_down(
         &mut log,
-        &press_at(
+        &primary_press(
             Point::new(20.0, 5.0),
             ui_events::keyboard::Modifiers::empty()
         )
@@ -562,7 +562,7 @@ fn scroll_viewport_bounds_starts_and_not_active_motion_or_release() {
     );
     assert!(handler.dispatch_pointer_down(
         &mut log,
-        &press_at(
+        &primary_press(
             Point::new(5.0, 5.0),
             ui_events::keyboard::Modifiers::empty()
         )
@@ -575,7 +575,7 @@ fn scroll_viewport_bounds_starts_and_not_active_motion_or_release() {
     assert!(handler.dispatch_pointer_move(&mut log, &move_at(20.0, 5.0)));
     assert!(handler.dispatch_pointer_up(
         &mut log,
-        &press_at(
+        &primary_press(
             Point::new(20.0, 5.0),
             ui_events::keyboard::Modifiers::empty()
         )
@@ -616,7 +616,7 @@ fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
     for button in [PointerButton::Primary, PointerButton::Secondary] {
         let event = PointerButtonEvent {
             button: Some(button),
-            ..press_at(
+            ..primary_press(
                 Point::new(15.0, 15.0),
                 ui_events::keyboard::Modifiers::empty(),
             )
@@ -626,7 +626,7 @@ fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
     }
     assert!(handler.dispatch_pointer_down(
         &mut log,
-        &press_at(
+        &primary_press(
             Point::new(25.0, 15.0),
             ui_events::keyboard::Modifiers::empty()
         )
@@ -634,7 +634,7 @@ fn occlusion_blocks_clicks_in_its_clip_but_not_active_gestures() {
     assert!(handler.dispatch_pointer_move(&mut log, &move_at(150.0, 150.0)));
     assert!(handler.dispatch_pointer_up(
         &mut log,
-        &press_at(
+        &primary_press(
             Point::new(150.0, 150.0),
             ui_events::keyboard::Modifiers::empty()
         )
@@ -705,7 +705,7 @@ fn a_floater_keeps_its_view_when_it_covers_another_view() {
         crate::test_support::command(),
     ] {
         let mut pointer = DispatchContext::new(root.clone(), Some(hit.clone()));
-        let event = press_at(point, modifiers);
+        let event = primary_press(point, modifiers);
         let mut log = Vec::new();
         assert!(placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
             &mut log,
@@ -805,7 +805,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     let mut count = 0;
     assert!(handler.dispatch_pointer_down_with(
         &mut count,
-        &press_at(
+        &primary_press(
             Point::new(55.0, 5.0),
             ui_events::keyboard::Modifiers::empty()
         ),
@@ -845,7 +845,7 @@ fn semantic_actions_obey_scroll_clips_even_when_the_target_matches() {
     let mut count = 0;
     assert!(!handler.dispatch_pointer_down_with(
         &mut count,
-        &press_at(
+        &primary_press(
             Point::new(20.0, 5.0),
             ui_events::keyboard::Modifiers::empty()
         ),
@@ -854,7 +854,7 @@ fn semantic_actions_obey_scroll_clips_even_when_the_target_matches() {
     assert_eq!(count, 0);
     assert!(handler.dispatch_pointer_down_with(
         &mut count,
-        &press_at(
+        &primary_press(
             Point::new(5.0, 5.0),
             ui_events::keyboard::Modifiers::empty()
         ),
@@ -919,7 +919,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
             selected: false,
             tab_stop: false,
         }]);
-        let event = press_at(Point::new(5.0, 5.0), crate::test_support::command());
+        let event = primary_press(Point::new(5.0, 5.0), crate::test_support::command());
         assert!(placed.handler.take().unwrap().dispatch_pointer_down_with(
             &mut editor,
             &event,

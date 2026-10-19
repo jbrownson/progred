@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::test_support::{mouse, press_at};
+use crate::display::test_support::{mouse, primary_press};
 use crate::display::{Layout, partial, widget};
 use crate::libraries::{f64, text};
 use crate::projection::Projection;
@@ -612,7 +612,7 @@ fn every_input_receives_the_installed_dispatch_context() {
                 EventOutcome::accept()
             }
         });
-        let button = press_at(Point::new(20.0, 20.0), Modifiers::empty());
+        let button = primary_press(Point::new(20.0, 20.0), Modifiers::empty());
         match kind {
             "key" => {
                 runner.keyboard_event(&key(), 1.0, VIEWPORT);
@@ -975,7 +975,7 @@ fn pointer_release_and_cancellation_update_the_computation_input() {
         let pressed = runner.editor.computations.pointer_pressed.clone();
         move |read| Ok(*pressed.read(read))
     });
-    let button = press_at(Point::ZERO, Modifiers::empty());
+    let button = primary_press(Point::ZERO, Modifiers::empty());
     for release in [
         PointerEvent::Up(button.clone()),
         PointerEvent::Cancel(button.pointer),

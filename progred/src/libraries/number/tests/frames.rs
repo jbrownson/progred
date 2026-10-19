@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::test_support::press_at;
+use crate::display::test_support::primary_press;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::frame::Hovered;
 use crate::frame::test_support::{editing_frame, framed};
@@ -96,7 +96,7 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
             frame.resolve_for_dispatch().dispatch_pointer_down_with(
                 &mut world,
-                &press_at(
+                &primary_press(
                     point,
                     if pick {
                         crate::test_support::command()

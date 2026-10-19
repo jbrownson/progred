@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
-use crate::display::test_support::press_at;
+use crate::display::test_support::primary_press;
 use crate::display::widget::view::Root;
 use crate::libraries::f64;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, hover};
@@ -68,7 +68,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
         let mut world = crate::test_editor(Document::default());
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
-            &press_at(Point::new(5.0, 5.0), Modifiers::empty()),
+            &primary_press(Point::new(5.0, 5.0), Modifiers::empty()),
             &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hover(vec![]))),
         );
         assert_eq!(handled, covered || accepts);
@@ -140,7 +140,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             false,
         );
         let mut world = crate::test_editor(Document::default());
-        let mut event = press_at(Point::new(x, 5.0), Modifiers::empty());
+        let mut event = primary_press(Point::new(x, 5.0), Modifiers::empty());
         event.button = button;
         event.pointer.pointer_type = pointer_type;
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
@@ -176,7 +176,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
                 .handler
                 .is_some_and(|handler| handler.dispatch_pointer_down_with(
                     &mut world,
-                    &press_at(Point::new(5.0, 5.0), crate::test_support::command()),
+                    &primary_press(Point::new(5.0, 5.0), crate::test_support::command()),
                     &mut crate::frame::DispatchContext::new(
                         Some(crate::test_root()),
                         Some(hover(vec![]))

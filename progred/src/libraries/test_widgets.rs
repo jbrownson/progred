@@ -1,7 +1,7 @@
 use crate::display::Env;
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
-use crate::display::test_support::{place_decoration, press_at};
+use crate::display::test_support::{place_decoration, primary_press};
 use crate::display::widget;
 use crate::display::widget::placed::leaf;
 use crate::projection::Layout;
@@ -80,7 +80,7 @@ pub fn point_update(
     ));
     assert!(output.handler.unwrap().dispatch_pointer_down(
         &mut world,
-        &press_at(Point::new(50.0, 50.0), Modifiers::empty())
+        &primary_press(Point::new(50.0, 50.0), Modifiers::empty())
     ));
     world.advance_gesture(&[kurbo::Point::new(point.x * 100.0, point.y * 100.0)]);
     crate::display::PointUpdate {
@@ -208,7 +208,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
     let mut world = pending_root();
     output.handler?.dispatch_pointer_down_with(
         &mut world,
-        &press_at(Point::ZERO, crate::test_support::command()),
+        &primary_press(Point::ZERO, crate::test_support::command()),
         &mut widget::frame::DispatchContext::new(None, Some(hover(vec![]))),
     );
     world.model.doc.root.clone()

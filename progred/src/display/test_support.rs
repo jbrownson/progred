@@ -601,7 +601,7 @@ pub fn mouse() -> ui_events::pointer::PointerInfo {
 }
 
 /// The mouse's primary button pressed at `point`, `modifiers` held.
-pub fn press_at(
+pub fn primary_press(
     point: kurbo::Point,
     modifiers: ui_events::keyboard::Modifiers,
 ) -> ui_events::pointer::PointerButtonEvent {

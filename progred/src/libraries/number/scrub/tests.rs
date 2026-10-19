@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
-use crate::display::test_support::press_at;
+use crate::display::test_support::primary_press;
 use crate::display::widget::placed::leaf;
 use crate::libraries::f64 as f64_convention;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, hover};
@@ -49,7 +49,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
         }
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
-            &press_at(
+            &primary_press(
                 Point::new(x, 5.0),
                 if pick {
                     crate::test_support::command()
@@ -140,7 +140,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         );
         assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
-            &press_at(Point::new(5.0, 5.0), crate::test_support::command()),
+            &primary_press(Point::new(5.0, 5.0), crate::test_support::command()),
             &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hover(vec![]))),
         ));
         assert_eq!(raw_contacts.get(), usize::from(raw));

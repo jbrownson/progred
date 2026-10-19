@@ -14,7 +14,7 @@ fn linking_and_picking_share_the_platform_command_modifier() {
 
 #[test]
 fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
-    use crate::display::test_support::press_at;
+    use crate::display::test_support::primary_press;
     use crate::libraries::text;
     use ui_events::keyboard::{Key, KeyState, KeyboardEvent};
     for (command, modifiers, other) in [
@@ -34,7 +34,7 @@ fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
         driver.type_text("changed");
         assert_eq!(text::read(&driver.value(&[])), Some("changed"));
         for (pressed, expected) in [(modifiers, true), (other, false)] {
-            let event = press_at(kurbo::Point::ZERO, pressed);
+            let event = primary_press(kurbo::Point::ZERO, pressed);
             assert_eq!(command.pressed(&event.state.modifiers), expected);
             assert_eq!(primary_edit(command, &event), !expected);
             let undo = KeyboardEvent {

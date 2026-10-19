@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::test_support::{mouse, press_at};
+use crate::display::test_support::{mouse, primary_press};
 use crate::svg::write_cmds;
 use puri::handler::test_support::DispatchShorthands;
 
@@ -459,7 +459,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     );
 
     input.root = Some(drawing_view);
-    let event = press_at(Point::new(5.0, 5.0), modifiers);
+    let event = primary_press(Point::new(5.0, 5.0), modifiers);
     editor.pressed = true;
     assert!(handler.dispatch_pointer_down_with(&mut editor, &event, &mut input));
     let selected = editor.model.selection.as_ref().unwrap();

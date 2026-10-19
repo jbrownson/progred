@@ -1,6 +1,6 @@
 use super::*;
 use crate::clipboard::Clipboard;
-use crate::display::test_support::press_at;
+use crate::display::test_support::primary_press;
 use puri::edit::TextClipboard;
 use puri::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::Modifiers;
@@ -210,7 +210,8 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
         ] {
             world.text_clipboard = Clipboard::default();
             assert!(
-                handler.dispatch_pointer_down(&mut world, &press_at(point, Modifiers::empty()))
+                handler
+                    .dispatch_pointer_down(&mut world, &primary_press(point, Modifiers::empty()))
             );
             assert_eq!(world.text_clipboard.get_text().as_deref(), expected);
         }
@@ -1136,7 +1137,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                 crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
             assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
                 &mut world,
-                &press_at(point, Modifiers::empty()),
+                &primary_press(point, Modifiers::empty()),
                 &mut input,
             ));
             assert!(Rc::ptr_eq(&before, &world.model.doc));
@@ -1204,7 +1205,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         );
         frame.resolve_for_dispatch().dispatch_pointer_down_with(
             world,
-            &press_at(point, Modifiers::empty()),
+            &primary_press(point, Modifiers::empty()),
             &mut input,
         )
     };
@@ -1305,7 +1306,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         let mut input = crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
         assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
-            &press_at(point, Modifiers::empty()),
+            &primary_press(point, Modifiers::empty()),
             &mut input,
         ));
         assert!(Rc::ptr_eq(&before, &world.model.doc));

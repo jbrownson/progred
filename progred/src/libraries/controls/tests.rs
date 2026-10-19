@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::test_support::{mouse, press_at};
+use crate::display::test_support::{mouse, primary_press};
 use crate::projection::Partial;
 use gid::Cells;
 use kurbo::Point;
@@ -512,7 +512,7 @@ fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
         Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
         &Default::default(),
     );
-    let event = press_at(Point::new(100.0, height / 2.0), Modifiers::empty());
+    let event = primary_press(Point::new(100.0, height / 2.0), Modifiers::empty());
     assert!(
         placed
             .resolve_for_dispatch()
@@ -809,7 +809,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
     );
     let dispatch = frame.handler.unwrap();
     let mut editor = crate::test_editor(gid::Document::default());
-    let mut event = press_at(Point::new(5.0, 1.0), Modifiers::empty());
+    let mut event = primary_press(Point::new(5.0, 1.0), Modifiers::empty());
     assert!(
         !dispatch.dispatch_pointer_down(&mut editor, &event),
         "the controls leave the top of the view interactive"
@@ -886,7 +886,7 @@ fn radio_dispatch_updates_value_without_touching_playback_camera_or_document() {
         &Default::default(),
     );
     let dispatch = placed.resolve_for_dispatch();
-    let mut event = press_at(
+    let mut event = primary_press(
         Point::new(extent.width + 10.0, extent.height() / 2.0),
         Modifiers::empty(),
     );
@@ -926,7 +926,7 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
         Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
         &Default::default(),
     );
-    let event = press_at(Point::new(100.0, height - 18.0), Modifiers::empty());
+    let event = primary_press(Point::new(100.0, height - 18.0), Modifiers::empty());
     assert!(
         placed
             .resolve_for_dispatch()
@@ -1117,7 +1117,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
         ))),
     );
     // No visible source: Cmd-click still belongs to the source link and must not move the range.
-    let mut event = press_at(point, crate::test_support::command());
+    let mut event = primary_press(point, crate::test_support::command());
     let handler = frame.handler.unwrap();
     assert!(handler.dispatch_pointer_down_with(&mut editor, &event, &mut input));
     assert!(
@@ -1237,7 +1237,7 @@ fn tree_cursor_stacks_disjoint_rows_without_extra_frame_padding() {
     );
 
     let mut editor = crate::test_editor(gid::Document::default());
-    let event = press_at(Point::new(100.0, 66.0), Modifiers::empty());
+    let event = primary_press(Point::new(100.0, 66.0), Modifiers::empty());
     assert!(
         frame
             .handler
@@ -1290,7 +1290,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
         Placement::root(Rect::new(0.0, 0.0, 200.0, height)),
         &Default::default(),
     );
-    let event = press_at(Point::new(150.0, height / 2.0), Modifiers::empty());
+    let event = primary_press(Point::new(150.0, height / 2.0), Modifiers::empty());
     assert!(
         placed
             .resolve_for_dispatch()

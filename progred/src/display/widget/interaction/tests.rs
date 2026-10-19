@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
-use crate::display::test_support::press_at;
+use crate::display::test_support::primary_press;
 use crate::display::widget::HoverContext;
 use crate::display::widget::frame::HoverOutput;
 use kurbo::{Point, Rect};
@@ -31,7 +31,7 @@ fn presses_use_settled_hover_not_a_second_hit_test() {
         let handler = frame.handler.unwrap();
         let mut world = (0, 0);
         // Holding the frame's command key is what makes a press pick.
-        let mut event = press_at(Point::new(25.0, 5.0), Modifiers::empty());
+        let mut event = primary_press(Point::new(25.0, 5.0), Modifiers::empty());
         if picking {
             event.state.modifiers = crate::test_support::command();
         }
@@ -45,7 +45,7 @@ fn presses_use_settled_hover_not_a_second_hit_test() {
                 expected
             );
         }
-        let mut secondary = press_at(Point::new(5.0, 5.0), Modifiers::empty());
+        let mut secondary = primary_press(Point::new(5.0, 5.0), Modifiers::empty());
         secondary.button = Some(PointerButton::Secondary);
         assert!(!handler.dispatch_pointer_down_with(
             &mut world,
@@ -125,7 +125,7 @@ fn leading_handlers_run_after_children_and_receive_declined_input() {
         let mut world = vec![];
         assert!(output.handler.unwrap().dispatch_pointer_down(
             &mut world,
-            &press_at(Point::new(5.0, 5.0), Modifiers::empty())
+            &primary_press(Point::new(5.0, 5.0), Modifiers::empty())
         ));
         assert_eq!(
             world,
