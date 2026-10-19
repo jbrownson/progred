@@ -111,6 +111,13 @@ pub fn selected_secondary<World>(landmarks: &[Landmark<World>]) -> Option<Second
         .find_map(|landmark| landmark.secondary.clone())
 }
 
+/// `child` registered as the landmark of the occurrence at `path`: what
+/// keyboard navigation reaches and reveals, over its full bounds. It claims
+/// no clicks: pointer selection belongs to the targets the view registers
+/// (heads, delimiters, rows), so a click on structural whitespace (gutters,
+/// gaps between rows, the dead space inside a box) falls through to the
+/// background's deselect. Arriving selects through `select` unless the child
+/// names its own arrival.
 pub(crate) fn landmark<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
     path: Rc<[Step]>,
