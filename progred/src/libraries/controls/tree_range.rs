@@ -166,9 +166,9 @@ impl Selection {
                 self.clone(),
                 position,
                 width,
-                decorate
-                    .as_ref()
-                    .map(|decorate| row.keys().map(|key| decorate(key)).collect()),
+                decorate.as_ref().map_or_else(Vec::new, |decorate| {
+                    row.keys().map(|key| decorate(key)).collect()
+                }),
             )
         })
     }
@@ -205,16 +205,19 @@ pub(super) fn cursor<W: Host>(
     width: f64,
     decorate: Option<ItemDecoration<W>>,
 ) -> (Vec<Widget<W>>, Value) {
-    cursor_from_tree(
+    let (widgets, fields) = cursor_from_tree(
         tree(items, Vec::new()),
         state,
         initial,
         key,
         width,
         decorate,
-    )
+    );
+    (widgets, Value::record(fields))
 }
 
+/// The cursor's widgets, and the fields of what it returns: its range and
+/// its position.
 pub(super) fn cursor_from_tree<W: Host>(
     tree: tree_slider::Tree<Key>,
     state: Option<&Value>,
@@ -222,7 +225,7 @@ pub(super) fn cursor_from_tree<W: Host>(
     key: CellId,
     width: f64,
     decorate: Option<ItemDecoration<W>>,
-) -> (Vec<Widget<W>>, Value) {
+) -> (Vec<Widget<W>>, [(CellId, Value); 2]) {
     let state = state.and_then(Value::as_record);
     let selection =
         Selection::from_tree(tree, state.and_then(|state| state.get(&vocabulary::RANGE)));
@@ -247,10 +250,10 @@ pub(super) fn cursor_from_tree<W: Host>(
     widgets.extend(selection.range_widgets(key, width, Some(position), decorate));
     (
         widgets,
-        Value::record([
+        [
             (vocabulary::RANGE, encode(selection.leaves.clone())),
             (vocabulary::POSITION, f64::value(position)),
-        ]),
+        ],
     )
 }
 
@@ -293,7 +296,7 @@ fn range_widget<W: Host>(
     selection: Selection,
     position: Option<f64>,
     width: f64,
-    decorations: Option<Vec<Option<Decoration<W>>>>,
+    decorations: Vec<Option<Decoration<W>>>,
 ) -> Widget<W> {
     let current = position.and_then(|position| selection.current_item(level, position));
     Rc::new(move |context| {
@@ -303,7 +306,6 @@ fn range_widget<W: Host>(
         let selection = selection.clone();
         let decorations: Vec<_> = decorations
             .iter()
-            .flatten()
             .map(|decorate| decorate.as_ref().map(|decorate| decorate(context)))
             .collect();
         let leaf = widget::leaf(

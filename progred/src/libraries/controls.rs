@@ -499,10 +499,8 @@ fn controls_output<W: Host>(
             );
             let value = RuntimeValue::record(
                 cursor
-                    .as_record()
-                    .unwrap()
-                    .iter()
-                    .map(|(key, value)| (*key, value.into()))
+                    .into_iter()
+                    .map(|(key, value)| (key, value.into()))
                     .chain([(ITEMS, built.items.clone())]),
             );
             return Ok(context.effect(|| {
@@ -559,12 +557,14 @@ fn controls_output<W: Host>(
                 return Ok(::grap::absent::value(INVALID_INPUT).into());
             };
             let initial = match context.field(call, INITIAL) {
-                Some(expression) => context.eval_to_value(expression, environment)?,
-                None => options[0].value.clone(),
+                Some(expression) => Some(context.eval_to_value(expression, environment)?),
+                None => options.first().map(|option| option.value.clone()),
             };
-            if !options.iter().any(|option| option.value == initial) {
+            let Some(initial) =
+                initial.filter(|initial| options.iter().any(|option| option.value == *initial))
+            else {
                 return Ok(::grap::absent::value(INVALID_INPUT).into());
-            }
+            };
             let selected = read_state(state, key)
                 .filter(|value| options.iter().any(|option| option.value == **value))
                 .cloned()
