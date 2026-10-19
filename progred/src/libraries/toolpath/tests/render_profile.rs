@@ -111,6 +111,7 @@ fn stock_render_profile() {
 #[ignore = "profiles current CAM scene layers and same-color path grouping"]
 fn cam_render_profile() {
     use super::super::playback::Draw;
+    use implicit::mesh::tests::gpu;
     let start = Instant::now();
     let (recording, eval) = record_example();
     eprintln!(
@@ -183,9 +184,9 @@ fn cam_render_profile() {
             .chain(std::iter::once(&stock))
             .cloned()
             .collect();
-        let mut renderer = implicit::mesh::Renderer::default();
+        let mut renderer = gpu::Renderer::default();
         // Warm the triangle backend separately from steady-state comparison.
-        implicit::mesh::raster(&geometry, &model, None, 1.0, &mut renderer).unwrap();
+        gpu::raster(&geometry, &model, None, 1.0, &mut renderer).unwrap();
         if std::env::var("CAM_MESH_UPLOADS").is_ok() {
             let mut geometry = geometry;
             let mut timings = [Vec::new(), Vec::new()];
@@ -197,8 +198,7 @@ fn cam_render_profile() {
                         std::sync::Arc::make_mut(&mut geometry);
                     }
                     let start = Instant::now();
-                    let image = implicit::mesh::raster(&geometry, &model, None, 1.0, &mut renderer)
-                        .unwrap();
+                    let image = gpu::raster(&geometry, &model, None, 1.0, &mut renderer).unwrap();
                     timings[index].push(start.elapsed());
                     if let Some(expected) = &expected {
                         assert_eq!(image.data.data(), expected);
@@ -232,7 +232,7 @@ fn cam_render_profile() {
             for trial in 0..12 {
                 for index in [trial % 2, 1 - trial % 2] {
                     let start = Instant::now();
-                    implicit::mesh::raster(
+                    gpu::raster(
                         if index == 0 { &flat } else { &geometry },
                         &model,
                         None,
@@ -271,7 +271,7 @@ fn cam_render_profile() {
                 let implicit_time = start.elapsed();
                 let composition = Instant::now();
                 if label == "hybrid" {
-                    implicit::mesh::raster_surface(
+                    gpu::raster_surface(
                         &geometry,
                         Some(implicit::mesh::Surface {
                             frame: frame.clone(),

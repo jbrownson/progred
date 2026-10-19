@@ -1,6 +1,9 @@
 use super::*;
 use gid::Cells;
 
+mod cpu;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod gpu;
 mod hybrid;
 mod normals;
 

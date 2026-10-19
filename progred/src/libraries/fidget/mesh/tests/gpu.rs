@@ -58,16 +58,13 @@ impl Renderer {
         surface: Option<Surface>,
     ) -> Option<Vec<u8>> {
         let texture = self.renderer.render(geometry, view, surface.as_ref())?;
-        let mut rgba = self.gpu.read(&texture);
-        // Match the historical ImageData boundary for byte/pixel comparisons.
-        for pixel in rgba.chunks_exact_mut(4) {
-            let alpha = u32::from(pixel[3]);
-            if alpha > 0 && alpha < 255 {
-                for channel in &mut pixel[..3] {
-                    *channel = ((u32::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
-                }
-            }
-        }
-        Some(rgba)
+        let premultiplied = ImageData {
+            data: self.gpu.read(&texture).into(),
+            format: ImageFormat::Rgba8,
+            alpha_type: ImageAlphaType::AlphaPremultiplied,
+            width: texture.width(),
+            height: texture.height(),
+        };
+        Some(puri::draw::straight_rgba(&premultiplied)?.into_owned())
     }
 }

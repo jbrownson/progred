@@ -3,16 +3,10 @@
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
 
-#[cfg(test)]
-mod cpu;
-#[cfg(all(test, not(target_arch = "wasm32")))]
-mod gpu;
 #[cfg(feature = "cam-profile")]
 pub(crate) mod performance;
 #[cfg(test)]
-mod tests;
-#[cfg(all(test, not(target_arch = "wasm32")))]
-pub(crate) use gpu::{Renderer, raster, raster_surface};
+pub(crate) mod tests;
 
 const DEFAULT_DEPTH: u64 = 6;
 
