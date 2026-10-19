@@ -45,7 +45,7 @@ pub mod vocabulary {
 
 /// A named cell as a reference, otherwise leave its definition visible.
 /// Contextual projections use this for expression and callable references.
-pub(crate) fn shallow_cell<W: Host>(
+fn shallow_cell<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     shallow_cell_with(input, |label| label)
@@ -161,7 +161,7 @@ pub(crate) fn expression_path<W: Host>(
 /// A record naming a Grap program: the program its `grap` field names is
 /// code, so an empty one offers Grap's suggestions. Its other fields, and
 /// code further in, keep their ordinary projections.
-pub fn program_display<W: Host>(
+fn program_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     input.value?.field(vocabulary::GRAP)?;
@@ -205,7 +205,7 @@ pub(crate) fn expression_descend<W: Host>(step: Step, default: &Partial<W>) -> L
 /// Parameter order is source metadata, not an evaluation. Follow
 /// transparent cell references to a stored lambda or closure; a
 /// computed callable has no order available to the projection.
-pub fn function_parameters<'a>(
+fn function_parameters<'a>(
     function: &::grap::RuntimeValue,
     resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
 ) -> Option<Vec<CellId>> {
@@ -232,7 +232,7 @@ pub fn function_parameters<'a>(
 }
 
 /// Construct a call and focus its first declared parameter, when known.
-pub fn call_completion<'a>(
+fn call_completion<'a>(
     function: Value,
     display: impl Into<crate::display::CompletionText>,
     resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
@@ -249,7 +249,7 @@ pub fn call_completion<'a>(
 /// Calls read as calls. Their function position is a shallow
 /// reference when it is a named cell; arguments retain Grap's contextual
 /// projection.
-pub fn call_display<W: Host>(
+fn call_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     call_with_function(input, None)
@@ -322,7 +322,7 @@ pub(crate) fn call_with_function<W: Host>(
 
 /// A stored lambda exposes its parameter declarations deeply and
 /// projects its body as an expression.
-pub fn lambda_display<W: Host>(
+fn lambda_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     let fields = input.value?;
@@ -357,7 +357,7 @@ pub fn lambda_display<W: Host>(
 
 /// A named expression, not a lexical binding. The name slot is always
 /// present in the projection; only the value field matters to evaluation.
-pub fn value_display<W: Host>(
+fn value_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     let fields = input.value?;
@@ -381,9 +381,7 @@ pub fn value_display<W: Host>(
 
 /// Foreignness is an evaluator implementation detail. In source, an
 /// FFI callable projects exactly like the cell it names.
-pub fn ffi_display<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-) -> Option<Layout<W>> {
+fn ffi_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let ffi = input.value?.field(FFI)?;
     ffi.as_cell()?;
     Some(group(shallow_path(
@@ -392,7 +390,7 @@ pub fn ffi_display<W: Host>(
     )))
 }
 
-pub fn evaluate_display<W: Host>(
+fn evaluate_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     let expression = input.value?.field(EVALUATE)?;
@@ -445,7 +443,7 @@ fn evaluate_foreign(
     }
 }
 
-pub fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         ::grap::vocabulary::EVALUATE,
         ForeignFunction::new(evaluate_foreign)

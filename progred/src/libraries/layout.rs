@@ -205,10 +205,7 @@ fn apply_border_projection(
     )]))
 }
 
-pub fn at(
-    steps: impl IntoIterator<Item = Step>,
-    value: ::grap::RuntimeValue,
-) -> ::grap::RuntimeValue {
+fn at(steps: impl IntoIterator<Item = Step>, value: ::grap::RuntimeValue) -> ::grap::RuntimeValue {
     ::grap::RuntimeValue::record([(
         vocabulary::AT,
         ::grap::RuntimeValue::record([
@@ -433,7 +430,7 @@ fn read_delim(value: &::grap::RuntimeValue) -> Option<Delim> {
     }
 }
 
-pub fn read_paint(value: &Value) -> Option<Paint> {
+fn read_paint(value: &Value) -> Option<Paint> {
     read_face(value)
         .map(Paint::Face)
         .or_else(|| color::read(value).map(|color| Paint::Brush(Brush::from(color))))
@@ -504,7 +501,7 @@ fn read_optional_transform(fields: &gid::Record) -> Option<Affine> {
     }
 }
 
-pub fn read_transform(value: &Value) -> Option<Affine> {
+fn read_transform(value: &Value) -> Option<Affine> {
     value
         .as_list()?
         .values()
@@ -521,7 +518,7 @@ pub fn read_transform(value: &Value) -> Option<Affine> {
         })
 }
 
-pub fn read_shape(value: &Value) -> Option<Shape> {
+fn read_shape(value: &Value) -> Option<Shape> {
     let fields = value.as_record()?;
     if let Some(content) = fields.get(&vocabulary::RECT) {
         let (x, y, width, height) = read_box(content)?;
@@ -625,7 +622,7 @@ fn read_point(value: &Value) -> Option<Point> {
     ))
 }
 
-pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     scope::display(input).or_else(|| decode_with(input.value?, &Place::Root, &|| input.site()))
 }
 
