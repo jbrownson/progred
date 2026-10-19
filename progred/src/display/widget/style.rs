@@ -14,9 +14,8 @@ pub fn highlight_outline(scale: f64, rect: Rect) -> RoundedRect {
     RoundedRect::from_rect(rect.inflate(2.0 * scale, 2.0 * scale), 4.0 * scale)
 }
 
-/// The pane-local primary: translucent system blue, like the Swift
-/// version's selection, ringed at full strength — the strongest mark
-/// in the shared vocabulary.
+/// The pane-local primary: a translucent accent wash ringed at full
+/// strength, the strongest mark in the shared vocabulary.
 pub fn primary_highlight<P: Canvas + ?Sized>(
     palette: Palette,
     scale: f64,
@@ -61,34 +60,28 @@ pub fn secondary_highlight<P: Canvas + ?Sized>(
     }
 }
 
+/// What the pointer rests on: an accent [`outline_wash`].
 pub fn hover_highlight<P: Canvas + ?Sized>(
     palette: Palette,
     scale: f64,
     canvas: &mut P,
     outline: RoundedRect,
 ) {
-    canvas.fill(outline, palette.accent.with_alpha(0.08), Affine::IDENTITY);
-    canvas.stroke(
-        outline,
-        Stroke::new(1.5 * scale),
-        palette.accent.with_alpha(0.55),
-        Affine::IDENTITY,
-    );
+    outline_wash(palette.accent, scale, canvas, outline);
 }
 
-/// Hover's outline in a literal's own color, for what the pointer could drag
-/// while the command modifier is held.
-pub fn drag_highlight<P: Canvas + ?Sized>(
-    palette: Palette,
+/// A faint wash of `color` inside a firmer ring of it.
+pub fn outline_wash<P: Canvas + ?Sized>(
+    color: Color,
     scale: f64,
     canvas: &mut P,
     outline: RoundedRect,
 ) {
-    canvas.fill(outline, palette.literal.with_alpha(0.08), Affine::IDENTITY);
+    canvas.fill(outline, color.with_alpha(0.08), Affine::IDENTITY);
     canvas.stroke(
         outline,
         Stroke::new(1.5 * scale),
-        palette.literal.with_alpha(0.55),
+        color.with_alpha(0.55),
         Affine::IDENTITY,
     );
 }

@@ -129,7 +129,7 @@ pub fn drag_outlined<W: 'static, H: 'static>(
                     if output.input.picking && !placement.clipped_out() {
                         let outline = super::style::highlight_outline(scale, placement.rect);
                         output.render(move |canvas, _| {
-                            super::style::drag_highlight(palette, scale, canvas, outline);
+                            super::style::outline_wash(palette.literal, scale, canvas, outline);
                         });
                     }
                 })
