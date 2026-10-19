@@ -92,12 +92,15 @@ impl FromIterator<(CellId, Value)> for Record {
     }
 }
 
-/// Entries sorted by key; a repeated key keeps its last value.
-fn sorted_entries<K: Ord, V>(entries: impl IntoIterator<Item = (K, V)>) -> Vec<(K, V)> {
+/// Entries sorted by key; a repeated key keeps its last value. Entries
+/// already in strictly increasing key order stay as they are.
+pub fn sorted_entries<K: Ord, V>(entries: impl IntoIterator<Item = (K, V)>) -> Vec<(K, V)> {
     let mut entries: Vec<_> = entries.into_iter().collect();
-    entries.reverse();
-    entries.sort_by(|(a, _), (b, _)| a.cmp(b));
-    entries.dedup_by(|(a, _), (b, _)| a == b);
+    if !entries.is_sorted_by(|(a, _), (b, _)| a < b) {
+        entries.reverse();
+        entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+        entries.dedup_by(|(a, _), (b, _)| a == b);
+    }
     entries
 }
 

@@ -350,7 +350,7 @@ impl RuntimeValue {
     }
 
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
-        Self::new(RuntimeValueKind::Record(record_fields(fields)))
+        Self::new(RuntimeValueKind::Record(gid::sorted_entries(fields).into()))
     }
 
     pub fn list(elements: impl IntoIterator<Item = RuntimeValue>) -> Self {
@@ -714,20 +714,6 @@ fn binding_index(indices: &CellIndices, cell: CellId) -> CellIndex {
     let index = table.intern(cell);
     table.bound[index.0] = true;
     index
-}
-
-/// A runtime record's fields, sorted by label; a repeated label keeps its
-/// last value, as in a GID record.
-fn record_fields(
-    fields: impl IntoIterator<Item = (CellId, RuntimeValue)>,
-) -> Rc<[(CellId, RuntimeValue)]> {
-    let mut fields: Vec<_> = fields.into_iter().collect();
-    if !fields.is_sorted_by(|(a, _), (b, _)| a < b) {
-        fields.reverse();
-        fields.sort_by_key(|(field, _)| *field);
-        fields.dedup_by_key(|(field, _)| *field);
-    }
-    fields.into()
 }
 
 /// A runtime record's field, borrowed. Runtime records keep their fields
@@ -2336,11 +2322,12 @@ fn runtime_expression(value: RuntimeValue) -> Expression {
 }
 
 fn runtime_call(function: RuntimeValue, arguments: Vec<(CellId, RuntimeValue)>) -> Expression {
-    let fields = record_fields(
+    let fields: Rc<[_]> = gid::sorted_entries(
         [(vocabulary::FUNCTION, function)]
             .into_iter()
             .chain(arguments),
-    );
+    )
+    .into();
     let lowered = fields
         .iter()
         .map(|(field, value)| (*field, runtime_expression(value.clone())))
