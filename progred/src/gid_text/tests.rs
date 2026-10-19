@@ -45,7 +45,10 @@ fn leniencies_normalize_and_minting_persists() {
                        "root": {a: florp, b: 9D2C1E10AB3440DE963D02D5F4B1A5A5}}"#;
     let (doc, binders) = parse_ok(text);
     let florp = binders["florp"];
-    assert_eq!(doc.cells.value(florp), Some(&crate::test_values::text("x")));
+    assert_eq!(
+        doc.cells.value(florp),
+        Some(&crate::libraries::text::value("x"))
+    );
     let printed = print(&doc, &binders);
     assert!(printed.contains("\"florp\": "));
     assert!(printed.contains("9d2c1e10ab3440de963d02d5f4b1a5a5"));
@@ -100,7 +103,7 @@ fn derived_binders_come_from_simple_name_facts() {
             "grap program",
             [(
                 crate::test_values::label("body"),
-                crate::test_values::text("body"),
+                crate::libraries::text::value("body"),
             )],
         ),
     );
@@ -164,7 +167,7 @@ fn text_escapes_and_blobs_round_trip() {
         root: Some(Value::record([
             (
                 crate::test_values::label("s"),
-                crate::test_values::text("say \"hi\"\n\tdone\\"),
+                crate::libraries::text::value("say \"hi\"\n\tdone\\"),
             ),
             (
                 crate::test_values::label("b"),

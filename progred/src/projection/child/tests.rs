@@ -23,7 +23,7 @@ fn child_lookup_preserves_missing_fields_and_resolves_follows() {
 
     let cell = crate::test_values::label("cell");
     let link = Value::from(cell);
-    let resolved = crate::test_values::text("resolved");
+    let resolved = crate::libraries::text::value("resolved");
     assert_eq!(
         of(
             &link.into(),

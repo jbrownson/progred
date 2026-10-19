@@ -100,16 +100,7 @@ fn svg_bench_renders_toolpath_source_and_preview() {
         cells: doc.cells,
     };
     let (bench, _) = place(&doc, None, 760.0);
-    let image = bench
-        .list
-        .0
-        .iter()
-        .find_map(|command| match command {
-            DrawCmd::Image { image, .. } => Some(image.clone()),
-            DrawCmd::Mesh { scene, .. } => scene.rasterize(),
-            _ => None,
-        })
-        .expect("the combined toolpath viewport renders an image");
+    let image = bench.image();
     let mut model = 0;
     let mut paths = 0;
     for pixel in image.data.as_ref().chunks_exact(4).filter(|p| p[3] > 0) {
@@ -169,7 +160,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     );
     render(
         &Document {
-            root: Some(crate::test_values::text("asdf")),
+            root: Some(crate::libraries::text::value("asdf")),
             cells: Cells::new(),
         },
         Some(&crate::selection::Selection::edge(
@@ -182,7 +173,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     // The empty string under its write-through editor: quotes
     // stay snug, no slot minimum applies to string literals.
     let empty_string = Document {
-        root: Some(crate::test_values::text("")),
+        root: Some(crate::libraries::text::value("")),
         cells: Cells::new(),
     };
     let sel = Selection::edge(&crate::test_root(), Vec::new());

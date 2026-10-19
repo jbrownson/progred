@@ -57,6 +57,11 @@ fn section(page: &str, id: &str) -> (String, Vec<String>) {
 /// An editor embedded in a tutorial page.
 pub(super) type Embed = Driver<Page>;
 
+/// The editor tutorial.html embeds in its section `id`.
+fn page(id: &str) -> Embed {
+    Embed::open("tutorial.html", id)
+}
+
 /// What the page says about its embedded editor.
 pub(super) struct Page {
     names: crate::gid_text::Binders,

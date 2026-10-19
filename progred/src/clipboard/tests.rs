@@ -8,8 +8,8 @@ fn clipboard_spellings_round_trip() {
     // Atoms are text and round-trip through it; structure rides
     // the private format and round-trips through its bytes.
     let atoms = [
-        crate::test_values::text("plain"),
-        crate::test_values::text("\"tricky\""),
+        crate::libraries::text::value("plain"),
+        crate::libraries::text::value("\"tricky\""),
         Value::from(vec![0xde, 0xad]),
     ];
     for value in atoms {
@@ -19,10 +19,10 @@ fn clipboard_spellings_round_trip() {
     }
     let structures = [
         Value::from(cell),
-        Value::list([crate::test_values::text("a"), Value::from(cell)]),
+        Value::list([crate::libraries::text::value("a"), Value::from(cell)]),
         Value::record([(
             crate::test_values::label("x"),
-            crate::test_values::text("1"),
+            crate::libraries::text::value("1"),
         )]),
         Value::record([(cell, Value::from(vec![0x00_u8]))]),
     ];
@@ -34,12 +34,15 @@ fn clipboard_spellings_round_trip() {
     // Atoms read in other apps; alien text pastes sensibly — and
     // TEXT IS NEVER STRUCTURE: characters that happen to spell
     // Value JSON read as the string they are.
-    assert_eq!(spelling(&crate::test_values::text("hi")).0, "\"hi\"");
+    assert_eq!(spelling(&crate::libraries::text::value("hi")).0, "\"hi\"");
     assert_eq!(spelling(&Value::from(vec![0xff_u8])).0, "0xff");
     assert_eq!(
         resolve_query("loose text"),
-        crate::test_values::text("loose text")
+        crate::libraries::text::value("loose text")
     );
     let spelled = spelling(&Value::record([])).0;
-    assert_eq!(resolve_query(&spelled), crate::test_values::text(&spelled));
+    assert_eq!(
+        resolve_query(&spelled),
+        crate::libraries::text::value(&spelled)
+    );
 }

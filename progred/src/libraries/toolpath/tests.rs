@@ -1,5 +1,6 @@
 use super::{cutter::Tool, *};
 use crate::libraries::{absent, control, number};
+use crate::test_values::call;
 use ::grap::Evaluation;
 use cam::paths::*;
 
@@ -204,10 +205,6 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         playback.get(&FOCUS),
         cursor.as_record().unwrap().get(&ui::RANGE)
     );
-}
-
-fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    ::grap::call(function.into(), fields)
 }
 
 fn sequence(expressions: Vec<Value>) -> Value {

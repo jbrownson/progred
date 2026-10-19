@@ -3,12 +3,9 @@ use fidget_engine::shape::EzShape;
 
 use crate::display::test_support::NoEval;
 use crate::libraries::test_widgets::projection_input;
+use crate::test_values::call;
 
 mod cube;
-
-fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    ::grap::call(Value::from(function), arguments)
-}
 
 fn evaluate(expression: &Value) -> Value {
     let library = library::<crate::Editor>();

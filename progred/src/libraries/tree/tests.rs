@@ -1,6 +1,7 @@
 use super::*;
 use crate::libraries::{control::vocabulary as c, f64, number};
 use crate::library::Definitions;
+use crate::test_values::call;
 use ::grap::vocabulary as g;
 use gid::Cells;
 
@@ -15,9 +16,6 @@ fn site(root: &crate::display::widget::view::Root) -> crate::editing::Site {
     crate::editing::Site::new(root.clone(), Rc::from([]), Default::default())
 }
 
-fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    ::grap::call(function.into(), fields)
-}
 fn group(children: Value) -> Value {
     call(GROUP, [(CHILDREN, children)])
 }

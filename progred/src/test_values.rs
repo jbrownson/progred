@@ -1,4 +1,4 @@
-use crate::libraries::{name, text};
+use crate::libraries::name;
 use gid::{CellId, Step, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
@@ -28,18 +28,19 @@ fn sample_labels() -> BTreeMap<String, CellId> {
         .collect()
 }
 
-pub fn text(text: impl Into<String>) -> Value {
-    text::value(text)
-}
-
 pub fn key(s: &str) -> Step {
     Step::Key(crate::test_values::label(s))
+}
+
+/// A call of `function` with `fields` as its arguments.
+pub fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
+    ::grap::call(function.into(), fields)
 }
 
 /// A call of the binary numeric operation `function` on `left` and `right`.
 pub fn binary_call(function: CellId, left: Value, right: Value) -> Value {
     use crate::libraries::number::vocabulary::{LEFT, RIGHT};
-    ::grap::call(function.into(), [(LEFT, left), (RIGHT, right)])
+    call(function, [(LEFT, left), (RIGHT, right)])
 }
 
 /// A call of each numeric representation's operations, beside the

@@ -1,6 +1,7 @@
 use super::computer::vocabulary::*;
 use super::*;
 use crate::libraries::{f64, text};
+use crate::test_values::call;
 use gid::{Cells, Step, Value};
 use puri::keyboard::CommandModifier;
 
@@ -30,10 +31,6 @@ fn send(session: &Rc<RefCell<Session>>, expression: Value) -> Value {
 
 fn at(point: Point) -> Value {
     Value::list([f64::value(point.x), f64::value(point.y)])
-}
-
-fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    ::grap::call(Value::from(function), arguments)
 }
 
 /// `key` held with the platform's command modifier, as an agent spells it.

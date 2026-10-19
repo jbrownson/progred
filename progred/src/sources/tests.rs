@@ -152,7 +152,7 @@ fn values_are_resolved_by_their_stable_sources() {
             name::field("lib-name"),
             (
                 crate::test_values::label("a"),
-                crate::test_values::text("1"),
+                crate::libraries::text::value("1"),
             ),
         ]),
     );
@@ -228,7 +228,7 @@ fn follow_names_a_library_source_not_its_load_order() {
     let right_id = new_cell_id();
     let library = |id, name| {
         let mut cells = Cells::new();
-        cells.set_value(cell, crate::test_values::text(name));
+        cells.set_value(cell, crate::libraries::text::value(name));
         crate::test_support::library(id, name, cells, grap::ForeignFunctions::default())
     };
     let doc = Document {
@@ -260,7 +260,7 @@ fn follow_names_a_library_source_not_its_load_order() {
         );
         assert_eq!(
             grap::evaluate_value(&cell.into(), &sources, 100).result,
-            crate::test_values::text(first),
+            crate::libraries::text::value(first),
         );
     }
 
@@ -290,10 +290,10 @@ fn external_means_the_library_answers() {
     let doc_cell = new_cell_id();
     let bare = new_cell_id();
     let mut library_cells = Cells::new();
-    library_cells.set_value(lib_cell, crate::test_values::text("lib"));
+    library_cells.set_value(lib_cell, crate::libraries::text::value("lib"));
     let libraries = libraries(new_cell_id(), library_cells);
     let mut cells = Cells::new();
-    cells.set_value(doc_cell, crate::test_values::text("doc"));
+    cells.set_value(doc_cell, crate::libraries::text::value("doc"));
 
     let owned = |cell, resolution| crate::location::owned(Start::Cell { cell, resolution });
     let library = Resolution::Library(libraries.iter().next().unwrap().0);
@@ -308,7 +308,7 @@ fn external_means_the_library_answers() {
     assert!(!sources.external(bare));
     assert!(owned(bare, Resolution::Document));
 
-    cells.set_value(lib_cell, crate::test_values::text("mine"));
+    cells.set_value(lib_cell, crate::libraries::text::value("mine"));
     let doc = doc_of(cells);
     let sources = Sources {
         doc: &doc,
@@ -330,10 +330,10 @@ fn resolve_follows_links_keys_and_elements() {
             (
                 crate::test_values::label("items"),
                 Value::list([
-                    crate::test_values::text("one"),
+                    crate::libraries::text::value("one"),
                     Value::record([(
                         crate::test_values::label("x"),
-                        crate::test_values::text("deep"),
+                        crate::libraries::text::value("deep"),
                     )]),
                 ]),
             ),
@@ -355,7 +355,7 @@ fn resolve_follows_links_keys_and_elements() {
             Step::Follow(Resolution::Document),
             Step::Key(name::vocabulary::NAME),
         ]),
-        Some(&crate::test_values::text("scene"))
+        Some(&crate::libraries::text::value("scene"))
     );
     let items = [
         Step::Follow(Resolution::Document),
@@ -377,7 +377,7 @@ fn resolve_follows_links_keys_and_elements() {
     ];
     assert_eq!(
         sources.resolve_path(&deep),
-        Some(&crate::test_values::text("deep"))
+        Some(&crate::libraries::text::value("deep"))
     );
 
     let bare_doc = Document {

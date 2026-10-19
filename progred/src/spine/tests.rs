@@ -1,27 +1,10 @@
 use super::*;
 use crate::test_support::value_at;
-use gid::{CellId, position};
-
-fn label(name: &str) -> CellId {
-    CellId::from_u128(match name {
-        "name" => 0x7a9138f84ed69a4546f2cd53021a7364,
-        "points" => 0x2e20418e4f70b7fbd650cd6675ab920a,
-        "row" => 0xe56ef28a80053b2493bd422dbb34e9f4,
-        "missing" => 0x87e099e7f26bc29933470066a4d9bd3c,
-        "deeper" => 0xa17a00a2df132d27f03dab7bd997fabb,
-        "color" => 0x04488199db044b9c5da89f2b6db1a83c,
-        "x" => 0x6b040071381df24022a370d51793e9cd,
-        "only" => 0xe923cf979e6706d090d6b56ef9e2fc88,
-        _ => unreachable!("fixture label"),
-    })
-}
+use crate::test_values::{key, label};
+use gid::position;
 
 fn blob(text: &str) -> Value {
     Value::from(text.as_bytes().to_vec())
-}
-
-fn key(s: &str) -> Step {
-    Step::Key(label(s))
 }
 
 fn sample() -> Value {

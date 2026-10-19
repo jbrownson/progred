@@ -116,17 +116,17 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
     let lib = core_libraries();
     let (mut doc, cell) = doc_of(vec![(
         crate::test_values::label("x"),
-        crate::test_values::text("1"),
+        crate::libraries::text::value("1"),
     )]);
     assert!(set_value(
         &mut doc,
         &lib,
         &Location::root(&[Step::Follow(gid::Resolution::Document), key("x")]),
-        crate::test_values::text("2")
+        crate::libraries::text::value("2")
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&[Step::Follow(gid::Resolution::Document), key("x")]),
-        Some(&crate::test_values::text("2"))
+        Some(&crate::libraries::text::value("2"))
     );
 
     // A fresh Key step INSERTS a field; a deep spine rebuilds
@@ -137,7 +137,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
         &Location::root(&[Step::Follow(gid::Resolution::Document), key("at")]),
         Value::record([(
             crate::test_values::label("row"),
-            crate::test_values::text("top")
+            crate::libraries::text::value("top")
         )]),
     ));
     assert!(set_value(
@@ -148,7 +148,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
             key("at"),
             key("row")
         ]),
-        crate::test_values::text("bottom")
+        crate::libraries::text::value("bottom")
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&[
@@ -156,7 +156,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
             key("at"),
             key("row")
         ]),
-        Some(&crate::test_values::text("bottom"))
+        Some(&crate::libraries::text::value("bottom"))
     );
 
     // The whole cell value is addressable at Follow: conversion
@@ -165,11 +165,11 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
         &mut doc,
         &lib,
         &Location::root(&[Step::Follow(gid::Resolution::Document)]),
-        Value::list([crate::test_values::text("a")])
+        Value::list([crate::libraries::text::value("a")])
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&[Step::Follow(gid::Resolution::Document)]),
-        Some(&Value::list([crate::test_values::text("a")]))
+        Some(&Value::list([crate::libraries::text::value("a")]))
     );
 
     // A bare cell takes its first value through the empty spine;
@@ -180,7 +180,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
         &mut doc,
         &lib,
         &Location::root(&[Step::Follow(gid::Resolution::Document), key("x")]),
-        crate::test_values::text("v")
+        crate::libraries::text::value("v")
     ));
     assert!(set_value(
         &mut doc,
@@ -188,12 +188,12 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
         &Location::root(&[Step::Follow(gid::Resolution::Document)]),
         Value::record([(
             crate::test_values::label("x"),
-            crate::test_values::text("v")
+            crate::libraries::text::value("v")
         )])
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&[Step::Follow(gid::Resolution::Document), key("x")]),
-        Some(&crate::test_values::text("v"))
+        Some(&crate::libraries::text::value("v"))
     );
 
     // An inline record at the root writes on the root spine — no
@@ -206,19 +206,19 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
         &mut doc,
         &lib,
         &Location::root(&[key("title")]),
-        crate::test_values::text("scene")
+        crate::libraries::text::value("scene")
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&[key("title")]),
-        Some(&crate::test_values::text("scene"))
+        Some(&crate::libraries::text::value("scene"))
     );
     assert!(set_value(
         &mut doc,
         &lib,
         &Location::root(&[]),
-        crate::test_values::text("root")
+        crate::libraries::text::value("root")
     ));
-    assert_eq!(doc.root, Some(crate::test_values::text("root")));
+    assert_eq!(doc.root, Some(crate::libraries::text::value("root")));
     // Text is a record convention, so a structural write can
     // enrich it. The text facet remains, and so does the extra
     // field.
@@ -226,14 +226,14 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
         &mut doc,
         &lib,
         &Location::root(&[key("x")]),
-        crate::test_values::text("0")
+        crate::libraries::text::value("0")
     ));
     assert_eq!(
         doc.root
             .as_ref()
             .and_then(Value::as_record)
             .and_then(|fields| fields.get(&crate::test_values::label("x"))),
-        Some(&crate::test_values::text("0"))
+        Some(&crate::libraries::text::value("0"))
     );
     assert!(text::read(doc.root.as_ref().unwrap()).is_some());
 }
@@ -248,7 +248,7 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
             "convention",
             [(
                 crate::test_values::label("a"),
-                crate::test_values::text("1"),
+                crate::libraries::text::value("1"),
             )],
         ),
     );
@@ -262,7 +262,7 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
         &mut doc,
         &lib,
         &Location::root(&[Step::Follow(gid::Resolution::Document), key("a")]),
-        crate::test_values::text("2")
+        crate::libraries::text::value("2")
     ));
     assert!(!set_value(
         &mut doc,
@@ -271,7 +271,7 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
             Step::Follow(gid::Resolution::Document),
             Step::Key(name::vocabulary::NAME),
         ]),
-        crate::test_values::text("mine")
+        crate::libraries::text::value("mine")
     ));
     assert!(!delete_edge(
         &mut doc,
@@ -288,14 +288,14 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
         lib_cell,
         Value::record([(
             crate::test_values::label("a"),
-            crate::test_values::text("1"),
+            crate::libraries::text::value("1"),
         )]),
     );
     assert!(set_value(
         &mut doc,
         &lib,
         &Location::root(&[Step::Follow(gid::Resolution::Document), key("a")]),
-        crate::test_values::text("2")
+        crate::libraries::text::value("2")
     ));
 }
 
@@ -307,7 +307,10 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
         (crate::test_values::label("child"), Value::from(child)),
         (
             crate::test_values::label("dash"),
-            Value::list([crate::test_values::text("2"), crate::test_values::text("3")]),
+            Value::list([
+                crate::libraries::text::value("2"),
+                crate::libraries::text::value("3"),
+            ]),
         ),
     ]);
     Rc::make_mut(&mut doc)
@@ -347,7 +350,7 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
     ));
     assert_eq!(
         src(&doc, &lib).resolve_path(&dash),
-        Some(&Value::list([crate::test_values::text("3")]))
+        Some(&Value::list([crate::libraries::text::value("3")]))
     );
 
     // A trailing Follow removes the cell's value: valueless

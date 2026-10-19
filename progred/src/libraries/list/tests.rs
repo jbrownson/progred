@@ -1,9 +1,5 @@
 use super::*;
-use ::grap;
-
-fn call(function: gid::CellId, fields: impl IntoIterator<Item = (gid::CellId, Value)>) -> Value {
-    grap::call(Value::from(function), fields)
-}
+use crate::test_values::call;
 
 #[test]
 fn list_operations_are_value_operations() {

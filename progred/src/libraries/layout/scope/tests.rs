@@ -3,10 +3,7 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::absent;
 use crate::libraries::control::vocabulary as control;
 use crate::projection::Layout;
-
-fn call(function: CellId, args: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    ::grap::call(function.into(), args)
-}
+use crate::test_values::call;
 
 fn sequence(expressions: impl IntoIterator<Item = Value>) -> Value {
     call(

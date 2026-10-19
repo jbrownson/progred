@@ -1,9 +1,6 @@
 use super::*;
+use crate::test_values::call;
 use std::{cell::RefCell, rc::Rc};
-
-fn call(function: gid::CellId, fields: impl IntoIterator<Item = (gid::CellId, Value)>) -> Value {
-    ::grap::call(Value::from(function), fields)
-}
 
 fn range(count: f64) -> Value {
     call(RANGE, [(COUNT, f64::value(count))])

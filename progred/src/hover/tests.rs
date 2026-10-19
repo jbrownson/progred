@@ -141,9 +141,9 @@ fn nested_values_match_by_cell_and_relative_path() {
     let contents = Value::record([
         (
             outer,
-            Value::record([(inner, crate::test_values::text("asdf"))]),
+            Value::record([(inner, crate::libraries::text::value("asdf"))]),
         ),
-        (peer, crate::test_values::text("asdf")),
+        (peer, crate::libraries::text::value("asdf")),
     ]);
     let mut cells = Cells::new();
     cells.set_value(shared, contents.clone());
@@ -214,7 +214,7 @@ fn entry_hover_marks_follow_the_visible_offers() {
     assert_eq!(
         hover_secondary(
             None,
-            Some(&offers(crate::test_values::text("offer"))),
+            Some(&offers(crate::libraries::text::value("offer"))),
             &Hover::Entry(0)
         ),
         None

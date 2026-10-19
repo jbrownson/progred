@@ -7,6 +7,7 @@ use crate::perf::{distribution, iterations};
 use crate::projection::test_support::{BenchContext, ProfileView};
 use crate::sources::Sources;
 use crate::test_support::core_libraries;
+use crate::test_values::call;
 use gid::{CellId, Cells, Document, Value};
 use layout::vocabulary as l;
 use puri::draw::DrawCmd;
@@ -14,10 +15,6 @@ use std::time::Instant;
 
 const ITEM: CellId = CellId::from_u128(9001);
 const LABEL: CellId = CellId::from_u128(9002);
-
-fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
-    grap::call(function.into(), arguments)
-}
 
 fn quote(value: Value) -> Value {
     call(control::QUOTE, [(grap::vocabulary::EXPRESSION, value)])

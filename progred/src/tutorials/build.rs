@@ -2,10 +2,6 @@
 
 use super::*;
 
-fn page(id: &str) -> Embed {
-    Embed::open("tutorial.html", id)
-}
-
 /// The painted circles' centers and radii, in their drawing's coordinates.
 fn dots(embed: &Embed) -> Vec<(Point, f64)> {
     embed

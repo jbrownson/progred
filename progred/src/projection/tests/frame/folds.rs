@@ -65,7 +65,7 @@ fn cycles_collapse_by_default_and_expand_turn_by_turn() {
 fn any_valued_cell_and_any_container_collapse() {
     let (doc, _) = doc_of(vec![(
         crate::test_values::label("kind"),
-        crate::test_values::text("building"),
+        crate::libraries::text::value("building"),
     )]);
     let mut driver = driver_of(&doc);
     // A plain (non-cycle) cell collapses to ( … ) via the same toggle.
@@ -83,7 +83,7 @@ fn any_valued_cell_and_any_container_collapse() {
 fn fold_keys_are_directional_and_stay_sparse() {
     let (doc, _) = doc_of(vec![(
         crate::test_values::label("a"),
-        crate::test_values::text("1"),
+        crate::libraries::text::value("1"),
     )]);
     let mut driver = driver_of(&doc);
     for (key, closed) in [

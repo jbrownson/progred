@@ -87,7 +87,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         lib_cell,
         Value::record([(
             crate::test_values::label("a"),
-            crate::test_values::text("1"),
+            crate::libraries::text::value("1"),
         )]),
     );
     let lib = library_of(library_cells);
@@ -96,13 +96,13 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         (crate::test_values::label("at"), Value::record([])),
         (
             crate::test_values::label("tags"),
-            Value::list([crate::test_values::text("x")]),
+            Value::list([crate::libraries::text::value("x")]),
         ),
         (crate::test_values::label("lib"), Value::from(lib_cell)),
         (crate::test_values::label("material"), Value::from(bare)),
         (
             crate::test_values::label("s"),
-            crate::test_values::text("leaf"),
+            crate::libraries::text::value("leaf"),
         ),
     ]);
     Rc::make_mut(&mut doc).root = doc.root.clone();
@@ -238,18 +238,27 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
 #[test]
 fn queries_resolve_text_and_blobs() {
-    assert_eq!(resolve_query("hello"), crate::test_values::text("hello"));
+    assert_eq!(
+        resolve_query("hello"),
+        crate::libraries::text::value("hello")
+    );
     assert_eq!(
         resolve_query("\"quoted\""),
-        crate::test_values::text("quoted")
+        crate::libraries::text::value("quoted")
     );
-    assert_eq!(resolve_query("\"open"), crate::test_values::text("open"));
-    assert_eq!(resolve_query("\"0xff\""), crate::test_values::text("0xff"));
+    assert_eq!(
+        resolve_query("\"open"),
+        crate::libraries::text::value("open")
+    );
+    assert_eq!(
+        resolve_query("\"0xff\""),
+        crate::libraries::text::value("0xff")
+    );
     assert_eq!(resolve_query("0xff00"), Value::from(vec![0xff, 0x00]));
     // Input is case-tolerant — the value is the bytes, lowercase
     // just the canonical spelling — and whole bytes only.
     assert_eq!(resolve_query("0xDEad"), Value::from(vec![0xde, 0xad]));
-    assert_eq!(resolve_query("0xf"), crate::test_values::text("0xf"));
+    assert_eq!(resolve_query("0xf"), crate::libraries::text::value("0xf"));
     assert_eq!(resolve_query("0x"), Value::from(vec![]));
 }
 
@@ -273,7 +282,7 @@ fn selecting_an_empty_value_slot_pends() {
     // Valued, it selects normally.
     Rc::make_mut(&mut doc)
         .cells
-        .set_value(bare, crate::test_values::text("v"));
+        .set_value(bare, crate::libraries::text::value("v"));
     assert_eq!(
         make_selection(vec![Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
         crate::selection::Stage::Edge

@@ -105,11 +105,11 @@ fn line_projection_descriptions_mount_the_rust_editor() {
     let (mut doc, cell) = doc_of(vec![
         (
             crate::test_values::label("name"),
-            crate::test_values::text("old"),
+            crate::libraries::text::value("old"),
         ),
         (
             crate::test_values::label("x"),
-            crate::test_values::text("1.5"),
+            crate::libraries::text::value("1.5"),
         ),
     ]);
     let edit = |doc: &Document, path: Vec<Step>| make_projected_editing_selection(doc, &lib, path);
@@ -157,7 +157,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
     // A cell holding text edits at its Follow path.
     Rc::make_mut(&mut doc)
         .cells
-        .set_value(cell, crate::test_values::text("held"));
+        .set_value(cell, crate::libraries::text::value("held"));
     assert_eq!(
         edit(&doc, vec![Step::Follow(gid::Resolution::Document)])
             .edit()
@@ -187,7 +187,7 @@ fn a_line_control_selects_without_storing_its_default_editor() {
     let lib = core_libraries();
     let (doc, _) = doc_of(vec![(
         crate::test_values::label("name"),
-        crate::test_values::text("old"),
+        crate::libraries::text::value("old"),
     )]);
     let selected = make_projected_selection(
         &doc,
@@ -439,7 +439,7 @@ fn edits_write_through_to_the_field() {
     let lib = core_libraries();
     let (mut doc, _) = doc_of(vec![(
         crate::test_values::label("name"),
-        crate::test_values::text("old"),
+        crate::libraries::text::value("old"),
     )]);
     let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
     let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
@@ -447,7 +447,7 @@ fn edits_write_through_to_the_field() {
     write_text(&mut doc, &lib, &mut selection);
     assert_eq!(
         src(&doc, &lib).resolve_path(&path),
-        Some(&crate::test_values::text("new"))
+        Some(&crate::libraries::text::value("new"))
     );
     // A selection without an editor writes nothing.
     let mut plain = make_selection(vec![
@@ -457,7 +457,7 @@ fn edits_write_through_to_the_field() {
     assert!(!write_text(&mut doc, &lib, &mut plain));
     assert_eq!(
         src(&doc, &lib).resolve_path(&path),
-        Some(&crate::test_values::text("new"))
+        Some(&crate::libraries::text::value("new"))
     );
 }
 
@@ -548,7 +548,7 @@ fn editing_an_f64_keeps_unrelated_fields() {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(unit, crate::test_values::text("mm")),
+                .update(unit, crate::libraries::text::value("mm")),
         ),
     );
     let mut driver = Driver::new(
@@ -579,7 +579,10 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
     let lib = core_libraries();
     let (mut doc, _) = doc_of(vec![(
         crate::test_values::label("dash"),
-        Value::list([crate::test_values::text("2"), crate::test_values::text("3")]),
+        Value::list([
+            crate::libraries::text::value("2"),
+            crate::libraries::text::value("3"),
+        ]),
     )]);
     let list_path = vec![Step::Follow(gid::Resolution::Document), key("dash")];
     let ps = positions(src(&doc, &lib).resolve_path(&list_path).unwrap());
@@ -596,13 +599,13 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
     assert!(write_text(&mut doc, &lib, &mut selection));
     assert_eq!(
         src(&doc, &lib).resolve_path(&element),
-        Some(&crate::test_values::text("9"))
+        Some(&crate::libraries::text::value("9"))
     );
     assert_eq!(
         src(&doc, &lib).resolve_path(&list_path),
         Some(&Value::list([
-            crate::test_values::text("2"),
-            crate::test_values::text("9")
+            crate::libraries::text::value("2"),
+            crate::libraries::text::value("9")
         ]))
     );
     assert_eq!(
@@ -616,7 +619,7 @@ fn write_through_opens_one_step_per_editor_life() {
     let lib = core_libraries();
     let (mut doc, _) = doc_of(vec![(
         crate::test_values::label("name"),
-        crate::test_values::text("a"),
+        crate::libraries::text::value("a"),
     )]);
     let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
     let mut selection = make_projected_editing_selection(&doc, &lib, path);
@@ -651,7 +654,7 @@ fn a_simple_name_is_an_ordinary_editable_field() {
         name::field("old"),
         (
             crate::test_values::label("x"),
-            crate::test_values::text("1"),
+            crate::libraries::text::value("1"),
         ),
     ]);
     let path = vec![

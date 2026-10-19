@@ -1004,15 +1004,18 @@ fn gap_document() -> Document {
         root: Some(Value::record([
             (
                 crate::test_values::label("tags"),
-                Value::list([crate::test_values::text("a"), crate::test_values::text("b")]),
+                Value::list([
+                    crate::libraries::text::value("a"),
+                    crate::libraries::text::value("b"),
+                ]),
             ),
             (
                 crate::test_values::label("body"),
                 Value::list([
-                    crate::test_values::text(
+                    crate::libraries::text::value(
                         "a long enough string that the flat literal cannot fit",
                     ),
-                    crate::test_values::text(
+                    crate::libraries::text::value(
                         "and another beside it overflowing any width we render",
                     ),
                 ]),
@@ -1307,8 +1310,12 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
     for boundary in 0_usize..=2 {
         let doc = Document {
             root: Some(Value::list([
-                crate::test_values::text("a long enough string that the flat literal cannot fit"),
-                crate::test_values::text("and another beside it overflowing any width we render"),
+                crate::libraries::text::value(
+                    "a long enough string that the flat literal cannot fit",
+                ),
+                crate::libraries::text::value(
+                    "and another beside it overflowing any width we render",
+                ),
             ])),
             cells: Cells::new(),
         };
@@ -1438,8 +1445,8 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
     cells.set_value(
         cell,
         Value::record([
-            (upper_key, crate::test_values::text("one")),
-            (lower_key, crate::test_values::text("two")),
+            (upper_key, crate::libraries::text::value("one")),
+            (lower_key, crate::libraries::text::value("two")),
         ]),
     );
     let doc = Document {

@@ -3,10 +3,6 @@
 
 use super::*;
 
-fn page(id: &str) -> Embed {
-    Embed::open("tutorial.html", id)
-}
-
 fn peel_forest(page: &str) {
     let mut peel = Embed::open(page, "peel");
     let leaves = peniko::Brush::from(peniko::Color::from_rgb8(0x39, 0x9b, 0x75));
