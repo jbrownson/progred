@@ -75,11 +75,12 @@ impl Session<'_> {
 
     /// Ends the running gesture; false when none runs.
     pub(crate) fn finish_gesture(&mut self) -> bool {
-        let Some(mut gesture) = self.gesture.take() else {
-            return false;
-        };
-        gesture.finish(&mut self.reborrow());
-        true
+        if let Some(mut gesture) = self.gesture.take() {
+            gesture.finish(&mut self.reborrow());
+            true
+        } else {
+            false
+        }
     }
 
     /// Opens or closes the fold at `path` in `root`'s view, toggling it

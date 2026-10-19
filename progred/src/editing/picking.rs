@@ -149,22 +149,23 @@ impl Picking<'_, '_> {
             doc: &model.doc,
             libraries,
         };
-        let Some(current) = model
+        match model
             .selection
             .as_ref()
             .filter(|current| current.writable(&sources))
-        else {
-            return false;
-        };
-        let next = selection::Selection::from_payload(
-            current.root(),
-            &sources,
-            current.scope().clone(),
-            current.path().to_vec(),
-            payload,
-        );
-        model.selection = Some(next);
-        true
+        {
+            Some(current) => {
+                model.selection = Some(selection::Selection::from_payload(
+                    current.root(),
+                    &sources,
+                    current.scope().clone(),
+                    current.path().to_vec(),
+                    payload,
+                ));
+                true
+            }
+            None => false,
+        }
     }
 
     /// Edits the query, where the pending's place is writable.

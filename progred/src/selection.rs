@@ -378,10 +378,10 @@ pub(crate) fn pending_follow(root: &Root, read: &Read, path: &[Step]) -> Option<
 /// an element step), minted between it and its neighbor. The list
 /// projection's gesture.
 fn pending_beside(root: &Root, read: &Read, path: &[Step], after: bool) -> Option<Selection> {
-    let (step, parent_path) = path.split_last()?;
-    let Step::Element(position) = step else {
-        return None;
-    };
+    let (parent_path, position) = match path {
+        [parent_path @ .., Step::Element(position)] => Some((parent_path, position)),
+        _ => None,
+    }?;
     let elements = read.resolve_path(parent_path)?.as_list()?;
     // Stated, not incidental: a list under an external cell takes no
     // minted siblings (the write would decline anyway, but a pending
@@ -446,16 +446,16 @@ pub(crate) fn pending_enter(
     path: &[Step],
     before: bool,
 ) -> Option<Selection> {
-    if let Some((Step::Follow(_), reference)) = path.split_last() {
-        return pending_enter(root, read, reference, before);
+    match path {
+        [reference @ .., Step::Follow(_)] => pending_enter(root, read, reference, before),
+        _ => pending_beside(root, read, path, !before)
+            .or_else(|| {
+                path.split_last()
+                    .and_then(|(_, parent)| pending_edge(root, read, parent.to_vec()))
+            })
+            .or_else(|| pending_edge(root, read, path.to_vec()))
+            .or_else(|| pending_into(root, read, path, true)),
     }
-    pending_beside(root, read, path, !before)
-        .or_else(|| {
-            path.split_last()
-                .and_then(|(_, parent)| pending_edge(root, read, parent.to_vec()))
-        })
-        .or_else(|| pending_edge(root, read, path.to_vec()))
-        .or_else(|| pending_into(root, read, path, true))
 }
 
 /// The command chord: author WITHIN the selection — a new field on
@@ -508,16 +508,15 @@ pub(crate) fn collapse_default_for_value(
     value: &grap::RuntimeValue,
     folded: bool,
 ) -> Option<bool> {
-    if value.as_text().is_some() || value.as_f64().is_some() {
-        return None;
-    }
-    let collapsible = match value.as_cell() {
-        Some(cell) => sources.resolve(cell).is_some(),
-        None => value
-            .list_len()
-            .or_else(|| value.record_len())
-            .is_some_and(|len| len != 0),
-    };
+    let collapsible = value.as_text().is_none()
+        && value.as_f64().is_none()
+        && match value.as_cell() {
+            Some(cell) => sources.resolve(cell).is_some(),
+            None => value
+                .list_len()
+                .or_else(|| value.record_len())
+                .is_some_and(|len| len != 0),
+        };
     collapsible.then_some(folded)
 }
 

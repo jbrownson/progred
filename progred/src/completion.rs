@@ -91,30 +91,32 @@ pub(crate) fn prepare(
                     .cells
                     .set_value(cell, definition);
             }
-            true
+            Some(true)
         }
         Stage::Label => {
             let label = value.as_cell()?;
             path.push(gid::Step::Key(label));
-            if selection
-                .scope()
-                .view(*sources)
-                .resolve_path(&path)
-                .is_some()
-            {
-                false
-            } else {
-                let changed = definition.is_some();
-                if let Some(value) = definition {
-                    std::rc::Rc::make_mut(&mut document)
-                        .cells
-                        .set_value(label, value);
-                }
-                changed
-            }
+            Some(
+                if selection
+                    .scope()
+                    .view(*sources)
+                    .resolve_path(&path)
+                    .is_some()
+                {
+                    false
+                } else {
+                    let changed = definition.is_some();
+                    if let Some(value) = definition {
+                        std::rc::Rc::make_mut(&mut document)
+                            .cells
+                            .set_value(label, value);
+                    }
+                    changed
+                },
+            )
         }
-        Stage::Edge => return None,
-    };
+        Stage::Edge => None,
+    }?;
     let annotation = annotations.at(&path).cloned();
     let selection_scope = selection.scope();
     let selection = Some((selection.path().to_vec(), selection.payload()));
