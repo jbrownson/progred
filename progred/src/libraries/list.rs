@@ -3,7 +3,7 @@
 //! structural matching alone.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, f64, name, number};
+use crate::libraries::{Library, f64, name, number};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x7b0fa421250c1b5c8a78a3a95b172cb6);
 use ::grap::{
@@ -175,11 +175,7 @@ fn functions() -> ForeignFunctions {
                     let result =
                         context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
                     if result.is_absent() {
-                        if result
-                            .field(absent::vocabulary::ABSENT)
-                            .and_then(|reason| reason.as_cell())
-                            != Some(vocabulary::FINISHED)
-                        {
+                        if result.absent_reason() != Some(vocabulary::FINISHED) {
                             break Ok(result);
                         }
                         break Ok(RuntimeValue::record([
@@ -247,17 +243,11 @@ fn functions() -> ForeignFunctions {
                     let next =
                         context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
                     if next.is_absent() {
-                        break Ok(
-                            if next
-                                .field(absent::vocabulary::ABSENT)
-                                .and_then(|reason| reason.as_cell())
-                                == Some(vocabulary::FINISHED)
-                            {
-                                state
-                            } else {
-                                next
-                            },
-                        );
+                        break Ok(if next.absent_reason() == Some(vocabulary::FINISHED) {
+                            state
+                        } else {
+                            next
+                        });
                     }
                     state = next;
                 }

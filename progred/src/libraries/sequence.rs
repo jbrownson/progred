@@ -3,7 +3,7 @@
 //! Calling the same pure sequence again does not advance it.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, f64, name};
+use crate::libraries::{Library, f64, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
@@ -127,11 +127,7 @@ fn consume(
     loop {
         let result = context.call_prepared(&sequence, [])?;
         if result.is_absent() {
-            if result
-                .field(absent::vocabulary::ABSENT)
-                .and_then(|reason| reason.as_cell())
-                != Some(FINISHED)
-            {
+            if result.absent_reason() != Some(FINISHED) {
                 return Ok(result);
             }
             return Ok(if collect {

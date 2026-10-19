@@ -25,7 +25,7 @@ pub mod vocabulary {
 /// An absent value reads as its reason, then any other fields, such as a
 /// failed alternative's causes, all on red.
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let reason = input.value?.field(vocabulary::ABSENT)?.as_cell()?;
+    let reason = input.value?.absent_reason()?;
     let name = input
         .env
         .name(reason)

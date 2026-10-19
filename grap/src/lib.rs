@@ -431,16 +431,17 @@ impl RuntimeValue {
         }
     }
 
+    /// Why this value is absent, if it is.
+    pub fn absent_reason(&self) -> Option<CellId> {
+        self.field(absent::ABSENT)?.as_cell()
+    }
+
     pub fn is_absent(&self) -> bool {
-        self.field(absent::ABSENT)
-            .and_then(|reason| reason.as_cell())
-            .is_some()
+        self.absent_reason().is_some()
     }
 
     pub fn declines(&self) -> bool {
-        self.field(absent::ABSENT)
-            .and_then(|reason| reason.as_cell())
-            == Some(absent::DECLINED)
+        self.absent_reason() == Some(absent::DECLINED)
     }
 
     pub fn record_len(&self) -> Option<usize> {
