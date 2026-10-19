@@ -1,4 +1,4 @@
-use crate::frame::{DispatchContext, frame_disposition};
+use crate::frame::DispatchContext;
 #[cfg(test)]
 use crate::selection;
 use crate::{Editor, EditorRunner, navigate};
@@ -217,12 +217,8 @@ impl EditorRunner {
     pub(crate) fn modifiers_changed(&mut self, modifiers: Modifiers, scale: f64, viewport: Size) {
         self.update_frame(scale, viewport, |editor, dispatch, hover| {
             editor.modifiers = modifiers;
-            dispatch.handler.dispatch(
-                editor,
-                Event::ModifiersChanged(&modifiers),
-                &mut dispatch.context(editor, hover.cloned()),
-            );
-            frame_disposition(false, true)
+            dispatch.send(editor, hover, Event::ModifiersChanged(&modifiers));
+            true
         });
     }
 
@@ -245,31 +241,14 @@ impl EditorRunner {
     ) -> bool {
         self.editor.focused
             && self.update_frame(scale, viewport, |editor, dispatch, hover| {
-                frame_disposition(
-                    dispatch.handler.dispatch_key_with(
-                        editor,
-                        event,
-                        &mut dispatch.context(editor, hover.cloned()),
-                    ),
-                    false,
-                )
+                dispatch.send(editor, hover, Event::Key(event))
             })
     }
 
     pub(crate) fn ime_event(&mut self, event: &ImeEvent, scale: f64, viewport: Size) -> bool {
         self.editor.focused
             && self.update_frame(scale, viewport, |editor, dispatch, hover| {
-                frame_disposition(
-                    dispatch
-                        .handler
-                        .dispatch(
-                            editor,
-                            Event::Ime(event),
-                            &mut dispatch.context(editor, hover.cloned()),
-                        )
-                        .handled(),
-                    false,
-                )
+                dispatch.send(editor, hover, Event::Ime(event))
             })
     }
 
@@ -286,7 +265,7 @@ impl EditorRunner {
         match event {
             PointerEvent::Scroll(event) => {
                 if let Some(pending) = self.pending_gesture.take() {
-                    self.dispatch_gesture_batch(pending);
+                    self.dispatch_batch(pending, |events| Event::Gesture(events));
                 }
                 if let Some(pending) = queue(
                     &mut self.pending_scroll,
@@ -297,7 +276,7 @@ impl EditorRunner {
                     },
                     PendingScroll::merge,
                 ) {
-                    self.dispatch_scroll_batch(pending);
+                    self.dispatch_batch(pending, |events| Event::Scroll(events));
                 }
                 true
             }
@@ -305,7 +284,7 @@ impl EditorRunner {
                 // Different continuous operations retain their arrival order.
                 // Ordinary pointer refreshes can still coalesce alongside them.
                 if let Some(pending) = self.pending_scroll.take() {
-                    self.dispatch_scroll_batch(pending);
+                    self.dispatch_batch(pending, |events| Event::Scroll(events));
                 }
                 if let Some(pending) = queue(
                     &mut self.pending_gesture,
@@ -316,7 +295,7 @@ impl EditorRunner {
                     },
                     PendingGesture::merge,
                 ) {
-                    self.dispatch_gesture_batch(pending);
+                    self.dispatch_batch(pending, |events| Event::Gesture(events));
                 }
                 true
             }
@@ -347,106 +326,61 @@ impl EditorRunner {
                     self.editor.pointer = pointer_position(event);
                     self.refresh_frame(scale, viewport);
                 }
-                self.update_frame(scale, viewport, |editor, dispatch, hover| {
-                    let (handled, input_changed) = match event {
-                        PointerEvent::Down(button) => {
-                            editor.pointer = window_pointer(editor.cursor, viewport);
-                            editor.pressed = true;
-                            editor.finish_gesture();
-                            let mut pointer = dispatch.context(editor, hover.cloned());
-                            let handled = dispatch.handler.dispatch_pointer_down_with(
-                                editor,
-                                button,
-                                &mut pointer,
-                            );
-                            (
-                                handled
-                                    || (puri::interact::is_primary_contact(button)
-                                        && pointer.hovered.is_none()
-                                        && editor.model.selection.take().is_some()),
-                                true,
-                            )
+                // Presses, releases and the pointer leaving change the frame's
+                // input, so each mints a successor whatever handles it.
+                self.update_frame(scale, viewport, |editor, dispatch, hover| match event {
+                    PointerEvent::Down(button) => {
+                        editor.pointer = window_pointer(editor.cursor, viewport);
+                        editor.pressed = true;
+                        editor.finish_gesture();
+                        // A primary press nothing takes, over nothing, deselects.
+                        if !dispatch.send(editor, hover, Event::PointerDown(button))
+                            && puri::interact::is_primary_contact(button)
+                            && hover.is_none()
+                        {
+                            editor.model.selection = None;
                         }
-                        PointerEvent::Up(button) => {
-                            editor.pointer = window_pointer(editor.cursor, viewport);
-                            editor.pressed = false;
-                            (
-                                editor.finish_gesture()
-                                    || dispatch
-                                        .handler
-                                        .dispatch(
-                                            editor,
-                                            Event::PointerUp(button),
-                                            &mut dispatch.context(editor, hover.cloned()),
-                                        )
-                                        .handled(),
-                                true,
-                            )
+                        true
+                    }
+                    PointerEvent::Up(button) => {
+                        editor.pointer = window_pointer(editor.cursor, viewport);
+                        editor.pressed = false;
+                        // A running gesture takes its release.
+                        if !editor.finish_gesture() {
+                            dispatch.send(editor, hover, Event::PointerUp(button));
                         }
-                        PointerEvent::Leave(_) => {
-                            editor.pointer = None;
-                            (false, true)
-                        }
-                        PointerEvent::Cancel(pointer) => {
-                            editor.pointer = None;
-                            editor.pressed = false;
-                            let handled = dispatch
-                                .handler
-                                .dispatch(
-                                    editor,
-                                    Event::PointerCancel(pointer),
-                                    &mut dispatch.context(editor, hover.cloned()),
-                                )
-                                .handled();
-                            let resize_cancelled = editor.model.workspace.cancel_resize();
-                            let gesture_cancelled = editor.finish_gesture();
-                            (handled || resize_cancelled || gesture_cancelled, true)
-                        }
-                        _ => (false, false),
-                    };
-                    frame_disposition(handled, input_changed)
+                        true
+                    }
+                    PointerEvent::Leave(_) => {
+                        editor.pointer = None;
+                        true
+                    }
+                    PointerEvent::Cancel(pointer) => {
+                        editor.pointer = None;
+                        editor.pressed = false;
+                        dispatch.send(editor, hover, Event::PointerCancel(pointer));
+                        editor.model.workspace.cancel_resize();
+                        editor.finish_gesture();
+                        true
+                    }
+                    _ => false,
                 })
             }
         }
     }
 
-    fn dispatch_scroll_batch(&mut self, pending: PendingScroll) -> bool {
+    /// Dispatch a held batch as the one `event` it makes, through the frame
+    /// it was held for.
+    fn dispatch_batch<T: Clone>(
+        &mut self,
+        pending: PendingBatch<T>,
+        event: impl for<'a> FnOnce(Cow<'a, [T]>) -> Event<'a>,
+    ) -> bool {
         self.update_frame(
             pending.scale,
             pending.viewport,
             |editor, dispatch, hover| {
-                let mut input = dispatch.context(editor, hover.cloned());
-                frame_disposition(
-                    dispatch
-                        .handler
-                        .dispatch(
-                            editor,
-                            Event::Scroll(Cow::Borrowed(&pending.events)),
-                            &mut input,
-                        )
-                        .handled(),
-                    false,
-                )
-            },
-        )
-    }
-
-    fn dispatch_gesture_batch(&mut self, pending: PendingGesture) -> bool {
-        self.update_frame(
-            pending.scale,
-            pending.viewport,
-            |editor, dispatch, hover| {
-                frame_disposition(
-                    dispatch
-                        .handler
-                        .dispatch(
-                            editor,
-                            Event::Gesture(Cow::Borrowed(&pending.events)),
-                            &mut dispatch.context(editor, hover.cloned()),
-                        )
-                        .handled(),
-                    false,
-                )
+                dispatch.send(editor, hover, event(Cow::Borrowed(&pending.events)))
             },
         )
     }
@@ -465,15 +399,11 @@ impl EditorRunner {
             pending.viewport,
             |editor, dispatch, hover| {
                 let event = &pending.event;
-                let mut input = dispatch.context(editor, hover.cloned());
                 let samples: Vec<_> = puri::interact::pointer_samples(event)
                     .map(|sample| Point::new(sample.position.x, sample.position.y))
                     .collect();
                 let moved = editor.advance_gesture(&samples)
-                    || dispatch
-                        .handler
-                        .dispatch(editor, Event::PointerMove(event), &mut input)
-                        .handled();
+                    || dispatch.send(editor, hover, Event::PointerMove(event));
                 // Unclaimed touch motion scrolls through the same nested handlers.
                 let handled = moved
                     || (event.pointer.pointer_type == PointerType::Touch && {
@@ -489,12 +419,9 @@ impl EditorRunner {
                                 })
                             })
                             .collect();
-                        dispatch
-                            .handler
-                            .dispatch(editor, Event::Scroll(Cow::Owned(scroll)), &mut input)
-                            .handled()
+                        dispatch.send(editor, hover, Event::Scroll(Cow::Owned(scroll)))
                     });
-                frame_disposition(handled || hover_handled, false)
+                handled || hover_handled
             },
         )
     }
@@ -506,11 +433,11 @@ impl EditorRunner {
     pub(crate) fn flush_pending_continuous(&mut self) -> bool {
         let pointer = self.pending_pointer.take();
         let mut reminted = match self.pending_scroll.take() {
-            Some(pending) => self.dispatch_scroll_batch(pending),
+            Some(pending) => self.dispatch_batch(pending, |events| Event::Scroll(events)),
             None => false,
         };
         if let Some(pending) = self.pending_gesture.take() {
-            reminted |= self.dispatch_gesture_batch(pending);
+            reminted |= self.dispatch_batch(pending, |events| Event::Gesture(events));
         }
         if let Some(pointer) = pointer {
             reminted |= self.dispatch_pointer_batch(&pointer);

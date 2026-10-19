@@ -78,6 +78,19 @@ impl Dispatch {
         }
     }
 
+    /// Dispatch `event` to `editor`, `hover` resting under its pointer;
+    /// whether a handler took it.
+    pub(crate) fn send(
+        &self,
+        editor: &mut Editor,
+        hover: Option<&Hovered>,
+        event: Event<'_>,
+    ) -> bool {
+        self.handler
+            .dispatch(editor, event, &mut self.context(editor, hover.cloned()))
+            .handled()
+    }
+
     /// The handler is shared only while a dispatch context is alive.
     pub(crate) fn handler_mut(&mut self) -> &mut Handler<Editor, DispatchContext<Editor>> {
         Rc::get_mut(&mut self.handler).expect("no dispatch is in progress")
@@ -197,20 +210,6 @@ fn attribute(
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) type Paint = puri_vello::compositor::SplitCanvas;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FrameDisposition {
-    Retain,
-    Remint,
-}
-
-pub(crate) fn frame_disposition(handled: bool, frame_input_changed: bool) -> FrameDisposition {
-    if handled || frame_input_changed {
-        FrameDisposition::Remint
-    } else {
-        FrameDisposition::Retain
-    }
-}
 
 /// Interpret the winning claim as an editor target and its owning view.
 fn hover_target(
@@ -458,23 +457,24 @@ impl EditorRunner {
         self.frame.dispatch.pointer_root = pointer_root;
     }
 
+    /// Handle an event with the installed frame. `handle_event` answers
+    /// whether the frame it shows changed, which mints its successor;
+    /// whether it did.
     pub(crate) fn update_frame(
         &mut self,
         scale: f64,
         viewport: Size,
-        handle_event: impl FnOnce(&mut Editor, &Dispatch, Option<&Hovered>) -> FrameDisposition,
+        handle_event: impl FnOnce(&mut Editor, &Dispatch, Option<&Hovered>) -> bool,
     ) -> bool {
-        match handle_event(
+        let remint = handle_event(
             &mut self.editor,
             &self.frame.dispatch,
             self.frame.hover.as_ref(),
-        ) {
-            FrameDisposition::Retain => false,
-            FrameDisposition::Remint => {
-                self.refresh_frame(scale, viewport);
-                true
-            }
+        );
+        if remint {
+            self.refresh_frame(scale, viewport);
         }
+        remint
     }
 
     /// Build the successor's projection, hover, handlers, and deferred paint.

@@ -331,7 +331,7 @@ fn hover_reactions_continue_across_painted_frames_without_recursion_or_a_limit()
     // An ordinary input can interrupt the oscillation between paintings.
     runner.update_frame(1.0, HOVER_VIEWPORT, |editor, _, _| {
         editor.pointer = None;
-        FrameDisposition::Remint
+        true
     });
     assert_eq!(log.take(), [("project", 20.0), ("leave", 20.0)]);
     assert!(!paint_hover_frame(&mut runner));
@@ -386,7 +386,7 @@ fn new_input_supersedes_an_unpainted_target_without_replaying_stale_handlers() {
     log.borrow_mut().clear();
     runner.update_frame(1.0, HOVER_VIEWPORT, |editor, _, _| {
         editor.pointer = None;
-        FrameDisposition::Remint
+        true
     });
     assert_eq!(log.take(), [("project", 1.0)]);
     assert!(paint_hover_frame(&mut runner));
@@ -491,7 +491,7 @@ fn selection_reveal_uses_installed_geometry_before_one_successor_build() {
     assert!(target.rect.y0 > viewport.height);
     let target = target.clone();
     assert!(runner.update_frame(1.0, viewport, |editor, dispatch, _| {
-        frame_disposition(dispatch.geometry(1.0).arrive(editor, &target, None), false)
+        dispatch.geometry(1.0).arrive(editor, &target, None)
     }));
     assert_eq!(projected.replace(0), per_frame);
     assert!(runner.editor.model.workspace.document.scroll.y > 0.0);
@@ -500,23 +500,20 @@ fn selection_reveal_uses_installed_geometry_before_one_successor_build() {
 
     // Scrolling away from an unchanged selection must not reveal it again.
     runner.update_frame(1.0, viewport, |editor, dispatch, _| {
-        frame_disposition(
-            dispatch
-                .handler
-                .dispatch_scroll(
-                    editor,
-                    &ui_events::pointer::PointerScrollEvent {
-                        pointer: crate::display::test_support::mouse(),
-                        state: ui_events::pointer::PointerState {
-                            position: (200.0, 200.0).into(),
-                            ..Default::default()
-                        },
-                        delta: ui_events::ScrollDelta::PixelDelta((0.0, 2_000.0).into()),
+        dispatch
+            .handler
+            .dispatch_scroll(
+                editor,
+                &ui_events::pointer::PointerScrollEvent {
+                    pointer: crate::display::test_support::mouse(),
+                    state: ui_events::pointer::PointerState {
+                        position: (200.0, 200.0).into(),
+                        ..Default::default()
                     },
-                )
-                .handled(),
-            false,
-        )
+                    delta: ui_events::ScrollDelta::PixelDelta((0.0, 2_000.0).into()),
+                },
+            )
+            .handled()
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
     assert_eq!(projected.get(), per_frame);
@@ -599,7 +596,7 @@ fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
 
     runner.refresh_frame(1.0, viewport);
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
-    runner.update_frame(1.0, viewport, |_, _, _| FrameDisposition::Remint);
+    runner.update_frame(1.0, viewport, |_, _, _| true);
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
 }
 
@@ -623,7 +620,7 @@ fn selection_changes_do_not_implicitly_request_reveal() {
         crate::editing::Scope::default()
             .open(editor.session())
             .select(&root, &path);
-        FrameDisposition::Remint
+        true
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
 
@@ -632,7 +629,7 @@ fn selection_changes_do_not_implicitly_request_reveal() {
             editor.model.workspace.document_root(),
             path,
         ));
-        FrameDisposition::Remint
+        true
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
 }
@@ -817,7 +814,7 @@ fn native_and_drawn_history_commands_reveal_even_the_same_selection() {
         } else {
             runner.update_frame(1.0, viewport, |editor, dispatch, _| {
                 editor.run_doc_command(crate::command::DocCommand::Undo, dispatch.geometry(1.0));
-                FrameDisposition::Remint
+                true
             });
         }
         assert_eq!(runner.editor.model.selection.as_ref().unwrap().path(), path);
@@ -859,7 +856,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
             path.clone(),
         ));
         dispatch.geometry(1.0).reveal_selection(&mut editor.model);
-        FrameDisposition::Remint
+        true
     });
     assert_eq!(projected.replace(0), 41);
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
@@ -869,17 +866,9 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
     runner.refresh_frame(1.0, viewport);
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
     assert_eq!(projected.replace(0), 41);
-    runner.update_frame(1.0, viewport, |_, _, _| FrameDisposition::Remint);
+    runner.update_frame(1.0, viewport, |_, _, _| true);
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
     assert_eq!(projected.get(), 41);
-}
-
-#[test]
-fn only_transitions_and_changed_frame_inputs_remint() {
-    assert_eq!(frame_disposition(false, false), FrameDisposition::Retain);
-    assert_eq!(frame_disposition(false, true), FrameDisposition::Remint);
-    assert_eq!(frame_disposition(true, false), FrameDisposition::Remint);
-    assert_eq!(frame_disposition(true, true), FrameDisposition::Remint);
 }
 
 #[test]
