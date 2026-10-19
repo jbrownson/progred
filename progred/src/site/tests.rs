@@ -2,6 +2,25 @@ use super::*;
 use crate::libraries::{control, path as path_data, selection as selection_capability, site};
 use gid::Document;
 
+fn evaluate(
+    function: &Value,
+    arguments: impl IntoIterator<Item = (gid::CellId, Value)>,
+    path: &[gid::Step],
+    annotation: Option<Value>,
+    selection: Option<(Path, Value)>,
+    sources: &Sources<'_>,
+    fuel: usize,
+) -> Option<PendingChanges> {
+    evaluate_with(path, annotation, selection, |overlay| {
+        let result = grap::apply_value(function, arguments, sources, Some(overlay), fuel);
+        grap::Evaluation {
+            result: result.result.into(),
+            remaining_fuel: result.remaining_fuel,
+            completed: result.completed,
+        }
+    })
+}
+
 fn quote(value: Value) -> Value {
     grap::call(
         Value::from(control::vocabulary::QUOTE),

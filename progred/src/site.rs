@@ -45,7 +45,7 @@ pub type Continuation =
 
 impl PendingChanges {
     pub fn select(&mut self, path: Path, payload: Value) {
-        if !::grap::absent::is_absent(&payload) {
+        if !absent::is_absent(&payload) {
             self.selection = Some((path, payload));
             self.selection_changed = true;
         } else if self
@@ -144,11 +144,8 @@ pub(crate) fn apply_scoped_event(
         &path,
         &mut staged,
     );
-    if handled {
-        let model = &mut *session.model;
-        let Some(view) = model.workspace.view_mut(&root) else {
-            return false;
-        };
+    let model = &mut *session.model;
+    if handled && let Some(view) = model.workspace.view_mut(&root) {
         install_scoped(
             staged,
             &Sources {
@@ -161,8 +158,10 @@ pub(crate) fn apply_scoped_event(
             &mut view.annotations,
             &mut model.selection,
         );
+        true
+    } else {
+        false
     }
-    handled
 }
 
 pub(crate) fn install_scoped(
@@ -199,26 +198,6 @@ pub(crate) fn install_scoped(
             None => {}
         }
     }
-}
-
-#[cfg(test)]
-fn evaluate(
-    function: &Value,
-    arguments: impl IntoIterator<Item = (gid::CellId, Value)>,
-    path: &[gid::Step],
-    annotation: Option<Value>,
-    selection: Option<(Path, Value)>,
-    sources: &Sources<'_>,
-    fuel: usize,
-) -> Option<PendingChanges> {
-    evaluate_with(path, annotation, selection, |overlay| {
-        let result = grap::apply_value(function, arguments, sources, Some(overlay), fuel);
-        grap::Evaluation {
-            result: result.result.into(),
-            remaining_fuel: result.remaining_fuel,
-            completed: result.completed,
-        }
-    })
 }
 
 fn evaluate_with(
@@ -286,7 +265,7 @@ fn set_state(
         return Ok(context.missing_argument(vocabulary::VALUE));
     };
     let value = context.eval_to_value(expression, environment)?;
-    let value = (!::grap::absent::is_absent(&value)).then_some(value.clone());
+    let value = (!absent::is_absent(&value)).then_some(value.clone());
     Ok(context.effect(|| {
         let mut staged = staged.borrow_mut();
         staged.annotation = value;
@@ -319,7 +298,7 @@ fn set_selection(
     };
     let value = context.eval_to_value(expression, environment)?;
     let mut staged = staged.borrow_mut();
-    if !::grap::absent::is_absent(&value)
+    if !absent::is_absent(&value)
         || staged
             .selection
             .as_ref()
