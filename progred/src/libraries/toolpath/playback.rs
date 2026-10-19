@@ -97,13 +97,13 @@ impl Settings {
         line_radius: f64,
         path_color: [u8; 3],
     ) -> Result<(), InvalidPath> {
+        tubes.style(line_radius, path_color)?;
         let mut end = None;
         let cursor = path.playback_cursor(
             self.cursor,
             self.focus.clone(),
             |a, b, axis, _, completed| -> Result<(), InvalidPath> {
                 if !completed {
-                    tubes.style(line_radius, path_color)?;
                     if end != Some(a) {
                         tubes.start_at(a, axis)?;
                     }
