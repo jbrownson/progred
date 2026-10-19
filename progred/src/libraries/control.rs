@@ -276,32 +276,40 @@ fn match_prepare(context: &Context, call: &Expression) -> Stage {
                 // list expression; burn its fuel so the stage stays
                 // burn-invisible.
                 context.burn()?;
-                for case in cases {
-                    let CompiledCase::Case {
-                        pattern,
-                        expression,
-                    } = case
-                    else {
-                        return Ok(::grap::absent::value(vocabulary::INVALID_CASE).into());
-                    };
-                    match destructure(pattern, &value) {
-                        Ok(Some(bindings)) => {
-                            return context
-                                .eval(expression.clone(), &environment.extended_runtime(bindings));
+                // The first case that matches, or isn't a case, decides.
+                cases
+                    .iter()
+                    .find_map(|case| match case {
+                        CompiledCase::Case {
+                            pattern,
+                            expression,
+                        } => match destructure(pattern, &value) {
+                            Ok(Some(bindings)) => {
+                                Some(context.eval(
+                                    expression.clone(),
+                                    &environment.extended_runtime(bindings),
+                                ))
+                            }
+                            Ok(None) => None,
+                            Err(InvalidBinder) => {
+                                Some(Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into()))
+                            }
+                        },
+                        CompiledCase::Malformed => {
+                            Some(Ok(::grap::absent::value(vocabulary::INVALID_CASE).into()))
                         }
-                        Ok(None) => {}
-                        Err(InvalidBinder) => {
-                            return Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into());
-                        }
-                    }
-                }
-                Ok(
-                    ::grap::absent::from_causes(cases.iter().filter_map(|case| match case {
-                        CompiledCase::Case { pattern, .. } => Some(pattern_mismatch(pattern)),
-                        CompiledCase::Malformed => None,
-                    }))
-                    .into(),
-                )
+                    })
+                    .unwrap_or_else(|| {
+                        Ok(::grap::absent::from_causes(cases.iter().filter_map(
+                            |case| match case {
+                                CompiledCase::Case { pattern, .. } => {
+                                    Some(pattern_mismatch(pattern))
+                                }
+                                CompiledCase::Malformed => None,
+                            },
+                        ))
+                        .into())
+                    })
             }
             CompiledCases::Deferred(cases) => {
                 let cases_value = context.eval(cases.clone(), environment)?;
@@ -341,18 +349,18 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                 elements
                     .iter()
                     .map(|binding| {
-                        let Some(value) = context.field(binding, vocabulary::VALUE) else {
-                            return CompiledBinding::Malformed(vocabulary::INVALID_BINDING);
-                        };
                         match (
+                            context.field(binding, vocabulary::VALUE),
                             context.field(binding, vocabulary::BIND),
                             context.field(binding, vocabulary::PATTERN),
                         ) {
-                            (Some(binder), None) => match context.value(&binder).as_cell() {
-                                Some(binder) => CompiledBinding::Bind { binder, value },
-                                None => CompiledBinding::Malformed(vocabulary::INVALID_BINDER),
-                            },
-                            (None, Some(pattern)) => CompiledBinding::Pattern {
+                            (Some(value), Some(binder), None) => {
+                                match context.value(&binder).as_cell() {
+                                    Some(binder) => CompiledBinding::Bind { binder, value },
+                                    None => CompiledBinding::Malformed(vocabulary::INVALID_BINDER),
+                                }
+                            }
+                            (Some(value), None, Some(pattern)) => CompiledBinding::Pattern {
                                 pattern: context.value(&pattern).clone(),
                                 value,
                             },
@@ -371,7 +379,7 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
         let Some(expression) = expression.clone() else {
             return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
         };
-        match compiled {
+        let bound = match compiled {
             CompiledBindings::Bindings(bindings) => {
                 // The prepared walk skips evaluating the bindings list
                 // expression; burn its fuel so the stage stays
@@ -379,74 +387,92 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                 context.burn()?;
                 let mut environment = environment.clone();
                 environment.reserve(bindings.len());
-                for binding in bindings {
-                    match binding {
-                        CompiledBinding::Malformed(reason) => {
-                            return Ok(::grap::absent::value(*reason).into());
-                        }
-                        CompiledBinding::Bind { binder, value } => {
-                            let value = context.eval(value.clone(), &environment)?;
-                            environment.push_runtime([(*binder, value)]);
-                        }
-                        CompiledBinding::Pattern { pattern, value } => {
-                            let value = context.eval(value.clone(), &environment)?;
-                            match destructure(pattern, &value) {
-                                Ok(Some(bindings)) => environment.push_runtime(bindings),
-                                Ok(None) => return Ok(pattern_mismatch(pattern).into()),
-                                Err(InvalidBinder) => {
-                                    return Ok(
-                                        ::grap::absent::value(vocabulary::INVALID_BINDER).into()
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-                context.eval(expression, &environment)
+                bindings
+                    .iter()
+                    .try_fold(environment, |environment, binding| match binding {
+                        CompiledBinding::Malformed(reason) => ended(*reason),
+                        CompiledBinding::Bind { binder, value } => bind(
+                            context.eval(value.clone(), &environment),
+                            Binder::Cell(*binder),
+                            environment,
+                        ),
+                        CompiledBinding::Pattern { pattern, value } => bind(
+                            context.eval(value.clone(), &environment),
+                            Binder::Pattern(pattern),
+                            environment,
+                        ),
+                    })
             }
             CompiledBindings::Deferred(bindings) => {
-                let bindings_value = context.eval(bindings.clone(), environment)?;
-                let Some(bindings) = bindings_value.list_values() else {
-                    return Ok(::grap::absent::value(vocabulary::INVALID_BINDINGS).into());
-                };
-                let mut environment = environment.clone();
-                for binding in bindings {
-                    let Some(value) = binding.field(vocabulary::VALUE) else {
-                        return Ok(::grap::absent::value(vocabulary::INVALID_BINDING).into());
-                    };
-                    let (binder, pattern) = match (
-                        binding.field(vocabulary::BIND),
-                        binding.field(vocabulary::PATTERN),
-                    ) {
-                        (Some(binder), None) => match binder.as_cell() {
-                            Some(binder) => (Some(binder), None),
-                            None => {
-                                return Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into());
+                match context.eval(bindings.clone(), environment)?.list_values() {
+                    None => ended(vocabulary::INVALID_BINDINGS),
+                    Some(mut bindings) => {
+                        bindings.try_fold(environment.clone(), |environment, binding| {
+                            match (
+                                binding.field(vocabulary::VALUE),
+                                binding.field(vocabulary::BIND),
+                                binding.field(vocabulary::PATTERN),
+                            ) {
+                                (Some(value), Some(binder), None) => match binder.as_cell() {
+                                    Some(binder) => bind(
+                                        context.eval_runtime_code(&value, &environment),
+                                        Binder::Cell(binder),
+                                        environment,
+                                    ),
+                                    None => ended(vocabulary::INVALID_BINDER),
+                                },
+                                (Some(value), None, Some(pattern)) => bind(
+                                    context.eval_runtime_code(&value, &environment),
+                                    Binder::Pattern(&pattern.to_value()),
+                                    environment,
+                                ),
+                                _ => ended(vocabulary::INVALID_BINDING),
                             }
-                        },
-                        (None, Some(pattern)) => (None, Some(pattern)),
-                        _ => {
-                            return Ok(::grap::absent::value(vocabulary::INVALID_BINDING).into());
-                        }
-                    };
-                    let value = context.eval_runtime_code(&value, &environment)?;
-                    if let Some(binder) = binder {
-                        environment.push_runtime([(binder, value)]);
-                    } else if let Some(pattern) = pattern {
-                        let pattern = pattern.to_value();
-                        match destructure(&pattern, &value) {
-                            Ok(Some(bindings)) => environment.push_runtime(bindings),
-                            Ok(None) => return Ok(pattern_mismatch(&pattern).into()),
-                            Err(InvalidBinder) => {
-                                return Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into());
-                            }
-                        }
+                        })
                     }
                 }
-                context.eval(expression, &environment)
             }
+        };
+        match bound {
+            ControlFlow::Continue(environment) => context.eval(expression, &environment),
+            ControlFlow::Break(stopped) => stopped,
         }
     })
+}
+
+/// Ends the bindings in the absent `reason`.
+fn ended(reason: CellId) -> ControlFlow<Result<RuntimeValue, Halt>, Environment> {
+    ControlFlow::Break(Ok(::grap::absent::value(reason).into()))
+}
+
+/// What a binding binds its value to.
+enum Binder<'a> {
+    Cell(CellId),
+    Pattern(&'a Value),
+}
+
+/// `environment` with `value` bound to `binder`, or what ends the bindings:
+/// a halt, or the absent of a pattern that doesn't match.
+fn bind(
+    value: Result<RuntimeValue, Halt>,
+    binder: Binder<'_>,
+    mut environment: Environment,
+) -> ControlFlow<Result<RuntimeValue, Halt>, Environment> {
+    match (binder, value) {
+        (_, Err(halt)) => ControlFlow::Break(Err(halt)),
+        (Binder::Cell(binder), Ok(value)) => {
+            environment.push_runtime([(binder, value)]);
+            ControlFlow::Continue(environment)
+        }
+        (Binder::Pattern(pattern), Ok(value)) => match destructure(pattern, &value) {
+            Ok(Some(bindings)) => {
+                environment.push_runtime(bindings);
+                ControlFlow::Continue(environment)
+            }
+            Ok(None) => ControlFlow::Break(Ok(pattern_mismatch(pattern).into())),
+            Err(InvalidBinder) => ended(vocabulary::INVALID_BINDER),
+        },
+    }
 }
 
 enum Selection {
@@ -459,39 +485,44 @@ enum Selection {
 }
 
 fn select(value: &RuntimeValue, cases: &RuntimeValue) -> Selection {
-    let Some(elements) = cases.list_values() else {
-        return Selection::Invalid(vocabulary::INVALID_CASES);
-    };
-    for case in elements {
-        let (Some(pattern), Some(expression)) = (
-            case.field(vocabulary::PATTERN),
-            case.field(::grap::vocabulary::EXPRESSION),
-        ) else {
-            return Selection::Invalid(vocabulary::INVALID_CASE);
-        };
-        match destructure(&pattern.to_value(), value) {
-            Ok(Some(bindings)) => {
-                return Selection::Expression {
-                    expression,
-                    bindings,
-                };
-            }
-            Ok(None) => {}
-            Err(InvalidBinder) => {
-                return Selection::Invalid(vocabulary::INVALID_BINDER);
-            }
-        }
+    match cases.list_values() {
+        None => Selection::Invalid(vocabulary::INVALID_CASES),
+        // The first case that matches, or isn't a case, decides.
+        Some(mut elements) => elements
+            .find_map(|case| {
+                match (
+                    case.field(vocabulary::PATTERN),
+                    case.field(::grap::vocabulary::EXPRESSION),
+                ) {
+                    (Some(pattern), Some(expression)) => {
+                        match destructure(&pattern.to_value(), value) {
+                            Ok(Some(bindings)) => Some(Selection::Expression {
+                                expression,
+                                bindings,
+                            }),
+                            Ok(None) => None,
+                            Err(InvalidBinder) => {
+                                Some(Selection::Invalid(vocabulary::INVALID_BINDER))
+                            }
+                        }
+                    }
+                    _ => Some(Selection::Invalid(vocabulary::INVALID_CASE)),
+                }
+            })
+            // Built only when nothing matched: most calls fail some cases
+            // first.
+            .unwrap_or_else(|| {
+                Selection::NoMatch(
+                    cases
+                        .list_values()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|case| case.field(vocabulary::PATTERN))
+                        .map(|pattern| pattern_mismatch(&pattern.to_value()))
+                        .collect(),
+                )
+            }),
     }
-    // Built only when nothing matched: most calls fail some cases first.
-    Selection::NoMatch(
-        cases
-            .list_values()
-            .into_iter()
-            .flatten()
-            .filter_map(|case| case.field(vocabulary::PATTERN))
-            .map(|pattern| pattern_mismatch(&pattern.to_value()))
-            .collect(),
-    )
 }
 
 fn pattern_mismatch(pattern: &Value) -> Value {
