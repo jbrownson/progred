@@ -1,7 +1,5 @@
 //! Lookup one child of a displayed value, including missing children.
 
-#[cfg(test)]
-use crate::libraries::f64;
 use gid::{CellId, Resolution, Step, Value};
 
 pub(super) fn of<'a>(

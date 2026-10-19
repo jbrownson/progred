@@ -20,6 +20,34 @@ pub(crate) fn core_libraries() -> Libraries {
     crate::stack::load().libraries
 }
 
+/// A focused editor of `doc` with every built-in library.
+pub(crate) fn test_editor(doc: Document) -> crate::Editor {
+    test_editor_with_stack(doc, crate::stack::load())
+}
+
+pub(crate) fn test_editor_with_stack(doc: Document, stack: crate::stack::Stack) -> crate::Editor {
+    let mut editor = crate::editor::new_editor(
+        crate::display::widget::style::Theme::Light.palette(),
+        crate::modifiers::native(),
+        false,
+        stack,
+        crate::fonts::bundled_font_context(),
+        doc,
+        None,
+        Default::default(),
+        None,
+    );
+    editor.model.workspace.document.root = test_root();
+    editor.focused = true;
+    editor
+}
+
+/// The document view's root, the same one throughout a thread.
+pub(crate) fn test_root() -> crate::display::widget::view::Root {
+    thread_local! { static ROOT: crate::display::widget::view::Root = crate::display::widget::view::Root::document(); }
+    ROOT.with(Clone::clone)
+}
+
 /// A Grap host resolving each cell through its function.
 pub(crate) struct TestHost<F>(pub F);
 

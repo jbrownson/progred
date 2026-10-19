@@ -5,12 +5,13 @@
 use super::*;
 use crate::annotations::Annotations;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::widget::navigation::Landmark;
 use crate::hover::hover_secondary;
 use crate::libraries::text;
 use crate::library::Libraries;
 use crate::test_support::{arrow, make_selection};
 use gid::Document;
-use kurbo::{Rect, Stroke};
+use kurbo::{Point, Rect, Stroke};
 use measured::Extent;
 use peniko::{Brush, ImageData};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};

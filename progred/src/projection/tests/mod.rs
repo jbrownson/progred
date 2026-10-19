@@ -2,6 +2,7 @@ use super::test_support::*;
 use super::*;
 use crate::annotations::Annotations;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::widget::navigation::Landmark;
 use crate::libraries::layout as layout_data;
 use crate::libraries::{f64, fidget, name, text};
 use crate::library::Libraries;
@@ -14,7 +15,7 @@ use crate::test_support::{
 };
 use crate::test_values::key;
 use gid::{Cells, Document, new_cell_id};
-use kurbo::Rect;
+use kurbo::{Point, Rect};
 use measured::Extent;
 use peniko::Brush;
 use ui_events::ScrollDelta;

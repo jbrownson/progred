@@ -2,6 +2,7 @@ use super::*;
 use crate::display::{Layout, partial, widget};
 use crate::libraries::{f64, text};
 use crate::projection::Projection;
+use crate::selection;
 use gid::{Cells, Document};
 use puri::handler::{HasHandler, ScrollOutcome};
 use std::cell::RefCell;

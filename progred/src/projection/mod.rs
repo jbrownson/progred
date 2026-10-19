@@ -10,8 +10,6 @@ mod tests;
 pub(crate) mod viewport;
 
 use crate::annotations::Annotations;
-#[cfg(test)]
-use crate::display::widget::navigation::Landmark;
 use crate::display::widget::placed::{before, decorate};
 use crate::display::widget::source::{Secondary, SourceTrace};
 use crate::display::widget::style::{
@@ -23,8 +21,6 @@ use crate::location::{Location, Start};
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
 use gid::{CellId, Path, Step, Value};
-#[cfg(test)]
-use kurbo::Point;
 use kurbo::{Affine, RoundedRect};
 use measured::Measured;
 use measured::choices::{ChoiceBuild, ChoiceGraph, ChoiceLayout, resolve_choices};
@@ -579,11 +575,6 @@ fn tree_hovered(hover: &Attribution) -> Option<&Hover> {
     }
 }
 
-/// Select `path` in this view, interpreted through this occurrence's scope.
-pub(crate) fn select_handler(path: SharedPath, cx: &Cx) -> crate::display::Action {
-    crate::display::widget::navigation::selecting(cx.site(path))
-}
-
 impl Cx<'_> {
     /// The occurrence at `path` in this view, as a place to act.
     pub(crate) fn site(&self, path: SharedPath) -> crate::editing::Site {
@@ -980,8 +971,12 @@ fn prepare_value(
             let palette = cx.styles.palette;
             let select =
                 crate::display::widget::navigation::arrival(cx.site(landmark_path.clone()));
-            let target =
-                value.map(|value| (value.clone(), select_handler(landmark_path.clone(), cx)));
+            let target = value.map(|value| {
+                (
+                    value.clone(),
+                    crate::display::widget::navigation::selecting(cx.site(landmark_path.clone())),
+                )
+            });
             let edits = cx.edits.clone();
             ChoiceLayout::map(inner, move |inner| {
                 let placed = descend_landmark_with(

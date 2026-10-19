@@ -10,8 +10,6 @@ use crate::input::{PendingGesture, PendingPointer, PendingScroll, continuous_inp
 #[cfg(target_os = "macos")]
 use crate::macos_window;
 use crate::model::Model;
-#[cfg(test)]
-use crate::modifiers;
 #[cfg(target_arch = "wasm32")]
 use crate::web_worker;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -818,33 +816,4 @@ impl Editor {
             window.request_redraw();
         }
     }
-}
-
-#[cfg(test)]
-pub(crate) fn test_editor(doc: gid::Document) -> Editor {
-    test_editor_with_stack(doc, stack::load())
-}
-
-#[cfg(test)]
-pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack) -> Editor {
-    let mut editor = new_editor(
-        style::Theme::Light.palette(),
-        modifiers::native(),
-        false,
-        stack,
-        crate::fonts::bundled_font_context(),
-        doc,
-        None,
-        Default::default(),
-        None,
-    );
-    editor.model.workspace.document.root = test_root();
-    editor.focused = true;
-    editor
-}
-
-#[cfg(test)]
-pub(crate) fn test_root() -> Root {
-    thread_local! { static ROOT: Root = Root::document(); }
-    ROOT.with(Clone::clone)
 }

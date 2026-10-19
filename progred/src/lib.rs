@@ -93,11 +93,11 @@ use app::App;
 use app::QuitState;
 use editor::new_editor;
 pub(crate) use editor::{Editor, EditorRunner};
-#[cfg(test)]
-pub(crate) use editor::{test_editor, test_editor_with_stack, test_root};
 use fonts::font_context;
 use kurbo::{Rect, Size};
 use std::path::PathBuf;
+#[cfg(test)]
+pub(crate) use test_support::{test_editor, test_editor_with_stack, test_root};
 #[cfg(target_arch = "wasm32")]
 use web::WEB_PROXY;
 

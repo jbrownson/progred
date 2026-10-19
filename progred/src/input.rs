@@ -1,6 +1,4 @@
 use crate::frame::DispatchContext;
-#[cfg(test)]
-use crate::selection;
 use crate::{Editor, EditorRunner, navigate};
 use kurbo::{Point, Rect, Size};
 use puri::handler::{Event, Handler, ImeEvent, NavigationDirection};
