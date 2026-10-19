@@ -1,8 +1,9 @@
 # Controls feeding a viewport
 
 The `controls` library supplies `with controls`, a viewport composition function.
-It takes `controls` (a zero-argument Grap callable), `view` (a callable), `value`,
-`width`, and `height`, and returns an ordinary GID declaration. Its partial:
+It takes `controls` (a callable receiving `control state` and `update`), `view` (a
+callable), `value`, `width`, and `height`, and returns an ordinary GID
+declaration. Its partial:
 
 1. During layout preparation, runs `controls` with evaluation-local control capabilities.
 2. Measures the emitted native widgets.
@@ -26,14 +27,16 @@ through Grap. Native widgets are emitted into a local collection of functions,
 not a widget enum or persisted description. A halted or absent control result
 discards that collection and projects the failure.
 
-The `slider` capability requires a `key` cell identity and accepts
-f64 `minimum`, `maximum`, and `initial` (defaults 0, 1, 0). Pass the identity as
-data, e.g. via `quote`. The capability emits an unlabelled native slider and
-returns its current f64. Calling it outside `with
-controls` returns `control output required`. Bounds must be finite and increasing.
+The `slider` capability takes an f64 `value` and an `on change` handler, with
+optional f64 `minimum` and `maximum` (defaults 0, 1). It emits an unlabelled
+native slider and returns the displayed value, clamped to the bounds; see
+[Controls and state](projections.md#controls-and-state) for its handler. Calling
+it outside `with controls` returns `control output required`. Bounds must be
+finite and increasing.
 
-The `radio` capability uses the same `key` and takes a nonempty `options` list
-of ordinary `{name: text, value: Value}` records. Values must be distinct; they
+The `radio` capability takes a `key` cell identity, passed as data, e.g. via
+`quote`, and a nonempty `options` list of ordinary `{name: text, value: Value}`
+records. Values must be distinct; they
 can be callables or any other ordinary data, not just indices or booleans. It
 emits labeled radio buttons and returns the selected value without evaluating
 it. `initial` defaults to the first option and must belong to the list. Stale or
@@ -68,20 +71,13 @@ that expression.
 For generated trees, `tree program cursor` takes a `key`, `tree program` callable,
 optional `fuel`, and optional `initial` position. It collects the program through
 the editor's dependency-tracked memo system at that key, then emits the same
-playback/range widgets. It returns `{items, range, position}`: ordinary nested
-list data plus the same cursor outputs as `tree cursor`. The control consumes the
-explicit native hierarchy, not a reconstruction from those items, so a list-valued
-leaf remains one leaf and an empty group remains empty. Each notch's decoration
-captures its source; the shared source-following handler reads the winning source
-from settled hover. No allocation identity, name, or closure
-inspection connects data back to provenance, and no opaque Rust handle or source
-fields enter Grap data. Passing the returned items to the view shares the collected
-result rather than running the program again. The CAM example uses this interface;
-see [trees](trees.md).
-Builder inputs, memoized leaves, and the returned `items` remain runtime values,
-so callbacks keep their code locations and captures through the control/view
-handoff. Cursor state is still ordinary GID annotation data. Radio options and
-the older list-based range controls retain their existing GID adapters.
+playback/range widgets from the explicit native hierarchy, not a reconstruction
+from the items, so a list-valued leaf remains one leaf and an empty group remains
+empty. It returns `{items, range, position}`: ordinary nested list data plus the
+same cursor outputs as `tree cursor`. The CAM example uses this interface;
+[trees](trees.md#editor-collection) describes the memo and how the notches link
+to their sources. Cursor state is ordinary GID annotation data. Radio options and
+list-based ranges are read as GID values.
 
 Plain `collect tree` remains an ordinary library function inside controls as well
 as outside them: it has no control key or implicit association with later widgets.
@@ -168,27 +164,28 @@ through the actual GID list positions and writes caller-owned view state. None k
 operations, tools, orientations, or CAM. Controls are emitted in evaluation order.
 
 Control values live in the view's existing per-location annotations, under
-`control state`, keyed by the supplied identities. Two views are independent;
-repeating a key at the same location intentionally shares its value. Updates
+`control state`. The radio and tree controls store theirs keyed by the supplied
+identities; a slider's handler replaces the whole state through `update`. Two
+views are independent; repeating a key at the same location intentionally shares
+its value. Updates
 preserve camera and other annotation fields, do not change the document or its
 saved flag, and do not create undo steps. Removing and restoring a control at
 the same location retains its annotation, like other per-location UI state.
 
 `puri-widgets::slider` owns range mapping and painting, without editor knowledge
-or retained state. The Progred adapter owns annotation writes and the
-pointer/touch gesture. It uses the existing active-gesture slot; starts respect
+or retained state. The Progred adapter owns the pointer/touch gesture and writes
+the annotation: a keyed control's value, or the state a slider's handler passes
+to `update`. It uses the existing active-gesture slot; starts respect
 clipping, captured motion remains unbounded, and document replacement ends the
 gesture normally. Keyboard focus/navigation and accessibility are deferred; this
 slider and radio group are pointer/touch controls. `puri-widgets::radio` owns
 indicator painting; Progred composes text, layout, and selection handlers.
 
 The controls function, view function, and preview projection all run again on
-each projected frame; controls do not cache emitted widgets. The CAM pane's
-`tree program cursor` call constructs its program tree through the general
-dependency-tracked computation system. Its explicit inputs are the builder
-callable and fuel, not viewport dimensions or control state. Resizing therefore
-rebuilds presentation without changing the generated cutting functions' captured
-environments or recording their paths again. A surrounding `render` declaration
+each projected frame; controls do not cache emitted widgets. The memo behind
+`tree program cursor` ([trees](trees.md#editor-collection)) takes no viewport
+dimensions or control state, so resizing rebuilds presentation without
+collecting the tree or recording its paths again. A surrounding `render` declaration
 can also reuse pure evaluation.
 The `with controls` constructor declares its reads tracked;
 it only evaluates arguments and returns data. Effects or untracked reads in
