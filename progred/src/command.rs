@@ -171,12 +171,12 @@ impl Shortcut {
     }
 
     fn matches(self, key: &str, shift: bool) -> bool {
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
-        if self.key == ShortcutKey::Plus {
+        match self.key {
             // + is Shift-= on most layouts, and browsers take = alone too.
-            return key == "+" || key == "=";
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            ShortcutKey::Plus => key == "+" || key == "=",
+            _ => self.shift == shift && key.eq_ignore_ascii_case(self.key.label()),
         }
-        self.shift == shift && key.eq_ignore_ascii_case(self.key.label())
     }
 }
 

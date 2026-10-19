@@ -532,15 +532,19 @@ impl Editor {
     }
 
     fn move_selected_pane(&mut self, direction: workspace::Move) {
-        let next = self.model.selection.as_ref().and_then(|selection| {
-            let Target::Pane { path } = selection.root().target() else {
-                return None;
-            };
-            let suffix = selection.path().strip_prefix(path.as_slice())?.to_vec();
-            let (value, path) =
-                workspace::move_value(self.model.doc.root.as_ref()?, path, direction)?;
-            Some((value, path, suffix, selection.root().clone()))
-        });
+        let next =
+            self.model
+                .selection
+                .as_ref()
+                .and_then(|selection| match selection.root().target() {
+                    Target::Pane { path } => {
+                        let suffix = selection.path().strip_prefix(path.as_slice())?.to_vec();
+                        let (value, path) =
+                            workspace::move_value(self.model.doc.root.as_ref()?, path, direction)?;
+                        Some((value, path, suffix, selection.root().clone()))
+                    }
+                    Target::Document => None,
+                });
         if let Some((value, path, suffix, root)) = next {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);

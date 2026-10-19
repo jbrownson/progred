@@ -172,12 +172,14 @@ impl State {
     fn alt_tapped(&mut self, event: &KeyboardEvent) -> bool {
         use ui_events::keyboard::NamedKey;
         let alt = event.key == Key::Named(NamedKey::Alt);
-        if !event.state.is_down() {
-            return alt && std::mem::take(&mut self.alt_alone);
+        if event.state.is_down() {
+            let alone =
+                !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.shift());
+            self.alt_alone = alt && if event.repeat { self.alt_alone } else { alone };
+            false
+        } else {
+            alt && std::mem::take(&mut self.alt_alone)
         }
-        let alone = !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.shift());
-        self.alt_alone = alt && if event.repeat { self.alt_alone } else { alone };
-        false
     }
 
     /// Something other than a key, such as a click, came between Alt's press
