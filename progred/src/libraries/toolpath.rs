@@ -142,8 +142,8 @@ fn background_unavailable<W: Host>(
         model,
         &[
             "No 3D preview here:",
-            "this browser doesn't allow",
             "background rendering",
+            "isn't available",
         ],
     )
 }
