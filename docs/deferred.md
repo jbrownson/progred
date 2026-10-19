@@ -112,7 +112,7 @@ bare references staying data, both workarounds worth removing first:
   whole lexical environment. The original reason, not retaining recursive
   list-mapping accumulators, went away with scoped tree emission. Lambdas that
   capture only the variables their body uses would let these be ordinary lambdas.
-- Keyed controls (`slider`, `radio`, `tree range`, `tree cursor`, and
+- Keyed controls (`radio`, `tree range`, `tree cursor`, and
   `tree program cursor`) take their state key as an evaluated argument, so
   programs quote a cell to pass it. The CAM's `control key: "preview mode` reuses
   the binder of the variable that holds the radio's value, and that cell is also
@@ -221,7 +221,7 @@ removed, so it isn't lost:
 - **Bracket keys everywhere.** `(`, `[` and `{` made a new cell, list or record
   in every picker. They are now keys of Raw's holes alone. Elsewhere a delimiter
   is typed as text, which finds its constructor where the hole offers one, as
-  Grap's slots do; a projection can't yet give its holes keys of their own.
+  Grap's slots do.
 - **Reaching any cell from a Grap slot.** Grap's list has bindings and functions
   but not other cells, such as a named constant.
 - **Existing cells in Raw's holes.** Raw offered every cell by name, the
