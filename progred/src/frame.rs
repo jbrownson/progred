@@ -105,11 +105,7 @@ impl Dispatch {
 
     /// The context a dispatch to `editor` runs in, `hover` resting under its
     /// pointer.
-    pub(crate) fn context(
-        &self,
-        editor: &Editor,
-        hover: Option<Hovered>,
-    ) -> DispatchContext<Editor> {
+    fn context(&self, editor: &Editor, hover: Option<Hovered>) -> DispatchContext<Editor> {
         DispatchContext {
             handler: self.handler.clone(),
             landmarks: self.landmarks.clone(),
@@ -499,16 +495,11 @@ impl EditorRunner {
             && self.frame.notified_hover != self.frame.hover_location()
         {
             self.frame.notified_hover = self.frame.hover_location();
-            let mut input = self
-                .frame
-                .dispatch
-                .context(&self.editor, self.frame.hover.clone());
-            let handled = self
-                .frame
-                .dispatch
-                .handler
-                .dispatch(&mut self.editor, Event::HoverChanged, &mut input)
-                .handled();
+            let handled = self.frame.dispatch.send(
+                &mut self.editor,
+                self.frame.hover.as_ref(),
+                Event::HoverChanged,
+            );
             self.frame.hover_awaits_paint = handled;
             handled
         } else {
