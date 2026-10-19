@@ -293,10 +293,7 @@ fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source()
             projected_display
         ))
         .map(|layout| inspect(&layout)),
-        Some(ProjectionCall::Descend {
-            step: Step::Key(vocabulary::VALUE),
-            ..
-        })
+        Some(ProjectionCall::Descend { steps, .. }) if steps == [Step::Key(vocabulary::VALUE)]
     ));
     assert!(
         projected(

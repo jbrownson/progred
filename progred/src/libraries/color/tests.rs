@@ -216,9 +216,9 @@ fn a_named_color_projects_its_editable_name_and_hex() {
 
     assert!(matches!(&inspect(&(children[1])),
         ProjectionCall::Descend {
-            step: Step::Key(field),
+            steps,
             ..
-        } if *field == name::vocabulary::NAME
+        } if *steps == [Step::Key(name::vocabulary::NAME)]
     ));
     assert!(matches!(
         hex_editor(encoded(&color).unwrap()),

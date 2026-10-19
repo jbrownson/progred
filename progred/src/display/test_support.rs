@@ -150,11 +150,6 @@ pub fn unshared<W, H>(mut layout: &Recorded<W, H>) -> &Recorded<W, H> {
 
 pub enum ProjectionCall<W, H> {
     Descend {
-        step: Step,
-        projection: Option<Partial<W, H>>,
-        default_projection: Option<Partial<W, H>>,
-    },
-    DescendPath {
         steps: Vec<Step>,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
@@ -182,7 +177,7 @@ fn recorder_preserves_local_and_descendant_projection_inputs() {
     let default = partial::<(), ()>(|_| None);
     let step = Step::Key(gid::new_cell_id());
     for layout in [
-        descend(step.clone(), Some(local.clone()), Some(default.clone())),
+        descend([step.clone()], Some(local.clone()), Some(default.clone())),
         at_with_projection(
             [step],
             Value::record([]),
@@ -244,18 +239,19 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
-        self.record(match steps {
-            [step] => ProjectionCall::Descend {
-                step: step.clone(),
-                projection,
-                default_projection,
-            },
-            _ => ProjectionCall::DescendPath {
-                steps: steps.to_vec(),
-                projection,
-                default_projection,
-            },
+        self.record(ProjectionCall::Descend {
+            steps: steps.to_vec(),
+            projection,
+            default_projection,
         })
+    }
+    fn descend_raw(
+        &self,
+        _: &mut TextCtx,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
+        _: Step,
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
+        panic!("raw descents aren't recorded")
     }
     fn jump(
         &self,
@@ -410,6 +406,14 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         _: &[Step],
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
+    ) -> ChoiceLayout<widget::HoverPass<W, H>> {
+        panic!("unexpected descent")
+    }
+    fn descend_raw(
+        &self,
+        _: &mut TextCtx,
+        _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
+        _: Step,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         panic!("unexpected descent")
     }

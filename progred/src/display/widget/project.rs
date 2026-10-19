@@ -43,7 +43,5 @@ pub trait Project<World, Hover> {
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<World, Hover>>,
         step: Step,
-    ) -> ChoiceLayout<HoverPass<World, Hover>> {
-        self.descend(text, build, std::slice::from_ref(&step), None, None)
-    }
+    ) -> ChoiceLayout<HoverPass<World, Hover>>;
 }

@@ -11,8 +11,8 @@ use gid::{CellId, Cells, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
 use crate::display::projection::{group, group_hug, hug};
 use crate::display::{
-    Face, RecordField, activatable, alternatives, col, descend_path_local, dim, faced, record_with,
-    row, shared,
+    Face, RecordField, activatable, alternatives, col, descend_local, dim, faced, record_with, row,
+    shared,
 };
 #[cfg(test)]
 use ::grap;
@@ -574,7 +574,7 @@ pub fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> O
     );
     Some(group_hug(
         head,
-        descend_path_local(
+        descend_local(
             [Step::Key(vocabulary::CASES)],
             crate::display::structure::list(Some(crate::display::runtime_partial(case_display))),
             &input.default_projection,
@@ -584,8 +584,8 @@ pub fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> O
     ))
 }
 
-fn pattern_path<W: Host>(steps: impl Into<Vec<Step>>, default: &Partial<W>) -> Layout<W> {
-    crate::display::descend_path_scoped(
+fn pattern_path<W: Host>(steps: impl AsRef<[Step]> + 'static, default: &Partial<W>) -> Layout<W> {
+    crate::display::descend_scoped(
         steps,
         crate::display::runtime_partial(pattern_binder),
         default,
@@ -668,7 +668,7 @@ pub fn bindings_display<W: Host>(
     let bindings = fields.field(vocabulary::BINDINGS)?;
     bindings.list_len()?;
     fields.field(::grap::vocabulary::EXPRESSION)?;
-    let bindings = shared(descend_path_local(
+    let bindings = shared(descend_local(
         [Step::Key(vocabulary::BINDINGS)],
         crate::display::structure::list(Some(crate::display::runtime_partial(binding_display))),
         &input.default_projection,
@@ -767,7 +767,7 @@ pub fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> O
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::QUOTE).then_some(())?;
     fields.field(::grap::vocabulary::EXPRESSION)?;
-    let marker = descend_path_local(
+    let marker = descend_local(
         [Step::Key(::grap::vocabulary::FUNCTION)],
         crate::display::runtime_partial(quote_marker),
         &input.default_projection,
@@ -776,7 +776,7 @@ pub fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> O
         2.0,
         [
             marker,
-            crate::display::descend_path([Step::Key(::grap::vocabulary::EXPRESSION)]),
+            crate::display::descend([Step::Key(::grap::vocabulary::EXPRESSION)], None, None),
         ],
     )))
 }
@@ -830,7 +830,7 @@ fn expression_list_display<W: Host>(
                 [Step::Key(::grap::vocabulary::FUNCTION)],
                 &input.default_projection,
             ),
-            descend_path_local(
+            descend_local(
                 [Step::Key(vocabulary::EXPRESSIONS)],
                 crate::display::structure::list(Some(crate::display::runtime_partial(
                     crate::libraries::grap::expression,

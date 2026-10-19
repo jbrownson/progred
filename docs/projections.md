@@ -137,15 +137,15 @@ parallel Progred drawing language.
 for the projection at their target and the default passed to descendants.
 Omitting either inherits it; supplying one replaces it without implicit
 composition. The total structural fallback still handles a declined result.
-`descend_local`/`descend_path_local` compose a custom partial before the default
-only at the target. `descend_path_scoped` passes that composition both here and
-below. `at_with_projection` accepts the same explicit partial compositions.
-These are ordinary preparation functions, not path-bearing layout opcodes.
+`descend_local` composes a custom partial before the default only at the
+target. `descend_scoped` passes that composition both here and below.
+`at_with_projection` accepts the same explicit partial compositions. These are
+ordinary preparation functions, not path-bearing layout opcodes.
 
-`descend` follows one step of the displayed structure; `descend_path` follows
-several without projecting intermediate containers. Both preserve the current
-location interpretation, except that following a cell starts a location at its
-definition. `jump(steps, document_path)` extends the occurrence path by `steps`
+`descend` follows steps of the displayed structure without projecting
+intermediate containers. It preserves the current location interpretation,
+except that following a cell starts a location at its definition.
+`jump(steps, document_path)` extends the occurrence path by `steps`
 but reads from an absolute, source-qualified document path. Its descendants
 conject to that source. `jump_with_conject` takes any location instead, such as
 one within a cell's definition, and supplies the lower level function,
@@ -157,7 +157,7 @@ required.
 Its conject returns `None`, including for ordinary descendants. A cell followed
 inside it still starts a location at its definition, which is stored data, and
 an explicit nested jump can establish a source. Existing stored-child partials
-use `descend_path`, not `at` with a copy of the source value. Computed results
+use `descend`, not `at` with a copy of the source value. Computed results
 use the same `at` combinator, with a `Key(presentation::RESULT)` occurrence
 step distinguishing the result from its producing expression. This is a
 projection path, not a fabricated field or writable document location.
@@ -252,7 +252,7 @@ deeply, keeping its parentheses and editable definition. This is a presentation
 choice, not an inference about lexical bindings or their runtime values.
 Compound forms choose their own children; inert containers, declaration
 metadata, and quoted data use the normal deep structural fallback, and local
-use-site overrides do not leak into them. `descend_path` preserves the child's
+use-site overrides do not leak into them. `descend` preserves the child's
 stored path while selecting its projection functions; Grap display uses this
 explicit composition rather than teaching the raw structural fallback about
 Grap. In lambda parameters, direct

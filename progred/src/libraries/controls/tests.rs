@@ -50,6 +50,14 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
         unreachable!()
     }
+    fn descend_raw(
+        &self,
+        _: &mut puri::text::TextCtx,
+        _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
+        _: gid::Step,
+    ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
+        unreachable!()
+    }
     fn jump(
         &self,
         _: &mut puri::text::TextCtx,

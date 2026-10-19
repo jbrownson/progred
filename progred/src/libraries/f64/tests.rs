@@ -238,22 +238,22 @@ fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
     let children = infix_children(&layout).unwrap();
     assert!(matches!(&inspect(&(&children[0])),
         ProjectionCall::Descend {
-            step: Step::Key(field),
+            steps,
             ..
-        } if *field == vocabulary::LEFT
+        } if *steps == [Step::Key(vocabulary::LEFT)]
     ));
     assert!(matches!(&inspect(&(&children[1])),
         ProjectionCall::Descend {
-            step: Step::Key(field),
+            steps,
             projection: Some(_),
             ..
-        } if *field == FUNCTION
+        } if *steps == [Step::Key(FUNCTION)]
     ));
     assert!(matches!(&inspect(&(&children[2])),
         ProjectionCall::Descend {
-            step: Step::Key(field),
+            steps,
             ..
-        } if *field == vocabulary::RIGHT
+        } if *steps == [Step::Key(vocabulary::RIGHT)]
     ));
 
     let product = call(
@@ -294,7 +294,7 @@ fn every_numeric_operator_reads_infix() {
         };
         let descends = |index: usize, key: CellId| {
             matches!(&inspect(&(&children[index])),
-                ProjectionCall::Descend { step: Step::Key(field), .. } if *field == key
+                ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(key)]
             )
         };
         children.len() == 3
@@ -401,7 +401,7 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
             binary_display(&projection_input(&NoEval, &(&without(&plain, key)).into())).unwrap();
         let children = infix_children(&layout).unwrap();
         assert!(matches!(&inspect(&(&children[index])),
-            ProjectionCall::Descend { step: Step::Key(field), .. } if *field == key
+            ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(key)]
         ));
     }
 }

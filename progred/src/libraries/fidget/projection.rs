@@ -2,7 +2,7 @@ use super::{one_marker, parameters, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::projection::{group, group_hug, hug};
 use crate::display::{
-    Delim, Face, activatable, alternatives, col, descend_path, dim, faced, row, selectable_bracket,
+    Delim, Face, activatable, alternatives, col, descend, dim, faced, row, selectable_bracket,
     shared,
 };
 use crate::libraries::name;
@@ -38,7 +38,7 @@ fn form(value: &Value) -> Option<(CellId, &Value)> {
 }
 
 fn operand<W: Host>(marker: CellId, key: CellId, value: &Value) -> Layout<W> {
-    let child = descend_path([Step::Key(marker), Step::Key(key)]);
+    let child = descend([Step::Key(marker), Step::Key(key)], None, None);
     let needs_group = value
         .as_record()
         .is_some_and(|fields| fields.contains_key(&name::vocabulary::NAME))
@@ -126,7 +126,7 @@ pub(super) fn field<W: Host>(
                         .iter()
                         .map(|key| {
                             fields.get(key)?;
-                            Some(descend_path([Step::Key(marker), Step::Key(*key)]))
+                            Some(descend([Step::Key(marker), Step::Key(*key)], None, None))
                         })
                         .collect::<Option<Vec<_>>>()?,
                 ),
@@ -140,7 +140,10 @@ pub(super) fn field<W: Host>(
             Some(_) => group_hug(
                 row(
                     6.0,
-                    [descend_path([Step::Key(name::vocabulary::NAME)]), dim("=")],
+                    [
+                        descend([Step::Key(name::vocabulary::NAME)], None, None),
+                        dim("="),
+                    ],
                 ),
                 body,
                 6.0,

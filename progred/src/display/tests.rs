@@ -10,9 +10,9 @@ fn probe(_: &ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
 fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
     let steps = vec![Step::Key(gid::new_cell_id()), Step::Key(gid::new_cell_id())];
     let source = vec![Step::Key(gid::new_cell_id())];
-    let layout: Layout<(), ()> = descend_path_local(steps.clone(), partial(probe), &partial(probe));
+    let layout: Layout<(), ()> = descend_local(steps.clone(), partial(probe), &partial(probe));
     match inspect(&layout) {
-        ProjectionCall::DescendPath {
+        ProjectionCall::Descend {
             steps: actual,
             projection,
             default_projection,

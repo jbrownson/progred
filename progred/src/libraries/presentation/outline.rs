@@ -57,7 +57,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 8.0,
                 [
                     label.clone(),
-                    d::descend(Step::Key(OUTLINE), Some(entries), None),
+                    d::descend([Step::Key(OUTLINE)], Some(entries), None),
                 ],
             )]
             .into_iter()

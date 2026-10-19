@@ -574,12 +574,14 @@ fn decode_with<W: Host>(
     }
     if let Some(content) = value.field(vocabulary::DESCEND) {
         let step = crate::libraries::path::read_step(content.field(vocabulary::STEP)?.as_value())?;
-        return Some(descend(step, None, None));
+        return Some(descend([step], None, None));
     }
     if let Some(content) = value.field(vocabulary::DESCEND_PATH) {
-        return Some(crate::display::descend_path(crate::libraries::path::read(
-            content.as_value(),
-        )?));
+        return Some(descend(
+            crate::libraries::path::read(content.as_value())?,
+            None,
+            None,
+        ));
     }
     if let Some(content) = value.field(vocabulary::JUMP) {
         content.record_len()?;

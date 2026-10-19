@@ -19,7 +19,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
             let local = partial(
                 move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
                     calls.borrow_mut().push(input.value?.clone());
-                    accepts.then(|| descend(Step::Key(child), None, None))
+                    accepts.then(|| descend([Step::Key(child)], None, None))
                 },
             );
             let expected_root = root.clone();
@@ -43,12 +43,12 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
                                 )
                             } else {
                                 descend_local(
-                                    Step::Key(field),
+                                    [Step::Key(field)],
                                     local.clone(),
                                     &input.default_projection,
                                 )
                             },
-                            descend(Step::Key(sibling), None, None),
+                            descend([Step::Key(sibling)], None, None),
                         ],
                     )
                 })
@@ -86,7 +86,11 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
             move |input: &crate::display::ProjectionInput<'_, EditingWorld, Hovered>| {
                 calls.borrow_mut().push(input.value.cloned());
                 match mode {
-                    0 => Some(descend(Step::Follow(gid::Resolution::Document), None, None)),
+                    0 => Some(descend(
+                        [Step::Follow(gid::Resolution::Document)],
+                        None,
+                        None,
+                    )),
                     1 => Some(at([Step::Key(field)], Value::from(vec![7]))),
                     _ => None,
                 }
@@ -96,7 +100,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
         let projection = Projection::new([partial(move |input| {
             (input.value == Some(&expected_root)).then(|| {
                 descend_local(
-                    Step::Key(if mode == 2 { cell } else { field }),
+                    [Step::Key(if mode == 2 { cell } else { field })],
                     local.clone(),
                     &input.default_projection,
                 )
@@ -191,12 +195,12 @@ fn descents_replace_current_and_default_projections_independently() {
                             )
                         } else {
                             descend(
-                                Step::Key(field),
+                                [Step::Key(field)],
                                 Some(current.clone()),
                                 Some(children.clone()),
                             )
                         },
-                        descend(Step::Key(sibling), None, None),
+                        descend([Step::Key(sibling)], None, None),
                     ],
                 )
             })
@@ -253,7 +257,7 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
                         Some(scoped_projection.clone()),
                         Some(scoped_projection),
                     ),
-                    descend(Step::Key(ordinary), None, None),
+                    descend([Step::Key(ordinary)], None, None),
                 ],
             )
         })

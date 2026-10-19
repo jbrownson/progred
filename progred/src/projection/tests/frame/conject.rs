@@ -245,7 +245,7 @@ fn copying_a_stored_or_jumped_cell_keeps_the_reference_shallow() {
                 Some(if jump {
                     d::jump([Step::Key(occurrence)], [Step::Key(source)])
                 } else {
-                    d::descend(Step::Key(source), None, None)
+                    d::descend([Step::Key(source)], None, None)
                 })
             }),
         );
@@ -720,7 +720,7 @@ fn custom_conject_is_used_for_both_descendant_reads_and_writes() {
                     )
                 }),
                 Some(d::partial(move |_| {
-                    Some(d::descend(Step::Key(shown), None, None))
+                    Some(d::descend([Step::Key(shown)], None, None))
                 })),
                 None,
             ))
@@ -758,7 +758,11 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&source)?;
-            Some(d::descend_path([Step::Key(source), Step::Key(child)]))
+            Some(d::descend(
+                [Step::Key(source), Step::Key(child)],
+                None,
+                None,
+            ))
         }),
     );
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));

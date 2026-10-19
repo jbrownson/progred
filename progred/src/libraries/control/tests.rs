@@ -334,19 +334,19 @@ fn quote_projects_a_selectable_marker_and_its_expression() {
         panic!("quote has a marker and expression");
     };
     let ProjectionCall::Descend {
-        step,
+        steps,
         projection: Some(_),
         ..
     } = &inspect(&(marker))
     else {
         panic!("the marker retains the function-field location");
     };
-    assert_eq!(step, &Step::Key(grap::vocabulary::FUNCTION));
+    assert_eq!(*steps, [Step::Key(grap::vocabulary::FUNCTION)]);
 
-    let ProjectionCall::Descend { step, .. } = &inspect(&(body)) else {
+    let ProjectionCall::Descend { steps, .. } = &inspect(&(body)) else {
         panic!("the expression retains its field location");
     };
-    assert_eq!(step, &Step::Key(grap::vocabulary::EXPRESSION));
+    assert_eq!(*steps, [Step::Key(grap::vocabulary::EXPRESSION)]);
 
     let marker = quote_marker(&projection_input(
         &NoEval,
@@ -810,14 +810,14 @@ fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
         panic!("let shares its bindings");
     };
     let ProjectionCall::Descend {
-        step,
+        steps,
         projection: Some(_),
         ..
     } = &inspect(&(bindings.as_ref()))
     else {
         panic!("let descends to its bindings list");
     };
-    assert_eq!(step, &Step::Key(vocabulary::BINDINGS));
+    assert_eq!(*steps, [Step::Key(vocabulary::BINDINGS)]);
 
     let where_layout = bindings_display(&projection_input(&NoEval, &(&where_call).into())).unwrap();
     let Recorded::Alternatives(where_options) = where_layout.record().content().clone() else {
@@ -830,8 +830,7 @@ fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
         panic!("where starts with its body");
     };
     assert!(matches!(&inspect(&(child.as_ref())),
-        ProjectionCall::Descend { step, .. }
-            if *step == Step::Key(grap::vocabulary::EXPRESSION)
+        ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(grap::vocabulary::EXPRESSION)]
     ));
 }
 
@@ -859,10 +858,10 @@ fn direct_binding_is_deep_and_centered_beside_its_equals() {
     };
     assert!(matches!(&inspect(&(&children[0])),
         ProjectionCall::Descend {
-            step,
+            steps,
             projection: Some(_),
             ..
-        } if *step == Step::Key(vocabulary::BIND)
+        } if *steps == [Step::Key(vocabulary::BIND)]
     ));
 }
 
@@ -888,14 +887,14 @@ fn match_augments_its_standard_cases_list_with_the_case_projection() {
         arms = child.as_ref();
     }
     let ProjectionCall::Descend {
-        step,
+        steps,
         projection: Some(_),
         ..
     } = &inspect(&(arms))
     else {
         panic!("match descends to its cases list");
     };
-    assert_eq!(step, &Step::Key(vocabulary::CASES));
+    assert_eq!(*steps, [Step::Key(vocabulary::CASES)]);
     let cases = expression
         .as_record()
         .unwrap()

@@ -55,7 +55,7 @@ fn cell_view<W: Host>(
     crate::display::structure::authoring(crate::display::projection::group(
         crate::display::selectable_bracket(
             crate::display::Delim::Paren,
-            crate::display::descend(gid::Step::Follow(resolution), None, None),
+            crate::display::descend([gid::Step::Follow(resolution)], None, None),
         ),
     ))
 }

@@ -814,8 +814,11 @@ pub fn shared<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     Layout::new(move |builder| builder.shared(id, &child))
 }
 
+/// Descend `steps` through stored structure without projecting intermediate
+/// containers. `projection` draws what's there and `default_projection` its
+/// descendants; each is the enclosing one where it's `None`.
 pub fn descend<World: 'static, Hover: 'static>(
-    step: Step,
+    steps: impl AsRef<[Step]> + 'static,
     projection: Option<Partial<World, Hover>>,
     default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
@@ -823,7 +826,7 @@ pub fn descend<World: 'static, Hover: 'static>(
         context.project.descend(
             context.text,
             build,
-            std::slice::from_ref(&step),
+            steps.as_ref(),
             projection.clone(),
             default_projection.clone(),
         )
@@ -837,30 +840,6 @@ pub fn descend_raw<World: 'static, Hover: 'static>(step: Step) -> Layout<World, 
         context
             .project
             .descend_raw(context.text, build, step.clone())
-    }))
-}
-
-/// Descend through stored structure without projecting intermediate containers.
-pub fn descend_path<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
-) -> Layout<World, Hover> {
-    descend_path_with_projection(steps, None, None)
-}
-
-pub fn descend_path_with_projection<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
-    projection: Option<Partial<World, Hover>>,
-    default_projection: Option<Partial<World, Hover>>,
-) -> Layout<World, Hover> {
-    let steps = steps.into();
-    Layout::program(Rc::new(move |context, build| {
-        context.project.descend(
-            context.text,
-            build,
-            &steps,
-            projection.clone(),
-            default_projection.clone(),
-        )
     }))
 }
 
@@ -935,25 +914,27 @@ pub fn jump_to<World: 'static, Hover: 'static>(
     }))
 }
 
-pub fn descend_path_local<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
+/// Try a specialization here, keeping the default for descendants.
+pub fn descend_local<World: 'static, Hover: 'static>(
+    steps: impl AsRef<[Step]> + 'static,
     projection: Partial<World, Hover>,
     default: &Partial<World, Hover>,
 ) -> Layout<World, Hover> {
-    descend_path_with_projection(
+    descend(
         steps,
         Some(compose_partials([projection, default.clone()])),
         Some(default.clone()),
     )
 }
 
-pub fn descend_path_scoped<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
+/// Try a specialization here and at every descendant.
+pub fn descend_scoped<World: 'static, Hover: 'static>(
+    steps: impl AsRef<[Step]> + 'static,
     projection: Partial<World, Hover>,
     default: &Partial<World, Hover>,
 ) -> Layout<World, Hover> {
     let projection = compose_partials([projection, default.clone()]);
-    descend_path_with_projection(steps, Some(projection.clone()), Some(projection))
+    descend(steps, Some(projection.clone()), Some(projection))
 }
 
 pub fn at_with_projection<World: 'static, Hover: 'static>(
@@ -974,19 +955,6 @@ pub fn at_with_projection<World: 'static, Hover: 'static>(
             default_projection.clone(),
         )
     }))
-}
-
-/// Try a specialization here, keeping the default for descendants.
-pub fn descend_local<World: 'static, Hover: 'static>(
-    step: Step,
-    projection: Partial<World, Hover>,
-    default: &Partial<World, Hover>,
-) -> Layout<World, Hover> {
-    descend(
-        step,
-        Some(compose_partials([projection, default.clone()])),
-        Some(default.clone()),
-    )
 }
 
 pub fn alternatives<World: 'static, Hover: 'static>(

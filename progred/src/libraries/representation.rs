@@ -104,7 +104,7 @@ pub(crate) fn infix_display<W: Host>(
     };
     let left = shared(operand(LEFT));
     let operator = shared(crate::display::descend_local(
-        Step::Key(FUNCTION),
+        [Step::Key(FUNCTION)],
         operation(representation),
         &input.default_projection,
     ));

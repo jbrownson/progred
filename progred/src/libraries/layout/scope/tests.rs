@@ -169,7 +169,7 @@ fn grap_recursion_calls_emit_the_same_native_location_operations() {
     let (result, layout) = evaluate(&call(DESCEND_PATH, [(STEPS, quote(encoded.clone()))]), 1000);
     assert!(result.completed);
     assert!(
-        matches!(inspect(&layout.unwrap()), ProjectionCall::DescendPath { steps: actual, .. } if actual == steps)
+        matches!(inspect(&layout.unwrap()), ProjectionCall::Descend { steps: actual, .. } if actual == steps)
     );
     let (result, layout) = evaluate(
         &call(

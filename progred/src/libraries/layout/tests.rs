@@ -19,7 +19,7 @@ fn traversal_uses_the_path_library_for_every_step() {
     for step in &steps {
         assert!(
             matches!((decoded(&descend_step(step.clone()))).map(|layout| inspect(&layout)),
-                Some(ProjectionCall::Descend { step: decoded, .. }) if decoded == *step
+                Some(ProjectionCall::Descend { steps: decoded, .. }) if decoded == [step.clone()]
             )
         );
     }
@@ -39,7 +39,7 @@ fn traversal_uses_the_path_library_for_every_step() {
         crate::libraries::path::value(&steps),
     );
     assert!(matches!(decoded(&value).map(|layout| inspect(&layout)),
-        Some(ProjectionCall::DescendPath { steps: decoded, .. }) if decoded == steps
+        Some(ProjectionCall::Descend { steps: decoded, .. }) if decoded == steps
     ));
     let document = vec![Step::Key(gid::new_cell_id())];
     let value = node(
@@ -460,7 +460,7 @@ fn a_layout_round_trips_from_data() {
         }) if text == "shape"
     ));
     assert!(matches!(&inspect(&(&children[1])),
-        ProjectionCall::Descend { step: Step::Key(key), .. } if *key == vocabulary::GAP
+        ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(vocabulary::GAP)]
     ));
     let (left, child, right) = crate::display::test_support::delimited(&forms[1]);
     crate::libraries::test_widgets::assert_delimiter(
@@ -478,10 +478,7 @@ fn a_layout_round_trips_from_data() {
     };
     assert!(matches!(
         &inspect(&(&children[0])),
-        ProjectionCall::Descend {
-            step: Step::Follow(gid::Resolution::Document),
-            ..
-        }
+        ProjectionCall::Descend { steps, .. } if *steps == [Step::Follow(gid::Resolution::Document)]
     ));
 }
 

@@ -401,7 +401,7 @@ pub fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<
         .value?
         .field(name::vocabulary::NAME)
         .filter(|value| value.as_text().is_some())
-        .map(|_| descend(Step::Key(name::vocabulary::NAME), None, None));
+        .map(|_| descend([Step::Key(name::vocabulary::NAME)], None, None));
     let named = name.is_some();
     let spelling = crate::display::line_edit(hex_editor(encoded));
     Some(crate::display::structure::with_extra_fields(

@@ -293,17 +293,19 @@ fn operation<W: Host>(
         SLOT => slot(),
         RULE => crate::display::rule(),
         DESCEND => descend(
-            arg!(STEP, |value| crate::libraries::path::read_step(
+            [arg!(STEP, |value| crate::libraries::path::read_step(
+                value.as_value()
+            ))],
+            None,
+            None,
+        ),
+        DESCEND_PATH => descend(
+            arg!(STEPS, |value| crate::libraries::path::read(
                 value.as_value()
             )),
             None,
             None,
         ),
-        DESCEND_PATH => {
-            crate::display::descend_path(arg!(STEPS, |value| crate::libraries::path::read(
-                value.as_value()
-            )))
-        }
         JUMP => crate::display::jump(
             arg!(STEPS, |value| crate::libraries::path::read(
                 value.as_value()

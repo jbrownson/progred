@@ -79,7 +79,7 @@ pub(crate) fn with_name<W: Host>(
     crate::display::row(
         6.0,
         [
-            descend_local(step, projection(), &input.default_projection),
+            descend_local([step], projection(), &input.default_projection),
             content,
         ],
     )

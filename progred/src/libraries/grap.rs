@@ -12,8 +12,8 @@ pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::projection::{group, group_hug};
 use crate::display::{
     Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
-    activatable, alternatives, at, col, descend_local, descend_path_local, dim, faced, pad, picker,
-    ranked, record_fragment_with, row, selectable_bracket, shared,
+    activatable, alternatives, at, col, descend_local, dim, faced, pad, picker, ranked,
+    record_fragment_with, row, selectable_bracket, shared,
 };
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -108,7 +108,7 @@ fn declaration_cell<W: Host>(
     Some(group(selectable_bracket(
         Delim::Paren,
         descend_local(
-            Step::Follow(definition.resolution),
+            [Step::Follow(definition.resolution)],
             crate::display::partial(declaration_name),
             &input.default_projection,
         ),
@@ -119,7 +119,7 @@ fn declaration_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>
     input.pending.is_none().then_some(())?;
     name::read(input.value?)?;
     Some(descend_local(
-        Step::Key(name::vocabulary::NAME),
+        [Step::Key(name::vocabulary::NAME)],
         name::projection(),
         &input.default_projection,
     ))
@@ -138,8 +138,11 @@ fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
     })
 }
 
-pub fn shallow_path<W: Host>(steps: impl Into<Vec<Step>>, default: &Partial<W>) -> Layout<W> {
-    descend_path_local(
+pub fn shallow_path<W: Host>(
+    steps: impl AsRef<[Step]> + 'static,
+    default: &Partial<W>,
+) -> Layout<W> {
+    descend_local(
         steps,
         crate::display::runtime_partial(shallow_cell),
         default,
@@ -149,10 +152,10 @@ pub fn shallow_path<W: Host>(steps: impl Into<Vec<Step>>, default: &Partial<W>) 
 /// A named direct expression reference is shallow. A compound expression's
 /// projection explicitly chooses the roles of its own children.
 pub(crate) fn expression_path<W: Host>(
-    steps: impl Into<Vec<Step>>,
+    steps: impl AsRef<[Step]> + 'static,
     default: &Partial<W>,
 ) -> Layout<W> {
-    descend_path_local(steps, crate::display::runtime_partial(expression), default)
+    descend_local(steps, crate::display::runtime_partial(expression), default)
 }
 
 /// A record naming a Grap program: the program its `grap` field names is
@@ -185,10 +188,10 @@ fn program<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
 /// Declaration cells keep their parentheses, with a named definition
 /// shown as an unquoted editor at the real name field.
 pub(crate) fn declaration_path<W: Host>(
-    steps: impl Into<Vec<Step>>,
+    steps: impl AsRef<[Step]> + 'static,
     default: &Partial<W>,
 ) -> Layout<W> {
-    descend_path_local(
+    descend_local(
         steps,
         crate::display::runtime_partial(declaration_cell),
         default,
@@ -300,7 +303,7 @@ pub(crate) fn call_with_function<W: Host>(
         }
         _ => Vec::new(),
     };
-    let function = descend_path_local(
+    let function = descend_local(
         [Step::Key(FUNCTION)],
         function_projection.unwrap_or_else(|| crate::display::runtime_partial(shallow_cell)),
         &input.default_projection,
@@ -354,14 +357,14 @@ pub fn lambda_display<W: Host>(
         .list_values()?
         .all(|param| param.as_cell().is_some())
         .then_some(())?;
-    let params = descend_path_local(
+    let params = descend_local(
         [Step::Key(PARAMS)],
         crate::display::structure::list(Some(crate::display::runtime_partial(parameter))),
         &input.default_projection,
     );
     let body_site = input.site().below(&[Step::Key(BODY)]);
     let lambda = descend_local(
-        Step::Key(name::vocabulary::NAME),
+        [Step::Key(name::vocabulary::NAME)],
         crate::display::partial(lambda_name),
         &input.default_projection,
     );
@@ -387,7 +390,7 @@ pub fn value_display<W: Host>(
         _ => return None,
     }
     let name = descend_local(
-        Step::Key(name::vocabulary::NAME),
+        [Step::Key(name::vocabulary::NAME)],
         crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
         &input.default_projection,
     );

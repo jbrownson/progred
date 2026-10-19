@@ -194,12 +194,12 @@ pub(crate) fn tutorial_slots(
                         slots.iter().zip(same).map(|((key, level), same)| {
                             let view = match level {
                                 Level::Full => crate::display::descend(
-                                    Step::Key(*key),
+                                    [Step::Key(*key)],
                                     None,
                                     Some(full_inside.clone()),
                                 ),
                                 Level::Plain => crate::display::descend(
-                                    Step::Key(*key),
+                                    [Step::Key(*key)],
                                     plain.clone(),
                                     plain_inside.clone(),
                                 ),

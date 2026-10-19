@@ -215,16 +215,16 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
                     .clone();
             let (_, child, _) = crate::display::test_support::delimited(&declaration);
             let ProjectionCall::Descend {
-                step,
+                steps,
                 projection: Some(projection),
                 ..
             } = &inspect(child)
             else {
                 panic!("a declaration follows the cell definition");
             };
-            assert_eq!(*step, Step::Follow(source));
+            assert_eq!(*steps, [Step::Follow(source)]);
             let ProjectionCall::Descend {
-                step,
+                steps,
                 projection: Some(projection),
                 ..
             } = &inspect(
@@ -234,7 +234,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             else {
                 panic!("the compact definition descends to its actual name");
             };
-            assert_eq!(*step, Step::Key(name::vocabulary::NAME));
+            assert_eq!(*steps, [Step::Key(name::vocabulary::NAME)]);
             let value = env
                 .0
                 .as_record()
@@ -414,10 +414,10 @@ fn argument_order(layout: &impl Recordable<crate::Editor, crate::frame::Hovered>
             let Recorded::Row { children, .. } = argument.content() else {
                 panic!("argument has a label and value");
             };
-            let ProjectionCall::Descend { step, .. } = &inspect(&(unshared(&children[2]))) else {
+            let ProjectionCall::Descend { steps, .. } = &inspect(&(unshared(&children[2]))) else {
                 panic!("argument value retains its path");
             };
-            let Step::Key(field) = step else {
+            let [Step::Key(field)] = steps.as_slice() else {
                 panic!("argument path is its field");
             };
             *field
@@ -431,8 +431,7 @@ fn a_record_with_the_field_is_expression_then_result() {
     let layout = projected(&env(), &wrapper(expression.clone(), [])).unwrap();
     let (shown, result) = arms(&layout);
     assert!(matches!(&inspect(&(shown)),
-        ProjectionCall::Descend { step, .. }
-            if *step == Step::Key(EVALUATE)
+        ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(EVALUATE)]
     ));
     assert!(matches!(&inspect(&(result)),
         ProjectionCall::At { value, steps, .. } if *value == Value::from(vec![1])
@@ -515,8 +514,7 @@ fn an_evaluate_shaped_result_is_another_projection() {
     let layout = projected(&env(), &result).unwrap();
     let (nested, _) = arms(&layout);
     assert!(matches!(&inspect(&(nested)),
-        ProjectionCall::Descend { step, .. }
-            if *step == Step::Key(EVALUATE)
+        ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(EVALUATE)]
     ));
 }
 
@@ -540,10 +538,10 @@ fn a_call_projects_its_function_cell_shallowly() {
     };
     assert!(matches!(&inspect(&(unshared(&children[0]))),
         ProjectionCall::Descend {
-            step,
+            steps,
             projection: Some(_),
             ..
-        } if *step == Step::Key(FUNCTION)
+        } if *steps == [Step::Key(FUNCTION)]
     ));
 }
 
@@ -795,17 +793,17 @@ fn a_lambda_targets_its_syntax_and_projects_its_body_as_grap() {
     };
     assert!(matches!(&inspect(&(&head[0])),
         ProjectionCall::Descend {
-            step: Step::Key(key),
+            steps,
             projection: Some(_),
             ..
-        } if *key == name::vocabulary::NAME
+        } if *steps == [Step::Key(name::vocabulary::NAME)]
     ));
     assert!(matches!(&inspect(&(&head[1])),
         ProjectionCall::Descend {
-            step,
+            steps,
             projection: Some(_),
             ..
-        } if *step == Step::Key(PARAMS)
+        } if *steps == [Step::Key(PARAMS)]
     ));
     let Recorded::Before { child, .. } = &head[2] else {
         panic!("lambda arrow targets its body");
@@ -820,10 +818,10 @@ fn a_lambda_targets_its_syntax_and_projects_its_body_as_grap() {
     assert!(matches!(
         &inspect(&(unshared(&children[1]))),
         ProjectionCall::Descend {
-            step: Step::Key(BODY),
+            steps,
             projection: Some(_),
             ..
-        }
+        } if *steps == [Step::Key(BODY)]
     ));
 }
 
@@ -874,14 +872,14 @@ fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
         panic!("lambda has a syntax head");
     };
     let ProjectionCall::Descend {
-        step: Step::Key(key),
+        steps,
         projection: Some(projection),
         ..
     } = &inspect(&(&head[0]))
     else {
         panic!("lambda name is projected contextually");
     };
-    assert_eq!(*key, name::vocabulary::NAME);
+    assert_eq!(*steps, [Step::Key(name::vocabulary::NAME)]);
     let value = definition
         .as_record()
         .unwrap()

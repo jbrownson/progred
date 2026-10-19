@@ -82,7 +82,7 @@ fn operands_keep_their_paths_and_operator_targets_the_expression() {
     };
     for (child, key) in [(&children[0], LEFT), (&children[2], RIGHT)] {
         assert!(
-            matches!(&inspect(&(unshared(child))), ProjectionCall::DescendPath { steps, .. }
+            matches!(&inspect(&(unshared(child))), ProjectionCall::Descend { steps, .. }
             if *steps == [Step::Key(SUM), Step::Key(key)])
         );
     }
@@ -185,8 +185,7 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
 fn coordinates_are_shallow_and_names_remain_editable_data() {
     let axis = node(AXIS, X.into());
     assert!(
-        matches!(inspect(&field(&projection_input(&Names, &axis)).unwrap()), ProjectionCall::Descend { step, projection: Some(_), .. }
-        if step == Step::Key(AXIS))
+        matches!(inspect(&field(&projection_input(&Names, &axis)).unwrap()), ProjectionCall::Descend { steps, projection: Some(_), .. } if steps == [Step::Key(AXIS)])
     );
     let named = name::record("torus", [(SQUARE, Value::record([(OPERAND, number(1.0))]))]);
     let Recorded::Alternatives(options) = field(&projection_input(&Names, &named))
@@ -204,7 +203,7 @@ fn coordinates_are_shallow_and_names_remain_editable_data() {
         panic!()
     };
     assert!(
-        matches!(&inspect(&(&head[0])), ProjectionCall::Descend { step, .. } if *step == Step::Key(name::vocabulary::NAME))
+        matches!(&inspect(&(&head[0])), ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(name::vocabulary::NAME)])
     );
 }
 
@@ -228,7 +227,7 @@ fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
                 return false;
             };
             matches!(&inspect(&(unshared(&children[0]))),
-                ProjectionCall::Descend { step: Step::Key(field), .. } if *field == LEFT
+                ProjectionCall::Descend { steps, .. } if *steps == [Step::Key(LEFT)]
             )
         })
     };

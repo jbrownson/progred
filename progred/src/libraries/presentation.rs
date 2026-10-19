@@ -53,7 +53,7 @@ pub fn viewport_display<W: Host>(
     }
     let result = viewport_runtime_output(input.value?, input.env, width, height)?;
     Some(if result.is_absent() {
-        crate::display::descend(Step::Key(vocabulary::VALUE), None, None)
+        crate::display::descend([Step::Key(vocabulary::VALUE)], None, None)
     } else {
         at([Step::Key(vocabulary::RESULT)], &result)
     })
@@ -222,7 +222,7 @@ pub fn projected_display<W: Host>(
         .env
         .apply_expression_runtime(&function, &[(vocabulary::VALUE, value)]);
     Some(if result.is_absent() {
-        crate::display::descend(Step::Key(vocabulary::VALUE), None, None)
+        crate::display::descend([Step::Key(vocabulary::VALUE)], None, None)
     } else {
         at([Step::Key(vocabulary::RESULT)], &result)
     })

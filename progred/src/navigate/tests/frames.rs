@@ -174,7 +174,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                     d::runtime_partial(move |input| {
                         input.value?.field(wrapper)?;
                         Some(d::descend(
-                            Step::Key(wrapper),
+                            [Step::Key(wrapper)],
                             Some(d::structure::list_column(8.0, None)),
                             None,
                         ))

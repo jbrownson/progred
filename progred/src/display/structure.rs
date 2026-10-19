@@ -64,7 +64,7 @@ fn list_items_at<W: Host>(
         .into_iter()
         .map(|position| {
             let layout = shared(descend(
-                Step::Element(position.clone()),
+                [Step::Element(position.clone())],
                 child.clone(),
                 None,
             ));
@@ -229,7 +229,7 @@ pub(crate) fn record_field<W: Host>(
     RecordField {
         label: record_label(input, key),
         value: descend(
-            Step::Key(key),
+            [Step::Key(key)],
             child.map(|p| compose_partials([p, input.default_projection.clone()])),
             None,
         ),
