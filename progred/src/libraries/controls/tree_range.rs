@@ -74,23 +74,22 @@ fn intent_value(intent: &Intent<Key>) -> Value {
 fn read_intent(value: &Value) -> Option<Intent<Key>> {
     if value.as_cell() == Some(ALL) {
         Some(Intent::All)
-    } else {
-        let [(_, first), (_, last)] = value.as_list()?.iter().as_slice() else {
-            return None;
-        };
+    } else if let [(_, first), (_, last)] = value.as_list()?.iter().as_slice() {
         let (first, last) = (read_key(first)?, read_key(last)?);
         (first <= last).then_some(Intent::Between { first, last })
+    } else {
+        None
     }
 }
 
 fn read_cursor(value: &Value) -> Option<Cursor<Key>> {
-    let [(_, item), (_, fraction)] = value.as_list()?.iter().as_slice() else {
-        return None;
-    };
-    Some(Cursor {
-        item: read_key(item)?,
-        fraction: f64::read(fraction)?,
-    })
+    match value.as_list()?.iter().as_slice() {
+        [(_, item), (_, fraction)] => Some(Cursor {
+            item: read_key(item)?,
+            fraction: f64::read(fraction)?,
+        }),
+        _ => None,
+    }
 }
 
 #[derive(Clone)]

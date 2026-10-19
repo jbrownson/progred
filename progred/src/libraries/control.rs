@@ -664,10 +664,10 @@ pub fn bindings_display<W: Host>(
     input.pending.is_none().then_some(())?;
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
     let form = match function.as_cell()? {
-        vocabulary::LET => BindingForm::Let,
-        vocabulary::WHERE => BindingForm::Where,
-        _ => return None,
-    };
+        vocabulary::LET => Some(BindingForm::Let),
+        vocabulary::WHERE => Some(BindingForm::Where),
+        _ => None,
+    }?;
     let bindings = fields.field(vocabulary::BINDINGS)?;
     bindings.list_len()?;
     fields.field(::grap::vocabulary::EXPRESSION)?;
@@ -727,18 +727,18 @@ fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
         fields.field(vocabulary::BIND),
         fields.field(vocabulary::PATTERN),
     ) {
-        (Some(binder), None) => {
-            binder.as_cell()?;
+        (Some(binder), None) => binder.as_cell().map(|_| {
             crate::libraries::grap::declaration_path(
                 [Step::Key(vocabulary::BIND)],
                 &input.default_projection,
             )
-        }
-        (None, Some(_)) => {
-            pattern_path([Step::Key(vocabulary::PATTERN)], &input.default_projection)
-        }
-        _ => return None,
-    };
+        }),
+        (None, Some(_)) => Some(pattern_path(
+            [Step::Key(vocabulary::PATTERN)],
+            &input.default_projection,
+        )),
+        _ => None,
+    }?;
     fields.field(vocabulary::VALUE)?;
     let value_site = input.site().below(&[Step::Key(vocabulary::VALUE)]);
     let equals = activatable(dim("="), &value_site);
@@ -789,13 +789,13 @@ pub fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> O
 pub fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     match &input.pending {
-        None => {
-            fields.field(vocabulary::UNQUOTE)?;
+        None => fields.contains_field(vocabulary::UNQUOTE),
+        Some(crate::display::Pending::Child(Step::Key(field))) => {
+            *field == vocabulary::UNQUOTE && fields.record_len() == Some(0)
         }
-        Some(crate::display::Pending::Child(Step::Key(field)))
-            if *field == vocabulary::UNQUOTE && fields.record_len() == Some(0) => {}
-        _ => return None,
+        _ => false,
     }
+    .then_some(())?;
     let site = input.site();
     Some(group(row(
         2.0,

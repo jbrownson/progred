@@ -335,62 +335,65 @@ fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
     let source = fields.field(VALUE)?;
     let width = fields.field(WIDTH)?.as_f64()?;
     let height = fields.field(HEIGHT)?.as_f64()?;
-    if !width.is_finite() || !height.is_finite() || width <= 2.0 * PADDING_X || height <= 0.0 {
-        return None;
-    }
+    (width.is_finite() && height.is_finite() && width > 2.0 * PADDING_X && height > 0.0)
+        .then_some(())?;
     let state = input.state.cloned();
-    Some(Layout::program(Rc::new(move |context, build| {
-        let (widgets, parameters) = match controls_output(&controls, state.as_ref(), width, context)
-        {
-            Ok(output) => output,
-            Err(error) => {
-                return display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &error)
-                    .measure(context, build);
+    Some(Layout::program(Rc::new(
+        move |context, build| match controls_output(&controls, state.as_ref(), width, context) {
+            Err(error) => display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &error)
+                .measure(context, build),
+            Ok((widgets, parameters)) => {
+                let controls: Vec<_> = widgets.iter().map(|widget| widget(context)).collect();
+                let result = ::grap::apply(
+                    &view,
+                    [
+                        (VALUE, source.clone()),
+                        (PARAMETERS, parameters),
+                        (WIDTH, ::grap::RuntimeValue::f64(width)),
+                        (HEIGHT, ::grap::RuntimeValue::f64(height)),
+                    ],
+                    context.viewing().host(),
+                    None,
+                    ::grap::DEFAULT_FUEL,
+                );
+                let content = display::at(
+                    [gid::Step::Key(presentation::vocabulary::RESULT)],
+                    &result.result,
+                )
+                .measure(context, build);
+                if controls.is_empty() {
+                    content
+                } else {
+                    controls_over(content, controls)
+                }
             }
-        };
-        let controls: Vec<_> = widgets.iter().map(|widget| widget(context)).collect();
-        let result = ::grap::apply(
-            &view,
-            [
-                (VALUE, source.clone()),
-                (PARAMETERS, parameters),
-                (WIDTH, ::grap::RuntimeValue::f64(width)),
-                (HEIGHT, ::grap::RuntimeValue::f64(height)),
-            ],
-            context.viewing().host(),
-            None,
-            ::grap::DEFAULT_FUEL,
-        );
-        let content = display::at(
-            [gid::Step::Key(
-                crate::libraries::presentation::vocabulary::RESULT,
-            )],
-            &result.result,
-        )
-        .measure(context, build);
-        if controls.is_empty() {
-            return content;
-        }
-        let controls =
-            widget::before_place(measured::col(0, 0.0, controls), |placement, output| {
-                output.claim(puri::hover::Probe::occludes(placement));
-                // The padding is part of the control surface too, not an orbit handle.
-                output.handler().on_pointer_down(move |_, event| {
-                    placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                });
-            });
-        ChoiceLayout::attach(content, ChoiceLayout::fixed(controls), |view, controls| {
-            measured::overlay_into(view, controls, |placement, extent| {
-                Some(uig::Placement::new(
-                    Rect::from_origin_size(
-                        (placement.rect.x0, placement.rect.y1 - extent.height()),
-                        extent.size(),
-                    ),
-                    placement.clip_rect.intersect(placement.rect),
-                ))
-            })
+        },
+    )))
+}
+
+/// `view` with `controls` in a column over its bottom.
+fn controls_over<W: Host>(
+    view: ChoiceLayout<widget::HoverPass<W, W::Hover>>,
+    controls: Vec<measured::Measured<widget::HoverPass<W, W::Hover>>>,
+) -> ChoiceLayout<widget::HoverPass<W, W::Hover>> {
+    let controls = widget::before_place(measured::col(0, 0.0, controls), |placement, output| {
+        output.claim(puri::hover::Probe::occludes(placement));
+        // The padding is part of the control surface too, not an orbit handle.
+        output.handler().on_pointer_down(move |_, event| {
+            placement.contains(Point::new(event.state.position.x, event.state.position.y))
+        });
+    });
+    ChoiceLayout::attach(view, ChoiceLayout::fixed(controls), |view, controls| {
+        measured::overlay_into(view, controls, |placement, extent| {
+            Some(uig::Placement::new(
+                Rect::from_origin_size(
+                    (placement.rect.x0, placement.rect.y1 - extent.height()),
+                    extent.size(),
+                ),
+                placement.clip_rect.intersect(placement.rect),
+            ))
         })
-    })))
+    })
 }
 
 fn controls_output<W: Host>(
