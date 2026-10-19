@@ -85,7 +85,7 @@ pub fn run<W: Host>(
         };
     let mut evaluation = evaluate(&ForeignOverlay::new(FUNCTIONS, &emit));
     let mut children = output.into_inner();
-    let layout = if !evaluation.completed || evaluation.result.is_absent() {
+    let layout = if !evaluation.completed || evaluation.result.absent_reason().is_some() {
         None
     } else if children.len() > 1 {
         evaluation.result = ::grap::absent::value(INVALID_PROGRAM).into();
@@ -109,7 +109,7 @@ pub(super) fn display<W: Host>(
             [gid::Step::Key(
                 crate::libraries::presentation::vocabulary::RESULT,
             )],
-            &if evaluation.result.is_absent() {
+            &if evaluation.result.absent_reason().is_some() {
                 evaluation.result
             } else {
                 RuntimeValue::record([
@@ -171,7 +171,7 @@ fn emitted<W: Host>(
     let result = context.eval(body, environment);
     let children = output.replace(parent);
     match result? {
-        result if result.is_absent() => Err(BuildError::Absent(result)),
+        result if result.absent_reason().is_some() => Err(BuildError::Absent(result)),
         _ => Ok(children),
     }
 }

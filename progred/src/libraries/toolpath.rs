@@ -202,7 +202,7 @@ fn mapped_point(
             [X, Y, Z].into_iter().zip(point.map(RuntimeValue::f64)),
         )?;
         point = read_runtime_point(&value).ok_or_else(|| {
-            if value.is_absent() {
+            if value.absent_reason().is_some() {
                 Error::Invalid(value)
             } else {
                 invalid()
@@ -265,7 +265,7 @@ fn operation(
                 if let Some(list) = program.list_values() {
                     for child in list {
                         let value = sequence(context, &child, output)?;
-                        if value.is_absent() {
+                        if value.absent_reason().is_some() {
                             return Ok(value);
                         }
                     }
@@ -279,7 +279,7 @@ fn operation(
             }
             let program = argument(context, call, PROGRAM)?;
             let program = context.eval(program, environment)?;
-            if program.is_absent() {
+            if program.absent_reason().is_some() {
                 return Ok(program);
             }
             return Ok(sequence(context, &program, output)?);
@@ -319,7 +319,7 @@ fn operation(
             let tool = argument(context, call, cutter::vocabulary::TOOL)?;
             let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
             let value = context.eval(tool, environment)?;
-            if value.is_absent() {
+            if value.absent_reason().is_some() {
                 return Ok(value);
             }
             let tool = cutter::Tool::read(value.as_value()).ok_or_else(invalid)?;

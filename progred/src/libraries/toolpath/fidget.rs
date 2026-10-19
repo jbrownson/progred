@@ -78,7 +78,7 @@ pub(super) fn preview_with(
     };
     let program = argument(context, call, PROGRAM)?;
     let program = context.eval(program, environment)?;
-    if program.is_absent() {
+    if program.absent_reason().is_some() {
         return Ok(program);
     }
     let radius = number(context, call, environment, LINE_RADIUS)?;

@@ -33,7 +33,7 @@ fn record_example() -> (Recording, ::grap::Evaluation) {
         )
     });
     assert!(
-        eval.completed && !eval.result.is_absent(),
+        eval.completed && eval.result.absent_reason().is_none(),
         "{:?}",
         eval.result
     );

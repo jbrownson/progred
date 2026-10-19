@@ -240,14 +240,11 @@ fn functions() -> ForeignFunctions {
                 loop {
                     let next =
                         context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
-                    if next.is_absent() {
-                        break Ok(if next.absent_reason() == Some(vocabulary::FINISHED) {
-                            state
-                        } else {
-                            next
-                        });
+                    match next.absent_reason() {
+                        Some(vocabulary::FINISHED) => break Ok(state),
+                        Some(_) => break Ok(next),
+                        None => state = next,
                     }
-                    state = next;
                 }
             })
             .parameters([vocabulary::INITIAL, vocabulary::STEP])

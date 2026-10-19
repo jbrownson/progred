@@ -56,7 +56,7 @@ pub fn viewport_display<W: Host>(
 /// A projection's result in place, or where it's absent, the value it
 /// projects, so the absence exposes its source.
 fn result_or_value<W: Host>(result: ::grap::RuntimeValue) -> Layout<W> {
-    if result.is_absent() {
+    if result.absent_reason().is_some() {
         crate::display::descend([Step::Key(vocabulary::VALUE)], None, None)
     } else {
         at([Step::Key(vocabulary::RESULT)], &result)
@@ -79,7 +79,7 @@ fn viewport_runtime_output(
             };
             let prepared =
                 env.apply_runtime_memo(prepare, &[(vocabulary::VALUE, value.clone())], fuel);
-            if prepared.is_absent() {
+            if prepared.absent_reason().is_some() {
                 return Some(prepared);
             }
             prepared
@@ -188,16 +188,16 @@ pub(crate) fn document_libraries<W: Host>(loaded: Partial<W>) -> Partial<W> {
                     Some(layout) => {
                         crate::display::structure::with_extra_fields(input, |_| true, layout)
                     }
-                    None => {
-                        (evaluation.completed && !evaluation.result.is_absent()).then(|| {
+                    None => Some(evaluation.result)
+                        .filter(|result| evaluation.completed && result.absent_reason().is_none())
+                        .map(|result| {
                             crate::display::at_with_projection(
                                 [Step::Key(vocabulary::RESULT)],
-                                evaluation.result,
+                                result,
                                 Some(loaded.clone()),
                                 Some(loaded.clone()),
                             )
-                        })?
-                    }
+                        })?,
                 };
                 let occurrence = occurrence.clone();
                 Some(Layout::new(move |builder| {

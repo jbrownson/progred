@@ -24,7 +24,7 @@ impl Recorded {
     }
 
     pub fn path(&self) -> Outcome<&Recording> {
-        if self.evaluation.completed && !self.evaluation.result.is_absent() {
+        if self.evaluation.completed && self.evaluation.result.absent_reason().is_none() {
             Ok(&self.path)
         } else {
             Err(self.evaluation.result.to_value())
@@ -119,7 +119,7 @@ fn record_parts(
         None => {
             let mut part = Recording::default();
             let evaluation = record(program, host, evaluation.remaining_fuel, &mut part);
-            if evaluation.completed && !evaluation.result.is_absent() {
+            if evaluation.completed && evaluation.result.absent_reason().is_none() {
                 output.append_part(part);
                 Ok(evaluation)
             } else {

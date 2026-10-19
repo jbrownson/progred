@@ -122,7 +122,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
         ::grap::evaluate_runtime_scoped(&expression, &receiver, scope, 1000)
     });
     assert!(
-        result.completed && !result.result.is_absent(),
+        result.completed && result.result.absent_reason().is_none(),
         "{:?}",
         result.result
     );
@@ -288,7 +288,7 @@ fn preview_constructor_preserves_its_runtime_program() {
             1000,
         );
         assert!(
-            result.completed && !result.result.is_absent(),
+            result.completed && result.result.absent_reason().is_none(),
             "{:?}",
             result.result
         );
@@ -378,7 +378,7 @@ fn runtime_mapping_profile() {
         let result = run(&mut path, |scope| {
             ::grap::evaluate_runtime_scoped(program, &host, scope, 100_000)
         });
-        assert!(result.completed && !result.result.is_absent());
+        assert!(result.completed && result.result.absent_reason().is_none());
         path
     };
     let expected = record(&programs[0]);

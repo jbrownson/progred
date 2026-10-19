@@ -67,7 +67,7 @@ fn constructor(
             return Ok(context.missing_runtime_argument(key));
         };
         let value = context.eval(expression, environment)?;
-        if value.is_absent() {
+        if value.absent_reason().is_some() {
             return Ok(value);
         }
         fields.push((key, value));
@@ -435,7 +435,7 @@ fn controls_output<W: Host>(
         )),
         ::grap::DEFAULT_FUEL,
     );
-    if !evaluation.completed || evaluation.result.is_absent() {
+    if !evaluation.completed || evaluation.result.absent_reason().is_some() {
         Err(evaluation.result)
     } else {
         Ok((widgets.into_inner(), evaluation.result))
@@ -478,7 +478,7 @@ fn slider<W: Host>(
         return Ok(context.missing_runtime_argument(ON_CHANGE));
     };
     let handler = context.eval(expression, environment)?;
-    if handler.is_absent() {
+    if handler.absent_reason().is_some() {
         return Ok(handler);
     }
     let mut number = |field, default| -> Result<Option<f64>, Halt> {
@@ -636,7 +636,7 @@ fn tree_program_cursor<W: Host>(
         return Ok(context.missing_runtime_argument(tree::vocabulary::PROGRAM));
     };
     let program = context.eval(program, environment)?;
-    if program.is_absent() {
+    if program.absent_reason().is_some() {
         return Ok(program);
     }
     let fuel = match context.field(call, layout::vocabulary::FUEL) {

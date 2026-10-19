@@ -7,7 +7,7 @@ fn retained(body: Value, source: CellId, host: &dyn ::grap::Host) -> RuntimeValu
         host,
         1000,
     );
-    assert!(result.completed && !result.result.is_absent());
+    assert!(result.completed && result.result.absent_reason().is_none());
     result.result
 }
 

@@ -347,7 +347,7 @@ fn scope_does_not_reinterpret_plain_values_or_escape_into_returned_closures() {
         None,
         10000,
     );
-    assert!(unscoped.result.is_absent());
+    assert!(unscoped.result.absent_reason().is_some());
 }
 
 #[test]

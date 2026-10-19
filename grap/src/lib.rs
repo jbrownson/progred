@@ -436,10 +436,6 @@ impl RuntimeValue {
         self.field(absent::ABSENT)?.as_cell()
     }
 
-    pub fn is_absent(&self) -> bool {
-        self.absent_reason().is_some()
-    }
-
     pub fn declines(&self) -> bool {
         self.absent_reason() == Some(absent::DECLINED)
     }
@@ -1663,7 +1659,7 @@ impl<'a> Context<'a> {
             ),
             PreparedCallTargetKind::Value(expression) => {
                 let callable = context.eval_definition(cell, expression.clone(), environment)?;
-                if callable.is_absent() {
+                if callable.absent_reason().is_some() {
                     Ok(callable)
                 } else {
                     context
@@ -2094,7 +2090,7 @@ impl<'a> Context<'a> {
                 let expression =
                     context.lower_source(&value, OriginRoot::Cell { cell, resolution });
                 let callable = context.eval_definition(cell, expression, environment)?;
-                if callable.is_absent() {
+                if callable.absent_reason().is_some() {
                     Ok(callable)
                 } else {
                     context

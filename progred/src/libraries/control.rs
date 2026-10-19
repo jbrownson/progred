@@ -103,7 +103,7 @@ fn do_foreign(
     let mut result = None;
     for expression in elements {
         let value = context.eval(expression.clone(), environment)?;
-        if value.is_absent() {
+        if value.absent_reason().is_some() {
             return Ok(value);
         }
         result = Some(value);

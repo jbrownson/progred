@@ -53,7 +53,7 @@ fn functions() -> ForeignFunctions {
                 return Ok(context.missing_runtime_argument(vocabulary::VALUE));
             };
             let value = context.eval(expression, environment)?;
-            if value.is_absent() {
+            if value.absent_reason().is_some() {
                 match context.field(call, vocabulary::DEFAULT) {
                     Some(default) => context.eval(default, environment),
                     None => Ok(context.missing_runtime_argument(vocabulary::DEFAULT)),

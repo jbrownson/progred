@@ -1092,7 +1092,8 @@ fn retained_foreign_references_do_not_keep_the_old_implementation() {
     assert!(
         apply(&callable, [], &host(vec![]), None, 100)
             .result
-            .is_absent()
+            .absent_reason()
+            .is_some()
     );
 }
 
@@ -1133,7 +1134,12 @@ fn retained_callables_use_the_receiving_scoped_capability() {
     );
     assert!(result.completed);
     assert_eq!(result.result.as_f64(), Some(2.0));
-    assert!(apply(&callable, [], &host, None, 100).result.is_absent());
+    assert!(
+        apply(&callable, [], &host, None, 100)
+            .result
+            .absent_reason()
+            .is_some()
+    );
 }
 
 #[test]

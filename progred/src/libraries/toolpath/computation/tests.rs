@@ -244,7 +244,7 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
     ]);
     let mut recording = Recording::default();
     let evaluation = record_program(&tree.clone().into(), &libraries, 10000, &mut recording);
-    assert!(evaluation.completed && !evaluation.result.is_absent());
+    assert!(evaluation.completed && evaluation.result.absent_reason().is_none());
     let pose = recording
         .playback_cursor::<InvalidPath>(Cursor::Progress(0.5), Some(1..2), |_, _, _, _, _| Ok(()))
         .unwrap()
@@ -260,7 +260,7 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
             10000,
         )
     });
-    assert!(evaluation.completed && !evaluation.result.is_absent());
+    assert!(evaluation.completed && evaluation.result.absent_reason().is_none());
     assert_eq!(
         recording.segments().collect::<Vec<_>>(),
         direct.segments().collect::<Vec<_>>()
@@ -394,7 +394,7 @@ fn cube_grouping_records_the_same_cuts_as_the_complete_program() {
     let mut recording = Recording::default();
     let evaluation = record_program(&tree.items, &sources, 3_000_000, &mut recording);
     assert!(
-        evaluation.completed && !evaluation.result.is_absent(),
+        evaluation.completed && evaluation.result.absent_reason().is_none(),
         "{:?}",
         evaluation.result
     );
@@ -409,7 +409,7 @@ fn cube_grouping_records_the_same_cuts_as_the_complete_program() {
         )
     });
     assert!(
-        evaluation.completed && !evaluation.result.is_absent(),
+        evaluation.completed && evaluation.result.absent_reason().is_none(),
         "{:?}",
         evaluation.result
     );

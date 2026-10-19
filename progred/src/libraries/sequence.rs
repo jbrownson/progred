@@ -54,7 +54,7 @@ fn range(
     env: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let count = evaluated(context, call, env, COUNT)?;
-    Ok(if count.is_absent() {
+    Ok(if count.absent_reason().is_some() {
         count
     } else {
         match count.as_f64().filter(|count| exact(*count)) {
@@ -78,11 +78,11 @@ fn range_step(
     env: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let count = evaluated(context, call, env, COUNT)?;
-    Ok(if count.is_absent() {
+    Ok(if count.absent_reason().is_some() {
         count
     } else {
         let index = evaluated(context, call, env, INDEX)?;
-        if index.is_absent() {
+        if index.absent_reason().is_some() {
             index
         } else {
             match (count.as_f64(), index.as_f64()) {
@@ -109,7 +109,7 @@ fn consume(
     collect: bool,
 ) -> Result<RuntimeValue, Halt> {
     let sequence = evaluated(context, call, env, ITEMS)?;
-    if sequence.is_absent() {
+    if sequence.absent_reason().is_some() {
         return Ok(sequence);
     }
     let mut sequence = context.prepare_runtime_callable(sequence, env);
@@ -140,7 +140,7 @@ fn consume(
             (None, Some(item), Some(next)) => {
                 if let Some(action) = &action {
                     let result = context.call_prepared(action, [(ITEM, item)])?;
-                    if result.is_absent() {
+                    if result.absent_reason().is_some() {
                         break Ok(result);
                     }
                 } else {

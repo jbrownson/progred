@@ -74,7 +74,7 @@ fn children<S: Sink>(
             } else {
                 context.eval(child, environment)?
             };
-            if result.is_absent() {
+            if result.absent_reason().is_some() {
                 return Ok(result);
             }
         }
@@ -141,14 +141,14 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
                 let value = maps.iter().try_fold(
                     context.eval(expression, environment)?,
                     |value, map| {
-                        if value.is_absent() {
+                        if value.absent_reason().is_some() {
                             Ok(value)
                         } else {
                             context.call_prepared(map, [(VALUE, value)])
                         }
                     },
                 )?;
-                Ok(if value.is_absent() {
+                Ok(if value.absent_reason().is_some() {
                     value
                 } else {
                     context.effect(|| {
@@ -239,7 +239,7 @@ fn collect(
     let result = interpret(context, sink.clone(), |context| {
         context.call_prepared(program, [])
     })?;
-    if result.is_absent() {
+    if result.absent_reason().is_some() {
         Ok(Err(result))
     } else {
         let items = std::mem::take(&mut sink.borrow_mut().items);
