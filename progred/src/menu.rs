@@ -210,103 +210,85 @@ pub fn navigate(
         })
     };
     let tapped = state.alt_tapped(event);
-    let f10 = event.state.is_down()
-        && event.key == Key::Named(NamedKey::F10)
-        && crate::modifiers::plain(&event.modifiers);
-    if (tapped || f10) && !menus.is_empty() {
-        if !state.close() {
-            state.open = Some(0);
-            state.cursor = first_enabled(0);
-        }
-        return Navigation::Handled;
-    }
-    if !event.state.is_down() {
-        return Navigation::Pass;
-    }
-    if state.open.is_some()
-        && !event.modifiers.ctrl()
-        && !event.modifiers.meta()
-        && !event.modifiers.alt()
-        && matches!(event.key, Key::Named(NamedKey::Escape | NamedKey::Tab))
-    {
-        state.close();
-        return Navigation::Handled;
-    }
-    if !crate::modifiers::plain(&event.modifiers) {
-        return Navigation::Pass;
-    }
-    let Some(open) = state.open else {
-        return Navigation::Pass;
-    };
-    let items = menus
-        .get(open)
-        .map(|menu| {
-            menu.entries
-                .iter()
-                .filter_map(|entry| match entry {
-                    Entry::Command(command) => Some((*command, availability.enabled(*command))),
-                    Entry::Separator => None,
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let step = |from: Option<usize>, delta: isize| -> Option<usize> {
-        if items.iter().all(|(_, enabled)| !enabled) {
-            return None;
-        }
-        let len = items.len() as isize;
-        let mut at = match from {
-            Some(at) => at as isize + delta,
-            None if delta > 0 => 0,
-            None => len - 1,
-        };
-        loop {
-            at = at.rem_euclid(len);
-            if items[at as usize].1 {
-                return Some(at as usize);
+    let down = event.state.is_down();
+    let plain = crate::modifiers::plain(&event.modifiers);
+    match (state.open, &event.key) {
+        _ if tapped || down && plain && event.key == Key::Named(NamedKey::F10) => {
+            if !state.close() {
+                state.open = Some(0);
+                state.cursor = first_enabled(0);
             }
-            at += delta;
-        }
-    };
-    match &event.key {
-        Key::Named(NamedKey::ArrowDown) => {
-            state.cursor = step(state.cursor, 1);
             Navigation::Handled
         }
-        Key::Named(NamedKey::ArrowUp) => {
-            state.cursor = step(state.cursor, -1);
+        (Some(_), Key::Named(NamedKey::Escape | NamedKey::Tab))
+            if down
+                && !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.alt()) =>
+        {
+            state.close();
             Navigation::Handled
         }
-        Key::Named(NamedKey::Home) => {
-            state.cursor = step(None, 1);
-            Navigation::Handled
+        (Some(open), key) if down && plain => {
+            let items: Vec<Command> = menus.get(open).map_or_else(Vec::new, |menu| {
+                commands(std::slice::from_ref(menu)).collect()
+            });
+            let enabled: Vec<bool> = items
+                .iter()
+                .map(|command| availability.enabled(*command))
+                .collect();
+            match key {
+                Key::Named(NamedKey::ArrowDown) => {
+                    state.cursor = step(&enabled, state.cursor, 1);
+                    Navigation::Handled
+                }
+                Key::Named(NamedKey::ArrowUp) => {
+                    state.cursor = step(&enabled, state.cursor, -1);
+                    Navigation::Handled
+                }
+                Key::Named(NamedKey::Home) => {
+                    state.cursor = step(&enabled, None, 1);
+                    Navigation::Handled
+                }
+                Key::Named(NamedKey::End) => {
+                    state.cursor = step(&enabled, None, -1);
+                    Navigation::Handled
+                }
+                Key::Named(arrow @ (NamedKey::ArrowLeft | NamedKey::ArrowRight)) => {
+                    let delta = match arrow {
+                        NamedKey::ArrowRight => 1,
+                        _ => menus.len() - 1,
+                    };
+                    let next = (open + delta) % menus.len();
+                    state.open = Some(next);
+                    state.cursor = first_enabled(next);
+                    Navigation::Handled
+                }
+                _ if *key == Key::Named(NamedKey::Enter)
+                    || matches!(key, Key::Character(c) if c.as_str() == " ") =>
+                {
+                    match state.cursor.and_then(|at| items.get(at)) {
+                        Some(command) if availability.enabled(*command) => {
+                            Navigation::Activate(*command)
+                        }
+                        _ => Navigation::Handled,
+                    }
+                }
+                _ => Navigation::Pass,
+            }
         }
-        Key::Named(NamedKey::End) => {
-            state.cursor = step(None, -1);
-            Navigation::Handled
-        }
-        Key::Named(NamedKey::ArrowLeft) if !menus.is_empty() => {
-            let next = (open + menus.len() - 1) % menus.len();
-            state.open = Some(next);
-            state.cursor = first_enabled(next);
-            Navigation::Handled
-        }
-        Key::Named(NamedKey::ArrowRight) if !menus.is_empty() => {
-            let next = (open + 1) % menus.len();
-            state.open = Some(next);
-            state.cursor = first_enabled(next);
-            Navigation::Handled
-        }
-        Key::Named(NamedKey::Enter) => match state.cursor.and_then(|at| items.get(at)) {
-            Some((command, true)) => Navigation::Activate(*command),
-            _ => Navigation::Handled,
-        },
-        Key::Character(c) if c.as_str() == " " => match state.cursor.and_then(|at| items.get(at)) {
-            Some((command, true)) => Navigation::Activate(*command),
-            _ => Navigation::Handled,
-        },
         _ => Navigation::Pass,
     }
+}
+
+/// The enabled item `delta` away from `from`, wrapping around, or the
+/// first enabled one counting from that end with nothing cursored.
+fn step(enabled: &[bool], from: Option<usize>, delta: isize) -> Option<usize> {
+    let len = enabled.len() as isize;
+    let start = from.map_or(if delta > 0 { 0 } else { len - 1 }, |at| {
+        at as isize + delta
+    });
+    (0..len)
+        .map(|offset| (start + offset * delta).rem_euclid(len) as usize)
+        .find(|at| enabled.get(*at).copied().unwrap_or(false))
 }
 
 pub fn shortcut(
@@ -446,11 +428,11 @@ mod view {
         )
     }
 
-    fn separator<C: 'static>(
+    fn separator(
         palette: crate::display::widget::style::Palette,
         scale: f64,
         width: f64,
-    ) -> Measured<HoverPass<C>> {
+    ) -> Measured<HoverPass<Editor>> {
         placed::leaf(
             Extent {
                 width,
@@ -593,17 +575,17 @@ mod view {
     ) -> Measured<HoverPass<Editor>> {
         let scale = description.scale;
         let palette = description.palette;
-        let mut command_index = 0;
+        // Separators don't count toward a command's index.
         let items = menu_entries
             .iter()
-            .copied()
-            .map(|entry| match entry {
-                Entry::Separator => None,
-                Entry::Command(command) => {
-                    let item = measure_item(tcx, styles, description, command, command_index);
-                    command_index += 1;
-                    Some(item)
-                }
+            .scan(0, |index, entry| {
+                Some(match entry {
+                    Entry::Separator => None,
+                    Entry::Command(command) => {
+                        *index += 1;
+                        Some(measure_item(tcx, styles, description, *command, *index - 1))
+                    }
+                })
             })
             .collect::<Vec<_>>();
         let label_width = items
@@ -664,16 +646,11 @@ mod view {
         let palette = description.palette;
         let styles = styles(palette);
         let definition = definition(description.projections.iter().map(|(library, _)| *library));
-        let mut x = 0.0;
-        let mut popup_x = 0.0;
         let headings = definition
             .iter()
             .enumerate()
             .map(|(index, menu)| {
-                if description.state.open() == Some(index) {
-                    popup_x = x;
-                }
-                let node = heading(
+                heading(
                     palette,
                     tcx,
                     &styles.text,
@@ -681,12 +658,18 @@ mod view {
                     menu.label,
                     description.state.open() == Some(index),
                     description.scale,
-                );
-                x += node.extent.width;
-                node
+                )
             })
             .collect::<Vec<_>>();
-        let heading_width = x;
+        let heading_width = headings.iter().map(|node| node.extent.width).sum::<f64>();
+        // The open menu's popup hangs below its heading.
+        let popup_x = description.state.open().map_or(0.0, |open| {
+            headings
+                .iter()
+                .take(open)
+                .map(|node| node.extent.width)
+                .sum()
+        });
         // How finished Progred is, at the bar's far end: a note, not a menu.
         let stage = {
             let text = placed::text(tcx, &crate::editor::stage(), &styles.dim);
