@@ -102,49 +102,15 @@ impl Computations {
         fuel: usize,
         origin: Option<grap::SourceOrigin>,
     ) -> grap::RuntimeValue {
-        struct Evaluation {
-            expression: Input<grap::RuntimeValue>,
-            origin: Input<Option<grap::SourceOrigin>>,
-            fuel: Input<usize>,
-            result: incremental::Memo<grap::Evaluation>,
-        }
-        let evaluation = self.at(view, path, || {
-            let expression = self.runtime.input(expression.clone());
-            let origin = self.runtime.input(origin.clone());
-            let fuel = self.runtime.input(fuel);
-            let result = self.runtime.memo_by(
-                {
-                    let expression = expression.clone();
-                    let origin = origin.clone();
-                    let fuel = fuel.clone();
-                    let definitions = self.definitions.clone();
-                    move |read| {
-                        let expression = expression.read(read);
-                        let fuel = *fuel.read(read);
-                        let origin = origin.read(read).as_ref().clone();
-                        Ok(memo::run(&definitions, read, |host| {
-                            grap::evaluate_runtime_at(&expression, origin, host, fuel)
-                        }))
-                    }
-                },
-                same_evaluation,
-            );
-            Evaluation {
-                expression,
-                origin,
-                fuel,
-                result,
-            }
-        });
-        evaluation
-            .expression
-            .set_by(expression.clone(), grap::RuntimeValue::same_result);
-        evaluation.origin.set(origin);
-        evaluation.fuel.set(fuel);
-        self.runtime
-            .read(&evaluation.result)
-            .map(|evaluation| evaluation.result.clone())
-            .unwrap_or_else(|error| memo::failure(error).into())
+        self.memoized(
+            view,
+            path,
+            (expression.clone(), origin, fuel),
+            |a, b| a.0.same_result(&b.0) && a.1 == b.1 && a.2 == b.2,
+            |(expression, origin, fuel), host| {
+                grap::evaluate_runtime_at(expression, origin.clone(), host, *fuel)
+            },
+        )
     }
 
     #[cfg(test)]
@@ -168,12 +134,39 @@ impl Computations {
         arguments: &[(gid::CellId, Value)],
         fuel: usize,
     ) -> grap::RuntimeValue {
-        struct Application {
-            input: Input<(Value, Vec<(gid::CellId, Value)>, usize)>,
+        self.memoized(
+            view,
+            path,
+            (function.clone(), arguments.to_vec(), fuel),
+            PartialEq::eq,
+            |(function, arguments, fuel), host| {
+                grap::apply_expression(
+                    &function.into(),
+                    arguments.iter().map(|(k, v)| (*k, v.into())),
+                    host,
+                    None,
+                    *fuel,
+                )
+            },
+        )
+    }
+
+    /// `run` over `input`, kept for the occurrence at `path` in `view`: it
+    /// runs again only when the input changes, as `same` compares it, or a
+    /// definition it resolved does.
+    fn memoized<I: Clone + 'static>(
+        &self,
+        view: &Root,
+        path: &[Step],
+        input: I,
+        same: fn(&I, &I) -> bool,
+        run: impl Fn(&I, &dyn Host) -> grap::Evaluation + 'static,
+    ) -> grap::RuntimeValue {
+        struct Memoized<I> {
+            input: Input<I>,
             result: incremental::Memo<grap::Evaluation>,
         }
-        let input = (function.clone(), arguments.to_vec(), fuel);
-        let application = self.at(view, path, || {
+        let memoized = self.at(view, path, || {
             let input = self.runtime.input(input.clone());
             let result = self.runtime.memo_by(
                 {
@@ -181,25 +174,16 @@ impl Computations {
                     let definitions = self.definitions.clone();
                     move |read| {
                         let input = input.read(read);
-                        let (function, arguments, fuel) = &*input;
-                        Ok(memo::run(&definitions, read, |host| {
-                            grap::apply_expression(
-                                &function.into(),
-                                arguments.iter().map(|(k, v)| (*k, v.into())),
-                                host,
-                                None,
-                                *fuel,
-                            )
-                        }))
+                        Ok(memo::run(&definitions, read, |host| run(&input, host)))
                     }
                 },
                 same_evaluation,
             );
-            Application { input, result }
+            Memoized { input, result }
         });
-        application.input.set(input);
+        memoized.input.set_by(input, same);
         self.runtime
-            .read(&application.result)
+            .read(&memoized.result)
             .map(|evaluation| evaluation.result.clone())
             .unwrap_or_else(|error| memo::failure(error).into())
     }
