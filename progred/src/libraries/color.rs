@@ -85,6 +85,15 @@ pub fn read(value: &Value) -> Option<Color> {
     encoded(value).map(decoded_color)
 }
 
+/// An opaque color's red, green and blue bytes.
+pub fn read_opaque(value: &Value) -> Option<[u8; 3]> {
+    match encoded(value)? {
+        Encoded::Rgb(rgb) => Some(rgb),
+        Encoded::Rgba([red, green, blue, 0xff]) => Some([red, green, blue]),
+        Encoded::Rgba(_) => None,
+    }
+}
+
 fn decoded_color(encoded: Encoded) -> Color {
     match encoded {
         Encoded::Rgb([red, green, blue]) => Color::from_rgba8(red, green, blue, 0xff),

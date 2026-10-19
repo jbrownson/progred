@@ -727,14 +727,7 @@ fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
                 .ok_or(vocabulary::INVALID_SCENE)?;
             let color = fields
                 .get(&vocabulary::COLOR)
-                .map(|value| {
-                    let rgba = color::read(value)
-                        .ok_or(vocabulary::INVALID_COLOR)?
-                        .to_rgba8();
-                    (rgba.a == 255)
-                        .then_some([rgba.r, rgba.g, rgba.b])
-                        .ok_or(vocabulary::INVALID_COLOR)
-                })
+                .map(|value| color::read_opaque(value).ok_or(vocabulary::INVALID_COLOR))
                 .transpose()?
                 .unwrap_or([255; 3]);
             Ok(SceneObject {

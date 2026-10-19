@@ -158,7 +158,8 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let program = fields.field(PROGRAM)?;
     let radius = fields.field(LINE_RADIUS)?.as_f64()?;
     cam::field::read_radius(radius)?;
-    let color = implicit::read_color(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
+    let color =
+        crate::libraries::color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
     let fuel = super::read_fuel(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
     let playback = match fields.field(PLAYBACK) {
         Some(value) => Some(playback::Settings::read(value.as_value())?),

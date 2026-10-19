@@ -37,7 +37,8 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
     let program = fields.field(PROGRAM)?;
     let radius = fields.field(LINE_RADIUS)?.as_f64()?;
-    let color = super::fidget::read_color(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
+    let color =
+        crate::libraries::color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
     read_radius(radius)?;
     let fuel = super::read_fuel(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
     let playback = match fields.field(PLAYBACK) {

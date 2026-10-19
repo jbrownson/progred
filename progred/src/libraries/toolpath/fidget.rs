@@ -152,11 +152,6 @@ impl Sink for Tubes {
     }
 }
 
-pub(super) fn read_color(value: &Value) -> Option<[u8; 3]> {
-    let rgba = color::read(value)?.to_rgba8();
-    (rgba.a == 255).then_some([rgba.r, rgba.g, rgba.b])
-}
-
 pub(super) fn preview(
     context: &mut Context,
     call: &Expression,
@@ -199,7 +194,7 @@ pub(super) fn preview_with(
         read_radius(radius).ok_or_else(invalid)?;
         let color = argument(context, call, fidget::vocabulary::COLOR)?;
         let color = context.eval_to_value(color, environment)?;
-        read_color(&color).ok_or_else(|| {
+        color::read_opaque(&color).ok_or_else(|| {
             Error::Invalid(::grap::absent::value(fidget::vocabulary::INVALID_COLOR).into())
         })?;
         let fuel = super::fuel(context, call, environment)?;
@@ -230,7 +225,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let program = fields.field(PROGRAM)?;
     let radius = fields.field(LINE_RADIUS)?.as_f64()?;
     read_radius(radius)?;
-    let color = read_color(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
+    let color = color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
     let fuel = fields.field(layout::vocabulary::FUEL)?.as_f64()?;
     let fuel = super::read_fuel(fuel)?;
     let request = fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?;

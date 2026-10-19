@@ -48,7 +48,7 @@ impl Settings {
         let stock_color = match r.get(&STOCK) {
             Some(value) => {
                 let fields = value.as_record()?;
-                Some(super::fidget::read_color(
+                Some(crate::libraries::color::read_opaque(
                     fields.get(&fidget::vocabulary::COLOR)?,
                 )?)
             }
