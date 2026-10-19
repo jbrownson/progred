@@ -256,6 +256,32 @@ fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
 }
 
 #[test]
+fn an_invalid_call_names_its_function() {
+    for (program, function) in [
+        (call(TEXT, []), TEXT),
+        (
+            call(ALTERNATIVES, [(CHILDREN, Value::record([]))]),
+            ALTERNATIVES,
+        ),
+        (
+            call(PAD, [(CHILD, sequence([text("two"), text("children")]))]),
+            PAD,
+        ),
+    ] {
+        let (result, layout) = evaluate(&program, 10000);
+        assert_eq!(
+            result.result.to_value(),
+            ::grap::absent::with_detail(
+                INVALID_PROGRAM,
+                ::grap::vocabulary::FUNCTION,
+                function.into()
+            )
+        );
+        assert!(layout.is_none());
+    }
+}
+
+#[test]
 fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
     let reason = gid::new_cell_id();
     let failure =
