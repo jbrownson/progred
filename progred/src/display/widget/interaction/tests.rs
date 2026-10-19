@@ -6,6 +6,7 @@ use crate::display::widget::frame::HoverOutput;
 use kurbo::{Point, Rect};
 use measured::Extent;
 use puri::handler::HasHandler;
+use puri::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::Modifiers;
 use ui_events::pointer::PointerButton;
 use uig::Placement;

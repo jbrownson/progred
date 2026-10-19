@@ -1,4 +1,5 @@
 use super::*;
+use puri::handler::test_support::DispatchShorthands;
 
 #[test]
 fn native_annotation_handler_retains_the_projected_site() {

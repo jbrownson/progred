@@ -9,6 +9,7 @@ use crate::projection::Projection;
 use crate::projection::test_support::{Framing, editing_frame, framed};
 use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value, new_cell_id};
+use puri::handler::test_support::DispatchShorthands;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 

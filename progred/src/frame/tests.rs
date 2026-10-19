@@ -3,6 +3,7 @@ use crate::display::test_support::Landmarks;
 use crate::display::widget::source::Secondary;
 use crate::test_support::key_down;
 use gid::{CellId, Cells, Document, Step, Value};
+use puri::handler::test_support::DispatchShorthands;
 
 type HoverLog = Rc<std::cell::RefCell<Vec<(&'static str, f64)>>>;
 type Probe = crate::display::widget::frame::Probe<Hovered>;

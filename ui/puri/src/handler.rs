@@ -159,81 +159,6 @@ impl<C, P> Handler<C, P> {
             None => EventOutcome::decline(event),
         }
     }
-
-    pub fn dispatch_pointer_down(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool
-    where
-        P: Default,
-    {
-        self.dispatch_pointer_down_with(ctx, event, &mut P::default())
-    }
-
-    pub fn dispatch_pointer_down_with(
-        &self,
-        ctx: &mut C,
-        event: &PointerButtonEvent,
-        input: &mut P,
-    ) -> bool {
-        self.dispatch(ctx, Event::PointerDown(event), input)
-            .handled()
-    }
-
-    pub fn dispatch_pointer_move(&self, ctx: &mut C, event: &PointerUpdate) -> bool
-    where
-        P: Default,
-    {
-        self.dispatch(ctx, Event::PointerMove(event), &mut P::default())
-            .handled()
-    }
-
-    pub fn dispatch_pointer_up(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool
-    where
-        P: Default,
-    {
-        self.dispatch(ctx, Event::PointerUp(event), &mut P::default())
-            .handled()
-    }
-
-    pub fn dispatch_pointer_cancel(&self, ctx: &mut C, event: &PointerInfo) -> bool
-    where
-        P: Default,
-    {
-        self.dispatch(ctx, Event::PointerCancel(event), &mut P::default())
-            .handled()
-    }
-
-    pub fn dispatch_scroll<'a>(
-        &self,
-        ctx: &mut C,
-        event: &'a PointerScrollEvent,
-    ) -> EventOutcome<'a>
-    where
-        P: Default,
-    {
-        self.dispatch(
-            ctx,
-            Event::Scroll(Cow::Borrowed(std::slice::from_ref(event))),
-            &mut P::default(),
-        )
-    }
-
-    pub fn dispatch_key(&self, ctx: &mut C, event: &KeyboardEvent) -> bool
-    where
-        P: Default,
-    {
-        self.dispatch_key_with(ctx, event, &mut P::default())
-    }
-
-    pub fn dispatch_key_with(&self, ctx: &mut C, event: &KeyboardEvent, input: &mut P) -> bool {
-        self.dispatch(ctx, Event::Key(event), input).handled()
-    }
-
-    pub fn dispatch_ime(&self, ctx: &mut C, event: &ImeEvent) -> bool
-    where
-        P: Default,
-    {
-        self.dispatch(ctx, Event::Ime(event), &mut P::default())
-            .handled()
-    }
 }
 
 impl<C: 'static, P: 'static> Handler<C, P> {
@@ -395,6 +320,9 @@ impl<C, P: 'static> HasHandler<C> for Handler<C, P> {
         self
     }
 }
+
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 
 #[cfg(test)]
 mod tests;

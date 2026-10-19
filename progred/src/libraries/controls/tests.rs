@@ -3,6 +3,7 @@ use crate::display::test_support::{mouse, press_at};
 use crate::projection::Partial;
 use gid::Cells;
 use kurbo::Point;
+use puri::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::Modifiers;
 
 fn controls_output(

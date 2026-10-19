@@ -6,6 +6,7 @@ use crate::libraries::f64;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, hover};
 use gid::{Document, Path, Step};
 use kurbo::Point;
+use puri::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::Modifiers;
 use ui_events::pointer::{PointerButton, PointerType};
 

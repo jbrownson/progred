@@ -10,6 +10,7 @@ use crate::test_support::key_down;
 use crate::test_values::numeric_calls;
 use gid::{Cells, Document, Step, new_cell_id};
 use kurbo::Point;
+use puri::handler::test_support::DispatchShorthands;
 use puri::hover::Claim;
 use ui_events::keyboard::{Key, Modifiers};
 

@@ -1,3 +1,4 @@
+use super::test_support::DispatchShorthands;
 use super::*;
 use kurbo::{Point, Rect};
 use ui_events::pointer::{

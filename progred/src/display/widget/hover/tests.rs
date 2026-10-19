@@ -3,6 +3,7 @@ use crate::display::widget::HoverInput;
 use crate::display::widget::frame::HoverOutput;
 use kurbo::{Point, Rect};
 use puri::draw::DrawList;
+use puri::handler::test_support::DispatchShorthands;
 use puri::hover::Claim;
 use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerState, PointerType};
 use uig::Placement;

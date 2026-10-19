@@ -11,6 +11,7 @@ use measured::{Extent, Measured};
 use peniko::{Brush, Color, ImageData};
 use puri::draw::{Canvas, DrawCmd, DrawList, GlyphRun, Shape};
 use puri::handler::HasHandler;
+use puri::handler::test_support::DispatchShorthands;
 use ui_events::ScrollDelta;
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerScrollEvent, PointerState, PointerUpdate,

@@ -1,6 +1,7 @@
 use super::*;
 use kurbo::Rect;
 use puri::handler::Event;
+use puri::handler::test_support::DispatchShorthands;
 use ui_events::ScrollDelta;
 use ui_events::pointer::{PointerScrollEvent, PointerState};
 use uig::Placement;

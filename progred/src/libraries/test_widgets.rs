@@ -10,6 +10,7 @@ use crate::{Editor, frame::Hovered};
 use kurbo::Point;
 use kurbo::Rect;
 use measured::Extent;
+use puri::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::Modifiers;
 use uig::Placement;
 

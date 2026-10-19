@@ -1,6 +1,7 @@
 use super::*;
 use crate::draw::DrawList;
 use crate::handler::Handler;
+use crate::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::KeyboardEvent;
 
 #[test]

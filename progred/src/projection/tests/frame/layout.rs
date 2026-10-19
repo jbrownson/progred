@@ -2,6 +2,7 @@ use super::*;
 use crate::clipboard::Clipboard;
 use crate::display::test_support::press_at;
 use puri::edit::TextClipboard;
+use puri::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::Modifiers;
 
 #[test]

@@ -1,5 +1,6 @@
 use super::*;
 use crate::handler::Handler;
+use crate::handler::test_support::DispatchShorthands;
 use kurbo::Rect;
 use ui_events::pointer::{PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType};
 

@@ -11,6 +11,7 @@ use gid::Value;
 use kurbo::Rect;
 use peniko::Brush;
 use puri::draw::{DrawCmd, DrawList, Shape};
+use puri::handler::test_support::DispatchShorthands;
 use puri::hover::Claim;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::Modifiers;

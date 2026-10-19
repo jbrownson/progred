@@ -10,6 +10,7 @@ use crate::projection::test_support::{Framing, framed};
 use gid::{CellId, Record, Value};
 use layout_data::vocabulary as event_fields;
 use puri::handler::ImeEvent;
+use puri::handler::test_support::DispatchShorthands;
 use ui_events::ScrollDelta;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{

@@ -8,6 +8,7 @@ use crate::projection::test_support::editing_frame;
 use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value};
 use puri::handler::NavigationDirection;
+use puri::handler::test_support::DispatchShorthands;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 

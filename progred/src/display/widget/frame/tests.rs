@@ -1,5 +1,6 @@
 use super::super::leaf;
 use super::*;
+use puri::handler::test_support::DispatchShorthands;
 use std::{cell::RefCell, rc::Rc};
 
 #[test]

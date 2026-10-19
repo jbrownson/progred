@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::test_support::{mouse, press_at};
 use crate::svg::write_cmds;
+use puri::handler::test_support::DispatchShorthands;
 
 #[test]
 fn grap_template_preview_evaluates_the_shared_cells_current_call() {
