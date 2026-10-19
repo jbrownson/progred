@@ -214,7 +214,7 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
 #[test]
 fn a_pending_replacement_does_not_retain_a_previous_absent_as_an_error() {
     let paths = Ok(Mesh::default());
-    let failure = Err(absent::with_reason(INVALID_INPUT));
+    let failure = Err(::grap::absent::value(INVALID_INPUT));
     let pending = Availability::Pending {
         previous: Some(Arc::new(failure.clone())),
     };

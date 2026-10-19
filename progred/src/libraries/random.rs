@@ -1,7 +1,7 @@
 //! Deterministic random sampling inside an explicit Grap evaluation scope.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, f64, name, u64};
+use crate::libraries::{Library, f64, name, u64};
 use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x953e2838d5985718dd4e91f0af673fe3);
@@ -49,7 +49,7 @@ fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
             let min = context.eval_f64(min, environment)?;
             let max = context.eval_f64(max, environment)?;
             let (Some(min), Some(max)) = (min, max) else {
-                return Ok(absent::with_reason(vocabulary::INVALID_BOUNDS).into());
+                return Ok(::grap::absent::value(vocabulary::INVALID_BOUNDS).into());
             };
             let next = state
                 .get()
@@ -69,7 +69,7 @@ fn functions() -> ForeignFunctions {
         .register(
             vocabulary::BETWEEN,
             ForeignFunction::from_value(|_, _, _| {
-                Ok(absent::with_reason(vocabulary::OUTSIDE_SCOPE))
+                Ok(::grap::absent::value(vocabulary::OUTSIDE_SCOPE))
             })
             .parameters([vocabulary::MIN, vocabulary::MAX]),
         )
@@ -80,7 +80,7 @@ fn functions() -> ForeignFunctions {
                     Some(seed) => match u64::read(&seed) {
                         Some(seed) => seed,
                         None => {
-                            return Ok(absent::with_reason(vocabulary::INVALID_SEED).into());
+                            return Ok(::grap::absent::value(vocabulary::INVALID_SEED).into());
                         }
                     },
                     None => 0,

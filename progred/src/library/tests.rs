@@ -121,7 +121,7 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
             ForeignFunctions::default()
                 .register(
                     SHARED_FUNCTION,
-                    ForeignFunction::from_value(|_, _, _| Ok(crate::libraries::absent::decline())),
+                    ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::decline())),
                 )
                 .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
         ),

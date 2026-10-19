@@ -1,5 +1,5 @@
 use super::{cutter::Tool, paths::*, *};
-use crate::libraries::{control, number};
+use crate::libraries::{absent, control, number};
 
 mod chamfers;
 mod geometry;
@@ -42,7 +42,7 @@ impl Inspect for Recording {
 fn cube_geometry(sources: &crate::sources::Sources<'_>, names: &crate::gid_text::Binders) -> Value {
     let result = ::grap::evaluate_value(&call(names["cube"], []), sources, 10_000);
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -75,7 +75,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         500.0,
     )
     .unwrap();
-    assert!(!absent::is_absent(&controls), "{controls:?}");
+    assert!(!::grap::absent::is_absent(&controls), "{controls:?}");
     let fields = controls
         .as_record()
         .unwrap()
@@ -150,7 +150,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         )
         .into_value();
         assert!(
-            parameters.completed && !absent::is_absent(&parameters.result),
+            parameters.completed && !::grap::absent::is_absent(&parameters.result),
             "{:?}",
             parameters.result
         );
@@ -283,7 +283,7 @@ fn apply_groups(
         fuel,
     )
     .into_value();
-    if !generated.completed || absent::is_absent(&generated.result) {
+    if !generated.completed || ::grap::absent::is_absent(&generated.result) {
         return generated;
     }
     ::grap::apply_value(
@@ -343,14 +343,14 @@ fn streaming_and_recording_are_interchangeable_consumers() {
     let mut direct = Count::default();
     let result = diagonals(&mut direct, 21.0, 0.03, 100_000);
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 21.0, 0.03, 100_000);
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -365,7 +365,7 @@ fn diagonal_uv_endpoints_spacing_and_boundaries_match_rhino() {
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 3.0, 0.1, 100_000);
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -471,7 +471,7 @@ fn grap_mapping_is_scoped_and_applies_in_composition_order() {
     ]);
     let (result, recording) = evaluate(&expression, 1000);
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -515,7 +515,7 @@ fn invalid_commands_stop_do_before_later_emissions() {
             1000,
         );
         assert!(result.completed);
-        assert!(absent::is_absent(&result.result));
+        assert!(::grap::absent::is_absent(&result.result));
         assert!(recording.commands().is_empty());
     }
 }
@@ -595,7 +595,7 @@ fn generation_is_fueled_and_requires_a_scoped_sink() {
     assert!(recording.commands().len() <= 100);
     let stack = crate::stack::load();
     let unscoped = ::grap::evaluate_value(&point_call(START_AT, [0.0; 3]), &stack.libraries, 100);
-    assert_eq!(unscoped.result, absent::with_reason(OUTPUT_REQUIRED));
+    assert_eq!(unscoped.result, ::grap::absent::value(OUTPUT_REQUIRED));
 }
 
 #[test]
@@ -613,7 +613,7 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
         let mut recording = Recording::default();
         let result = diagonals(&mut recording, rows, spacing, 1000);
         assert!(
-            result.completed && absent::is_absent(&result.result),
+            result.completed && ::grap::absent::is_absent(&result.result),
             "{:?}",
             result.result
         );
@@ -621,7 +621,7 @@ fn example_rejects_invalid_sampling_and_accepts_zero_rows() {
     }
     let mut recording = Recording::default();
     let result = diagonals(&mut recording, 0.0, 0.1, 1000);
-    assert!(result.completed && !absent::is_absent(&result.result));
+    assert!(result.completed && !::grap::absent::is_absent(&result.result));
     assert!(recording.commands().is_empty());
 
     let result = diagonals(&mut recording, 1.0, f64::from_bits(1), 1000);
@@ -684,7 +684,7 @@ fn example_tool_tips_compensate_contact_normal_and_spindle_axis() {
         a.result,
         b.result
     );
-    assert!(!absent::is_absent(&b.result), "{:?}", b.result);
+    assert!(!::grap::absent::is_absent(&b.result), "{:?}", b.result);
     assert_eq!(contact.commands().len(), centers.commands().len());
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
     let mut axis = Axis::Z;
@@ -754,7 +754,7 @@ fn example_is_two_crossing_sweeps_on_the_rhino_top_face() {
         )
     });
     assert!(
-        evaluation.completed && !absent::is_absent(&evaluation.result),
+        evaluation.completed && !::grap::absent::is_absent(&evaluation.result),
         "{:?}",
         evaluation.result
     );
@@ -794,7 +794,7 @@ fn example_ball_path() -> (Recording, f64) {
             500_000,
         )
     });
-    assert!(result.completed && !absent::is_absent(&result.result));
+    assert!(result.completed && !::grap::absent::is_absent(&result.result));
     let radius = f64::read(doc.cells.value(names["tool_diameter"]).unwrap()).unwrap() / 2.0;
     (recording, radius)
 }
@@ -952,7 +952,7 @@ fn example_tubes_compile_without_gpu_memory_operations() {
             500_000,
         )
     });
-    assert!(evaluation.completed && !absent::is_absent(&evaluation.result));
+    assert!(evaluation.completed && !::grap::absent::is_absent(&evaluation.result));
     let paths = tubes.scene();
     assert_eq!(paths.len(), 42);
     for (index, object) in paths.into_iter().enumerate() {

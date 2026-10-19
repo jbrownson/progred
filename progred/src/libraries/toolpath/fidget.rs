@@ -8,7 +8,7 @@ use super::playback::Draw;
 use super::{Error, argument, invalid, number, paths::*, runtime_result, vocabulary::*};
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{absent, color, f64, fidget, layout, presentation};
+use crate::libraries::{color, f64, fidget, layout, presentation};
 use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 use cam::field::read_radius;
 #[cfg(test)]
@@ -182,7 +182,7 @@ pub(super) fn preview_with(
         let playback = match context.field(call, PLAYBACK) {
             Some(expression) => {
                 let value = context.eval_to_value(expression, environment)?;
-                if absent::is_absent(&value) {
+                if ::grap::absent::is_absent(&value) {
                     return Ok(value.into());
                 }
                 playback::Settings::read(&value).ok_or_else(invalid)?;
@@ -200,11 +200,11 @@ pub(super) fn preview_with(
         let color = argument(context, call, fidget::vocabulary::COLOR)?;
         let color = context.eval_to_value(color, environment)?;
         read_color(&color).ok_or_else(|| {
-            Error::Invalid(absent::with_reason(fidget::vocabulary::INVALID_COLOR).into())
+            Error::Invalid(::grap::absent::value(fidget::vocabulary::INVALID_COLOR).into())
         })?;
         let fuel = super::fuel(context, call, environment)?;
         let model = model(context, call, environment)?;
-        if absent::is_absent(&model) {
+        if ::grap::absent::is_absent(&model) {
             return Ok(model.into());
         }
         Ok(RuntimeValue::record([(
@@ -284,7 +284,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                 });
                 let drawing =
                     fidget::mesh::drawing_surface(paths, surface, &model, state.as_ref(), scale)
-                        .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
+                        .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))?;
                 Ok((image, drawing))
             });
         match result {

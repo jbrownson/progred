@@ -1,5 +1,5 @@
 //! Final-encoded trees. Consumers choose what to retain; source links are not GID fields.
-use super::{Library, absent, layout, name, presentation};
+use super::{Library, layout, name, presentation};
 use crate::computations::memo;
 use crate::display::Host;
 use ::grap::{
@@ -245,7 +245,7 @@ fn collect(
         let items = std::mem::take(&mut sink.borrow_mut().items);
         Ok(match <[Built; 1]>::try_from(items) {
             Ok([built]) => Ok(built),
-            Err(_) => Err(absent::with_reason(INVALID_OUTPUT).into()),
+            Err(_) => Err(::grap::absent::value(INVALID_OUTPUT).into()),
         })
     }
 }
@@ -357,7 +357,7 @@ fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>)
 
 /// A tree constructor outside a collection, which has nowhere to emit.
 fn output_required(parameters: impl IntoIterator<Item = CellId>) -> ForeignFunction {
-    ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+    ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
         .parameters(parameters)
         .tracked()
 }

@@ -20,7 +20,7 @@ fn nested_tools_are_scoped_recorded_and_replayable() {
         line(30.0),
     ]);
     let (result, path) = evaluate(&expression, 1000);
-    assert!(result.completed && !absent::is_absent(&result.result));
+    assert!(result.completed && !::grap::absent::is_absent(&result.result));
     let tools: Vec<_> = path.tool_segments().map(|(_, _, _, tool)| tool).collect();
     assert_eq!(tools, [Some(&ball), Some(&square), Some(&ball), None]);
     assert_eq!(path.length(), 4.0);
@@ -60,14 +60,14 @@ fn tool_boundaries_require_a_new_start() {
         ]),
     ] {
         let (result, path) = evaluate(&expression, 1000);
-        assert!(result.completed && absent::is_absent(&result.result));
+        assert!(result.completed && ::grap::absent::is_absent(&result.result));
         assert_eq!(path.segments().count(), 1);
     }
 }
 
 #[test]
 fn invalid_or_absent_tools_do_not_run_the_body() {
-    for tool in [Value::record([]), absent::with_reason(INVALID_INPUT)] {
+    for tool in [Value::record([]), ::grap::absent::value(INVALID_INPUT)] {
         let expression = call(
             WITH_TOOL,
             [
@@ -76,7 +76,7 @@ fn invalid_or_absent_tools_do_not_run_the_body() {
             ],
         );
         let (result, path) = evaluate(&expression, 1000);
-        assert!(result.completed && absent::is_absent(&result.result));
+        assert!(result.completed && ::grap::absent::is_absent(&result.result));
         assert!(path.entries.is_empty());
     }
 }
@@ -115,7 +115,7 @@ fn scopes_restore_after_recovered_absents_and_evaluator_halts() {
         1000,
     );
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -211,7 +211,7 @@ fn axis_mapping_composes_inside_out_and_is_independent_of_translation() {
     ]);
     let (result, path) = evaluate(&expression, 1000);
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );

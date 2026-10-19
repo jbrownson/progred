@@ -129,7 +129,7 @@ fn computed_controls_agree_on_fuel_errors_and_effect_order_across_representation
     let binder = gid::new_cell_id();
     let other = gid::new_cell_id();
     let good = RuntimeValue::from(::grap::call(effect.into(), []));
-    let ordinary_absent = absent::with_reason(vocabulary::PATTERN_MISMATCH);
+    let ordinary_absent = ::grap::absent::value(vocabulary::PATTERN_MISMATCH);
     for function in [vocabulary::MATCH, vocabulary::LET, vocabulary::WHERE] {
         let valid = clause(function, good.clone(), binder).to_value();
         let absent_clause = clause(function, ordinary_absent.clone().into(), binder).to_value();

@@ -2,7 +2,6 @@
 //! borrowed FFIs emit into this Rust buffer, including through calls and loops.
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::absent;
 use ::grap::{Context, Evaluation, ForeignOverlay, RuntimeValue};
 use std::cell::RefCell;
 use vocabulary::*;
@@ -107,7 +106,7 @@ pub fn run<W: Host>(
     let layout = if !evaluation.completed || evaluation.result.is_absent() {
         None
     } else if children.len() > 1 {
-        evaluation.result = absent::with_reason(INVALID_PROGRAM).into();
+        evaluation.result = ::grap::absent::value(INVALID_PROGRAM).into();
         None
     } else {
         children.pop()

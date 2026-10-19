@@ -3,7 +3,7 @@
 //! functions.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, name, number};
+use crate::libraries::{Library, name, number};
 use gid::CellId;
 #[cfg(test)]
 use gid::{Step, Value};
@@ -181,9 +181,9 @@ fn lerp(
     let amount = context.eval_f64(amount, environment)?;
     Ok(match (start, end, amount) {
         (Some(start), Some(end), Some(amount)) => RuntimeValue::f64(start + (end - start) * amount),
-        (None, _, _) => absent::with_reason(vocabulary::START_NOT_F64).into(),
-        (_, None, _) => absent::with_reason(vocabulary::END_NOT_F64).into(),
-        (_, _, None) => absent::with_reason(vocabulary::AMOUNT_NOT_F64).into(),
+        (None, _, _) => ::grap::absent::value(vocabulary::START_NOT_F64).into(),
+        (_, None, _) => ::grap::absent::value(vocabulary::END_NOT_F64).into(),
+        (_, _, None) => ::grap::absent::value(vocabulary::AMOUNT_NOT_F64).into(),
     })
 }
 

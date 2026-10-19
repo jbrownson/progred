@@ -482,7 +482,9 @@ fn controls_receive_arbitrary_state_and_an_update_callable() {
                     assert_eq!(result, state);
                 }
                 None => {
-                    assert!(matches!(output, Err(error) if error == absent::with_reason(NO_STATE)))
+                    assert!(
+                        matches!(output, Err(error) if error == ::grap::absent::value(NO_STATE))
+                    )
                 }
             }
             let (widgets, result) = controls_output(
@@ -618,7 +620,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
                 c::EXPRESSIONS,
                 Value::list([
                     ::grap::call(UPDATE.into(), [(VALUE, VALUE.into())]),
-                    absent::decline(),
+                    ::grap::absent::decline(),
                 ]),
             )],
         ),
@@ -636,7 +638,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
                 c::EXPRESSIONS,
                 Value::list([
                     ::grap::call(UPDATE.into(), [(VALUE, VALUE.into())]),
-                    absent::with_reason(INVALID_INPUT),
+                    ::grap::absent::value(INVALID_INPUT),
                 ]),
             )],
         ),

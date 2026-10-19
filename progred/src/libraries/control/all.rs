@@ -1,4 +1,4 @@
-use crate::libraries::{absent, control::vocabulary as control};
+use crate::libraries::control::vocabulary as control;
 use ::grap::{Context, Environment, Expression, Halt, RuntimeValue};
 
 pub(super) fn evaluate(
@@ -10,7 +10,7 @@ pub(super) fn evaluate(
         return Ok(context.missing_runtime_argument(control::EXPRESSIONS));
     };
     let Some(elements) = context.elements(&expressions) else {
-        return Ok(absent::with_reason(control::INVALID_EXPRESSIONS).into());
+        return Ok(::grap::absent::value(control::INVALID_EXPRESSIONS).into());
     };
     super::try_map_sized(elements, |expression| {
         context.eval(expression.clone(), environment)

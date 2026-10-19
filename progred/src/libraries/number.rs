@@ -6,7 +6,7 @@
 use crate::display::activatable;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::libraries::representation::{Precedence, calls, infix_display, tagged};
-use crate::libraries::{Library, absent, line_edit, logic, name};
+use crate::libraries::{Library, line_edit, logic, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
@@ -216,7 +216,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             Operation::Checked(apply, failure) => self.binary(move |left, right| {
                 apply(left, right)
                     .map(self.runtime)
-                    .unwrap_or_else(|| absent::with_reason(failure).into())
+                    .unwrap_or_else(|| ::grap::absent::value(failure).into())
             }),
             Operation::Comparison(apply) => {
                 self.binary(move |left, right| logic::value(apply(left, right)).into())
@@ -237,7 +237,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                     Rc::new(move |context, environment| {
                         Ok(match (self.eval)(context, operand.clone(), environment)? {
                             Some(operand) => operation(operand),
-                            None => absent::with_reason(self.operand_not).into(),
+                            None => ::grap::absent::value(self.operand_not).into(),
                         })
                     })
                 }
@@ -294,8 +294,8 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                         let right = (self.eval)(context, right.clone(), environment)?;
                         Ok(match (left, right) {
                             (Some(left), Some(right)) => operation(left, right),
-                            (None, _) => absent::with_reason(self.left_not).into(),
-                            (_, None) => absent::with_reason(self.right_not).into(),
+                            (None, _) => ::grap::absent::value(self.left_not).into(),
+                            (_, None) => ::grap::absent::value(self.right_not).into(),
                         })
                     })
                 }

@@ -1,5 +1,5 @@
 //! Evaluation-local controls: native widgets emit alongside ordinary Grap values.
-use super::{Library, absent, f64, layout, name, presentation, tree};
+use super::{Library, f64, layout, name, presentation, tree};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{self, widget};
 use ::grap::{
@@ -101,7 +101,7 @@ fn current_state(annotation: Option<&Value>) -> Value {
         .and_then(Value::as_record)
         .and_then(|fields| fields.get(&STATE))
         .cloned()
-        .unwrap_or_else(|| absent::with_reason(NO_STATE))
+        .unwrap_or_else(|| ::grap::absent::value(NO_STATE))
 }
 
 fn update_function() -> Value {
@@ -409,7 +409,7 @@ fn controls_output<W: Host>(
                 return Ok(context.missing_runtime_argument(VALUE));
             };
             let Some(value) = context.eval_f64(expression, environment)? else {
-                return Ok(absent::with_reason(INVALID_INPUT).into());
+                return Ok(::grap::absent::value(INVALID_INPUT).into());
             };
             let Some(expression) = context.field(call, ON_CHANGE) else {
                 return Ok(context.missing_runtime_argument(ON_CHANGE));
@@ -425,10 +425,10 @@ fn controls_output<W: Host>(
                 }
             };
             let (Some(min), Some(max)) = (number(MINIMUM, 0.0)?, number(MAXIMUM, 1.0)?) else {
-                return Ok(absent::with_reason(INVALID_INPUT).into());
+                return Ok(::grap::absent::value(INVALID_INPUT).into());
             };
             let Some(slider) = Slider::new(min, max, value) else {
-                return Ok(absent::with_reason(INVALID_INPUT).into());
+                return Ok(::grap::absent::value(INVALID_INPUT).into());
             };
             return Ok(context.effect(|| {
                 widgets
@@ -442,7 +442,7 @@ fn controls_output<W: Host>(
         };
         let key = context.eval(key, environment)?;
         let Some(key) = key.as_cell() else {
-            return Ok(absent::with_reason(INVALID_INPUT).into());
+            return Ok(::grap::absent::value(INVALID_INPUT).into());
         };
         if function == TREE_PROGRAM_CURSOR {
             let Some(program) = context.field(call, tree::vocabulary::PROGRAM) else {
@@ -455,14 +455,14 @@ fn controls_output<W: Host>(
             let fuel = match context.field(call, layout::vocabulary::FUEL) {
                 Some(expression) => match context.eval_f64(expression, environment)? {
                     Some(n) if n >= 0.0 && n <= usize::MAX as f64 && n.fract() == 0.0 => n as usize,
-                    _ => return Ok(absent::with_reason(INVALID_INPUT).into()),
+                    _ => return Ok(::grap::absent::value(INVALID_INPUT).into()),
                 },
                 None => ::grap::DEFAULT_FUEL,
             };
             let initial = match context.field(call, INITIAL) {
                 Some(expression) => match context.eval_f64(expression, environment)? {
                     Some(n) if n.is_finite() => n,
-                    _ => return Ok(absent::with_reason(INVALID_INPUT).into()),
+                    _ => return Ok(::grap::absent::value(INVALID_INPUT).into()),
                 },
                 None => 0.0,
             };
@@ -508,14 +508,14 @@ fn controls_output<W: Host>(
             };
             let decorate = stored_tree_items(context, expression.clone());
             let items = context.eval_to_value(expression, environment)?;
-            if absent::is_absent(&items) {
+            if ::grap::absent::is_absent(&items) {
                 return Ok(items.into());
             }
             if function == TREE_CURSOR {
                 let initial = match context.field(call, INITIAL) {
                     Some(expression) => match context.eval_f64(expression, environment)? {
                         Some(n) if n.is_finite() => n,
-                        _ => return Ok(absent::with_reason(INVALID_INPUT).into()),
+                        _ => return Ok(::grap::absent::value(INVALID_INPUT).into()),
                     },
                     None => 0.0,
                 };
@@ -548,14 +548,14 @@ fn controls_output<W: Host>(
             };
             let options = context.eval_to_value(expression, environment)?;
             let Some(options) = radio_options(&options) else {
-                return Ok(absent::with_reason(INVALID_INPUT).into());
+                return Ok(::grap::absent::value(INVALID_INPUT).into());
             };
             let initial = match context.field(call, INITIAL) {
                 Some(expression) => context.eval_to_value(expression, environment)?,
                 None => options[0].value.clone(),
             };
             if !options.iter().any(|option| option.value == initial) {
-                return Ok(absent::with_reason(INVALID_INPUT).into());
+                return Ok(::grap::absent::value(INVALID_INPUT).into());
             }
             let selected = read_state(state, key)
                 .filter(|value| options.iter().any(|option| option.value == **value))
@@ -571,7 +571,7 @@ fn controls_output<W: Host>(
                 selected.into()
             }));
         }
-        Ok(absent::with_reason(INVALID_INPUT).into())
+        Ok(::grap::absent::value(INVALID_INPUT).into())
     };
     let evaluation = ::grap::apply(
         controls,
@@ -621,37 +621,37 @@ pub fn library<W: Host>() -> Library<W> {
         )
         .register(
             SLIDER,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
                 .parameters([VALUE, ON_CHANGE])
                 .tracked(),
         )
         .register(
             UPDATE,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
                 .parameters([VALUE])
                 .tracked(),
         )
         .register(
             RADIO,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
                 .parameters([KEY, OPTIONS])
                 .tracked(),
         )
         .register(
             TREE_RANGE,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
                 .parameters([KEY, ITEMS])
                 .tracked(),
         )
         .register(
             TREE_CURSOR,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
                 .parameters([KEY, ITEMS])
                 .tracked(),
         )
         .register(
             TREE_PROGRAM_CURSOR,
-            ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+            ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
                 .parameters([KEY, tree::vocabulary::PROGRAM])
                 .tracked(),
         );

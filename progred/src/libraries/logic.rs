@@ -2,7 +2,7 @@
 //! evaluating that cell's description.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, name};
+use crate::libraries::{Library, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::Value;
 
@@ -47,7 +47,7 @@ fn functions() -> ForeignFunctions {
                 return Ok(context.missing_argument(vocabulary::CONDITION));
             };
             let value = context.eval_to_value(condition, environment)?;
-            Ok(if absent::is_absent(&value) {
+            Ok(if ::grap::absent::is_absent(&value) {
                 value
             } else {
                 match read(&value) {

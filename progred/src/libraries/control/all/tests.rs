@@ -33,7 +33,7 @@ fn all_retains_absents_and_effects_and_continues_in_order() {
     let before = Value::from(b"before".to_vec());
     let after = Value::from(b"after".to_vec());
     for reason in [gid::new_cell_id(), ::grap::absent::FUEL_EXHAUSTED] {
-        let failure = absent::with_reason(reason);
+        let failure = ::grap::absent::value(reason);
         let values = [before.clone(), failure, after.clone()];
         let expression = all(values
             .clone()
@@ -52,19 +52,19 @@ fn all_handles_empty_and_malformed_lists_but_does_not_swallow_halts() {
     assert_eq!(run(&all([]), 100).result, Value::list([]));
     let missing = run(&::grap::call(control::ALL.into(), []), 100);
     assert!(missing.completed);
-    assert!(absent::reason(&missing.result).is_some());
+    assert!(::grap::absent::reason(&missing.result).is_some());
     let invalid = ::grap::call(
         control::ALL.into(),
         [(control::EXPRESSIONS, Value::record([]))],
     );
     assert_eq!(
         run(&invalid, 100).result,
-        absent::with_reason(control::INVALID_EXPRESSIONS)
+        ::grap::absent::value(control::INVALID_EXPRESSIONS)
     );
     let exhausted = run(&all((0..100).map(|_| Value::record([]))), 5);
     assert!(!exhausted.completed);
     assert_eq!(
-        absent::reason(&exhausted.result),
+        ::grap::absent::reason(&exhausted.result),
         Some(::grap::absent::FUEL_EXHAUSTED)
     );
 }

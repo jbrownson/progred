@@ -2,7 +2,7 @@
 //! through a sink; recording is one consumer, not the program representation.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, f64, layout, name, presentation};
+use crate::libraries::{Library, f64, layout, name, presentation};
 #[cfg(test)]
 use ::grap::Evaluation;
 use ::grap::{
@@ -124,7 +124,7 @@ impl From<Halt> for Error {
 }
 
 fn invalid() -> Error {
-    Error::Invalid(absent::with_reason(INVALID_INPUT).into())
+    Error::Invalid(::grap::absent::value(INVALID_INPUT).into())
 }
 
 fn argument(context: &Context, call: &Expression, field: CellId) -> Result<Expression, Error> {
@@ -376,7 +376,7 @@ fn functions() -> ForeignFunctions {
         .fold(ForeignFunctions::default(), |functions, &cell| {
             functions.register(
                 cell,
-                ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+                ForeignFunction::from_value(|_, _, _| Ok(::grap::absent::value(OUTPUT_REQUIRED)))
                     .parameters(match cell {
                         START_AT | LINE_TO => vec![X, Y, Z],
                         WITH_TOOL => vec![cutter::vocabulary::TOOL, ::grap::vocabulary::EXPRESSION],

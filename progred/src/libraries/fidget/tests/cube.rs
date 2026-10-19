@@ -54,7 +54,7 @@ fn cube(size: f32, chamfer: f32, depth: f32) -> Value {
         grap::evaluate_value(&grap::call(id.into(), []), &src(&doc, &libraries), 10_000);
     assert!(evaluated.completed);
     assert!(
-        !crate::libraries::absent::is_absent(&evaluated.result),
+        !::grap::absent::is_absent(&evaluated.result),
         "{:?}",
         evaluated.result
     );

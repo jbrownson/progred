@@ -1,5 +1,5 @@
 use super::*;
-use gid::new_cell_id;
+use gid::{Value, new_cell_id};
 
 fn or_default(value: Value, default: Value) -> Value {
     ::grap::call(
@@ -53,7 +53,7 @@ fn default_evaluates_each_needed_argument_once_in_the_calling_environment() {
                         Ok(context.effect(|| {
                             reads.set(reads.get() + 1);
                             if missing {
-                                with_reason(new_cell_id())
+                                ::grap::absent::value(new_cell_id())
                             } else {
                                 Value::record([])
                             }
@@ -104,10 +104,10 @@ fn default_evaluates_each_needed_argument_once_in_the_calling_environment() {
 
 #[test]
 fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
-    let replacement = with_reason(new_cell_id());
+    let replacement = ::grap::absent::value(new_cell_id());
     let returned = crate::libraries::test_evaluate(
         &or_default(
-            with_reason(::grap::absent::FUEL_EXHAUSTED),
+            ::grap::absent::value(::grap::absent::FUEL_EXHAUSTED),
             replacement.clone(),
         ),
         |_| None,
@@ -135,7 +135,10 @@ fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
         30,
     );
     assert!(!result.completed);
-    assert_eq!(reason(&result.result), Some(::grap::absent::FUEL_EXHAUSTED));
+    assert_eq!(
+        ::grap::absent::reason(&result.result),
+        Some(::grap::absent::FUEL_EXHAUSTED)
+    );
 }
 
 #[test]
@@ -143,17 +146,20 @@ fn absence_is_an_open_tag_with_a_stable_reason() {
     let reason = new_cell_id();
     let extra = new_cell_id();
     let absent = Value::record(
-        with_reason(reason)
+        ::grap::absent::value(reason)
             .as_record()
             .unwrap()
             .clone()
             .update(extra, Value::from(vec![1])),
     );
 
-    assert!(is_absent(&absent));
-    assert_eq!(super::reason(&absent), Some(reason));
-    assert!(!is_absent(&name::record("specific absence", [])));
-    assert!(!is_absent(&Value::record([(
+    assert!(::grap::absent::is_absent(&absent));
+    assert_eq!(::grap::absent::reason(&absent), Some(reason));
+    assert!(!::grap::absent::is_absent(&name::record(
+        "specific absence",
+        []
+    )));
+    assert!(!::grap::absent::is_absent(&Value::record([(
         vocabulary::ABSENT,
         Value::from(vec![1]),
     )])));
@@ -161,12 +167,15 @@ fn absence_is_an_open_tag_with_a_stable_reason() {
 
 #[test]
 fn multiple_causes_form_an_ordered_absence_while_one_remains_itself() {
-    let first = with_reason(new_cell_id());
-    let second = with_reason(new_cell_id());
+    let first = ::grap::absent::value(new_cell_id());
+    let second = ::grap::absent::value(new_cell_id());
 
-    assert_eq!(from_causes([first.clone()]), first);
-    let combined = from_causes([first.clone(), second.clone()]);
-    assert_eq!(reason(&combined), Some(vocabulary::NO_ALTERNATIVE));
+    assert_eq!(::grap::absent::from_causes([first.clone()]), first);
+    let combined = ::grap::absent::from_causes([first.clone(), second.clone()]);
+    assert_eq!(
+        ::grap::absent::reason(&combined),
+        Some(vocabulary::NO_ALTERNATIVE)
+    );
     assert_eq!(
         combined
             .as_record()

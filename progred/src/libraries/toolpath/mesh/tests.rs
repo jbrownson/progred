@@ -402,7 +402,7 @@ fn mesh_preview_validates_depth_and_retains_an_ordinary_model_declaration() {
         } else {
             assert_eq!(
                 result.result,
-                absent::with_reason(fidget::vocabulary::INVALID_MESH_DEPTH)
+                ::grap::absent::value(fidget::vocabulary::INVALID_MESH_DEPTH)
             );
         }
     }

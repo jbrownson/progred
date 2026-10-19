@@ -116,7 +116,7 @@ fn malformed_scenes_and_translucent_colors_fail_explicitly() {
                 node(vocabulary::SCENE, objects),
             )],
         ));
-        assert_eq!(result, absent::with_reason(reason));
+        assert_eq!(result, ::grap::absent::value(reason));
     }
     let opaque = node(
         vocabulary::SCENE,
@@ -491,7 +491,7 @@ fn invalid_preview_dimensions_decline_without_rendering() {
                 ),
             ],
         ));
-        assert_eq!(result, absent::with_reason(vocabulary::INVALID_SIZE));
+        assert_eq!(result, ::grap::absent::value(vocabulary::INVALID_SIZE));
     }
 }
 

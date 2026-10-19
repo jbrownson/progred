@@ -4,7 +4,6 @@ use crate::projection::ProjectionInput;
 
 use crate::display::Env;
 use crate::display::test_support::{EvaluatesTo, ProjectionCall, inspect, unshared};
-use crate::libraries::absent;
 use crate::libraries::test_widgets::{project_runtime, projection_input};
 use crate::library::Libraries;
 use crate::test_support::{
@@ -907,7 +906,7 @@ fn the_lambda_name_partial_handles_missing_names_or_text() {
     input.value = Some(&value);
     assert!(lambda_name(&input).is_none());
 
-    let absent = crate::libraries::absent::with_reason(gid::new_cell_id());
+    let absent = ::grap::absent::value(gid::new_cell_id());
     input.value = Some(&absent);
     assert!(lambda_name(&input).is_none());
 }
@@ -965,7 +964,7 @@ fn the_library_describes_grap_and_owns_evaluate() {
         Some("missing cell")
     );
     assert_eq!(
-        absent::reason(&absent::with_reason(::grap::absent::MISSING_CELL)),
+        ::grap::absent::reason(&::grap::absent::value(::grap::absent::MISSING_CELL)),
         Some(::grap::absent::MISSING_CELL)
     );
 

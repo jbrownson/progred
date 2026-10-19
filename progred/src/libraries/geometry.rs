@@ -2,7 +2,7 @@
 //! constructor consuming the f64 library's representation.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, f64, name};
+use crate::libraries::{Library, f64, name};
 use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xac27c33e44d2df4f3d1753bcebd2cfe5);
@@ -47,7 +47,7 @@ pub fn functions() -> ForeignFunctions {
             Ok(f64::read(&radius)
                 .filter(|radius| radius.is_finite() && *radius >= 0.0)
                 .map(value)
-                .unwrap_or_else(|| absent::with_reason(vocabulary::INVALID_RADIUS)))
+                .unwrap_or_else(|| ::grap::absent::value(vocabulary::INVALID_RADIUS)))
         })
         .parameters([vocabulary::RADIUS])
         .tracked(),

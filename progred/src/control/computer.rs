@@ -8,7 +8,7 @@
 use super::{Action, Session};
 use crate::gid_text::Binders;
 use crate::libraries::Library;
-use crate::libraries::{absent, name, png, text};
+use crate::libraries::{name, png, text};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use gid::{CellId, Cells, Value};
 use kurbo::{Point, Vec2};
@@ -212,7 +212,7 @@ fn action<const N: usize>(
         }) {
             Ok(action) => Ok(context
                 .effect(|| session.borrow_mut().perform(action))
-                .map_or_else(absent::with_reason, |()| Value::from(vocabulary::DONE))),
+                .map_or_else(::grap::absent::value, |()| Value::from(vocabulary::DONE))),
             Err(Stop::Absent(reason)) => Ok(reason),
             Err(Stop::Halt(halt)) => Err(halt),
         }
@@ -275,7 +275,7 @@ impl Arguments<'_, '_> {
                 Value::from(parameter),
             ))
         })?;
-        read(&value).ok_or_else(|| Stop::Absent(absent::with_reason(invalid)))
+        read(&value).ok_or_else(|| Stop::Absent(::grap::absent::value(invalid)))
     }
 
     fn coordinate(&mut self, parameter: CellId) -> Result<Point, Stop> {
@@ -288,7 +288,7 @@ impl Arguments<'_, '_> {
             .map_or(Ok(ModifiersState::empty()), |value| {
                 text::read(&value)
                     .and_then(held_modifiers)
-                    .ok_or_else(|| Stop::Absent(absent::with_reason(vocabulary::UNKNOWN_KEY)))
+                    .ok_or_else(|| Stop::Absent(::grap::absent::value(vocabulary::UNKNOWN_KEY)))
             })
     }
 

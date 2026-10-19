@@ -10,7 +10,7 @@ use crate::computations::{Computations, memo};
 use crate::display::host::{Host, Layout, ProjectionInput};
 #[cfg(test)]
 use crate::libraries::f64;
-use crate::libraries::{absent, fidget, layout, presentation};
+use crate::libraries::{fidget, layout, presentation};
 use ::grap::RuntimeValue;
 #[cfg(test)]
 use gid::Value;
@@ -202,7 +202,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                     let image =
                         fidget::mesh::drawing(&geometry.geometry, &model, state.as_ref(), scale)
                             .ok_or_else(|| {
-                                absent::with_reason(fidget::vocabulary::INVALID_FIELD)
+                                ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)
                             })?;
                     // Implicit refinement is pending, even when the fallback is current.
                     Ok(implicit::progress_bar(image, *progress))
@@ -220,7 +220,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                         state.as_ref(),
                         scale,
                     )
-                    .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))?;
+                    .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))?;
                     Ok(if image.pending {
                         implicit::progress_bar(drawing, image.progress)
                     } else {

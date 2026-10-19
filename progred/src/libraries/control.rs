@@ -101,7 +101,7 @@ fn do_foreign(
         return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
     };
     let Some(elements) = context.elements(&expressions) else {
-        return Ok(absent::with_reason(vocabulary::INVALID_EXPRESSIONS).into());
+        return Ok(::grap::absent::value(vocabulary::INVALID_EXPRESSIONS).into());
     };
     let mut result = None;
     for expression in elements {
@@ -111,7 +111,10 @@ fn do_foreign(
         }
         result = Some(value);
     }
-    Ok(result.unwrap_or_else(|| absent::with_reason(vocabulary::MISSING_FINAL_EXPRESSION).into()))
+    Ok(
+        result
+            .unwrap_or_else(|| ::grap::absent::value(vocabulary::MISSING_FINAL_EXPRESSION).into()),
+    )
 }
 
 fn quote_foreign(
@@ -256,7 +259,7 @@ fn match_prepare(context: &Context, call: &Expression) -> Stage {
                         expression,
                     } = case
                     else {
-                        return Ok(absent::with_reason(vocabulary::INVALID_CASE).into());
+                        return Ok(::grap::absent::value(vocabulary::INVALID_CASE).into());
                     };
                     match destructure(pattern, &value) {
                         Ok(Some(bindings)) => {
@@ -265,12 +268,12 @@ fn match_prepare(context: &Context, call: &Expression) -> Stage {
                         }
                         Ok(None) => {}
                         Err(InvalidBinder) => {
-                            return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
+                            return Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into());
                         }
                     }
                 }
                 Ok(
-                    absent::from_causes(cases.iter().filter_map(|case| match case {
+                    ::grap::absent::from_causes(cases.iter().filter_map(|case| match case {
                         CompiledCase::Case { pattern, .. } => Some(pattern_mismatch(pattern)),
                         CompiledCase::Malformed => None,
                     }))
@@ -285,8 +288,8 @@ fn match_prepare(context: &Context, call: &Expression) -> Stage {
                         bindings,
                     } => context
                         .eval_runtime_code(&expression, &environment.extended_runtime(bindings)),
-                    Selection::NoMatch(absents) => Ok(absent::from_causes(absents).into()),
-                    Selection::Invalid(cell) => Ok(absent::with_reason(cell).into()),
+                    Selection::NoMatch(absents) => Ok(::grap::absent::from_causes(absents).into()),
+                    Selection::Invalid(cell) => Ok(::grap::absent::value(cell).into()),
                 }
             }
         }
@@ -356,7 +359,7 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                 for binding in bindings {
                     match binding {
                         CompiledBinding::Malformed(reason) => {
-                            return Ok(absent::with_reason(*reason).into());
+                            return Ok(::grap::absent::value(*reason).into());
                         }
                         CompiledBinding::Bind { binder, value } => {
                             let value = context.eval(value.clone(), &environment)?;
@@ -369,7 +372,7 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                                 Ok(None) => return Ok(pattern_mismatch(pattern).into()),
                                 Err(InvalidBinder) => {
                                     return Ok(
-                                        absent::with_reason(vocabulary::INVALID_BINDER).into()
+                                        ::grap::absent::value(vocabulary::INVALID_BINDER).into()
                                     );
                                 }
                             }
@@ -381,12 +384,12 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
             CompiledBindings::Deferred(bindings) => {
                 let bindings_value = context.eval(bindings.clone(), environment)?;
                 let Some(bindings) = bindings_value.list_values() else {
-                    return Ok(absent::with_reason(vocabulary::INVALID_BINDINGS).into());
+                    return Ok(::grap::absent::value(vocabulary::INVALID_BINDINGS).into());
                 };
                 let mut environment = environment.clone();
                 for binding in bindings {
                     let Some(value) = binding.field(vocabulary::VALUE) else {
-                        return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
+                        return Ok(::grap::absent::value(vocabulary::INVALID_BINDING).into());
                     };
                     let (binder, pattern) = match (
                         binding.field(vocabulary::BIND),
@@ -395,12 +398,12 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                         (Some(binder), None) => match binder.as_cell() {
                             Some(binder) => (Some(binder), None),
                             None => {
-                                return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
+                                return Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into());
                             }
                         },
                         (None, Some(pattern)) => (None, Some(pattern)),
                         _ => {
-                            return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
+                            return Ok(::grap::absent::value(vocabulary::INVALID_BINDING).into());
                         }
                     };
                     let value = context.eval_runtime_code(&value, &environment)?;
@@ -412,7 +415,7 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                             Ok(Some(bindings)) => environment.push_runtime(bindings),
                             Ok(None) => return Ok(pattern_mismatch(&pattern).into()),
                             Err(InvalidBinder) => {
-                                return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
+                                return Ok(::grap::absent::value(vocabulary::INVALID_BINDER).into());
                             }
                         }
                     }

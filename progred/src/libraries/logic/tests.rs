@@ -75,7 +75,7 @@ fn require_accepts_true_rejects_false_and_preserves_absents() {
         20,
     );
     assert_eq!(
-        absent::reason(&missing.result),
+        ::grap::absent::reason(&missing.result),
         Some(::grap::absent::MISSING_ARGUMENT)
     );
 }

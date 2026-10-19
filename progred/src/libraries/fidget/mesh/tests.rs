@@ -73,7 +73,10 @@ fn mesh_function_returns_an_ordinary_declaration() {
         (presentation::vocabulary::VALUE, f32::value(1.0)),
         (vocabulary::MESH_DEPTH, crate::libraries::u64::value(0)),
     ]);
-    assert_eq!(invalid, absent::with_reason(vocabulary::INVALID_MESH_DEPTH));
+    assert_eq!(
+        invalid,
+        ::grap::absent::value(vocabulary::INVALID_MESH_DEPTH)
+    );
 }
 
 #[test]

@@ -30,7 +30,7 @@ pub(crate) fn preview(
 ) -> Result<Value, Halt> {
     let requested = evaluated(context, call, environment, vocabulary::MESH_DEPTH)?;
     let Some(depth) = depth(requested.as_ref()) else {
-        return Ok(absent::with_reason(vocabulary::INVALID_MESH_DEPTH));
+        return Ok(::grap::absent::value(vocabulary::INVALID_MESH_DEPTH));
     };
     let value = volume_preview_function(context, call, environment, vocabulary::PREVIEW_MESH)?;
     Ok(

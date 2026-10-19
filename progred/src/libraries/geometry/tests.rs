@@ -42,6 +42,6 @@ fn invalid_radius_is_a_library_sentinel() {
     let evaluation = crate::libraries::test_evaluate(&expression, |_| None, &foreign, 10);
     assert_eq!(
         evaluation.result,
-        absent::with_reason(vocabulary::INVALID_RADIUS)
+        ::grap::absent::value(vocabulary::INVALID_RADIUS)
     );
 }

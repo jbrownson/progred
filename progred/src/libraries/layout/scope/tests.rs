@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
+use crate::libraries::absent;
 use crate::libraries::control::vocabulary as control;
 use crate::projection::Layout;
 
@@ -251,7 +252,7 @@ fn invalid_calls_and_fuel_exhaustion_discard_every_emission() {
     for program in programs {
         let (result, layout) = evaluate(&program, 10000);
         assert_eq!(
-            absent::reason(&result.result.to_value()),
+            ::grap::absent::reason(&result.result.to_value()),
             Some(INVALID_PROGRAM)
         );
         assert!(layout.is_none());
@@ -305,7 +306,7 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
     let (evaluation, layout) = evaluate(&empty, 1000);
     assert_eq!(
         evaluation.result.to_value(),
-        absent::with_reason(control::MISSING_FINAL_EXPRESSION)
+        ::grap::absent::value(control::MISSING_FINAL_EXPRESSION)
     );
     assert!(layout.is_none());
 }

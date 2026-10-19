@@ -146,7 +146,7 @@ fn alternate_consumer_runs_without_collecting_a_tree() {
             1000,
         )
         .into_value();
-        assert!(result.completed && !absent::is_absent(&result.result));
+        assert!(result.completed && !::grap::absent::is_absent(&result.result));
     });
     let count = sink.borrow();
     assert_eq!((count.groups, count.depth, count.leaves), (2, 0, 2));
@@ -203,7 +203,7 @@ fn leaf_mapping_composes_inside_out_without_changing_origins() {
 
 #[test]
 fn failures_stop_children_and_scopes_balance_when_a_caller_recovers() {
-    let failure = absent::with_reason(B);
+    let failure = ::grap::absent::value(B);
     // Absents keep effects, as elsewhere in Grap; recovering doesn't roll back
     // previously emitted leaves. It does close groups and remove leaf mappings.
     let fail = call(
@@ -254,7 +254,7 @@ fn failures_stop_children_and_scopes_balance_when_a_caller_recovers() {
         with_host(&doc, |host| build(&Value::from(A).into(), host, 1000))
             .err()
             .map(RuntimeValue::into_value),
-        Some(absent::with_reason(INVALID_OUTPUT))
+        Some(::grap::absent::value(INVALID_OUTPUT))
     );
 }
 

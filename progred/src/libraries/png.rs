@@ -2,7 +2,7 @@
 //! PNG, and the projection shows the picture.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, absent, name};
+use crate::libraries::{Library, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::{CellId, Value};
 use kurbo::Size;
@@ -136,9 +136,9 @@ fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction {
         Ok(match context.field(call, vocabulary::IMAGE) {
             None => context.missing_argument(vocabulary::IMAGE),
             Some(image) => match read(&context.eval_to_value(image, environment)?) {
-                None => absent::with_reason(vocabulary::NOT_PNG),
+                None => ::grap::absent::value(vocabulary::NOT_PNG),
                 Some(bytes) => size(bytes).map_or_else(
-                    || absent::with_reason(vocabulary::INVALID_PNG),
+                    || ::grap::absent::value(vocabulary::INVALID_PNG),
                     |size| crate::libraries::f64::value(f64::from(pick(size))),
                 ),
             },

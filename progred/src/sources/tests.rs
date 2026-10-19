@@ -81,7 +81,7 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
     let library_ids = [new_cell_id(), new_cell_id()];
     let definition = |value| grap::lambda([], grap::call(Value::from(probe), [(result, value)]));
     let mut cells = Cells::new();
-    cells.set_value(function, definition(crate::libraries::absent::decline()));
+    cells.set_value(function, definition(::grap::absent::decline()));
     let doc = doc_of(cells);
     for order in [library_ids, [library_ids[1], library_ids[0]]] {
         let libraries = Libraries::from_contributions(order.map(|id| {
@@ -126,7 +126,7 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
                 )
                 .into_value()
             };
-            assert_eq!(evaluation.result, crate::libraries::absent::decline());
+            assert_eq!(evaluation.result, ::grap::absent::decline());
             assert_eq!(
                 origins.into_inner(),
                 [Resolution::Document].map(|resolution| {

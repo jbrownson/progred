@@ -110,7 +110,7 @@ fn do_evaluates_in_order_and_returns_the_last_result() {
     assert_eq!(result, blob("second"));
     assert_eq!(
         evaluate(&do_call([])).result,
-        absent::with_reason(vocabulary::MISSING_FINAL_EXPRESSION)
+        ::grap::absent::value(vocabulary::MISSING_FINAL_EXPRESSION)
     );
 }
 
@@ -157,16 +157,16 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
     }
     // A pure decline is still an absent, even without any preceding effect.
     log.borrow_mut().clear();
-    let result = run(&do_call([absent::decline(), effect("never")]));
+    let result = run(&do_call([::grap::absent::decline(), effect("never")]));
     assert!(result.completed);
-    assert_eq!(result.result, absent::decline());
+    assert_eq!(result.result, ::grap::absent::decline());
     assert!(log.borrow().is_empty());
 }
 
 #[test]
 fn ordinary_bindings_may_contain_absents_without_short_circuiting() {
     let binder = new_cell_id();
-    let failure = absent::with_reason(new_cell_id());
+    let failure = ::grap::absent::value(new_cell_id());
     for function in [vocabulary::LET, vocabulary::WHERE] {
         let expression = bindings_call(
             function,
@@ -506,7 +506,7 @@ fn match_evaluates_its_subject_once_across_all_cases() {
     let evaluation = crate::libraries::test_evaluate(&expression, |_| None, &foreign, 100);
     assert_eq!(
         evaluation.result,
-        absent::from_causes([
+        ::grap::absent::from_causes([
             pattern_mismatch(&blob("first")),
             pattern_mismatch(&blob("second")),
         ]),
@@ -733,7 +733,7 @@ fn referenced_patterns_preserve_mismatches_and_lazy_binder_errors() {
     ] {
         for function in [vocabulary::MATCH, vocabulary::LET, vocabulary::WHERE] {
             let expected = reason
-                .map(absent::with_reason)
+                .map(::grap::absent::value)
                 .unwrap_or_else(|| pattern_mismatch(&pattern));
             let clauses = Value::list([if function == vocabulary::MATCH {
                 case_arm(pattern.clone(), blob("never"))
@@ -955,13 +955,13 @@ fn malformed_match_data_returns_library_absents() {
     );
     assert_eq!(
         evaluate(&invalid_cases).result,
-        absent::with_reason(vocabulary::INVALID_CASES)
+        ::grap::absent::value(vocabulary::INVALID_CASES)
     );
 
     let invalid_case = match_call(blob("subject"), [blob("not a case")]);
     assert_eq!(
         evaluate(&invalid_case).result,
-        absent::with_reason(vocabulary::INVALID_CASE)
+        ::grap::absent::value(vocabulary::INVALID_CASE)
     );
 
     let invalid_binder = match_call(
@@ -973,7 +973,7 @@ fn malformed_match_data_returns_library_absents() {
     );
     assert_eq!(
         evaluate(&invalid_binder).result,
-        absent::with_reason(vocabulary::INVALID_BINDER)
+        ::grap::absent::value(vocabulary::INVALID_BINDER)
     );
 }
 
@@ -988,13 +988,13 @@ fn malformed_let_data_returns_library_absents() {
     );
     assert_eq!(
         evaluate(&invalid_bindings).result,
-        absent::with_reason(vocabulary::INVALID_BINDINGS)
+        ::grap::absent::value(vocabulary::INVALID_BINDINGS)
     );
 
     let invalid_binding = bindings_call(vocabulary::LET, [blob("not a binding")], blob("body"));
     assert_eq!(
         evaluate(&invalid_binding).result,
-        absent::with_reason(vocabulary::INVALID_BINDING)
+        ::grap::absent::value(vocabulary::INVALID_BINDING)
     );
 
     let ambiguous = bindings_call(
@@ -1008,7 +1008,7 @@ fn malformed_let_data_returns_library_absents() {
     );
     assert_eq!(
         evaluate(&ambiguous).result,
-        absent::with_reason(vocabulary::INVALID_BINDING)
+        ::grap::absent::value(vocabulary::INVALID_BINDING)
     );
 
     let invalid_binder = bindings_call(
@@ -1021,7 +1021,7 @@ fn malformed_let_data_returns_library_absents() {
     );
     assert_eq!(
         evaluate(&invalid_binder).result,
-        absent::with_reason(vocabulary::INVALID_BINDER)
+        ::grap::absent::value(vocabulary::INVALID_BINDER)
     );
 }
 
@@ -1058,7 +1058,10 @@ fn library_describes_control_forms_and_absence_reasons() {
         vocabulary::INVALID_EXPRESSIONS,
     ] {
         assert!(name::read(library.definitions.value(cell).unwrap()).is_some());
-        assert_eq!(absent::reason(&absent::with_reason(cell)), Some(cell));
+        assert_eq!(
+            ::grap::absent::reason(&::grap::absent::value(cell)),
+            Some(cell)
+        );
     }
 }
 

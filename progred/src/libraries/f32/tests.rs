@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{absent, logic, name};
+use crate::libraries::{logic, name};
 use gid::new_cell_id;
 
 fn call(function: CellId, left: Value, right: Value) -> Value {
@@ -82,7 +82,7 @@ fn operands_of_other_representations_decline() {
             crate::libraries::f64::value(2.0),
             value(3.0)
         )),
-        absent::with_reason(vocabulary::LEFT_NOT_F32)
+        ::grap::absent::value(vocabulary::LEFT_NOT_F32)
     );
     assert_eq!(
         evaluate(&call(
@@ -90,7 +90,7 @@ fn operands_of_other_representations_decline() {
             value(2.0),
             Value::from(b"three".to_vec())
         )),
-        absent::with_reason(vocabulary::RIGHT_NOT_F32)
+        ::grap::absent::value(vocabulary::RIGHT_NOT_F32)
     );
 }
 
@@ -119,7 +119,7 @@ fn library_names_are_ordinary_facts_for_random_identities() {
         Some("left is not f32")
     );
     assert_eq!(
-        absent::reason(&absent::with_reason(vocabulary::RIGHT_NOT_F32)),
+        ::grap::absent::reason(&::grap::absent::value(vocabulary::RIGHT_NOT_F32)),
         Some(vocabulary::RIGHT_NOT_F32)
     );
 }

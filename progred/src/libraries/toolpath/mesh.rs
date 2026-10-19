@@ -3,7 +3,7 @@
 use super::{paths::*, playback, vocabulary::*};
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{absent, f64, fidget, layout, presentation};
+use crate::libraries::{f64, fidget, layout, presentation};
 use ::grap::RuntimeValue;
 use cam::field::{coordinate, read_radius};
 use fidget::mesh::{Geometry, Mesh, Normal, Vertex};
@@ -83,7 +83,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                         drawing
                     }
                 })
-                .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD))
+                .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))
         });
         match drawing {
             Ok(drawing) => drawing.measure(context, build),

@@ -75,7 +75,7 @@ fn functions() -> ForeignFunctions {
                     return Ok(context.missing_runtime_argument(vocabulary::ITEM));
                 };
                 let Some(values) = list.list_values() else {
-                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
                 };
                 Ok(RuntimeValue::list(std::iter::once(item).chain(values)))
             })
@@ -94,7 +94,7 @@ fn functions() -> ForeignFunctions {
                     return Ok(context.missing_runtime_argument(number::vocabulary::RIGHT));
                 };
                 let (Some(left), Some(right)) = (left.list_values(), right.list_values()) else {
-                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
                 };
                 Ok(RuntimeValue::list(left.chain(right)))
             })
@@ -110,7 +110,7 @@ fn functions() -> ForeignFunctions {
                 Ok(list
                     .list_len()
                     .map(|length| RuntimeValue::f64(length as f64))
-                    .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST).into()))
+                    .unwrap_or_else(|| ::grap::absent::value(vocabulary::NOT_LIST).into()))
             })
             .parameters([vocabulary::LIST])
             .tracked(),
@@ -126,18 +126,18 @@ fn functions() -> ForeignFunctions {
                 };
                 let index = context.eval(index, environment)?;
                 if list.list_len().is_none() {
-                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
                 }
                 let Some(index) = index
                     .as_f64()
                     .filter(|index| *index >= 0.0 && index.fract() == 0.0)
                     .map(|index| index as usize)
                 else {
-                    return Ok(absent::with_reason(vocabulary::OUT_OF_BOUNDS).into());
+                    return Ok(::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into());
                 };
                 Ok(list
                     .list_get(index)
-                    .unwrap_or_else(|| absent::with_reason(vocabulary::OUT_OF_BOUNDS).into()))
+                    .unwrap_or_else(|| ::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into()))
             })
             .parameters([vocabulary::LIST, vocabulary::INDEX])
             .tracked(),
@@ -149,10 +149,10 @@ fn functions() -> ForeignFunctions {
                     return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
                 let Some(mut values) = list.list_values() else {
-                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
                 };
                 if values.next().is_none() {
-                    return Ok(absent::with_reason(vocabulary::OUT_OF_BOUNDS).into());
+                    return Ok(::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into());
                 }
                 Ok(RuntimeValue::list(values))
             })
@@ -191,7 +191,7 @@ fn functions() -> ForeignFunctions {
                         result.field(vocabulary::ITEM),
                         result.field(vocabulary::STATE),
                     ) else {
-                        break Ok(absent::with_reason(vocabulary::INVALID_STEP).into());
+                        break Ok(::grap::absent::value(vocabulary::INVALID_STEP).into());
                     };
                     items.push(item);
                     state = next;
@@ -216,7 +216,7 @@ fn functions() -> ForeignFunctions {
                 };
                 let step = context.prepare_callable(step, environment)?;
                 let Some(values) = list.list_values() else {
-                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
                 };
                 for item in values {
                     accumulator = context.call_prepared(

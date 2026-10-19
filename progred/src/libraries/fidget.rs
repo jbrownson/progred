@@ -3,7 +3,7 @@
 //! the host representation.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, absent, color, control, f32, name, presentation, representation};
+use crate::libraries::{Library, color, control, f32, name, presentation, representation};
 #[cfg(test)]
 use fidget_engine::shape::EzShape;
 #[cfg(not(target_arch = "wasm32"))]
@@ -157,7 +157,7 @@ fn preview_value(
         tree(&field).map(|_| ()).ok_or(vocabulary::INVALID_FIELD)
     };
     if let Err(reason) = validation {
-        return Ok(absent::with_reason(reason));
+        return Ok(::grap::absent::value(reason));
     }
     let dimensions = [
         crate::libraries::layout::vocabulary::WIDTH,
@@ -174,7 +174,7 @@ fn preview_value(
     })
     .collect::<Result<Option<Vec<_>>, _>>()?;
     let Some(dimensions) = dimensions else {
-        return Ok(absent::with_reason(vocabulary::INVALID_SIZE));
+        return Ok(::grap::absent::value(vocabulary::INVALID_SIZE));
     };
     let bounds = bounds
         .into_iter()
@@ -197,7 +197,7 @@ fn preview_value(
                     .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
             ),
         ),
-        None => absent::with_reason(vocabulary::INVALID_BOUNDS),
+        None => ::grap::absent::value(vocabulary::INVALID_BOUNDS),
     })
 }
 
@@ -270,7 +270,7 @@ fn translate_function(
         let value =
             evaluated(context, call, environment, coordinate)?.unwrap_or_else(|| f32::value(0.0));
         if !matches!(f32::read(&value), Some(value) if value.is_finite()) {
-            return Ok(absent::with_reason(vocabulary::INVALID_FIELD));
+            return Ok(::grap::absent::value(vocabulary::INVALID_FIELD));
         }
         values.push((coordinate, value));
     }

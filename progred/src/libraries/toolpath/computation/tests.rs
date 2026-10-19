@@ -3,7 +3,7 @@ use super::super::{
     vocabulary::*,
 };
 use super::*;
-use crate::libraries::{absent, control, f64};
+use crate::libraries::{control, f64};
 
 /// The pane's occurrence at `path`, where the tree program's work is kept.
 fn site(root: &crate::display::widget::view::Root, path: &[gid::Step]) -> crate::editing::Site {
@@ -195,7 +195,7 @@ fn profile_program_tree_construction() {
             let start = Instant::now();
             let view = presentation::viewport_output(declaration, &sources, 400.0, 750.0).unwrap();
             let view_time = start.elapsed();
-            assert!(!absent::is_absent(&view));
+            assert!(!::grap::absent::is_absent(&view));
             let start = Instant::now();
             let memoized = crate::libraries::tree::prepared(
                 &computations,
@@ -268,7 +268,7 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
         direct.segments().collect::<Vec<_>>()
     );
 
-    let failure = absent::with_reason(INVALID_INPUT);
+    let failure = ::grap::absent::value(INVALID_INPUT);
     let invalid = Value::list([line(0.0), ::grap::lambda([], failure.clone()), line(10.0)]);
     let mut recording = Recording::default();
     let result = record_program(&invalid.into(), &libraries, 10000, &mut recording);

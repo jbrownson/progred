@@ -390,9 +390,7 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
     let destination: Vec<_> = site.iter().chain(&child).cloned().collect();
     for payload in [
         payload::edge(),
-        crate::libraries::absent::with_reason(
-            crate::libraries::selection::vocabulary::NO_SELECTION,
-        ),
+        ::grap::absent::value(crate::libraries::selection::vocabulary::NO_SELECTION),
     ] {
         for selected in [None, Some(destination.clone()), Some(site.clone())] {
             let initial = || crate::site::PendingChanges {

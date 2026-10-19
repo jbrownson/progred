@@ -44,7 +44,7 @@ fn iteration_and_unfold_only_consume_their_finished_reason() {
             vocabulary::STATE,
             Value::from(vec![8]),
         );
-        for result in [failure.clone(), absent::with_reason(vocabulary::FINISHED)] {
+        for result in [failure.clone(), ::grap::absent::value(vocabulary::FINISHED)] {
             let expression = call(
                 operation,
                 [
@@ -71,7 +71,7 @@ fn iteration_and_unfold_only_consume_their_finished_reason() {
             let exhausted = crate::libraries::test_evaluate(&expression, |_| None, &functions(), 1);
             assert!(!exhausted.completed);
             assert_eq!(
-                absent::reason(&exhausted.result),
+                ::grap::absent::reason(&exhausted.result),
                 Some(::grap::absent::FUEL_EXHAUSTED)
             );
         }
@@ -92,7 +92,7 @@ fn iterate_drives_a_step_without_collecting_intermediate_values() {
             let call = step_calls.get();
             step_calls.set(call + 1);
             Ok(if call == 3 {
-                absent::with_reason(vocabulary::FINISHED)
+                ::grap::absent::value(vocabulary::FINISHED)
             } else {
                 Value::from(vec![call as u8])
             })

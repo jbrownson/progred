@@ -173,7 +173,7 @@ pub(crate) fn image(
             cancel.check()?;
             let compiled = SoftwareScene::new(&objects, cancel);
             cancel.check()?;
-            Ok(compiled.ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD)))
+            Ok(compiled.ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
         },
         move |scene, view, cancel, publish, progress| {
             Ok(view
@@ -185,7 +185,7 @@ pub(crate) fn image(
                     &mut |image| publish(Ok(image)),
                     Some(progress),
                 )?
-                .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD)))
+                .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
         },
     )
 }
@@ -321,7 +321,7 @@ fn image_with<S: Send + Sync + 'static>(
 }
 
 fn scene(request: SceneRequest) -> Outcome<Vec<fidget::SceneObject>> {
-    let invalid = || absent::with_reason(INVALID_INPUT);
+    let invalid = || ::grap::absent::value(INVALID_INPUT);
     let objects = match request {
         SceneRequest::Model(objects) => objects,
         SceneRequest::Stock(path, playback) => vec![
@@ -332,7 +332,7 @@ fn scene(request: SceneRequest) -> Outcome<Vec<fidget::SceneObject>> {
         ],
     };
     if objects.len() > usize::from(u16::MAX) + 1 {
-        Err(absent::with_reason(fidget::vocabulary::INVALID_SCENE))
+        Err(::grap::absent::value(fidget::vocabulary::INVALID_SCENE))
     } else {
         Ok(objects)
     }

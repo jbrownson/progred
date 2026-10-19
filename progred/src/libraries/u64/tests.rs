@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{absent, logic, name};
+use crate::libraries::{logic, name};
 use ::grap;
 use gid::new_cell_id;
 
@@ -74,19 +74,19 @@ fn rust_supplies_arithmetic_to_grap() {
 fn unrepresentable_results_are_library_absents() {
     assert_eq!(
         evaluate(&call(vocabulary::SUM, value(u64::MAX), value(1))),
-        absent::with_reason(vocabulary::OVERFLOW)
+        ::grap::absent::value(vocabulary::OVERFLOW)
     );
     assert_eq!(
         evaluate(&call(vocabulary::SUBTRACT, value(1), value(2))),
-        absent::with_reason(vocabulary::OVERFLOW)
+        ::grap::absent::value(vocabulary::OVERFLOW)
     );
     assert_eq!(
         evaluate(&call(vocabulary::MULTIPLY, value(u64::MAX), value(2))),
-        absent::with_reason(vocabulary::OVERFLOW)
+        ::grap::absent::value(vocabulary::OVERFLOW)
     );
     assert_eq!(
         evaluate(&call(vocabulary::DIVIDE, value(1), value(0))),
-        absent::with_reason(vocabulary::DIVISION_BY_ZERO)
+        ::grap::absent::value(vocabulary::DIVISION_BY_ZERO)
     );
 }
 
@@ -114,7 +114,7 @@ fn operands_of_other_representations_decline() {
             crate::libraries::f64::value(2.0),
             value(3)
         )),
-        absent::with_reason(vocabulary::LEFT_NOT_U64)
+        ::grap::absent::value(vocabulary::LEFT_NOT_U64)
     );
     assert_eq!(
         evaluate(&call(
@@ -122,7 +122,7 @@ fn operands_of_other_representations_decline() {
             value(2),
             crate::libraries::f32::value(3.0)
         )),
-        absent::with_reason(vocabulary::RIGHT_NOT_U64)
+        ::grap::absent::value(vocabulary::RIGHT_NOT_U64)
     );
 }
 
@@ -144,7 +144,7 @@ fn library_names_are_ordinary_facts_for_random_identities() {
         Some("u64 overflow")
     );
     assert_eq!(
-        absent::reason(&absent::with_reason(vocabulary::DIVISION_BY_ZERO)),
+        ::grap::absent::reason(&::grap::absent::value(vocabulary::DIVISION_BY_ZERO)),
         Some(vocabulary::DIVISION_BY_ZERO)
     );
 }

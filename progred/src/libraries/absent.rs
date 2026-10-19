@@ -4,7 +4,7 @@
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
-use gid::{CellId, Value};
+use gid::CellId;
 
 pub const ID: CellId = CellId::from_u128(0x873c68ac371dbbb98a4f198546d60241);
 
@@ -20,26 +20,6 @@ pub mod vocabulary {
     pub const DECLINED: CellId = ::grap::absent::DECLINED;
     pub const OR_DEFAULT: CellId = CellId::from_u128(0x6a7a30847dd7d939448d0e7eaeb82893);
     pub const DEFAULT: CellId = CellId::from_u128(0xd8bdf7403b181a43fa73578bd976ba3b);
-}
-
-pub fn with_reason(reason: CellId) -> Value {
-    ::grap::absent::value(reason)
-}
-
-#[cfg(test)]
-pub fn reason(value: &Value) -> Option<CellId> {
-    ::grap::absent::reason(value)
-}
-
-pub fn is_absent(value: &Value) -> bool {
-    ::grap::absent::is_absent(value)
-}
-
-#[cfg(test)]
-pub use ::grap::absent::decline;
-
-pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
-    ::grap::absent::from_causes(causes)
 }
 
 /// An absent value reads as its reason, then any other fields, such as a

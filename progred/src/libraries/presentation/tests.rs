@@ -89,7 +89,7 @@ fn viewport_preparation_failure_does_not_call_the_viewport() {
         ) -> RuntimeValue {
             assert_eq!(fuel, ::grap::DEFAULT_FUEL);
             self.0.set(self.0.get() + 1);
-            absent::with_reason(::grap::absent::MISSING_CELL).into()
+            ::grap::absent::value(::grap::absent::MISSING_CELL).into()
         }
         fn apply_expression_runtime(
             &self,
@@ -125,7 +125,7 @@ fn viewport_preparation_failure_does_not_call_the_viewport() {
     let declaration = Value::Record(fields.clone());
     assert_eq!(
         viewport_output(&declaration, &env, 400.0, 300.0),
-        Some(absent::with_reason(::grap::absent::MISSING_CELL))
+        Some(::grap::absent::value(::grap::absent::MISSING_CELL))
     );
     assert_eq!(env.0.get(), 1);
     for fuel in [f64::value(-1.0), f64::value(0.5), Value::record([])] {
@@ -289,7 +289,7 @@ fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source()
     assert!(matches!(
         (projected(
             &value,
-            &EvaluatesTo(absent::with_reason(LEFT_VALUE)),
+            &EvaluatesTo(::grap::absent::value(LEFT_VALUE)),
             projected_display
         ))
         .map(|layout| inspect(&layout)),

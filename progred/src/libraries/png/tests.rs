@@ -118,16 +118,16 @@ fn width_and_height_read_the_header() {
             vocabulary::WIDTH,
             [(vocabulary::IMAGE, Value::from(vec![1]))]
         ),
-        absent::with_reason(vocabulary::NOT_PNG)
+        ::grap::absent::value(vocabulary::NOT_PNG)
     );
     assert_eq!(
         call(
             vocabulary::HEIGHT,
             [(vocabulary::IMAGE, value(b"not a png".to_vec()))]
         ),
-        absent::with_reason(vocabulary::INVALID_PNG)
+        ::grap::absent::value(vocabulary::INVALID_PNG)
     );
-    assert!(absent::is_absent(&call(vocabulary::WIDTH, [])));
+    assert!(::grap::absent::is_absent(&call(vocabulary::WIDTH, [])));
 }
 
 fn driver(root: Value) -> Driver {

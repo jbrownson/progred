@@ -4,7 +4,7 @@ use gid::{CellId, Cells, Document, Value};
 use puri::draw::DrawCmd;
 #[test]
 fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
-    use crate::libraries::{absent, color, control, f32, fidget, presentation, toolpath};
+    use crate::libraries::{color, control, f32, fidget, presentation, toolpath};
     use toolpath::vocabulary as t;
     let point = |function: CellId, x| {
         grap::call(
@@ -19,7 +19,7 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
     for preview in [t::PREVIEW_3D, t::PREVIEW_MESH] {
         for (result, fuel, should_draw) in [
             (Value::record([]), 1000, true),
-            (absent::with_reason(t::INVALID_INPUT), 1000, false),
+            (::grap::absent::value(t::INVALID_INPUT), 1000, false),
             (Value::record([]), 0, false),
         ] {
             let program = Value::record([
@@ -52,7 +52,7 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
             );
             let stack = crate::stack::load();
             let result = grap::evaluate_value(&expression, &stack.libraries, 1000);
-            assert!(result.completed && !absent::is_absent(&result.result));
+            assert!(result.completed && !::grap::absent::is_absent(&result.result));
             let doc = Document {
                 root: Some(result.result),
                 cells: Cells::new(),

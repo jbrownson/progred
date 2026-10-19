@@ -355,10 +355,7 @@ fn an_iterate_step_burns_like_an_ordinary_call() {
             (list::vocabulary::INITIAL, blob("start")),
             (
                 list::vocabulary::STEP,
-                grap::lambda(
-                    [state],
-                    crate::libraries::absent::with_reason(list::vocabulary::FINISHED),
-                ),
+                grap::lambda([state], ::grap::absent::value(list::vocabulary::FINISHED)),
             ),
         ],
     );

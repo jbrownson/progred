@@ -3,7 +3,7 @@
 //! their application-level evaluation behavior.
 
 use crate::gid_text::{Binders, parse};
-use crate::libraries::{absent, f64, geometry};
+use crate::libraries::{f64, geometry};
 use gid::{Document, Value};
 
 fn evaluated_expression(value: &Value) -> &Value {
@@ -96,14 +96,14 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             evaluated_expression(demo_entry(&doc, &binders, "type_absent")),
         )
         .result,
-        absent::with_reason(f64::vocabulary::LEFT_NOT_F64)
+        ::grap::absent::value(f64::vocabulary::LEFT_NOT_F64)
     );
     for (label, reason) in [
         ("missing_argument", grap::absent::MISSING_ARGUMENT),
         ("not_callable", grap::absent::NOT_CALLABLE),
     ] {
         assert_eq!(
-            absent::reason(
+            ::grap::absent::reason(
                 &evaluate(
                     &doc,
                     evaluated_expression(demo_entry(&doc, &binders, label))

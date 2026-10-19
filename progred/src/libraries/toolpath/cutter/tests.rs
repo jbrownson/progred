@@ -1,6 +1,6 @@
 use super::super::paths::{Axis, InvalidPath};
 use super::*;
-use crate::libraries::{absent, f64};
+use crate::libraries::f64;
 use fidget_engine::{context::Tree, shape::EzShape, vm::VmShape};
 use gid::Value;
 
@@ -66,7 +66,7 @@ fn constructors_return_editable_profiles_not_shape_tags() {
         1000,
     )
     .result;
-    assert!(absent::is_absent(&value));
+    assert!(::grap::absent::is_absent(&value));
 }
 
 #[test]

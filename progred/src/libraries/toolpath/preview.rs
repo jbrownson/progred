@@ -6,7 +6,7 @@ use super::{
 };
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::widget;
-use crate::libraries::{absent, layout};
+use crate::libraries::layout;
 use kurbo::{Affine, BezPath, Point, Rect, Size, Stroke};
 use peniko::Color;
 use puri::draw::Canvas;
@@ -129,7 +129,7 @@ pub(super) fn display<W: Host>(
                 [gid::Step::Key(
                     crate::libraries::presentation::vocabulary::RESULT,
                 )],
-                absent::with_reason(INVALID_INPUT),
+                ::grap::absent::value(INVALID_INPUT),
             )
             .measure(context, build);
         };

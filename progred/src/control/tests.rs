@@ -1,6 +1,6 @@
 use super::computer::vocabulary::*;
 use super::*;
-use crate::libraries::{absent, f64, text};
+use crate::libraries::{f64, text};
 use gid::Step;
 use puri::keyboard::CommandModifier;
 
@@ -92,20 +92,23 @@ fn actions_answer_why_they_could_not_happen() {
             &session,
             call(LEFT_CLICK, [(COORDINATE, at(Point::new(5000.0, 10.0)))])
         ),
-        absent::with_reason(OUTSIDE_WINDOW)
+        ::grap::absent::value(OUTSIDE_WINDOW)
     );
     assert_eq!(
         send(
             &session,
             call(LEFT_CLICK, [(COORDINATE, text::value("the middle"))])
         ),
-        absent::with_reason(NOT_A_COORDINATE)
+        ::grap::absent::value(NOT_A_COORDINATE)
     );
     assert_eq!(
         send(&session, call(KEY, [(TEXT, text::value("hyper+q"))])),
-        absent::with_reason(UNKNOWN_KEY)
+        ::grap::absent::value(UNKNOWN_KEY)
     );
-    assert!(absent::is_absent(&send(&session, call(MOUSE_MOVE, []))));
+    assert!(::grap::absent::is_absent(&send(
+        &session,
+        call(MOUSE_MOVE, [])
+    )));
 }
 
 #[test]
@@ -160,7 +163,7 @@ fn requests_that_are_not_documents_say_so() {
     let binders = computer::binders();
     let reply = respond(&Session::libraries(&session), &binders, b"{root: [}");
     let root = gid_text::parse(&reply).unwrap().0.root.unwrap();
-    assert_eq!(absent::reason(&root), Some(INVALID_REQUEST));
+    assert_eq!(::grap::absent::reason(&root), Some(INVALID_REQUEST));
 }
 
 #[test]

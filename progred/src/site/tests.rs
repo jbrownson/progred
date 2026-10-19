@@ -71,7 +71,7 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
             assert_eq!(evaluation.result, Value::record([]));
             assert_eq!(
                 read(),
-                if absent::is_absent(&payload) {
+                if ::grap::absent::is_absent(&payload) {
                     absent::value(reason)
                 } else {
                     payload
@@ -196,7 +196,7 @@ fn event_changes_commit_with_an_ordinary_absent_but_not_a_decline() {
     assert_eq!(staged.selection, Some((vec![], selection.clone())));
     assert!(
         evaluate(
-            &function(absent::decline()),
+            &function(::grap::absent::decline()),
             [],
             &[],
             None,
@@ -235,7 +235,7 @@ fn declining_after_editing_discards_the_whole_editor_operation() {
                 site::vocabulary::SET.into(),
                 [(site::vocabulary::VALUE, Value::from(vec![42]))],
             ),
-            absent::decline(),
+            ::grap::absent::decline(),
         ]),
     );
     let doc = Document {

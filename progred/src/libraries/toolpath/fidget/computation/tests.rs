@@ -219,7 +219,9 @@ fn camera_changes_do_not_cancel_running_preparation_but_geometry_changes_do() {
             let rendered = rendered.clone();
             move |_, view, _, _, _| {
                 rendered.lock().unwrap().push(view);
-                Ok(Err(absent::with_reason(fidget::vocabulary::INVALID_FIELD)))
+                Ok(Err(::grap::absent::value(
+                    fidget::vocabulary::INVALID_FIELD,
+                )))
             }
         },
     );

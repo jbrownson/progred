@@ -135,7 +135,7 @@ impl Layers {
             Ok(shape
                 .append_cancellable(&mut geometry, request.depth, cancel)?
                 .map(|()| geometry.into())
-                .ok_or_else(|| absent::with_reason(fidget::vocabulary::INVALID_FIELD)))
+                .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
         });
         let paths = runtime.memo_by(
             move |read| {
@@ -182,7 +182,7 @@ fn combine(paths: &Outcome<Mesh>, surface: &Availability<Outcome<Mesh>>) -> Outc
                     color
                 }
             })
-            .ok_or_else(|| absent::with_reason(INVALID_INPUT))?;
+            .ok_or_else(|| ::grap::absent::value(INVALID_INPUT))?;
     }
     Ok(ViewGeometry {
         surface_start: paths.indices.len(),
@@ -202,7 +202,7 @@ fn remaining_shape(request: &Surface) -> Outcome<fidget::mesh::Shape> {
     if let Some((path, playback)) = &request.removal
         && let Some(stock) = playback
             .remaining_stock(path)
-            .map_err(|_| absent::with_reason(INVALID_INPUT))?
+            .map_err(|_| ::grap::absent::value(INVALID_INPUT))?
     {
         shape.objects = vec![stock];
     }
@@ -225,7 +225,7 @@ pub(crate) fn paths(
     playback: Option<&playback::Settings>,
 ) -> Outcome<Mesh> {
     let path = record.path()?;
-    let invalid = || absent::with_reason(INVALID_INPUT);
+    let invalid = || ::grap::absent::value(INVALID_INPUT);
     let mut tubes = tubes::Tubes::new(radius, color).ok_or_else(invalid)?;
     if let Some(playback) = playback {
         playback

@@ -106,7 +106,7 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
         assert!((actual / expected - 1.0).abs() < 1e-14);
         assert_eq!(
             evaluate(call(function, Value::record([]), value(b))),
-            absent::with_reason(vocabulary::LEFT_NOT_F64),
+            ::grap::absent::value(vocabulary::LEFT_NOT_F64),
         );
     }
     let unary_call =
@@ -126,9 +126,9 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
     for function in [vocabulary::CEIL, vocabulary::IS_FINITE] {
         assert_eq!(
             evaluate(unary_call(function, Value::record([]))),
-            absent::with_reason(vocabulary::OPERAND_NOT_F64),
+            ::grap::absent::value(vocabulary::OPERAND_NOT_F64),
         );
-        assert!(absent::is_absent(&evaluate(grap::call(
+        assert!(::grap::absent::is_absent(&evaluate(grap::call(
             function.into(),
             []
         ))));
@@ -394,11 +394,11 @@ fn type_absences_are_library_values() {
     let right = call(vocabulary::SUM, value(2.0), Value::from(b"three".to_vec()));
     assert_eq!(
         crate::libraries::test_evaluate(&left, |_| None, &functions(), 10).result,
-        absent::with_reason(vocabulary::LEFT_NOT_F64)
+        ::grap::absent::value(vocabulary::LEFT_NOT_F64)
     );
     assert_eq!(
         crate::libraries::test_evaluate(&right, |_| None, &functions(), 10).result,
-        absent::with_reason(vocabulary::RIGHT_NOT_F64)
+        ::grap::absent::value(vocabulary::RIGHT_NOT_F64)
     );
 }
 
@@ -445,11 +445,11 @@ fn library_names_are_ordinary_facts_for_random_identities() {
         Some("right is not f64")
     );
     assert_eq!(
-        absent::reason(&absent::with_reason(vocabulary::LEFT_NOT_F64)),
+        ::grap::absent::reason(&::grap::absent::value(vocabulary::LEFT_NOT_F64)),
         Some(vocabulary::LEFT_NOT_F64)
     );
     assert_eq!(
-        absent::reason(&absent::with_reason(vocabulary::RIGHT_NOT_F64)),
+        ::grap::absent::reason(&::grap::absent::value(vocabulary::RIGHT_NOT_F64)),
         Some(vocabulary::RIGHT_NOT_F64)
     );
     assert!(library.definitions.value(vocabulary::SUM).is_some());

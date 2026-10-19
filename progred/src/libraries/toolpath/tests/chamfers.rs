@@ -13,7 +13,7 @@ fn program(sources: &Sources<'_>, names: &Binders, name: &str) -> Recording {
         apply_groups(&names[name].into(), [], sources, scope, 300_000)
     });
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -127,7 +127,7 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
     ] {
         // Configuration is pure and can be evaluated without any path output.
         let configured = ::grap::evaluate_value(&recipe, &sources, 1000);
-        assert!(configured.completed && !absent::is_absent(&configured.result));
+        assert!(configured.completed && !::grap::absent::is_absent(&configured.result));
         let mut path = Recording::default();
         let result = run(&mut path, |scope| {
             apply_groups(
@@ -139,7 +139,7 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
             )
         });
         assert!(
-            result.completed && !absent::is_absent(&result.result),
+            result.completed && !::grap::absent::is_absent(&result.result),
             "{:?}",
             result.result
         );
@@ -188,7 +188,7 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
             &sources,
             1000,
         );
-        assert!(result.completed && !absent::is_absent(&result.result));
+        assert!(result.completed && !::grap::absent::is_absent(&result.result));
         result.result
     };
     for (before, after) in [(0.0, 0.0), (7.0, 0.0), (0.0, 14.0), (7.0, 14.0)] {
@@ -217,7 +217,7 @@ fn stroke_extension_composes_without_a_tool_or_output_scope() {
                     10_000,
                 );
                 assert!(
-                    result.completed && !absent::is_absent(&result.result),
+                    result.completed && !::grap::absent::is_absent(&result.result),
                     "{:?}",
                     result.result
                 );
@@ -268,7 +268,7 @@ fn extending_a_zero_length_stroke_fails_without_emitting_a_path() {
         &sources,
         1000,
     );
-    assert!(configured.completed && !absent::is_absent(&configured.result));
+    assert!(configured.completed && !::grap::absent::is_absent(&configured.result));
     let mut path = Recording::default();
     let result = run(&mut path, |scope| {
         ::grap::apply_value(
@@ -282,7 +282,7 @@ fn extending_a_zero_length_stroke_fails_without_emitting_a_path() {
             10_000,
         )
     });
-    assert!(result.completed && absent::is_absent(&result.result));
+    assert!(result.completed && ::grap::absent::is_absent(&result.result));
     assert!(path.commands().is_empty());
 }
 
@@ -328,7 +328,7 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
         )
         .into_value()
     });
-    assert!(result.completed && !absent::is_absent(&result.result));
+    assert!(result.completed && !::grap::absent::is_absent(&result.result));
     assert_eq!(
         path.commands(),
         [0.0, 0.25, 0.5, 0.75, 1.0].map(|t| Command::StartAt([t, 0.0, 0.0], Axis::Z))
@@ -373,7 +373,7 @@ fn spacing_and_rotated_repetition_do_not_require_a_chamfer_or_tool() {
         )
         .into_value()
     });
-    assert!(result.completed && !absent::is_absent(&result.result));
+    assert!(result.completed && !::grap::absent::is_absent(&result.result));
     let actual: Vec<_> = path
         .segments()
         .map(|(a, b, axis)| (a, b, axis.vector()))
@@ -620,7 +620,7 @@ fn invalid_stepover_fails_before_emitting_but_contours_do_not_consume_it() {
         let result = run(&mut path, |scope| {
             apply_groups(&names["op1_chamfers"].into(), [], &sources, scope, 300_000)
         });
-        assert!(result.completed && absent::is_absent(&result.result));
+        assert!(result.completed && ::grap::absent::is_absent(&result.result));
         assert!(path.commands().is_empty());
 
         set_strategy(&mut doc, &names, "contour_chamfer");

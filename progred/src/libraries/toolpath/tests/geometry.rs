@@ -56,7 +56,7 @@ fn path(sources: &Sources<'_>, names: &Binders) -> Recording {
         )
     });
     assert!(
-        result.completed && !absent::is_absent(&result.result),
+        result.completed && !::grap::absent::is_absent(&result.result),
         "{:?}",
         result.result
     );
@@ -84,7 +84,7 @@ fn cube_edits_change_paths_and_cached_results_match_fresh_evaluation() {
                     })
                 });
             assert!(
-                result.completed && !absent::is_absent(&result.result),
+                result.completed && !::grap::absent::is_absent(&result.result),
                 "{:?}",
                 result.result
             );
@@ -153,7 +153,7 @@ fn cube_contact_points_and_normals_agree_with_its_implicit_solid() {
             None,
             10_000,
         );
-        assert!(solid.completed && !absent::is_absent(&solid.result));
+        assert!(solid.completed && !::grap::absent::is_absent(&solid.result));
         let preview = ::grap::apply_value(
             &Value::from(fidget::vocabulary::PREVIEW_MESH),
             [(

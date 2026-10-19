@@ -42,7 +42,7 @@ fn ranges_are_lazy_and_collection_is_explicit() {
     }
     for count in [-1.0, 1.5, f64::NAN, f64::INFINITY, 1e20] {
         let result = crate::libraries::test_evaluate(&range(count), |_| None, &functions, 100);
-        assert_eq!(absent::reason(&result.result), Some(INVALID));
+        assert_eq!(::grap::absent::reason(&result.result), Some(INVALID));
     }
 }
 
@@ -69,7 +69,7 @@ fn calling_again_repeats_and_only_the_successor_advances() {
     );
     assert_eq!(first_item, pull(&first));
     let end = second_item.as_record().unwrap().get(&NEXT).unwrap();
-    assert_eq!(absent::reason(&pull(end)), Some(FINISHED));
+    assert_eq!(::grap::absent::reason(&pull(end)), Some(FINISHED));
     assert_eq!(pull(end), pull(end));
 }
 
@@ -88,13 +88,13 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
                 (ITEM, unquote(Value::from(captured))),
                 (
                     NEXT,
-                    unquote(::grap::lambda([], absent::with_reason(FINISHED))),
+                    unquote(::grap::lambda([], ::grap::absent::value(FINISHED))),
                 ),
             ])),
         ),
     );
     let functions = functions().merge(control::functions());
-    for value in [f64::value(42.0), absent::with_reason(INVALID)] {
+    for value in [f64::value(42.0), ::grap::absent::value(INVALID)] {
         let sequence = ::grap::call(producer.clone(), [(captured, value.clone())]);
         let result = crate::libraries::test_evaluate(
             &call(COLLECT, [(ITEMS, sequence)]),
@@ -112,7 +112,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
     let pull = gid::new_cell_id();
     let action = gid::new_cell_id();
     let log = Rc::new(RefCell::new(Vec::new()));
-    let failure = absent::with_reason(crate::libraries::list::vocabulary::FINISHED);
+    let failure = ::grap::absent::value(crate::libraries::list::vocabulary::FINISHED);
     let functions = functions()
         .register(
             pull,
@@ -187,7 +187,10 @@ fn empty_sequence_does_not_call_action_and_metadata_is_ignored() {
                         [(COUNT, f64::value(0.0)), (extra, Value::record([]))],
                     ),
                 ),
-                (ACTION, ::grap::lambda([ITEM], absent::with_reason(INVALID))),
+                (
+                    ACTION,
+                    ::grap::lambda([ITEM], ::grap::absent::value(INVALID)),
+                ),
             ],
         ),
         |_| None,
@@ -204,7 +207,7 @@ fn producer_failures_malformed_steps_and_fuel_are_not_completion() {
     for output in [
         Value::record([]),
         Value::record([(ITEM, f64::value(1.0))]),
-        absent::with_reason(::grap::absent::MISSING_CELL),
+        ::grap::absent::value(::grap::absent::MISSING_CELL),
     ] {
         let functions = functions().register(
             step,
@@ -223,10 +226,10 @@ fn producer_failures_malformed_steps_and_fuel_are_not_completion() {
         assert!(result.completed);
         assert_eq!(
             result.result,
-            if absent::reason(&output).is_some() {
+            if ::grap::absent::reason(&output).is_some() {
                 output
             } else {
-                absent::with_reason(INVALID)
+                ::grap::absent::value(INVALID)
             }
         );
     }
@@ -244,7 +247,7 @@ fn producer_failures_malformed_steps_and_fuel_are_not_completion() {
     );
     assert!(!result.completed);
     assert_eq!(
-        absent::reason(&result.result),
+        ::grap::absent::reason(&result.result),
         Some(::grap::absent::FUEL_EXHAUSTED)
     );
 }

@@ -60,7 +60,7 @@ fn negative_resolution_and_native_replacement_are_dependencies() {
     let fuel = runtime.input(100);
     let query = evaluate(&runtime, source, expression, fuel);
     assert_eq!(
-        absent::reason(&runtime.read(&query).unwrap().result),
+        ::grap::absent::reason(&runtime.read(&query).unwrap().result),
         Some(absent::MISSING_CELL)
     );
     let first = counted(&runs, Value::from(vec![1]));
@@ -133,7 +133,7 @@ fn library_order_document_override_and_removal_are_observed() {
     }
     table.set_by(vec![], |_, _| false);
     assert_eq!(
-        absent::reason(&runtime.read(&query).unwrap().result),
+        ::grap::absent::reason(&runtime.read(&query).unwrap().result),
         Some(absent::MISSING_CELL)
     );
 }

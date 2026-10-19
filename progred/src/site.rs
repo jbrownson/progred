@@ -45,7 +45,7 @@ pub type Continuation =
 
 impl PendingChanges {
     pub fn select(&mut self, path: Path, payload: Value) {
-        if !absent::is_absent(&payload) {
+        if !::grap::absent::is_absent(&payload) {
             self.selection = Some((path, payload));
             self.selection_changed = true;
         } else if self
@@ -286,7 +286,7 @@ fn set_state(
         return Ok(context.missing_argument(vocabulary::VALUE));
     };
     let value = context.eval_to_value(expression, environment)?;
-    let value = (!absent::is_absent(&value)).then_some(value.clone());
+    let value = (!::grap::absent::is_absent(&value)).then_some(value.clone());
     Ok(context.effect(|| {
         let mut staged = staged.borrow_mut();
         staged.annotation = value;
@@ -319,7 +319,7 @@ fn set_selection(
     };
     let value = context.eval_to_value(expression, environment)?;
     let mut staged = staged.borrow_mut();
-    if !absent::is_absent(&value)
+    if !::grap::absent::is_absent(&value)
         || staged
             .selection
             .as_ref()

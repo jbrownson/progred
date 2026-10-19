@@ -19,7 +19,7 @@ fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
             (sum, grap::call(f64::vocabulary::SUM.into(), [])),
             (
                 missing,
-                absent::with_reason(absent::vocabulary::NO_ALTERNATIVE),
+                ::grap::absent::value(absent::vocabulary::NO_ALTERNATIVE),
             ),
         ])),
         cells: Cells::new(),
@@ -91,8 +91,8 @@ fn an_absent_value_reads_as_its_reason_then_its_fields_all_on_red() {
             .collect::<Vec<_>>()
     };
     // Each cause of a failed alternative is washed too, inside its failure's.
-    let failure = washes(absent::from_causes([
-        absent::with_reason(absent::vocabulary::DECLINED),
+    let failure = washes(::grap::absent::from_causes([
+        ::grap::absent::value(absent::vocabulary::DECLINED),
         ::grap::absent::with_detail(
             ::grap::absent::MISSING_ARGUMENT,
             absent::vocabulary::VALUE,

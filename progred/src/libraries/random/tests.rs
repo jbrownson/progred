@@ -63,7 +63,7 @@ fn declining_after_sampling_halts_the_evaluation() {
                         grap::Definition::Value(grap::lambda(
                             [],
                             grap::call(
-                                grap::lambda([ignored], absent::decline()),
+                                grap::lambda([ignored], ::grap::absent::decline()),
                                 [(ignored, next.clone())],
                             ),
                         )),
@@ -90,7 +90,7 @@ fn declining_after_sampling_halts_the_evaluation() {
     );
     assert!(!evaluation.completed);
     assert_eq!(
-        absent::reason(&evaluation.result),
+        ::grap::absent::reason(&evaluation.result),
         Some(grap::absent::EFFECTFUL_DECLINE),
     );
 }
@@ -167,5 +167,5 @@ fn sampling_outside_a_scope_returns_a_stable_absent() {
     )
     .result;
 
-    assert_eq!(result, absent::with_reason(vocabulary::OUTSIDE_SCOPE));
+    assert_eq!(result, ::grap::absent::value(vocabulary::OUTSIDE_SCOPE));
 }

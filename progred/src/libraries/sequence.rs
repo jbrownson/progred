@@ -27,7 +27,7 @@ pub mod vocabulary {
 use vocabulary::*;
 
 fn invalid() -> RuntimeValue {
-    absent::with_reason(INVALID).into()
+    ::grap::absent::value(INVALID).into()
 }
 
 fn evaluated(
@@ -95,7 +95,7 @@ fn range_step(
         return Ok(invalid());
     }
     Ok(if index == count {
-        absent::with_reason(FINISHED).into()
+        ::grap::absent::value(FINISHED).into()
     } else {
         RuntimeValue::record([
             (ITEM, RuntimeValue::f64(index)),

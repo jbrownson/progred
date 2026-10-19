@@ -93,10 +93,7 @@ pub fn at_display_partial() -> Value {
                                 control::vocabulary::PATTERN,
                                 bind(layout::vocabulary::EVENT),
                             ),
-                            (
-                                grap::vocabulary::EXPRESSION,
-                                crate::libraries::absent::decline(),
-                            ),
+                            (grap::vocabulary::EXPRESSION, ::grap::absent::decline()),
                         ]),
                     ]),
                 ),

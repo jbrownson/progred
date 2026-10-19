@@ -6,8 +6,6 @@
 //! receives the pane's assigned logical width and height.
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-#[cfg(test)]
-use crate::libraries::absent;
 use crate::libraries::{Library, f64, layout, name};
 use gid::Step;
 

@@ -1153,7 +1153,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     for pane in &mut model.workspace.left.panes {
         pane.view.projection = workspace::Projection::Standard;
     }
-    *result.borrow_mut() = crate::libraries::absent::with_reason(projector);
+    *result.borrow_mut() = ::grap::absent::value(projector);
     let absent = place(&model);
     assert_eq!(calls.get(), 2);
     for (pane, path) in &sources {
