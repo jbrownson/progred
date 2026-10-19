@@ -2,16 +2,10 @@
 //! libraries. Ordinary lookup selects the document, then the first
 //! library definition. A stored Follow step still names its source.
 
+use crate::display::ResolvedCell;
 use crate::library::Libraries;
 use crate::location::{Location, Start};
 use gid::{CellId, Document, Resolution, Step, Value};
-
-#[derive(Clone, Copy)]
-pub struct LocatedValue<'a> {
-    /// Whether the document or a library defines it.
-    pub resolution: Resolution,
-    pub value: &'a Value,
-}
 
 /// One source's definition of a cell.
 #[derive(Clone, Copy)]
@@ -129,8 +123,8 @@ impl crate::display::Env for Sources<'_> {
         grap::apply_value(function, arguments.iter().cloned(), self, None, fuel).result
     }
 
-    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
-        self.definition(cell)
+    fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {
+        Sources::resolve(self, cell)
     }
 }
 
@@ -152,10 +146,15 @@ impl<'a> Sources<'a> {
             }))
     }
 
-    pub fn definition(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'a>> {
+    pub fn value(&self, cell: CellId, resolution: &Resolution) -> Option<&'a Value> {
+        self.values(cell)
+            .find(|value| &value.resolution == resolution)
+            .map(|value| value.value)
+    }
+
+    pub fn values(&self, cell: CellId) -> impl Iterator<Item = ResolvedCell<'a>> {
         self.definitions(cell)
-            .next()
-            .map(|(resolution, contribution)| crate::display::ResolvedCell {
+            .map(|(resolution, contribution)| ResolvedCell {
                 resolution,
                 value: contribution.value(),
                 native: matches!(
@@ -165,21 +164,8 @@ impl<'a> Sources<'a> {
             })
     }
 
-    pub fn value(&self, cell: CellId, resolution: &Resolution) -> Option<&'a Value> {
-        self.values(cell)
-            .find(|value| &value.resolution == resolution)
-            .map(|value| value.value)
-    }
-
-    pub fn values(&self, cell: CellId) -> impl Iterator<Item = LocatedValue<'a>> {
-        self.definitions(cell)
-            .map(|(resolution, contribution)| LocatedValue {
-                resolution,
-                value: contribution.value(),
-            })
-    }
-
-    pub fn resolve(&self, cell: CellId) -> Option<LocatedValue<'a>> {
+    /// The definition ordinary lookup selects.
+    pub fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'a>> {
         self.values(cell).next()
     }
 
@@ -215,7 +201,7 @@ impl<'a> Sources<'a> {
         )
     }
 
-    pub fn cells(&self) -> impl Iterator<Item = CellId> + '_ {
+    pub fn cells(&self) -> Vec<CellId> {
         let mut cells: Vec<_> = self
             .doc
             .cells
@@ -225,7 +211,7 @@ impl<'a> Sources<'a> {
             .collect();
         cells.sort_unstable();
         cells.dedup();
-        cells.into_iter()
+        cells
     }
 
     /// The library is authoritative only when it supplies the value

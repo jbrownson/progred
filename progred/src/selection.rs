@@ -435,7 +435,7 @@ fn query_selection(root: &Root, path: Path, payload: Value) -> Selection {
 /// paths for insertion and navigation. No source-to-occurrence inverse is needed.
 pub(crate) trait LocationRead {
     fn resolve_path(&self, path: &[Step]) -> Option<&Value>;
-    fn resolve(&self, cell: CellId) -> Option<crate::sources::LocatedValue<'_>>;
+    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>>;
     fn writable(&self, path: &[Step]) -> bool;
 }
 
@@ -443,7 +443,7 @@ impl LocationRead for Sources<'_> {
     fn resolve_path(&self, path: &[Step]) -> Option<&Value> {
         Sources::resolve_path(self, path)
     }
-    fn resolve(&self, cell: CellId) -> Option<crate::sources::LocatedValue<'_>> {
+    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
         Sources::resolve(self, cell)
     }
     fn writable(&self, path: &[Step]) -> bool {
@@ -455,7 +455,7 @@ impl LocationRead for crate::editing::Read<'_, '_> {
     fn resolve_path(&self, path: &[Step]) -> Option<&Value> {
         self.resolve_path(path)
     }
-    fn resolve(&self, cell: CellId) -> Option<crate::sources::LocatedValue<'_>> {
+    fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
         self.sources.resolve(cell)
     }
     fn writable(&self, path: &[Step]) -> bool {
@@ -744,7 +744,7 @@ pub(crate) fn collapse_default_for_value(
         return None;
     }
     let collapsible = match value.as_cell() {
-        Some(cell) => sources.values(cell).next().is_some(),
+        Some(cell) => sources.resolve(cell).is_some(),
         None => value
             .list_len()
             .or_else(|| value.record_len())

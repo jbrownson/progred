@@ -372,7 +372,7 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
     }
 
     fn resolve(&self, cell: CellId) -> Option<crate::display::ResolvedCell<'_>> {
-        self.cx.sources.definition(cell)
+        self.cx.sources.resolve(cell)
     }
 
     fn libraries(&self) -> Vec<crate::display::DocumentLibrary> {

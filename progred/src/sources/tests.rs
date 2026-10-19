@@ -39,7 +39,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
         doc: &empty,
         libraries: &libraries,
     }
-    .definition(function)
+    .resolve(function)
     .unwrap();
     assert_eq!(native.resolution, Resolution::Library(library));
     assert!(native.native);
@@ -63,7 +63,7 @@ fn document_definitions_shadow_library_calls_including_non_callable_values() {
             doc: &doc,
             libraries: &libraries,
         };
-        let resolved = sources.definition(function).unwrap();
+        let resolved = sources.resolve(function).unwrap();
         assert_eq!(resolved.resolution, Resolution::Document);
         assert!(!resolved.native);
         assert_eq!(Some(resolved.value), doc.cells.value(function));

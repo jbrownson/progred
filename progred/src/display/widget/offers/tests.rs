@@ -49,8 +49,8 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                 scope: CompletionScope::Everything,
                 path: &path,
                 value_at: &|_| None,
-                resolve: &|cell| sources.definition(cell),
-                cells: &|| sources.cells().collect(),
+                resolve: &|cell| sources.resolve(cell),
+                cells: &|| sources.cells(),
                 name: &|cell| crate::libraries::name::of(&sources, cell),
                 libraries: None,
             });
@@ -134,8 +134,8 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
         scope: CompletionScope::Everything,
         path: &path,
         value_at: &value_at,
-        resolve: &|cell| sources.definition(cell),
-        cells: &|| sources.cells().collect(),
+        resolve: &|cell| sources.resolve(cell),
+        cells: &|| sources.cells(),
         name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: None,
     };

@@ -35,8 +35,8 @@ pub(crate) fn root_completions<World>(
         scope: crate::display::CompletionScope::Start,
         path: &[],
         value_at: &|_| None,
-        resolve: &|cell| sources.definition(cell),
-        cells: &|| sources.cells().collect(),
+        resolve: &|cell| sources.resolve(cell),
+        cells: &|| sources.cells(),
         name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: None,
     })
@@ -77,8 +77,8 @@ pub(crate) fn completion_entries_with(
         scope: CompletionScope::Everything,
         path: &[],
         value_at: &value_at,
-        resolve: &|cell| sources.definition(cell),
-        cells: &|| sources.cells().collect(),
+        resolve: &|cell| sources.resolve(cell),
+        cells: &|| sources.cells(),
         name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: providers,
     })

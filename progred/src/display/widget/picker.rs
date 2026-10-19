@@ -179,7 +179,7 @@ fn query_content<W: Host>(
     let start = location.start;
     let sources = toolkit.sources();
     let value_at = move |path: &[Step]| sources.read_from(start, path);
-    let resolve = |cell| sources.definition(cell);
+    let resolve = |cell| sources.resolve(cell);
     let request = CompletionRequest {
         raw: toolkit.raw(),
         query: query.text(),
@@ -188,7 +188,7 @@ fn query_content<W: Host>(
         path: &location.path,
         value_at: &value_at,
         resolve: &resolve,
-        cells: &|| sources.cells().collect(),
+        cells: &|| sources.cells(),
         name: &|cell| toolkit.name(cell),
         libraries: toolkit.completions(),
     };
