@@ -4,11 +4,11 @@ use std::rc::Rc;
 #[test]
 fn reveal_moves_a_partly_visible_target_fully_into_view() {
     assert_eq!(
-        reveal_axis(120.0, 1_000.0, 180.0, 220.0, 30.0, 200.0, 12.0, 1.0),
+        reveal_axis(120.0, 1_000.0, (180.0, 220.0), (30.0, 200.0), 1.0),
         152.0
     );
     assert_eq!(
-        reveal_axis(120.0, 1_000.0, 10.0, 50.0, 30.0, 200.0, 12.0, 1.0),
+        reveal_axis(120.0, 1_000.0, (10.0, 50.0), (30.0, 200.0), 1.0),
         88.0
     );
 }
@@ -16,7 +16,7 @@ fn reveal_moves_a_partly_visible_target_fully_into_view() {
 #[test]
 fn reveal_leaves_fully_visible_targets_alone_even_inside_the_margin() {
     assert_eq!(
-        reveal_axis(120.0, 1_000.0, 30.0, 200.0, 30.0, 200.0, 12.0, 1.0),
+        reveal_axis(120.0, 1_000.0, (30.0, 200.0), (30.0, 200.0), 1.0),
         120.0
     );
 }
@@ -24,11 +24,11 @@ fn reveal_leaves_fully_visible_targets_alone_even_inside_the_margin() {
 #[test]
 fn reveal_aligns_an_oversized_target_at_its_leading_edge() {
     assert_eq!(
-        reveal_axis(120.0, 1_000.0, 80.0, 500.0, 30.0, 200.0, 12.0, 1.0),
+        reveal_axis(120.0, 1_000.0, (80.0, 500.0), (30.0, 200.0), 1.0),
         158.0
     );
     assert_eq!(
-        reveal_axis(120.0, 1_000.0, 42.0, 462.0, 30.0, 200.0, 12.0, 1.0),
+        reveal_axis(120.0, 1_000.0, (42.0, 462.0), (30.0, 200.0), 1.0),
         120.0
     );
 }
@@ -36,7 +36,7 @@ fn reveal_aligns_an_oversized_target_at_its_leading_edge() {
 #[test]
 fn a_target_starting_beyond_the_viewport_is_revealed() {
     assert_eq!(
-        reveal_axis(120.0, 1_000.0, 220.0, 260.0, 30.0, 200.0, 12.0, 1.0),
+        reveal_axis(120.0, 1_000.0, (220.0, 260.0), (30.0, 200.0), 1.0),
         192.0
     );
 }
@@ -44,7 +44,7 @@ fn a_target_starting_beyond_the_viewport_is_revealed() {
 #[test]
 fn reveal_clamps_an_offset_left_stale_by_a_resize() {
     assert_eq!(
-        reveal_axis(300.0, 100.0, 80.0, 120.0, 30.0, 200.0, 12.0, 1.0),
+        reveal_axis(300.0, 100.0, (80.0, 120.0), (30.0, 200.0), 1.0),
         100.0
     );
 }

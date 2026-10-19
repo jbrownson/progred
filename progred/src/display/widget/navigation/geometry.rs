@@ -27,15 +27,8 @@ impl<W> Clone for Geometry<'_, W> {
 
 impl<W> Copy for Geometry<'_, W> {}
 
-impl<W> Default for Geometry<'_, W> {
-    fn default() -> Self {
-        Self {
-            landmarks: &[],
-            view_regions: &[],
-            scale: 1.0,
-        }
-    }
-}
+/// How far inside its view, in logical units, a revealed place lands.
+const REVEAL_PAD: f64 = 12.0;
 
 impl<W> Geometry<'_, W> {
     /// Missing paths do nothing; new geometry does not retry the request.
@@ -53,38 +46,28 @@ impl<W> Geometry<'_, W> {
         }
     }
 
-    pub fn reveal_rect(self, model: &mut Model, root: &Root, rect: Rect) -> bool {
-        let Some(region) = self.view_regions.iter().find(|region| &region.root == root) else {
-            return false;
-        };
-        let Some(view) = model.workspace.view_mut(root) else {
-            return false;
-        };
-        let before = view.scroll;
-        let pad = 12.0 * self.scale;
-        view.scroll = Vec2::new(
-            reveal_axis(
-                before.x,
-                region.maximum.x,
-                rect.x0,
-                rect.x1,
-                region.rect.x0,
-                region.rect.x1,
-                pad,
-                self.scale,
-            ),
-            reveal_axis(
-                before.y,
-                region.maximum.y,
-                rect.y0,
-                rect.y1,
-                region.rect.y0,
-                region.rect.y1,
-                pad,
-                self.scale,
-            ),
-        );
-        view.scroll != before
+    pub fn reveal_rect(self, model: &mut Model, root: &Root, rect: Rect) {
+        if let (Some(region), Some(view)) = (
+            self.view_regions.iter().find(|region| &region.root == root),
+            model.workspace.view_mut(root),
+        ) {
+            view.scroll = Vec2::new(
+                reveal_axis(
+                    view.scroll.x,
+                    region.maximum.x,
+                    (rect.x0, rect.x1),
+                    (region.rect.x0, region.rect.x1),
+                    self.scale,
+                ),
+                reveal_axis(
+                    view.scroll.y,
+                    region.maximum.y,
+                    (rect.y0, rect.y1),
+                    (region.rect.y0, region.rect.y1),
+                    self.scale,
+                ),
+            );
+        }
     }
 }
 
@@ -104,16 +87,16 @@ impl<W: Host> Geometry<'_, W> {
     }
 }
 
+/// The scroll offset along one axis that shows the `target` span within the
+/// `viewport` span, both in pixels, moving as little as it can from `current`.
 fn reveal_axis(
     current: f64,
     maximum: f64,
-    start: f64,
-    end: f64,
-    viewport_start: f64,
-    viewport_end: f64,
-    pad: f64,
+    (start, end): (f64, f64),
+    (viewport_start, viewport_end): (f64, f64),
     scale: f64,
 ) -> f64 {
+    let pad = REVEAL_PAD * scale;
     let current = current.clamp(0.0, maximum);
     let mut scroll = current;
     // Reveal the full span; the margin is a landing allowance, not a trigger.

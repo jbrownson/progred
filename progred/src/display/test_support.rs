@@ -383,6 +383,17 @@ impl<H> Default for widget::HoverInput<'_, H> {
     }
 }
 
+/// No landmarks or views, at scale 1.
+impl<W> Default for widget::navigation::Geometry<'_, W> {
+    fn default() -> Self {
+        Self {
+            landmarks: &[],
+            view_regions: &[],
+            scale: 1.0,
+        }
+    }
+}
+
 /// Native-only widget tests intentionally provide no document recursion.
 pub struct NoProject;
 impl<W, H> widget::project::Project<W, H> for NoProject {
