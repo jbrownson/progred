@@ -267,12 +267,7 @@ fn operation<W: Host>(
             crate::display::center(need!(single(children)))
         }
         BRACKET => {
-            let delim = arg!(DELIM, |value| match value.as_cell()? {
-                PAREN => Some(Delim::Paren),
-                SQUARE => Some(Delim::Bracket),
-                CURLY => Some(Delim::Brace),
-                _ => None,
-            });
+            let delim = arg!(DELIM, read_delim);
             let body = need!(context.field(call, CHILD));
             let children = children!(body);
             bracket(delim, need!(single(children)))

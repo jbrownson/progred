@@ -227,169 +227,128 @@ fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
     ::grap::f64::to_usize(baseline).filter(|index| children == 0 || *index < children)
 }
 
+/// The stored form's node markers, in the precedence that settles a record
+/// carrying several.
+const MARKERS: [CellId; 18] = [
+    vocabulary::ROW,
+    vocabulary::COL,
+    vocabulary::OVERLAY,
+    vocabulary::PAD,
+    vocabulary::BORDER,
+    vocabulary::BRACKET,
+    vocabulary::ALTERNATIVES,
+    vocabulary::DESCEND,
+    vocabulary::DESCEND_PATH,
+    vocabulary::JUMP,
+    vocabulary::AT,
+    vocabulary::TEXT,
+    vocabulary::DRAWING,
+    vocabulary::SLOT,
+    vocabulary::SELECTABLE,
+    vocabulary::PICKABLE,
+    vocabulary::HOVER_BLOCK,
+    vocabulary::ON_EVENT,
+];
+
 fn decode_with<W: Host>(
     value: &::grap::RuntimeValue,
     site: &impl Fn() -> crate::editing::Site,
 ) -> Option<Layout<W>> {
-    value.record_len()?;
-    if let Some(content) = value.field(vocabulary::ROW) {
-        content.record_len()?;
-        let gap = read_number(content.field(vocabulary::GAP)?.as_value())?;
-        let children = children(&content.field(vocabulary::CHILDREN)?, site)?;
-        return Some(match content.field(vocabulary::BASELINE) {
-            None => crate::display::row(gap, children),
-            Some(baseline) => crate::display::aligned_row(
-                RowAlignment::Top {
-                    baseline: baseline_index(read_number(baseline.as_value())?, children.len())?,
-                },
-                gap,
-                children,
-            ),
-        });
-    }
-    if let Some(content) = value.field(vocabulary::COL) {
-        content.record_len()?;
-        let baseline = read_number(content.field(vocabulary::BASELINE)?.as_value())?;
-        let children = children(&content.field(vocabulary::CHILDREN)?, site)?;
-        return Some(crate::display::col(
-            baseline_index(baseline, children.len())?,
-            read_number(content.field(vocabulary::GAP)?.as_value())?,
-            children,
-        ));
-    }
-    if let Some(content) = value.field(vocabulary::OVERLAY) {
-        return Some(layout_overlay(children(&content, site)?));
-    }
-    if let Some(content) = value.field(vocabulary::PAD) {
-        content.record_len()?;
-        return Some(crate::display::padding(
-            (
-                read_number(content.field(vocabulary::LEFT)?.as_value())?,
-                read_number(content.field(vocabulary::TOP)?.as_value())?,
-                read_number(content.field(vocabulary::RIGHT)?.as_value())?,
-                read_number(content.field(vocabulary::BOTTOM)?.as_value())?,
-            )
-                .into(),
-            decode_with(&content.field(vocabulary::CHILD)?, site)?,
-        ));
-    }
-    if let Some(content) = value.field(vocabulary::BORDER) {
-        return Some(border(decode_with(&content, site)?));
-    }
-    if let Some(content) = value.field(vocabulary::BRACKET) {
-        content.record_len()?;
-        let delim = match content.field(vocabulary::DELIM)?.as_cell()? {
-            cell if cell == vocabulary::PAREN => Delim::Paren,
-            cell if cell == vocabulary::SQUARE => Delim::Bracket,
-            cell if cell == vocabulary::CURLY => Delim::Brace,
-            _ => return None,
-        };
-        return Some(bracket(
-            delim,
-            decode_with(&content.field(vocabulary::CHILD)?, site)?,
-        ));
-    }
-    if let Some(content) = value.field(vocabulary::ALTERNATIVES) {
-        return Some(alternatives(children(&content, site)?));
-    }
-    if let Some(content) = value.field(vocabulary::DESCEND) {
-        let step = crate::libraries::path::read_step(content.field(vocabulary::STEP)?.as_value())?;
-        return Some(descend([step], None, None));
-    }
-    if let Some(content) = value.field(vocabulary::DESCEND_PATH) {
-        return Some(descend(
-            crate::libraries::path::read(content.as_value())?,
-            None,
-            None,
-        ));
-    }
-    if let Some(content) = value.field(vocabulary::JUMP) {
-        content.record_len()?;
-        let steps = crate::libraries::path::read(content.field(vocabulary::STEPS)?.as_value())?;
-        let document =
-            crate::libraries::path::read(content.field(vocabulary::DOCUMENT_PATH)?.as_value())?;
-        return Some(crate::display::jump(steps, document));
-    }
-    if let Some(content) = value.field(vocabulary::AT) {
-        content.record_len()?;
-        let steps = crate::libraries::path::read(content.field(vocabulary::STEPS)?.as_value())?;
-        return Some(crate::display::at(steps, content.field(vocabulary::VALUE)?));
-    }
-    if let Some(content) = value.field(vocabulary::TEXT) {
-        content.record_len()?;
-        let face = match content.field(vocabulary::PAINT)?.as_cell()? {
-            cell if cell == vocabulary::NAME_FACE => Face::Name,
-            cell if cell == vocabulary::STRING_FACE => Face::String,
-            cell if cell == vocabulary::DIM_FACE => Face::Dim,
-            cell if cell == vocabulary::LABEL_FACE => Face::Label,
-            cell if cell == vocabulary::ID_FACE => Face::Id,
-            cell if cell == vocabulary::ACCENT_WASH_FACE => Face::AccentWash,
-            cell if cell == vocabulary::INK_FACE => Face::Ink,
-            _ => return None,
-        };
-        return Some(leaf(Leaf::Text {
-            text: content.field(vocabulary::CONTENT)?.as_text()?.to_string(),
-            paint: Paint::Face(face),
-            script: puri::text::Script::Normal,
-        }));
-    }
-    if let Some(content) = value.field(vocabulary::DRAWING) {
-        content.record_len()?;
-        let width = read_nonnegative(content.field(vocabulary::WIDTH)?.as_value())?;
-        let ascent = read_nonnegative(content.field(vocabulary::ASCENT)?.as_value())?;
-        let descent = read_nonnegative(content.field(vocabulary::DESCENT)?.as_value())?;
-        if let Some(program) = content.field(vocabulary::PROGRAM) {
-            let fuel =
-                ::grap::f64::to_usize(read_number(content.field(vocabulary::FUEL)?.as_value())?)?;
-            return Some(drawing::program(
-                crate::display::widget::Extent {
-                    width,
-                    ascent,
-                    descent,
-                },
-                fuel,
-                program.clone(),
-            ));
+    use crate::libraries::path;
+    use vocabulary::*;
+    let (marker, content) = MARKERS
+        .into_iter()
+        .find_map(|marker| Some((marker, value.field(marker)?)))?;
+    let number = |field| read_number(content.field(field)?.as_value());
+    let nonnegative = |field| read_nonnegative(content.field(field)?.as_value());
+    let child = || decode_with(&content.field(CHILD)?, site);
+    Some(match marker {
+        ROW => {
+            let gap = number(GAP)?;
+            let children = children(&content.field(CHILDREN)?, site)?;
+            match content.field(BASELINE) {
+                None => crate::display::row(gap, children),
+                Some(baseline) => crate::display::aligned_row(
+                    RowAlignment::Top {
+                        baseline: baseline_index(
+                            read_number(baseline.as_value())?,
+                            children.len(),
+                        )?,
+                    },
+                    gap,
+                    children,
+                ),
+            }
         }
-        let commands = content
-            .field(vocabulary::COMMANDS)?
-            .list_values()?
-            .map(|v| read_command(v.as_value()))
-            .collect::<Option<Vec<_>>>()?;
-        return Some(leaf(Leaf::Drawing(Drawing {
-            width,
-            ascent,
-            descent,
-            commands,
-        })));
-    }
-    if value.field(vocabulary::SLOT).is_some() {
-        return Some(slot());
-    }
-    if let Some(content) = value.field(vocabulary::SELECTABLE) {
-        let child = decode_with(&content, site)?;
-        return Some(activatable(child, &site()));
-    }
-    if let Some(content) = value.field(vocabulary::PICKABLE) {
-        content.record_len()?;
-        let child = decode_with(&content.field(vocabulary::CHILD)?, site)?;
-        return Some(pickable(
-            child,
+        COL => {
+            let baseline = number(BASELINE)?;
+            let children = children(&content.field(CHILDREN)?, site)?;
+            crate::display::col(
+                baseline_index(baseline, children.len())?,
+                number(GAP)?,
+                children,
+            )
+        }
+        OVERLAY => layout_overlay(children(&content, site)?),
+        PAD => crate::display::padding(
+            (number(LEFT)?, number(TOP)?, number(RIGHT)?, number(BOTTOM)?).into(),
+            child()?,
+        ),
+        BORDER => border(decode_with(&content, site)?),
+        BRACKET => bracket(read_delim(&content.field(DELIM)?)?, child()?),
+        ALTERNATIVES => alternatives(children(&content, site)?),
+        DESCEND => descend(
+            [path::read_step(content.field(STEP)?.as_value())?],
+            None,
+            None,
+        ),
+        DESCEND_PATH => descend(path::read(content.as_value())?, None, None),
+        JUMP => crate::display::jump(
+            path::read(content.field(STEPS)?.as_value())?,
+            path::read(content.field(DOCUMENT_PATH)?.as_value())?,
+        ),
+        AT => crate::display::at(
+            path::read(content.field(STEPS)?.as_value())?,
+            content.field(VALUE)?,
+        ),
+        TEXT => leaf(Leaf::Text {
+            text: content.field(CONTENT)?.as_text()?.to_string(),
+            paint: Paint::Face(read_face(content.field(PAINT)?.as_value())?),
+            script: puri::text::Script::Normal,
+        }),
+        DRAWING => {
+            let extent = crate::display::widget::Extent {
+                width: nonnegative(WIDTH)?,
+                ascent: nonnegative(ASCENT)?,
+                descent: nonnegative(DESCENT)?,
+            };
+            match content.field(PROGRAM) {
+                Some(program) => {
+                    drawing::program(extent, ::grap::f64::to_usize(number(FUEL)?)?, program)
+                }
+                None => leaf(Leaf::Drawing(Drawing {
+                    width: extent.width,
+                    ascent: extent.ascent,
+                    descent: extent.descent,
+                    commands: content
+                        .field(COMMANDS)?
+                        .list_values()?
+                        .map(|command| read_command(command.as_value()))
+                        .collect::<Option<Vec<_>>>()?,
+                })),
+            }
+        }
+        SLOT => slot(),
+        SELECTABLE => activatable(decode_with(&content, site)?, &site()),
+        PICKABLE => pickable(
+            child()?,
             W::Hover::from(site().hover()),
-            content.field(vocabulary::VALUE)?,
-        ));
-    }
-    if let Some(content) = value.field(vocabulary::HOVER_BLOCK) {
-        return Some(block_hover(decode_with(&content, site)?));
-    }
-    if let Some(content) = value.field(vocabulary::ON_EVENT) {
-        content.record_len()?;
-        return Some(on_event(
-            decode_with(&content.field(vocabulary::CHILD)?, site)?,
-            content.field(vocabulary::HANDLER)?,
-        ));
-    }
-    None
+            content.field(VALUE)?,
+        ),
+        HOVER_BLOCK => block_hover(decode_with(&content, site)?),
+        ON_EVENT => on_event(child()?, content.field(HANDLER)?),
+        _ => unreachable!("only the markers above are looked for"),
+    })
 }
 
 fn children<W: Host>(
@@ -405,20 +364,28 @@ fn read_number(value: &Value) -> Option<f64> {
     f64_convention::read(value).filter(|number| number.is_finite())
 }
 
-/// An explicit evaluation allowance: a nonnegative whole number of steps.
 fn read_nonnegative(value: &Value) -> Option<f64> {
     read_number(value).filter(|number| *number >= 0.0)
 }
 
 fn read_face(value: &Value) -> Option<Face> {
     match value.as_cell()? {
-        cell if cell == vocabulary::NAME_FACE => Some(Face::Name),
-        cell if cell == vocabulary::STRING_FACE => Some(Face::String),
-        cell if cell == vocabulary::DIM_FACE => Some(Face::Dim),
-        cell if cell == vocabulary::LABEL_FACE => Some(Face::Label),
-        cell if cell == vocabulary::ID_FACE => Some(Face::Id),
-        cell if cell == vocabulary::ACCENT_WASH_FACE => Some(Face::AccentWash),
-        cell if cell == vocabulary::INK_FACE => Some(Face::Ink),
+        vocabulary::NAME_FACE => Some(Face::Name),
+        vocabulary::STRING_FACE => Some(Face::String),
+        vocabulary::DIM_FACE => Some(Face::Dim),
+        vocabulary::LABEL_FACE => Some(Face::Label),
+        vocabulary::ID_FACE => Some(Face::Id),
+        vocabulary::ACCENT_WASH_FACE => Some(Face::AccentWash),
+        vocabulary::INK_FACE => Some(Face::Ink),
+        _ => None,
+    }
+}
+
+fn read_delim(value: &::grap::RuntimeValue) -> Option<Delim> {
+    match value.as_cell()? {
+        vocabulary::PAREN => Some(Delim::Paren),
+        vocabulary::SQUARE => Some(Delim::Bracket),
+        vocabulary::CURLY => Some(Delim::Brace),
         _ => None,
     }
 }
