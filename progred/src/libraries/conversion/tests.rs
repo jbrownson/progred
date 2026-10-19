@@ -33,7 +33,7 @@ fn f32_from_f64_rounds_at_the_explicit_numeric_boundary() {
     assert_eq!(
         convert(invalid.clone()),
         ::grap::absent::with_detail(
-            f32::vocabulary::INVALID_INPUT,
+            vocabulary::INVALID_F32_INPUT,
             number::vocabulary::OPERAND,
             invalid,
         )
