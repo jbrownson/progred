@@ -35,7 +35,7 @@ use puri::handler::HasHandler;
 use puri::text::TextCtx;
 use std::collections::HashSet;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, NamedKey};
+use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 /// The toolkit's types over the editor, which hosts everything the runtime
 /// projects. Display and the libraries stay generic over their host, through
@@ -748,7 +748,8 @@ fn descend_landmark_with(
     crate::display::widget::navigation::landmark(marked, path, select, scope, secondary, selected)
 }
 
-/// Standard commands for this displayed value, below its own widget handlers.
+/// Standard commands for this displayed value, below its own widget handlers:
+/// copy and cut, folding when it folds, and deleting it.
 /// The occurrence identifies the selection; only mutations need its conject.
 fn bind_selection(
     child: Measured<HoverPass<crate::Editor>>,
@@ -760,51 +761,46 @@ fn bind_selection(
 ) -> Measured<HoverPass<crate::Editor>> {
     before(child, move |p, _| {
         let command = p.command_modifier();
-        p.handler().on_key_with(move |ctx, event, input| {
-            if !event.state.is_down()
-                || ctx.model.selection.as_ref().is_none_or(|selection| {
-                    selection.root() != &root
-                        || selection.path() != path.as_ref()
-                        || selection.stage(&ctx.sources()) != Stage::Edge
+        p.handler().on_key_with(move |editor, event, input| {
+            let copy = crate::modifiers::chord(command, event, "c");
+            let cut = crate::modifiers::chord(command, event, "x");
+            event.state.is_down()
+                && editor.model.selection.as_ref().is_some_and(|selection| {
+                    selection.root() == &root
+                        && selection.path() == path.as_ref()
+                        && selection.stage(&editor.sources()) == Stage::Edge
                 })
-            {
-                return false;
-            }
-            if command.pressed(&event.modifiers)
-                && let Key::Character(key) = &event.key
-                && (key.eq_ignore_ascii_case("c") || key.eq_ignore_ascii_case("x"))
-            {
-                if !ctx.copy_value(value.as_value()) {
-                    return false;
-                }
-                if key.eq_ignore_ascii_case("x") {
-                    ctx.delete_selected_edge(input.geometry(scale));
-                }
-                return true;
-            }
-            if let Some(default) = fold_default {
-                let closed = match &event.key {
-                    Key::Character(key) if key.as_str() == " " => Some(None),
-                    Key::Named(NamedKey::ArrowUp) if command.pressed(&event.modifiers) => {
-                        Some(Some(true))
+                && if copy || cut {
+                    editor.copy_value(value.as_value()) && {
+                        if cut {
+                            editor.delete_selected_edge(input.geometry(scale));
+                        }
+                        true
                     }
-                    Key::Named(NamedKey::ArrowDown) if command.pressed(&event.modifiers) => {
-                        Some(Some(false))
+                } else {
+                    match fold_default.zip(fold_key(command, event)) {
+                        Some((default, closed)) => editor
+                            .session()
+                            .set_collapsed(&root, &path, default, closed),
+                        None => editor.delete_key(input.geometry(scale), event),
                     }
-                    _ => None,
-                };
-                if let Some(closed) = closed {
-                    return ctx.session().set_collapsed(&root, &path, default, closed);
                 }
-            }
-            crate::modifiers::plain(&event.modifiers)
-                && matches!(
-                    &event.key,
-                    Key::Named(NamedKey::Backspace | NamedKey::Delete)
-                )
-                && ctx.delete_selected_edge(input.geometry(scale))
         })
     })
+}
+
+/// The fold a key asks of a selected value: Space toggles it, and the
+/// command modifier with Up closes it and with Down opens it.
+fn fold_key(
+    command: puri::keyboard::CommandModifier,
+    event: &KeyboardEvent,
+) -> Option<Option<bool>> {
+    match &event.key {
+        Key::Character(key) if key.as_str() == " " => Some(None),
+        Key::Named(NamedKey::ArrowUp) if command.pressed(&event.modifiers) => Some(Some(true)),
+        Key::Named(NamedKey::ArrowDown) if command.pressed(&event.modifiers) => Some(Some(false)),
+        _ => None,
+    }
 }
 
 fn ground(cx: &Cx, source: Option<&Location>, value: Option<&grap::RuntimeValue>) -> Ground {

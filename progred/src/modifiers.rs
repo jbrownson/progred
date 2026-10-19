@@ -1,5 +1,5 @@
 use puri::keyboard::CommandModifier;
-use ui_events::keyboard::Modifiers;
+use ui_events::keyboard::{Key, KeyboardEvent, Modifiers};
 use ui_events::pointer::PointerButtonEvent;
 
 /// The platform's primary application-command modifier.
@@ -23,6 +23,13 @@ pub(crate) fn command() -> Modifiers {
         CommandModifier::Meta => Modifiers::META,
         CommandModifier::Control => Modifiers::CONTROL,
     }
+}
+
+/// Whether `event` presses `key` with the `command` modifier held.
+pub(crate) fn chord(command: CommandModifier, event: &KeyboardEvent, key: &str) -> bool {
+    event.state.is_down()
+        && command.pressed(&event.modifiers)
+        && matches!(&event.key, Key::Character(typed) if typed.eq_ignore_ascii_case(key))
 }
 
 pub(crate) fn plain(modifiers: &Modifiers) -> bool {
