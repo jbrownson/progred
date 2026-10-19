@@ -1,6 +1,6 @@
 //! Placement runs hover probes and returns continuations for the resolved hover.
 use super::{
-    container::{self, Layers},
+    container,
     navigation::{Collector, Landmark, Select},
     offers::Offers,
     source::{Secondary, SourceTrace},
@@ -287,6 +287,20 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
         self.root = parent;
     }
 
+    /// Place `content` clipped to `placement`, its starts and scrolls gated there.
+    pub(crate) fn clipped(&mut self, placement: Placement, content: impl FnOnce(&mut Self)) {
+        self.scope(content, |output| output.clipped(placement));
+    }
+
+    /// Place `above` once everything else is placed, over it, in this view.
+    pub(crate) fn float(&mut self, above: impl FnOnce(&mut Self) + 'static) {
+        let root = self.root.clone();
+        self.floaters.push(Box::new(move |pass| match root {
+            Some(root) => pass.in_view(root, above),
+            None => above(pass),
+        }));
+    }
+
     fn run_floaters(&mut self) {
         for floater in std::mem::take(&mut self.floaters) {
             floater(self);
@@ -314,19 +328,6 @@ impl<C: 'static, H: 'static> measured::ObserveLayout for HoverPass<C, H> {
             .begin(measured::Composition::Row(measured::RowAlignment::Baseline));
         child(self);
         self.navigation.end();
-    }
-}
-
-impl<C: 'static, H: 'static> Layers for HoverPass<C, H> {
-    fn clipped(&mut self, placement: Placement, content: impl FnOnce(&mut Self)) {
-        self.scope(content, |output| output.clipped(placement));
-    }
-    fn float(&mut self, above: impl FnOnce(&mut Self) + 'static) {
-        let root = self.root.clone();
-        self.floaters.push(Box::new(move |pass| match root {
-            Some(root) => pass.in_view(root, above),
-            None => above(pass),
-        }));
     }
 }
 

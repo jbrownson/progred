@@ -218,7 +218,7 @@ Ordinary decorations do not resolve paths or inspect selection.
 The native completion card uses those same outputs. Its rows draw directly
 through `CanvasSink`; it never needs a document resolver or Grap interpreter.
 The [container combinators](../progred/src/display/widget/container.rs) share scrolling
-and out-of-flow placement over the running `HoverPass`. `Layers` supplies
+and out-of-flow placement over the running `HoverPass`, which supplies
 clipping and floater attachment. Hover callbacks compose input handlers through
 `HasHandler`. The editor adds view ownership separately. Ordinary probes run
 immediately in painting order; only floating placements are queued, running

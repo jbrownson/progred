@@ -8,16 +8,11 @@ use puri::handler::{Event, EventOutcome, Handler, HasHandler, ScrollOutcome};
 use ui_events::pointer::PointerScrollEvent;
 use uig::Placement;
 
-pub trait Layers {
-    fn clipped(&mut self, placement: Placement, content: impl FnOnce(&mut Self));
-    fn float(&mut self, above: impl FnOnce(&mut Self) + 'static);
-}
-
-pub fn floating<O: Layers + 'static>(
-    base: Measured<O>,
-    content: Measured<O>,
+pub fn floating<W: 'static, H: 'static>(
+    base: Measured<HoverPass<W, H>>,
+    content: Measured<HoverPass<W, H>>,
     place: impl FnOnce(Placement, Extent) -> Option<Placement> + 'static,
-) -> Measured<O> {
+) -> Measured<HoverPass<W, H>> {
     let extent = content.extent;
     measured::around_into(base, move |placement, base, output| {
         base.place_into(output);

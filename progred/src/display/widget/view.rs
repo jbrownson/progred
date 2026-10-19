@@ -1,7 +1,7 @@
 //! A view's identity, and the widgets that mark where a view is drawn.
 
 use super::HoverPass;
-use super::container::{self, Layers};
+use super::container;
 use super::frame::ViewRegion;
 use super::placed::before;
 use gid::Path;
