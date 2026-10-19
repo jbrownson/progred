@@ -1,6 +1,7 @@
 //! The lessons the tutorials embed, checked through the editor's frames rather
 //! than the pages' steps.
 
+use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::libraries::f64;
 use crate::test_examples::website_growing_forest_editor;
@@ -8,7 +9,7 @@ use crate::test_support::{completion_entries_with, library_offers};
 use gid::{CellId, Step, Value};
 use kurbo::Point;
 use peniko::Color;
-use puri::draw::{DrawCmd, DrawList};
+use puri::draw::DrawCmd;
 use puri::hover::Claim;
 use std::rc::Rc;
 #[test]
@@ -59,35 +60,22 @@ fn website_forest_hover_finds_the_available_call() {
 #[test]
 fn website_growing_forest_controls_and_edits_change_the_drawing() {
     use crate::libraries::{color, controls, presentation};
-    fn circles(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, peniko::Brush)> {
-        crate::display::test_support::painted(commands)
-            .filter_map(|command| match command {
-                DrawCmd::Fill {
-                    shape: puri::draw::Shape::Circle(circle),
-                    brush,
-                    ..
-                } if *brush == peniko::Brush::from(Color::from_rgb8(57, 155, 117))
-                    || *brush == peniko::Brush::from(Color::from_rgb8(220, 90, 40))
-                    || *brush == peniko::Brush::from(Color::from_rgb8(248, 201, 112)) =>
-                {
-                    Some((*circle, brush.clone()))
-                }
-                _ => None,
-            })
-            .collect()
-    }
     let (editor, names) = website_growing_forest_editor();
     assert!(crate::workspace::declarations(editor.model.doc.root.as_ref()).is_empty());
-    let mut runner = crate::EditorRunner::new(editor);
-    let size = kurbo::Size::new(720.0, 684.0);
-    let render = |runner: &mut crate::EditorRunner| {
-        runner.refresh_frame(1.0, size);
-        let mut list = DrawList::new();
-        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
-        runner.frame_presented();
-        circles(&list.0)
+    let mut driver = Driver::new(editor, kurbo::Size::new(720.0, 684.0));
+    // The sun and the trees' leaves, whatever else is drawn.
+    let painted = [(57, 155, 117), (220, 90, 40), (248, 201, 112)]
+        .map(|(r, g, b)| peniko::Brush::from(Color::from_rgb8(r, g, b)));
+    let render = |driver: &mut Driver| {
+        driver.present();
+        driver
+            .circles()
+            .into_iter()
+            .filter(|(_, _, brush)| painted.contains(brush))
+            .map(|(_, circle, brush)| (circle, brush))
+            .collect::<Vec<_>>()
     };
-    let initial = render(&mut runner);
+    let initial = render(&mut driver);
     assert_eq!(
         initial.len(),
         22,
@@ -99,7 +87,8 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
     );
     let mut frames = Vec::new();
     for growth in [0.0, 0.35, 1.0, 0.35] {
-        runner
+        driver
+            .runner
             .editor
             .model
             .workspace
@@ -113,7 +102,7 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
                 controls::vocabulary::STATE,
                 Some(f64::value(growth)),
             );
-        frames.push(render(&mut runner));
+        frames.push(render(&mut driver));
     }
     assert_ne!(frames[0][1..], frames[1][1..]);
     assert_ne!(frames[1][1..], frames[2][1..]);
@@ -134,7 +123,7 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
         ("leaves", color::tests::value(Color::from_rgb8(220, 90, 40))),
         ("count", f64::value(0.0)),
     ] {
-        let mut doc = (*runner.editor.model.doc).clone();
+        let mut doc = (*driver.editor().model.doc).clone();
         fn edit_call(source: &Value, function: CellId, field: CellId, value: &Value) -> Value {
             match source {
                 Value::Record(record)
@@ -164,8 +153,8 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
             &value,
         );
         doc.cells.set_value(names["sample"], sample);
-        runner.editor.model.doc = Rc::new(doc);
-        let changed = render(&mut runner);
+        driver.runner.editor.model.doc = Rc::new(doc);
+        let changed = render(&mut driver);
         if parameter == "count" {
             assert_eq!(
                 changed.len(),
@@ -245,53 +234,29 @@ fn website_growing_forest_add_clouds(
 
 #[test]
 fn website_growing_forest_all_keeps_drawing_after_incomplete_clouds() {
-    fn circles(commands: &[DrawCmd]) -> Vec<(kurbo::Circle, peniko::Brush)> {
-        crate::display::test_support::painted(commands)
-            .filter_map(|command| match command {
-                DrawCmd::Fill {
-                    shape: puri::draw::Shape::Circle(circle),
-                    brush,
-                    ..
-                } => Some((*circle, brush.clone())),
-                _ => None,
-            })
-            .collect()
-    }
     let (editor, names) = website_growing_forest_editor();
-    let mut runner = crate::EditorRunner::new(editor);
-    let render = |runner: &mut crate::EditorRunner| {
-        let size = kurbo::Size::new(720.0, 960.0);
-        runner.refresh_frame(1.0, size);
-        let mut drawing = DrawList::new();
-        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut drawing);
-        runner.frame_presented();
-        circles(&drawing.0)
+    let mut driver = Driver::new(editor, kurbo::Size::new(720.0, 960.0));
+    let render = |driver: &mut Driver| {
+        driver.present();
+        driver
+            .circles()
+            .into_iter()
+            .map(|(_, circle, brush)| (circle, brush))
+            .collect::<Vec<_>>()
     };
-    let before = render(&mut runner);
+    let before = render(&mut driver);
     assert!(before.len() >= 22, "sun and forest are visible");
     website_growing_forest_insert(
-        &mut runner.editor,
+        &mut driver.runner.editor,
         &names,
         &::grap::call(names["clouds"].into(), []),
     );
-    assert_eq!(render(&mut runner), before);
+    assert_eq!(render(&mut driver), before);
 }
 
 #[test]
 fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
     use crate::libraries::{controls, presentation};
-    fn cloud_circles(commands: &[DrawCmd]) -> Vec<kurbo::Circle> {
-        crate::display::test_support::painted(commands)
-            .filter_map(|command| match command {
-                DrawCmd::Fill {
-                    shape: puri::draw::Shape::Circle(circle),
-                    brush,
-                    ..
-                } if *brush == peniko::Brush::from(Color::WHITE) => Some(*circle),
-                _ => None,
-            })
-            .collect()
-    }
     let (editor, names) = website_growing_forest_editor();
     let offers = completion_entries_with(
         &editor.sources(),
@@ -309,9 +274,11 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
             .iter()
             .any(|offer| offer.display == "clouds" && offer.detail.as_deref() == Some("call"))
     );
-    let mut runner = crate::EditorRunner::new(editor);
-    let render = |runner: &mut crate::EditorRunner, time: f64| {
-        runner
+    let mut driver = Driver::new(editor, kurbo::Size::new(720.0, 960.0));
+    // The clouds' white lobes, `time` into the sun's day.
+    let render = |driver: &mut Driver, time: f64| {
+        driver
+            .runner
             .editor
             .model
             .workspace
@@ -325,23 +292,24 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
                 controls::vocabulary::STATE,
                 Some(f64::value(time)),
             );
-        let size = kurbo::Size::new(720.0, 960.0);
-        runner.refresh_frame(1.0, size);
-        let mut list = DrawList::new();
-        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
-        runner.frame_presented();
-        cloud_circles(&list.0)
+        driver.present();
+        driver
+            .circles()
+            .into_iter()
+            .filter(|(_, _, brush)| *brush == peniko::Brush::from(Color::WHITE))
+            .map(|(_, circle, _)| circle)
+            .collect::<Vec<_>>()
     };
     assert!(
-        render(&mut runner, 0.0).is_empty(),
+        render(&mut driver, 0.0).is_empty(),
         "clouds are not drawn by default"
     );
-    let original = runner.editor.model.doc.clone();
+    let original = driver.editor().model.doc.clone();
     for speed in [0.0, 1.0, 2.0, -1.0] {
-        runner.editor.model.doc = original.clone();
-        website_growing_forest_add_clouds(&mut runner.editor, &names, speed);
-        let start = render(&mut runner, 0.0);
-        let end = render(&mut runner, 1.0);
+        driver.runner.editor.model.doc = original.clone();
+        website_growing_forest_add_clouds(&mut driver.runner.editor, &names, speed);
+        let start = render(&mut driver, 0.0);
+        let end = render(&mut driver, 1.0);
         assert_eq!(start.len(), 9, "three clouds with three lobes each");
         assert_eq!(end.len(), start.len());
         for (start, end) in start.iter().zip(&end) {
@@ -349,7 +317,7 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
             assert_eq!(start.center.y, end.center.y);
             assert_eq!(start.radius, end.radius);
         }
-        assert_eq!(start, render(&mut runner, 0.0), "scrubbing is reversible");
+        assert_eq!(start, render(&mut driver, 0.0), "scrubbing is reversible");
     }
 }
 
@@ -421,14 +389,10 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
     }
     let (editor, names) = website_shape_editor();
     assert!(crate::workspace::declarations(editor.model.doc.root.as_ref()).is_empty());
-    let mut runner = crate::EditorRunner::new(editor);
-    let size = kurbo::Size::new(720.0, 520.0);
-    let render = |runner: &mut crate::EditorRunner| {
-        runner.refresh_frame(1.0, size);
-        let mut list = DrawList::new();
-        puri::frame::render(runner.prepare_paint(1.0, size).renders, &mut list);
-        runner.frame_presented();
-        let scenes = meshes(&list.0);
+    let mut driver = Driver::new(editor, kurbo::Size::new(720.0, 520.0));
+    let render = |driver: &mut Driver| {
+        driver.present();
+        let scenes = meshes(&driver.painted().0);
         assert_eq!(
             scenes.len(),
             1,
@@ -437,8 +401,8 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
         assert!(scenes[0].geometry.indices.len() > 100);
         scenes.into_iter().next().unwrap()
     };
-    let initial = render(&mut runner);
-    let mut doc = (*runner.editor.model.doc).clone();
+    let initial = render(&mut driver);
+    let mut doc = (*driver.editor().model.doc).clone();
     let mut call = doc
         .cells
         .value(names["sample"])
@@ -448,14 +412,15 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
         .clone();
     call.insert(names["rows"], f64::value(5.0));
     doc.cells.set_value(names["sample"], Value::Record(call));
-    runner.editor.model.doc = Rc::new(doc);
-    let edited = render(&mut runner);
+    driver.runner.editor.model.doc = Rc::new(doc);
+    let edited = render(&mut driver);
     assert_ne!(
         initial.geometry.indices.len(),
         edited.geometry.indices.len()
     );
 
-    runner
+    driver
+        .runner
         .editor
         .model
         .workspace
@@ -472,7 +437,7 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
                 names["model"].into(),
             )])),
         );
-    let model = render(&mut runner);
+    let model = render(&mut driver);
     assert_ne!(edited.geometry.indices.len(), model.geometry.indices.len());
 
     // These are arguments of the same call, not disconnected preview controls.
@@ -486,7 +451,7 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
     };
     let mut previous = positions(&model);
     for (parameter, value) in [("control_depth", 0.25), ("tilt", 20.0)] {
-        let mut doc = (*runner.editor.model.doc).clone();
+        let mut doc = (*driver.editor().model.doc).clone();
         let mut call = doc
             .cells
             .value(names["sample"])
@@ -496,8 +461,8 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
             .clone();
         call.insert(names[parameter], f64::value(value));
         doc.cells.set_value(names["sample"], Value::Record(call));
-        runner.editor.model.doc = Rc::new(doc);
-        let current = positions(&render(&mut runner));
+        driver.runner.editor.model.doc = Rc::new(doc);
+        let current = positions(&render(&mut driver));
         assert!(previous != current, "{parameter} must change the geometry");
         previous = current;
     }
