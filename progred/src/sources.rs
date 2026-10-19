@@ -96,33 +96,6 @@ impl crate::display::Env for Sources<'_> {
         .result
     }
 
-    fn apply_scoped(
-        &self,
-        function: &Value,
-        arguments: &[(CellId, Value)],
-        scope: Option<&grap::ForeignOverlay<'_>>,
-    ) -> grap::Evaluation<gid::Value> {
-        grap::apply_value(
-            function,
-            arguments.iter().cloned(),
-            self,
-            scope,
-            grap::DEFAULT_FUEL,
-        )
-    }
-
-    fn evaluate(&self, expression: &Value) -> Value {
-        self.evaluate_with_fuel(expression, grap::DEFAULT_FUEL)
-    }
-
-    fn evaluate_with_fuel(&self, expression: &Value, fuel: usize) -> Value {
-        grap::evaluate_value(expression, self, fuel).result
-    }
-
-    fn apply_memo(&self, function: &Value, arguments: &[(CellId, Value)], fuel: usize) -> Value {
-        grap::apply_value(function, arguments.iter().cloned(), self, None, fuel).result
-    }
-
     fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {
         Sources::resolve(self, cell)
     }

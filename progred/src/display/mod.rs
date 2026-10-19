@@ -261,106 +261,51 @@ pub struct DocumentLibrary {
 
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
-    /// Expression-facing application without materializing the callable or its
-    /// arguments. Legacy/test hosts may use the GID adapter below.
+    /// Expression-facing application, without materializing the callable or
+    /// its arguments: Grap parameters receive values, while foreign functions
+    /// may interpret argument syntax themselves.
     fn apply_expression_runtime(
         &self,
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
-    ) -> grap::RuntimeValue {
-        self.apply(
-            function.as_value(),
-            &arguments
-                .iter()
-                .map(|(k, v)| (*k, v.to_value()))
-                .collect::<Vec<_>>(),
-        )
-        .into()
-    }
+    ) -> grap::RuntimeValue;
+
+    /// Evaluate `expression`, stored `steps` below this occurrence, with an
+    /// explicit allowance.
     fn evaluate_runtime(
         &self,
         expression: &grap::RuntimeValue,
         fuel: usize,
-        _steps: &[Step],
-    ) -> grap::RuntimeValue {
-        self.evaluate_with_fuel(expression.as_value(), fuel).into()
-    }
+        steps: &[Step],
+    ) -> grap::RuntimeValue;
 
+    /// [`Env::evaluate_runtime`], reusing a completed evaluation when its
+    /// observed inputs are unchanged. Hosts without a computation runtime may
+    /// simply evaluate. Untracked reads, effects, and halts prevent reuse in
+    /// hosts that provide memoization.
     fn evaluate_runtime_memo(
         &self,
         expression: &grap::RuntimeValue,
         fuel: usize,
-        _steps: &[Step],
-    ) -> grap::RuntimeValue {
-        self.evaluate_memo(expression.as_value(), fuel).into()
-    }
+        steps: &[Step],
+    ) -> grap::RuntimeValue;
 
+    /// Borrow capabilities for this application only. Their output remains host-owned.
     fn apply_runtime_scoped(
         &self,
         function: &grap::RuntimeValue,
         arguments: &[(CellId, grap::RuntimeValue)],
         scope: Option<&grap::ForeignOverlay<'_>>,
-    ) -> grap::Evaluation {
-        let result = self.apply_scoped(
-            function.as_value(),
-            &arguments
-                .iter()
-                .map(|(k, v)| (*k, v.to_value()))
-                .collect::<Vec<_>>(),
-            scope,
-        );
-        grap::Evaluation {
-            result: result.result.into(),
-            completed: result.completed,
-            remaining_fuel: result.remaining_fuel,
-        }
-    }
+    ) -> grap::Evaluation;
 
+    /// Reuse an application with explicit data arguments, under the same
+    /// dependency/effect contract as [`Env::evaluate_runtime_memo`].
     fn apply_runtime_memo(
         &self,
         function: &Value,
         arguments: &[(CellId, Value)],
         fuel: usize,
-    ) -> grap::RuntimeValue {
-        self.apply_memo(function, arguments, fuel).into()
-    }
-
-    /// Legacy GID application boundary: Grap parameters receive values, while
-    /// foreign functions may interpret argument syntax themselves.
-    fn apply(&self, function: &Value, arguments: &[(CellId, Value)]) -> Value {
-        self.apply_scoped(function, arguments, None).result
-    }
-
-    /// Borrow capabilities for this application only. Their output remains host-owned.
-    fn apply_scoped(
-        &self,
-        function: &Value,
-        arguments: &[(CellId, Value)],
-        scope: Option<&grap::ForeignOverlay<'_>>,
-    ) -> grap::Evaluation<gid::Value>;
-
-    /// Evaluate an expression using the host's ordinary allowance.
-    fn evaluate(&self, expression: &Value) -> Value;
-
-    /// Evaluate with an explicit allowance. Hosts that do not expose
-    /// fuel may keep their ordinary behavior.
-    fn evaluate_with_fuel(&self, expression: &Value, _fuel: usize) -> Value {
-        self.evaluate(expression)
-    }
-
-    /// Reuse a completed evaluation when its observed inputs are unchanged.
-    /// Hosts without a computation runtime may simply evaluate. Untracked reads,
-    /// effects, and halts prevent reuse in hosts that provide memoization.
-    fn evaluate_memo(&self, expression: &Value, fuel: usize) -> Value {
-        self.evaluate_with_fuel(expression, fuel)
-    }
-
-    /// Reuse an application with explicit data arguments, under the same
-    /// dependency/effect contract as `evaluate_memo`. Hosts without a runtime
-    /// or configurable fuel may keep their ordinary application behavior.
-    fn apply_memo(&self, function: &Value, arguments: &[(CellId, Value)], _fuel: usize) -> Value {
-        self.apply(function, arguments)
-    }
+    ) -> grap::RuntimeValue;
 
     /// The selected definition's conventional human name.
     fn name(&self, _cell: CellId) -> Option<&str> {

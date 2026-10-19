@@ -13,16 +13,47 @@ use crate::libraries::test_widgets::{project_runtime, projection_input};
 struct Names;
 
 impl Env for Names {
-    fn apply_scoped(
+    fn apply_expression_runtime(
         &self,
-        _: &Value,
-        _: &[(CellId, Value)],
-        _scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
+        _: &::grap::RuntimeValue,
+        _: &[(CellId, ::grap::RuntimeValue)],
+    ) -> ::grap::RuntimeValue {
         panic!("source projection must not evaluate")
     }
 
-    fn evaluate(&self, _: &Value) -> Value {
+    fn evaluate_runtime(
+        &self,
+        _: &::grap::RuntimeValue,
+        _: usize,
+        _: &[Step],
+    ) -> ::grap::RuntimeValue {
+        panic!("source projection must not evaluate")
+    }
+
+    fn evaluate_runtime_memo(
+        &self,
+        _: &::grap::RuntimeValue,
+        _: usize,
+        _: &[Step],
+    ) -> ::grap::RuntimeValue {
+        panic!("source projection must not evaluate")
+    }
+
+    fn apply_runtime_scoped(
+        &self,
+        _: &::grap::RuntimeValue,
+        _: &[(CellId, ::grap::RuntimeValue)],
+        _: Option<&::grap::ForeignOverlay<'_>>,
+    ) -> ::grap::Evaluation {
+        panic!("source projection must not evaluate")
+    }
+
+    fn apply_runtime_memo(
+        &self,
+        _: &Value,
+        _: &[(CellId, Value)],
+        _: usize,
+    ) -> ::grap::RuntimeValue {
         panic!("source projection must not evaluate")
     }
 

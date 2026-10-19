@@ -5,6 +5,7 @@ use crate::projection::{Layout, ProjectionInput};
 use crate::display::Env;
 use crate::display::test_support::{EvaluatesTo, NoEval, ProjectionCall, inspect};
 use crate::libraries::test_widgets::{project_runtime, projection_input};
+use ::grap::RuntimeValue;
 use gid::{CellId, Value};
 
 const LEFT_VALUE: CellId = CellId::from_u128(1);
@@ -21,29 +22,38 @@ fn display(input: &ProjectionInput<'_>) -> Option<Layout> {
 fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {
     struct CheckArguments;
     impl Env for CheckArguments {
-        fn apply_scoped(
+        fn apply_expression_runtime(
             &self,
-            function: &Value,
-            arguments: &[(CellId, Value)],
-            _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation<gid::Value> {
-            assert_eq!(function, &Value::from(LEFT_VALUE));
+            function: &RuntimeValue,
+            arguments: &[(CellId, RuntimeValue)],
+        ) -> RuntimeValue {
+            assert_eq!(function.as_value(), &Value::from(LEFT_VALUE));
             assert_eq!(
-                arguments,
-                &[
+                values(arguments),
+                [
                     (vocabulary::VALUE, Value::from(LEFT_VALUE)),
                     (layout::vocabulary::WIDTH, f64::value(420.5)),
                     (layout::vocabulary::HEIGHT, f64::value(160.25)),
                 ]
             );
-            ::grap::Evaluation {
-                result: layout::drawing(420.5, 0.0, 160.25, []),
-                remaining_fuel: 17,
-                completed: true,
-            }
+            layout::drawing(420.5, 0.0, 160.25, []).into()
         }
-        fn evaluate(&self, _: &Value) -> Value {
+        fn evaluate_runtime(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
             panic!("viewport sources are passed as data")
+        }
+        fn evaluate_runtime_memo(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
+            panic!("viewport sources are passed as data")
+        }
+        fn apply_runtime_scoped(
+            &self,
+            _: &RuntimeValue,
+            _: &[(CellId, RuntimeValue)],
+            _: Option<&::grap::ForeignOverlay<'_>>,
+        ) -> ::grap::Evaluation {
+            panic!("the viewport applies its function as an expression")
+        }
+        fn apply_runtime_memo(&self, _: &Value, _: &[(CellId, Value)], _: usize) -> RuntimeValue {
+            panic!("the declaration has nothing to prepare")
         }
     }
     let declaration = Value::record([
@@ -71,20 +81,35 @@ fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {
 fn viewport_preparation_failure_does_not_call_the_viewport() {
     struct Failed(std::cell::Cell<usize>);
     impl Env for Failed {
-        fn apply_memo(&self, _: &Value, _: &[(CellId, Value)], fuel: usize) -> Value {
-            assert_eq!(fuel, ::grap::DEFAULT_FUEL);
-            self.0.set(self.0.get() + 1);
-            absent::with_reason(::grap::absent::MISSING_CELL)
-        }
-        fn apply_scoped(
+        fn apply_runtime_memo(
             &self,
             _: &Value,
             _: &[(CellId, Value)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation<gid::Value> {
+            fuel: usize,
+        ) -> RuntimeValue {
+            assert_eq!(fuel, ::grap::DEFAULT_FUEL);
+            self.0.set(self.0.get() + 1);
+            absent::with_reason(::grap::absent::MISSING_CELL).into()
+        }
+        fn apply_expression_runtime(
+            &self,
+            _: &RuntimeValue,
+            _: &[(CellId, RuntimeValue)],
+        ) -> RuntimeValue {
             panic!("the viewport must not run after preparation failed")
         }
-        fn evaluate(&self, _: &Value) -> Value {
+        fn apply_runtime_scoped(
+            &self,
+            _: &RuntimeValue,
+            _: &[(CellId, RuntimeValue)],
+            _: Option<&::grap::ForeignOverlay<'_>>,
+        ) -> ::grap::Evaluation {
+            unreachable!()
+        }
+        fn evaluate_runtime(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
+            unreachable!()
+        }
+        fn evaluate_runtime_memo(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
             unreachable!()
         }
     }
@@ -114,41 +139,46 @@ fn viewport_preparation_failure_does_not_call_the_viewport() {
 fn viewport_preparation_receives_only_data_before_dimensions_are_supplied() {
     struct Prepared(std::cell::Cell<usize>);
     impl Env for Prepared {
-        fn apply_memo(
+        fn apply_runtime_memo(
             &self,
             function: &Value,
             arguments: &[(CellId, Value)],
             fuel: usize,
-        ) -> Value {
+        ) -> RuntimeValue {
             assert_eq!(function, &Value::from(vocabulary::PREPARE));
             assert_eq!(arguments, &[(vocabulary::VALUE, LEFT_VALUE.into())]);
             assert_eq!(fuel, 1234);
             self.0.set(self.0.get() + 1);
-            Value::list([LEFT_VALUE.into()])
+            Value::list([LEFT_VALUE.into()]).into()
         }
-        fn apply_scoped(
+        fn apply_expression_runtime(
             &self,
-            _: &Value,
-            arguments: &[(CellId, Value)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation<gid::Value> {
+            _: &RuntimeValue,
+            arguments: &[(CellId, RuntimeValue)],
+        ) -> RuntimeValue {
             assert!(self.0.get() > 0);
             assert_eq!(
-                arguments[0],
-                (vocabulary::VALUE, Value::list([LEFT_VALUE.into()]))
+                values(arguments),
+                [
+                    (vocabulary::VALUE, Value::list([LEFT_VALUE.into()])),
+                    (layout::vocabulary::WIDTH, f64::value(400.0)),
+                    (layout::vocabulary::HEIGHT, f64::value(300.0)),
+                ]
             );
-            assert_eq!(arguments[1], (layout::vocabulary::WIDTH, f64::value(400.0)));
-            assert_eq!(
-                arguments[2],
-                (layout::vocabulary::HEIGHT, f64::value(300.0))
-            );
-            ::grap::Evaluation {
-                result: Value::record([]),
-                remaining_fuel: 0,
-                completed: true,
-            }
+            Value::record([]).into()
         }
-        fn evaluate(&self, _: &Value) -> Value {
+        fn apply_runtime_scoped(
+            &self,
+            _: &RuntimeValue,
+            _: &[(CellId, RuntimeValue)],
+            _: Option<&::grap::ForeignOverlay<'_>>,
+        ) -> ::grap::Evaluation {
+            unreachable!()
+        }
+        fn evaluate_runtime(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
+            unreachable!()
+        }
+        fn evaluate_runtime_memo(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
             unreachable!()
         }
     }
@@ -171,6 +201,14 @@ fn viewport_preparation_receives_only_data_before_dimensions_are_supplied() {
     assert_eq!(env.0.get(), 1, "a zero-sized viewport doesn't prepare");
 }
 
+/// `arguments` as GID data, to compare.
+fn values(arguments: &[(CellId, RuntimeValue)]) -> Vec<(CellId, Value)> {
+    arguments
+        .iter()
+        .map(|(key, value)| (*key, value.to_value()))
+        .collect()
+}
+
 fn projected<V>(
     value: &V,
     env: &dyn Env,
@@ -181,29 +219,35 @@ fn projected<V>(
 
 #[test]
 fn declaration_passes_runtime_callable_and_data_without_reification() {
-    struct CheckRuntime(::grap::RuntimeValue);
+    struct CheckRuntime(RuntimeValue);
     impl Env for CheckRuntime {
-        fn apply_scoped(
-            &self,
-            _: &Value,
-            _: &[(CellId, Value)],
-            _: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation<Value> {
-            panic!("runtime declarations must not use the GID application adapter")
-        }
-        fn evaluate(&self, _: &Value) -> Value {
-            panic!("runtime declarations must not use the GID evaluation adapter")
-        }
         fn apply_expression_runtime(
             &self,
-            function: &::grap::RuntimeValue,
-            arguments: &[(CellId, ::grap::RuntimeValue)],
-        ) -> ::grap::RuntimeValue {
+            function: &RuntimeValue,
+            arguments: &[(CellId, RuntimeValue)],
+        ) -> RuntimeValue {
             assert!(function.same_result(&self.0));
             assert_eq!(arguments.len(), 1);
             assert_eq!(arguments[0].0, vocabulary::VALUE);
             assert!(arguments[0].1.same_result(&self.0));
-            ::grap::RuntimeValue::f64(42.0)
+            RuntimeValue::f64(42.0)
+        }
+        fn evaluate_runtime(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
+            panic!("unexpected evaluation")
+        }
+        fn evaluate_runtime_memo(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
+            panic!("unexpected evaluation")
+        }
+        fn apply_runtime_scoped(
+            &self,
+            _: &RuntimeValue,
+            _: &[(CellId, RuntimeValue)],
+            _: Option<&::grap::ForeignOverlay<'_>>,
+        ) -> ::grap::Evaluation {
+            panic!("unexpected application")
+        }
+        fn apply_runtime_memo(&self, _: &Value, _: &[(CellId, Value)], _: usize) -> RuntimeValue {
+            panic!("unexpected application")
         }
     }
     let host = crate::libraries::TestHost(|_| vec![]);

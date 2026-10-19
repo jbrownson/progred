@@ -147,16 +147,47 @@ fn projected(
 fn declaration_cells_follow_their_source_and_edit_the_name_field() {
     struct DefinitionEnv(Value, gid::Resolution);
     impl Env for DefinitionEnv {
-        fn apply_scoped(
+        fn apply_expression_runtime(
             &self,
-            _: &Value,
-            _: &[(CellId, Value)],
-            _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation<gid::Value> {
+            _: &::grap::RuntimeValue,
+            _: &[(CellId, ::grap::RuntimeValue)],
+        ) -> ::grap::RuntimeValue {
             panic!("declarations do not evaluate");
         }
 
-        fn evaluate(&self, _: &Value) -> Value {
+        fn evaluate_runtime(
+            &self,
+            _: &::grap::RuntimeValue,
+            _: usize,
+            _: &[Step],
+        ) -> ::grap::RuntimeValue {
+            panic!("declarations do not evaluate");
+        }
+
+        fn evaluate_runtime_memo(
+            &self,
+            _: &::grap::RuntimeValue,
+            _: usize,
+            _: &[Step],
+        ) -> ::grap::RuntimeValue {
+            panic!("declarations do not evaluate");
+        }
+
+        fn apply_runtime_scoped(
+            &self,
+            _: &::grap::RuntimeValue,
+            _: &[(CellId, ::grap::RuntimeValue)],
+            _: Option<&::grap::ForeignOverlay<'_>>,
+        ) -> ::grap::Evaluation {
+            panic!("declarations do not evaluate");
+        }
+
+        fn apply_runtime_memo(
+            &self,
+            _: &Value,
+            _: &[(CellId, Value)],
+            _: usize,
+        ) -> ::grap::RuntimeValue {
             panic!("declarations do not evaluate");
         }
 
@@ -577,17 +608,48 @@ fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
     }
 
     impl Env for DefinitionEnv {
-        fn apply_scoped(
+        fn apply_expression_runtime(
             &self,
-            _: &gid::Value,
-            _: &[(gid::CellId, gid::Value)],
-            _scope: Option<&::grap::ForeignOverlay<'_>>,
-        ) -> ::grap::Evaluation<gid::Value> {
+            _: &::grap::RuntimeValue,
+            _: &[(CellId, ::grap::RuntimeValue)],
+        ) -> ::grap::RuntimeValue {
             panic!("unexpected projection application")
         }
 
-        fn evaluate(&self, _: &Value) -> Value {
-            Value::record([])
+        fn evaluate_runtime(
+            &self,
+            _: &::grap::RuntimeValue,
+            _: usize,
+            _: &[Step],
+        ) -> ::grap::RuntimeValue {
+            Value::record([]).into()
+        }
+
+        fn evaluate_runtime_memo(
+            &self,
+            _: &::grap::RuntimeValue,
+            _: usize,
+            _: &[Step],
+        ) -> ::grap::RuntimeValue {
+            Value::record([]).into()
+        }
+
+        fn apply_runtime_scoped(
+            &self,
+            _: &::grap::RuntimeValue,
+            _: &[(CellId, ::grap::RuntimeValue)],
+            _: Option<&::grap::ForeignOverlay<'_>>,
+        ) -> ::grap::Evaluation {
+            panic!("unexpected projection application")
+        }
+
+        fn apply_runtime_memo(
+            &self,
+            _: &Value,
+            _: &[(CellId, Value)],
+            _: usize,
+        ) -> ::grap::RuntimeValue {
+            panic!("unexpected projection application")
         }
 
         fn resolve(&self, cell: CellId) -> Option<ResolvedCell<'_>> {

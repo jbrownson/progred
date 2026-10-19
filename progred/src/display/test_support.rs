@@ -60,6 +60,7 @@ impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::HoverO
 
 pub use crate::display::recording::{Recordable, Recorded, record};
 use crate::display::{Partial, widget};
+use ::grap::RuntimeValue;
 use gid::{CellId, Step, Value};
 use measured::Extent;
 use measured::choices::{ChoiceBuild, ChoiceLayout};
@@ -71,17 +72,33 @@ use std::cell::RefCell;
 pub struct NoEval;
 
 impl crate::display::Env for NoEval {
-    fn apply_scoped(
+    fn apply_expression_runtime(
         &self,
-        _: &Value,
-        _: &[(CellId, Value)],
-        _: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<Value> {
+        _: &RuntimeValue,
+        _: &[(CellId, RuntimeValue)],
+    ) -> RuntimeValue {
         panic!("unexpected application")
     }
 
-    fn evaluate(&self, _: &Value) -> Value {
+    fn evaluate_runtime(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
         panic!("unexpected evaluation")
+    }
+
+    fn evaluate_runtime_memo(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
+        panic!("unexpected evaluation")
+    }
+
+    fn apply_runtime_scoped(
+        &self,
+        _: &RuntimeValue,
+        _: &[(CellId, RuntimeValue)],
+        _: Option<&::grap::ForeignOverlay<'_>>,
+    ) -> ::grap::Evaluation {
+        panic!("unexpected application")
+    }
+
+    fn apply_runtime_memo(&self, _: &Value, _: &[(CellId, Value)], _: usize) -> RuntimeValue {
+        panic!("unexpected application")
     }
 }
 
@@ -89,21 +106,37 @@ impl crate::display::Env for NoEval {
 pub struct EvaluatesTo(pub Value);
 
 impl crate::display::Env for EvaluatesTo {
-    fn apply_scoped(
+    fn apply_expression_runtime(
         &self,
-        _: &Value,
-        _: &[(CellId, Value)],
+        _: &RuntimeValue,
+        _: &[(CellId, RuntimeValue)],
+    ) -> RuntimeValue {
+        self.0.clone().into()
+    }
+
+    fn evaluate_runtime(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
+        self.0.clone().into()
+    }
+
+    fn evaluate_runtime_memo(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
+        self.0.clone().into()
+    }
+
+    fn apply_runtime_scoped(
+        &self,
+        _: &RuntimeValue,
+        _: &[(CellId, RuntimeValue)],
         _: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<Value> {
+    ) -> ::grap::Evaluation {
         ::grap::Evaluation {
-            result: self.0.clone(),
+            result: self.0.clone().into(),
             completed: true,
             remaining_fuel: 0,
         }
     }
 
-    fn evaluate(&self, _: &Value) -> Value {
-        self.0.clone()
+    fn apply_runtime_memo(&self, _: &Value, _: &[(CellId, Value)], _: usize) -> RuntimeValue {
+        self.0.clone().into()
     }
 }
 

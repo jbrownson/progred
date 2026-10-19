@@ -16,17 +16,16 @@ pub fn native(update: impl Fn(&str, Option<&Value>) -> Option<Value> + 'static) 
 
 #[cfg(test)]
 pub fn grap(function: Value) -> LineUpdate {
+    let function = ::grap::RuntimeValue::from(function);
     Rc::new(move |env, spelling, current| {
-        let arguments =
-            std::iter::once((vocabulary::INPUT, crate::libraries::text::value(spelling)))
-                .chain(
-                    current
-                        .cloned()
-                        .map(|current| (vocabulary::CURRENT, current)),
-                )
-                .collect::<Vec<_>>();
-        let result = env.apply(&function, &arguments);
-        (!crate::libraries::absent::is_absent(&result)).then_some(result)
+        let arguments = std::iter::once((
+            vocabulary::INPUT,
+            crate::libraries::text::value(spelling).into(),
+        ))
+        .chain(current.map(|current| (vocabulary::CURRENT, current.into())))
+        .collect::<Vec<_>>();
+        let result = env.apply_expression_runtime(&function, &arguments);
+        (!result.is_absent()).then(|| result.into_value())
     })
 }
 

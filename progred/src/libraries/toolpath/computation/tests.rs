@@ -17,28 +17,50 @@ struct ViewportEnv<'a> {
 }
 
 impl crate::display::Env for ViewportEnv<'_> {
-    fn apply_scoped(
+    fn apply_expression_runtime(
         &self,
-        function: &Value,
-        arguments: &[(gid::CellId, Value)],
+        function: &RuntimeValue,
+        arguments: &[(gid::CellId, RuntimeValue)],
+    ) -> RuntimeValue {
+        self.sources.apply_expression_runtime(function, arguments)
+    }
+
+    fn evaluate_runtime(
+        &self,
+        expression: &RuntimeValue,
+        fuel: usize,
+        steps: &[gid::Step],
+    ) -> RuntimeValue {
+        self.sources.evaluate_runtime(expression, fuel, steps)
+    }
+
+    fn evaluate_runtime_memo(
+        &self,
+        expression: &RuntimeValue,
+        fuel: usize,
+        steps: &[gid::Step],
+    ) -> RuntimeValue {
+        self.sources.evaluate_runtime_memo(expression, fuel, steps)
+    }
+
+    fn apply_runtime_scoped(
+        &self,
+        function: &RuntimeValue,
+        arguments: &[(gid::CellId, RuntimeValue)],
         scope: Option<&::grap::ForeignOverlay<'_>>,
-    ) -> ::grap::Evaluation<gid::Value> {
-        self.sources.apply_scoped(function, arguments, scope)
+    ) -> ::grap::Evaluation {
+        self.sources
+            .apply_runtime_scoped(function, arguments, scope)
     }
 
-    fn evaluate(&self, expression: &Value) -> Value {
-        self.sources.evaluate(expression)
-    }
-
-    fn apply_memo(
+    fn apply_runtime_memo(
         &self,
         function: &Value,
         arguments: &[(gid::CellId, Value)],
         fuel: usize,
-    ) -> Value {
+    ) -> RuntimeValue {
         self.computations
             .apply_runtime(self.root, &[], function, arguments, fuel)
-            .into_value()
     }
 }
 

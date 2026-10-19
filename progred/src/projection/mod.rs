@@ -350,23 +350,6 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
             .apply_runtime(self.cx.view, self.path, function, arguments, fuel)
     }
 
-    fn apply_scoped(
-        &self,
-        function: &Value,
-        arguments: &[(CellId, Value)],
-        scope: Option<&grap::ForeignOverlay<'_>>,
-    ) -> grap::Evaluation<gid::Value> {
-        self.cx.sources.apply_scoped(function, arguments, scope)
-    }
-
-    fn evaluate(&self, expression: &Value) -> Value {
-        self.cx.sources.evaluate(expression)
-    }
-
-    fn evaluate_with_fuel(&self, expression: &Value, fuel: usize) -> Value {
-        self.cx.sources.evaluate_with_fuel(expression, fuel)
-    }
-
     fn name(&self, cell: CellId) -> Option<&str> {
         self.cx.name(cell)
     }
