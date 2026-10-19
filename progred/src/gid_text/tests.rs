@@ -14,14 +14,14 @@ fn a_file_round_trips_canonically() {
     "shape": f7c17a58b92f3f1b6090142612b16595,
     "stroke": 0a6fba22bfd658dedb62920b6ea06699,
     "style": 0f950b2aa9ed44554b87ab8f88d82cea,
-    "swatch": 0f3ae682742540de963d02d5f4b1a5a5,
+    "swatch": 9699d575e15bed45194282172feb7d0b,
     "tags": 98a45386e99286144421e94d8c444d9b,
   },
   "cells": {
     roof1: {name: "roof", stroke: "hairline", tags: ["draft", "gabled"]},
-    9d2c1e10ab3440de963d02d5f4b1a5a5: {payload: 0x663399},
+    ee9171e338e870dc1e976d86e47794e7: {payload: 0x663399},
   },
-  "root": {shape: roof1, style: 9d2c1e10ab3440de963d02d5f4b1a5a5, color: swatch},
+  "root": {shape: roof1, style: ee9171e338e870dc1e976d86e47794e7, color: swatch},
 }
 "#;
     let (doc, binders) = parse_ok(text);
@@ -34,7 +34,7 @@ fn a_file_round_trips_canonically() {
     assert_eq!(print(&again, &binders_again), printed);
     // The loaded binder survives the round trip.
     assert!(printed.contains("\"roof1\": "));
-    assert!(printed.contains("\"swatch\": 0f3ae682742540de963d02d5f4b1a5a5"));
+    assert!(printed.contains("\"swatch\": 9699d575e15bed45194282172feb7d0b"));
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn leniencies_normalize_and_minting_persists() {
     // Uppercase cell id, no trailing commas, a binder never declared:
     // all defined leniencies; saving canonicalizes.
     let text = r#"{"cells": {florp: "x"},
-                       "root": {a: florp, b: 9D2C1E10AB3440DE963D02D5F4B1A5A5}}"#;
+                       "root": {a: florp, b: EE9171E338E870DC1E976D86E47794E7}}"#;
     let (doc, binders) = parse_ok(text);
     let florp = binders["florp"];
     assert_eq!(
@@ -51,7 +51,7 @@ fn leniencies_normalize_and_minting_persists() {
     );
     let printed = print(&doc, &binders);
     assert!(printed.contains("\"florp\": "));
-    assert!(printed.contains("9d2c1e10ab3440de963d02d5f4b1a5a5"));
+    assert!(printed.contains("ee9171e338e870dc1e976d86e47794e7"));
     // A hyphenated id is neither a cell id nor a binder.
     assert!(parse(r#"{"root": e6c0b205-8b84-6842-8d64-576d953e2d62}"#).is_err());
     // A reference to a never-defined binder is a bare cell —
@@ -68,10 +68,10 @@ fn a_cell_stated_twice_fails_and_duplicate_names_coexist() {
     // ones, refuses rather than clobbering.
     assert!(parse(r#"{"cells": {x: "a", x: "b"}}"#).is_err());
     let aliased = r#"{
-            "binders": {"x": 9d2c1e10ab3440de963d02d5f4b1a5a5},
+            "binders": {"x": ee9171e338e870dc1e976d86e47794e7},
             "cells": {
                 x: "a",
-                9d2c1e10ab3440de963d02d5f4b1a5a5: "b",
+                ee9171e338e870dc1e976d86e47794e7: "b",
             },
         }"#;
     assert!(parse(aliased).is_err());

@@ -84,15 +84,15 @@ keys are file syntax, not ordinary value labels:
     "shape": 777d80d6e03e9ae0f9c143678ab68a75,
     "stroke": 34e8ba540a0297748f92540743779d3f,
     "style": e64688dc84e4b835d86d6c1f4ad5726f,
-    "swatch": 0f3ae682742540de963d02d5f4b1a5a5,
+    "swatch": 9699d575e15bed45194282172feb7d0b,
   },
   "cells": {
     name: {name: "name"},
     roof1: {name: "roof", stroke: "hairline"},
-    21b4fa5c9d2c40de963d02d5f4b1a5a5: {name: "roof"},
-    9d2c1e10ab3440de963d02d5f4b1a5a5: {payload: 0x663399},
+    e9cf9091fbf7ab76c959dc3a39c8cc7f: {name: "roof"},
+    ee9171e338e870dc1e976d86e47794e7: {payload: 0x663399},
   },
-  "root": {shape: roof1, style: 9d2c1e10ab3440de963d02d5f4b1a5a5, color: swatch},
+  "root": {shape: roof1, style: ee9171e338e870dc1e976d86e47794e7, color: swatch},
 }
 ```
 
