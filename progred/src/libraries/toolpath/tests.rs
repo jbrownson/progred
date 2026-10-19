@@ -30,7 +30,9 @@ impl Inspect for Recording {
     }
 
     fn length(&self) -> f64 {
-        self.segments().map(|(a, b, _)| distance(a, b)).sum()
+        self.segments()
+            .map(|(a, b, _)| (b[0] - a[0]).hypot(b[1] - a[1]).hypot(b[2] - a[2]))
+            .sum()
     }
 
     fn playback<E: From<InvalidPath>>(

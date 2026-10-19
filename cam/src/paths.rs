@@ -325,8 +325,7 @@ impl Recording {
     }
 }
 
-/// The straight distance between two points, as playback measures it.
-pub fn distance(a: Point3, b: Point3) -> f64 {
+fn distance(a: Point3, b: Point3) -> f64 {
     (b[0] - a[0]).hypot(b[1] - a[1]).hypot(b[2] - a[2])
 }
 
