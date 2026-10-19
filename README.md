@@ -74,7 +74,7 @@ There are also Linux and browser hosts. They do not yet have feature or performa
 
 - **A type system.** Nothing checks that a value fits where it goes before the
   program runs; a mismatch becomes an absent when it does. Completions can't
-  tell what a slot expects either, beyond an operation's own number type.
+  tell what a slot expects either.
 - **A robust set of libraries.** The built-in libraries cover the examples and
   little else: there's no `and`, `or`, `not`, or `if`, comparisons stop at `<`
   and `==`, and text has no operations.
