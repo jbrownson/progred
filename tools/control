@@ -21,6 +21,7 @@ couldn't happen. Each request is a GID document whose root calls the action,
 spelled with the binders the session writes beside its socket.
 """
 
+import os
 import re
 import socket
 import struct
@@ -112,10 +113,16 @@ def document_end(data):
 
 def exchange(document):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        # A socket's path is limited to about a hundred bytes, which a deep
+        # checkout's absolute path can pass; connect from beside it instead.
+        here = os.getcwd()
         try:
-            connection.connect(str(SOCKET))
+            os.chdir(CONTROL)
+            connection.connect(SOCKET.name)
         except (FileNotFoundError, ConnectionRefusedError):
             raise SystemExit(f"no session is listening on {SOCKET}; start one with make control")
+        finally:
+            os.chdir(here)
         connection.sendall(document.encode())
         reply = b""
         while (end := document_end(reply)) is None:
