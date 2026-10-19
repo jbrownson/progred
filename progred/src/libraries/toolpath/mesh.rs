@@ -21,13 +21,13 @@ pub(super) fn preview(
     call: &::grap::Expression,
     environment: &::grap::Environment,
 ) -> Result<RuntimeValue, ::grap::Halt> {
-    super::fidget::preview_with(
+    super::runtime_result(super::fidget::preview_with(
         context,
         call,
         environment,
         PREVIEW_MESH,
         fidget::mesh::preview,
-    )
+    ))
 }
 
 pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {

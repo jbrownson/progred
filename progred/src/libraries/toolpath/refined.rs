@@ -21,13 +21,13 @@ pub(super) fn preview(
     call: &::grap::Expression,
     environment: &::grap::Environment,
 ) -> Result<RuntimeValue, ::grap::Halt> {
-    implicit::preview_with(
+    super::runtime_result(implicit::preview_with(
         context,
         call,
         environment,
         PREVIEW_REFINED,
         fidget::mesh::preview,
-    )
+    ))
 }
 
 struct Computation {

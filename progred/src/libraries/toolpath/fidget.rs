@@ -48,13 +48,13 @@ pub(super) fn preview(
     call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    preview_with(
+    runtime_result(preview_with(
         context,
         call,
         environment,
         PREVIEW_3D,
         fidget::preview_3d_function,
-    )
+    ))
 }
 
 pub(super) fn preview_with(
@@ -63,51 +63,49 @@ pub(super) fn preview_with(
     environment: &Environment,
     marker: gid::CellId,
     model: impl FnOnce(&mut Context, &Expression, &Environment) -> Result<Value, Halt>,
-) -> Result<RuntimeValue, Halt> {
-    runtime_result((|| {
-        let playback = match context.field(call, PLAYBACK) {
-            Some(expression) => {
-                let value = context.eval_to_value(expression, environment)?;
-                if ::grap::absent::is_absent(&value) {
-                    return Ok(value.into());
-                }
-                playback::Settings::read(&value).ok_or_else(invalid)?;
-                Some((PLAYBACK, value.into()))
+) -> Result<RuntimeValue, Error> {
+    let playback = match context.field(call, PLAYBACK) {
+        Some(expression) => {
+            let value = context.eval_to_value(expression, environment)?;
+            if ::grap::absent::is_absent(&value) {
+                return Ok(value.into());
             }
-            None => None,
-        };
-        let program = argument(context, call, PROGRAM)?;
-        let program = context.eval(program, environment)?;
-        if program.is_absent() {
-            return Ok(program);
+            playback::Settings::read(&value).ok_or_else(invalid)?;
+            Some((PLAYBACK, value.into()))
         }
-        let radius = number(context, call, environment, LINE_RADIUS)?;
-        read_radius(radius).ok_or_else(invalid)?;
-        let color = argument(context, call, fidget::vocabulary::COLOR)?;
-        let color = context.eval_to_value(color, environment)?;
-        color::read_opaque(&color).ok_or_else(|| {
-            Error::Invalid(::grap::absent::value(fidget::vocabulary::INVALID_COLOR).into())
-        })?;
-        let fuel = super::fuel(context, call, environment)?;
-        let model = model(context, call, environment)?;
-        if ::grap::absent::is_absent(&model) {
-            return Ok(model.into());
-        }
-        Ok(RuntimeValue::record([(
-            marker,
-            RuntimeValue::record(
-                [
-                    (presentation::vocabulary::VALUE, model.into()),
-                    (PROGRAM, program),
-                    (LINE_RADIUS, RuntimeValue::f64(radius)),
-                    (fidget::vocabulary::COLOR, color.into()),
-                    (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
-                ]
-                .into_iter()
-                .chain(playback),
-            ),
-        )]))
-    })())
+        None => None,
+    };
+    let program = argument(context, call, PROGRAM)?;
+    let program = context.eval(program, environment)?;
+    if program.is_absent() {
+        return Ok(program);
+    }
+    let radius = number(context, call, environment, LINE_RADIUS)?;
+    read_radius(radius).ok_or_else(invalid)?;
+    let color = argument(context, call, fidget::vocabulary::COLOR)?;
+    let color = context.eval_to_value(color, environment)?;
+    color::read_opaque(&color).ok_or_else(|| {
+        Error::Invalid(::grap::absent::value(fidget::vocabulary::INVALID_COLOR).into())
+    })?;
+    let fuel = super::fuel(context, call, environment)?;
+    let model = model(context, call, environment)?;
+    if ::grap::absent::is_absent(&model) {
+        return Ok(model.into());
+    }
+    Ok(RuntimeValue::record([(
+        marker,
+        RuntimeValue::record(
+            [
+                (presentation::vocabulary::VALUE, model.into()),
+                (PROGRAM, program),
+                (LINE_RADIUS, RuntimeValue::f64(radius)),
+                (fidget::vocabulary::COLOR, color.into()),
+                (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
+            ]
+            .into_iter()
+            .chain(playback),
+        ),
+    )]))
 }
 
 pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {

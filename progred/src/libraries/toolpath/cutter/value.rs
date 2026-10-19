@@ -1,6 +1,8 @@
+use super::super::vocabulary::{TOOL_DIAMETER, TOOL_LENGTH};
+use super::super::{Error, invalid, number, result};
 use super::*;
 use crate::libraries::f64;
-use ::grap::{ForeignFunction, ForeignFunctions};
+use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions};
 use gid::{CellId, Value};
 
 pub mod vocabulary {
@@ -197,35 +199,65 @@ impl ToolValue for Tool {
     }
 }
 
-pub(crate) fn functions(mut functions: ForeignFunctions) -> ForeignFunctions {
-    use super::super::{
-        invalid, number, result,
-        vocabulary::{TOOL_DIAMETER, TOOL_LENGTH},
-    };
-    for id in [BALL_MILL, SQUARE_MILL, BULL_MILL] {
-        functions = functions.register(
-            id,
-            ForeignFunction::from_value(move |context, call, env| {
-                result((|| {
-                    let diameter = number(context, call, env, TOOL_DIAMETER)?;
-                    let length = number(context, call, env, TOOL_LENGTH)?;
-                    let tool = match id {
-                        BALL_MILL => Tool::ball(diameter, length),
-                        SQUARE_MILL => Tool::square(diameter, length),
-                        BULL_MILL => {
-                            Tool::bull(diameter, number(context, call, env, CORNER_RADIUS)?, length)
-                        }
-                        _ => unreachable!(),
-                    };
-                    tool.map(|t| t.value()).ok_or_else(invalid)
-                })())
-            })
-            .parameters(match id {
-                BULL_MILL => vec![TOOL_DIAMETER, CORNER_RADIUS, TOOL_LENGTH],
-                _ => vec![TOOL_DIAMETER, TOOL_LENGTH],
-            })
-            .tracked(),
-        );
-    }
+pub(crate) fn functions(functions: ForeignFunctions) -> ForeignFunctions {
     functions
+        .register(
+            BALL_MILL,
+            mill(
+                [TOOL_DIAMETER, TOOL_LENGTH],
+                |context, call, environment| {
+                    dimensions(context, call, environment)
+                        .map(|(diameter, length)| Tool::ball(diameter, length))
+                },
+            ),
+        )
+        .register(
+            SQUARE_MILL,
+            mill(
+                [TOOL_DIAMETER, TOOL_LENGTH],
+                |context, call, environment| {
+                    dimensions(context, call, environment)
+                        .map(|(diameter, length)| Tool::square(diameter, length))
+                },
+            ),
+        )
+        .register(
+            BULL_MILL,
+            mill(
+                [TOOL_DIAMETER, CORNER_RADIUS, TOOL_LENGTH],
+                |context, call, environment| {
+                    let (diameter, length) = dimensions(context, call, environment)?;
+                    let corner = number(context, call, environment, CORNER_RADIUS)?;
+                    Ok(Tool::bull(diameter, corner, length))
+                },
+            ),
+        )
+}
+
+/// A mill's function, from the reader of its arguments into the tool they
+/// make, if they make one.
+fn mill(
+    parameters: impl IntoIterator<Item = CellId>,
+    tool: fn(&mut Context, &Expression, &Environment) -> Result<Option<Tool>, Error>,
+) -> ForeignFunction {
+    ForeignFunction::from_value(move |context, call, environment| {
+        result(
+            tool(context, call, environment)
+                .and_then(|tool| tool.map(|tool| tool.value()).ok_or_else(invalid)),
+        )
+    })
+    .parameters(parameters)
+    .tracked()
+}
+
+/// A mill's diameter and length, read in that order.
+fn dimensions(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<(f64, f64), Error> {
+    Ok((
+        number(context, call, environment, TOOL_DIAMETER)?,
+        number(context, call, environment, TOOL_LENGTH)?,
+    ))
 }

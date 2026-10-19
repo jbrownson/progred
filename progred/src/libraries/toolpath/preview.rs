@@ -1,7 +1,8 @@
-use super::{run, vocabulary::*};
+use super::{Error, argument, fuel, invalid, number, run, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::widget;
-use crate::libraries::layout;
+use crate::libraries::{layout, presentation};
+use ::grap::{Context, Environment, Expression, RuntimeValue};
 use cam::paths::{Axis, InvalidPath, MapPoints, Point3, Sink};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Stroke};
 use peniko::Color;
@@ -92,6 +93,31 @@ fn fitted(lines: Lines2D, size: Size) -> Option<BezPath> {
         );
     }
     Some(path)
+}
+
+/// The 2D preview's value: the program, and the size and fuel to draw it with.
+pub(super) fn preview(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<RuntimeValue, Error> {
+    let program = argument(context, call, presentation::vocabulary::VALUE)?;
+    let program = context.eval(program, environment)?;
+    let width = number(context, call, environment, layout::vocabulary::WIDTH)?;
+    let height = number(context, call, environment, layout::vocabulary::HEIGHT)?;
+    if width <= 0.0 || height <= 0.0 {
+        return Err(invalid());
+    }
+    let fuel = fuel(context, call, environment)?;
+    Ok(RuntimeValue::record([(
+        PREVIEW,
+        RuntimeValue::record([
+            (PROGRAM, program),
+            (layout::vocabulary::WIDTH, RuntimeValue::f64(width)),
+            (layout::vocabulary::HEIGHT, RuntimeValue::f64(height)),
+            (layout::vocabulary::FUEL, RuntimeValue::f64(fuel as f64)),
+        ]),
+    )]))
 }
 
 pub(super) fn display<W: Host>(
