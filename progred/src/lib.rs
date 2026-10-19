@@ -142,9 +142,8 @@ pub(crate) enum UserEvent {
     },
 }
 
-/// One canonical spelling per document, so every identity — frame
-/// memory, the duplicate-window rule — agrees regardless of how the
-/// path was written.
+/// One canonical spelling per document, so every identity, such as a
+/// window's remembered frame, agrees however the path was written.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn canonical(path: PathBuf) -> PathBuf {
     path.canonicalize().unwrap_or(path)
@@ -203,15 +202,12 @@ pub fn run() {
     let doc_path: Option<PathBuf> = None;
     // A given-but-missing path is a new document there; no path is
     // untitled until the first save asks. A file that exists but does
-    // not parse is refused rather than silently replaced, so a save
-    // cannot clobber it with the sample.
+    // not parse is refused, so no save replaces it.
     let (doc, binders) = match &doc_path {
         Some(path) if path.exists() => text_store::load(path).unwrap_or_else(|error| {
             eprintln!("failed to load {}: {error}", path.display());
             std::process::exit(1);
         }),
-        // No path starts EMPTY — the sample lives in examples/sample.gid now,
-        // opened like any document.
         _ => (gid::Document::default(), gid_text::Binders::new()),
     };
 

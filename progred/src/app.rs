@@ -333,15 +333,14 @@ impl App {
     }
 
     /// The editor application-level commands act on: the focused
-    /// window's, or the sole survivor's while focus is unknown.
+    /// window's, or the first one's while focus is unknown.
     fn focused_index(&self) -> Option<usize> {
         self.focused
             .and_then(|id| self.editor_index(id))
             .or_else(|| (!self.editors.is_empty()).then_some(0))
     }
 
-    /// Opens a document in its own new window — every document lives
-    /// in exactly one window.
+    /// Opens a document in a new window; each window holds one document.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn open_editor(
         &mut self,
@@ -830,21 +829,17 @@ impl App {
         }
     }
 
-    /// Unsaved changes gate for the document-replacing commands.
-    /// Parented to the window, the dialog is a real NSAlert sheet;
-    /// parentless, rfd falls back to a CFUserNotification panel that
-    /// arrives unfocused (a click to focus, then a click to answer)
-    /// and warns on the console.
     /// Gate an action on unsaved changes: a clean document proceeds
-    /// immediately; a dirty one presents the standard window sheet
-    /// and continues through a [`UserEvent::Discard`] when it
-    /// resolves. Async is the one rfd path that presents natively on
-    /// macOS (begin-sheet with a completion; the sync API falls back
-    /// to CFUserNotification parentless and a sheet-plus-modal-loop
-    /// double-present parented). The sheet's completion lands on the
-    /// main run loop, so the answer is awaited on a throwaway thread
-    /// and routed back through the proxy — blocking here would
-    /// deadlock the loop the sheet needs.
+    /// immediately; a dirty one asks first, in the browser through its
+    /// confirm dialog, and on the desktop through the window's sheet,
+    /// continuing through a [`UserEvent::Discard`] when it resolves. Async
+    /// is the one rfd path that presents natively on macOS (begin-sheet
+    /// with a completion): the sync API falls back, parentless, to a
+    /// CFUserNotification panel that arrives unfocused and warns on the
+    /// console, and, parented, presents twice, as a sheet and a modal
+    /// loop. The sheet's completion lands on the main run loop, so the
+    /// answer is awaited on a throwaway thread and routed back through the
+    /// proxy; blocking here would deadlock the loop the sheet needs.
     pub(crate) fn request_discard(
         &mut self,
         event_loop: &ActiveEventLoop,

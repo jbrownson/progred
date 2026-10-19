@@ -83,13 +83,14 @@ impl<World: 'static> Projection<World> {
         }
     }
 
-    /// Prepend a partial at entry, following cells to their definitions.
-    /// Its children and computed results use the ordinary projection.
+    /// The composed partials, without the entry.
     #[cfg(any(test, target_arch = "wasm32"))]
     pub(crate) fn partial(&self) -> &crate::display::Partial<World, Hovered> {
         &self.partial
     }
 
+    /// Prepend a partial at entry, following cells to their definitions.
+    /// Its children and computed results use the ordinary projection.
     pub fn with_entry(self, partial: crate::display::Partial<World, Hovered>) -> Self {
         Self {
             entry: Some(partial),
@@ -125,8 +126,7 @@ pub(crate) struct Cx<'a> {
     /// The reading context: the document read over its library.
     pub(crate) sources: Sources<'a>,
     pub(crate) edits: crate::editing::Scope,
-    /// Names and field order derive from this view bit. Value
-    /// projections come from the editor's stack; `grap` is one of them.
+    /// Names and field order derive from this view bit.
     /// Raw opens only the cells it reaches directly: references inside a
     /// cell's definition start folded, so a call doesn't inline its callee
     /// and a shared cell isn't expanded again at every use. A cell that is

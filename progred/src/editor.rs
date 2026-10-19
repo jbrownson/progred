@@ -138,8 +138,7 @@ pub(crate) struct Editor {
     /// The continuation installed by the accepting projection handler.
     pub(crate) gesture: Option<gesture::Active>,
     pub(crate) reducer: WindowEventReducer,
-    /// Routes the discard sheet's answer back into the loop.
-    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    /// Carries the application commands the drawn menu chooses to the app.
     pub(crate) proxy: Option<winit::event_loop::EventLoopProxy<UserEvent>>,
     pub(crate) pending_discard: Option<AfterDiscard>,
 }
@@ -169,12 +168,11 @@ pub(crate) struct EditorRunner {
     /// platform-independent frame contract, but matters especially on
     /// macOS: Winit deliberately emits `CursorMoved` before every
     /// scroll to refresh the otherwise position-less `MouseWheel`
-    /// event's implicit cursor state. Treating that synthetic refresh
-    /// as a barrier made projection work keep AppKit from reaching its
-    /// redraw boundary under continuous input.
-    ///
-    /// History: https://github.com/rust-windowing/winit/issues/942
-    /// and https://github.com/rust-windowing/winit/pull/1490
+    /// event's implicit cursor state (see
+    /// https://github.com/rust-windowing/winit/issues/942 and
+    /// https://github.com/rust-windowing/winit/pull/1490). Treating that
+    /// synthetic refresh as a barrier would let projection work keep AppKit
+    /// from reaching its redraw boundary under continuous input.
     ///
     /// Handlers receive earlier samples in `PointerUpdate::coalesced`
     /// and the latest in `current`, including during a drag.
@@ -586,8 +584,9 @@ impl Editor {
         }
     }
 
-    /// A document command against this editor, including the redraw
-    /// its view changes require.
+    /// A document command against this editor. It only changes the editor;
+    /// its caller schedules the next frame, as a dispatch and
+    /// `App::run_command` do.
     pub(crate) fn run_doc_command(&mut self, command: DocCommand, geometry: Geometry<'_, Editor>) {
         match command {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -654,9 +653,6 @@ impl Editor {
                 }
             }
         }
-        // Execution only mutates; the caller owns frame scheduling —
-        // the drawn dispatch through its disposition, the native path
-        // in `run_command`.
     }
 
     pub(crate) fn menu_key(
@@ -762,9 +758,6 @@ impl Editor {
         }
     }
 
-    /// Replace document-owned state, retaining the window and its platform
-    /// resources. In particular, the input reducer still knows the physical
-    /// pointer position and held modifiers; old gestures do not survive.
     /// Libraries decide how everything is drawn and what cells resolve to,
     /// so a new stack keeps the document, selection, and folds but discards
     /// gestures and memoized work computed under the old one.
@@ -775,6 +768,9 @@ impl Editor {
         self.stack = stack;
     }
 
+    /// Replace document-owned state, retaining the window and its platform
+    /// resources. In particular, the input reducer still knows the physical
+    /// pointer position and held modifiers; old gestures do not survive.
     pub(crate) fn replace_document(
         &mut self,
         doc: gid::Document,

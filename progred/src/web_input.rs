@@ -56,7 +56,8 @@ impl ApplicationHandler<UserEvent> for SharedApp {
 pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
     let mut modifiers = Modifiers::empty();
     // Lock keys are toggles, not held modifiers, and pointer input never
-    // reports them; including them made every key look like a modifier change.
+    // reports them; including them would make every key look like a
+    // modifier change.
     for (name, flag) in [
         ("Shift", Modifiers::SHIFT),
         ("Control", Modifiers::CONTROL),

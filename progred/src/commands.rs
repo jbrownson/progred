@@ -1,4 +1,4 @@
-//! Editor commands: insert, delete, clipboard, and collapse.
+//! Editor commands: insert, delete, and the clipboard.
 
 use crate::Editor;
 use crate::display::widget::navigation::{Geometry, landmark_at};
@@ -84,12 +84,6 @@ impl Editor {
         }
     }
 
-    /// Commits a pointed-at value into the open pending — the
-    /// command-click gesture. A value-stage pending commits and
-    /// selects the edge; a label stage advances to its value stage.
-    /// False when nothing is pending — or when the picked value
-    /// cannot label (a list, a record, a blob) at the label stage —
-    /// so the click falls through rather than spending the pending.
     /// Structural paste, the shell's fallback after text editing.
     /// Copy and cut belong to the selected projected occurrence. Deliberately
     /// NOT menu items — native menu accelerators intercept ahead of key
