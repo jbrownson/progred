@@ -3,7 +3,7 @@
 //! recorded leaf, which records a visible program once per frame for both
 //! hit-testing and painting.
 
-use super::{read_paint, read_shape, read_transform, vocabulary};
+use super::{read_paint, read_shape, vocabulary};
 use crate::display::Host;
 use crate::display::widget::recorded::{Record, Recorder};
 use gid::{CellId, Step, Value};
@@ -139,7 +139,8 @@ fn number(
 }
 
 /// The common shapes read straight from evaluated values, sparing each
-/// coordinate a round trip through stored bytes; others read as stored data.
+/// coordinate a round trip through stored bytes; others read as stored data,
+/// as does a circle carrying a rounded rect, which `read_shape` takes first.
 fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::draw::Shape> {
     use vocabulary::{CIRCLE, HEIGHT, RADIUS, RECT, ROUNDED_RECT, WIDTH, X, Y};
     if let Some(rect) = value.field(RECT) {
@@ -149,10 +150,9 @@ fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::draw::Shape> {
             coordinate(&rect, WIDTH)?,
             coordinate(&rect, HEIGHT)?,
         );
-        return (width >= 0.0 && height >= 0.0)
-            .then(|| puri::draw::Shape::Rect(Rect::new(x, y, x + width, y + height)));
-    }
-    if !value.contains_field(ROUNDED_RECT)
+        (width >= 0.0 && height >= 0.0)
+            .then(|| puri::draw::Shape::Rect(Rect::new(x, y, x + width, y + height)))
+    } else if !value.contains_field(ROUNDED_RECT)
         && let Some(circle) = value.field(CIRCLE)
     {
         let (x, y, radius) = (
@@ -160,30 +160,24 @@ fn evaluated_shape(value: &grap::RuntimeValue) -> Option<puri::draw::Shape> {
             coordinate(&circle, Y)?,
             coordinate(&circle, RADIUS)?,
         );
-        return (radius >= 0.0).then(|| puri::draw::Shape::Circle(Circle::new((x, y), radius)));
+        (radius >= 0.0).then(|| puri::draw::Shape::Circle(Circle::new((x, y), radius)))
+    } else {
+        read_shape(&value.to_value())
     }
-    read_shape(&value.to_value())
 }
 
 fn evaluated_transform(value: &grap::RuntimeValue) -> Option<Affine> {
     use vocabulary::{ROTATE, TRANSLATE, X, Y};
-    let Some(mut operations) = value.list_values() else {
-        return read_transform(&value.to_value());
-    };
-    operations.try_fold(Affine::IDENTITY, |transform, operation| {
-        Some(match operation.field(TRANSLATE) {
-            Some(point) => {
-                transform * Affine::translate((coordinate(&point, X)?, coordinate(&point, Y)?))
-            }
-            None => {
-                let angle = operation
-                    .field(ROTATE)?
-                    .as_f64()
-                    .filter(|n| n.is_finite())?;
-                transform * Affine::rotate(angle)
-            }
+    value
+        .list_values()?
+        .try_fold(Affine::IDENTITY, |transform, operation| {
+            Some(match operation.field(TRANSLATE) {
+                Some(point) => {
+                    transform * Affine::translate((coordinate(&point, X)?, coordinate(&point, Y)?))
+                }
+                None => transform * Affine::rotate(coordinate(&operation, ROTATE)?),
+            })
         })
-    })
 }
 
 fn coordinate(value: &grap::RuntimeValue, key: CellId) -> Option<f64> {
