@@ -347,7 +347,11 @@ pub struct Menu {
 }
 
 impl Menu {
-    pub fn new(proxy: EventLoopProxy<UserEvent>) -> Self {
+    /// The bar, with a `Projections` entry for each of `projections`.
+    pub fn new<'a>(
+        proxy: EventLoopProxy<UserEvent>,
+        projections: impl IntoIterator<Item = (gid::CellId, &'a str)>,
+    ) -> Self {
         let mtm = MainThreadMarker::new().expect("menus are created on the main thread");
         let target = MenuTarget::new(mtm, proxy);
         let root = NSMenu::new(mtm);
@@ -356,7 +360,7 @@ impl Menu {
         let mut windows = None;
         let mut services = None;
 
-        for section in definition(crate::stack::load().projections()) {
+        for section in definition(projections) {
             let submenu = NSMenu::new(mtm);
             submenu.setTitle(&NSString::from_str(section.label));
             submenu.setAutoenablesItems(false);

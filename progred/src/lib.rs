@@ -225,7 +225,7 @@ fn run_document(
     #[cfg(target_arch = "wasm32")]
     WEB_PROXY.with(|slot| *slot.borrow_mut() = Some(proxy.clone()));
     #[cfg(target_os = "macos")]
-    let native_menu = native_menu::Menu::new(proxy.clone());
+    let native_menu = native_menu::Menu::new(proxy.clone(), stack.projections());
 
     let fonts = font_context();
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
