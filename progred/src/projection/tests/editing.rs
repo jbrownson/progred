@@ -1,5 +1,22 @@
 use super::*;
+use crate::driver::Driver;
 use puri::edit::TextClipboard;
+use puri::handler::ImeEvent;
+use ui_events::keyboard::Modifiers;
+
+/// Select the whole line being edited, so what's typed next replaces it.
+fn select_line(driver: &mut Driver) {
+    assert!(driver.keystroke(Key::Named(NamedKey::Home), Modifiers::SHIFT));
+}
+
+/// Click the window's empty corner, which drops the selection.
+fn deselect(driver: &mut Driver) {
+    driver.click_at(Point::new(
+        Driver::VIEWPORT.width - 4.0,
+        Driver::VIEWPORT.height - 4.0,
+    ));
+    assert!(driver.editor().model.selection.is_none());
+}
 
 #[test]
 fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
@@ -23,38 +40,24 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
             }))
         })])
     }
-    let first = new_cell_id();
-    let second = new_cell_id();
-    let libraries = core_libraries();
-    let mut world = editing_world(
-        &Document {
-            root: Some(text::value("a")),
-            cells: Cells::new(),
-        },
-        &libraries,
-    );
-    world.model.selection = Some(make_selection(vec![]));
-    for (marker, typed, expected) in [(first, "b", "ab"), (second, "c", "abc")] {
-        let frame = editing_frame_with_projection(&mut world, false, Some(&projection(marker)));
-        assert!(frame.resolve_for_dispatch().dispatch_key(
-            &mut world,
-            &KeyboardEvent {
-                key: Key::Character(typed.into()),
-                ..arrow(NamedKey::End)
-            }
-        ));
-        assert_eq!(
-            text::read(world.model.doc.root.as_ref().unwrap()),
-            Some(expected)
-        );
-        let fields = world.model.doc.root.as_ref().unwrap().as_record().unwrap();
+    let mut driver = Driver::of(text::value("a"));
+    driver.select(&[]);
+    for (marker, typed, expected) in [(new_cell_id(), "b", "ab"), (new_cell_id(), "c", "abc")] {
+        let mut stack = driver.editor().stack.clone();
+        stack.projection = projection(marker);
+        driver.stack(stack);
+        driver.type_text(typed);
+        let root = driver.value(&[]);
+        assert_eq!(text::read(&root), Some(expected));
+        let fields = root.as_record().unwrap();
         assert!(fields.contains_key(&marker));
         assert_eq!(fields.len(), 2);
     }
-    let payload = world.model.selection.as_ref().unwrap().payload();
+    let editor = driver.editor();
+    let payload = editor.model.selection.as_ref().unwrap().payload();
     let selection = Selection::from_scoped_payload(
         &crate::test_root(),
-        &src(&world.model.doc, &libraries),
+        &editor.sources(),
         Default::default(),
         vec![],
         payload.clone(),
@@ -66,7 +69,8 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
 #[test]
 fn caret_motion_does_not_run_a_line_conversion() {
     let calls = Rc::new(std::cell::Cell::new(0));
-    let projection = Projection::new([crate::display::partial({
+    let mut editor = crate::editor_of(text::value("abc"));
+    editor.stack.projection = Projection::new([crate::display::partial({
         let calls = calls.clone();
         move |input| {
             Some(crate::display::line_edit(crate::display::LineEdit {
@@ -84,35 +88,15 @@ fn caret_motion_does_not_run_a_line_conversion() {
             }))
         }
     })]);
-    let libraries = core_libraries();
-    let mut world = editing_world(
-        &Document {
-            root: Some(text::value("abc")),
-            cells: Cells::new(),
-        },
-        &libraries,
-    );
-    world.model.selection = Some(make_selection(vec![]));
-    let original = world.model.doc.clone();
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch_key(&mut world, &arrow(NamedKey::Home))
-    );
+    let mut driver = Driver::new(editor, Driver::VIEWPORT);
+    driver.select(&[]);
+    let original = driver.editor().model.doc.clone();
+    driver.press(NamedKey::Home);
     assert_eq!(calls.get(), 0);
-    assert!(Rc::ptr_eq(&world.model.doc, &original));
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(
-        frame
-            .resolve_for_dispatch()
-            .dispatch_ime(&mut world, &puri::handler::ImeEvent::Commit("x".into()))
-    );
+    assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
+    assert!(driver.ime(ImeEvent::Commit("x".into())));
     assert_eq!(calls.get(), 1);
-    assert_eq!(
-        text::read(world.model.doc.root.as_ref().unwrap()),
-        Some("xabc")
-    );
+    assert_eq!(text::read(&driver.value(&[])), Some("xabc"));
 }
 
 #[test]
@@ -216,116 +200,56 @@ fn a_line_control_selects_without_storing_its_default_editor() {
 
 #[test]
 fn a_plain_selection_accepts_first_input_using_the_line_default() {
-    let libraries = core_libraries();
     for (value, input, expected) in [
         (text::value("hë🦀"), "!", text::value("hë🦀!")),
         (text::value(""), "first", text::value("first")),
         (f64::value(12.0), "3", f64::value(123.0)),
         (Value::from(vec![0xab]), "cd", Value::from(vec![0xab, 0xcd])),
     ] {
-        let doc = Document {
-            root: Some(value),
-            cells: Cells::new(),
-        };
-        let mut world = editing_world(&doc, &libraries);
-        world.model.selection = Some(make_selection(vec![]));
-        let frame = editing_frame(&mut world, false);
-        assert!(world.model.selection.as_ref().unwrap().edit().is_none());
-        assert!(frame.resolve_for_dispatch().dispatch_key(
-            &mut world,
-            &KeyboardEvent {
-                key: Key::Character(input.into()),
-                ..arrow(NamedKey::End)
-            }
-        ));
-        assert_eq!(world.model.doc.root, Some(expected));
-        let selected = world.model.selection.as_mut().unwrap();
-        selected.edit_mut().unwrap().cursor_to_start();
-        editing_frame(&mut world, false);
-        assert_eq!(
-            world
-                .model
-                .selection
-                .as_ref()
-                .unwrap()
-                .edit()
-                .unwrap()
-                .selection_offsets(),
-            (0, 0)
-        );
+        let mut driver = Driver::of(value);
+        driver.select(&[]);
+        assert!(driver.line().is_none());
+        driver.type_text(input);
+        assert_eq!(driver.value(&[]), expected);
+        // The caret the typing started stays where it's moved.
+        driver.press(NamedKey::Home);
+        assert_eq!(driver.line_selection(), Some((0, 0)));
     }
 }
 
 #[test]
 fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
-    let libraries = core_libraries();
-    let doc = Document {
-        root: Some(text::value("hello")),
-        cells: Cells::new(),
-    };
     for ime in [false, true] {
-        let mut world = editing_world(&doc, &libraries);
-        world.model.selection = Some(make_selection(vec![]));
-        world.text_clipboard.set_text(" world");
-        let frame = editing_frame(&mut world, false);
-        let handler = frame.resolve_for_dispatch();
+        let mut driver = Driver::of(text::value("hello"));
+        driver.runner.editor.text_clipboard.set_text(" world");
+        driver.select(&[]);
         assert!(if ime {
-            handler.dispatch_ime(
-                &mut world,
-                &puri::handler::ImeEvent::Commit(" world".into()),
-            )
+            driver.ime(ImeEvent::Commit(" world".into()))
         } else {
-            handler.dispatch_key(
-                &mut world,
-                &KeyboardEvent {
-                    key: Key::Character("v".into()),
-                    modifiers: crate::modifiers::command(),
-                    ..arrow(NamedKey::End)
-                },
-            )
+            driver.keystroke(Key::Character("v".into()), crate::modifiers::command())
         });
-        assert_eq!(
-            world
-                .model
-                .selection
-                .as_ref()
-                .unwrap()
-                .edit()
-                .unwrap()
-                .text(),
-            "hello world"
-        );
+        assert_eq!(driver.line(), Some("hello world"));
     }
 }
 
 #[test]
 fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
-    let libraries = core_libraries();
-    let doc = Document {
-        root: Some(text::value("ab")),
-        cells: Cells::new(),
-    };
-    let mut world = editing_world(&doc, &libraries);
-    world.model.selection = Some(Selection::from_scoped_payload(
+    let mut editor = crate::editor_of(text::value("ab"));
+    let selection = Selection::from_scoped_payload(
         &crate::test_root(),
-        &src(&doc, &libraries),
+        &editor.sources(),
         Default::default(),
         vec![],
         Value::record([
             (selection_payload::vocabulary::ANCHOR, f64::value(1.0)),
             (selection_payload::vocabulary::FOCUS, f64::value(1.0)),
         ]),
-    ));
-    let frame = editing_frame(&mut world, false);
-    assert!(world.model.selection.as_ref().unwrap().edit().is_none());
-    assert!(frame.resolve_for_dispatch().dispatch_key(
-        &mut world,
-        &KeyboardEvent {
-            key: Key::Character("X".into()),
-            ..arrow(NamedKey::End)
-        }
-    ));
-    assert_eq!(world.model.doc.root, Some(text::value("aXb")));
+    );
+    editor.model.selection = Some(selection);
+    let mut driver = Driver::new(editor, Driver::VIEWPORT);
+    assert!(driver.line().is_none());
+    driver.type_text("X");
+    assert_eq!(driver.value(&[]), text::value("aXb"));
 }
 
 #[test]
@@ -387,14 +311,18 @@ fn deletion_and_history_landings_need_no_line_initialization() {
     let root = model.workspace.document_root().clone();
     model.selection = Some(Selection::edge(&root, first.clone()));
     model.history.record(model.snapshot());
-    let mut world = editing_world(&doc, &libraries);
-    let frame = editing_frame(&mut world, false);
+    let drawn = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     assert!(delete_edge(
         &mut model.doc,
         &libraries,
         &crate::location::Location::root(&first)
     ));
-    let next = crate::navigate::selection_after_removing(&frame.landmarks, None, &first, true);
+    let next = crate::navigate::selection_after_removing(
+        &drawn.runner.frame.dispatch.landmarks,
+        Some(&crate::test_root()),
+        &first,
+        true,
+    );
     assert_eq!(next, second);
     model.selection = Some(Selection::edge(&root, next));
     for (undo, expected) in [(false, "survivor!"), (true, "first!")] {
@@ -403,30 +331,11 @@ fn deletion_and_history_landings_need_no_line_initialization() {
         }
         let selected = model.selection.as_ref().unwrap();
         assert!(selected.edit().is_none());
-        world.model.doc = model.doc.clone();
-        world.model.selection = Some(make_selection(selected.path().to_vec()));
-        assert!(
-            editing_frame(&mut world, false)
-                .resolve_for_dispatch()
-                .dispatch_key(
-                    &mut world,
-                    &KeyboardEvent {
-                        key: Key::Character("!".into()),
-                        ..arrow(NamedKey::End)
-                    }
-                )
-        );
-        assert_eq!(
-            world
-                .model
-                .selection
-                .as_ref()
-                .unwrap()
-                .edit()
-                .unwrap()
-                .text(),
-            expected
-        );
+        let mut editor = crate::test_editor((*model.doc).clone());
+        editor.model.selection = Some(make_selection(selected.path().to_vec()));
+        let mut driver = Driver::new(editor, Driver::VIEWPORT);
+        driver.type_text("!");
+        assert_eq!(driver.line(), Some(expected));
     }
 }
 
@@ -449,21 +358,30 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
             vec![Step::Follow(gid::Resolution::Library(library))],
         ),
     ] {
-        let doc = Document {
-            root: Some(value),
-            cells: Cells::new(),
-        };
-        let mut world = editing_world(&doc, &libraries);
-        world.model.selection = Some(make_selection(path));
-        let frame = editing_frame(&mut world, raw);
-        assert!(!frame.handler.is_some_and(|handler| handler.dispatch_key(
-            &mut world,
-            &KeyboardEvent {
-                key: Key::Character("!".into()),
-                ..arrow(NamedKey::End)
-            }
-        )));
-        assert!(world.model.selection.as_ref().unwrap().edit().is_none());
+        let mut editor = editing_world(
+            &Document {
+                root: Some(value),
+                cells: Cells::new(),
+            },
+            &libraries,
+        );
+        if raw {
+            editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
+        }
+        editor.model.selection = Some(make_selection(path));
+        let mut driver = Driver::new(editor, Driver::VIEWPORT);
+        let original = driver.editor().model.doc.clone();
+        // Typing over a raw value opens a hole for its replacement, and a
+        // read-only one takes nothing; neither edits the value's spelling.
+        assert_eq!(
+            driver.keystroke(Key::Character("!".into()), Modifiers::empty()),
+            raw
+        );
+        assert_eq!(
+            driver.stage(),
+            Some(if raw { Stage::Pending } else { Stage::Edge })
+        );
+        assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
     }
 }
 
@@ -471,7 +389,6 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
 fn annotated_numbers_navigate_and_edit_only_the_digits() {
     use crate::libraries::{f32, u64};
 
-    let libraries = core_libraries();
     for (original, spelling, expected) in [
         (f32::value(24.5), "24.5", f32::value(17.0)),
         (f64::value(-2.75), "-2.75", f64::value(17.0)),
@@ -482,23 +399,14 @@ fn annotated_numbers_navigate_and_edit_only_the_digits() {
             f64::value(17.0),
         ),
     ] {
-        let doc = Rc::new(Document {
-            root: Some(original),
-            cells: Cells::new(),
-        });
-        let mut selected = make_projected_editing_selection(&doc, &libraries, vec![]);
-        assert_eq!(selected.path(), &[]);
-        assert_eq!(selected.edit().map(LineEditState::text), Some(spelling));
-        *selected.edit_mut().unwrap() =
-            LineEditState::from_parts(spelling, 0, spelling.len(), None, None);
-        let mut world = editing_world(&doc, &libraries);
-        world.model.selection = Some(selected);
-        assert!(
-            editing_frame(&mut world, false)
-                .resolve_for_dispatch()
-                .dispatch_ime(&mut world, &puri::handler::ImeEvent::Commit("17".into()),)
-        );
-        assert_eq!(world.model.doc.root, Some(expected));
+        let mut driver = Driver::of(original);
+        driver.select(&[]);
+        driver.press(NamedKey::End);
+        assert_eq!(driver.selection(), []);
+        assert_eq!(driver.line(), Some(spelling));
+        select_line(&mut driver);
+        assert!(driver.ime(ImeEvent::Commit("17".into())));
+        assert_eq!(driver.value(&[]), expected);
     }
 }
 
@@ -555,93 +463,81 @@ fn edits_write_through_to_the_field() {
 
 #[test]
 fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
-    let libraries = core_libraries();
     let cell = new_cell_id();
     let bytes: Vec<u8> = (0..=31).collect();
     let mut cells = Cells::new();
     cells.set_value(cell, Value::from(bytes.clone()));
-    let mut doc = Rc::new(Document {
-        root: Some(cell.into()),
-        cells,
-    });
-    let path = vec![Step::Follow(gid::Resolution::Document)];
-    let mut selected = make_projected_editing_selection(&doc, &libraries, path.clone());
-    assert_eq!(selected.edit().unwrap().text(), gid::hex_string(&bytes));
-    assert!(!write_with(
-        &mut doc,
-        &libraries,
-        &mut selected,
-        crate::libraries::blob::edit
-    ));
-    selected.edit_mut().unwrap().set_text("DEad");
-    assert!(write_with(
-        &mut doc,
-        &libraries,
-        &mut selected,
-        crate::libraries::blob::edit
-    ));
-    assert_eq!(doc.cells.value(cell), Some(&Value::from(vec![0xde, 0xad])));
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(cell.into()),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
+    let path = [Step::Follow(gid::Resolution::Document)];
+    let original = driver.editor().model.doc.clone();
+    driver.select(&path);
+    driver.press(NamedKey::End);
+    assert_eq!(driver.line(), Some(gid::hex_string(&bytes).as_str()));
+    assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
     for (input, expected) in [
+        ("DEad", Some(vec![0xde, 0xad])),
         ("DEadf", None),
         ("DEadff", Some(vec![0xde, 0xad, 0xff])),
         ("xx", None),
         ("", Some(vec![])),
     ] {
-        let before = doc.clone();
-        selected.edit_mut().unwrap().set_text(input);
-        assert!(
-            !write_with(
-                &mut doc,
-                &libraries,
-                &mut selected,
-                crate::libraries::blob::edit
-            ),
-            "one edit run opens one undo step"
-        );
-        assert_eq!(selected.edit().unwrap().text(), input);
-        assert_eq!(doc.root, before.root);
-        match expected {
-            Some(bytes) => assert_eq!(doc.cells.value(cell), Some(&Value::from(bytes))),
-            None => assert_eq!(doc.cells.value(cell), before.cells.value(cell)),
+        let before = driver.editor().model.doc.clone();
+        select_line(&mut driver);
+        match input {
+            "" => driver.press(NamedKey::Backspace),
+            input => driver.type_text(input),
         }
+        assert_eq!(driver.line(), Some(input));
+        let doc = &driver.editor().model.doc;
+        assert_eq!(doc.root, before.root);
+        assert_eq!(
+            doc.cells.value(cell),
+            expected
+                .map(Value::from)
+                .as_ref()
+                .or(before.cells.value(cell))
+        );
     }
+    // The whole run of edits is one undo step.
+    assert!(driver.keystroke(Key::Character("z".into()), crate::modifiers::command()));
+    assert_eq!(
+        driver.editor().model.doc.cells.value(cell),
+        Some(&Value::from(bytes))
+    );
 }
 
 #[test]
 fn compact_f64_values_edit_as_decimal_text() {
-    let lib = core_libraries();
     let cell = new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(cell, f64::value(2.5));
-    let mut doc = Rc::new(Document {
-        root: Some(Value::from(cell)),
-        cells,
-    });
-    let path = vec![Step::Follow(gid::Resolution::Document)];
-    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
-    assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
-    selection.edit_mut().unwrap().set_text("7.25");
-    assert!(write_with(&mut doc, &lib, &mut selection, |s, c| {
-        crate::libraries::number::edit(s, c, f64::value)
-    }));
-    assert_eq!(
-        src(&doc, &lib).resolve_path(&path).and_then(f64::read),
-        Some(7.25)
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::from(cell)),
+            cells,
+        }),
+        Driver::VIEWPORT,
     );
-
-    selection.edit_mut().unwrap().set_text("not a number");
-    assert!(!write_with(&mut doc, &lib, &mut selection, |s, c| {
-        crate::libraries::number::edit(s, c, f64::value)
-    }));
-    assert_eq!(
-        src(&doc, &lib).resolve_path(&path).and_then(f64::read),
-        Some(7.25)
-    );
+    let path = [Step::Follow(gid::Resolution::Document)];
+    driver.select(&path);
+    driver.press(NamedKey::End);
+    assert_eq!(driver.line(), Some("2.5"));
+    // What isn't a number leaves the last one written.
+    for (typed, expected) in [("7.25", 7.25), ("not a number", 7.25)] {
+        select_line(&mut driver);
+        driver.type_text(typed);
+        assert_eq!(driver.number(&path), Some(expected));
+    }
 }
 
 #[test]
 fn editing_an_f64_keeps_unrelated_fields() {
-    let lib = core_libraries();
     let cell = new_cell_id();
     let unit = crate::test_values::label("unit");
     let mut cells = Cells::new();
@@ -655,18 +551,20 @@ fn editing_an_f64_keeps_unrelated_fields() {
                 .update(unit, crate::test_values::text("mm")),
         ),
     );
-    let mut doc = Rc::new(Document {
-        root: Some(Value::from(cell)),
-        cells,
-    });
-    let path = vec![Step::Follow(gid::Resolution::Document)];
-    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
-    selection.edit_mut().unwrap().set_text("8");
-    assert!(write_with(&mut doc, &lib, &mut selection, |s, c| {
-        crate::libraries::number::edit(s, c, f64::value)
-    }));
-    let value = src(&doc, &lib).resolve_path(&path).unwrap();
-    assert_eq!(f64::read(value), Some(8.0));
+    let mut driver = Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::from(cell)),
+            cells,
+        }),
+        Driver::VIEWPORT,
+    );
+    let path = [Step::Follow(gid::Resolution::Document)];
+    driver.select(&path);
+    driver.press(NamedKey::End);
+    select_line(&mut driver);
+    driver.type_text("8");
+    let value = driver.value(&path);
+    assert_eq!(f64::read(&value), Some(8.0));
     assert_eq!(
         value
             .as_record()
@@ -818,47 +716,34 @@ fn missing_controls_default_without_mutating_selection_until_input() {
             cells: Cells::new(),
         };
         for payload in [Value::record([]), crate::selection::payload::edge()] {
-            let mut world = editing_world(&doc, &libraries);
-            world.model.selection = Some(Selection::from_scoped_payload(
+            let mut editor = editing_world(&doc, &libraries);
+            editor.model.selection = Some(Selection::from_scoped_payload(
                 &crate::test_root(),
                 &src(&doc, &libraries),
                 Default::default(),
                 path.clone(),
                 payload.clone(),
             ));
-            let original = world.model.doc.clone();
-            let frame = editing_frame(&mut world, false);
-            assert!(frame.completion.is_some());
-            let selected = world.model.selection.as_ref().unwrap();
-            assert!(selected.edit().is_none());
-            assert_eq!(selected.payload(), payload);
-            assert!(frame.resolve_for_dispatch().dispatch_key(
-                &mut world,
-                &KeyboardEvent {
-                    key: Key::Character("new name".into()),
-                    ..arrow(NamedKey::End)
-                }
-            ));
+            let mut driver = Driver::new(editor, Driver::VIEWPORT);
+            let original = driver.editor().model.doc.clone();
+            assert!(driver.picker_entries().is_some());
+            assert!(driver.line().is_none());
             assert_eq!(
-                world
-                    .model
-                    .selection
-                    .as_ref()
-                    .unwrap()
-                    .edit()
-                    .unwrap()
-                    .text(),
-                "new name"
+                driver.editor().model.selection.as_ref().unwrap().payload(),
+                payload
             );
+            driver.type_text("new name");
+            assert_eq!(driver.line(), Some("new name"));
+            let editor = &mut driver.runner.editor;
             assert!(!write_text(
-                &mut world.model.doc,
+                &mut editor.model.doc,
                 &libraries,
-                world.model.selection.as_mut().unwrap()
+                editor.model.selection.as_mut().unwrap()
             ));
-            assert!(Rc::ptr_eq(&world.model.doc, &original));
-            world.model.selection = None;
-            assert!(editing_frame(&mut world, false).completion.is_none());
-            assert!(Rc::ptr_eq(&world.model.doc, &original));
+            assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
+            deselect(&mut driver);
+            assert!(driver.picker_entries().is_none());
+            assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
         }
     }
 }
@@ -874,95 +759,47 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
         Step::Follow(gid::Resolution::Document),
         Step::Key(name::vocabulary::NAME),
     ];
-    let mut world = editing_world(&doc, &lib);
-    let idle = editing_frame(&mut world, false);
-    let original = world.model.doc.clone();
-    let marker = idle.landmarks.landmark(&path).unwrap();
-    let point = marker.rect.center();
-    let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
+    let unwritten = |driver: &mut Driver| {
+        let editor = &mut driver.runner.editor;
+        assert!(!write_text(
+            &mut editor.model.doc,
+            &lib,
+            editor.model.selection.as_mut().unwrap()
+        ));
+        assert!(editor.sources().resolve_path(&path).is_none());
+    };
+    let mut driver = Driver::new(editing_world(&doc, &lib), Driver::VIEWPORT);
+    let original = driver.editor().model.doc.clone();
+    let point = driver.rect(&path).center();
     assert_eq!(
-        editing_frame_at(&mut world, false, None, Some(point))
-            .claim
-            .map(|(_, claim)| claim),
-        Some(puri::hover::Claim::Direct(target.clone()))
+        driver.hover_at(point),
+        Some(Hovered::Tree(Hover::Value(Rc::from(path.clone()))))
     );
-    let mut state = PointerState::default();
-    state.position.x = point.x;
-    state.position.y = point.y;
-    assert!(idle.resolve_for_dispatch().dispatch_pointer_down_with(
-        &mut world,
-        &PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state,
-        },
-        &mut crate::frame::DispatchContext::new(None, Some(target)),
-    ));
-    assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
-    assert_eq!(
-        world
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .stage(&src(&world.model.doc, &lib)),
-        Stage::Pending
-    );
-    assert!(world.model.selection.as_ref().unwrap().edit().is_none());
-    assert_eq!(
-        world.model.selection.as_ref().unwrap().payload(),
-        crate::selection::payload::edge()
-    );
-    assert!(editing_frame(&mut world, false).completion.is_some());
-    assert!(!write_text(
-        &mut world.model.doc,
-        &lib,
-        world.model.selection.as_mut().unwrap()
-    ));
-    assert!(src(&world.model.doc, &lib).resolve_path(&path).is_none());
-
-    world.model.selection = None;
-    assert!(editing_frame(&mut world, false).completion.is_none());
-    assert!(Rc::ptr_eq(&world.model.doc, &original));
+    driver.click_at(point);
+    assert_eq!(driver.selection(), path);
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    assert_eq!(driver.line(), Some(""), "the picker's query starts empty");
+    assert!(driver.picker_entries().is_some());
+    unwritten(&mut driver);
+    deselect(&mut driver);
+    assert!(driver.picker_entries().is_none());
+    assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
 
     // Keyboard navigation enters the same missing location.
-    world.model.selection = Some(make_projected_selection(&doc, &lib, path.clone()));
-    assert!(!write_text(
-        &mut world.model.doc,
-        &lib,
-        world.model.selection.as_mut().unwrap()
-    ));
-    assert!(src(&world.model.doc, &lib).resolve_path(&path).is_none());
-    let frame = editing_frame(&mut world, false);
-    assert!(frame.completion.is_some());
-    let handler = frame.resolve_for_dispatch();
-    assert!(handler.dispatch_key(&mut world, &arrow(NamedKey::End)));
-    assert!(!write_text(
-        &mut world.model.doc,
-        &lib,
-        world.model.selection.as_mut().unwrap()
-    ));
-    assert!(src(&world.model.doc, &lib).resolve_path(&path).is_none());
-    assert!(handler.dispatch_key(
-        &mut world,
-        &KeyboardEvent {
-            key: Key::Character("\"tree\"".into()),
-            ..arrow(NamedKey::End)
-        }
-    ));
-    let selected = world.model.selection.as_mut().unwrap();
-    assert_eq!(selected.stage(&src(&world.model.doc, &lib)), Stage::Pending);
-    assert_eq!(selected.edit().unwrap().text(), "\"tree\"");
-    assert!(!write_text(&mut world.model.doc, &lib, selected));
-    assert!(src(&world.model.doc, &lib).resolve_path(&path).is_none());
+    driver.select(&path);
+    unwritten(&mut driver);
+    assert!(driver.picker_entries().is_some());
+    driver.press(NamedKey::End);
+    unwritten(&mut driver);
+    driver.type_text("\"tree\"");
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    assert_eq!(driver.line(), Some("\"tree\""));
+    unwritten(&mut driver);
 
+    let editor = driver.editor();
     let prepared = crate::completion::prepare(
-        &src(&world.model.doc, &lib),
-        world.model.selection.as_ref().unwrap(),
+        &editor.sources(),
+        editor.model.selection.as_ref().unwrap(),
         &Annotations::default(),
         text::value("tree"),
         None,

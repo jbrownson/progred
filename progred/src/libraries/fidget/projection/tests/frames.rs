@@ -1,13 +1,13 @@
 use super::*;
 use crate::display::test_support::Landmarks;
+use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::projection::test_support::*;
-use crate::test_support::{core_libraries, src};
 use gid::{Cells, Document};
 use kurbo::Point;
 use puri::hover::Claim;
-use std::rc::Rc;
+use ui_events::keyboard::{Key, Modifiers, NamedKey};
 
 fn sum(left: Value, right: Value) -> Value {
     Value::record([(SUM, Value::record([(LEFT, left), (RIGHT, right)]))])
@@ -15,13 +15,13 @@ fn sum(left: Value, right: Value) -> Value {
 
 #[test]
 fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression() {
-    let mut doc = Rc::new(Document {
+    let doc = Document {
         root: Some(sum(
             Value::record([(AXIS, X.into())]),
             crate::libraries::f32::value(25.0),
         )),
         cells: Cells::new(),
-    });
+    };
     let coordinate = [Step::Key(SUM), Step::Key(LEFT), Step::Key(AXIS)];
     let number = vec![Step::Key(SUM), Step::Key(RIGHT)];
     let (bench, _) = place(&doc, None, 400.0);
@@ -49,17 +49,13 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == path));
     }
-    let libraries = core_libraries();
-    let mut selected = make_projected_editing_selection(&doc, &libraries, number.clone());
-    assert_eq!(selected.edit().unwrap().text(), "25");
-    selected.edit_mut().unwrap().set_text("30");
-    assert!(write_with(&mut doc, &libraries, &mut selected, |s, c| {
-        crate::libraries::number::edit(s, c, crate::libraries::f32::value)
-    }));
-    assert_eq!(
-        src(&doc, &libraries).resolve_path(&number),
-        Some(&crate::libraries::f32::value(30.0))
-    );
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+    driver.select(&number);
+    driver.press(NamedKey::End);
+    assert_eq!(driver.line(), Some("25"));
+    assert!(driver.keystroke(Key::Named(NamedKey::Home), Modifiers::SHIFT));
+    driver.type_text("30");
+    assert_eq!(driver.value(&number), crate::libraries::f32::value(30.0));
 }
 
 #[test]

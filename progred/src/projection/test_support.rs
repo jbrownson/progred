@@ -6,10 +6,10 @@ use super::*;
 use crate::annotations::Annotations;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::display::widget::navigation::Landmark;
+use crate::driver::Driver;
 use crate::hover::hover_secondary;
 use crate::libraries::text;
 use crate::library::Libraries;
-use crate::test_support::arrow;
 use gid::Document;
 use kurbo::{Point, Rect, Stroke};
 use measured::Extent;
@@ -161,38 +161,37 @@ pub(crate) fn make_projected_selection(
     world.model.selection.expect("a selection")
 }
 
+/// What selecting the line drawn at `path` and pressing End selects: its
+/// editor, the caret at the end.
 pub(crate) fn make_projected_editing_selection(
     doc: &Document,
     libraries: &Libraries,
     path: Path,
 ) -> Selection {
-    let mut world = editing_world(doc, libraries);
-    world.model.selection = Some(make_projected_selection(doc, libraries, path));
-    editing_frame(&mut world, false)
-        .resolve_for_dispatch()
-        .dispatch_key(&mut world, &arrow(NamedKey::End));
-    world.model.selection.unwrap()
+    let mut driver = Driver::new(editing_world(doc, libraries), Driver::VIEWPORT);
+    driver.select(&path);
+    driver.press(NamedKey::End);
+    driver
+        .runner
+        .editor
+        .model
+        .selection
+        .take()
+        .expect("a selection")
 }
 
+/// Write `selected`'s line through as text; whether that opened an undo
+/// step.
 pub(crate) fn write_text(
     doc: &mut Rc<Document>,
     libraries: &Libraries,
     selected: &mut Selection,
 ) -> bool {
-    write_with(doc, libraries, selected, text::edit)
-}
-
-pub(crate) fn write_with(
-    doc: &mut Rc<Document>,
-    libraries: &Libraries,
-    selected: &mut Selection,
-    update: impl Fn(&str, Option<&Value>) -> Option<Value> + 'static,
-) -> bool {
     crate::editing::commit_line(
         doc,
         libraries,
         selected,
-        &crate::libraries::line_edit::native(update),
+        &crate::libraries::line_edit::native(text::edit),
     )
 }
 
