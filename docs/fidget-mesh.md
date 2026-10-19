@@ -30,7 +30,7 @@ their voxel preview functions. Full-stock implicit GPU rendering is unsupported;
 The ordinary Fidget mesh viewport lowers and meshes each scene object's field with
 Fidget's CPU VM and Manifold Dual Contouring, in the supplied model-space
 bounds. There is **no mesh or image cache**, including while orbiting, zooming,
-resizing, or editing. The CAM `preview paths mesh` variant now composes a
+resizing, or editing. The CAM `preview paths mesh` variant composes a
 [dependency-tracked recording/stock/mesh graph](incremental.md), retaining valid
 geometry while camera views change. CAM stock construction/meshing runs
 asynchronously on native and the threaded web build; ordinary Fidget previews
@@ -104,9 +104,8 @@ draws, non-aligned readback row widths, and resource resizing/reuse.
 
 The existing `fidget_cube_profile_loop` exercises the mesh fixture and remeshes;
 `fidget_toolpaths_profile_loop` follows the Command+3 fixture, recording deferred
-mesh drawing. Its timing no longer includes GPU rendering; the paired
+mesh drawing. Its timing excludes GPU rendering; the paired
 `cam_mesh_roundtrip_profile` covers drawing plus full-editor composition.
-The updated default depth and cutter size differ from prior baselines.
 The ignored
 `editor_mesh_svg_capture` test captures the full editor with this example without
 opening a window; `editor_toolpath_mesh_svg_capture` captures Command+3. These

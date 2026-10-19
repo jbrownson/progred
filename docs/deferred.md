@@ -713,7 +713,7 @@ construction is separate work, not solved by inventing identities in the widget.
 
 ## Keyboard navigation and list reordering
 
-Ordinary arrows now use [layout-derived navigation](navigation.md). Placeholder
+Ordinary arrows use [layout-derived navigation](navigation.md). Placeholder
 Tab navigation, grow-selection commands, directional history, and moving a list
 item with a modifier-plus-arrow shortcut remain separate decisions. The range
 controls also remain pointer/touch-only.

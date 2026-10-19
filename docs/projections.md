@@ -148,7 +148,7 @@ ordinary preparation functions, not path-bearing layout opcodes.
 `descend` follows steps of the displayed structure without projecting
 intermediate containers. It preserves the current location interpretation,
 except that following a cell starts a location at its definition.
-`jump(steps, document_path)` extends the occurrence path by `steps`
+`jump(steps, document)` extends the occurrence path by `steps`
 but reads from an absolute, source-qualified document path. Its descendants
 conject to that source, for both projection reads and later edits; no inverse
 is required. `jump_to` reads from wherever a site is stored instead, such as

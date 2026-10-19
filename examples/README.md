@@ -135,7 +135,7 @@ The editable tilt defaults to 45°; each crossing family has a fixed cutter axis
 The example chooses the lean away from the vise using each operation's explicit
 setup-up vector, pulls along that lean, and orders rows for clockwise climb
 cutting. This is not yet a fixture collision check.
-Path positions now locate the tip, after normal compensation and the axial
+Path positions locate the tip, after normal compensation and the axial
 ball-center-to-tip shift. At the end of the toolpaths list, `ball tool` evaluates
 the common constructor and `square tool` is an editable profile with a wider,
 tapered non-cutting shank. Each displays a mirrored 2D profile beside its data.

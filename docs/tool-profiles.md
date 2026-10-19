@@ -89,8 +89,8 @@ It does not depend on playback accuracy.
 Playback has its own required, finite, positive `profile tolerance`, in the
 same units as the tool geometry. It supplies this to stock subtraction and the
 mesh/implicit tool display. Changing it changes the computation inputs, not
-the tool definition. The example keeps the prior value, `0.00025` inches, now
-in the playback record. Native `Tool::sweep` and `Stock::cut` similarly take
+the tool definition. The example sets it to `0.00025` inches in its
+playback record. Native `Tool::sweep` and `Stock::cut` similarly take
 tolerance as an explicit operation argument.
 
 Stock subtraction sweeps **only cutting sections**, independently, then unions
