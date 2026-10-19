@@ -124,9 +124,9 @@ pub(crate) struct Cx<'a> {
 }
 
 /// One occurrence in a view, as the widgets drawing it read the view.
-pub(crate) struct Occurrence<'a> {
-    pub(crate) cx: &'a Cx<'a>,
-    pub(crate) path: &'a [Step],
+struct Occurrence<'a> {
+    cx: &'a Cx<'a>,
+    path: &'a [Step],
 }
 
 impl Occurrence<'_> {

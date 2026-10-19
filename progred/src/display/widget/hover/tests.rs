@@ -1,7 +1,6 @@
 use super::*;
-use crate::display::recording::{Recorded, record};
+use crate::display::widget::HoverInput;
 use crate::display::widget::frame::HoverOutput;
-use crate::display::widget::{HoverContext, HoverInput};
 use kurbo::{Point, Rect};
 use puri::draw::DrawList;
 use puri::hover::Claim;
@@ -17,23 +16,23 @@ fn place_at(
     placement: Placement,
     input: HoverInput<'_, u32>,
 ) -> HoverOutput<(), u32> {
-    let before = match record(&layout) {
-        Recorded::Before { before, .. } | Recorded::After { after: before, .. } => before,
-        _ => panic!("native decorator"),
-    };
-    let mut output = HoverOutput::default();
-    crate::display::test_support::with_context(
-        &crate::display::test_support::NoProject,
-        |context| before(context),
-    )(
-        &mut HoverContext::new(input, &mut output, &mut Default::default()),
-        placement,
-    );
-    output
+    crate::display::test_support::place_before(&layout, placement, input).expect("native decorator")
 }
 
 #[test]
 fn a_border_uses_settled_geometry_without_requesting_site_or_event_capabilities() {
+    // Building it in a context that refuses its site fails if it asks.
+    let crate::display::recording::Recorded::After { after, .. } =
+        crate::display::recording::record(&crate::display::widget::border::<(), u32>(
+            crate::display::test_support::text("inside"),
+        ))
+    else {
+        panic!("a border decorates its child")
+    };
+    crate::display::test_support::with_siteless_context(
+        &crate::display::test_support::NoProject,
+        |context| drop(after(context)),
+    );
     let placement = Placement::root(Rect::new(10.0, 20.0, 40.0, 60.0));
     let output = place(
         crate::display::widget::border(crate::display::test_support::text("inside")),

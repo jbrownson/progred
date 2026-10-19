@@ -250,7 +250,8 @@ fn render_is_one_continuation_regardless_of_drawing_count() {
 
 #[test]
 fn inert_widgets_and_pointer_wrappers_do_not_request_site_state() {
-    crate::display::test_support::with_context::<crate::Editor, crate::frame::Hovered, _>(
+    // The context fails the test if any of these asks for its site or state.
+    crate::display::test_support::with_siteless_context::<crate::Editor, crate::frame::Hovered, _>(
         &crate::display::test_support::NoProject,
         |context| {
             let measured =

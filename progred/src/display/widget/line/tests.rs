@@ -9,22 +9,19 @@ fn read_only_line_needs_no_selection_or_editing_capabilities() {
                 edits: cx.edits.detached(vec![]),
                 ..cx.clone()
             };
-            let mut context = Context {
-                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
-                project,
-                value: None,
-                text,
-            };
-            let measured = view(
-                &mut context,
-                LineEdit {
-                    text: "read only".into(),
-                    update: Rc::new(|_, _| panic!("read-only line cannot write")),
-                    prefix: String::new(),
-                    suffix: String::new(),
-                    family: TextFamily::default(),
-                },
-            );
+            let measured =
+                crate::projection::test_support::at_root(&cx, text, project, None, |context| {
+                    view(
+                        context,
+                        LineEdit {
+                            text: "read only".into(),
+                            update: Rc::new(|_, _| panic!("read-only line cannot write")),
+                            prefix: String::new(),
+                            suffix: String::new(),
+                            family: TextFamily::default(),
+                        },
+                    )
+                });
             let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
             let output =
                 crate::display::widget::frame::place(measured, placement, &Default::default());

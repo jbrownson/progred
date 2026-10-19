@@ -1,7 +1,7 @@
 use crate::display::Env;
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
-use crate::display::test_support::{mouse, press_at};
+use crate::display::test_support::{place_before, press_at};
 use crate::display::widget;
 use crate::display::widget::placed::leaf;
 use crate::projection::Layout;
@@ -15,9 +15,15 @@ use uig::Placement;
 
 /// Exercise an offer's actual handler, including its selection effects.
 pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
+    let mut world = pending_root();
+    (offer.activate)(&mut world.session());
+    world
+}
+
+/// An empty document's editor, its missing root a pending hole.
+fn pending_root() -> Editor {
     let mut world = crate::test_editor(gid::Document::default());
     world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
-    (offer.activate)(&mut world.session());
     world
 }
 
@@ -55,30 +61,21 @@ pub fn point_update(
     layout: &impl Recordable<Editor, Hovered>,
     point: crate::display::PointEvent,
 ) -> crate::display::PointUpdate {
-    let Recorded::Before { before, .. } = layout.record() else {
-        panic!("expected a point-control wrapper");
-    };
-    let place = with_context(&crate::display::test_support::NoProject, |context| {
-        before(context)
-    });
+    let output = place_before(
+        layout,
+        Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0)),
+        Default::default(),
+    )
+    .expect("a point-control wrapper");
     let mut world = crate::test_editor(gid::Document::default());
     world.model.selection = Some(crate::selection::Selection::edge(
         &crate::test_root(),
         vec![],
     ));
-    let mut output = widget::frame::HoverOutput::default();
-    place(
-        &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
-        uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 100.0, 100.0)),
-    );
-    let mut event = press_at(Point::ZERO, Modifiers::empty());
-    event.state.position = (50.0, 50.0).into();
-    assert!(
-        output
-            .handler
-            .unwrap()
-            .dispatch_pointer_down(&mut world, &event)
-    );
+    assert!(output.handler.unwrap().dispatch_pointer_down(
+        &mut world,
+        &press_at(Point::new(50.0, 50.0), Modifiers::empty())
+    ));
     world.advance_gesture(&[kurbo::Point::new(point.x * 100.0, point.y * 100.0)]);
     crate::display::PointUpdate {
         value: world.model.doc.root.clone().expect("contact writes"),
@@ -92,26 +89,17 @@ pub fn point_update(
 }
 
 pub fn claim(layout: &impl Recordable<Editor, Hovered>) -> Option<puri::hover::Claim<Hovered>> {
-    let Recorded::Before { before, .. } = layout.record() else {
-        return None;
-    };
-    let place = with_context(&crate::display::test_support::NoProject, |context| {
-        before(context)
-    });
-    let mut output = widget::frame::HoverOutput::default();
-    let placement = uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0));
-    place(
-        &mut widget::HoverContext::new(
-            widget::HoverInput {
-                pointer: Some(placement.rect.center()),
-                ..Default::default()
-            },
-            &mut output,
-            &mut Default::default(),
-        ),
+    let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
+    place_before(
+        layout,
         placement,
-    );
-    output.claim.map(|(_, claim)| claim)
+        widget::HoverInput {
+            pointer: Some(placement.rect.center()),
+            ..Default::default()
+        },
+    )?
+    .claim
+    .map(|(_, claim)| claim)
 }
 
 pub fn assert_delimiter(
@@ -119,18 +107,9 @@ pub fn assert_delimiter(
     delim: puri::delim::Delim,
     side: puri::delim::Side,
 ) {
-    use kurbo::{Affine, Point};
+    use kurbo::Affine;
     use puri::draw::{DrawCmd, DrawList};
-    use uig::Placement;
-    let measured = with_context(&crate::display::test_support::NoProject, |context| {
-        widget(context)
-    });
-    let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
-    let fragment = crate::display::widget::frame::place(measured, placement, &Default::default());
-    let mut canvas = DrawList::new();
-    for render in fragment.bind(Default::default()).renders {
-        render(&mut canvas);
-    }
+    let (_, canvas) = paint(&Layout::widget(widget.clone()));
     let mut expected = DrawList::new();
     puri::delim::draw_stretched(
         delim,
@@ -215,48 +194,26 @@ pub fn project_runtime(
 }
 
 pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
-    let Recorded::Before { before, .. } = layout.record() else {
-        return None;
-    };
-    let place = with_context(&crate::display::test_support::NoProject, |context| {
-        before(context)
-    });
-    let mut output = widget::frame::HoverOutput::default();
-    place(
-        &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
-        uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0)),
-    );
-    let mut world = crate::test_editor(gid::Document::default());
-    world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
-    let event = ui_events::pointer::PointerButtonEvent {
-        button: Some(ui_events::pointer::PointerButton::Primary),
-        pointer: mouse(),
-        state: ui_events::pointer::PointerState {
-            modifiers: ui_events::keyboard::Modifiers::META
-                | ui_events::keyboard::Modifiers::CONTROL,
-            ..Default::default()
-        },
-    };
+    let output = place_before(
+        layout,
+        Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
+        Default::default(),
+    )?;
+    let mut world = pending_root();
     output.handler?.dispatch_pointer_down_with(
         &mut world,
-        &event,
+        &press_at(Point::ZERO, crate::modifiers::command()),
         &mut widget::frame::DispatchContext::new(None, Some(hover(vec![]))),
     );
     world.model.doc.root.clone()
 }
 
 pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
-    let Recorded::Before { before, .. } = layout.record() else {
-        return None;
-    };
-    let place = with_context(&crate::display::test_support::NoProject, |context| {
-        before(context)
-    });
-    let mut output = widget::frame::HoverOutput::default();
-    place(
-        &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
-        uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0)),
-    );
+    let output = place_before(
+        layout,
+        Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
+        Default::default(),
+    )?;
     let mut world = crate::test_editor(gid::Document::default());
     output.handler?.dispatch_key(
         &mut world,
@@ -266,10 +223,6 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
         },
     );
     world.model.workspace.document.annotations.at(&[]).cloned()
-}
-
-pub fn target() -> Hovered {
-    crate::libraries::test_widgets::hover(vec![])
 }
 
 pub fn gesture_place(
@@ -284,15 +237,16 @@ pub fn gesture_place(
     crate::display::test_support::with_empty_view(
         &crate::display::test_support::NoProject,
         |cx, text, project| {
-            let mut cx = cx.clone();
-            if readonly {
-                cx.edits = cx.edits.detached(vec![]);
-            }
-            before(&mut crate::display::widget::Context {
-                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
-                project,
-                value: None,
-                text,
+            let cx = crate::projection::Cx {
+                edits: if readonly {
+                    cx.edits.detached(vec![])
+                } else {
+                    cx.edits.clone()
+                },
+                ..cx.clone()
+            };
+            crate::projection::test_support::at_root(&cx, text, project, None, |context| {
+                before(context)
             })
         },
     )

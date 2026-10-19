@@ -177,51 +177,47 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
                 view: &root,
                 ..cx.clone()
             };
-            let mut context = widget::Context {
-                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
-                text,
-                project,
-                value: None,
-            };
-            let start = std::time::Instant::now();
-            let controls = ::grap::evaluate(controls, &sources, ::grap::DEFAULT_FUEL).result;
-            let (widgets, parameters) =
-                super::controls_output(&controls, None, width, &context).unwrap();
-            eprintln!("CAM controls width {width}: {:?}", start.elapsed());
-            let tree = parameters
-                .field(names["playback"])
-                .unwrap()
-                .field(ITEMS)
-                .unwrap();
-            if let Some(previous) = &previous {
-                assert!(
-                    previous.same_result(&tree),
-                    "native leaf code and captures must be reused"
+            crate::projection::test_support::at_root(&cx, text, project, None, |context| {
+                let start = std::time::Instant::now();
+                let controls = ::grap::evaluate(controls, &sources, ::grap::DEFAULT_FUEL).result;
+                let (widgets, parameters) =
+                    super::controls_output(&controls, None, width, context).unwrap();
+                eprintln!("CAM controls width {width}: {:?}", start.elapsed());
+                let tree = parameters
+                    .field(names["playback"])
+                    .unwrap()
+                    .field(ITEMS)
+                    .unwrap();
+                if let Some(previous) = &previous {
+                    assert!(
+                        previous.same_result(&tree),
+                        "native leaf code and captures must be reused"
+                    );
+                }
+                previous = Some(tree.clone());
+                assert_eq!(widgets.len(), 7, "radio, playback, and five grouping rows");
+                // A genuinely generated leaf links to its producer after all mapping,
+                // control declaration, collection, memo, and widget boundaries.
+                let measured = widgets[2](context);
+                let point = puri_widgets::range_slider::RangeSlider::new(504, 0..504)
+                    .unwrap()
+                    .item_rect(Rect::new(PADDING_X, 0.0, width - PADDING_X, 20.0), 1.0, 0)
+                    .unwrap()
+                    .center();
+                let placed = widget::frame::place(
+                    measured,
+                    Placement::root(Rect::new(0.0, 0.0, width, 20.0)),
+                    &widget::HoverInput {
+                        pointer: Some(point),
+                        ..Default::default()
+                    },
                 );
-            }
-            previous = Some(tree.clone());
-            assert_eq!(widgets.len(), 7, "radio, playback, and five grouping rows");
-            // A genuinely generated leaf links to its producer after all mapping,
-            // control declaration, collection, memo, and widget boundaries.
-            let measured = widgets[2](&mut context);
-            let point = puri_widgets::range_slider::RangeSlider::new(504, 0..504)
-                .unwrap()
-                .item_rect(Rect::new(PADDING_X, 0.0, width - PADDING_X, 20.0), 1.0, 0)
-                .unwrap()
-                .center();
-            let placed = widget::frame::place(
-                measured,
-                Placement::root(Rect::new(0.0, 0.0, width, 20.0)),
-                &widget::HoverInput {
-                    pointer: Some(point),
-                    ..Default::default()
-                },
-            );
-            assert!(
-                matches!(&placed.claim, Some((_,puri::hover::Claim::Direct(crate::frame::Hovered::Tree(crate::hover::Hover::Source(crate::display::widget::source::SourceTrace::InCell {cell,..}))))) if *cell==names["diagonal_groups"]),
-                "{:?}",
-                placed.claim
-            );
+                assert!(
+                    matches!(&placed.claim, Some((_,puri::hover::Claim::Direct(crate::frame::Hovered::Tree(crate::hover::Hover::Source(crate::display::widget::source::SourceTrace::InCell {cell,..}))))) if *cell==names["diagonal_groups"]),
+                    "{:?}",
+                    placed.claim
+                );
+            })
         });
     }
 }
@@ -1065,16 +1061,12 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
                 selected_trace: selected,
                 ..cx.clone()
             };
-            let mut context = widget::Context {
-                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
-                text,
-                project,
-                value: None,
-            };
-            selection
-                .widgets(A, 180.0, Some(decorate.clone()))
-                .next()
-                .unwrap()(&mut context)
+            crate::projection::test_support::at_root(&cx, text, project, None, |context| {
+                selection
+                    .widgets(A, 180.0, Some(decorate.clone()))
+                    .next()
+                    .unwrap()(context)
+            })
         });
         let placed = widget::frame::place(
             measured,

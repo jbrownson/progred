@@ -3,7 +3,7 @@ use crate::display::test_support::ResolveForDispatch;
 use crate::display::test_support::press_at;
 use crate::display::widget::placed::leaf;
 use crate::libraries::f64 as f64_convention;
-use crate::libraries::test_widgets::{drag_frame, gesture_place, target};
+use crate::libraries::test_widgets::{drag_frame, gesture_place, hover};
 use crate::selection::{Stage, pending_value};
 use gid::{Step, new_cell_id};
 use kurbo::Point;
@@ -26,7 +26,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
             gesture_place(
                 crate::libraries::number::scrub::on_scrub(
                     crate::display::row(0.0, []),
-                    target(),
+                    hover(vec![]),
                     Rc::new(|| {
                         Box::new(|_| crate::libraries::number::scrub::ScrubUpdate {
                             value: f64_convention::value(13.0),
@@ -54,7 +54,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
             ),
             &mut crate::frame::DispatchContext::new(
                 owns_view.then(crate::test_root),
-                Some(target()),
+                Some(hover(vec![])),
             ),
         );
         assert_eq!(handled, covered || expected);
@@ -85,7 +85,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         let scrub = gesture_place(
             crate::libraries::number::scrub::on_scrub(
                 crate::display::row(0.0, []),
-                target(),
+                hover(vec![]),
                 Rc::new(|| {
                     Box::new(|_| crate::libraries::number::scrub::ScrubUpdate {
                         value: f64_convention::value(13.0),
@@ -114,7 +114,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
             ),
             move |_, output| {
                 output.on_press(
-                    target(),
+                    hover(vec![]),
                     |_, _| false,
                     move |world: &mut crate::Editor, _| {
                         world
@@ -133,7 +133,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press_at(Point::new(5.0, 5.0), crate::modifiers::command()),
-            &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target())),
+            &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hover(vec![]))),
         ));
         assert_eq!(raw_contacts.get(), usize::from(raw));
         assert_eq!(world.gesture.is_some(), !pending && !raw);

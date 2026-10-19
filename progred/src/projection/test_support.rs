@@ -109,6 +109,23 @@ pub(crate) fn framed(
     )
 }
 
+/// What `run` makes of a widget context at the root of the view `cx`,
+/// drawing `value` when given.
+pub(crate) fn at_root<W: 'static, H: 'static, R>(
+    cx: &Cx<'_>,
+    text: &mut TextCtx<'_>,
+    project: &dyn crate::display::widget::project::Project<W, H>,
+    value: Option<&grap::RuntimeValue>,
+    run: impl FnOnce(&mut crate::display::widget::Context<'_, '_, W, H>) -> R,
+) -> R {
+    run(&mut crate::display::widget::Context {
+        text,
+        project,
+        toolkit: &Occurrence { cx, path: &[] },
+        value,
+    })
+}
+
 /// The entries the picker open at `selection` offers in `world`.
 pub(crate) fn offered(
     world: &mut crate::Editor,

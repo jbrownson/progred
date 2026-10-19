@@ -3,7 +3,7 @@ use crate::display::test_support::ResolveForDispatch;
 use crate::display::test_support::press_at;
 use crate::display::widget::view::Root;
 use crate::libraries::f64;
-use crate::libraries::test_widgets::{drag_frame, gesture_place, target};
+use crate::libraries::test_widgets::{drag_frame, gesture_place, hover};
 use gid::{Document, Path, Step};
 use kurbo::Point;
 use ui_events::keyboard::Modifiers;
@@ -45,7 +45,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
             gesture_place(
                 crate::display::on_state_drag(
                     crate::display::row(0.0, []),
-                    target(),
+                    hover(vec![]),
                     Rc::new(move |session| {
                         select_log.borrow_mut().push("select");
                         if accepts {
@@ -68,7 +68,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press_at(Point::new(5.0, 5.0), Modifiers::empty()),
-            &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target())),
+            &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hover(vec![]))),
         );
         assert_eq!(handled, covered || accepts);
         assert_eq!(world.gesture.is_some(), accepts && !covered);
@@ -130,7 +130,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             gesture_place(
                 crate::display::on_state_drag(
                     crate::display::row(0.0, []),
-                    target(),
+                    hover(vec![]),
                     Rc::new(|_| true),
                     Rc::new(|| Box::new(|_, _| Value::record([]))),
                 ),
@@ -147,7 +147,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             &event,
             &mut crate::frame::DispatchContext::new(
                 owns_view.then(crate::test_root),
-                Some(target()),
+                Some(hover(vec![])),
             ),
         );
         assert_eq!(handled, expected);
@@ -160,7 +160,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
     for layout in [
         crate::libraries::number::scrub::on_scrub(
             crate::display::row(0.0, []),
-            target(),
+            hover(vec![]),
             Rc::new(|| panic!("read-only scrub")),
         ),
         crate::display::on_point(
@@ -178,7 +178,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
                     &press_at(Point::new(5.0, 5.0), crate::modifiers::command()),
                     &mut crate::frame::DispatchContext::new(
                         Some(crate::test_root()),
-                        Some(target())
+                        Some(hover(vec![]))
                     )
                 ))
         );

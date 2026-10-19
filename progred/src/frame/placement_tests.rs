@@ -95,12 +95,13 @@ fn native_delimiter(
                 styles: &styles,
                 ..cx.clone()
             };
-            widget::fill_height(side)(&mut widget::Context {
-                value: Some(&value.into()),
-                toolkit: &crate::projection::Occurrence { cx: &cx, path: &[] },
-                project,
+            crate::projection::test_support::at_root(
+                &cx,
                 text,
-            })
+                project,
+                Some(&value.into()),
+                |context| widget::fill_height(side)(context),
+            )
         },
     );
     let extent = Extent {

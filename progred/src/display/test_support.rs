@@ -270,13 +270,121 @@ pub fn with_sources<W: 'static, H: 'static, R>(
     run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
 ) -> R {
     with_view(sources, project, |cx, text, project| {
+        crate::projection::test_support::at_root(cx, text, project, None, run)
+    })
+}
+
+/// [`with_context`], with a toolkit that fails the test when a widget asks
+/// for its occurrence's site or per-path state.
+pub fn with_siteless_context<W: 'static, H: 'static, R>(
+    project: &dyn widget::project::Project<W, H>,
+    run: impl FnOnce(&mut widget::Context<'_, '_, W, H>) -> R,
+) -> R {
+    with_context(project, |context| {
+        let toolkit = NoSite(context.toolkit);
         run(&mut widget::Context {
-            text,
-            project,
-            toolkit: &crate::projection::Occurrence { cx, path: &[] },
-            value: None,
+            project: context.project,
+            text: &mut *context.text,
+            toolkit: &toolkit,
+            value: context.value,
         })
     })
+}
+
+/// A toolkit reading as the one it wraps, except that it fails the test
+/// when asked for the occurrence's site or per-path state.
+struct NoSite<'a>(&'a dyn crate::display::Toolkit);
+
+impl crate::display::Viewing for NoSite<'_> {
+    fn scale(&self) -> f64 {
+        self.0.scale()
+    }
+    fn writable(&self) -> bool {
+        self.0.writable()
+    }
+    fn host(&self) -> &dyn ::grap::Host {
+        self.0.host()
+    }
+    fn computations(&self) -> &crate::computations::Computations {
+        self.0.computations()
+    }
+    fn state_below(&self, _: &[Step]) -> Option<&Value> {
+        panic!("unexpected request for per-path state")
+    }
+    fn selected_below(&self, steps: &[Step]) -> bool {
+        self.0.selected_below(steps)
+    }
+}
+
+impl crate::display::Toolkit for NoSite<'_> {
+    fn path(&self) -> &[Step] {
+        self.0.path()
+    }
+    fn view(&self) -> &widget::view::Root {
+        self.0.view()
+    }
+    fn scope(&self) -> &crate::editing::Scope {
+        self.0.scope()
+    }
+    fn site(&self) -> crate::editing::Site {
+        panic!("unexpected request for the occurrence's site")
+    }
+    fn styles(&self) -> &widget::style::Styles {
+        self.0.styles()
+    }
+    fn sources(&self) -> crate::sources::Sources<'_> {
+        self.0.sources()
+    }
+    fn location(&self) -> Option<crate::location::Location<'_>> {
+        self.0.location()
+    }
+    fn focused(&self) -> bool {
+        self.0.focused()
+    }
+    fn raw(&self) -> bool {
+        self.0.raw()
+    }
+    fn selection(&self) -> Option<&crate::selection::Selection> {
+        self.0.selection()
+    }
+    fn selected(&self) -> bool {
+        self.0.selected()
+    }
+    fn label_query(&self) -> Option<&puri::edit::LineEditState> {
+        self.0.label_query()
+    }
+    fn completions(&self) -> Option<&crate::display::CompletionProvider> {
+        self.0.completions()
+    }
+    fn name(&self, cell: CellId) -> Option<&str> {
+        self.0.name(cell)
+    }
+    fn selected_trace(&self) -> Option<&widget::source::SourceTrace> {
+        self.0.selected_trace()
+    }
+    fn trace_below(&self, steps: &[Step]) -> Option<widget::source::SourceTrace> {
+        self.0.trace_below(steps)
+    }
+}
+
+/// What the decorator `layout` leads or ends with places at `placement`,
+/// the pointer as `input` says; `None` when it isn't a decorator.
+pub fn place_before<W: 'static, H: Clone + 'static>(
+    layout: &impl Recordable<W, H>,
+    placement: uig::Placement,
+    input: widget::HoverInput<'_, H>,
+) -> Option<widget::frame::HoverOutput<W, H>> {
+    match layout.record() {
+        Recorded::Before { before, .. } | Recorded::After { after: before, .. } => {
+            let mut output = widget::frame::HoverOutput::default();
+            with_context(&NoProject, |context| before(context))(
+                &mut widget::HoverContext::new(input, &mut output, &mut Default::default()),
+                placement,
+            );
+            Some(output)
+        }
+        _ => None,
+    }
 }
 
 /// [`with_view`] over an empty document and no libraries.
