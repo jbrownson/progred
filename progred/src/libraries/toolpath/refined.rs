@@ -111,23 +111,24 @@ impl Computation {
                 // old implicit job without scheduling a new one ahead of the mesh.
                 let geometry = geometry.read(read)?;
                 let image = image.read(read)?;
-                if geometry.is_err() {
-                    return Ok(View::Mesh(geometry, None));
-                }
-                Ok(match image.as_ref() {
-                    Ok(image) => match (&image.image, image.stale) {
-                        (Some(frame), false) => View::Implicit(
-                            Ok(Refinement {
-                                frame: frame.clone(),
-                                pending: image.pending,
-                                progress: image.progress,
-                            }),
-                            geometry,
-                        ),
-                        _ => View::Mesh(geometry, image.progress),
-                    },
-                    // A current error is a result too; don't hide it behind old geometry.
-                    Err(error) => View::Implicit(Err(error.clone()), geometry),
+                Ok(if geometry.is_err() {
+                    View::Mesh(geometry, None)
+                } else {
+                    match image.as_ref() {
+                        Ok(image) => match (&image.image, image.stale) {
+                            (Some(frame), false) => View::Implicit(
+                                Ok(Refinement {
+                                    frame: frame.clone(),
+                                    pending: image.pending,
+                                    progress: image.progress,
+                                }),
+                                geometry,
+                            ),
+                            _ => View::Mesh(geometry, image.progress),
+                        },
+                        // A current error is a result too; don't hide it behind old geometry.
+                        Err(error) => View::Implicit(Err(error.clone()), geometry),
+                    }
                 })
             },
             |_, _| false,

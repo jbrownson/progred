@@ -118,23 +118,23 @@ fn surface(
     });
     // Paths and cutter redraw immediately. Let each admitted surface finish,
     // then catch up to the latest inputs, without a queue of drag samples.
-    tasks.memo_conflated(prepared, |prepared, cancel| {
-        let request = match prepared {
-            Ok(request) => request,
-            Err(failure) => return Ok(Err(failure)),
-        };
-        cancel.check()?;
-        let shape = remaining_shape(&request);
-        cancel.check()?;
-        let shape = match shape {
-            Ok(shape) => shape,
-            Err(failure) => return Ok(Err(failure)),
-        };
-        let mut geometry = Geometry::default();
-        Ok(shape
-            .append(&mut geometry, request.depth, cancel)?
-            .map(|()| geometry.into())
-            .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
+    tasks.memo_conflated(prepared, |prepared, cancel| match prepared {
+        Ok(request) => {
+            cancel.check()?;
+            let shape = remaining_shape(&request);
+            cancel.check()?;
+            match shape {
+                Ok(shape) => {
+                    let mut geometry = Geometry::default();
+                    Ok(shape
+                        .append(&mut geometry, request.depth, cancel)?
+                        .map(|()| geometry.into())
+                        .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
+                }
+                Err(failure) => Ok(Err(failure)),
+            }
+        }
+        Err(failure) => Ok(Err(failure)),
     })
 }
 

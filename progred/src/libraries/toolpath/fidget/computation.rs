@@ -176,12 +176,10 @@ fn image_with<S: Send + Sync + 'static>(
     let scene_input = runtime.memo({
         let requested_scene = requested_scene.clone();
         move |read| {
-            if let Some(ready) = &ready
-                && !*ready.read(read)?
-            {
-                return Ok(None);
-            }
-            Ok(Some((*requested_scene.read(read)?).clone()))
+            Ok(match &ready {
+                Some(ready) if !*ready.read(read)? => None,
+                _ => Some((*requested_scene.read(read)?).clone()),
+            })
         }
     });
     let compiled =
@@ -234,34 +232,36 @@ fn image_with<S: Send + Sync + 'static>(
             let requested_scene = requested_scene.read(read)?;
             let availability = worker.read(read)?;
             let progress = worker.progress(read)?;
-            if let Err(failure) = &*requested_scene {
-                return Ok(Err(failure.clone()));
-            }
-            if let Availability::Ready(scene) = &*compiled.read(read)?
-                && let Err(failure) = scene.as_ref()
-            {
-                return Ok(Err(failure.clone()));
-            }
-            Ok(match &*availability {
-                Availability::Ready(image) | Availability::Refining(image) => image
-                    .as_ref()
-                    .as_ref()
-                    .map(|image| ViewImage {
-                        image: Some(image.clone()),
-                        pending: matches!(&*availability, Availability::Refining(_)),
-                        stale: false,
+            let failure = match &*requested_scene {
+                Err(failure) => Some(failure.clone()),
+                Ok(_) => match &*compiled.read(read)? {
+                    Availability::Ready(scene) => scene.as_ref().as_ref().err().cloned(),
+                    _ => None,
+                },
+            };
+            Ok(match failure {
+                Some(failure) => Err(failure),
+                None => match &*availability {
+                    Availability::Ready(image) | Availability::Refining(image) => image
+                        .as_ref()
+                        .as_ref()
+                        .map(|image| ViewImage {
+                            image: Some(image.clone()),
+                            pending: matches!(&*availability, Availability::Refining(_)),
+                            stale: false,
+                            progress,
+                        })
+                        .map_err(Clone::clone),
+                    Availability::Pending { previous } => Ok(ViewImage {
+                        image: previous
+                            .as_deref()
+                            .and_then(|result| result.as_ref().ok())
+                            .cloned(),
+                        pending: true,
+                        stale: previous.is_some(),
                         progress,
-                    })
-                    .map_err(Clone::clone),
-                Availability::Pending { previous } => Ok(ViewImage {
-                    image: previous
-                        .as_deref()
-                        .and_then(|result| result.as_ref().ok())
-                        .cloned(),
-                    pending: true,
-                    stale: previous.is_some(),
-                    progress,
-                }),
+                    }),
+                },
             })
         },
         |_, _| false,

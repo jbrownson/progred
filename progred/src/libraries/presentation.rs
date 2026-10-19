@@ -182,12 +182,14 @@ pub(crate) fn document_libraries<W: Host>(loaded: Partial<W>) -> Partial<W> {
                         )
                     },
                 );
-                let layout = match layout {
+                match layout {
                     // The view chose what to show; only a field being added
                     // follows it.
-                    Some(layout) => {
-                        crate::display::structure::with_extra_fields(input, |_| true, layout)
-                    }
+                    Some(layout) => Some(crate::display::structure::with_extra_fields(
+                        input,
+                        |_| true,
+                        layout,
+                    )),
                     None => Some(evaluation.result)
                         .filter(|result| evaluation.completed && result.absent_reason().is_none())
                         .map(|result| {
@@ -197,13 +199,15 @@ pub(crate) fn document_libraries<W: Host>(loaded: Partial<W>) -> Partial<W> {
                                 Some(loaded.clone()),
                                 Some(loaded.clone()),
                             )
-                        })?,
-                };
-                let occurrence = occurrence.clone();
-                Some(Layout::new(move |builder| {
-                    let _drawing = Drawing::at(occurrence.clone());
-                    layout.run(builder)
-                }))
+                        }),
+                }
+                .map(|layout| {
+                    let occurrence = occurrence.clone();
+                    Layout::new(move |builder| {
+                        let _drawing = Drawing::at(occurrence.clone());
+                        layout.run(builder)
+                    })
+                })
             })
     })
 }
