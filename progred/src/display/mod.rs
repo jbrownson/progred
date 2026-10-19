@@ -328,13 +328,12 @@ pub trait Env {
     }
 }
 
-/// Everything a partial projection receives for one value. The
-/// default selection callback and matching hover claim may be used,
-/// wrapped, ignored, or replaced; no central action vocabulary is
-/// involved. Editor state arrives POSITIONALLY and as DATA: the
-/// selection's payload when this value's path is the selected one,
-/// and this path's annotation record — never an address, never a
-/// store.
+/// Everything a partial projection receives for one value. It lends its
+/// occurrence as a site to act on, which [`ProjectionInput::site`] gives; no
+/// central action vocabulary is involved. Editor state arrives POSITIONALLY
+/// and as DATA: the selection's payload when this value's path is the
+/// selected one, and this path's annotation record — never an address,
+/// never a store.
 pub struct ProjectionInput<'a, World, Hover, V = Value> {
     pub env: &'a dyn Env,
     /// The composed default for child projections. Clone and compose it
