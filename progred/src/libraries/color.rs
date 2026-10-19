@@ -2,12 +2,12 @@
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{
-    PointEvent, PointUpdate, TextFamily, centered_row, col, descend, on_activate, on_hover,
-    on_point, popover, widget,
+    PointEvent, PointUpdate, TextFamily, centered_row, col, on_activate, on_hover, on_point,
+    popover, widget,
 };
 use crate::libraries::{Library, f64, name};
 use ::grap::RuntimeValue;
-use gid::{Step, Value};
+use gid::Value;
 use kurbo::{Affine, Rect, RoundedRect, Stroke};
 use peniko::Color;
 use puri::draw::{Canvas, CanvasSink};
@@ -373,25 +373,11 @@ fn present<W: Host>(
     } else {
         swatch
     };
-    let name = value
-        .field(name::vocabulary::NAME)
-        .filter(|value| value.as_text().is_some())
-        .map(|_| descend([Step::Key(name::vocabulary::NAME)], None, None));
-    let named = name.is_some();
     let spelling = crate::display::line_edit(hex_editor(encoded));
     Some(crate::display::structure::with_extra_fields(
         input,
-        |key| {
-            key == vocabulary::RGB
-                || key == vocabulary::RGBA
-                || (named && key == name::vocabulary::NAME)
-        },
-        centered_row(
-            4.0,
-            std::iter::once(swatch)
-                .chain(name)
-                .chain(std::iter::once(spelling)),
-        ),
+        |key| key == vocabulary::RGB || key == vocabulary::RGBA || key == name::vocabulary::NAME,
+        name::with_name(input, centered_row(4.0, [swatch, spelling])),
     ))
 }
 

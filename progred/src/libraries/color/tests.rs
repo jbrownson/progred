@@ -1,4 +1,5 @@
 use super::*;
+use gid::Step;
 
 pub(crate) fn value(color: Color) -> Value {
     let rgba = color.to_rgba8();
@@ -197,16 +198,23 @@ fn a_named_color_projects_its_editable_name_and_hex() {
     let Recorded::Row { children, .. } = layout.record() else {
         panic!("named color projection is one row")
     };
-    let [_, name_field, spelling] = children.as_slice() else {
-        panic!("a swatch, its name and its spelling")
+    let [name_field, drawn] = children.as_slice() else {
+        panic!("its name, then the color")
     };
-
+    // The name reads as a name, as a number's does, not as quoted text.
     assert!(matches!(&inspect(name_field),
         ProjectionCall::Descend {
             steps,
+            projection: Some(_),
             ..
         } if *steps == [Step::Key(name::vocabulary::NAME)]
     ));
+    let Recorded::Row { children, .. } = drawn.content() else {
+        panic!("the color is a row")
+    };
+    let [_, spelling] = children.as_slice() else {
+        panic!("a swatch and its spelling")
+    };
     assert!(matches!(spelling, Recorded::Widget(_)));
     assert!(matches!(
         hex_editor(encoded(&color).unwrap()),
