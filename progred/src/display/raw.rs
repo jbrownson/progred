@@ -241,7 +241,7 @@ fn entries<W: Host>(request: &CompletionRequest<'_>) -> Vec<Entry<W>> {
     )
     .into_iter()
     .map(|ranked| {
-        let fuzzy = ranked.fuzzy();
+        let fuzzy = ranked.fuzzy;
         (
             Entry {
                 matches: ranked.matches,

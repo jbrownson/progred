@@ -1,31 +1,35 @@
-//! Compositional completion filtering, carried from the TypeScript
-//! prototype (archived at `archive/pre-root-promotion`): tiers
-//! chain over the previous tier's rejects, so every item lands in its
-//! best tier — exact prefix, exact substring, their case-insensitive
-//! forms, then fuzzy subsequence — with each tier sorted by the
-//! fraction of the haystack matched, and match spans (byte offsets)
-//! driving highlight rendering. Unlike the TypeScript version,
-//! case-insensitive tiers compare per character on the original
-//! string, so spans stay byte-correct under case folding.
+//! Compositional completion filtering: tiers chain over the previous
+//! tier's rejects, so every item lands in its best tier — exact prefix,
+//! exact substring, their case-insensitive forms, then fuzzy subsequence —
+//! with each tier sorted by the fraction of the haystack matched, and match
+//! spans (byte offsets) driving highlight rendering. Case-insensitive tiers
+//! compare per character on the original string, so spans stay byte-correct
+//! under case folding.
 
 use std::ops::Range;
 
 pub struct Ranked<A> {
     pub item: A,
     pub matches: Vec<Range<usize>>,
-    tier: usize,
-}
-
-impl<A> Ranked<A> {
-    /// Whether the item was accepted by a fuzzy-subsequence tier
-    /// rather than a prefix/substring one — a weak signal callers may
-    /// rank differently.
-    pub fn fuzzy(&self) -> bool {
-        self.tier >= 4
-    }
+    /// Whether a fuzzy-subsequence tier accepted the item rather than a
+    /// prefix or substring one — a weak signal callers may rank differently.
+    pub fuzzy: bool,
 }
 
 type CharEq = fn(char, char) -> bool;
+
+type Matcher = fn(&str, &str, CharEq) -> Option<Vec<Range<usize>>>;
+
+/// Each tier's matcher, how it compares characters, and whether it's fuzzy,
+/// best first.
+const TIERS: [(Matcher, CharEq, bool); 6] = [
+    (prefix, exact, false),
+    (substring, exact, false),
+    (prefix, case_insensitive, false),
+    (substring, case_insensitive, false),
+    (fuzzy, exact, true),
+    (fuzzy, case_insensitive, true),
+];
 
 fn exact(a: char, b: char) -> bool {
     a == b
@@ -50,16 +54,12 @@ fn prefix(needle: &str, haystack: &str, eq: CharEq) -> Option<Vec<Range<usize>>>
 
 fn substring(needle: &str, haystack: &str, eq: CharEq) -> Option<Vec<Range<usize>>> {
     haystack.char_indices().find_map(|(start, _)| {
-        let mut len = 0;
-        let mut haystack_chars = haystack[start..].chars();
-        for n in needle.chars() {
-            let h = haystack_chars.next()?;
-            if !eq(n, h) {
-                return None;
-            }
-            len += h.len_utf8();
-        }
-        Some(vec![start..start + len])
+        prefix(needle, &haystack[start..], eq).map(|matches| {
+            matches
+                .into_iter()
+                .map(|range| start + range.start..start + range.end)
+                .collect()
+        })
     })
 }
 
@@ -78,53 +78,48 @@ fn fuzzy(needle: &str, haystack: &str, eq: CharEq) -> Option<Vec<Range<usize>>> 
 /// spans — a span means "these characters matched your query", and
 /// an empty query matched none (the popup bolds spans; nothing typed,
 /// nothing bold).
-pub fn rank<A>(items: Vec<A>, key: impl Fn(&A) -> &str, needle: &str) -> Vec<Ranked<A>> {
+fn rank<A>(items: Vec<A>, key: impl Fn(&A) -> &str, needle: &str) -> Vec<Ranked<A>> {
     if needle.is_empty() {
-        return items
+        items
             .into_iter()
             .map(|item| Ranked {
                 item,
                 matches: Vec::new(),
-                tier: 0,
+                fuzzy: false,
             })
-            .collect();
-    }
-    let tiers: [(fn(&str, &str, CharEq) -> Option<Vec<Range<usize>>>, CharEq); 6] = [
-        (prefix, exact),
-        (substring, exact),
-        (prefix, case_insensitive),
-        (substring, case_insensitive),
-        (fuzzy, exact),
-        (fuzzy, case_insensitive),
-    ];
-    let mut remaining = items;
-    let mut ranked = Vec::new();
-    for (tier, (matcher, eq)) in tiers.into_iter().enumerate() {
-        let mut accepted = Vec::new();
-        remaining = remaining
+            .collect()
+    } else {
+        let fraction = |ranked: &Ranked<A>| {
+            let matched: usize = ranked.matches.iter().map(|m| m.len()).sum();
+            matched as f64 / key(&ranked.item).len().max(1) as f64
+        };
+        TIERS
             .into_iter()
-            .filter_map(|item| match matcher(needle, key(&item), eq) {
-                Some(matches) => {
-                    accepted.push(Ranked {
-                        item,
-                        matches,
-                        tier,
-                    });
-                    None
-                }
-                None => Some(item),
-            })
-            .collect();
-        accepted.sort_by(|a, b| {
-            let fraction = |ranked: &Ranked<A>| {
-                let matched: usize = ranked.matches.iter().map(|m| m.len()).sum();
-                matched as f64 / key(&ranked.item).len().max(1) as f64
-            };
-            fraction(b).total_cmp(&fraction(a))
-        });
-        ranked.extend(accepted);
+            .fold(
+                (items, Vec::new()),
+                |(remaining, mut ranked), (matcher, eq, fuzzy)| {
+                    let (accepted, rejected): (Vec<_>, Vec<_>) = remaining
+                        .into_iter()
+                        .map(|item| match matcher(needle, key(&item), eq) {
+                            Some(matches) => Ok(Ranked {
+                                item,
+                                matches,
+                                fuzzy,
+                            }),
+                            None => Err(item),
+                        })
+                        .partition(Result::is_ok);
+                    let mut accepted: Vec<_> = accepted.into_iter().flatten().collect();
+                    accepted.sort_by(|a, b| fraction(b).total_cmp(&fraction(a)));
+                    ranked.extend(accepted);
+                    (
+                        rejected.into_iter().filter_map(Result::err).collect(),
+                        ranked,
+                    )
+                },
+            )
+            .1
     }
-    ranked
 }
 
 /// Keep each item's best display-name or alias match. Alias matches do not
@@ -158,7 +153,7 @@ pub fn rank_with_aliases<A, S: AsRef<str>>(
                 } else {
                     Vec::new()
                 },
-                tier: ranked.tier,
+                fuzzy: ranked.fuzzy,
             })
             .collect();
         let mut items: Vec<_> = items.into_iter().map(Some).collect();
@@ -168,7 +163,7 @@ pub fn rank_with_aliases<A, S: AsRef<str>>(
                 items[ranked.item].take().map(|item| Ranked {
                     item,
                     matches: ranked.matches,
-                    tier: ranked.tier,
+                    fuzzy: ranked.fuzzy,
                 })
             })
             .collect()
