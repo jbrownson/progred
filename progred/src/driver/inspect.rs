@@ -433,12 +433,17 @@ impl<P> Driver<P> {
         self.double_click_at(self.text_at(path));
     }
 
-    /// Click at `point` holding the editor's command key, as picking does.
-    pub(crate) fn pick_at(&mut self, point: Point) {
+    /// Hold the editor's command key, as picking and scrubbing do.
+    pub(crate) fn hold_command(&mut self) {
         self.hold(match self.editor().command_modifier {
             puri::keyboard::CommandModifier::Meta => ModifiersState::SUPER,
             puri::keyboard::CommandModifier::Control => ModifiersState::CONTROL,
         });
+    }
+
+    /// Click at `point` holding the editor's command key, as picking does.
+    pub(crate) fn pick_at(&mut self, point: Point) {
+        self.hold_command();
         self.click_at(point);
         self.hold(ModifiersState::empty());
     }

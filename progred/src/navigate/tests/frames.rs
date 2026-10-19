@@ -298,42 +298,30 @@ fn navigation_arrival_through_jump_retains_editing_context() {
     let second = new_cell_id();
     let mut world = crate::editor_of(Value::record([(source, text::value("shared"))]));
     world.model.selection = Some(make_selection(vec![Step::Key(first)]));
-    let build = |world: &mut World| {
-        let ordinary = sample_projection();
-        world.stack.projection = Projection::new([
-            d::runtime_partial(move |input| {
-                input.value?.field(source)?;
-                Some(d::group(d::row(
-                    8.0,
-                    [
-                        d::jump([Step::Key(first)], [Step::Key(source)]),
-                        d::jump([Step::Key(second)], [Step::Key(source)]),
-                    ],
-                )))
-            }),
-            ordinary.partial().clone(),
-        ]);
-
-        editing_frame(world)
-    };
-    let frame = build(&mut world);
+    world.stack.projection = Projection::new([
+        d::runtime_partial(move |input| {
+            input.value?.field(source)?;
+            Some(d::group(d::row(
+                8.0,
+                [
+                    d::jump([Step::Key(first)], [Step::Key(source)]),
+                    d::jump([Step::Key(second)], [Step::Key(source)]),
+                ],
+            )))
+        }),
+        sample_projection().partial().clone(),
+    ]);
+    let frame = editing_frame(&mut world);
     assert!(frame.navigate(&mut world, NavigationDirection::Right));
     assert_eq!(
         world.model.selection.as_ref().unwrap().path(),
         [Step::Key(second)]
     );
-    let frame = build(&mut world);
-    assert!(frame.resolve_for_dispatch().dispatch_key(
-        &mut world,
-        &KeyboardEvent {
-            key: Key::Character("!".into()),
-            state: KeyState::Down,
-            ..Default::default()
-        }
-    ));
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    driver.type_text("!");
     assert_eq!(
-        world.model.doc.root,
-        Some(Value::record([(source, text::value("!shared"))]))
+        driver.value(&[]),
+        Value::record([(source, text::value("!shared"))])
     );
 }
 
@@ -525,23 +513,17 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
             Some(Start::Cell { .. })
         ));
         assert!(Rc::ptr_eq(&world.model.doc, &before));
-        let frame = editing_frame(&mut world);
-        assert!(frame.resolve_for_dispatch().dispatch_key(
-            &mut world,
-            &KeyboardEvent {
-                key: Key::Character("X".into()),
-                state: KeyState::Down,
-                ..Default::default()
-            }
-        ));
+        let mut driver = Driver::new(world, Driver::VIEWPORT);
+        driver.type_text("X");
+        let doc = &driver.editor().model.doc;
         assert_eq!(
             field(
-                world.model.doc.cells.value(binders["width"]).unwrap(),
+                doc.cells.value(binders["width"]).unwrap(),
                 name::vocabulary::NAME
             ),
             text::value("Xwidth")
         );
-        assert_eq!(world.model.doc.root, document.root);
+        assert_eq!(doc.root, document.root);
     }
 }
 

@@ -1,19 +1,16 @@
 use super::*;
-use crate::display::test_support::primary_press;
-use crate::display::test_support::{Landmarks, ResolveForDispatch};
+use crate::display::test_support::Landmarks;
+use crate::driver::Driver;
 use crate::frame::Hovered;
-use crate::frame::test_support::{editing_frame, framed};
+use crate::frame::test_support::editing_frame;
 use crate::hover::Hover;
 use crate::libraries::{f32, f64, text, u64};
 use crate::projection::test_support::*;
 use crate::selection::pending_value;
-use crate::test_support::key_down;
 use crate::test_values::numeric_calls;
 use gid::{Cells, Document, Step, new_cell_id};
 use kurbo::Point;
-use puri::handler::test_support::DispatchShorthands;
 use puri::hover::Claim;
-use ui_events::keyboard::{Key, Modifiers};
 
 #[test]
 fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
@@ -28,23 +25,21 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
         let named = before.overlaid(name::record("tilt", []));
         let mut cells = Cells::new();
         cells.set_value(cell, named);
-        let mut world = crate::test_editor(Document {
-            root: Some(cell.into()),
-            cells,
-        });
+        let mut driver = Driver::new(
+            crate::test_editor(Document {
+                root: Some(cell.into()),
+                cells,
+            }),
+            Driver::VIEWPORT,
+        );
         for (path, typed) in [(&name_path[..], " angle"), (&number_path[..], "5")] {
-            let frame = editing_frame(&mut world);
-            let target = frame.landmarks.landmark(path).unwrap();
-            assert!((target.select)(&mut world, None));
-            let frame = editing_frame(&mut world);
-            assert!(frame.resolve_for_dispatch().dispatch_key(
-                &mut world,
-                &key_down(Key::Character(typed.into()), Modifiers::empty()),
-            ));
+            driver.select(path);
+            driver.type_text(typed);
         }
-        assert_eq!(world.model.doc.root, Some(cell.into()));
+        let doc = &driver.editor().model.doc;
+        assert_eq!(doc.root, Some(cell.into()));
         assert_eq!(
-            world.model.doc.cells.value(cell),
+            doc.cells.value(cell),
             Some(&after.overlaid(name::record("tilt angle", []))),
         );
     }
@@ -67,55 +62,46 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
             let name_path = vec![number_path[0].clone(), Step::Key(name::vocabulary::NAME)];
             let mut cells = Cells::new();
             cells.set_value(cell, value.clone());
-            let mut world = crate::test_editor(Document {
-                root: Some(cell.into()),
-                cells,
-            });
-            let frame = editing_frame(&mut world);
+            let mut driver = Driver::new(
+                crate::test_editor(Document {
+                    root: Some(cell.into()),
+                    cells,
+                }),
+                Driver::VIEWPORT,
+            );
             let path = if name_contact {
                 name_path.clone()
             } else {
                 number_path.clone()
             };
-            let rect = frame.landmarks.landmark(&name_path).unwrap().rect;
-            let number_rect = frame.landmarks.landmark(&number_path).unwrap().rect;
+            let rect = driver.rect(&name_path);
+            let number_rect = driver.rect(&number_path);
             let point = match contact {
                 "name" => rect.center(),
                 "digits" => Point::new(rect.x1 + 8.0, rect.center().y),
                 _ => Point::new(number_rect.x1 - 0.5, number_rect.y1 - 0.5),
             };
-            let frame = framed(&mut world, Some(point));
-            let Some((_, Claim::Direct(hovered))) = frame.claim.as_ref() else {
-                panic!("direct hover on {contact}")
-            };
             assert_eq!(
-                *hovered,
-                Hovered::Tree(Hover::Value(Rc::from(path.clone())))
+                driver.hover_at(point),
+                Some(Hovered::Tree(Hover::Value(Rc::from(path.clone())))),
+                "{contact}"
             );
-            let mut dispatch =
-                crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
-            frame.resolve_for_dispatch().dispatch_pointer_down_with(
-                &mut world,
-                &primary_press(
-                    point,
-                    if pick {
-                        crate::test_support::command()
-                    } else {
-                        Modifiers::empty()
-                    },
-                ),
-                &mut dispatch,
-            );
-            assert_eq!(world.gesture.is_some(), scrub, "{contact}");
-            if !name_contact {
-                assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
+            if pick {
+                driver.hold_command();
             }
-            assert_eq!(world.model.doc.cells.value(cell), Some(&value));
-            world.advance_gesture(&[Point::new(point.x + 48.0, point.y)]);
-            assert_eq!(world.model.doc.root, Some(cell.into()));
-            let edited = world.model.doc.cells.value(cell).unwrap();
+            driver.press_at(point);
+            assert_eq!(driver.editor().gesture.is_some(), scrub, "{contact}");
+            if !name_contact {
+                assert_eq!(driver.selection(), path);
+            }
+            assert_eq!(driver.editor().model.doc.cells.value(cell), Some(&value));
+            driver.move_to(Point::new(point.x + 48.0, point.y));
+            driver.release();
+            let doc = &driver.editor().model.doc;
+            assert_eq!(doc.root, Some(cell.into()));
+            let edited = doc.cells.value(cell).unwrap();
             assert_eq!(name::read(edited), Some("tilt"));
-            assert_eq!(*edited == value, !scrub);
+            assert_eq!(*edited == value, !scrub, "{contact}");
         }
     }
 }

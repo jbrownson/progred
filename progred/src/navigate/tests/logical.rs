@@ -8,9 +8,8 @@ use crate::location::Location;
 use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value};
 use puri::handler::NavigationDirection;
-use puri::handler::test_support::DispatchShorthands;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+use ui_events::keyboard::NamedKey;
 
 type World = crate::Editor;
 
@@ -62,30 +61,9 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
         selection.scope().location(selection.path()),
         Some(Location::root(field("d")))
     );
-    assert!(
-        editing_frame(&mut world)
-            .resolve_for_dispatch()
-            .dispatch_key(
-                &mut world,
-                &KeyboardEvent {
-                    key: Key::Character("X".into()),
-                    state: KeyState::Down,
-                    ..Default::default()
-                },
-            )
-    );
-    assert_eq!(
-        world
-            .model
-            .doc
-            .root
-            .as_ref()
-            .unwrap()
-            .as_record()
-            .unwrap()
-            .get(&binders["d"]),
-        Some(&text::value("XRight 1"))
-    );
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    driver.type_text("X");
+    assert_eq!(driver.value(&field("d")), text::value("XRight 1"));
 }
 
 #[test]
