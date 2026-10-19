@@ -97,6 +97,18 @@ fn set_state(state: Option<&Value>, key: CellId, value: Value) -> Value {
     Value::Record(fields)
 }
 
+/// Store `value` under `key` in the control state at `site`.
+fn store(
+    session: &mut crate::editing::Session<'_>,
+    site: &crate::editing::Site,
+    key: CellId,
+    value: Value,
+) {
+    let mut edit = site.open(session);
+    let state = set_state(edit.state(), key, value);
+    edit.set_state(state);
+}
+
 fn current_state(annotation: Option<&Value>) -> Value {
     annotation
         .and_then(Value::as_record)
@@ -198,11 +210,7 @@ fn keyed_slider<W: Host>(
         slider,
         width,
         ticks,
-        Rc::new(move |session, site, position| {
-            let mut edit = site.open(session);
-            let state = set_state(edit.state(), key, value(position));
-            edit.set_state(state);
-        }),
+        Rc::new(move |session, site, position| store(session, site, key, value(position))),
     )
 }
 
@@ -306,10 +314,7 @@ fn radio_widget<W: Host>(
             buttons.push(widget::before_place(button, move |placement, output| {
                 output.claim(puri::hover::Probe::occludes(placement));
                 puri::interact::clickable(output, placement, move |world: &mut W| {
-                    let mut session = world.session();
-                    let mut edit = site.open(&mut session);
-                    let state = set_state(edit.state(), key, value.clone());
-                    edit.set_state(state);
+                    store(&mut world.session(), &site, key, value.clone())
                 });
             }));
         }

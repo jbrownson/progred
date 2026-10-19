@@ -188,6 +188,15 @@ pub(crate) fn cursor_state(selection: &Selection, position: f64) -> Value {
     ])
 }
 
+/// What a range control stores: its range, with its cursor's `position` when
+/// it has one.
+fn control_state(selection: &Selection, position: Option<f64>) -> Value {
+    position.map_or_else(
+        || selection.state(),
+        |position| cursor_state(selection, position),
+    )
+}
+
 pub(super) fn cursor<W: Host>(
     items: &Value,
     state: Option<&Value>,
@@ -266,13 +275,12 @@ impl widget::gesture::Gesture for RangeDrag {
                 .dragged(self.drag, self.rect, self.scale, *point);
             self.selection = self.selection.select(self.level, selected, self.current);
             self.position = self.position.map(|p| self.selection.position(p));
-            let value = self.position.map_or_else(
-                || self.selection.state(),
-                |p| cursor_state(&self.selection, p),
+            store(
+                session,
+                &self.site,
+                self.key,
+                control_state(&self.selection, self.position),
             );
-            let mut edit = self.site.open(session);
-            let state = set_state(edit.state(), self.key, value);
-            edit.set_state(state);
         }
         false
     }
@@ -320,14 +328,12 @@ fn range_widget<W: Host>(
                         }
                         if event.state.count == 2 {
                             let selection = selection.select_all(level);
-                            let value = position.map_or_else(
-                                || selection.state(),
-                                |p| cursor_state(&selection, selection.position(p)),
+                            store(
+                                &mut world.session(),
+                                &site,
+                                key,
+                                control_state(&selection, position.map(|p| selection.position(p))),
                             );
-                            let mut session = world.session();
-                            let mut edit = site.open(&mut session);
-                            let state = set_state(edit.state(), key, value);
-                            edit.set_state(state);
                         } else {
                             let drag = slider.begin(placement.rect, scale, point);
                             world.session().start_gesture(
