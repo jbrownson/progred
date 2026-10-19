@@ -792,18 +792,26 @@ fn volume_view(
     volume_view_bounds(preview.min, preview.max, camera, raster_size)
 }
 
+/// The center of the box from `min` to `max`, and the radius a view frames
+/// around it: half its diagonal, with a margin. The implicit and mesh views
+/// share it, so that a refined preview's two images agree.
+fn framing(min: Vector3<f32>, max: Vector3<f32>) -> (Vector3<f32>, f32) {
+    ((min + max) / 2.0, ((max - min) / 2.0).norm() * 1.05)
+}
+
+/// The camera's rotation from view to model: pitch about X, then yaw about Z.
+fn orientation(camera: Camera) -> Rotation3<f32> {
+    Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians())
+        * Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians())
+}
+
 fn volume_view_bounds(
     min: Vector3<f32>,
     max: Vector3<f32>,
     camera: Camera,
     raster_size: PixelRenderSize,
 ) -> VolumeView {
-    let center = (min + max) / 2.0;
-    let half = (max - min) / 2.0;
-    let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians());
-    let yaw = Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians());
-    let rotation = yaw * pitch;
-    let radius = half.norm() * 1.05;
+    let (center, radius) = framing(min, max);
     let minimum = raster_size.width().min(raster_size.height());
     let height = raster_size.height();
     let depth = (f64::from(height) * f64::from(camera.zoom.max(1.0)))
@@ -817,7 +825,7 @@ fn volume_view_bounds(
     VolumeView {
         size: VoxelRenderSize::new(raster_size.width(), raster_size.height(), depth),
         world_to_model: Translation3::from(center).to_homogeneous()
-            * rotation.to_homogeneous()
+            * orientation(camera).to_homogeneous()
             * Scale3::new(
                 radius / camera.zoom * image_scale,
                 radius / camera.zoom * image_scale,

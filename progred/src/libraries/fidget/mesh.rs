@@ -98,26 +98,22 @@ impl Shape {
 }
 
 fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Option<View> {
-    let center = (preview.min + preview.max) / 2.0;
-    let radius = ((preview.max - preview.min) / 2.0).norm() * 1.05;
-    if !radius.is_finite() || radius <= 0.0 {
-        return None;
-    }
-    let pitch = Rotation3::from_axis_angle(&Vector3::x_axis(), camera.pitch.to_radians());
-    let yaw = Rotation3::from_axis_angle(&Vector3::z_axis(), camera.yaw.to_radians());
-    // Match the implicit view's vertical framing, independent of pane width.
-    let vertical_scale = camera.zoom / radius;
-    Some(View {
-        model_to_view: (yaw * pitch).inverse().to_homogeneous()
-            * Translation3::from(-center).to_homogeneous(),
-        projection: [
-            vertical_scale * pixels.height() as f32 / pixels.width() as f32,
-            vertical_scale,
-            -0.5 / radius,
-            0.5,
-        ],
-        width: pixels.width(),
-        height: pixels.height(),
+    let (center, radius) = framing(preview.min, preview.max);
+    (radius.is_finite() && radius > 0.0).then(|| {
+        // Match the implicit view's vertical framing, independent of pane width.
+        let vertical_scale = camera.zoom / radius;
+        View {
+            model_to_view: orientation(camera).inverse().to_homogeneous()
+                * Translation3::from(-center).to_homogeneous(),
+            projection: [
+                vertical_scale * pixels.height() as f32 / pixels.width() as f32,
+                vertical_scale,
+                -0.5 / radius,
+                0.5,
+            ],
+            width: pixels.width(),
+            height: pixels.height(),
+        }
     })
 }
 
