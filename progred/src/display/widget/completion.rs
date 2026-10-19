@@ -117,9 +117,9 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
     let panel = popover::card_panel(styles);
     measured::leaf_into(extent, move |placement, pass| {
         let viewport_height = ((placement.rect.height() - 2.0 * inset) / scale).clamp(0.0, tallest);
-        let maximum = (content.extent.height() / scale - viewport_height).max(0.0);
-        let scroll = scroll.clamp(0.0, maximum);
         let visible = viewport_extent(content.extent, viewport_height, scale);
+        let maximum = scroll::maximum(content.extent, visible.size(), scale);
+        let scroll = scroll.clamp(0.0, maximum.y);
         let scroll_view = set_view.clone();
         let scrolled = container::scrolled(
             content,
@@ -131,8 +131,8 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
                         Vec2::new(0.0, scroll),
                         event,
                         scale,
-                        Size::new(visible.width, visible.height()),
-                        Vec2::new(0.0, maximum),
+                        visible.size(),
+                        maximum,
                     );
                     if next.y != scroll {
                         scroll_view(world, next.y, choice);
@@ -171,7 +171,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
                                 set_view(
                                     world,
                                     reveal(scroll, next, &row_spans, viewport_height)
-                                        .clamp(0.0, maximum),
+                                        .clamp(0.0, maximum.y),
                                     next,
                                 );
                                 true
