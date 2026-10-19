@@ -92,31 +92,53 @@ fn record_program(
     output: &mut Recording,
 ) -> ::grap::Evaluation {
     if program.list_len().is_none() {
-        return run(output, |scope| {
-            ::grap::apply_expression(program, [], host, Some(scope), fuel)
-        });
+        record(program, host, fuel, output)
+    } else {
+        let start = ::grap::Evaluation {
+            result: RuntimeValue::record([]),
+            remaining_fuel: fuel,
+            completed: true,
+        };
+        let (Ok(evaluation) | Err(evaluation)) = record_parts(program, host, start, output);
+        evaluation
     }
-    let mut evaluation = ::grap::Evaluation {
-        result: RuntimeValue::record([]),
-        remaining_fuel: fuel,
-        completed: true,
-    };
-    let mut pending = vec![program.clone()];
-    while let Some(program) = pending.pop() {
-        if let Some(list) = program.list_values() {
-            pending.extend(list.collect::<Vec<_>>().into_iter().rev());
-        } else {
+}
+
+/// Record each leaf of `program` in order, after `evaluation`, as a part of
+/// `output`; a leaf that fails stops the rest and is the error.
+fn record_parts(
+    program: &RuntimeValue,
+    host: &dyn ::grap::Host,
+    evaluation: ::grap::Evaluation,
+    output: &mut Recording,
+) -> Result<::grap::Evaluation, ::grap::Evaluation> {
+    match program.list_values() {
+        Some(mut children) => children.try_fold(evaluation, |evaluation, child| {
+            record_parts(&child, host, evaluation, output)
+        }),
+        None => {
             let mut part = Recording::default();
-            evaluation = run(&mut part, |scope| {
-                ::grap::apply_expression(&program, [], host, Some(scope), evaluation.remaining_fuel)
-            });
-            if !evaluation.completed || evaluation.result.is_absent() {
-                return evaluation;
+            let evaluation = record(program, host, evaluation.remaining_fuel, &mut part);
+            if evaluation.completed && !evaluation.result.is_absent() {
+                output.append_part(part);
+                Ok(evaluation)
+            } else {
+                Err(evaluation)
             }
-            output.append_part(part);
         }
     }
-    evaluation
+}
+
+/// Run the zero-argument `program`, recording what it emits into `output`.
+fn record(
+    program: &RuntimeValue,
+    host: &dyn ::grap::Host,
+    fuel: usize,
+    output: &mut Recording,
+) -> ::grap::Evaluation {
+    run(output, |scope| {
+        ::grap::apply_expression(program, [], host, Some(scope), fuel)
+    })
 }
 
 #[cfg(test)]
