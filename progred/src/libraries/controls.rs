@@ -398,6 +398,8 @@ fn controls_over<W: Host>(
     })
 }
 
+/// Runs `controls` with each control's native in scope: it reads its call,
+/// emits its widgets as an effect, and returns its value.
 fn controls_output<W: Host>(
     controls: &::grap::RuntimeValue,
     state: Option<&Value>,
@@ -405,182 +407,21 @@ fn controls_output<W: Host>(
     frame: &widget::Context<'_, '_, W, W::Hover>,
 ) -> Result<(Vec<Widget<W>>, RuntimeValue), RuntimeValue> {
     let widgets: RefCell<Vec<Widget<W>>> = RefCell::new(Vec::new());
-    let emit = |function,
-                context: &mut Context<'_>,
-                call: &Expression,
-                environment: &Environment| {
-        if function == SLIDER {
-            let Some(expression) = context.field(call, VALUE) else {
-                return Ok(context.missing_runtime_argument(VALUE));
-            };
-            let Some(value) = context.eval_f64(expression, environment)? else {
-                return Ok(::grap::absent::value(INVALID_INPUT).into());
-            };
-            let Some(expression) = context.field(call, ON_CHANGE) else {
-                return Ok(context.missing_runtime_argument(ON_CHANGE));
-            };
-            let handler = context.eval(expression, environment)?;
-            if handler.is_absent() {
-                return Ok(handler);
-            }
-            let mut number = |field, default| -> Result<Option<f64>, Halt> {
-                match context.field(call, field) {
-                    Some(expression) => context.eval_f64(expression, environment),
-                    None => Ok(Some(default)),
+    // Each control spans the width inside its padding.
+    let width = width - 2.0 * PADDING_X;
+    let emit =
+        |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
+            match function {
+                SLIDER => slider(context, call, environment, width, &widgets),
+                RADIO => radio(context, call, environment, state, width, &widgets),
+                TREE_RANGE => tree_range(context, call, environment, state, width, &widgets),
+                TREE_CURSOR => tree_cursor(context, call, environment, state, width, &widgets),
+                TREE_PROGRAM_CURSOR => {
+                    tree_program_cursor(context, call, environment, state, width, frame, &widgets)
                 }
-            };
-            let (Some(min), Some(max)) = (number(MINIMUM, 0.0)?, number(MAXIMUM, 1.0)?) else {
-                return Ok(::grap::absent::value(INVALID_INPUT).into());
-            };
-            let Some(slider) = Slider::new(min, max, value) else {
-                return Ok(::grap::absent::value(INVALID_INPUT).into());
-            };
-            return Ok(context.effect(|| {
-                widgets
-                    .borrow_mut()
-                    .push(handler_slider(slider, width - 2.0 * PADDING_X, handler));
-                RuntimeValue::f64(slider.value)
-            }));
-        }
-        let Some(key) = context.field(call, KEY) else {
-            return Ok(context.missing_runtime_argument(KEY));
+                _ => unreachable!("the overlay calls only the controls"),
+            }
         };
-        let key = context.eval(key, environment)?;
-        let Some(key) = key.as_cell() else {
-            return Ok(::grap::absent::value(INVALID_INPUT).into());
-        };
-        if function == TREE_PROGRAM_CURSOR {
-            let Some(program) = context.field(call, tree::vocabulary::PROGRAM) else {
-                return Ok(context.missing_runtime_argument(tree::vocabulary::PROGRAM));
-            };
-            let program = context.eval(program, environment)?;
-            if program.is_absent() {
-                return Ok(program);
-            }
-            let fuel = match context.field(call, layout::vocabulary::FUEL) {
-                Some(expression) => match context
-                    .eval_f64(expression, environment)?
-                    .and_then(::grap::f64::to_usize)
-                {
-                    Some(fuel) => fuel,
-                    None => return Ok(::grap::absent::value(INVALID_INPUT).into()),
-                },
-                None => ::grap::DEFAULT_FUEL,
-            };
-            let initial = match context.field(call, INITIAL) {
-                Some(expression) => match context.eval_f64(expression, environment)? {
-                    Some(n) if n.is_finite() => n,
-                    _ => return Ok(::grap::absent::value(INVALID_INPUT).into()),
-                },
-                None => 0.0,
-            };
-            let result = tree::prepared(
-                frame.viewing().computations(),
-                &frame.site().below(&[gid::Step::Key(key)]),
-                program,
-                fuel,
-            );
-            let built = match result.as_ref() {
-                Ok(tree) => tree,
-                Err(error) => return Ok(error.clone()),
-            };
-            let root = built.root.clone();
-            let decorate: tree_range::ItemDecoration<W> = Rc::new(move |key| {
-                let source = crate::hover::from_grap(root.at(key)?.source.clone()?, None)?;
-                Some(crate::display::widget::source_link::decoration(source))
-            });
-            let (controls, cursor) = tree_range::cursor_from_tree(
-                tree_range::emitted_tree(&built.root, Vec::new()),
-                read_state(state, key),
-                initial,
-                key,
-                width - 2.0 * PADDING_X,
-                Some(decorate),
-            );
-            let value = RuntimeValue::record(
-                cursor
-                    .into_iter()
-                    .map(|(key, value)| (key, value.into()))
-                    .chain([(ITEMS, built.items.clone())]),
-            );
-            return Ok(context.effect(|| {
-                widgets.borrow_mut().extend(controls);
-                value
-            }));
-        }
-        if function == TREE_RANGE || function == TREE_CURSOR {
-            let Some(expression) = context.field(call, ITEMS) else {
-                return Ok(context.missing_runtime_argument(ITEMS));
-            };
-            let decorate = stored_item_links(context, expression.clone());
-            let items = context.eval_to_value(expression, environment)?;
-            if ::grap::absent::is_absent(&items) {
-                return Ok(items.into());
-            }
-            if function == TREE_CURSOR {
-                let initial = match context.field(call, INITIAL) {
-                    Some(expression) => match context.eval_f64(expression, environment)? {
-                        Some(n) if n.is_finite() => n,
-                        _ => return Ok(::grap::absent::value(INVALID_INPUT).into()),
-                    },
-                    None => 0.0,
-                };
-                let (controls, result) = tree_range::cursor(
-                    &items,
-                    read_state(state, key),
-                    initial,
-                    key,
-                    width - 2.0 * PADDING_X,
-                    decorate,
-                );
-                return Ok(context.effect(|| {
-                    widgets.borrow_mut().extend(controls);
-                    result.into()
-                }));
-            }
-            let selection = tree_range::Selection::new(&items, read_state(state, key));
-            return Ok(context.effect(|| {
-                widgets.borrow_mut().extend(selection.widgets(
-                    key,
-                    width - 2.0 * PADDING_X,
-                    decorate,
-                ));
-                tree_range::encode(selection.leaves.clone()).into()
-            }));
-        }
-        if function == RADIO {
-            let Some(expression) = context.field(call, OPTIONS) else {
-                return Ok(context.missing_runtime_argument(OPTIONS));
-            };
-            let options = context.eval_to_value(expression, environment)?;
-            let Some(options) = radio_options(&options) else {
-                return Ok(::grap::absent::value(INVALID_INPUT).into());
-            };
-            let initial = match context.field(call, INITIAL) {
-                Some(expression) => Some(context.eval_to_value(expression, environment)?),
-                None => options.first().map(|option| option.value.clone()),
-            };
-            let Some(initial) =
-                initial.filter(|initial| options.iter().any(|option| option.value == *initial))
-            else {
-                return Ok(::grap::absent::value(INVALID_INPUT).into());
-            };
-            let selected = read_state(state, key)
-                .filter(|value| options.iter().any(|option| option.value == **value))
-                .cloned()
-                .unwrap_or(initial);
-            return Ok(context.effect(|| {
-                widgets.borrow_mut().push(radio_widget(
-                    key,
-                    options,
-                    selected.clone(),
-                    width - 2.0 * PADDING_X,
-                ));
-                selected.into()
-            }));
-        }
-        Ok(::grap::absent::value(INVALID_INPUT).into())
-    };
     let evaluation = ::grap::apply(
         controls,
         [
@@ -599,6 +440,250 @@ fn controls_output<W: Host>(
     } else {
         Ok((widgets.into_inner(), evaluation.result))
     }
+}
+
+fn invalid_input() -> RuntimeValue {
+    ::grap::absent::value(INVALID_INPUT).into()
+}
+
+/// A tree cursor's `initial` position, 0 when the call leaves it out; `None`
+/// when it isn't a finite number.
+fn initial_position(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<Option<f64>, Halt> {
+    Ok(match context.field(call, INITIAL) {
+        Some(expression) => context
+            .eval_f64(expression, environment)?
+            .filter(|initial| initial.is_finite()),
+        None => Some(0.0),
+    })
+}
+
+fn slider<W: Host>(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    width: f64,
+    widgets: &RefCell<Vec<Widget<W>>>,
+) -> Result<RuntimeValue, Halt> {
+    let Some(expression) = context.field(call, VALUE) else {
+        return Ok(context.missing_runtime_argument(VALUE));
+    };
+    let Some(value) = context.eval_f64(expression, environment)? else {
+        return Ok(invalid_input());
+    };
+    let Some(expression) = context.field(call, ON_CHANGE) else {
+        return Ok(context.missing_runtime_argument(ON_CHANGE));
+    };
+    let handler = context.eval(expression, environment)?;
+    if handler.is_absent() {
+        return Ok(handler);
+    }
+    let mut number = |field, default| -> Result<Option<f64>, Halt> {
+        match context.field(call, field) {
+            Some(expression) => context.eval_f64(expression, environment),
+            None => Ok(Some(default)),
+        }
+    };
+    let (Some(min), Some(max)) = (number(MINIMUM, 0.0)?, number(MAXIMUM, 1.0)?) else {
+        return Ok(invalid_input());
+    };
+    let Some(slider) = Slider::new(min, max, value) else {
+        return Ok(invalid_input());
+    };
+    Ok(context.effect(|| {
+        widgets
+            .borrow_mut()
+            .push(handler_slider(slider, width, handler));
+        RuntimeValue::f64(slider.value)
+    }))
+}
+
+fn radio<W: Host>(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    state: Option<&Value>,
+    width: f64,
+    widgets: &RefCell<Vec<Widget<W>>>,
+) -> Result<RuntimeValue, Halt> {
+    let Some(key) = context.field(call, KEY) else {
+        return Ok(context.missing_runtime_argument(KEY));
+    };
+    let key = context.eval(key, environment)?;
+    let Some(key) = key.as_cell() else {
+        return Ok(invalid_input());
+    };
+    let Some(expression) = context.field(call, OPTIONS) else {
+        return Ok(context.missing_runtime_argument(OPTIONS));
+    };
+    let options = context.eval_to_value(expression, environment)?;
+    let Some(options) = radio_options(&options) else {
+        return Ok(invalid_input());
+    };
+    let initial = match context.field(call, INITIAL) {
+        Some(expression) => Some(context.eval_to_value(expression, environment)?),
+        None => options.first().map(|option| option.value.clone()),
+    };
+    let Some(initial) =
+        initial.filter(|initial| options.iter().any(|option| option.value == *initial))
+    else {
+        return Ok(invalid_input());
+    };
+    let selected = read_state(state, key)
+        .filter(|value| options.iter().any(|option| option.value == **value))
+        .cloned()
+        .unwrap_or(initial);
+    Ok(context.effect(|| {
+        widgets
+            .borrow_mut()
+            .push(radio_widget(key, options, selected.clone(), width));
+        selected.into()
+    }))
+}
+
+fn tree_range<W: Host>(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    state: Option<&Value>,
+    width: f64,
+    widgets: &RefCell<Vec<Widget<W>>>,
+) -> Result<RuntimeValue, Halt> {
+    let Some(key) = context.field(call, KEY) else {
+        return Ok(context.missing_runtime_argument(KEY));
+    };
+    let key = context.eval(key, environment)?;
+    let Some(key) = key.as_cell() else {
+        return Ok(invalid_input());
+    };
+    let Some(expression) = context.field(call, ITEMS) else {
+        return Ok(context.missing_runtime_argument(ITEMS));
+    };
+    let decorate = stored_item_links(context, expression.clone());
+    let items = context.eval_to_value(expression, environment)?;
+    if ::grap::absent::is_absent(&items) {
+        return Ok(items.into());
+    }
+    let selection = tree_range::Selection::new(&items, read_state(state, key));
+    Ok(context.effect(|| {
+        widgets
+            .borrow_mut()
+            .extend(selection.widgets(key, width, decorate));
+        tree_range::encode(selection.leaves.clone()).into()
+    }))
+}
+
+fn tree_cursor<W: Host>(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    state: Option<&Value>,
+    width: f64,
+    widgets: &RefCell<Vec<Widget<W>>>,
+) -> Result<RuntimeValue, Halt> {
+    let Some(key) = context.field(call, KEY) else {
+        return Ok(context.missing_runtime_argument(KEY));
+    };
+    let key = context.eval(key, environment)?;
+    let Some(key) = key.as_cell() else {
+        return Ok(invalid_input());
+    };
+    let Some(expression) = context.field(call, ITEMS) else {
+        return Ok(context.missing_runtime_argument(ITEMS));
+    };
+    let decorate = stored_item_links(context, expression.clone());
+    let items = context.eval_to_value(expression, environment)?;
+    if ::grap::absent::is_absent(&items) {
+        return Ok(items.into());
+    }
+    let Some(initial) = initial_position(context, call, environment)? else {
+        return Ok(invalid_input());
+    };
+    let (controls, result) = tree_range::cursor(
+        &items,
+        read_state(state, key),
+        initial,
+        key,
+        width,
+        decorate,
+    );
+    Ok(context.effect(|| {
+        widgets.borrow_mut().extend(controls);
+        result.into()
+    }))
+}
+
+fn tree_program_cursor<W: Host>(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+    state: Option<&Value>,
+    width: f64,
+    frame: &widget::Context<'_, '_, W, W::Hover>,
+    widgets: &RefCell<Vec<Widget<W>>>,
+) -> Result<RuntimeValue, Halt> {
+    let Some(key) = context.field(call, KEY) else {
+        return Ok(context.missing_runtime_argument(KEY));
+    };
+    let key = context.eval(key, environment)?;
+    let Some(key) = key.as_cell() else {
+        return Ok(invalid_input());
+    };
+    let Some(program) = context.field(call, tree::vocabulary::PROGRAM) else {
+        return Ok(context.missing_runtime_argument(tree::vocabulary::PROGRAM));
+    };
+    let program = context.eval(program, environment)?;
+    if program.is_absent() {
+        return Ok(program);
+    }
+    let fuel = match context.field(call, layout::vocabulary::FUEL) {
+        Some(expression) => context
+            .eval_f64(expression, environment)?
+            .and_then(::grap::f64::to_usize),
+        None => Some(::grap::DEFAULT_FUEL),
+    };
+    let Some(fuel) = fuel else {
+        return Ok(invalid_input());
+    };
+    let Some(initial) = initial_position(context, call, environment)? else {
+        return Ok(invalid_input());
+    };
+    let result = tree::prepared(
+        frame.viewing().computations(),
+        &frame.site().below(&[gid::Step::Key(key)]),
+        program,
+        fuel,
+    );
+    let built = match result.as_ref() {
+        Ok(tree) => tree,
+        Err(error) => return Ok(error.clone()),
+    };
+    let root = built.root.clone();
+    let decorate: tree_range::ItemDecoration<W> = Rc::new(move |key| {
+        let source = crate::hover::from_grap(root.at(key)?.source.clone()?, None)?;
+        Some(crate::display::widget::source_link::decoration(source))
+    });
+    let (controls, cursor) = tree_range::cursor_from_tree(
+        tree_range::emitted_tree(&built.root, Vec::new()),
+        read_state(state, key),
+        initial,
+        key,
+        width,
+        Some(decorate),
+    );
+    let value = RuntimeValue::record(
+        cursor
+            .into_iter()
+            .map(|(key, value)| (key, value.into()))
+            .chain([(ITEMS, built.items.clone())]),
+    );
+    Ok(context.effect(|| {
+        widgets.borrow_mut().extend(controls);
+        value
+    }))
 }
 
 /// When `expression` is a list stored in source, a link from each of its
