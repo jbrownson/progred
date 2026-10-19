@@ -9,7 +9,7 @@ fn without_an_overlay_they_are_not_callable() {
         crate::test_support::test_evaluate(
             &grap::call(Value::from(vocabulary::GET), []),
             |cell| library.definitions.value(cell).cloned(),
-            &library.functions(),
+            &crate::test_support::foreign_functions(&library),
             10,
         )
         .result,

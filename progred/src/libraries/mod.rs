@@ -41,3 +41,5 @@ pub mod workspace;
 
 #[cfg(test)]
 pub(crate) mod test_widgets;
+#[cfg(test)]
+mod tests;

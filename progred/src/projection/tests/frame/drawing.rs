@@ -357,8 +357,8 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
     let before = library(10.0);
     let after = library(20.0);
     assert_eq!(
-        before.first_value(shape_function),
-        after.first_value(shape_function)
+        crate::test_support::first_value(&before, shape_function),
+        crate::test_support::first_value(&after, shape_function)
     );
     let doc = Document {
         root: None,

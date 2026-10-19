@@ -1,5 +1,6 @@
 use super::*;
 use crate::projection::{Layout, ProjectionInput};
+use crate::test_values::binary_call;
 
 fn binary_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
     crate::libraries::representation::infix_display(vocabulary::F64, &parts().infix, input)
@@ -29,7 +30,7 @@ use crate::libraries::test_widgets::projection_input;
 use gid::{Step, Value, new_cell_id};
 
 fn functions() -> ::grap::ForeignFunctions {
-    library::<crate::Editor>().functions()
+    crate::test_support::foreign_functions(&library::<crate::Editor>())
 }
 
 #[test]
@@ -89,16 +90,6 @@ fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
     crate::display::test_support::delimited(&children[0]);
 }
 
-fn call(function: CellId, left: Value, right: Value) -> Value {
-    grap::call(
-        Value::from(function),
-        [
-            (number::vocabulary::LEFT, left),
-            (number::vocabulary::RIGHT, right),
-        ],
-    )
-}
-
 #[test]
 fn extrema_rounding_and_norm_follow_the_numeric_contract() {
     let evaluate = |expression: Value| {
@@ -110,10 +101,10 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
         (vocabulary::HYPOT, 3.0, 4.0, 5.0),
         (vocabulary::HYPOT, 3e200, 4e200, 5e200),
     ] {
-        let actual = read(&evaluate(call(function, value(a), value(b)))).unwrap();
+        let actual = read(&evaluate(binary_call(function, value(a), value(b)))).unwrap();
         assert!((actual / expected - 1.0).abs() < 1e-14);
         assert_eq!(
-            evaluate(call(function, Value::record([]), value(b))),
+            evaluate(binary_call(function, Value::record([]), value(b))),
             ::grap::absent::value(vocabulary::LEFT_NOT_F64),
         );
     }
@@ -175,8 +166,8 @@ fn representation_is_library_data() {
 
 #[test]
 fn rust_supplies_arithmetic_to_grap() {
-    let sum = call(vocabulary::SUM, value(2.0), value(3.0));
-    let multiply = call(vocabulary::MULTIPLY, sum, value(4.0));
+    let sum = binary_call(vocabulary::SUM, value(2.0), value(3.0));
+    let multiply = binary_call(vocabulary::MULTIPLY, sum, value(4.0));
     assert_eq!(
         crate::test_support::test_evaluate(&multiply, |_| None, &functions(), 20).result,
         value(20.0)
@@ -223,8 +214,8 @@ fn runtime_lowering_preserves_an_enriched_value_through_a_binding() {
 
 #[test]
 fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
-    let product = call(vocabulary::MULTIPLY, value(2.0), value(3.0));
-    let sum = call(vocabulary::SUM, value(1.0), product);
+    let product = binary_call(vocabulary::MULTIPLY, value(2.0), value(3.0));
+    let sum = binary_call(vocabulary::SUM, value(1.0), product);
     let layout = binary_display(&projection_input(&NoEval, &(&sum).into())).unwrap();
     let children = infix_children(&layout).unwrap();
     assert!(matches!(&inspect(&(&children[0])),
@@ -247,9 +238,9 @@ fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
         } if *steps == [Step::Key(number::vocabulary::RIGHT)]
     ));
 
-    let product = call(
+    let product = binary_call(
         vocabulary::MULTIPLY,
-        call(vocabulary::SUM, value(1.0), value(2.0)),
+        binary_call(vocabulary::SUM, value(1.0), value(2.0)),
         value(3.0),
     );
     let layout = binary_display(&projection_input(&NoEval, &(&product).into())).unwrap();
@@ -259,7 +250,7 @@ fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
 
 #[test]
 fn binary_notation_wraps_before_its_operator() {
-    let sum = call(vocabulary::SUM, value(1.0), value(2.0));
+    let sum = binary_call(vocabulary::SUM, value(1.0), value(2.0));
     let layout = binary_display(&projection_input(&NoEval, &(&sum).into())).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {
         panic!("binary notation has a one-line form and a wrapped one");
@@ -333,14 +324,17 @@ fn every_numeric_operator_reads_infix() {
     ] {
         for operator in operators {
             assert!(
-                infix(&library, call(operator, one.clone(), one.clone())),
+                infix(&library, binary_call(operator, one.clone(), one.clone())),
                 "{operator:?} reads infix"
             );
         }
     }
     // Named operations stay calls.
     for operation in [vocabulary::MIN, vocabulary::MAX, vocabulary::HYPOT] {
-        assert!(!infix(&library(), call(operation, value(1.0), value(2.0))));
+        assert!(!infix(
+            &library(),
+            binary_call(operation, value(1.0), value(2.0))
+        ));
     }
 }
 
@@ -368,7 +362,7 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
         };
         let layout = binary_display(&projection_input(
             &NoEval,
-            &(&call(parent, left, right)).into(),
+            &(&binary_call(parent, left, right)).into(),
         ))
         .unwrap();
         let children = infix_children(&layout).unwrap();
@@ -402,8 +396,8 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
 
 #[test]
 fn type_absences_are_library_values() {
-    let left = call(vocabulary::SUM, Value::from(b"two".to_vec()), value(3.0));
-    let right = call(vocabulary::SUM, value(2.0), Value::from(b"three".to_vec()));
+    let left = binary_call(vocabulary::SUM, Value::from(b"two".to_vec()), value(3.0));
+    let right = binary_call(vocabulary::SUM, value(2.0), Value::from(b"three".to_vec()));
     assert_eq!(
         crate::test_support::test_evaluate(&left, |_| None, &functions(), 10).result,
         ::grap::absent::value(vocabulary::LEFT_NOT_F64)
@@ -415,54 +409,9 @@ fn type_absences_are_library_values() {
 }
 
 #[test]
-fn library_names_are_ordinary_facts_for_random_identities() {
+fn pi_reads_as_its_number_and_its_name() {
     let library = library::<crate::Editor>();
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::F64)
-            .and_then(name::read),
-        Some("f64")
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::SUM)
-            .and_then(name::read),
-        Some("+")
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::PI)
-            .and_then(name::read),
-        Some("π")
-    );
-    assert_eq!(
-        library.definitions.value(vocabulary::PI).and_then(read),
-        Some(std::f64::consts::PI)
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::LEFT_NOT_F64)
-            .and_then(name::read),
-        Some("left is not f64")
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::RIGHT_NOT_F64)
-            .and_then(name::read),
-        Some("right is not f64")
-    );
-    assert_eq!(
-        ::grap::absent::reason(&::grap::absent::value(vocabulary::LEFT_NOT_F64)),
-        Some(vocabulary::LEFT_NOT_F64)
-    );
-    assert_eq!(
-        ::grap::absent::reason(&::grap::absent::value(vocabulary::RIGHT_NOT_F64)),
-        Some(vocabulary::RIGHT_NOT_F64)
-    );
-    assert!(library.definitions.value(vocabulary::SUM).is_some());
+    let pi = library.definitions.value(vocabulary::PI).unwrap();
+    assert_eq!(read(pi), Some(std::f64::consts::PI));
+    assert_eq!(name::read(pi), Some("π"));
 }

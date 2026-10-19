@@ -1,26 +1,8 @@
 use super::*;
-use crate::libraries::{logic, name};
+use crate::libraries::logic;
+use crate::test_support::evaluate_with;
+use crate::test_values::binary_call;
 use gid::new_cell_id;
-
-fn call(function: CellId, left: Value, right: Value) -> Value {
-    ::grap::call(
-        Value::from(function),
-        [
-            (number::vocabulary::LEFT, left),
-            (number::vocabulary::RIGHT, right),
-        ],
-    )
-}
-
-fn evaluate(expression: &Value) -> Value {
-    crate::test_support::test_evaluate(
-        expression,
-        |_| None,
-        &library::<crate::Editor>().functions(),
-        20,
-    )
-    .result
-}
 
 #[test]
 fn representation_is_open_library_data() {
@@ -48,14 +30,20 @@ fn spelling_round_trips_through_the_line_conversion() {
 
 #[test]
 fn rust_supplies_arithmetic_to_grap() {
-    let sum = call(vocabulary::SUM, value(2.0), value(3.0));
+    let sum = binary_call(vocabulary::SUM, value(2.0), value(3.0));
     assert_eq!(
-        evaluate(&call(vocabulary::MULTIPLY, sum, value(4.0))),
+        evaluate_with(
+            &library(),
+            &binary_call(vocabulary::MULTIPLY, sum, value(4.0))
+        ),
         value(20.0)
     );
-    let difference = call(vocabulary::SUBTRACT, value(7.0), value(1.0));
+    let difference = binary_call(vocabulary::SUBTRACT, value(7.0), value(1.0));
     assert_eq!(
-        evaluate(&call(vocabulary::DIVIDE, difference, value(4.0))),
+        evaluate_with(
+            &library(),
+            &binary_call(vocabulary::DIVIDE, difference, value(4.0))
+        ),
         value(1.5)
     );
 }
@@ -63,19 +51,31 @@ fn rust_supplies_arithmetic_to_grap() {
 #[test]
 fn comparisons_are_logic_values() {
     assert_eq!(
-        evaluate(&call(vocabulary::LESS, value(1.0), value(2.0))),
+        evaluate_with(
+            &library(),
+            &binary_call(vocabulary::LESS, value(1.0), value(2.0))
+        ),
         logic::value(true)
     );
     assert_eq!(
-        evaluate(&call(vocabulary::LESS, value(2.0), value(1.0))),
+        evaluate_with(
+            &library(),
+            &binary_call(vocabulary::LESS, value(2.0), value(1.0))
+        ),
         logic::value(false)
     );
     assert_eq!(
-        evaluate(&call(vocabulary::EQUAL, value(2.0), value(2.0))),
+        evaluate_with(
+            &library(),
+            &binary_call(vocabulary::EQUAL, value(2.0), value(2.0))
+        ),
         logic::value(true)
     );
     assert_eq!(
-        evaluate(&call(vocabulary::EQUAL, value(2.0), value(2.5))),
+        evaluate_with(
+            &library(),
+            &binary_call(vocabulary::EQUAL, value(2.0), value(2.5))
+        ),
         logic::value(false)
     );
 }
@@ -83,49 +83,21 @@ fn comparisons_are_logic_values() {
 #[test]
 fn operands_of_other_representations_decline() {
     assert_eq!(
-        evaluate(&call(
-            vocabulary::SUM,
-            crate::libraries::f64::value(2.0),
-            value(3.0)
-        )),
+        evaluate_with(
+            &library(),
+            &binary_call(
+                vocabulary::SUM,
+                crate::libraries::f64::value(2.0),
+                value(3.0)
+            )
+        ),
         ::grap::absent::value(vocabulary::LEFT_NOT_F32)
     );
     assert_eq!(
-        evaluate(&call(
-            vocabulary::SUM,
-            value(2.0),
-            Value::from(b"three".to_vec())
-        )),
+        evaluate_with(
+            &library(),
+            &binary_call(vocabulary::SUM, value(2.0), Value::from(b"three".to_vec()))
+        ),
         ::grap::absent::value(vocabulary::RIGHT_NOT_F32)
-    );
-}
-
-#[test]
-fn library_names_are_ordinary_facts_for_random_identities() {
-    let library = library::<crate::Editor>();
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::SUM)
-            .and_then(name::read),
-        Some("+")
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::EQUAL)
-            .and_then(name::read),
-        Some("==")
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::LEFT_NOT_F32)
-            .and_then(name::read),
-        Some("left is not f32")
-    );
-    assert_eq!(
-        ::grap::absent::reason(&::grap::absent::value(vocabulary::RIGHT_NOT_F32)),
-        Some(vocabulary::RIGHT_NOT_F32)
     );
 }

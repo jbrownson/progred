@@ -1090,46 +1090,6 @@ fn malformed_let_data_returns_library_absents() {
 }
 
 #[test]
-fn library_describes_control_forms_and_absence_reasons() {
-    let library = library::<crate::Editor>();
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::QUOTE)
-            .and_then(name::read),
-        Some("quote")
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::UNQUOTE)
-            .and_then(name::read),
-        Some("unquote")
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::DO)
-            .and_then(name::read),
-        Some("do")
-    );
-    for cell in [
-        vocabulary::INVALID_CASES,
-        vocabulary::INVALID_CASE,
-        vocabulary::INVALID_BINDER,
-        vocabulary::INVALID_BINDINGS,
-        vocabulary::INVALID_BINDING,
-        vocabulary::INVALID_EXPRESSIONS,
-    ] {
-        assert!(name::read(library.definitions.value(cell).unwrap()).is_some());
-        assert_eq!(
-            ::grap::absent::reason(&::grap::absent::value(cell)),
-            Some(cell)
-        );
-    }
-}
-
-#[test]
 fn quote_and_unquote_are_offered_under_their_marks() {
     use crate::driver::Driver;
     use crate::libraries::grap::vocabulary::GRAP;

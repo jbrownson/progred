@@ -100,29 +100,36 @@ pub(crate) fn test_apply(
     )
 }
 
-impl<World, Hover> crate::library::Library<World, Hover> {
-    /// The foreign functions this library defines, to evaluate with apart
-    /// from its other definitions.
-    pub(crate) fn functions(&self) -> grap::ForeignFunctions {
-        self.definitions.iter().fold(
-            grap::ForeignFunctions::default(),
-            |functions, (cell, definition)| match definition {
-                grap::Definition::Value(_) => functions,
-                grap::Definition::Foreign(native) => {
-                    functions.register(cell, native.implementation.clone())
-                }
-            },
-        )
-    }
+/// The foreign functions `library` defines, to evaluate with apart from its
+/// other definitions.
+pub(crate) fn foreign_functions<World, Hover>(
+    library: &crate::library::Library<World, Hover>,
+) -> grap::ForeignFunctions {
+    library.definitions.iter().fold(
+        grap::ForeignFunctions::default(),
+        |functions, (cell, definition)| match definition {
+            grap::Definition::Value(_) => functions,
+            grap::Definition::Foreign(native) => {
+                functions.register(cell, native.implementation.clone())
+            }
+        },
+    )
 }
 
-impl Libraries {
-    /// The value of the first loaded library's definition of `cell`.
-    pub(crate) fn first_value(&self, cell: CellId) -> Option<&Value> {
-        self.definitions(cell)
-            .next()
-            .map(|(_, definition)| definition.value())
-    }
+/// What `expression` evaluates to with only `library`'s functions defined.
+pub(crate) fn evaluate_with(
+    library: &crate::libraries::Library<crate::Editor>,
+    expression: &Value,
+) -> Value {
+    test_evaluate(expression, |_| None, &foreign_functions(library), 20).result
+}
+
+/// The value of the first loaded library's definition of `cell`.
+pub(crate) fn first_value(libraries: &Libraries, cell: CellId) -> Option<&Value> {
+    libraries
+        .definitions(cell)
+        .next()
+        .map(|(_, definition)| definition.value())
 }
 
 pub(crate) fn root_completions(stack: &crate::stack::Stack) -> Vec<crate::display::Completion> {

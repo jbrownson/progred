@@ -537,7 +537,12 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
     let stack = crate::stack::load();
     let cell = name::vocabulary::NAME;
     let mut cells = Cells::new();
-    cells.set_value(cell, stack.libraries.first_value(cell).unwrap().clone());
+    cells.set_value(
+        cell,
+        crate::test_support::first_value(&stack.libraries, cell)
+            .unwrap()
+            .clone(),
+    );
     let root = Value::list([Value::from(cell), Value::from(cell)]);
     let positions: Vec<_> = root.as_list().unwrap().keys().cloned().collect();
     let doc = Document {

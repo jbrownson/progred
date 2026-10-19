@@ -241,7 +241,7 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
         [LEFT_LIBRARY, RIGHT_LIBRARY]
     );
     assert_eq!(
-        libraries.first_value(LEFT_LIBRARY).and_then(name::read),
+        crate::test_support::first_value(&libraries, LEFT_LIBRARY).and_then(name::read),
         Some("replacement")
     );
     assert_eq!(projections.len(), 2);
@@ -284,7 +284,10 @@ fn library_descriptions_are_ordinary_cells() {
         ),
     )]);
     let description = name::record("library", []);
-    assert_eq!(libraries.first_value(LEFT_LIBRARY), Some(&description));
+    assert_eq!(
+        crate::test_support::first_value(&libraries, LEFT_LIBRARY),
+        Some(&description)
+    );
     assert_eq!(
         ::grap::evaluate_value(&LEFT_LIBRARY.into(), &libraries, 20).result,
         description
@@ -337,8 +340,7 @@ fn libraries_are_an_ordered_unique_map_without_hashing() {
 
     assert!(libraries.iter().any(|(id, _)| id == LEFT_LIBRARY));
     assert_eq!(
-        libraries
-            .first_value(LEFT_LIBRARY)
+        crate::test_support::first_value(&libraries, LEFT_LIBRARY)
             .and_then(crate::libraries::name::read),
         Some("left")
     );

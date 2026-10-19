@@ -51,7 +51,7 @@ fn the_vocabulary_alone_grants_no_selection_access() {
         crate::test_support::test_evaluate(
             &::grap::call(Value::from(vocabulary::GET), []),
             |cell| library.definitions.value(cell).cloned(),
-            &library.functions(),
+            &crate::test_support::foreign_functions(&library),
             10,
         )
         .result,
@@ -92,7 +92,8 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
             }))
         }
     };
-    let functions = crate::libraries::list::library::<crate::Editor>().functions();
+    let functions =
+        crate::test_support::foreign_functions(&crate::libraries::list::library::<crate::Editor>());
     let overlay = ::grap::ForeignOverlay::from_value(
         &[crate::libraries::site::vocabulary::PATH, vocabulary::SET],
         &interpret,

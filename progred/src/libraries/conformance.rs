@@ -12,9 +12,9 @@ use gid::{CellId, Value, new_cell_id};
 fn functions() -> ForeignFunctions {
     ForeignFunctions::merge_all([
         control::functions(),
-        f32::library::<crate::Editor>().functions(),
-        f64::library::<crate::Editor>().functions(),
-        list::library::<crate::Editor>().functions(),
+        crate::test_support::foreign_functions(&f32::library::<crate::Editor>()),
+        crate::test_support::foreign_functions(&f64::library::<crate::Editor>()),
+        crate::test_support::foreign_functions(&list::library::<crate::Editor>()),
     ])
 }
 

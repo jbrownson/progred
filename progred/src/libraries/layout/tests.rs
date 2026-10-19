@@ -113,7 +113,7 @@ fn drawing_is_an_ordinary_projection_function() {
         &Value::from(vocabulary::DRAWING),
         [(presentation::vocabulary::VALUE, configuration.clone())],
         |cell| library.definitions.value(cell).cloned(),
-        &library.functions(),
+        &crate::test_support::foreign_functions(&library),
         20,
     );
     assert_eq!(
@@ -356,7 +356,7 @@ fn border_composes_with_an_ordinary_projection() {
             )],
         ),
         |cell| library.definitions.value(cell).cloned(),
-        &library.functions(),
+        &crate::test_support::foreign_functions(&library),
         20,
     );
     assert!(
@@ -369,7 +369,7 @@ fn border_composes_with_an_ordinary_projection() {
         &composition.result,
         [(presentation::vocabulary::VALUE, configuration.clone())],
         |cell| library.definitions.value(cell).cloned(),
-        &library.functions(),
+        &crate::test_support::foreign_functions(&library),
         50,
     );
     let Some(Recorded::After { child, .. }) = decoded(&evaluation.result) else {

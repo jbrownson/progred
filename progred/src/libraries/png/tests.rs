@@ -159,22 +159,3 @@ fn the_editor_shows_the_picture_and_the_record_around_it() {
     assert!(broken.images().is_empty());
     assert!(broken.drawn(&[Step::Key(vocabulary::PNG)]));
 }
-
-#[test]
-fn the_library_names_its_vocabulary() {
-    let library = library::<crate::Editor>();
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::WIDTH)
-            .and_then(name::read),
-        Some("png width")
-    );
-    assert_eq!(
-        library
-            .definitions
-            .value(vocabulary::INVALID_PNG)
-            .and_then(name::read),
-        Some("invalid png")
-    );
-}

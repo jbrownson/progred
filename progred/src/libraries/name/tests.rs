@@ -21,15 +21,6 @@ fn names_are_extensible_ordinary_record_data() {
 }
 
 #[test]
-fn the_name_relation_describes_itself_without_core_support() {
-    let library = library::<crate::Editor>();
-    assert_eq!(
-        library.definitions.value(vocabulary::NAME).and_then(read),
-        Some("name")
-    );
-}
-
-#[test]
 fn a_new_label_is_the_typed_text_as_a_cell_name_and_nothing_else() {
     use crate::display::{CompletionKind, CompletionRequest, CompletionScope};
     let ask = |kind, scope, query| {

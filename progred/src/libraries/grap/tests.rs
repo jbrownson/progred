@@ -963,10 +963,6 @@ fn the_library_describes_grap_and_owns_evaluate() {
             .and_then(name::read),
         Some("missing cell")
     );
-    assert_eq!(
-        ::grap::absent::reason(&::grap::absent::value(::grap::absent::MISSING_CELL)),
-        Some(::grap::absent::MISSING_CELL)
-    );
 
     let input = gid::new_cell_id();
     let expression = ::grap::call(
@@ -982,7 +978,7 @@ fn the_library_describes_grap_and_owns_evaluate() {
             ],
         ),
         |_| None,
-        &library.functions(),
+        &crate::test_support::foreign_functions(&library),
         40,
     );
     assert_eq!(evaluation.result, Value::from(b"evaluated".to_vec()));

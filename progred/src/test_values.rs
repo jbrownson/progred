@@ -47,6 +47,12 @@ pub fn key(s: &str) -> Step {
     Step::Key(crate::test_values::label(s))
 }
 
+/// A call of the binary numeric operation `function` on `left` and `right`.
+pub fn binary_call(function: CellId, left: Value, right: Value) -> Value {
+    use crate::libraries::number::vocabulary::{LEFT, RIGHT};
+    ::grap::call(function.into(), [(LEFT, left), (RIGHT, right)])
+}
+
 /// A call of each numeric representation's operations, beside the
 /// representation and the function called: binary ones on f64, f32 and u64,
 /// and f64's unary sine.
@@ -62,13 +68,7 @@ pub fn numeric_calls() -> Vec<(CellId, CellId, Value)> {
         (
             representation,
             function,
-            ::grap::call(
-                function.into(),
-                [
-                    (number::vocabulary::LEFT, value.clone()),
-                    (number::vocabulary::RIGHT, value),
-                ],
-            ),
+            binary_call(function, value.clone(), value),
         )
     })
     .chain([(
