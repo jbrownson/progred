@@ -318,7 +318,7 @@ fn deletion_and_history_landings_need_no_line_initialization() {
     ));
     let next = crate::navigate::selection_after_removing(
         &drawn.runner.frame.dispatch.landmarks,
-        Some(&crate::test_root()),
+        &crate::test_root(),
         &first,
         true,
     );

@@ -26,7 +26,7 @@ pub fn direction(event: &KeyboardEvent) -> Option<NavigationDirection> {
 /// backward, on the sibling before it, else its parent.
 pub fn selection_after_removing<World>(
     landmarks: &[Landmark<World>],
-    root: Option<&Root>,
+    root: &Root,
     path: &[Step],
     forward: bool,
 ) -> Path {
@@ -124,11 +124,7 @@ fn root_target<'a, World>(
 
 /// The stop after the drawn `path`: its next sibling, else the one after its
 /// nearest ancestor that has one.
-fn following<World>(
-    landmarks: &[Landmark<World>],
-    root: Option<&Root>,
-    path: &[Step],
-) -> Option<Path> {
+fn following<World>(landmarks: &[Landmark<World>], root: &Root, path: &[Step]) -> Option<Path> {
     let (parent, siblings, index) = siblings(landmarks, root, path)?;
     siblings
         .get(index + 1)
@@ -137,11 +133,7 @@ fn following<World>(
 }
 
 /// The sibling before the drawn `path`.
-fn preceding<World>(
-    landmarks: &[Landmark<World>],
-    root: Option<&Root>,
-    path: &[Step],
-) -> Option<Path> {
+fn preceding<World>(landmarks: &[Landmark<World>], root: &Root, path: &[Step]) -> Option<Path> {
     let (_, siblings, index) = siblings(landmarks, root, path)?;
     index
         .checked_sub(1)
@@ -153,13 +145,13 @@ fn preceding<World>(
 /// among them at `index`.
 fn siblings<'a, World>(
     landmarks: &'a [Landmark<World>],
-    root: Option<&Root>,
+    root: &Root,
     path: &'a [Step],
 ) -> Option<(&'a [Step], Vec<&'a [Step]>, usize)> {
     let (_, parent) = path.split_last()?;
     let siblings: Vec<&[Step]> = landmarks
         .iter()
-        .filter(|landmark| root.is_none_or(|root| landmark.root.as_ref() == Some(root)))
+        .filter(|landmark| landmark.root.as_ref() == Some(root))
         .map(|landmark| landmark.path.as_ref())
         .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
         .collect();

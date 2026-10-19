@@ -279,7 +279,7 @@ impl Editor {
                             selection::Stage::Label => current.path().to_vec(),
                             _ => navigate::selection_after_removing(
                                 geometry.landmarks,
-                                Some(current.root()),
+                                current.root(),
                                 current.path(),
                                 forward,
                             ),
