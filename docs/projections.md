@@ -19,9 +19,10 @@ contribution through the [library interface](../progred/src/library.rs): names,
 text, f64, control, Grap, geometry, presentation, layout, and other domains. The
 built-in `libraries::grap` module owns Grap's self-description, the `evaluate`
 Rust function, and Grap's projection; geometry and CAD concepts remain separate
-libraries. Nothing in this representation requires Rust FFIs, so editor-authored
-libraries can later lower into it. A `Library` carries definitions and one
-partial projection. A library with several forms composes them with
+libraries. Nothing in this representation requires Rust FFIs, which leaves room
+for [editor-authored libraries](deferred.md#editor-authored-libraries). A
+`Library` carries definitions and one partial projection. A library with several
+forms composes them with
 `compose_partials`: first success wins, and the empty composition declines. The
 editor composes these library projections in load order above its one total
 structural fallback. `Libraries` keeps an insertion-ordered unique map keyed by
@@ -45,13 +46,14 @@ metadata side channel.
 
 [`stack::load`](../progred/src/stack.rs) retains those boundaries and composes
 the partial projections and contextual completion providers. A completion provider
-receives the query, field/value kind, suggestion/Everything scope, the hole's path
-from where its location starts, Raw mode, read-only path and cell lookups from that
-same start, and lazy enumeration of defined cells.
+receives the query, field/value kind, scope (`Everything`, `Literal` or `Start`),
+the hole's path from where its location starts, Raw mode, read-only path and cell
+lookups from that same start, lazy enumeration of defined cells, the document's
+names for cells, and the loaded libraries' provider.
 Library providers compose in library order;
 a projection may supply a local vocabulary on its completion control instead.
-There are no root-specific host hooks: root templates and root fields are ordinary
-provider decisions about that request. A Grap function stored in a document is
+An empty document root, outside Raw, first asks providers with `Start` what a
+document can start as. A Grap function stored in a document is
 ordinary reachable data; configuration is never discovered through a reserved
 cell address or other data outside ordinary root reachability.
 
@@ -98,10 +100,11 @@ tracked reads; unknown calls and unrecorded effects prevent reuse.
 Normal display uses one composition of ordered partial functions, followed
 by a total structural fallback. A partial checks its preconditions and fails
 closed by declining; malformed shapes must remain accessible through a later
-projection or Raw. Raw uses the structural fallback alone: the same `Layout`
-language, total rather than `Option`, with cells as their short identities.
-Plain is Raw with names, text, bytes, absent values and numbers reading as
-themselves through their libraries; calls, arithmetic included, stay the records
+projection or Raw. Raw uses the structural fallback alone, in the same `Layout`
+language: it declines only at a missing location, draws a cell as its definition
+between parentheses, and shows labels as short ids. Plain is Raw with names,
+text, bytes, absent values and numbers reading as themselves through their
+libraries; calls, arithmetic included, stay the records
 they are. One list in stack.rs defines it for the editor and the tutorial page
 alike. The View menu switches the selected area to either and back. Specific
 domain projections precede general ones. Libraries contribute these functions
@@ -121,9 +124,10 @@ Active field insertion can use the general presentation to keep its picker
 visible.
 
 [`ProjectionInput`](../progred/src/display/mod.rs) supplies the environment, value,
-scale, writeability, local selection/annotation data, pending state, and
-selection targets. Its `default_projection` is one composed partial function,
-passed explicitly through recursion rather than buried in display context. A
+scale, writeability, local selection/annotation data, pending state, and a
+lazily built `Site` for its occurrence. Its `default_projection` is one composed
+partial function, passed explicitly through recursion rather than buried in
+display context. A
 partial returns a `Layout<World, Hover>` program that calls the layout builder
 with box operations, Puri leaves, and opaque widget/preparation functions.
 `Layout` is a reusable program over the object-safe `Builder` interface, not an
@@ -133,13 +137,13 @@ extent plus a one-shot placement function, never a second container tree.
 Structural recording is a separate interpreter used only by tests. There is no
 parallel Progred drawing language.
 
-`at`/`descend`/`jump` accept independent optional replacements
-for the projection at their target and the default passed to descendants.
+`descend` and `at_with_projection` accept independent optional replacements
+for the projection at their target and the default passed to descendants;
+`jump_to` accepts one for its target only, and `at` and `jump` take neither.
 Omitting either inherits it; supplying one replaces it without implicit
 composition. The total structural fallback still handles a declined result.
 `descend_local` composes a custom partial before the default only at the
-target. `descend_scoped` passes that composition both here and below.
-`at_with_projection` accepts the same explicit partial compositions. These are
+target. `descend_scoped` passes that composition both here and below. These are
 ordinary preparation functions, not path-bearing layout opcodes.
 
 `descend` follows steps of the displayed structure without projecting
@@ -185,32 +189,31 @@ separate: the existing source/conject supplies permissions, and a reference to a
 read-only definition is still replaceable at its writable occurrence.
 
 The lambda-name partial shows `λ` when the name is missing and unselected.
-Activation selects that missing location for entry. Once selected, the partial
-declines and the ordinary empty picker takes over; only committing creates the
-field. Neither pointer activation nor navigation supplies picker state. The
-picker uses defaults for an ordinary selection, including an empty payload.
+Activation selects that missing location for entry. Once selected, it draws the
+name library's hole, which offers what's typed as the name; only committing
+creates the field. Neither pointer activation nor navigation supplies picker
+state. The picker uses defaults for an ordinary selection, including an empty payload.
 The name library supplies text suggestions at name fields. Existing names
 use unquoted line editors, like parameter names. An explicitly empty name stays
 an empty editor, distinct from the missing name's `λ` marker. Ordinary string
 projections retain their quotes.
-Library completion providers still compose separately, so multiple libraries
+Library completion providers compose separately, so multiple libraries
 can contribute offers to one picker.
 
-Grap contributes a `new lambda` value completion (aliases `lambda` and `λ`) to
-the universal picker. It inserts `{params: []}` and selects the missing body.
+Grap answers `Everything` with a `new lambda` value completion (aliases `lambda`
+and `λ`), which Grap's expression slots list. It inserts `{params: []}` and
+selects the missing body.
 The lambda projection accepts that unfinished shape and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
-An empty parameter slot offers `x — new parameter` for whatever is typed: a
-new document cell named `x`, ahead of existing cells of that name, which stay
-behind `…`.
+An empty parameter slot offers only `x — new parameter` for whatever is typed: a
+new document cell named `x`.
 
 The expression-use partial also handles missing values with a focused completion
-provider. It combines statically visible bindings and function calls with the
-loaded libraries' value constructors; general cell search remains behind `…`.
+provider. It lists statically visible bindings, the libraries' `Everything`
+offers, callable cells, Raw's constructors, quote, and what's typed read as a value.
 Only explicit expression children use this provider, not quoted data, parameter
 declarations, or ordinary structural containers. Provider composition is lazy:
-the projection obtains the library provider from `Env`, but offers and scope are
-read only for the active picker.
+only an active picker reads the loaded libraries' provider, from the toolkit.
 At a missing expression, the default partial gets the first opportunity to
 present selection-driven interactions (such as the new-color picker), before
 falling back to expression completion.
@@ -220,8 +223,9 @@ applies a partial at each immediate element. Standard lists use the same
 renderer with `None`. Lambda parameters, match cases, let/where bindings, and
 do expressions each supply their element projection this way.
 `structure::record_layout` takes a function from each field identity to an
-optional child partial. Standard records use the same renderer with no field overrides;
-record layouts also share `record_heads` geometry with ordered call arguments.
+optional child partial. Standard records use the same renderer with no field overrides.
+Record layouts, through `record_heads`, and ordered call arguments, through
+`record_fragment`, share `record_forms` geometry.
 Patterns establish an explicit binder-projection scope. Ordinary container
 recursion then finds nested binders while text and numeric facets keep their
 normal projections; no duplicate pattern-specific structural walk is needed.
@@ -234,9 +238,9 @@ wraps each projected child; the separator callback chooses which boundaries
 to show and supplies their presentation, receiving an optional hover identity
 for feedback. The common combinator disables insertion beside a pending or in
 read-only data and activates a separator by selecting an ordinary missing
-element position. There is no separate host insertion capability or hover kind.
-Separators adopt their container's offered width before both interaction and
-painting: a column's width, or their intrinsic width in a row. Each call returns
+element position. Separators adopt their container's offered width before both
+interaction and painting: a column's width, or their intrinsic width in a row.
+Each call returns
 one interleaved sequence, with no alternatives or arrangement policy inside it.
 The bracketed list explicitly calls it twice, using commas for a row and
 clickable gaps for a column, then combines those layouts as alternatives.
@@ -267,7 +271,8 @@ extra fields. Missing declared arguments appear as ordinary editable empty slots
 at their real field paths; they remain absent from the document until edited.
 An active missing argument stays in its declared position rather than gaining a
 second trailing row. This is a raw definition lookup, not evaluation of the
-callable, so computed callables and FFIs use the ordinary order.
+callable: a native function named by its cell uses the `params` its description
+lists, and computed callables and `{ffi: cell}` references use the ordinary order.
 Numeric libraries decorate their math calls' function references with the same
 representation subscript used by literals. Both names come from definitions;
 the decorated label still selects the call's `function` field. A comparison's
@@ -287,8 +292,8 @@ Normal record order is named fields alphabetically by display name, with cell
 identity breaking ties, then unnamed fields by identity. Raw uses identity order.
 
 Grap's `{name: text, value: expression}` wrapper projects as `name = expression`.
-The name slot is always present: a missing name uses the normal empty picker,
-with the name library's string completions. The expression uses the local
+The name slot is always present: a missing name uses Raw's ordinary empty
+picker, where what's typed reads as text. The expression uses the local
 shallow-reference projection. Other metadata does not block recognition, and
 both editors retain their stored field paths. This is a named expression, not a
 `let` binding; the evaluator ignores its name. Named numeric facets remain
@@ -333,10 +338,11 @@ evaluation allowance. Ordinary call-shaped values elsewhere, including returned
 ones, remain editable data until explicitly evaluated.
 
 The separate `grap` field is ordinary library vocabulary saying its contents
-belong to the Grap domain. It requests no evaluation. The Grap library offers it
-as a suggested root field and a root template, and draws the program it names as
-an expression slot: the cell keeps its parentheses, and an empty program offers
-Grap's suggestions rather than the whole vocabulary.
+belong to the Grap domain. It requests no evaluation. The Grap library offers a
+root template (a document whose `grap` names a new program rendered in a pane),
+and draws the program `grap` names as an expression slot: the cell keeps its
+parentheses, and an empty program offers Grap's suggestions rather than the
+whole vocabulary.
 
 The presentation library offers an opt-in interpreter for
 `{value: source, projection: function}`. Pane views try it only at entry,
@@ -368,8 +374,7 @@ presentation. The list uses a vertical, unbracketed presentation with a local
 element partial for the field's name and
 disclosure heading. An item-composition callback adds the indented body outside
 the heading's cell boundary, so reference selection and library tint cover only
-the heading, not the separately projected source field. There is no separate
-toggle strip or selected-tab color. The same list-entry combinator
+the heading, not the separately projected source field. The same list-entry combinator
 supplies stable element paths and pending insertion for both ordinary bracketed
 lists and these columns. Column gaps, including half-gaps at either end, offer
 an insertion line on hover; clicking selects an ordinary missing element.
@@ -378,11 +383,13 @@ columns retain an ordinary empty-list handle.
 
 A heading selects the real list element, so navigation, insertion, deletion,
 and picking remain list operations. Removing an entry removes only the reference,
-not the source field. The body uses `jump` at `outline / element / field` to the
-source record's field, composing with any enclosing conject. Repeated entries
+not the source field. The body uses `jump_to` at `outline / element / field`,
+drawing the source record's field where it is stored and composing with any
+enclosing conject. Repeated entries
 therefore share document edits but have independent selection and fold state.
 Section lists use the same unbracketed column with spacing between items.
-Computed outlines use `at` for their bodies instead: copy and folding remain
+A computed outline is stored nowhere, so `jump_to` falls back to
+`at_with_projection` for its bodies: copy and folding remain
 available without inventing a document source.
 
 Visibility uses the existing undoable fold annotation at each body occurrence,
@@ -446,63 +453,29 @@ traversal opcodes. Preparation interleaves descendant projection and measurement
 before choices resolve. Shared children prepare once per frame, and only chosen
 placement continuations contribute interaction and ink.
 
-Puri leaves carry text or canvas drawing operations. They do not acquire
-selection paths, document editing rules, names, completion providers or
-queries, or event policy. Their text is shaped at lowering.
-The stock [line widget](../progred/src/display/widget/line.rs) is an ordinary native
-function. Text and number projections supply its spelling, affixes, and
-conversion callback; `Layout::widget` carries the resulting measurement
-program without inspecting its props. Placement returns a hover continuation;
-running it contributes native render continuations, handlers, the hover claim,
-and a navigation transition through
-the [widget output interface](../progred/src/display/widget.rs). These are Progred
-widgets, generic over the editor that hosts them: a handler opens its
-[site](../progred/src/editing/site.rs) on the host's editing session and calls
-ordinary [editing helpers](../progred/src/editing.rs); no generic-world callback
-dictionary is installed at each location. Editing's `edit_line` applies editing
-operations and conversion, with undo grouping owned by Progred. The current
-handler owns conversion, not the selection payload. Line conversions are
-native functions; they do not round-trip through Grap.
+The stock [line widget](../progred/src/display/widget/line.rs),
+[delimiters](../progred/src/display/widget/delimiter.rs), borders, and the
+[interaction functions](../progred/src/display/widget/interaction.rs) for click,
+activation and picking are ordinary native widgets and decorators, built on
+`widget::before` and `widget::after`; [Puri and the editor
+frame](puri.md#widgets-and-hover-continuations) describes how their placements
+run against `HoverPass` and bind into paint and handlers. Text and number
+projections supply the line widget's spelling, affixes, and conversion callback;
+`Layout::widget` carries the resulting measurement program without inspecting
+its props. Line conversions are native functions, applied by editing's
+`edit_line`; they do not round-trip through Grap.
 Completion uses an ordinary native widget factory with explicit kind/provider
 inputs. The app adapter constructs document-specific offers and pending
 state; the reusable card owns row ink, navigation, and scrolling. Drawing-program
 widgets directly use the app's evaluation/source attribution helpers. Both
 return the same measured widgets as other projections, not control opcodes.
-Their settled placements run against `HoverPass`; its `HoverOutput` holds the
-winner and after-hover continuations. Binding those with `Attribution` produces
-paint and handlers independently, using Puri's generic phase composition.
-Reusable widgets remain consumers of Puri. See [the editor model](model.md).
 
-Delimiter handles use ordinary [side widgets](../progred/src/display/widget/delimiter.rs).
-An ordinary row lays out fixed-width sides, which adopt its available height
-during placement; selection and picking are explicit `selectable_widget`
-composition inside the stretch, not interpreter behavior.
-The standard record/list/cell projections request `selectable_bracket`. The
-low-level `bracket` constructor, including its Grap layout encoding, contributes
-only ink and geometry. The same settled hover drives native handler activation,
-so retained hover still selects the highlighted target rather than re-hit-testing
-the click position.
-
-Click, activation, and picking likewise compose ordinary
-[native interaction functions](../progred/src/display/widget/interaction.rs).
-`widget::before` prepares a placement continuation, which can contribute ink,
-claims, or handlers before any child; the layout interpreter only composes it.
-`widget::after` contributes after the child through the same output interface.
-The standard border is an ordinary native `after` decorator, with no border
-opcode in layout or border rendering rule in the interpreter.
-There are no click/activate/pick enum cases. Existing Grap layout constructors
-decode to these same functions. The current site's value and the host's pick
-capability are separate inputs, so an explicit pick target need not equal the
-value being projected. Neither path changes pointer-handler precedence.
-Hover claims and occlusion use the same native decorator interface. Hover
-feedback is an explicit, independent decorator used by insert/collapse handles,
-not a hidden policy selected by inspecting the target's enum variant. Native
-widgets request site state only when needed and retain a whole-widget rendering
-callback, not one deferred allocation per canvas operation. Empty outlines also
-use a native widget rather than an interpreter case.
+Grap layout constructors decode to these same functions. The current site's
+value and the host's pick capability are separate inputs, so an explicit pick
+target need not equal the value being projected.
 
 Grap's `on_event` adapter belongs to the layout library and builds an ordinary
-`before` decorator too; there is no `Layout::OnEvent`. One handler decides when
+`before` decorator too. One handler decides when
 a drawing's handler gets an event, and calls the supplied site-scoped
 interpreter with the event as [`site::event`](../progred/src/site/event.rs)
 encodes it. The core owns that record and its vocabulary, which the layout
@@ -533,11 +506,11 @@ selection paths name displayed occurrences; the host retains the interpretation
 used by later document edits. No mutable editor, scope handle, or opaque native
 value is encoded into GID. Completion continuations receive a read-only scoped
 view, so looking up their committed path reads the newly inserted source value.
-Scope construction and arbitrary Grap-defined editor wrappers are not exposed
-as Grap functions in this checkpoint.
+Grap code cannot construct scopes or wrap editor operations.
 
-Drawing programs use scoped foreign operations for fills, strokes, paths,
-transforms, and clips. A temporary path builder belongs to that synchronous
+Drawing programs use scoped foreign operations: `path`, `move to`, `line to` and
+`close` build a path, and `fill` paints a given shape, or else that path, under an
+optional transform. A temporary path builder belongs to that synchronous
 evaluation. A visible program records once in the frame; hover and painting
 share the recording and its source origins. There is no cross-frame canvas memo.
 The installed frame's hover probes retain that recording for subsequent pointer
@@ -562,9 +535,11 @@ receives `value`, the current `control state`, and the scoped `update` callable.
 Calling `update {value: ...}` replaces that control state, preserving unrelated
 site annotations. Updates are staged until the handler completes; ordinary
 absents retain effects, while decline or an evaluator halt discards them.
-The update capability is unavailable while building the controls. The CAM radio
-and tree controls still use their existing keyed state adapters; they have not
-yet migrated to the plain slider's explicit value/handler interface.
+The update capability is unavailable while building the controls. `radio` and
+the tree controls instead take a `key` naming their entry in that state and store
+their values there themselves; [one control-state
+model](deferred.md#one-control-state-model) would move them to the slider's
+interface.
 
 ## Scoped layout programs
 
@@ -572,7 +547,7 @@ The layout library's `layout program` function takes a raw `expression` and
 returns `{layout program: closure}`. This is an ordinary Grap closure with its
 lexical environment, not an opaque native value. The normal partial recognizes
 that record and runs the closure with a borrowed `ForeignOverlay` capturing a
-Rust layout output buffer. No evaluator types or syntax were added.
+Rust layout output buffer. It adds no evaluator types or syntax.
 
 Within that scope, `row`, `col`, `overlay`, and `alternatives` take a raw
 `children` expression. They evaluate it once into a fresh child buffer, then
@@ -608,11 +583,11 @@ Grap recovery. An intentionally empty layout can emit an empty row or column
 with `{}` as its child computation; an empty `do` is not a successful computation.
 
 The explicit boundary matters for composition: pane/viewport projection
-functions still return ordinary values. The existing `border` combinator wraps
-a layout-program record like any other result. Neither it nor other existing
+functions return ordinary values. The `border` combinator wraps
+a layout-program record like any other result. Neither it nor other
 value-returning functions changes meaning inside a secretly installed scope.
-Stored GID layout descriptions remain supported. The new path avoids building
-and decoding those descriptions per node, but still allocates the chosen Rust
+Grap can also return stored layout descriptions; a layout program avoids building
+and decoding them per node, but still allocates the chosen Rust
 layout representation and evaluates Grap code. It is not a cache or a guarantee
 of improved speed for arbitrary programs.
 
@@ -646,8 +621,9 @@ bind-once semantics and separate `value` field identity; they do not own or
 discover wrappers. As with calls, wrappers inside inert data or returned by a
 function remain data until explicitly evaluated.
 
-Cell evaluation checks lexical bindings first, then asks `Host::resolve` for one
-definition: the document's value, otherwise the first loaded library definition.
+Cell evaluation checks lexical bindings first, then asks `grap::Host::resolve`
+for one definition: the document's value, otherwise the first loaded library
+definition.
 Duplicate definitions are tolerated, not merged, composed, or overloaded. Names
 and structural display use the same selected definition; duplicate indicators
 and inspection UI are [deferred](deferred.md#duplicate-definition-inspection).
@@ -723,12 +699,10 @@ Fuel limits individual evaluator runs to help catch accidental runaway programs;
 it is not a security boundary. Calls within one evaluator context still spend
 that context's allowance. Separate projection evaluations start fresh and may
 specify their own budgets; the projection context retains no remaining-fuel
-state and does not clamp a nested render's requested budget. In particular,
+state, carries no unused fuel through projected values, rendering, or errors,
+and does not clamp a nested render's requested budget. In particular,
 an endlessly self-reproducing projection can still hang the editor. Preventing
-all such loops is not a contract of the current fuel mechanism. Preview meshes,
-images, and display errors do not carry unused evaluator fuel through rendering.
-Unused fuel is not propagated through projected values, rendering results, or
-errors, and cross-projection budget clamps are not added to close loopholes.
+all such loops is not a contract of the fuel mechanism.
 
 ## Control functions and absents
 
@@ -911,83 +885,41 @@ Native `ForeignFunction::new` callbacks return runtime values, and
 `Context::eval` evaluates an argument to a runtime value. Generated runtime
 arguments remain values, including closures: they are not materialized and
 reinterpreted as expressions. Raw expression inspection and explicit GID
-adapters remain available for macros and existing consumers.
+adapters serve macros and consumers that read GID.
 `ForeignFunction::from_value` is the explicit adapter for a GID-returning
-implementation. Progred now carries runtime values through evaluation results,
-presentation, controls, layout descriptions, drawing programs, and retained
-slider/event callbacks. Descending into a returned container retains its runtime
-children. Existing data-oriented partial projections use an explicit adapter;
-it borrows stored GID directly or lazily materializes a shared GID view. The
-original runtime value remains available to runtime-aware partials and children.
-Copying a result and writing document/UI data are GID boundaries.
+implementation.
 
-Fold classification, collapsed-container display, and source highlighting inspect
-runtime atoms/container shape directly rather than asking for a complete GID
-view. Text, blob, and color partials likewise inspect only their own facets. A collapsed
-value's picking handler retains the runtime value and materializes it only when
-invoked. Empty partials use the runtime interface so declining without inspecting
-anything does not itself request conversion. Expanded structural lists/records
-inspect positions/labels directly and descend into retained runtime children;
-stored list positions remain unchanged. Control-form partials and shallow Grap
-reference/declaration helpers also inspect runtime inputs directly. General Grap
-call/lambda/value/FFI projections, evaluate-form recognition, numeric facets, and
-arithmetic notation now do likewise. Call layout inspects labels rather than
-argument values; parameter discovery reads native closure parameters directly,
-without materializing code or captures. Both `evaluate` and presentation's
-`render` pass runtime syntax into evaluation, including memoized evaluation.
-The memo input uses the same conservative runtime equality as results, so
-closures with different origins cannot silently reuse one another. Those
-origins now differ in their GID representations too. Domain-specific and other
-legacy partials still use the GID adapter.
-Opening the writable color picker or
-starting a numeric scrub requests GID for document-editing callbacks; simply
-recognizing or displaying those facets does not materialize the enclosing record.
-
-Scoped layout programs retain runtime results through nested child collection,
-absence propagation, and the final output check. An absent's detail fields may
-themselves contain retained callbacks. The `drawing` constructor wraps its
-runtime configuration unchanged; layout picking retains its payload until
-activation writes it into editor state. Border-projection composition captures
-its runtime callable in the wrapper's lexical environment and retains the
-projected result inside its border/`at` description. Declaration projection also
-passes its callable and argument as runtime values. Neither boundary needs to
-materialize callback code or captures. Narrow path/paint readers still use GID
-adapters.
+Progred carries runtime values through evaluation, projection, and the
+libraries. A projection receives a `RuntimeValue`, and descending into a
+returned container retains its runtime children. Runtime-aware partials inspect
+the value directly; `partial` adapts a GID-oriented projection by handing it the
+value's GID view, which borrows stored data as it is and materializes anything
+else once, on first request, keeping it for later readers. Values otherwise
+become GID only at GID boundaries: copying a value, writing document or UI data,
+a library decoding its own data such as a path, paint, tool profile, or radio
+options, and worker requests, which contain geometry, never runtime closures.
+Callbacks therefore keep their code locations and captures through layout
+programs, controls, trees, and previews. The
+[runtime-value migration](history/runtime-values-2026-10-19.md) records which
+consumers read runtime values directly.
 
 Generated drawing syntax may contain retained native closures. Explicitly
 interpreting that syntax lowers its containers without serializing the embedded
-closures. The expression-facing host application adapter preserves the existing
+closures. The expression-facing host application adapter keeps the usual
 contract: Grap parameters bind supplied data, while native functions receive
 argument syntax to interpret. This is distinct from `apply`, whose callable and
 arguments are already evaluated.
-
-Toolpath execution retains runtime programs through nested `sequence paths`,
-point/axis mapper scopes, and tool-scope results. Mapper inputs and point results
-use runtime numeric fields; absent details retain runtime children too. The 2D
-preview constructor and projection pass the program through without materializing
-it. Tool-profile parsing remains an explicit GID boundary. Tree collection,
-mapping, memo inputs/results, and the tree-program cursor's control/view handoff
-also retain runtime values. Tree memo comparisons include callable code/capture
-identity and the separate source-linked hierarchy, not just serialized GID.
-The 3D preview constructors, projections, and recording memo retain runtime
-programs and results as well. Model, playback, color, and tool-profile decoders
-still use GID views of their own data. Recorded failures adapt to GID at the
-existing render-outcome boundary; worker requests contain geometry, never
-runtime closures. Fidget and cutter projections check their identifying fields
-before requesting a GID view, so unrelated executable containers aren't
-materialized merely to decline a projection.
-Widget preparation also receives the runtime value, not an eagerly materialized
-GID copy. A selectable widget converts only when the user actually picks its
-value into the editable document.
 
 Inline code retained by the editor is anchored to its original document
 occurrence before evaluation; cell code retains its definition source and path.
 Later invocation does not rebase those locations onto the drawing program.
 Cmd-hover chooses the innermost call with an available projected occurrence.
-Memo result comparison still conservatively includes native closure code/capture
-identity. It can decline reuse for separately allocated but equivalent closures;
-this is a cheap reuse test, not Grap value equality. GID equality now includes
-the explicit origin metadata instead of silently discarding it.
+Memo input and result comparisons conservatively include native closure
+code/capture identity, so closures with different origins never reuse one
+another's results. They can decline reuse for separately allocated but
+equivalent closures; this is a cheap reuse test, not Grap value equality. A
+closure's GID record carries its origin, so GID equality tells such closures
+apart too.
 
 Materialization preserves existing sharing of runtime records, lists, and
 captured environments within one returned value. Its address table lives only

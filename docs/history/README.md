@@ -90,6 +90,9 @@ at the time; code some of them describe has since been retired.
 - [Projection interface design notes](projection-interface-design-2026-10-17.md):
   handlers given capabilities instead of the editor, the picker as a widget,
   and drawing programs recorded by the layout library.
+- [Runtime values through the editor](runtime-values-2026-10-19.md): which
+  projections, libraries, and previews came to read Grap's runtime values
+  directly, moved from Grap and projections on 2026-10-19.
 
 ## Earlier notes
 
