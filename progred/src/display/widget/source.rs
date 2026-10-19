@@ -135,7 +135,7 @@ impl PartialEq for Secondary {
             ) => {
                 left_cell == right_cell
                     && left_resolution == right_resolution
-                    && left_path[*left_from..] == right_path[*right_from..]
+                    && left_path.get(*left_from..) == right_path.get(*right_from..)
             }
             _ => false,
         }
@@ -143,3 +143,6 @@ impl PartialEq for Secondary {
 }
 
 impl Eq for Secondary {}
+
+#[cfg(test)]
+mod tests;
