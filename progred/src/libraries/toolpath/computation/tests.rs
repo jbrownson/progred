@@ -92,7 +92,7 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
             computations: &computations,
             root: &root,
         };
-        let output = presentation::viewport_output(
+        let output = presentation::tests::viewport_output(
             sources.resolve_path(&pane.path).unwrap(),
             &env,
             width,
@@ -193,7 +193,7 @@ fn profile_program_tree_construction() {
             let selection_time = start.elapsed();
             assert_eq!(selection.leaves, 0..504);
             let start = Instant::now();
-            let view = presentation::viewport_output(declaration, &sources, 400.0, 750.0).unwrap();
+            let view = presentation::tests::viewport_output(declaration, &sources, 400.0, 750.0).unwrap();
             let view_time = start.elapsed();
             assert!(!::grap::absent::is_absent(&view));
             let start = Instant::now();

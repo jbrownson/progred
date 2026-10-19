@@ -11,7 +11,7 @@ fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) 
 
 fn evaluate(expression: &Value) -> Value {
     let library = library::<crate::Editor>();
-    crate::libraries::test_evaluate(
+    crate::test_support::test_evaluate(
         expression,
         |cell| library.definitions.value(cell).cloned(),
         &library.functions().merge(control::functions()),

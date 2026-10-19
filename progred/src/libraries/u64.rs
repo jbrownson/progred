@@ -124,11 +124,6 @@ fn parts() -> number::Parts {
     parts
 }
 
-#[cfg(test)]
-fn functions() -> ::grap::ForeignFunctions {
-    parts().functions
-}
-
 pub fn library<W: Host>() -> Library<W> {
     convention().library(ID, parts())
 }

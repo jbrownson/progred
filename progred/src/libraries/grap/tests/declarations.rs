@@ -4,7 +4,7 @@ use crate::display::widget::navigation::Landmark;
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::libraries::control::vocabulary as control;
-use crate::libraries::{f64, text};
+use crate::libraries::{f64, number, text};
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_into};
 use gid::Path;
@@ -46,11 +46,11 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
                 grap::call(
                     f64::vocabulary::SUM.into(),
                     [
-                        (f64::vocabulary::LEFT, cell.into()),
-                        (f64::vocabulary::RIGHT, f64::value(2.0)),
+                        (number::vocabulary::LEFT, cell.into()),
+                        (number::vocabulary::RIGHT, f64::value(2.0)),
                     ],
                 ),
-                vec![Step::Key(f64::vocabulary::LEFT)],
+                vec![Step::Key(number::vocabulary::LEFT)],
                 true,
             ),
         ] {
@@ -88,8 +88,8 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
     let expression = grap::call(
         f64::vocabulary::SUM.into(),
         [
-            (f64::vocabulary::LEFT, cell.into()),
-            (f64::vocabulary::RIGHT, cell.into()),
+            (number::vocabulary::LEFT, cell.into()),
+            (number::vocabulary::RIGHT, cell.into()),
         ],
     );
     let mut cells = Cells::new();
@@ -99,7 +99,7 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
         cells,
     });
     let path = [
-        Step::Key(f64::vocabulary::LEFT),
+        Step::Key(number::vocabulary::LEFT),
         Step::Follow(gid::Resolution::Document),
     ];
     let frame = editing_frame(&mut world, false);
@@ -729,8 +729,8 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     let sum = grap::call(
         f64::vocabulary::SUM.into(),
         [
-            (f64::vocabulary::LEFT, f64::value(1.0)),
-            (f64::vocabulary::RIGHT, f64::value(2.0)),
+            (number::vocabulary::LEFT, f64::value(1.0)),
+            (number::vocabulary::RIGHT, f64::value(2.0)),
         ],
     );
     let libraries = core_libraries();
@@ -769,7 +769,7 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     let mut world = editing_world(&doc, &libraries);
     world.model.selection = Some(crate::selection::pending_value(
         &crate::test_root(),
-        vec![Step::Key(f64::vocabulary::LEFT)],
+        vec![Step::Key(number::vocabulary::LEFT)],
     ));
     let frame = editing_frame(&mut world, false);
     assert!(frame.completion.is_some());
@@ -777,7 +777,7 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
         frame
             .landmarks
             .iter()
-            .any(|d| d.path.as_ref() == [Step::Key(f64::vocabulary::RIGHT)])
+            .any(|d| d.path.as_ref() == [Step::Key(number::vocabulary::RIGHT)])
     );
 }
 

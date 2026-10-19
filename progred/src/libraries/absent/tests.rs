@@ -24,7 +24,7 @@ fn default_preserves_present_values_without_type_validation() {
         Value::record([]),
         Value::record([(vocabulary::ABSENT, Value::from(vec![1]))]),
     ] {
-        let result = crate::libraries::test_evaluate(
+        let result = crate::test_support::test_evaluate(
             &or_default(value.clone(), new_cell_id().into()),
             |_| None,
             &functions(),
@@ -75,7 +75,7 @@ fn default_evaluates_each_needed_argument_once_in_the_calling_environment() {
                     }
                 }),
             );
-        let result = crate::libraries::test_apply(
+        let result = crate::test_support::test_apply(
             &::grap::lambda(
                 [parameter],
                 or_default(
@@ -105,7 +105,7 @@ fn default_evaluates_each_needed_argument_once_in_the_calling_environment() {
 #[test]
 fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
     let replacement = ::grap::absent::value(new_cell_id());
-    let returned = crate::libraries::test_evaluate(
+    let returned = crate::test_support::test_evaluate(
         &or_default(
             ::grap::absent::value(::grap::absent::FUEL_EXHAUSTED),
             replacement.clone(),
@@ -125,7 +125,7 @@ fn default_recovers_returned_absents_but_does_not_intercept_evaluator_halts() {
             panic!("an evaluator halt must not evaluate the default")
         }),
     );
-    let result = crate::libraries::test_evaluate(
+    let result = crate::test_support::test_evaluate(
         &or_default(
             ::grap::call(recurse.into(), []),
             ::grap::call(fallback.into(), []),

@@ -51,7 +51,7 @@ fn settings_at(
             STOCK,
             Value::record([(
                 fidget::vocabulary::COLOR,
-                crate::libraries::color::value(peniko::Color::from_rgb8(100, 180, 230)),
+                crate::libraries::color::tests::value(peniko::Color::from_rgb8(100, 180, 230)),
             )]),
         ),
     ]))

@@ -60,14 +60,12 @@ fn traversal_uses_the_path_library_for_every_step() {
 #[test]
 fn drawing_constructor_keeps_native_program_code_and_captures() {
     let library = library::<crate::Editor>();
-    let host = crate::libraries::TestHost(|cell| {
+    let host = crate::test_support::TestHost(|cell| {
         library
             .definitions
             .get(cell)
             .cloned()
             .map(|definition| (gid::Resolution::Document, definition))
-            .into_iter()
-            .collect()
     });
     let captured = gid::new_cell_id();
     let program = ::grap::evaluate_runtime_at(
@@ -110,7 +108,7 @@ fn drawing_constructor_keeps_native_program_code_and_captures() {
 fn drawing_is_an_ordinary_projection_function() {
     let library = library::<crate::Editor>();
     let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
-    let evaluation = crate::libraries::test_apply(
+    let evaluation = crate::test_support::test_apply(
         &Value::from(vocabulary::DRAWING),
         [(presentation::vocabulary::VALUE, configuration.clone())],
         |cell| library.definitions.value(cell).cloned(),
@@ -133,7 +131,7 @@ fn border_retains_native_callbacks_and_their_call_origins() {
     let captured = gid::new_cell_id();
     let origin = gid::new_cell_id();
     let traces = Rc::new(RefCell::new(Vec::new()));
-    let host = crate::libraries::TestHost(|cell: CellId| {
+    let host = crate::test_support::TestHost(|cell: CellId| {
         let definition = if cell == sink {
             let traces = traces.clone();
             Some(::grap::Definition::foreign(
@@ -146,10 +144,7 @@ fn border_retains_native_callbacks_and_their_call_origins() {
         } else {
             library.definitions.get(cell).cloned()
         };
-        definition
-            .map(|definition| (gid::Resolution::Document, definition))
-            .into_iter()
-            .collect()
+        definition.map(|definition| (gid::Resolution::Document, definition))
     });
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], number(7.0))),
@@ -227,16 +222,13 @@ fn border_preserves_expression_facing_foreign_arguments() {
     let library = library::<crate::Editor>();
     let data = gid::new_cell_id();
     let value = number(12.0);
-    let host = crate::libraries::TestHost(|cell: CellId| {
+    let host = crate::test_support::TestHost(|cell: CellId| {
         let definition = if cell == data {
             Some(::grap::Definition::Value(value.clone()))
         } else {
             library.definitions.get(cell).cloned()
         };
-        definition
-            .map(|definition| (gid::Resolution::Document, definition))
-            .into_iter()
-            .collect()
+        definition.map(|definition| (gid::Resolution::Document, definition))
     });
     for (projection, expected) in [
         (
@@ -287,7 +279,7 @@ fn border_interprets_captured_projection_syntax_only_when_invoked() {
     let syntax = gid::new_cell_id();
     let resolve = gid::new_cell_id();
     let runs = Rc::new(Cell::new(0));
-    let host = crate::libraries::TestHost(|cell: CellId| {
+    let host = crate::test_support::TestHost(|cell: CellId| {
         let definition = if cell == syntax {
             Some(::grap::Definition::foreign(
                 Value::record([]),
@@ -305,10 +297,7 @@ fn border_interprets_captured_projection_syntax_only_when_invoked() {
         } else {
             library.definitions.get(cell).cloned()
         };
-        definition
-            .map(|definition| (gid::Resolution::Document, definition))
-            .into_iter()
-            .collect()
+        definition.map(|definition| (gid::Resolution::Document, definition))
     });
     let wrapper = ::grap::evaluate(
         &::grap::call(
@@ -357,7 +346,7 @@ fn border_interprets_captured_projection_syntax_only_when_invoked() {
 fn border_composes_with_an_ordinary_projection() {
     let library = library::<crate::Editor>();
     let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
-    let composition = crate::libraries::test_evaluate(
+    let composition = crate::test_support::test_evaluate(
         &::grap::call(
             Value::from(vocabulary::BORDER),
             [(
@@ -375,7 +364,7 @@ fn border_composes_with_an_ordinary_projection() {
             .as_record()
             .is_some_and(|fields| fields.contains_key(&::grap::vocabulary::CLOSURE))
     );
-    let evaluation = crate::libraries::test_apply(
+    let evaluation = crate::test_support::test_apply(
         &composition.result,
         [(presentation::vocabulary::VALUE, configuration.clone())],
         |cell| library.definitions.value(cell).cloned(),

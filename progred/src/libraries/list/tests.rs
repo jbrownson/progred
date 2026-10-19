@@ -29,7 +29,7 @@ fn list_operations_are_value_operations() {
         ],
     );
     assert_eq!(
-        crate::libraries::test_evaluate(&at, |_| None, &functions, 30).result,
+        crate::test_support::test_evaluate(&at, |_| None, &functions, 30).result,
         Value::from(b"b".to_vec())
     );
 }
@@ -53,7 +53,7 @@ fn iteration_and_unfold_only_consume_their_finished_reason() {
                 ],
             );
             let evaluation =
-                crate::libraries::test_evaluate(&expression, |_| None, &functions(), 100);
+                crate::test_support::test_evaluate(&expression, |_| None, &functions(), 100);
             assert!(evaluation.completed);
             assert_eq!(
                 evaluation.result,
@@ -68,7 +68,8 @@ fn iteration_and_unfold_only_consume_their_finished_reason() {
                     ])
                 }
             );
-            let exhausted = crate::libraries::test_evaluate(&expression, |_| None, &functions(), 1);
+            let exhausted =
+                crate::test_support::test_evaluate(&expression, |_| None, &functions(), 1);
             assert!(!exhausted.completed);
             assert_eq!(
                 ::grap::absent::reason(&exhausted.result),
@@ -106,7 +107,7 @@ fn iterate_drives_a_step_without_collecting_intermediate_values() {
         ],
     );
     assert_eq!(
-        crate::libraries::test_evaluate(&iterated, |_| None, &functions, 30).result,
+        crate::test_support::test_evaluate(&iterated, |_| None, &functions, 30).result,
         Value::from(vec![2]),
     );
     assert_eq!(calls.get(), 4);

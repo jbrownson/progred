@@ -49,7 +49,7 @@ fn playback(progress: f64) -> playback::Settings {
             STOCK,
             Value::record([(
                 fidget::vocabulary::COLOR,
-                color::value(peniko::Color::from_rgb8(100, 180, 230)),
+                color::tests::value(peniko::Color::from_rgb8(100, 180, 230)),
             )]),
         ),
     ]))

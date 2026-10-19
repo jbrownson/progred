@@ -42,7 +42,7 @@ fn computed_clauses_preserve_closure_code_captures_and_origins() {
         gid::new_cell_id(),
     );
     let foreign = functions();
-    let host = crate::libraries::test_host(|_| None, &foreign);
+    let host = crate::test_support::test_host(|_| None, &foreign);
     let closure = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::call(
             ::grap::lambda(
@@ -84,7 +84,7 @@ fn computed_clauses_preserve_closure_code_captures_and_origins() {
                         context.eval(context.field(call, captured).unwrap(), environment)
                     }),
                 );
-            let host = crate::libraries::test_host(|_| None, &foreign);
+            let host = crate::test_support::test_host(|_| None, &foreign);
             let result = ::grap::evaluate(
                 &control_call(function, ::grap::call(producer.into(), []), binder),
                 &host,
@@ -203,7 +203,7 @@ fn computed_controls_agree_on_fuel_errors_and_effect_order_across_representation
                         );
                     let result = ::grap::evaluate(
                         &control_call(function, ::grap::call(producer.into(), []), binder),
-                        &crate::libraries::test_host(|_| None, &foreign),
+                        &crate::test_support::test_host(|_| None, &foreign),
                         fuel,
                     );
                     let effects = effects.borrow().clone();

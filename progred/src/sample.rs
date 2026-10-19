@@ -283,8 +283,11 @@ pub fn sample_document() -> Document {
                     grap::call(
                         Value::from(f64::vocabulary::MULTIPLY),
                         [
-                            (f64::vocabulary::LEFT, Value::from(amount)),
-                            (f64::vocabulary::RIGHT, f64::value(2.0)),
+                            (
+                                crate::libraries::number::vocabulary::LEFT,
+                                Value::from(amount),
+                            ),
+                            (crate::libraries::number::vocabulary::RIGHT, f64::value(2.0)),
                         ],
                     ),
                 ),
@@ -325,8 +328,8 @@ pub fn sample_document() -> Document {
                             grap::call(
                                 Value::from(f64::vocabulary::MULTIPLY),
                                 [
-                                    (f64::vocabulary::LEFT, double_pitch()),
-                                    (f64::vocabulary::RIGHT, f64::value(8.0)),
+                                    (crate::libraries::number::vocabulary::LEFT, double_pitch()),
+                                    (crate::libraries::number::vocabulary::RIGHT, f64::value(8.0)),
                                 ],
                             ),
                         )],

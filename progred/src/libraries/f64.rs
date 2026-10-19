@@ -4,22 +4,14 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, name, number};
+use ::grap::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue};
 use gid::CellId;
-#[cfg(test)]
-use gid::{Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0x1fdb573a2c56a7063546c195318214bc);
-#[cfg(test)]
-use ::grap;
-#[cfg(test)]
-use ::grap::vocabulary::FUNCTION;
-use ::grap::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue};
 
 pub mod vocabulary {
     use gid::CellId;
 
-    #[cfg(test)]
-    pub use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
     pub use ::grap::f64::F64;
     pub const SUM: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
     pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
@@ -155,11 +147,6 @@ fn parts() -> number::Parts {
     ]);
     parts.calls.push(vocabulary::LERP);
     parts
-}
-
-#[cfg(test)]
-pub fn functions() -> ::grap::ForeignFunctions {
-    parts().functions
 }
 
 fn lerp(

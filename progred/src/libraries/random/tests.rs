@@ -16,7 +16,7 @@ fn sample(seed: Option<Value>) -> Value {
         )),
         seed.map(|seed| (vocabulary::SEED, seed)),
     ];
-    crate::libraries::test_evaluate(
+    crate::test_support::test_evaluate(
         &grap::call(
             Value::from(vocabulary::WITH_RANDOM),
             arguments.into_iter().flatten(),
@@ -55,35 +55,25 @@ fn declining_after_sampling_halts_the_evaluation() {
                 grap::call(function.into(), []),
             )],
         ),
-        &crate::libraries::TestHost(|cell| {
+        &crate::test_support::TestHost(|cell| {
             if cell == function {
-                vec![
-                    (
-                        gid::Resolution::Document,
-                        grap::Definition::Value(grap::lambda(
-                            [],
-                            grap::call(
-                                grap::lambda([ignored], ::grap::absent::decline()),
-                                [(ignored, next.clone())],
-                            ),
-                        )),
-                    ),
+                Some((
+                    gid::Resolution::Document,
+                    grap::Definition::Value(grap::lambda(
+                        [],
+                        grap::call(
+                            grap::lambda([ignored], ::grap::absent::decline()),
+                            [(ignored, next.clone())],
+                        ),
+                    )),
+                ))
+            } else {
+                functions.get(cell).map(|function| {
                     (
                         gid::Resolution::Library(ID),
-                        grap::Definition::Value(grap::lambda([], next.clone())),
-                    ),
-                ]
-            } else {
-                functions
-                    .get(cell)
-                    .map(|function| {
-                        (
-                            gid::Resolution::Library(ID),
-                            grap::Definition::foreign(gid::Value::record([]), function.clone()),
-                        )
-                    })
-                    .into_iter()
-                    .collect()
+                        grap::Definition::foreign(gid::Value::record([]), function.clone()),
+                    )
+                })
             }
         }),
         100,
@@ -138,7 +128,8 @@ fn successive_samples_advance_the_scoped_stream() {
             ),
         ],
     );
-    let evaluate = || crate::libraries::test_evaluate(&expression, |_| None, &functions, 60).result;
+    let evaluate =
+        || crate::test_support::test_evaluate(&expression, |_| None, &functions, 60).result;
     let result = evaluate();
 
     assert!(result.as_list().is_some_and(|values| {
@@ -153,7 +144,7 @@ fn successive_samples_advance_the_scoped_stream() {
 
 #[test]
 fn sampling_outside_a_scope_returns_a_stable_absent() {
-    let result = crate::libraries::test_evaluate(
+    let result = crate::test_support::test_evaluate(
         &grap::call(
             Value::from(vocabulary::BETWEEN),
             [

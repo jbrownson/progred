@@ -12,12 +12,12 @@ fn range(count: f64) -> Value {
 #[test]
 fn ranges_are_lazy_and_collection_is_explicit() {
     let functions = functions();
-    let huge = crate::libraries::test_evaluate(&range(1e12), |_| None, &functions, 30);
+    let huge = crate::test_support::test_evaluate(&range(1e12), |_| None, &functions, 30);
     assert!(huge.completed);
     let fields = huge.result.as_record().unwrap();
     assert!(fields.contains_key(&::grap::vocabulary::CLOSURE));
-    let saved = crate::libraries::test_evaluate(&range(3.0), |_| None, &functions, 30).result;
-    let restored = crate::libraries::test_evaluate(
+    let saved = crate::test_support::test_evaluate(&range(3.0), |_| None, &functions, 30).result;
+    let restored = crate::test_support::test_evaluate(
         &call(COLLECT, [(ITEMS, saved)]),
         |_| None,
         &functions,
@@ -28,7 +28,7 @@ fn ranges_are_lazy_and_collection_is_explicit() {
         Value::list([0.0, 1.0, 2.0].map(f64::value))
     );
     for count in [0, 1, 5] {
-        let result = crate::libraries::test_evaluate(
+        let result = crate::test_support::test_evaluate(
             &call(COLLECT, [(ITEMS, range(count as f64))]),
             |_| None,
             &functions,
@@ -41,7 +41,7 @@ fn ranges_are_lazy_and_collection_is_explicit() {
         );
     }
     for count in [-1.0, 1.5, f64::NAN, f64::INFINITY, 1e20] {
-        let result = crate::libraries::test_evaluate(&range(count), |_| None, &functions, 100);
+        let result = crate::test_support::test_evaluate(&range(count), |_| None, &functions, 100);
         assert_eq!(::grap::absent::reason(&result.result), Some(INVALID));
     }
 }
@@ -49,9 +49,9 @@ fn ranges_are_lazy_and_collection_is_explicit() {
 #[test]
 fn calling_again_repeats_and_only_the_successor_advances() {
     let functions = functions();
-    let first = crate::libraries::test_evaluate(&range(2.0), |_| None, &functions, 100).result;
+    let first = crate::test_support::test_evaluate(&range(2.0), |_| None, &functions, 100).result;
     let pull = |sequence: &Value| {
-        let result = crate::libraries::test_apply(sequence, [], |_| None, &functions, 100);
+        let result = crate::test_support::test_apply(sequence, [], |_| None, &functions, 100);
         assert!(result.completed);
         result.result
     };
@@ -96,7 +96,7 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
     let functions = functions().merge(control::functions());
     for value in [f64::value(42.0), ::grap::absent::value(INVALID)] {
         let sequence = ::grap::call(producer.clone(), [(captured, value.clone())]);
-        let result = crate::libraries::test_evaluate(
+        let result = crate::test_support::test_evaluate(
             &call(COLLECT, [(ITEMS, sequence)]),
             |_| None,
             &functions,
@@ -152,7 +152,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
             .tracked(),
         );
     let sequence = ::grap::lambda([], call(pull, [(INDEX, f64::value(0.0))]));
-    let result = crate::libraries::test_evaluate(
+    let result = crate::test_support::test_evaluate(
         &call(FOR_EACH, [(ITEMS, sequence), (ACTION, Value::from(action))]),
         |_| None,
         &functions,
@@ -176,7 +176,7 @@ fn pulls_and_actions_interleave_and_action_failure_stops_before_next_pull() {
 #[test]
 fn empty_sequence_does_not_call_action_and_metadata_is_ignored() {
     let extra = gid::new_cell_id();
-    let result = crate::libraries::test_evaluate(
+    let result = crate::test_support::test_evaluate(
         &call(
             FOR_EACH,
             [
@@ -217,7 +217,7 @@ fn producer_failures_malformed_steps_and_fuel_are_not_completion() {
             })
             .tracked(),
         );
-        let result = crate::libraries::test_evaluate(
+        let result = crate::test_support::test_evaluate(
             &call(COLLECT, [(ITEMS, sequence.clone())]),
             |_| None,
             &functions,
@@ -233,7 +233,7 @@ fn producer_failures_malformed_steps_and_fuel_are_not_completion() {
             }
         );
     }
-    let result = crate::libraries::test_evaluate(
+    let result = crate::test_support::test_evaluate(
         &call(
             FOR_EACH,
             [

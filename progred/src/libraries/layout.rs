@@ -269,7 +269,7 @@ pub fn descend_follow(resolution: gid::Resolution) -> Value {
 pub fn descend_step(step: Step) -> Value {
     node(
         vocabulary::DESCEND,
-        Value::record([(vocabulary::STEP, crate::libraries::path::step_value(&step))]),
+        Value::record([(vocabulary::STEP, ::grap::path::step_value(&step))]),
     )
 }
 

@@ -12,8 +12,8 @@ use gid::{CellId, Value, new_cell_id};
 fn functions() -> ForeignFunctions {
     ForeignFunctions::merge_all([
         control::functions(),
-        f32::functions(),
-        f64::functions(),
+        f32::library::<crate::Editor>().functions(),
+        f64::library::<crate::Editor>().functions(),
         list::library::<crate::Editor>().functions(),
     ])
 }
@@ -23,7 +23,7 @@ fn blob(text: &str) -> Value {
 }
 
 fn evaluate(expression: &Value, fuel: usize) -> grap::Evaluation<gid::Value> {
-    crate::libraries::test_evaluate(expression, |_| None, &functions(), fuel)
+    crate::test_support::test_evaluate(expression, |_| None, &functions(), fuel)
 }
 
 fn evaluate_resolving(
@@ -31,7 +31,7 @@ fn evaluate_resolving(
     resolve: impl Fn(CellId) -> Option<Value>,
     fuel: usize,
 ) -> grap::Evaluation<gid::Value> {
-    crate::libraries::test_evaluate(expression, resolve, &functions(), fuel)
+    crate::test_support::test_evaluate(expression, resolve, &functions(), fuel)
 }
 
 /// call(1) + lambda(1) + argument(1) + body cell, bound(1) = 4.
@@ -317,8 +317,8 @@ fn arithmetic_burns_its_call_function_and_operands() {
     let expression = grap::call(
         Value::from(f64::vocabulary::SUM),
         [
-            (f64::vocabulary::LEFT, f64::value(1.0)),
-            (f64::vocabulary::RIGHT, f64::value(2.0)),
+            (number::vocabulary::LEFT, f64::value(1.0)),
+            (number::vocabulary::RIGHT, f64::value(2.0)),
         ],
     );
     let evaluation = evaluate(&expression, 10);

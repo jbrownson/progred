@@ -33,16 +33,6 @@ enum Encoded {
     Rgba([u8; 4]),
 }
 
-#[cfg(test)]
-pub fn value(color: Color) -> Value {
-    let rgba = color.to_rgba8();
-    encoded_value(if rgba.a == 0xff {
-        Encoded::Rgb([rgba.r, rgba.g, rgba.b])
-    } else {
-        Encoded::Rgba([rgba.r, rgba.g, rgba.b, rgba.a])
-    })
-}
-
 fn encoded_value(color: Encoded) -> Value {
     Value::record([encoded_field(color)])
 }
@@ -428,4 +418,4 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

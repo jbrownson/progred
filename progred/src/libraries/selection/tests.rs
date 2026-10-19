@@ -48,7 +48,7 @@ use gid::Value;
 fn the_vocabulary_alone_grants_no_selection_access() {
     let library = library::<crate::Editor>();
     assert_eq!(
-        crate::libraries::test_evaluate(
+        crate::test_support::test_evaluate(
             &::grap::call(Value::from(vocabulary::GET), []),
             |cell| library.definitions.value(cell).cloned(),
             &library.functions(),
@@ -103,18 +103,13 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
             crate::selection::payload::empty_pending(),
         ),
         [],
-        &crate::libraries::TestHost(|cell| {
-            functions
-                .get(cell)
-                .cloned()
-                .map(|function| {
-                    (
-                        gid::Resolution::Document,
-                        ::grap::Definition::foreign(gid::Value::record([]), function),
-                    )
-                })
-                .into_iter()
-                .collect()
+        &crate::test_support::TestHost(|cell| {
+            functions.get(cell).cloned().map(|function| {
+                (
+                    gid::Resolution::Document,
+                    ::grap::Definition::foreign(gid::Value::record([]), function),
+                )
+            })
         }),
         Some(&overlay),
         100,

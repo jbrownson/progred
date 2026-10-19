@@ -12,7 +12,7 @@ fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
                 .update(extra, Value::record([])),
         );
         assert_eq!(read(&boolean), Some(expected));
-        let evaluated = crate::libraries::test_evaluate(
+        let evaluated = crate::test_support::test_evaluate(
             &boolean,
             |id| library.definitions.value(id).cloned(),
             &functions(),
@@ -64,11 +64,11 @@ fn require_accepts_true_rejects_false_and_preserves_absents() {
             vocabulary::REQUIRE.into(),
             [(vocabulary::CONDITION, condition)],
         );
-        let result = crate::libraries::test_evaluate(&expression, |_| None, &functions(), 20);
+        let result = crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20);
         assert!(result.completed);
         assert_eq!(result.result, expected);
     }
-    let missing = crate::libraries::test_evaluate(
+    let missing = crate::test_support::test_evaluate(
         &::grap::call(vocabulary::REQUIRE.into(), []),
         |_| None,
         &functions(),

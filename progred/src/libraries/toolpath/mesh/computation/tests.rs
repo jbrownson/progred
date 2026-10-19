@@ -86,7 +86,7 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
                 STOCK,
                 Value::record([(
                     fidget::vocabulary::COLOR,
-                    crate::libraries::color::value(peniko::Color::from_rgb8(100, 180, 230)),
+                    crate::libraries::color::tests::value(peniko::Color::from_rgb8(100, 180, 230)),
                 )]),
             ),
         ]))
@@ -266,7 +266,7 @@ fn path_appearance_changes_retain_the_stock_mesh() {
                 STOCK,
                 Value::record([(
                     fidget::vocabulary::COLOR,
-                    crate::libraries::color::value(peniko::Color::from_rgb8(100, 180, 230)),
+                    crate::libraries::color::tests::value(peniko::Color::from_rgb8(100, 180, 230)),
                 )]),
             ),
         ]))
@@ -491,7 +491,7 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
             STOCK,
             Value::record([(
                 fidget::vocabulary::COLOR,
-                crate::libraries::color::value(peniko::Color::from_rgb8(100, 180, 230)),
+                crate::libraries::color::tests::value(peniko::Color::from_rgb8(100, 180, 230)),
             )]),
         ),
     ]);

@@ -5,7 +5,7 @@ use gid::Value;
 #[test]
 fn f32_from_f64_rounds_at_the_explicit_numeric_boundary() {
     let evaluate = |expression: &Value| {
-        crate::libraries::test_evaluate(expression, |_| None, &functions(), 20).result
+        crate::test_support::test_evaluate(expression, |_| None, &functions(), 20).result
     };
     let convert = |operand| {
         evaluate(&::grap::call(

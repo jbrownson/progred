@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{control::vocabulary as c, f64};
+use crate::libraries::{control::vocabulary as c, f64, number};
 use crate::library::Definitions;
 use ::grap::vocabulary as g;
 use gid::Cells;
@@ -161,8 +161,8 @@ fn leaf_mapping_composes_inside_out_without_changing_origins() {
             call(
                 function,
                 [
-                    (f64::vocabulary::LEFT, VALUE.into()),
-                    (f64::vocabulary::RIGHT, f64::value(right)),
+                    (number::vocabulary::LEFT, VALUE.into()),
+                    (number::vocabulary::RIGHT, f64::value(right)),
                 ],
             ),
         )

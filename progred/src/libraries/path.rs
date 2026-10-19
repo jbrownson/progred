@@ -3,8 +3,6 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, name};
-#[cfg(test)]
-pub use ::grap::path::step_value;
 pub use ::grap::path::{read, read_step, value};
 use gid::CellId;
 

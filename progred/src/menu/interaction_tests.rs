@@ -262,7 +262,9 @@ fn zoom_shortcuts_step_the_window_zoom_and_stop_at_its_ends() {
 fn a_projections_entry_switches_one_library_off_in_the_selected_area() {
     use crate::libraries::color;
     let mut driver = driver(Document {
-        root: Some(color::value(peniko::Color::from_rgb8(0x50, 0x96, 0xdc))),
+        root: Some(color::tests::value(peniko::Color::from_rgb8(
+            0x50, 0x96, 0xdc,
+        ))),
         cells: Cells::new(),
     });
     let command = Command::Doc(DocCommand::Projection(color::ID));

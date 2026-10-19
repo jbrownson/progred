@@ -62,7 +62,8 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
         let pane = crate::workspace::declarations(standalone.root.as_ref()).remove(0);
         let declaration = standalone_sources.resolve_path(&pane.path).unwrap();
         let expected =
-            presentation::viewport_output(declaration, &standalone_sources, 256.0, 256.0).unwrap();
+            presentation::tests::viewport_output(declaration, &standalone_sources, 256.0, 256.0)
+                .unwrap();
         assert_eq!(
             result.result,
             unnamed(&expected),

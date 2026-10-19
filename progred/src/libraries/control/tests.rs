@@ -71,11 +71,11 @@ fn do_call(expressions: impl IntoIterator<Item = Value>) -> Value {
 }
 
 fn evaluate(expression: &Value) -> grap::Evaluation<gid::Value> {
-    crate::libraries::test_evaluate(expression, |_| None, &functions(), 100)
+    crate::test_support::test_evaluate(expression, |_| None, &functions(), 100)
 }
 
 fn evaluate_with_fuel(expression: &Value, fuel: usize) -> grap::Evaluation<gid::Value> {
-    crate::libraries::test_evaluate(expression, |_| None, &functions(), fuel)
+    crate::test_support::test_evaluate(expression, |_| None, &functions(), fuel)
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn do_evaluates_in_order_and_returns_the_last_result() {
         grap::call(Value::from(first), []),
         grap::call(Value::from(second), []),
     ]);
-    let result = crate::libraries::test_evaluate(&expression, |_| None, &functions, 100).result;
+    let result = crate::test_support::test_evaluate(&expression, |_| None, &functions, 100).result;
 
     assert_eq!(&*calls.borrow(), &[first, second]);
     assert_eq!(result, blob("second"));
@@ -131,8 +131,9 @@ fn do_short_circuits_without_halting_or_rolling_back_effects() {
         }),
     );
     let effect = |text| grap::call(emit.into(), [(vocabulary::VALUE, blob(text))]);
-    let run =
-        |expression: &Value| crate::libraries::test_evaluate(expression, |_| None, &functions, 100);
+    let run = |expression: &Value| {
+        crate::test_support::test_evaluate(expression, |_| None, &functions, 100)
+    };
     for reason in [new_cell_id(), grap::absent::FUEL_EXHAUSTED] {
         let failure = grap::absent::with_detail(reason, vocabulary::VALUE, blob("detail"));
         let expression = do_call([effect("before"), failure.clone(), effect("never")]);
@@ -503,7 +504,7 @@ fn match_evaluates_its_subject_once_across_all_cases() {
             case_arm(blob("second"), blob("second result")),
         ],
     );
-    let evaluation = crate::libraries::test_evaluate(&expression, |_| None, &foreign, 100);
+    let evaluation = crate::test_support::test_evaluate(&expression, |_| None, &foreign, 100);
     assert_eq!(
         evaluation.result,
         ::grap::absent::from_causes([
@@ -693,7 +694,7 @@ fn referenced_patterns_preserve_lowered_captures_and_fuel() {
                     },
                 );
                 let run = |fuel| {
-                    crate::libraries::test_evaluate(
+                    crate::test_support::test_evaluate(
                         &expression,
                         |cell| (cell == clauses_cell).then(|| clauses.clone()),
                         &functions,
@@ -760,7 +761,7 @@ fn referenced_patterns_preserve_mismatches_and_lazy_binder_errors() {
                         ]
                     },
                 );
-                let result = crate::libraries::test_evaluate(
+                let result = crate::test_support::test_evaluate(
                     &expression,
                     |cell| (cell == clauses_cell).then(|| clauses.clone()),
                     &functions(),

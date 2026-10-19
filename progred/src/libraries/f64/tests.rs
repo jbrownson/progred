@@ -22,17 +22,22 @@ fn infix_children(layout: &Layout) -> Option<Vec<Recorded<crate::Editor, crate::
 }
 use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::logic;
+use ::grap::vocabulary::FUNCTION;
 
 use crate::display::test_support::{NoEval, ProjectionCall, inspect, unshared};
 use crate::libraries::test_widgets::projection_input;
-use gid::new_cell_id;
+use gid::{Step, Value, new_cell_id};
+
+fn functions() -> ::grap::ForeignFunctions {
+    library::<crate::Editor>().functions()
+}
 
 #[test]
 fn numeric_projections_read_runtime_facets_and_ignore_unrelated_children() {
     type Project = for<'a, 'b> fn(&'b ProjectionInput<'a, RuntimeValue>) -> Option<Layout>;
     let extra = new_cell_id();
     let functions = functions();
-    let host = crate::libraries::test_host(|_| None, &functions);
+    let host = crate::test_support::test_host(|_| None, &functions);
     let callback = ::grap::evaluate(&::grap::lambda([], value(1.0)), &host, 100).result;
     for (field, bytes, project) in [
         (
@@ -71,13 +76,13 @@ fn numeric_projections_read_runtime_facets_and_ignore_unrelated_children() {
 fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
     let sum = RuntimeValue::record([
         (FUNCTION, Value::from(vocabulary::SUM).into()),
-        (vocabulary::LEFT, RuntimeValue::f64(1.0)),
-        (vocabulary::RIGHT, RuntimeValue::f64(2.0)),
+        (number::vocabulary::LEFT, RuntimeValue::f64(1.0)),
+        (number::vocabulary::RIGHT, RuntimeValue::f64(2.0)),
     ]);
     let product = RuntimeValue::record([
         (FUNCTION, Value::from(vocabulary::MULTIPLY).into()),
-        (vocabulary::LEFT, sum),
-        (vocabulary::RIGHT, RuntimeValue::f64(3.0)),
+        (number::vocabulary::LEFT, sum),
+        (number::vocabulary::RIGHT, RuntimeValue::f64(3.0)),
     ]);
     let children =
         infix_children(&binary_display(&projection_input(&NoEval, &product)).unwrap()).unwrap();
@@ -87,14 +92,17 @@ fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
 fn call(function: CellId, left: Value, right: Value) -> Value {
     grap::call(
         Value::from(function),
-        [(vocabulary::LEFT, left), (vocabulary::RIGHT, right)],
+        [
+            (number::vocabulary::LEFT, left),
+            (number::vocabulary::RIGHT, right),
+        ],
     )
 }
 
 #[test]
 fn extrema_rounding_and_norm_follow_the_numeric_contract() {
     let evaluate = |expression: Value| {
-        crate::libraries::test_evaluate(&expression, |_| None, &functions(), 100).result
+        crate::test_support::test_evaluate(&expression, |_| None, &functions(), 100).result
     };
     for (function, a, b, expected) in [
         (vocabulary::MIN, -3.0, 2.0, -3.0),
@@ -109,8 +117,9 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
             ::grap::absent::value(vocabulary::LEFT_NOT_F64),
         );
     }
-    let unary_call =
-        |function: CellId, argument| grap::call(function.into(), [(vocabulary::OPERAND, argument)]);
+    let unary_call = |function: CellId, argument| {
+        grap::call(function.into(), [(number::vocabulary::OPERAND, argument)])
+    };
     for (input, expected) in [(1.1, 2.0), (-1.1, -1.0), (2.0, 2.0)] {
         assert_eq!(
             evaluate(unary_call(vocabulary::CEIL, value(input))),
@@ -169,7 +178,7 @@ fn rust_supplies_arithmetic_to_grap() {
     let sum = call(vocabulary::SUM, value(2.0), value(3.0));
     let multiply = call(vocabulary::MULTIPLY, sum, value(4.0));
     assert_eq!(
-        crate::libraries::test_evaluate(&multiply, |_| None, &functions(), 20).result,
+        crate::test_support::test_evaluate(&multiply, |_| None, &functions(), 20).result,
         value(20.0)
     );
 }
@@ -185,7 +194,7 @@ fn rust_supplies_lerp_to_grap() {
         ],
     );
     assert_eq!(
-        crate::libraries::test_evaluate(&expression, |_| None, &functions(), 20).result,
+        crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20).result,
         value(12.5)
     );
 }
@@ -207,7 +216,7 @@ fn runtime_lowering_preserves_an_enriched_value_through_a_binding() {
     );
 
     assert_eq!(
-        crate::libraries::test_evaluate(&expression, |_| None, &functions(), 20).result,
+        crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20).result,
         enriched
     );
 }
@@ -222,7 +231,7 @@ fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
         ProjectionCall::Descend {
             steps,
             ..
-        } if *steps == [Step::Key(vocabulary::LEFT)]
+        } if *steps == [Step::Key(number::vocabulary::LEFT)]
     ));
     assert!(matches!(&inspect(&(&children[1])),
         ProjectionCall::Descend {
@@ -235,7 +244,7 @@ fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
         ProjectionCall::Descend {
             steps,
             ..
-        } if *steps == [Step::Key(vocabulary::RIGHT)]
+        } if *steps == [Step::Key(number::vocabulary::RIGHT)]
     ));
 
     let product = call(
@@ -280,9 +289,9 @@ fn every_numeric_operator_reads_infix() {
             )
         };
         children.len() == 3
-            && descends(0, vocabulary::LEFT)
+            && descends(0, number::vocabulary::LEFT)
             && descends(1, FUNCTION)
-            && descends(2, vocabulary::RIGHT)
+            && descends(2, number::vocabulary::RIGHT)
     };
     for (library, operators, one) in [
         (
@@ -341,18 +350,18 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
     let sum = grap::call(
         Value::from(vocabulary::SUM),
         [
-            (vocabulary::LEFT, value(1.0)),
-            (vocabulary::RIGHT, value(2.0)),
+            (number::vocabulary::LEFT, value(1.0)),
+            (number::vocabulary::RIGHT, value(2.0)),
             (extra, value(3.0)),
         ],
     );
     assert!(binary_display(&projection_input(&NoEval, &(&sum).into())).is_some());
     for (parent, field, grouped) in [
-        (vocabulary::MULTIPLY, vocabulary::LEFT, true),
-        (vocabulary::SUM, vocabulary::LEFT, false),
-        (vocabulary::SUM, vocabulary::RIGHT, true),
+        (vocabulary::MULTIPLY, number::vocabulary::LEFT, true),
+        (vocabulary::SUM, number::vocabulary::LEFT, false),
+        (vocabulary::SUM, number::vocabulary::RIGHT, true),
     ] {
-        let (left, right, index) = if field == vocabulary::LEFT {
+        let (left, right, index) = if field == number::vocabulary::LEFT {
             (sum.clone(), value(4.0), 0)
         } else {
             (value(4.0), sum.clone(), 2)
@@ -378,7 +387,10 @@ fn binary_notation_reads_extra_or_missing_fields_without_changing_grouping() {
     );
     // From the moment the operator is chosen, a missing operand is a slot.
     let plain = without(&sum, extra);
-    for (key, index) in [(vocabulary::LEFT, 0), (vocabulary::RIGHT, 2)] {
+    for (key, index) in [
+        (number::vocabulary::LEFT, 0),
+        (number::vocabulary::RIGHT, 2),
+    ] {
         let layout =
             binary_display(&projection_input(&NoEval, &(&without(&plain, key)).into())).unwrap();
         let children = infix_children(&layout).unwrap();
@@ -393,11 +405,11 @@ fn type_absences_are_library_values() {
     let left = call(vocabulary::SUM, Value::from(b"two".to_vec()), value(3.0));
     let right = call(vocabulary::SUM, value(2.0), Value::from(b"three".to_vec()));
     assert_eq!(
-        crate::libraries::test_evaluate(&left, |_| None, &functions(), 10).result,
+        crate::test_support::test_evaluate(&left, |_| None, &functions(), 10).result,
         ::grap::absent::value(vocabulary::LEFT_NOT_F64)
     );
     assert_eq!(
-        crate::libraries::test_evaluate(&right, |_| None, &functions(), 10).result,
+        crate::test_support::test_evaluate(&right, |_| None, &functions(), 10).result,
         ::grap::absent::value(vocabulary::RIGHT_NOT_F64)
     );
 }

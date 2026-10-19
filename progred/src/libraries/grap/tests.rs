@@ -972,7 +972,7 @@ fn the_library_describes_grap_and_owns_evaluate() {
         ::grap::lambda([input], Value::from(input)),
         [(input, Value::from(b"evaluated".to_vec()))],
     );
-    let evaluation = crate::libraries::test_evaluate(
+    let evaluation = crate::test_support::test_evaluate(
         &::grap::call(
             Value::from(::grap::vocabulary::EVALUATE),
             [

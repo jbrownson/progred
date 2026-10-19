@@ -8,6 +8,16 @@ use crate::libraries::test_widgets::{project_runtime, projection_input};
 use ::grap::RuntimeValue;
 use gid::{CellId, Value};
 
+/// A viewport declaration's output at `width` by `height`, as data.
+pub(crate) fn viewport_output(
+    declaration: &Value,
+    env: &dyn Env,
+    width: f64,
+    height: f64,
+) -> Option<Value> {
+    viewport_runtime_output(declaration, env, width, height).map(RuntimeValue::into_value)
+}
+
 const LEFT_VALUE: CellId = CellId::from_u128(1);
 
 fn projected_display(input: &ProjectionInput<'_>) -> Option<Layout> {
@@ -250,7 +260,7 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
             panic!("unexpected application")
         }
     }
-    let host = crate::libraries::TestHost(|_| vec![]);
+    let host = crate::test_support::TestHost(|_| None);
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], f64::value(7.0))),
         Some(::grap::SourceOrigin::Stored(vec![Step::Key(LEFT_VALUE)])),

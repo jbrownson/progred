@@ -20,10 +20,10 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
     let captured = gid::new_cell_id();
     let place = gid::new_cell_id();
     let origins = Rc::new(RefCell::new(Vec::new()));
-    let host = crate::libraries::TestHost(|cell| {
+    let host = crate::test_support::TestHost(|cell| {
         if cell == inspect {
             let origins = origins.clone();
-            vec![(
+            Some((
                 gid::Resolution::Document,
                 ::grap::Definition::foreign(
                     Value::record([]),
@@ -40,9 +40,9 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
                         context.eval(context.field(call, captured).unwrap(), environment)
                     }),
                 ),
-            )]
+            ))
         } else {
-            libraries.resolve(cell).into_iter().collect()
+            libraries.resolve(cell)
         }
     });
     let make = |body, marker, value| {
@@ -72,10 +72,10 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
         RuntimeValue::record([]),
     );
     // Reuse the closure in a receiving host; its saved code must call the new capability.
-    let receiver = crate::libraries::TestHost(|cell| {
+    let receiver = crate::test_support::TestHost(|cell| {
         if cell == place {
             let origins = origins.clone();
-            vec![(
+            Some((
                 gid::Resolution::Document,
                 ::grap::Definition::foreign(
                     Value::record([]),
@@ -92,9 +92,9 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
                         Ok(RuntimeValue::record([]))
                     }),
                 ),
-            )]
+            ))
         } else {
-            host.resolve(cell).into_iter().collect()
+            host.resolve(cell)
         }
     });
     let sequence = runtime_call(
@@ -280,7 +280,7 @@ fn preview_constructor_preserves_its_runtime_program() {
                 (LINE_RADIUS, RuntimeValue::f64(0.01)),
                 (
                     crate::libraries::fidget::vocabulary::COLOR,
-                    crate::libraries::color::value(peniko::Color::WHITE).into(),
+                    crate::libraries::color::tests::value(peniko::Color::WHITE).into(),
                 ),
             ],
             &host,

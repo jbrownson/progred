@@ -57,17 +57,7 @@ pub fn viewport_display<W: Host>(
     })
 }
 
-#[cfg(test)]
-pub(crate) fn viewport_output(
-    declaration: &gid::Value,
-    env: &dyn crate::display::Env,
-    width: f64,
-    height: f64,
-) -> Option<gid::Value> {
-    viewport_runtime_output(declaration, env, width, height).map(::grap::RuntimeValue::into_value)
-}
-
-pub(crate) fn viewport_runtime_output(
+fn viewport_runtime_output(
     declaration: &gid::Value,
     env: &dyn crate::display::Env,
     width: f64,
@@ -248,4 +238,4 @@ pub fn library<W: Host>() -> Library<W> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

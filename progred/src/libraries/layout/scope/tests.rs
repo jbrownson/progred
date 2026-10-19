@@ -26,14 +26,12 @@ fn site() -> crate::editing::Site {
 #[test]
 fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     let control = crate::libraries::control::library::<crate::Editor>();
-    let host = crate::libraries::TestHost(|cell| {
+    let host = crate::test_support::TestHost(|cell| {
         control
             .definitions
             .get(cell)
             .cloned()
             .map(|definition| (gid::Resolution::Document, definition))
-            .into_iter()
-            .collect()
     });
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
@@ -99,17 +97,14 @@ fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
         crate::libraries::control::library::<crate::Editor>(),
         super::super::library::<crate::Editor>(),
     ];
-    let host = crate::libraries::TestHost(|cell| {
-        libraries
-            .iter()
-            .filter_map(|library| {
-                library
-                    .definitions
-                    .get(cell)
-                    .cloned()
-                    .map(|definition| (gid::Resolution::Document, definition))
-            })
-            .collect()
+    let host = crate::test_support::TestHost(|cell| {
+        libraries.iter().find_map(|library| {
+            library
+                .definitions
+                .get(cell)
+                .cloned()
+                .map(|definition| (gid::Resolution::Document, definition))
+        })
     });
     run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_runtime_scoped(&::grap::RuntimeValue::from(program), &host, scope, fuel)
@@ -322,7 +317,7 @@ fn scope_does_not_reinterpret_plain_values_or_escape_into_returned_closures() {
     let unscoped = ::grap::apply(
         &result.result,
         [],
-        &crate::libraries::TestHost(|_| vec![]),
+        &crate::test_support::TestHost(|_| None),
         None,
         10000,
     );
@@ -357,7 +352,7 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
         ::grap::apply(
             &function,
             [],
-            &crate::libraries::TestHost(|_| vec![]),
+            &crate::test_support::TestHost(|_| None),
             Some(scope),
             10000,
         )

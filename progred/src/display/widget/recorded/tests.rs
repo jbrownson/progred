@@ -13,16 +13,13 @@ fn calls_at(origin: SourceOrigin) -> SourceCalls {
         *captured.borrow_mut() = context.call_trace();
         Ok(gid::Value::record([]).into())
     });
-    let host = crate::libraries::TestHost(move |cell| {
-        (cell == sink)
-            .then(|| {
-                (
-                    Resolution::Document,
-                    grap::Definition::foreign(gid::Value::record([]), function.clone()),
-                )
-            })
-            .into_iter()
-            .collect()
+    let host = crate::test_support::TestHost(move |cell| {
+        (cell == sink).then(|| {
+            (
+                Resolution::Document,
+                grap::Definition::foreign(gid::Value::record([]), function.clone()),
+            )
+        })
     });
     grap::evaluate_runtime_at(&grap::call(sink.into(), []).into(), Some(origin), &host, 10);
     SourceCalls::new(trace.take().expect("the call has its origin"), None)

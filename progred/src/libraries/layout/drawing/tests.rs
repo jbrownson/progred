@@ -28,7 +28,7 @@ fn declining_after_drawing_discards_the_whole_recording() {
         draw::FILL.into(),
         [(
             draw::PAINT,
-            crate::libraries::color::value(peniko::Color::BLACK),
+            crate::libraries::color::tests::value(peniko::Color::BLACK),
         )],
     );
     let function = new_cell_id();
@@ -95,7 +95,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
                 ),
                 (
                     vocabulary::PAINT,
-                    crate::libraries::color::value(peniko::Color::BLACK),
+                    crate::libraries::color::tests::value(peniko::Color::BLACK),
                 ),
             ],
         ),

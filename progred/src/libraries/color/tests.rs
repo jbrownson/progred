@@ -1,5 +1,14 @@
 use super::*;
 
+pub(crate) fn value(color: Color) -> Value {
+    let rgba = color.to_rgba8();
+    encoded_value(if rgba.a == 0xff {
+        Encoded::Rgb([rgba.r, rgba.g, rgba.b])
+    } else {
+        Encoded::Rgba([rgba.r, rgba.g, rgba.b, rgba.a])
+    })
+}
+
 #[test]
 fn new_color_is_only_offered_where_its_picker_can_be_presented() {
     use crate::display::{CompletionKind, CompletionRequest, CompletionScope};

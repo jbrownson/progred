@@ -87,7 +87,8 @@ fn svg_bench_renders_toolpath_source_and_preview() {
     let declaration = sources.resolve_path(&pane.path).unwrap();
     let (value, _) = presentation::viewport(declaration).unwrap();
     assert_eq!(value.as_cell(), Some(names["program_tree"]));
-    let preview = presentation::viewport_output(declaration, &sources, 700.0, 500.0).unwrap();
+    let preview =
+        presentation::tests::viewport_output(declaration, &sources, 700.0, 500.0).unwrap();
     assert!(
         preview
             .as_record()

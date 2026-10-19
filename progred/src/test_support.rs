@@ -20,6 +20,58 @@ pub(crate) fn core_libraries() -> Libraries {
     crate::stack::load().libraries
 }
 
+/// A Grap host resolving each cell through its function.
+pub(crate) struct TestHost<F>(pub F);
+
+impl<F: Fn(CellId) -> Option<(gid::Resolution, grap::Definition)>> grap::Host for TestHost<F> {
+    fn resolve(&self, cell: CellId) -> Option<(gid::Resolution, grap::Definition)> {
+        (self.0)(cell)
+    }
+}
+
+/// A host whose document defines `resolve`'s values and `foreign`'s functions.
+pub(crate) fn test_host<'a>(
+    resolve: impl Fn(CellId) -> Option<Value> + 'a,
+    foreign: &'a grap::ForeignFunctions,
+) -> impl grap::Host + 'a {
+    TestHost(move |cell| {
+        match (resolve(cell), foreign.get(cell)) {
+            (value, Some(function)) => Some(grap::Definition::foreign(
+                value.unwrap_or_else(|| Value::record([])),
+                function.clone(),
+            )),
+            (Some(value), None) => Some(grap::Definition::Value(value)),
+            (None, None) => None,
+        }
+        .map(|definition| (gid::Resolution::Document, definition))
+    })
+}
+
+pub(crate) fn test_evaluate(
+    expression: &Value,
+    resolve: impl Fn(CellId) -> Option<Value>,
+    foreign: &grap::ForeignFunctions,
+    fuel: usize,
+) -> grap::Evaluation<Value> {
+    grap::evaluate_value(expression, &test_host(resolve, foreign), fuel)
+}
+
+pub(crate) fn test_apply(
+    function: &Value,
+    arguments: impl IntoIterator<Item = (CellId, Value)>,
+    resolve: impl Fn(CellId) -> Option<Value>,
+    foreign: &grap::ForeignFunctions,
+    fuel: usize,
+) -> grap::Evaluation<Value> {
+    grap::apply_value(
+        function,
+        arguments,
+        &test_host(resolve, foreign),
+        None,
+        fuel,
+    )
+}
+
 impl<World, Hover> crate::library::Library<World, Hover> {
     /// The foreign functions this library defines, to evaluate with apart
     /// from its other definitions.

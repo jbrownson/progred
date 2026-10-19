@@ -131,7 +131,7 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
         ("count", f64::value(4.75)),
         ("count", f64::value(4.0)),
         ("rate", f64::value(1.5)),
-        ("leaves", color::value(Color::from_rgb8(220, 90, 40))),
+        ("leaves", color::tests::value(Color::from_rgb8(220, 90, 40))),
         ("count", f64::value(0.0)),
     ] {
         let mut doc = (*runner.editor.model.doc).clone();
@@ -234,7 +234,10 @@ fn website_growing_forest_add_clouds(
         [
             (names["sun_time"], Value::from(names["controls_parameters"])),
             (names["cloud_speed"], f64::value(speed)),
-            (names["color"], crate::libraries::color::value(Color::WHITE)),
+            (
+                names["color"],
+                crate::libraries::color::tests::value(Color::WHITE),
+            ),
         ],
     );
     website_growing_forest_insert(editor, names, &clouds);

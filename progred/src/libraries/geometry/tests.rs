@@ -1,6 +1,16 @@
 use super::*;
 use gid::new_cell_id;
 
+fn read(value: &Value) -> Option<f64> {
+    let fields = value.as_record()?;
+    let radius = fields
+        .get(&vocabulary::CIRCLE)
+        .and_then(Value::as_record)
+        .and_then(|circle| circle.get(&vocabulary::RADIUS))
+        .and_then(f64::read)?;
+    (radius.is_finite() && radius >= 0.0).then_some(radius)
+}
+
 #[test]
 fn circle_is_a_library_call_over_an_f64() {
     let foreign = functions();
@@ -9,7 +19,7 @@ fn circle_is_a_library_call_over_an_f64() {
         [(vocabulary::RADIUS, f64::value(20.0))],
     );
     assert_eq!(
-        crate::libraries::test_evaluate(&expression, |_| None, &foreign, 10).result,
+        crate::test_support::test_evaluate(&expression, |_| None, &foreign, 10).result,
         value(20.0)
     );
     assert_eq!(read(&value(20.0)), Some(20.0));
@@ -39,7 +49,7 @@ fn invalid_radius_is_a_library_sentinel() {
         Value::from(vocabulary::CIRCLE),
         [(vocabulary::RADIUS, f64::value(-1.0))],
     );
-    let evaluation = crate::libraries::test_evaluate(&expression, |_| None, &foreign, 10);
+    let evaluation = crate::test_support::test_evaluate(&expression, |_| None, &foreign, 10);
     assert_eq!(
         evaluation.result,
         ::grap::absent::value(vocabulary::INVALID_RADIUS)

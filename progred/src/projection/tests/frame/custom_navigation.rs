@@ -1,6 +1,6 @@
 //! Custom forms obey the same placed navigation policy as structural containers.
 use super::*;
-use crate::libraries::{control, f64, fidget};
+use crate::libraries::{control, f64, fidget, number};
 use ::grap::vocabulary::{BODY, EVALUATE, EXPRESSION, FFI, FUNCTION, PARAMS, VALUE};
 use puri::handler::NavigationDirection;
 
@@ -86,17 +86,17 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
             ::grap::call(
                 f64::vocabulary::SUM.into(),
                 [
-                    (f64::vocabulary::LEFT, number()),
-                    (f64::vocabulary::RIGHT, number()),
+                    (number::vocabulary::LEFT, number()),
+                    (number::vocabulary::RIGHT, number()),
                 ],
             ),
-            vec![Step::Key(f64::vocabulary::LEFT)],
+            vec![Step::Key(number::vocabulary::LEFT)],
         ),
         (
             "call",
             ::grap::call(
                 f64::vocabulary::SIN.into(),
-                [(f64::vocabulary::OPERAND, number())],
+                [(number::vocabulary::OPERAND, number())],
             ),
             vec![Step::Key(FUNCTION)],
         ),
@@ -313,12 +313,12 @@ fn call_function_and_arguments_are_one_form_in_both_presentations() {
         let mut f = Fixture::new(
             ::grap::call(
                 f64::vocabulary::SIN.into(),
-                [(f64::vocabulary::OPERAND, f64::value(3.0))],
+                [(number::vocabulary::OPERAND, f64::value(3.0))],
             ),
             Cells::new(),
         );
         let function = f.child([Step::Key(FUNCTION)]);
-        let argument = f.child([Step::Key(f64::vocabulary::OPERAND)]);
+        let argument = f.child([Step::Key(number::vocabulary::OPERAND)]);
         for (from, direction, to) in [
             (f.whole.clone(), forward, function.clone()),
             (function.clone(), forward, argument.clone()),
@@ -441,7 +441,7 @@ fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling(
 #[test]
 fn named_color_name_and_spelling_form_one_horizontal_row() {
     use NavigationDirection::*;
-    let color = crate::libraries::color::value(peniko::Color::new([0.7, 0.3, 0.1, 1.0]));
+    let color = crate::libraries::color::tests::value(peniko::Color::new([0.7, 0.3, 0.1, 1.0]));
     let color = Value::record(
         color
             .as_record()

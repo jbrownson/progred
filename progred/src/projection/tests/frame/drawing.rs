@@ -204,7 +204,7 @@ fn drawing_frame(
                 ),
                 (
                     layout_data::vocabulary::PAINT,
-                    crate::libraries::color::value(Color::BLACK),
+                    crate::libraries::color::tests::value(Color::BLACK),
                 ),
             ],
         ),

@@ -13,7 +13,13 @@ fn call(function: CellId, left: Value, right: Value) -> Value {
 }
 
 fn evaluate(expression: &Value) -> Value {
-    crate::libraries::test_evaluate(expression, |_| None, &functions(), 20).result
+    crate::test_support::test_evaluate(
+        expression,
+        |_| None,
+        &library::<crate::Editor>().functions(),
+        20,
+    )
+    .result
 }
 
 #[test]

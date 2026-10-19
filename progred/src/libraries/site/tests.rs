@@ -6,7 +6,7 @@ use gid::Value;
 fn without_an_overlay_they_are_not_callable() {
     let library = library::<crate::Editor>();
     assert_eq!(
-        crate::libraries::test_evaluate(
+        crate::test_support::test_evaluate(
             &grap::call(Value::from(vocabulary::GET), []),
             |cell| library.definitions.value(cell).cloned(),
             &library.functions(),
