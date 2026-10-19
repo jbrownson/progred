@@ -32,6 +32,33 @@ impl Recorded {
     }
 }
 
+/// A path preview's program and fuel, as the inputs a frame sets, and the
+/// recording they make.
+pub(super) struct Program {
+    pub value: Input<RuntimeValue>,
+    pub fuel: Input<usize>,
+    pub recording: Memo<Recorded>,
+}
+
+impl Program {
+    pub fn new(computations: &Computations, program: RuntimeValue, fuel: usize) -> Self {
+        let value = computations.runtime.input(program);
+        let fuel = computations.runtime.input(fuel);
+        Self {
+            recording: recording(computations, value.clone(), fuel.clone()),
+            value,
+            fuel,
+        }
+    }
+
+    /// Set a frame's program and fuel; a program with the same result keeps
+    /// its recording.
+    pub fn update(&self, program: RuntimeValue, fuel: usize) {
+        self.value.set_by(program, RuntimeValue::same_result);
+        self.fuel.set(fuel);
+    }
+}
+
 pub(super) fn recording(
     computations: &Computations,
     program: Input<RuntimeValue>,

@@ -1,4 +1,4 @@
-use super::{Error, argument, fuel, invalid, number, run, vocabulary::*};
+use super::{Error, argument, fuel, invalid, number, result_layout, run, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::widget;
 use crate::libraries::{layout, presentation};
@@ -138,46 +138,34 @@ pub(super) fn display<W: Host>(
             ::grap::apply_expression(&program, [], context.viewing().host(), Some(scope), fuel)
         });
         if !evaluation.completed || evaluation.result.is_absent() {
-            return crate::display::at(
-                [gid::Step::Key(
-                    crate::libraries::presentation::vocabulary::RESULT,
-                )],
-                &evaluation.result,
-            )
-            .measure(context, build);
+            result_layout(&evaluation.result).measure(context, build)
+        } else if let Some(path) = fitted(lines.sink, size) {
+            let scale = context.viewing().scale();
+            measured::choices::ChoiceLayout::fixed(widget::paint(
+                widget::Extent {
+                    width: width * scale,
+                    ascent: height * scale / 2.0,
+                    descent: height * scale / 2.0,
+                },
+                move |canvas, placement| {
+                    let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
+                        * Affine::scale(scale);
+                    canvas.fill(
+                        Rect::from_origin_size(Point::ZERO, size),
+                        Color::WHITE,
+                        transform,
+                    );
+                    canvas.stroke(
+                        path,
+                        Stroke::new(1.25),
+                        Color::new([0.08, 0.48, 0.32, 1.0]),
+                        transform,
+                    );
+                },
+            ))
+        } else {
+            result_layout(::grap::absent::value(INVALID_INPUT)).measure(context, build)
         }
-        let Some(path) = fitted(lines.sink, size) else {
-            return crate::display::at(
-                [gid::Step::Key(
-                    crate::libraries::presentation::vocabulary::RESULT,
-                )],
-                ::grap::absent::value(INVALID_INPUT),
-            )
-            .measure(context, build);
-        };
-        let scale = context.viewing().scale();
-        measured::choices::ChoiceLayout::fixed(widget::paint(
-            widget::Extent {
-                width: width * scale,
-                ascent: height * scale / 2.0,
-                descent: height * scale / 2.0,
-            },
-            move |canvas, placement| {
-                let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
-                    * Affine::scale(scale);
-                canvas.fill(
-                    Rect::from_origin_size(Point::ZERO, size),
-                    Color::WHITE,
-                    transform,
-                );
-                canvas.stroke(
-                    path,
-                    Stroke::new(1.25),
-                    Color::new([0.08, 0.48, 0.32, 1.0]),
-                    transform,
-                );
-            },
-        ))
     })))
 }
 

@@ -1,5 +1,6 @@
+use super::super::playback;
 use super::*;
-use crate::libraries::{control, f32, f64};
+use crate::libraries::{control, f32, f64, layout};
 use crate::library::Definitions;
 use gid::{Cells, Document, Value, new_cell_id};
 use incremental::background::{Executor, Job};
@@ -469,7 +470,7 @@ fn current_failure_is_not_hidden_by_a_previous_successful_render() {
     f.finish_preparation();
     f.finish(0);
     assert!(matches!(&*f.read(), View::Implicit(_, _)));
-    f.graph.fuel.set(0);
+    f.graph.program.fuel.set(0);
     let view = f.read();
     let View::Mesh(result, _) = &*view else {
         panic!("current error must be exposed")

@@ -1,4 +1,4 @@
-use super::super::computation::{Outcome, Recorded, recording};
+use super::super::computation::{Outcome, Program, Recorded};
 use super::super::mesh::computation::{PathStyle, path_tubes};
 use super::*;
 use crate::computations::Computations;
@@ -41,8 +41,7 @@ pub(crate) struct ViewImage {
 }
 
 pub(super) struct Computation {
-    pub program: Input<RuntimeValue>,
-    pub fuel: Input<usize>,
+    pub program: Program,
     pub settings: Input<Settings>,
     pub image: Memo<Outcome<ViewImage>>,
     pub paths: Memo<Outcome<Mesh>>,
@@ -56,15 +55,12 @@ impl Computation {
         settings: Settings,
         permitted: Memo<bool>,
     ) -> Self {
-        let runtime = &computations.runtime;
-        let program = runtime.input(program);
-        let fuel = runtime.input(fuel);
-        let settings = runtime.input(settings);
-        let recording = recording(computations, program.clone(), fuel.clone());
-        let paths = paths(computations, recording.clone(), settings.clone());
+        let program = Program::new(computations, program, fuel);
+        let settings = computations.runtime.input(settings);
+        let paths = paths(computations, program.recording.clone(), settings.clone());
         let image = image(
             computations,
-            recording,
+            program.recording.clone(),
             settings.clone(),
             Passes::Progressive {
                 first_max_edge: 128,
@@ -74,7 +70,6 @@ impl Computation {
         );
         Self {
             program,
-            fuel,
             settings,
             image,
             paths,
@@ -98,15 +93,12 @@ impl Computation {
         + Sync
         + 'static,
     ) -> Self {
-        let runtime = &computations.runtime;
-        let program = runtime.input(program);
-        let fuel = runtime.input(fuel);
-        let settings = runtime.input(settings);
-        let recording = recording(computations, program.clone(), fuel.clone());
-        let paths = paths(computations, recording.clone(), settings.clone());
+        let program = Program::new(computations, program, fuel);
+        let settings = computations.runtime.input(settings);
+        let paths = paths(computations, program.recording.clone(), settings.clone());
         let image = image_with(
             computations,
-            recording,
+            program.recording.clone(),
             settings.clone(),
             None,
             None,
@@ -117,7 +109,6 @@ impl Computation {
         );
         Self {
             program,
-            fuel,
             settings,
             image,
             paths,

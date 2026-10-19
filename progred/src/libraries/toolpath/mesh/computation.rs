@@ -1,4 +1,4 @@
-use super::super::computation::{Outcome, Recorded, recording};
+use super::super::computation::{Outcome, Program, Recorded};
 use super::*;
 use crate::computations::Computations;
 use incremental::background::{AsyncMemo, Availability, Tasks};
@@ -37,8 +37,7 @@ struct Surface {
 }
 
 pub(super) struct Computation {
-    pub program: Input<RuntimeValue>,
-    pub fuel: Input<usize>,
+    pub program: Program,
     pub settings: Input<Settings>,
     pub depth: Input<u8>,
     pub geometry: Memo<Outcome<ViewGeometry>>,
@@ -53,14 +52,12 @@ impl Computation {
         depth: u8,
     ) -> Self {
         let runtime = &computations.runtime;
-        let program = runtime.input(program);
-        let fuel = runtime.input(fuel);
+        let program = Program::new(computations, program, fuel);
         let settings = runtime.input(settings);
         let depth = runtime.input(depth);
-        let recording = recording(computations, program.clone(), fuel.clone());
         let geometry = geometry(
             computations,
-            recording,
+            program.recording.clone(),
             runtime.memo({
                 let settings = settings.clone();
                 move |read| Ok((*settings.read(read)).clone())
@@ -69,7 +66,6 @@ impl Computation {
         );
         Self {
             program,
-            fuel,
             settings,
             depth,
             geometry,

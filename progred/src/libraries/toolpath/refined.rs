@@ -2,13 +2,13 @@
 //! Current implicit results refine the mesh; camera changes don't remesh it.
 
 use super::{
-    computation::{Outcome, recording},
-    fidget as implicit, mesh, playback,
+    computation::{Outcome, Program},
+    fidget as implicit, mesh,
     vocabulary::*,
 };
 use crate::computations::{Computations, memo};
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{fidget, layout, presentation};
+use crate::libraries::{fidget, presentation};
 use ::grap::RuntimeValue;
 use incremental::{Input, Memo};
 use std::rc::Rc;
@@ -31,8 +31,7 @@ pub(super) fn preview(
 }
 
 struct Computation {
-    program: Input<RuntimeValue>,
-    fuel: Input<usize>,
+    program: Program,
     settings: Input<implicit::computation::Settings>,
     depth: Input<u8>,
     view: Memo<View>,
@@ -66,11 +65,9 @@ impl Computation {
         permitted: Memo<bool>,
     ) -> Self {
         let runtime = &computations.runtime;
-        let program = runtime.input(program);
-        let fuel = runtime.input(fuel);
+        let program = Program::new(computations, program, fuel);
         let settings = runtime.input(settings);
         let depth = runtime.input(depth);
-        let recording = recording(computations, program.clone(), fuel.clone());
         // A derived node drops the camera and image dimensions. Equality cuts
         // propagation here when only the view changes; no event classification.
         let mesh_settings = runtime.memo({
@@ -85,7 +82,7 @@ impl Computation {
         });
         let geometry = mesh::computation::geometry(
             computations,
-            recording.clone(),
+            program.recording.clone(),
             mesh_settings,
             depth.clone(),
         );
@@ -102,7 +99,7 @@ impl Computation {
         // The mesh supplies the draft; completed final-quality tiles replace it.
         let image = implicit::computation::image(
             computations,
-            recording,
+            program.recording.clone(),
             settings.clone(),
             fidget::raster::Passes::Final,
             Some(mesh_ready),
@@ -137,7 +134,6 @@ impl Computation {
         );
         Self {
             program,
-            fuel,
             settings,
             depth,
             view,
@@ -149,23 +145,14 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let fields = input.value?.field(PREVIEW_REFINED)?;
     let (model, depth) =
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
-    let program = fields.field(PROGRAM)?;
-    let radius = fields.field(LINE_RADIUS)?.as_f64()?;
-    cam::field::read_radius(radius)?;
-    let color =
-        crate::libraries::color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
-    let fuel = ::grap::f64::to_usize(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
-    let playback = match fields.field(PLAYBACK) {
-        Some(value) => Some(playback::Settings::read(value.as_value())?),
-        None => None,
-    };
+    let implicit::PathPreview {
+        program,
+        fuel,
+        style,
+    } = implicit::PathPreview::read(&fields)?;
     let image_settings = implicit::computation::Settings {
         request: fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?,
-        style: mesh::computation::PathStyle {
-            radius,
-            color,
-            playback,
-        },
+        style,
     };
     let state = input.state.cloned();
     let scale = input.scale_factor;
@@ -183,10 +170,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                 interaction.permitted.clone(),
             )
         });
-        computation
-            .program
-            .set_by(program.clone(), RuntimeValue::same_result);
-        computation.fuel.set(fuel);
+        computation.program.update(program.clone(), fuel);
         computation.settings.set(image_settings.clone());
         computation.depth.set(depth);
         let view = computations.runtime.read(&computation.view);
@@ -225,13 +209,9 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                     })
                 }
             });
-        match drawing {
-            Ok(drawing) => drawing.measure(context, build),
-            Err(value) => {
-                crate::display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &value)
-                    .measure(context, build)
-            }
-        }
+        drawing
+            .unwrap_or_else(super::result_layout)
+            .measure(context, build)
     }));
     Some(fidget::interactive_volume(drawing, input))
 }

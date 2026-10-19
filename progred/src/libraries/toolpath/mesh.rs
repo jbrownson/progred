@@ -3,9 +3,9 @@
 use super::{playback, vocabulary::*};
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{f64, fidget, layout, presentation};
+use crate::libraries::{f64, fidget, presentation};
 use ::grap::RuntimeValue;
-use cam::field::{coordinate, read_radius};
+use cam::field::coordinate;
 use cam::paths::*;
 use nalgebra::Vector3;
 use puri::mesh::{Geometry, Mesh, Normal, Vertex};
@@ -34,25 +34,16 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
     let fields = input.value?.field(PREVIEW_MESH)?;
     let (model, depth) =
         fidget::mesh::read(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
-    let program = fields.field(PROGRAM)?;
-    let radius = fields.field(LINE_RADIUS)?.as_f64()?;
-    let color =
-        crate::libraries::color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
-    read_radius(radius)?;
-    let fuel = ::grap::f64::to_usize(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?;
-    let playback = match fields.field(PLAYBACK) {
-        Some(value) => Some(playback::Settings::read(value.as_value())?),
-        None => None,
-    };
+    let super::fidget::PathPreview {
+        program,
+        fuel,
+        style,
+    } = super::fidget::PathPreview::read(&fields)?;
     let state = input.state.cloned();
     let scale = input.scale_factor;
     let settings = computation::Settings {
         shape: (&model).into(),
-        style: computation::PathStyle {
-            radius,
-            color,
-            playback,
-        },
+        style,
     };
     let drawing = Layout::program(Rc::new(move |context, build| {
         let computations = context.viewing().computations();
@@ -65,10 +56,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                 depth,
             )
         });
-        computation
-            .program
-            .set_by(program.clone(), RuntimeValue::same_result);
-        computation.fuel.set(fuel);
+        computation.program.update(program.clone(), fuel);
         computation.settings.set(settings.clone());
         computation.depth.set(depth);
         let geometry = computations.runtime.read(&computation.geometry);
@@ -87,13 +75,9 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                 })
                 .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))
         });
-        match drawing {
-            Ok(drawing) => drawing.measure(context, build),
-            Err(value) => {
-                crate::display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &value)
-                    .measure(context, build)
-            }
-        }
+        drawing
+            .unwrap_or_else(super::result_layout)
+            .measure(context, build)
     }));
     Some(fidget::interactive_volume(drawing, input))
 }

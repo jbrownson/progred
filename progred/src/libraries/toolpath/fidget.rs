@@ -1,5 +1,6 @@
 //! Async implicit surfaces combined with mesh paths and cutters.
 
+use super::mesh::computation::PathStyle;
 use super::playback;
 use super::{Error, argument, invalid, number, runtime_result, vocabulary::*};
 use crate::computations::memo;
@@ -108,26 +109,44 @@ pub(super) fn preview_with(
     )]))
 }
 
+/// What a 3D path preview's value holds besides its model, as `preview_with`
+/// writes it.
+pub(super) struct PathPreview {
+    pub program: RuntimeValue,
+    pub fuel: usize,
+    pub style: PathStyle,
+}
+
+impl PathPreview {
+    pub fn read(fields: &RuntimeValue) -> Option<Self> {
+        let radius = fields.field(LINE_RADIUS)?.as_f64()?;
+        read_radius(radius)?;
+        Some(Self {
+            program: fields.field(PROGRAM)?,
+            fuel: ::grap::f64::to_usize(fields.field(layout::vocabulary::FUEL)?.as_f64()?)?,
+            style: PathStyle {
+                radius,
+                color: color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?,
+                playback: match fields.field(PLAYBACK) {
+                    Some(value) => Some(playback::Settings::read(value.as_value())?),
+                    None => None,
+                },
+            },
+        })
+    }
+}
+
 pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?.field(PREVIEW_3D)?;
     let model = fidget::volume_preview(fields.field(presentation::vocabulary::VALUE)?.as_value())?;
-    let program = fields.field(PROGRAM)?;
-    let radius = fields.field(LINE_RADIUS)?.as_f64()?;
-    read_radius(radius)?;
-    let color = color::read_opaque(fields.field(fidget::vocabulary::COLOR)?.as_value())?;
-    let fuel = fields.field(layout::vocabulary::FUEL)?.as_f64()?;
-    let fuel = ::grap::f64::to_usize(fuel)?;
-    let request = fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?;
+    let PathPreview {
+        program,
+        fuel,
+        style,
+    } = PathPreview::read(&fields)?;
     let settings = computation::Settings {
-        request,
-        style: super::mesh::computation::PathStyle {
-            radius,
-            color,
-            playback: match fields.field(PLAYBACK) {
-                Some(value) => Some(playback::Settings::read(value.as_value())?),
-                None => None,
-            },
-        },
+        request: fidget::raster::Request::new(model.clone(), input.state, input.scale_factor)?,
+        style,
     };
     let state = input.state.cloned();
     let scale = input.scale_factor;
@@ -144,10 +163,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                 interaction.permitted.clone(),
             )
         });
-        computation
-            .program
-            .set_by(program.clone(), RuntimeValue::same_result);
-        computation.fuel.set(fuel);
+        computation.program.update(program.clone(), fuel);
         computation.settings.set(settings.clone());
         let image = computations.runtime.read(&computation.image);
         let paths = computations.runtime.read(&computation.paths);
@@ -173,20 +189,16 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> 
                         .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD))?;
                 Ok((image, drawing))
             });
-        match result {
-            Ok((image, drawing)) => {
-                let drawing = if image.pending {
+        result
+            .map(|(image, drawing)| {
+                if image.pending {
                     progress_bar(drawing, image.progress)
                 } else {
                     drawing
-                };
-                drawing.measure(context, build)
-            }
-            Err(value) => {
-                crate::display::at([gid::Step::Key(presentation::vocabulary::RESULT)], &value)
-                    .measure(context, build)
-            }
-        }
+                }
+            })
+            .unwrap_or_else(super::result_layout)
+            .measure(context, build)
     }));
     Some(fidget::interactive_volume(drawing, input))
 }
