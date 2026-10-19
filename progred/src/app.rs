@@ -426,116 +426,21 @@ impl App {
         }
     }
 
+    /// Gives suspended editor `index` its window back, or its first one,
+    /// and draws it.
     fn resume_editor(&mut self, event_loop: &ActiveEventLoop, index: usize) {
-        #[cfg(target_os = "macos")]
-        let appearance = self.appearance;
-        #[cfg(target_os = "macos")]
-        let App {
-            editors,
-            context,
-            renderers,
-            cascade,
-            ..
-        } = &mut *self;
-        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "macos")))]
-        let App {
-            editors,
-            context,
-            renderers,
-            ..
-        } = &mut *self;
-        #[cfg(target_arch = "wasm32")]
-        let App { editors, .. } = &mut *self;
-        let runner = &mut editors[index];
-        let RenderState::Suspended(cached_window) = &mut runner.editor.state else {
-            return;
-        };
-
-        let window = cached_window.take().unwrap_or_else(|| {
-            let attributes = Window::default_attributes().with_title(runner.editor.title());
-            #[cfg(target_os = "macos")]
-            let attributes = attributes.with_theme(appearance);
-            #[cfg(not(target_arch = "wasm32"))]
-            let attributes = attributes.with_inner_size(LogicalSize::new(900, 640));
-            // The app id must match linux/progred.desktop for compositors
-            // to associate the window with the desktop entry. Wayland and
-            // X11 read the same attribute.
-            #[cfg(target_os = "linux")]
-            let attributes = attributes.with_name("progred", "progred");
-            #[cfg(target_arch = "wasm32")]
-            let attributes = {
-                let canvas = web_sys::window()
-                    .and_then(|window| window.document())
-                    .and_then(|document| document.get_element_by_id("progred"))
-                    .and_then(|element| element.dyn_into::<HtmlCanvasElement>().ok())
-                    .expect("#progred canvas");
-                attributes
-                    .with_canvas(Some(canvas))
-                    .with_active(false)
-                    .with_prevent_default(true)
-            };
-            let window = event_loop.create_window(attributes).unwrap();
+        if let RenderState::Suspended(cached) = &mut self.editors[index].editor.state {
+            let cached = cached.take();
+            let window = cached.unwrap_or_else(|| self.create_window(event_loop, index));
             #[cfg(target_os = "macos")]
             {
-                macos_window::place_and_autosave_frame(
-                    &window,
-                    runner.editor.doc_path.as_deref(),
-                    cascade,
-                );
-                macos_window::set_represented(&window, runner.editor.doc_path.as_deref());
+                window.set_theme(self.appearance);
+                self.editors[index].editor.palette =
+                    macos_window::palette(self.appearance, window.theme());
             }
-            Arc::new(window)
-        });
-
-        #[cfg(target_os = "macos")]
-        {
-            window.set_theme(appearance);
-            runner.editor.palette = macos_window::palette(appearance, window.theme());
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let size = window.inner_size();
-            #[cfg(target_os = "macos")]
-            let surface_future = context.create_render_surface(
-                macos_surface::create(&context.instance, &window),
-                size.width,
-                size.height,
-                wgpu::PresentMode::AutoVsync,
-            );
-            #[cfg(not(target_os = "macos"))]
-            let surface_future = context.create_surface(
-                window.clone(),
-                size.width,
-                size.height,
-                wgpu::PresentMode::AutoVsync,
-            );
-            let surface = pollster::block_on(surface_future).expect("Error creating surface");
-
-            renderers.resize_with(context.devices.len(), || None);
-            renderers[surface.dev_id].get_or_insert_with(|| {
-                Compositor::new(
-                    &context.devices[surface.dev_id].device,
-                    &context.devices[surface.dev_id].queue,
-                )
-                .expect("Couldn't create renderer")
-            });
-
-            runner.editor.state = RenderState::Active {
-                surface: Box::new(surface),
-                valid_surface: true,
-                window,
-            };
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            let canvas = window.canvas().expect("Winit web canvas");
-            runner.editor.state = RenderState::Active { canvas, window };
-        }
-
-        if let RenderState::Active { window, .. } = &runner.editor.state {
-            let window = window.clone();
+            let state = self.activate(window.clone());
+            let runner = &mut self.editors[index];
+            runner.editor.state = state;
             #[cfg(not(target_arch = "wasm32"))]
             {
                 runner.editor.focused = window.has_focus();
@@ -547,6 +452,89 @@ impl App {
             runner.refresh_frame(runner.editor.scale(&window), viewport(&window));
             runner.sync_window(&window);
             window.request_redraw();
+        }
+    }
+
+    /// A new window for editor `index`'s document.
+    fn create_window(&mut self, event_loop: &ActiveEventLoop, index: usize) -> Arc<Window> {
+        let editor = &self.editors[index].editor;
+        let attributes = Window::default_attributes().with_title(editor.title());
+        #[cfg(target_os = "macos")]
+        let attributes = attributes.with_theme(self.appearance);
+        #[cfg(not(target_arch = "wasm32"))]
+        let attributes = attributes.with_inner_size(LogicalSize::new(900, 640));
+        // The app id must match linux/progred.desktop for compositors
+        // to associate the window with the desktop entry. Wayland and
+        // X11 read the same attribute.
+        #[cfg(target_os = "linux")]
+        let attributes = attributes.with_name("progred", "progred");
+        #[cfg(target_arch = "wasm32")]
+        let attributes = {
+            let canvas = web_sys::window()
+                .and_then(|window| window.document())
+                .and_then(|document| document.get_element_by_id("progred"))
+                .and_then(|element| element.dyn_into::<HtmlCanvasElement>().ok())
+                .expect("#progred canvas");
+            attributes
+                .with_canvas(Some(canvas))
+                .with_active(false)
+                .with_prevent_default(true)
+        };
+        let window = event_loop.create_window(attributes).unwrap();
+        #[cfg(target_os = "macos")]
+        {
+            macos_window::place_and_autosave_frame(
+                &window,
+                editor.doc_path.as_deref(),
+                &mut self.cascade,
+            );
+            macos_window::set_represented(&window, editor.doc_path.as_deref());
+        }
+        Arc::new(window)
+    }
+
+    /// `window`'s render state once it can draw: a GPU surface, with a
+    /// compositor for the surface's device.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn activate(&mut self, window: Arc<Window>) -> RenderState {
+        let size = window.inner_size();
+        #[cfg(target_os = "macos")]
+        let surface_future = self.context.create_render_surface(
+            macos_surface::create(&self.context.instance, &window),
+            size.width,
+            size.height,
+            wgpu::PresentMode::AutoVsync,
+        );
+        #[cfg(not(target_os = "macos"))]
+        let surface_future = self.context.create_surface(
+            window.clone(),
+            size.width,
+            size.height,
+            wgpu::PresentMode::AutoVsync,
+        );
+        let surface = pollster::block_on(surface_future).expect("Error creating surface");
+        self.renderers
+            .resize_with(self.context.devices.len(), || None);
+        self.renderers[surface.dev_id].get_or_insert_with(|| {
+            Compositor::new(
+                &self.context.devices[surface.dev_id].device,
+                &self.context.devices[surface.dev_id].queue,
+            )
+            .expect("Couldn't create renderer")
+        });
+        RenderState::Active {
+            surface: Box::new(surface),
+            valid_surface: true,
+            window,
+        }
+    }
+
+    /// `window`'s render state once it can draw: its canvas.
+    #[cfg(target_arch = "wasm32")]
+    fn activate(&mut self, window: Arc<Window>) -> RenderState {
+        RenderState::Active {
+            canvas: window.canvas().expect("Winit web canvas"),
+            window,
         }
     }
 
