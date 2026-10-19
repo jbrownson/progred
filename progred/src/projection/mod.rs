@@ -634,7 +634,7 @@ pub struct ProjectDescription<'a> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    pub projection: Option<&'a Projection>,
+    pub projection: &'a Projection,
 }
 
 pub(crate) fn project(
@@ -665,7 +665,6 @@ fn prepare_project(
         width: _,
         projection,
     } = description;
-    let projection = projection.cloned().unwrap_or_default();
     // A view reached through a cell starts its locations at the last one it
     // follows, as following that cell in the view would.
     let followed = Location::root(root_path)
@@ -702,7 +701,7 @@ fn prepare_project(
     });
     let layout = prepare_value(
         &cx,
-        &projection,
+        projection,
         None,
         None,
         tcx,

@@ -64,6 +64,7 @@ pub(crate) fn editing_frame_with_annotations(
 ) -> crate::frame::HoverOutput<EditingWorld> {
     let stack = &world.stack;
     let styles = crate::display::widget::style::editor(world.palette, 1.0);
+    let raw_projection = Projection::default();
     world
         .computations
         .begin(world.model.doc.clone(), stack.libraries.clone());
@@ -91,8 +92,11 @@ pub(crate) fn editing_frame_with_annotations(
             raw,
             styles: &styles,
             width: 500.0,
-
-            projection: (!raw).then_some(projection.unwrap_or(&stack.projection)),
+            projection: if raw {
+                &raw_projection
+            } else {
+                projection.unwrap_or(&stack.projection)
+            },
         },
         &mut tcx,
     );
@@ -442,7 +446,7 @@ impl BenchContext {
                 raw: false,
                 styles,
                 width,
-                projection: Some(&stack.projection),
+                projection: &stack.projection,
             },
             &mut tcx,
         );

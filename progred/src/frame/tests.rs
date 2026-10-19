@@ -1059,21 +1059,14 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         cache: &mut cache,
     };
     let size = Size::new(1200.0, 1000.0);
+    let computations = crate::computations::Computations::default();
     let mut place = |model: &Model| {
         crate::display::widget::frame::place(
             project_workspace(
-                model,
-                true,
-                &crate::computations::Computations::default(),
-                &stack,
+                &workspace_description(model, &stack, &computations, 1.0),
                 &styles,
                 &mut tcx,
-                sources::Sources {
-                    doc: &model.doc,
-                    libraries: &stack.libraries,
-                },
                 size,
-                1.0,
             ),
             Placement::root(Rect::from_origin_size(Point::ZERO, size)),
             &Default::default(),
@@ -1257,22 +1250,15 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
             scale: scale as f32,
             cache: &mut cache,
         };
+        let computations = crate::computations::Computations::default();
         let mut place = |view, pointer| {
             crate::display::widget::frame::place(
                 project_workspace_view(
-                    &model,
-                    true,
-                    &crate::computations::Computations::default(),
-                    &stack,
+                    &workspace_description(&model, &stack, &computations, scale),
                     &styles,
                     &mut tcx,
-                    sources::Sources {
-                        doc: &model.doc,
-                        libraries: &stack.libraries,
-                    },
                     view,
                     size,
-                    scale,
                 ),
                 Placement::root(Rect::from_origin_size(Point::new(30.0, 40.0), size)),
                 &crate::display::widget::HoverInput {
@@ -1371,18 +1357,15 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
     let size = Size::new(801.0, 600.0);
     let placed = crate::display::widget::frame::place(
         project_workspace(
-            &model,
-            true,
-            &crate::computations::Computations::default(),
-            &stack,
+            &workspace_description(
+                &model,
+                &stack,
+                &crate::computations::Computations::default(),
+                1.0,
+            ),
             &styles,
             &mut tcx,
-            sources::Sources {
-                doc: &model.doc,
-                libraries: &stack.libraries,
-            },
             size,
-            1.0,
         ),
         Placement::root(Rect::from_origin_size(Point::ZERO, size)),
         &Default::default(),
@@ -1545,6 +1528,42 @@ fn a_hovered_target_shows_the_cursor_it_asked_for() {
         runner.frame.hover = frame.hover;
         runner.frame.dispatch = frame.dispatch;
         assert_eq!(runner.cursor(), expected);
+    }
+}
+
+/// A frame's description over `model` with no menu bar, for projecting its
+/// workspace.
+fn workspace_description<'a>(
+    model: &'a Model,
+    stack: &'a crate::stack::Stack,
+    computations: &'a crate::computations::Computations,
+    scale: f64,
+) -> FrameDescription<'a> {
+    FrameDescription {
+        palette: style::Theme::Light.palette(),
+        command_modifier: crate::modifiers::native(),
+        computations,
+        focused: true,
+        drawn_menu: false,
+        model,
+        stack,
+        menu: menu::State::default(),
+        availability: crate::command::Availability {
+            save: false,
+            undo: false,
+            redo: false,
+            open_pane: false,
+            move_up: false,
+            move_down: false,
+            move_left: false,
+            move_right: false,
+            actual_size: false,
+            zoom_in: false,
+            zoom_out: false,
+        },
+        toggles: Default::default(),
+        scale,
+        viewport: Size::ZERO,
     }
 }
 

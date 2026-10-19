@@ -59,7 +59,7 @@ fn native_annotation_handler_retains_the_projected_site() {
             raw: false,
             styles: &styles,
             width: 500.0,
-            projection: Some(&projection),
+            projection: &projection,
         },
         &mut TextCtx {
             fonts: &mut fonts,

@@ -378,7 +378,7 @@ pub(crate) fn projected_completion_entries_in(
             styles: &styles,
             width: 500.0,
 
-            projection: Some(projection.unwrap_or(&stack.projection)),
+            projection: projection.unwrap_or(&stack.projection),
         },
         &mut tcx,
     );

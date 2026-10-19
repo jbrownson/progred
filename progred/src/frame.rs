@@ -26,6 +26,7 @@ use puri::handler::{Event, Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
+use std::borrow::Cow;
 use std::rc::Rc;
 use uig::Placement;
 
@@ -567,58 +568,86 @@ impl EditorRunner {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// What `view` draws with: Plain's or Raw's projection, or the libraries'
+/// less those the view leaves off, as a pane's when `pane`.
+fn view_projection<'a>(
+    stack: &'a stack::Stack,
+    view: &workspace::View,
+    pane: bool,
+) -> Cow<'a, projection::Projection> {
+    match view.projection {
+        workspace::Projection::Plain => Cow::Owned(stack.plain()),
+        workspace::Projection::Raw => Cow::Owned(projection::Projection::default()),
+        workspace::Projection::Standard if view.hidden.is_empty() => Cow::Borrowed(if pane {
+            &stack.pane_projection
+        } else {
+            &stack.projection
+        }),
+        workspace::Projection::Standard => {
+            let (document, pane_projection) = stack.without(&view.hidden);
+            Cow::Owned(if pane { pane_projection } else { document })
+        }
+    }
+}
+
+/// An empty leaf filling `size`, for overlays to place into.
+fn backdrop(size: Size) -> measured::Measured<HoverPass<Editor>> {
+    placed::leaf(
+        measured::Extent {
+            width: size.width,
+            ascent: 0.0,
+            descent: size.height,
+        },
+        |_, _| {},
+    )
+}
+
 fn project_workspace_view(
-    model: &Model,
-    focused: bool,
-    computations: &crate::computations::Computations,
-    stack: &stack::Stack,
+    description: &FrameDescription<'_>,
     styles: &style::Styles,
     tcx: &mut TextCtx,
-    sources: sources::Sources<'_>,
     view: &workspace::View,
     size: Size,
-    scale: f64,
 ) -> measured::Measured<HoverPass<Editor>> {
-    let raw = view.projection == workspace::Projection::Raw;
-    let standard = view.projection == workspace::Projection::Standard;
+    let FrameDescription {
+        computations,
+        focused,
+        model,
+        stack,
+        scale,
+        ..
+    } = *description;
+    let sources = sources::Sources {
+        doc: &model.doc,
+        libraries: &stack.libraries,
+    };
+    // A standard pane whose value is a viewport fills the pane with it.
     let viewport = match view.root.target() {
-        Target::Pane { path } if standard => projection::viewport::entry(sources, path),
+        Target::Pane { path } if view.projection == workspace::Projection::Standard => {
+            projection::viewport::entry(sources, path)
+        }
         _ => None,
     };
-    let plain = (view.projection == workspace::Projection::Plain).then(|| stack.plain());
-    let peeled = (!view.hidden.is_empty()).then(|| stack.without(&view.hidden));
-    let (document_projection, pane_projection) = match &peeled {
-        Some((document, pane)) => (document, pane),
-        None => (&stack.projection, &stack.pane_projection),
+    let (root_path, root, projection) = match (view.root.target(), &viewport) {
+        (_, Some(entry)) => (
+            entry.path.as_slice(),
+            Some(entry.value),
+            Cow::Owned(projection::viewport::projection(
+                &view_projection(stack, view, false),
+                size / scale,
+            )),
+        ),
+        (Target::Document, None) => (&[][..], sources.root(), view_projection(stack, view, false)),
+        (Target::Pane { path }, None) => (
+            path.as_slice(),
+            sources.resolve_path(path),
+            view_projection(stack, view, true),
+        ),
     };
-    let viewport = viewport.map(|entry| {
-        (
-            entry,
-            projection::viewport::projection(document_projection, size / scale),
-        )
-    });
     let margin = if viewport.is_some() {
         0.0
     } else {
         12.0 * scale
-    };
-    let body_width = (size.width - 2.0 * margin).max(0.0);
-    let root_path;
-    let (root, projection) = match view.root.target() {
-        Target::Document => {
-            root_path = Vec::new();
-            (sources.root(), document_projection)
-        }
-        Target::Pane { path } => {
-            if let Some((entry, projection)) = &viewport {
-                root_path = entry.path.clone();
-                (Some(entry.value), projection)
-            } else {
-                root_path = path.clone();
-                (sources.resolve_path(path), pane_projection)
-            }
-        }
     };
     let projected = projection::project(
         projection::ProjectDescription {
@@ -628,20 +657,17 @@ fn project_workspace_view(
             completions: Some(&stack.completions),
             sources,
             root,
-            root_path: &root_path,
+            root_path,
             selection: model
                 .selection
                 .as_ref()
                 .filter(|selection| selection.root() == &view.root),
             source_selection: model.selection.as_ref(),
             annotations: &view.annotations,
-            raw,
+            raw: view.projection == workspace::Projection::Raw,
             styles,
-            width: body_width,
-            projection: match &plain {
-                Some(plain) => Some(plain),
-                None => (!raw).then_some(projection),
-            },
+            width: (size.width - 2.0 * margin).max(0.0),
+            projection: &projection,
         },
         tcx,
     );
@@ -667,15 +693,7 @@ fn project_workspace_view(
         )
     };
     let content = view::in_view(content, root);
-    let frame = placed::leaf(
-        measured::Extent {
-            width: size.width,
-            ascent: 0.0,
-            descent: size.height,
-        },
-        |_, _| {},
-    );
-    measured::overlay_into(frame, content, move |placement, _| {
+    measured::overlay_into(backdrop(size), content, move |placement, _| {
         Some(Placement::new(
             placement.rect,
             placement.clip_rect.intersect(placement.rect),
@@ -683,118 +701,116 @@ fn project_workspace_view(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+/// The rule between two columns or panes, which drags to resize them.
+fn divider_rule(
+    divider: workspace::Divider,
+    rect: Rect,
+    border: peniko::Color,
+    scale: f64,
+    size: Size,
+) -> measured::Measured<HoverPass<Editor>> {
+    let vertical = matches!(divider, workspace::Divider::Columns(_));
+    let hover_divider = divider.clone();
+    let cursor_divider = divider.clone();
+    let down_divider = divider.clone();
+    let move_divider = divider.clone();
+    let up_divider = divider;
+    placed::leaf(
+        measured::Extent {
+            width: rect.width(),
+            ascent: 0.0,
+            descent: rect.height(),
+        },
+        move |p, placement| {
+            let hit = if vertical {
+                placement.rect.inflate(4.0 * scale, 0.0)
+            } else {
+                placement.rect.inflate(0.0, 4.0 * scale)
+            };
+            let clip = placement.clip_rect;
+            p.fill(placement.rect, border, Affine::IDENTITY);
+            p.claim_exact(
+                Placement::new(hit, placement.clip_rect),
+                Hovered::Divider(hover_divider),
+            );
+            p.cursor(
+                Hovered::Divider(cursor_divider),
+                if vertical {
+                    Cursor::ColumnResize
+                } else {
+                    Cursor::RowResize
+                },
+            );
+            p.handler().on_pointer_down(move |app: &mut Editor, event| {
+                is_primary_contact(event)
+                    && hit.contains(Point::new(event.state.position.x, event.state.position.y))
+                    && app.model.workspace.start_resize(
+                        down_divider.clone(),
+                        Vec2::new(
+                            event.state.position.x - clip.x0,
+                            event.state.position.y - clip.y0,
+                        ),
+                    )
+            });
+            p.handler().on_pointer_move(move |app: &mut Editor, event| {
+                app.model.workspace.resize(
+                    &move_divider,
+                    Vec2::new(
+                        event.current.position.x - clip.x0,
+                        event.current.position.y - clip.y0,
+                    ),
+                    size,
+                )
+            });
+            p.handler().on_pointer_up(move |app: &mut Editor, _| {
+                app.model.workspace.finish_resize(&up_divider)
+            });
+        },
+    )
+}
+
 fn project_workspace(
-    model: &Model,
-    focused: bool,
-    computations: &crate::computations::Computations,
-    stack: &stack::Stack,
+    description: &FrameDescription<'_>,
     styles: &style::Styles,
     tcx: &mut TextCtx,
-    sources: sources::Sources<'_>,
     size: Size,
-    scale: f64,
 ) -> measured::Measured<HoverPass<Editor>> {
-    let geometry = model.workspace.geometry(size, scale);
-    let mut body = placed::leaf(
-        measured::Extent {
-            width: size.width,
-            ascent: 0.0,
-            descent: size.height,
-        },
-        |_, _| {},
-    );
-    for placed_view in geometry.views {
-        let view = placed_view.view;
-        let rect = placed_view.rect;
-        let child = project_workspace_view(
-            model,
-            focused,
-            computations,
-            stack,
-            styles,
-            tcx,
-            sources,
-            view,
-            rect.size(),
-            scale,
-        );
-        body = measured::overlay_into(body, child, move |placement, _| {
-            let rect = rect + placement.rect.origin().to_vec2();
-            Some(Placement::new(rect, placement.clip_rect.intersect(rect)))
+    let geometry = description
+        .model
+        .workspace
+        .geometry(size, description.scale);
+    let views = geometry
+        .views
+        .into_iter()
+        .fold(backdrop(size), |body, placed_view| {
+            let rect = placed_view.rect;
+            let child =
+                project_workspace_view(description, styles, tcx, placed_view.view, rect.size());
+            measured::overlay_into(body, child, move |placement, _| {
+                let rect = rect + placement.rect.origin().to_vec2();
+                Some(Placement::new(rect, placement.clip_rect.intersect(rect)))
+            })
         });
-    }
-    for placed_divider in geometry.dividers {
-        let rect = placed_divider.rect;
-        let divider = placed_divider.divider;
-        let vertical = matches!(divider, workspace::Divider::Columns(_));
-        let hover_divider = divider.clone();
-        let cursor_divider = divider.clone();
-        let down_divider = divider.clone();
-        let move_divider = divider.clone();
-        let up_divider = divider;
-        let border = styles.palette.border;
-        let rule = placed::leaf(
-            measured::Extent {
-                width: rect.width(),
-                ascent: 0.0,
-                descent: rect.height(),
-            },
-            move |p, placement| {
-                let hit = if vertical {
-                    placement.rect.inflate(4.0 * scale, 0.0)
-                } else {
-                    placement.rect.inflate(0.0, 4.0 * scale)
-                };
-                let clip = placement.clip_rect;
-                p.fill(placement.rect, border, Affine::IDENTITY);
-                p.claim_exact(
-                    Placement::new(hit, placement.clip_rect),
-                    Hovered::Divider(hover_divider),
-                );
-                p.cursor(
-                    Hovered::Divider(cursor_divider),
-                    if vertical {
-                        Cursor::ColumnResize
-                    } else {
-                        Cursor::RowResize
-                    },
-                );
-                p.handler().on_pointer_down(move |app: &mut Editor, event| {
-                    is_primary_contact(event)
-                        && hit.contains(Point::new(event.state.position.x, event.state.position.y))
-                        && app.model.workspace.start_resize(
-                            down_divider.clone(),
-                            Vec2::new(
-                                event.state.position.x - clip.x0,
-                                event.state.position.y - clip.y0,
-                            ),
-                        )
-                });
-                p.handler().on_pointer_move(move |app: &mut Editor, event| {
-                    app.model.workspace.resize(
-                        &move_divider,
-                        Vec2::new(
-                            event.current.position.x - clip.x0,
-                            event.current.position.y - clip.y0,
-                        ),
-                        size,
-                    )
-                });
-                p.handler().on_pointer_up(move |app: &mut Editor, _| {
-                    app.model.workspace.finish_resize(&up_divider)
-                });
-            },
-        );
-        body = measured::overlay_into(body, rule, move |placement, _| {
-            let rect = rect + placement.rect.origin().to_vec2();
-            // The rule is inside the workspace, but its retained drag
-            // needs the workspace origin after the pointer leaves the
-            // narrow hit target.
-            Some(Placement::new(rect, placement.clip_rect))
-        });
-    }
-    body
+    geometry
+        .dividers
+        .into_iter()
+        .fold(views, |body, placed_divider| {
+            let rect = placed_divider.rect;
+            let rule = divider_rule(
+                placed_divider.divider,
+                rect,
+                styles.palette.border,
+                description.scale,
+                size,
+            );
+            measured::overlay_into(body, rule, move |placement, _| {
+                let rect = rect + placement.rect.origin().to_vec2();
+                // The rule is inside the workspace, but its retained drag
+                // needs the workspace origin after the pointer leaves the
+                // narrow hit target.
+                Some(Placement::new(rect, placement.clip_rect))
+            })
+        })
 }
 
 fn project_frame(
@@ -808,7 +824,6 @@ fn project_frame(
         palette,
         command_modifier,
         computations,
-        focused,
         drawn_menu,
         ref toggles,
         model,
@@ -817,6 +832,7 @@ fn project_frame(
         availability,
         scale,
         viewport,
+        ..
     } = *description;
     computations.begin(model.doc.clone(), stack.libraries.clone());
     let FrameResources {
@@ -865,76 +881,58 @@ fn project_frame(
         None => (None, None, 0.0, history),
     };
     let content_viewport = content_viewport(drawn_menu, viewport, scale);
-    let sources = sources::Sources {
-        doc: &model.doc,
-        libraries: &stack.libraries,
-    };
-    let body = project_workspace(
-        model,
-        focused,
-        computations,
-        stack,
-        &styles,
-        &mut tcx,
-        sources,
-        content_viewport.size(),
-        scale,
-    );
+    let body = project_workspace(description, &styles, &mut tcx, content_viewport.size());
     // The stage is editor chrome around one workspace tree. Empty
     // space deselection remains the shell's final editor action.
-    let mut stage = placed::leaf(
-        measured::Extent {
-            width: viewport.width,
-            ascent: 0.0,
-            descent: viewport.height,
-        },
-        |_, _| {},
-    );
-    if let Some(bar) = menu_bar {
-        let bar_placement = Placement::new(
-            Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
-            Rect::new(0.0, 0.0, viewport_width, viewport.height),
-        );
-        stage = measured::overlay_into(stage, bar, move |_, _| Some(bar_placement));
-    }
-    stage = measured::overlay_into(stage, body, move |_, _| {
+    let stage = match menu_bar {
+        Some(bar) => {
+            let bar_placement = Placement::new(
+                Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
+                Rect::new(0.0, 0.0, viewport_width, viewport.height),
+            );
+            measured::overlay_into(backdrop(viewport), bar, move |_, _| Some(bar_placement))
+        }
+        None => backdrop(viewport),
+    };
+    let stage = measured::overlay_into(stage, body, move |_, _| {
         Some(Placement::new(content_viewport, content_viewport))
     });
-
-    if let Some((x, popup)) = menu_popup {
-        let heading_width = menu_heading_width;
-        // Outside presses close the popup. Its own Occludes claim
-        // becomes Hovered::Blocked over separators; command items resolve
-        // their semantic target above it, so no raw inside-swallow may
-        // preempt them.
-        let popup = placed::before(popup, move |p, placement| {
-            let rect = placement.rect;
-            let headings = Rect::new(0.0, 0.0, heading_width, content_viewport.y0);
-            p.handler().on_pointer_down(move |app: &mut Editor, event| {
-                let point = Point::new(event.state.position.x, event.state.position.y);
-                is_primary_contact(event)
-                    && !headings.contains(point)
-                    && !rect.contains(point)
-                    && app.menu.close()
+    let stage = match menu_popup {
+        Some((x, popup)) => {
+            // Outside presses close the popup. Its own Occludes claim
+            // becomes Hovered::Blocked over separators; command items resolve
+            // their semantic target above it, so no raw inside-swallow may
+            // preempt them.
+            let popup = placed::before(popup, move |p, placement| {
+                let rect = placement.rect;
+                let headings = Rect::new(0.0, 0.0, menu_heading_width, content_viewport.y0);
+                p.handler().on_pointer_down(move |app: &mut Editor, event| {
+                    let point = Point::new(event.state.position.x, event.state.position.y);
+                    is_primary_contact(event)
+                        && !headings.contains(point)
+                        && !rect.contains(point)
+                        && app.menu.close()
+                });
+                p.handler().on_scroll(move |_: &mut Editor, event| {
+                    if rect.contains(Point::new(event.state.position.x, event.state.position.y)) {
+                        ScrollOutcome::consume(event)
+                    } else {
+                        ScrollOutcome::pass(event)
+                    }
+                });
             });
-            p.handler().on_scroll(move |_: &mut Editor, event| {
-                if rect.contains(Point::new(event.state.position.x, event.state.position.y)) {
-                    ScrollOutcome::consume(event)
-                } else {
-                    ScrollOutcome::pass(event)
-                }
-            });
-        });
-        stage = container::floating(stage, popup, move |placement, extent| {
-            let x = x
-                .min(placement.clip_rect.x1 - extent.width)
-                .max(placement.clip_rect.x0);
-            Some(Placement::new(
-                extent.rect_at(Point::new(x, content_viewport.y0)),
-                placement.clip_rect,
-            ))
-        });
-    }
+            container::floating(stage, popup, move |placement, extent| {
+                let x = x
+                    .min(placement.clip_rect.x1 - extent.width)
+                    .max(placement.clip_rect.x0);
+                Some(Placement::new(
+                    extent.rect_at(Point::new(x, content_viewport.y0)),
+                    placement.clip_rect,
+                ))
+            })
+        }
+        None => stage,
+    };
     (stage, keyboard)
 }
 

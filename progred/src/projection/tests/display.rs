@@ -378,7 +378,7 @@ fn partials_receive_selection_and_annotations_positionally() {
                 styles: &styles,
                 width: 500.0,
 
-                projection: Some(&projection),
+                projection: &projection,
             },
             &mut tcx,
         )
@@ -461,7 +461,7 @@ fn a_projection_defined_as_data_realizes() {
             styles: &styles,
             width: 500.0,
 
-            projection: Some(&projection),
+            projection: &projection,
         },
         &mut tcx,
     );
