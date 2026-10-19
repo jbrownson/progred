@@ -1,4 +1,5 @@
 use super::*;
+use gid::Cells;
 
 #[test]
 fn axes_are_normalized_and_invalid_axes_do_not_emit() {

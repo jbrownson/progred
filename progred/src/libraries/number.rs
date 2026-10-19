@@ -10,7 +10,7 @@ use crate::libraries::{Library, absent, line_edit, logic, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 use puri::handler::HasHandler;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -29,18 +29,15 @@ pub mod vocabulary {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::LEFT, "left"),
-        (vocabulary::RIGHT, "right"),
-        (vocabulary::OPERAND, "operand"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
     name::named_library(
         ID,
         "number",
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        [
+            (vocabulary::LEFT, "left"),
+            (vocabulary::RIGHT, "right"),
+            (vocabulary::OPERAND, "operand"),
+        ],
+        ForeignFunctions::default(),
     )
 }
 
@@ -104,10 +101,10 @@ pub(crate) enum Operation<N> {
     Predicate(fn(N) -> bool),
 }
 
-/// A convention's generated cells, functions, and projected call forms,
+/// A convention's operations' names, functions, and projected call forms,
 /// which a representation extends with its own before assembling.
 pub(crate) struct Parts {
-    pub cells: Cells,
+    pub names: Vec<(CellId, &'static str)>,
     pub functions: ForeignFunctions,
     pub calls: Vec<CellId>,
     /// The calls that read infix, and how tightly each binds.
@@ -121,19 +118,9 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         self,
         operations: impl IntoIterator<Item = (CellId, &'static str, Operation<N>)>,
     ) -> Parts {
-        let mut cells = Cells::new();
-        cells.set_value(self.tag, name::record(self.name, []));
-        for (cell, reason) in [
-            (self.left_not, format!("left is not {}", self.name)),
-            (self.right_not, format!("right is not {}", self.name)),
-            (self.operand_not, format!("operand is not {}", self.name)),
-            (self.invalid_input, format!("invalid {} input", self.name)),
-        ] {
-            cells.set_value(cell, absent::named_reason(reason));
-        }
         operations.into_iter().fold(
             Parts {
-                cells,
+                names: Vec::new(),
                 functions: ForeignFunctions::default(),
                 calls: Vec::new(),
                 infix: Vec::new(),
@@ -144,7 +131,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                     parts.infix.push((cell, precedence));
                     parts.symbols.push((spelling, cell));
                 }
-                parts.cells.set_value(cell, name::record(spelling, []));
+                parts.names.push((cell, spelling));
                 parts.functions = parts.functions.register(cell, self.operation(operation));
                 parts.calls.push(cell);
                 parts
@@ -159,7 +146,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         before: impl IntoIterator<Item = Partial<W>>,
     ) -> Library<W> {
         let Parts {
-            cells,
+            names,
             functions,
             calls: operations,
             infix,
@@ -167,10 +154,23 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         } = parts;
         let infix: Rc<[(CellId, Precedence)]> = infix.into();
         let symbols: Rc<[(&'static str, CellId)]> = symbols.into();
+        let reasons = [
+            (self.left_not, format!("left is not {}", self.name)),
+            (self.right_not, format!("right is not {}", self.name)),
+            (self.operand_not, format!("operand is not {}", self.name)),
+            (self.invalid_input, format!("invalid {} input", self.name)),
+        ];
         name::named_library(
             id,
             self.name,
-            crate::libraries::Definitions::from_parts(cells, functions),
+            std::iter::once((self.tag, self.name))
+                .chain(
+                    reasons
+                        .iter()
+                        .map(|(cell, reason)| (*cell, reason.as_str())),
+                )
+                .chain(names),
+            functions,
         )
         .with_projection(crate::display::compose_partials(before.into_iter().chain(
             [

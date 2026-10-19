@@ -1,12 +1,12 @@
 //! Final-encoded trees. Consumers choose what to retain; source links are not GID fields.
-use super::{Definitions, Library, absent, layout, name, presentation};
+use super::{Library, absent, layout, name, presentation};
 use crate::computations::memo;
 use crate::display::Host;
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
     SourceOrigin,
 };
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 #[cfg(test)]
@@ -345,20 +345,6 @@ fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>)
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, label) in [
-        (ID, "Trees"),
-        (GROUP, "tree group"),
-        (LEAF, "tree leaf"),
-        (MAP, "map tree leaves"),
-        (COLLECT, "collect tree"),
-        (PROGRAM, "tree program"),
-        (MAPPING, "mapping"),
-        (INVALID_OUTPUT, "tree requires one root"),
-        (OUTPUT_REQUIRED, "tree output required"),
-    ] {
-        cells.set_value(cell, name::record(label, []));
-    }
     let functions = [GROUP, LEAF, MAP]
         .into_iter()
         .fold(ForeignFunctions::default(), |functions, cell| {
@@ -388,5 +374,19 @@ pub fn library<W: Host>() -> Library<W> {
             .parameters([PROGRAM])
             .tracked(),
         );
-    Library::new(Definitions::from_parts(cells, functions))
+    name::named_library(
+        ID,
+        "trees",
+        [
+            (GROUP, "tree group"),
+            (LEAF, "tree leaf"),
+            (MAP, "map tree leaves"),
+            (COLLECT, "collect tree"),
+            (PROGRAM, "tree program"),
+            (MAPPING, "mapping"),
+            (INVALID_OUTPUT, "tree requires one root"),
+            (OUTPUT_REQUIRED, "tree output required"),
+        ],
+        functions,
+    )
 }

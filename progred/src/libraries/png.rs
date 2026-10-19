@@ -4,7 +4,7 @@
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, absent, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 use kurbo::Size;
 use peniko::{ImageAlphaType, ImageData, ImageFormat};
 
@@ -155,25 +155,18 @@ pub fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::PNG, "png"),
-        (vocabulary::IMAGE, "image"),
-        (vocabulary::WIDTH, "png width"),
-        (vocabulary::HEIGHT, "png height"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    for (cell, reason) in [
-        (vocabulary::NOT_PNG, "not a png"),
-        (vocabulary::INVALID_PNG, "invalid png"),
-    ] {
-        cells.set_value(cell, absent::named_reason(reason));
-    }
     name::named_library(
         ID,
         "png",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [
+            (vocabulary::PNG, "png"),
+            (vocabulary::IMAGE, "image"),
+            (vocabulary::WIDTH, "png width"),
+            (vocabulary::HEIGHT, "png height"),
+            (vocabulary::NOT_PNG, "not a png"),
+            (vocabulary::INVALID_PNG, "invalid png"),
+        ],
+        functions(),
     )
     .with_projection(crate::display::runtime_partial(display))
 }

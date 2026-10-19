@@ -4,12 +4,13 @@ use crate::projection::ProjectionInput;
 
 use crate::display::Env;
 use crate::display::test_support::{EvaluatesTo, ProjectionCall, inspect, unshared};
+use crate::libraries::absent;
 use crate::libraries::test_widgets::{project_runtime, projection_input};
 use crate::library::Libraries;
 use crate::test_support::{
     activated, completion_entries_with, core_libraries, library_offers, src,
 };
-use gid::{Document, new_cell_id};
+use gid::{Cells, Document, new_cell_id};
 
 #[test]
 fn every_built_in_declares_its_parameters() {

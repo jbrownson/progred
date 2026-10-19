@@ -1,7 +1,7 @@
 //! An open u64 record convention with the stock editable projection.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, number};
+use crate::libraries::{Library, number};
 use gid::{CellId, Value};
 
 pub const ID: CellId = CellId::from_u128(0xb7212cd0aed055a7a2fbe4036b7f3e51);
@@ -121,12 +121,10 @@ fn parts() -> number::Parts {
             Comparison(|left, right| left == right),
         ),
     ]);
-    for (cell, reason) in [
+    parts.names.extend([
         (vocabulary::OVERFLOW, "u64 overflow"),
         (vocabulary::DIVISION_BY_ZERO, "division by zero"),
-    ] {
-        parts.cells.set_value(cell, absent::named_reason(reason));
-    }
+    ]);
     parts
 }
 

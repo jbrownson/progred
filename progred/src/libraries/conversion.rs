@@ -3,7 +3,7 @@
 use crate::display::Host;
 use crate::libraries::{Library, f32, name};
 use ::grap::ForeignFunctions;
-use gid::{CellId, Cells};
+use gid::CellId;
 
 pub const ID: CellId = CellId::from_u128(0x20540168af7321cb256f4e275e9389f9);
 
@@ -21,12 +21,11 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    cells.set_value(vocabulary::F32_FROM_F64, name::record("f32 from f64", []));
     name::named_library(
         ID,
         "conversion",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [(vocabulary::F32_FROM_F64, "f32 from f64")],
+        functions(),
     )
 }
 

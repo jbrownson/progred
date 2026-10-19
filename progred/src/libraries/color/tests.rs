@@ -29,7 +29,7 @@ use crate::display::recording::{Recordable, Recorded};
 use crate::display::RowAlignment;
 use crate::display::test_support::{NoEval, ProjectionCall, inspect};
 use crate::libraries::test_widgets::projection_input;
-use gid::new_cell_id;
+use gid::{Cells, new_cell_id};
 
 #[test]
 fn swatch_keeps_its_metrics_fill_and_inset_border() {

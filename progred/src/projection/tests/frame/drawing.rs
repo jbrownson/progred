@@ -332,21 +332,17 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
     let shape_function = new_cell_id();
     let library_id = new_cell_id();
     let library = |width| {
-        let mut cells = Cells::new();
-        cells.set_value(shape_function, name::record("shape", []));
         Libraries::from_contributions([(
             library_id,
             crate::libraries::name::named_library::<crate::Editor>(
                 library_id,
                 "shape",
-                crate::library::Definitions::from_parts(
-                    cells,
-                    grap::ForeignFunctions::default().register(
-                        shape_function,
-                        grap::ForeignFunction::from_value(move |_, _, _| {
-                            Ok(layout_data::rect(0.0, 0.0, width, 10.0))
-                        }),
-                    ),
+                [(shape_function, "shape")],
+                grap::ForeignFunctions::default().register(
+                    shape_function,
+                    grap::ForeignFunction::from_value(move |_, _, _| {
+                        Ok(layout_data::rect(0.0, 0.0, width, 10.0))
+                    }),
                 ),
             ),
         )])

@@ -9,7 +9,7 @@ use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 #[cfg(test)]
 use crate::libraries::absent;
 use crate::libraries::{Library, f64, layout, name};
-use gid::{Cells, Step};
+use gid::Step;
 
 mod outline;
 
@@ -229,22 +229,19 @@ pub fn projected_display<W: Host>(
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::RENDER, "render"),
-        (vocabulary::PROJECTION, "projection"),
-        (vocabulary::VIEWPORT, "viewport"),
-        (vocabulary::PREPARE, "prepare"),
-        (vocabulary::VALUE, "value"),
-        (vocabulary::OUTLINE, "outline"),
-        (vocabulary::RESULT, "result"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
     name::named_library(
         ID,
         "presentation",
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        [
+            (vocabulary::RENDER, "render"),
+            (vocabulary::PROJECTION, "projection"),
+            (vocabulary::VIEWPORT, "viewport"),
+            (vocabulary::PREPARE, "prepare"),
+            (vocabulary::VALUE, "value"),
+            (vocabulary::OUTLINE, "outline"),
+            (vocabulary::RESULT, "result"),
+        ],
+        ::grap::ForeignFunctions::default(),
     )
     .with_projection(crate::display::compose_partials([
         crate::display::runtime_partial(display),

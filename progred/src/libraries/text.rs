@@ -9,7 +9,7 @@
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, line_edit, name};
-use gid::{Cells, Value};
+use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xeaaf309c36a65d2811083944da29aec9);
 
@@ -68,12 +68,11 @@ fn editor_for_text(text: &str) -> crate::display::LineEdit {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    cells.set_value(vocabulary::UTF8, name::record("utf8", []));
     name::named_library(
         ID,
         "text",
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        [(vocabulary::UTF8, "utf8")],
+        ::grap::ForeignFunctions::default(),
     )
     .with_projection(crate::display::runtime_partial(display))
     .with_completions(completions)

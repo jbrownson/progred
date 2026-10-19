@@ -6,7 +6,7 @@ use crate::libraries::{f32, f64, text, u64};
 use crate::projection::test_support::*;
 use crate::selection::pending_value;
 use crate::test_values::numeric_calls;
-use gid::{Document, Step, new_cell_id};
+use gid::{Cells, Document, Step, new_cell_id};
 use kurbo::Point;
 use puri::hover::Claim;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};

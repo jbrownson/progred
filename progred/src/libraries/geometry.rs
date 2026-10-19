@@ -3,7 +3,7 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, absent, f64, name};
-use gid::{Cells, Value};
+use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xac27c33e44d2df4f3d1753bcebd2cfe5);
 #[cfg(test)]
@@ -55,17 +55,15 @@ pub fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    cells.set_value(vocabulary::CIRCLE, name::record("circle", []));
-    cells.set_value(vocabulary::RADIUS, name::record("radius", []));
-    cells.set_value(
-        vocabulary::INVALID_RADIUS,
-        absent::named_reason("invalid radius"),
-    );
     name::named_library(
         ID,
         "geometry",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [
+            (vocabulary::CIRCLE, "circle"),
+            (vocabulary::RADIUS, "radius"),
+            (vocabulary::INVALID_RADIUS, "invalid radius"),
+        ],
+        functions(),
     )
 }
 

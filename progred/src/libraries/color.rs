@@ -2,7 +2,7 @@
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, f64, line_edit, name};
-use gid::{Cells, Step, Value};
+use gid::{Step, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
 use crate::display::{
@@ -403,17 +403,18 @@ fn hex_editor(color: Encoded) -> crate::display::LineEdit {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    cells.set_value(vocabulary::RGB, name::record("rgb", []));
-    cells.set_value(vocabulary::RGBA, name::record("rgba", []));
-    cells.set_value(vocabulary::PICKER, name::record("color picker", []));
-    cells.set_value(vocabulary::HUE, name::record("hue", []));
-    named::insert(&mut cells);
     name::named_library(
         ID,
         "color",
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        [
+            (vocabulary::RGB, "rgb"),
+            (vocabulary::RGBA, "rgba"),
+            (vocabulary::PICKER, "color picker"),
+            (vocabulary::HUE, "hue"),
+        ],
+        ::grap::ForeignFunctions::default(),
     )
+    .with_values(named::colors())
     .with_projection(crate::display::runtime_partial(display))
     .with_completions(completions)
 }

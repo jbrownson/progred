@@ -83,15 +83,7 @@ const NAMES: [(CellId, &str); 24] = {
 };
 
 pub(super) fn library<W: crate::display::Host>(session: &Rc<RefCell<Session>>) -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in NAMES {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    name::named_library(
-        ID,
-        "computer",
-        crate::library::Definitions::from_parts(cells, functions(session)),
-    )
+    name::named_library(ID, "computer", NAMES, functions(session))
 }
 
 /// Binders for everything a request or reply is likely to mention: the

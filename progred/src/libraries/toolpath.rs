@@ -2,14 +2,14 @@
 //! through a sink; recording is one consumer, not the program representation.
 
 use crate::display::Host;
-use crate::libraries::{Definitions, Library, absent, f64, layout, name, presentation};
+use crate::libraries::{Library, absent, f64, layout, name, presentation};
 #[cfg(test)]
 use ::grap::Evaluation;
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
     RuntimeValue,
 };
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 use std::{cell::RefCell, rc::Rc};
 
 mod computation;
@@ -446,48 +446,44 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (id, spelling) in [
-        (TOOLPATH, "toolpaths"),
-        (START_AT, "start at"),
-        (TOOL_AXIS, "tool axis"),
-        (LINE_TO, "line to"),
-        (MAP_POINTS, "map points"),
-        (MAP_AXES, "map axes"),
-        (WITH_TOOL, "with tool"),
-        (MAPPER, "mapping"),
-        (POINT, "point"),
-        (X, "x"),
-        (Y, "y"),
-        (Z, "z"),
-        (PREVIEW, "preview paths"),
-        (PREVIEW_3D, "preview paths 3d"),
-        (PREVIEW_MESH, "preview paths mesh"),
-        (PREVIEW_REFINED, "preview paths refined"),
-        (LINE_RADIUS, "line radius"),
-        (PROGRAM, "program"),
-        (SEQUENCE, "sequence paths"),
-        (FOCUS, "focus"),
-        (PLAYBACK, "playback"),
-        (PROGRESS, "progress"),
-        (TOOL_DIAMETER, "tool diameter"),
-        (TOOL_LENGTH, "tool length"),
-        (PROFILE_TOLERANCE, "profile tolerance"),
-        (STOCK_MIN, "stock minimum"),
-        (STOCK_MAX, "stock maximum"),
-        (STOCK, "stock"),
-        (INVALID_INPUT, "invalid toolpath input"),
-        (OUTPUT_REQUIRED, "toolpath output required"),
-    ] {
-        cells.set_value(id, name::record(spelling, []));
-    }
-    for (id, spelling) in cutter::names() {
-        cells.set_value(id, name::record(spelling, []));
-    }
     name::named_library(
         ID,
         "toolpaths",
-        Definitions::from_parts(cells, cutter::functions(functions())),
+        [
+            (TOOLPATH, "toolpaths"),
+            (START_AT, "start at"),
+            (TOOL_AXIS, "tool axis"),
+            (LINE_TO, "line to"),
+            (MAP_POINTS, "map points"),
+            (MAP_AXES, "map axes"),
+            (WITH_TOOL, "with tool"),
+            (MAPPER, "mapping"),
+            (POINT, "point"),
+            (X, "x"),
+            (Y, "y"),
+            (Z, "z"),
+            (PREVIEW, "preview paths"),
+            (PREVIEW_3D, "preview paths 3d"),
+            (PREVIEW_MESH, "preview paths mesh"),
+            (PREVIEW_REFINED, "preview paths refined"),
+            (LINE_RADIUS, "line radius"),
+            (PROGRAM, "program"),
+            (SEQUENCE, "sequence paths"),
+            (FOCUS, "focus"),
+            (PLAYBACK, "playback"),
+            (PROGRESS, "progress"),
+            (TOOL_DIAMETER, "tool diameter"),
+            (TOOL_LENGTH, "tool length"),
+            (PROFILE_TOLERANCE, "profile tolerance"),
+            (STOCK_MIN, "stock minimum"),
+            (STOCK_MAX, "stock maximum"),
+            (STOCK, "stock"),
+            (INVALID_INPUT, "invalid toolpath input"),
+            (OUTPUT_REQUIRED, "toolpath output required"),
+        ]
+        .into_iter()
+        .chain(cutter::names()),
+        cutter::functions(functions()),
     )
     .with_projection(crate::display::compose_partials([
         crate::display::runtime_partial(cutter::display),

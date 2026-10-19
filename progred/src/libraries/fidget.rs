@@ -21,7 +21,7 @@ use fidget_engine::{
     },
     vm::VmShape,
 };
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 
 mod completion;
 pub(crate) mod interaction;
@@ -1099,73 +1099,6 @@ pub(crate) fn interactive_volume<W: Host, V>(
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::FIDGET, "fidget"),
-        (vocabulary::AXIS, "axis"),
-        (vocabulary::MIN, "min"),
-        (vocabulary::MAX, "max"),
-        (vocabulary::NEGATE, "negate"),
-        (vocabulary::ABS, "abs"),
-        (vocabulary::SQRT, "sqrt"),
-        (vocabulary::SQUARE, "square"),
-        (vocabulary::SIN, "sin"),
-        (vocabulary::COS, "cos"),
-        (vocabulary::TRANSLATE, "translate"),
-        (vocabulary::UNION, "union"),
-        (vocabulary::INTERSECTION, "intersection"),
-        (vocabulary::DIFFERENCE, "difference"),
-        (vocabulary::PREVIEW, "preview"),
-        (vocabulary::PREVIEW_3D, "preview 3d"),
-        (vocabulary::PREVIEW_MESH, "preview mesh"),
-        (vocabulary::MESH_DEPTH, "mesh depth"),
-        (vocabulary::FIELD, "field"),
-        (vocabulary::SCENE, "scene"),
-        (vocabulary::COLOR, "color"),
-        (vocabulary::RADIUS, "radius"),
-        (vocabulary::DELTA_X, "x"),
-        (vocabulary::DELTA_Y, "y"),
-        (vocabulary::DELTA_Z, "z"),
-        (vocabulary::MIN_X, "minimum x"),
-        (vocabulary::MAX_X, "maximum x"),
-        (vocabulary::MIN_Y, "minimum y"),
-        (vocabulary::MAX_Y, "maximum y"),
-        (vocabulary::MIN_Z, "minimum z"),
-        (vocabulary::MAX_Z, "maximum z"),
-        (vocabulary::SLICE_Z, "slice z"),
-        (vocabulary::CAMERA, "camera"),
-        (vocabulary::YAW, "yaw"),
-        (vocabulary::PITCH, "pitch"),
-        (vocabulary::ZOOM, "zoom"),
-    ]
-    .into_iter()
-    .chain(ARITHMETIC)
-    {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    for (cell, spelling) in [
-        (vocabulary::INVALID_FIELD, "invalid field"),
-        (vocabulary::INVALID_SCENE, "invalid scene"),
-        (vocabulary::INVALID_COLOR, "invalid opaque color"),
-        (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
-        (vocabulary::INVALID_SIZE, "invalid preview size"),
-        (
-            vocabulary::INVALID_MESH_DEPTH,
-            "mesh depth must be from 1 to 8",
-        ),
-    ] {
-        cells.set_value(cell, absent::named_reason(spelling));
-    }
-    for (cell, spelling) in [
-        (vocabulary::X, "x"),
-        (vocabulary::Y, "y"),
-        (vocabulary::Z, "z"),
-    ] {
-        cells.set_value(
-            cell,
-            name::record(spelling, [(vocabulary::AXIS, Value::from(cell))]),
-        );
-    }
     let square = |axis| {
         unary(
             vocabulary::SQUARE,
@@ -1177,17 +1110,6 @@ pub fn library<W: Host>() -> Library<W> {
         square(vocabulary::X),
         square(vocabulary::Y),
     );
-    cells.set_value(
-        vocabulary::CIRCLE,
-        radial_function("circle", radial.clone()),
-    );
-    cells.set_value(
-        vocabulary::SPHERE,
-        radial_function(
-            "sphere",
-            binary(vocabulary::SUM, radial, square(vocabulary::Z)),
-        ),
-    );
     let renderer = Rc::new(RefCell::new(PreviewRenderer::default()));
     let infix: Rc<[_]> = ARITHMETIC
         .into_iter()
@@ -1196,7 +1118,85 @@ pub fn library<W: Host>() -> Library<W> {
     name::named_library(
         ID,
         "fidget",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [
+            (vocabulary::FIDGET, "fidget"),
+            (vocabulary::AXIS, "axis"),
+            (vocabulary::MIN, "min"),
+            (vocabulary::MAX, "max"),
+            (vocabulary::NEGATE, "negate"),
+            (vocabulary::ABS, "abs"),
+            (vocabulary::SQRT, "sqrt"),
+            (vocabulary::SQUARE, "square"),
+            (vocabulary::SIN, "sin"),
+            (vocabulary::COS, "cos"),
+            (vocabulary::TRANSLATE, "translate"),
+            (vocabulary::UNION, "union"),
+            (vocabulary::INTERSECTION, "intersection"),
+            (vocabulary::DIFFERENCE, "difference"),
+            (vocabulary::PREVIEW, "preview"),
+            (vocabulary::PREVIEW_3D, "preview 3d"),
+            (vocabulary::PREVIEW_MESH, "preview mesh"),
+            (vocabulary::MESH_DEPTH, "mesh depth"),
+            (vocabulary::FIELD, "field"),
+            (vocabulary::SCENE, "scene"),
+            (vocabulary::COLOR, "color"),
+            (vocabulary::RADIUS, "radius"),
+            (vocabulary::DELTA_X, "x"),
+            (vocabulary::DELTA_Y, "y"),
+            (vocabulary::DELTA_Z, "z"),
+            (vocabulary::MIN_X, "minimum x"),
+            (vocabulary::MAX_X, "maximum x"),
+            (vocabulary::MIN_Y, "minimum y"),
+            (vocabulary::MAX_Y, "maximum y"),
+            (vocabulary::MIN_Z, "minimum z"),
+            (vocabulary::MAX_Z, "maximum z"),
+            (vocabulary::SLICE_Z, "slice z"),
+            (vocabulary::CAMERA, "camera"),
+            (vocabulary::YAW, "yaw"),
+            (vocabulary::PITCH, "pitch"),
+            (vocabulary::ZOOM, "zoom"),
+        ]
+        .into_iter()
+        .chain(ARITHMETIC)
+        .chain([
+            (vocabulary::INVALID_FIELD, "invalid field"),
+            (vocabulary::INVALID_SCENE, "invalid scene"),
+            (vocabulary::INVALID_COLOR, "invalid opaque color"),
+            (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
+            (vocabulary::INVALID_SIZE, "invalid preview size"),
+            (
+                vocabulary::INVALID_MESH_DEPTH,
+                "mesh depth must be from 1 to 8",
+            ),
+        ]),
+        functions(),
+    )
+    .with_values(
+        [
+            (vocabulary::X, "x"),
+            (vocabulary::Y, "y"),
+            (vocabulary::Z, "z"),
+        ]
+        .map(|(cell, spelling)| {
+            (
+                cell,
+                name::record(spelling, [(vocabulary::AXIS, Value::from(cell))]),
+            )
+        })
+        .into_iter()
+        .chain([
+            (
+                vocabulary::CIRCLE,
+                radial_function("circle", radial.clone()),
+            ),
+            (
+                vocabulary::SPHERE,
+                radial_function(
+                    "sphere",
+                    binary(vocabulary::SUM, radial, square(vocabulary::Z)),
+                ),
+            ),
+        ]),
     )
     .with_projection(crate::display::compose_partials([
         crate::display::runtime_partial(move |input| {

@@ -152,7 +152,7 @@ fn absence_is_an_open_tag_with_a_stable_reason() {
 
     assert!(is_absent(&absent));
     assert_eq!(super::reason(&absent), Some(reason));
-    assert!(!is_absent(&named_reason("specific absence")));
+    assert!(!is_absent(&name::record("specific absence", [])));
     assert!(!is_absent(&Value::record([(
         vocabulary::ABSENT,
         Value::from(vec![1]),

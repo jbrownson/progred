@@ -4,7 +4,7 @@
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 
 pub const ID: CellId = CellId::from_u128(0x873c68ac371dbbb98a4f198546d60241);
 
@@ -40,10 +40,6 @@ pub use ::grap::absent::decline;
 
 pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
     ::grap::absent::from_causes(causes)
-}
-
-pub fn named_reason(value: impl Into<String>) -> Value {
-    name::record(value, [])
 }
 
 /// An absent value reads as its reason, then any other fields, such as a
@@ -96,23 +92,21 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    cells.set_value(vocabulary::ABSENT, name::record("absent", []));
-    cells.set_value(vocabulary::CELL, name::record("cell", []));
-    cells.set_value(vocabulary::VALUE, name::record("value", []));
-    cells.set_value(vocabulary::CYCLE, name::record("cycle", []));
-    cells.set_value(vocabulary::CAUSES, name::record("causes", []));
-    cells.set_value(
-        vocabulary::NO_ALTERNATIVE,
-        named_reason("no applicable alternative"),
-    );
-    cells.set_value(vocabulary::DECLINED, named_reason("not applicable"));
-    cells.set_value(vocabulary::OR_DEFAULT, name::record("or default", []));
-    cells.set_value(vocabulary::DEFAULT, name::record("default", []));
     name::named_library(
         ID,
         "absent",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [
+            (vocabulary::ABSENT, "absent"),
+            (vocabulary::CELL, "cell"),
+            (vocabulary::VALUE, "value"),
+            (vocabulary::CYCLE, "cycle"),
+            (vocabulary::CAUSES, "causes"),
+            (vocabulary::NO_ALTERNATIVE, "no applicable alternative"),
+            (vocabulary::DECLINED, "not applicable"),
+            (vocabulary::OR_DEFAULT, "or default"),
+            (vocabulary::DEFAULT, "default"),
+        ],
+        functions(),
     )
     .with_projection(crate::display::runtime_partial(display))
 }

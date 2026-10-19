@@ -106,13 +106,11 @@ fn recorded_hits_keep_the_executing_library_definition() {
             cells.set_value(function, definition.clone());
             (
                 id,
-                crate::libraries::name::named_library::<crate::Editor>(
+                crate::test_support::library(
                     id,
                     "drawing",
-                    crate::library::Definitions::from_parts(
-                        cells,
-                        grap::ForeignFunctions::default(),
-                    ),
+                    cells,
+                    grap::ForeignFunctions::default(),
                 ),
             )
         }))

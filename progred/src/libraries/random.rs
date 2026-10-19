@@ -2,7 +2,7 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, absent, f64, name, u64};
-use gid::{Cells, Value};
+use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x953e2838d5985718dd4e91f0af673fe3);
 use ::grap::{
@@ -97,27 +97,20 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::BETWEEN, "random between"),
-        (vocabulary::MIN, "minimum"),
-        (vocabulary::MAX, "maximum"),
-        (vocabulary::WITH_RANDOM, "with random"),
-        (vocabulary::SEED, "seed"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    for (cell, spelling) in [
-        (vocabulary::OUTSIDE_SCOPE, "random outside scope"),
-        (vocabulary::INVALID_SEED, "invalid random seed"),
-        (vocabulary::INVALID_BOUNDS, "invalid random bounds"),
-    ] {
-        cells.set_value(cell, absent::named_reason(spelling));
-    }
     name::named_library(
         ID,
         "random",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [
+            (vocabulary::BETWEEN, "random between"),
+            (vocabulary::MIN, "minimum"),
+            (vocabulary::MAX, "maximum"),
+            (vocabulary::WITH_RANDOM, "with random"),
+            (vocabulary::SEED, "seed"),
+            (vocabulary::OUTSIDE_SCOPE, "random outside scope"),
+            (vocabulary::INVALID_SEED, "invalid random seed"),
+            (vocabulary::INVALID_BOUNDS, "invalid random bounds"),
+        ],
+        functions(),
     )
 }
 

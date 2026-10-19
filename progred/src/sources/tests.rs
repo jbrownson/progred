@@ -5,11 +5,7 @@ use gid::{Cells, new_cell_id};
 fn libraries(id: CellId, cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         id,
-        crate::libraries::name::named_library::<crate::Editor>(
-            id,
-            "test",
-            crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
-        ),
+        crate::test_support::library(id, "test", cells, grap::ForeignFunctions::default()),
     )])
     .0
 }
@@ -93,13 +89,11 @@ fn grap_origins_follow_the_selected_document_definition_even_when_it_declines() 
             cells.set_value(function, definition(Value::from(id)));
             (
                 id,
-                crate::libraries::name::named_library::<crate::Editor>(
+                crate::test_support::library(
                     id,
                     "source",
-                    crate::library::Definitions::from_parts(
-                        cells,
-                        grap::ForeignFunctions::default(),
-                    ),
+                    cells,
+                    grap::ForeignFunctions::default(),
                 ),
             )
         }))
@@ -235,11 +229,7 @@ fn follow_names_a_library_source_not_its_load_order() {
     let library = |id, name| {
         let mut cells = Cells::new();
         cells.set_value(cell, crate::test_values::text(name));
-        crate::libraries::name::named_library::<crate::Editor>(
-            id,
-            name,
-            crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
-        )
+        crate::test_support::library(id, name, cells, grap::ForeignFunctions::default())
     };
     let doc = Document {
         root: Some(Value::from(cell)),

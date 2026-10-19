@@ -4,7 +4,6 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, absent, f64, name, number};
-use gid::Cells;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x7b0fa421250c1b5c8a78a3a95b172cb6);
 use ::grap::{
@@ -269,38 +268,31 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::PREPEND, "prepend"),
-        (vocabulary::CONCAT, "concat"),
-        (vocabulary::AT, "list at"),
-        (vocabulary::LENGTH, "list length"),
-        (vocabulary::LIST, "list"),
-        (vocabulary::ITEM, "item"),
-        (vocabulary::INDEX, "index"),
-        (vocabulary::TAIL, "list tail"),
-        (vocabulary::UNFOLD, "unfold"),
-        (vocabulary::FOLD, "fold"),
-        (vocabulary::ITERATE, "iterate"),
-        (vocabulary::INITIAL, "initial"),
-        (vocabulary::STEP, "step"),
-        (vocabulary::ACCUMULATOR, "accumulator"),
-        (vocabulary::STATE, "state"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    for (cell, spelling) in [
-        (vocabulary::NOT_LIST, "not a list"),
-        (vocabulary::OUT_OF_BOUNDS, "list index out of bounds"),
-        (vocabulary::INVALID_STEP, "invalid unfold step"),
-        (vocabulary::FINISHED, "iteration finished"),
-    ] {
-        cells.set_value(cell, absent::named_reason(spelling));
-    }
     name::named_library(
         ID,
         "list",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [
+            (vocabulary::PREPEND, "prepend"),
+            (vocabulary::CONCAT, "concat"),
+            (vocabulary::AT, "list at"),
+            (vocabulary::LENGTH, "list length"),
+            (vocabulary::LIST, "list"),
+            (vocabulary::ITEM, "item"),
+            (vocabulary::INDEX, "index"),
+            (vocabulary::TAIL, "list tail"),
+            (vocabulary::UNFOLD, "unfold"),
+            (vocabulary::FOLD, "fold"),
+            (vocabulary::ITERATE, "iterate"),
+            (vocabulary::INITIAL, "initial"),
+            (vocabulary::STEP, "step"),
+            (vocabulary::ACCUMULATOR, "accumulator"),
+            (vocabulary::STATE, "state"),
+            (vocabulary::NOT_LIST, "not a list"),
+            (vocabulary::OUT_OF_BOUNDS, "list index out of bounds"),
+            (vocabulary::INVALID_STEP, "invalid unfold step"),
+            (vocabulary::FINISHED, "iteration finished"),
+        ],
+        functions(),
     )
 }
 

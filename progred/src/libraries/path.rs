@@ -2,7 +2,7 @@
 //! and resolution context. List positions retain their session lifetime.
 
 use crate::display::Host;
-use crate::libraries::{Library, absent, name};
+use crate::libraries::{Library, name};
 #[cfg(test)]
 pub use ::grap::path::step_value;
 pub use ::grap::path::{read, read_step, value};
@@ -16,22 +16,19 @@ pub mod vocabulary {
 
 pub fn library<W: Host>() -> Library<W> {
     use vocabulary::*;
-    let mut cells = gid::Cells::new();
-    for (cell, spelling) in [
-        (KEY, "key"),
-        (ELEMENT, "element"),
-        (FOLLOW, "follow"),
-        (DOCUMENT, "document"),
-        (LIBRARY, "library"),
-        (INDEXABLE, "indexable"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    cells.set_value(INVALID_PATH, absent::named_reason("invalid path"));
     name::named_library(
         ID,
         "path",
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        [
+            (KEY, "key"),
+            (ELEMENT, "element"),
+            (FOLLOW, "follow"),
+            (DOCUMENT, "document"),
+            (LIBRARY, "library"),
+            (INDEXABLE, "indexable"),
+            (INVALID_PATH, "invalid path"),
+        ],
+        ::grap::ForeignFunctions::default(),
     )
 }
 

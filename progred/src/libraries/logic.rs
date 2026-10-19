@@ -4,7 +4,7 @@
 use crate::display::Host;
 use crate::libraries::{Library, absent, name};
 use ::grap::{ForeignFunction, ForeignFunctions};
-use gid::{Cells, Value};
+use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xf76a2ef341541a5c955fc23094e2df52);
 
@@ -70,22 +70,19 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::TRUE, "true"),
-        (vocabulary::FALSE, "false"),
-        (vocabulary::BOOL, "bool"),
-        (vocabulary::REQUIRE, "require"),
-        (vocabulary::CONDITION, "condition"),
-        (vocabulary::NOT_BOOL, "not a boolean"),
-        (vocabulary::CONDITION_NOT_MET, "condition not met"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
     name::named_library(
         ID,
         "logic",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [
+            (vocabulary::TRUE, "true"),
+            (vocabulary::FALSE, "false"),
+            (vocabulary::BOOL, "bool"),
+            (vocabulary::REQUIRE, "require"),
+            (vocabulary::CONDITION, "condition"),
+            (vocabulary::NOT_BOOL, "not a boolean"),
+            (vocabulary::CONDITION_NOT_MET, "condition not met"),
+        ],
+        functions(),
     )
 }
 

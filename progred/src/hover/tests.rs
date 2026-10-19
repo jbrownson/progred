@@ -56,13 +56,11 @@ fn definitions_have_distinct_source_traces_and_secondary_marks() {
         crate::library::Libraries::from_contributions(order.map(|id| {
             (
                 id,
-                crate::libraries::name::named_library::<crate::Editor>(
+                crate::test_support::library(
                     id,
                     "source",
-                    crate::library::Definitions::from_parts(
-                        doc.cells.clone(),
-                        grap::ForeignFunctions::default(),
-                    ),
+                    doc.cells.clone(),
+                    grap::ForeignFunctions::default(),
                 ),
             )
         }))

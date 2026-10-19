@@ -49,27 +49,23 @@ fn library_definitions_and_projections_compose_in_order() {
     let (libraries, projections, _) = Libraries::from_contributions([
         (
             LEFT_LIBRARY,
-            crate::libraries::name::named_library::<crate::Editor>(
+            crate::test_support::library(
                 LEFT_LIBRARY,
                 "left",
-                Definitions::from_parts(
-                    left_cells,
-                    ForeignFunctions::default()
-                        .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
-                ),
+                left_cells,
+                ForeignFunctions::default()
+                    .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
             )
             .with_projection(crate::display::partial(left_projection)),
         ),
         (
             RIGHT_LIBRARY,
-            crate::libraries::name::named_library::<crate::Editor>(
+            crate::test_support::library(
                 RIGHT_LIBRARY,
                 "right",
-                Definitions::from_parts(
-                    right_cells,
-                    ForeignFunctions::default()
-                        .register(SHARED_FUNCTION, ForeignFunction::from_value(right_function)),
-                ),
+                right_cells,
+                ForeignFunctions::default()
+                    .register(SHARED_FUNCTION, ForeignFunction::from_value(right_function)),
             )
             .with_projection(crate::display::partial(right_projection)),
         ),
@@ -116,18 +112,19 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
     let name = crate::libraries::name::record("shared", []);
     let mut cells = Cells::new();
     cells.set_value(SHARED_FUNCTION, name.clone());
-    let definitions = Definitions::from_parts(
-        cells,
-        ForeignFunctions::default()
-            .register(
-                SHARED_FUNCTION,
-                ForeignFunction::from_value(|_, _, _| Ok(crate::libraries::absent::decline())),
-            )
-            .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
-    );
     let (libraries, _, _) = Libraries::from_contributions([(
         LEFT_LIBRARY,
-        crate::libraries::name::named_library::<crate::Editor>(LEFT_LIBRARY, "test", definitions),
+        crate::test_support::library(
+            LEFT_LIBRARY,
+            "test",
+            cells,
+            ForeignFunctions::default()
+                .register(
+                    SHARED_FUNCTION,
+                    ForeignFunction::from_value(|_, _, _| Ok(crate::libraries::absent::decline())),
+                )
+                .register(SHARED_FUNCTION, ForeignFunction::from_value(left_function)),
+        ),
     )]);
     assert_eq!(
         libraries
@@ -206,7 +203,8 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
         crate::libraries::name::named_library::<crate::Editor>(
             LEFT_LIBRARY,
             "old",
-            Definitions::default(),
+            [],
+            ForeignFunctions::default(),
         )
         .with_projection(crate::display::partial(|_| panic!("replaced projection")))
         .with_completions(|_| panic!("replaced completion provider"));
@@ -215,7 +213,8 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
     let replacement = crate::libraries::name::named_library::<crate::Editor>(
         LEFT_LIBRARY,
         "replacement",
-        Definitions::default(),
+        [],
+        ForeignFunctions::default(),
     )
     .with_projection(replacement_projection.clone())
     .with_completions(|request| {
@@ -227,7 +226,8 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
     let right = crate::libraries::name::named_library::<crate::Editor>(
         RIGHT_LIBRARY,
         "right",
-        Definitions::default(),
+        [],
+        ForeignFunctions::default(),
     )
     .with_projection(right_projection.clone());
     let (libraries, projections, providers) = Libraries::from_contributions([
@@ -279,7 +279,8 @@ fn library_descriptions_are_ordinary_cells() {
         crate::libraries::name::named_library::<crate::Editor>(
             LEFT_LIBRARY,
             "library",
-            Definitions::default(),
+            [],
+            ForeignFunctions::default(),
         ),
     )]);
     let description = name::record("library", []);
@@ -315,21 +316,20 @@ fn unnamed_native_definitions_have_an_empty_description() {
 fn libraries_are_an_ordered_unique_map_without_hashing() {
     let mut left_cells = Cells::new();
     left_cells.set_value(SHARED_CELL, Value::from(b"left".to_vec()));
-    let left = crate::libraries::name::named_library::<crate::Editor>(
+    let left = crate::test_support::library(
         LEFT_LIBRARY,
         "left",
-        Definitions::from_parts(
-            left_cells,
-            ForeignFunctions::default()
-                .register(SHARED_CELL, ForeignFunction::from_value(left_function)),
-        ),
+        left_cells,
+        ForeignFunctions::default()
+            .register(SHARED_CELL, ForeignFunction::from_value(left_function)),
     );
     let mut right_cells = Cells::new();
     right_cells.set_value(SHARED_CELL, Value::from(b"right".to_vec()));
-    let right = crate::libraries::name::named_library::<crate::Editor>(
+    let right = crate::test_support::library(
         RIGHT_LIBRARY,
         "right",
-        Definitions::from_parts(right_cells, ForeignFunctions::default()),
+        right_cells,
+        ForeignFunctions::default(),
     );
     let (mut libraries, _, _) =
         Libraries::from_contributions([(LEFT_LIBRARY, left), (RIGHT_LIBRARY, right)]);

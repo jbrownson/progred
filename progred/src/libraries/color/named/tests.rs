@@ -15,14 +15,10 @@ fn the_css_palette_has_unique_durable_cells_and_expected_aliases() {
         149,
     );
 
-    let mut cells = Cells::new();
-    insert(&mut cells);
     let named = |wanted| {
-        cells
-            .iter()
-            .find_map(|(cell, value)| (name::read(value) == Some(wanted)).then_some(*cell))
-            .and_then(|cell| cells.value(cell))
-            .and_then(color::read)
+        colors()
+            .find(|(_, value)| name::read(value) == Some(wanted))
+            .and_then(|(_, value)| color::read(&value))
     };
     assert_eq!(
         named("rebeccapurple"),

@@ -1,9 +1,8 @@
-use super::*;
 use crate::annotations::Annotations;
 use crate::libraries::fidget;
 use crate::projection::test_support::*;
 use crate::test_support::root_completions;
-use gid::Document;
+use gid::{Cells, Document};
 use puri::draw::DrawCmd;
 
 #[test]

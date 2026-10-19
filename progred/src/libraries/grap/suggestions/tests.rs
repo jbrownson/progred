@@ -1,5 +1,6 @@
 use super::*;
 use ::grap::vocabulary::EXPRESSION;
+use gid::Cells;
 
 fn visible(root: Value, path: &[Step]) -> BTreeSet<CellId> {
     let document = gid::Document {

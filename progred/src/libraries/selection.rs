@@ -17,23 +17,20 @@ pub mod vocabulary {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = gid::Cells::new();
-    for (cell, spelling) in [
-        (vocabulary::GET, "selection get"),
-        (vocabulary::SET, "selection set"),
-        (vocabulary::PATH, "path"),
-        (vocabulary::STAGE, "stage"),
-        (vocabulary::EDGE, "edge"),
-        (vocabulary::PENDING, "pending"),
-        (vocabulary::LABEL, "label"),
-        (vocabulary::NO_SELECTION, "no selection at this site"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
     name::named_library(
         ID,
         "selection",
-        crate::libraries::Definitions::from_parts(cells, Default::default()),
+        [
+            (vocabulary::GET, "selection get"),
+            (vocabulary::SET, "selection set"),
+            (vocabulary::PATH, "path"),
+            (vocabulary::STAGE, "stage"),
+            (vocabulary::EDGE, "edge"),
+            (vocabulary::PENDING, "pending"),
+            (vocabulary::LABEL, "label"),
+            (vocabulary::NO_SELECTION, "no selection at this site"),
+        ],
+        ::grap::ForeignFunctions::default(),
     )
 }
 

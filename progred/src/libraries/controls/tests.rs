@@ -1,5 +1,6 @@
 use super::*;
 use crate::projection::Partial;
+use gid::Cells;
 
 fn controls_output(
     controls: &Value,

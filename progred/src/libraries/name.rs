@@ -6,6 +6,7 @@ use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionSc
 use crate::libraries::{Definitions, Library, text};
 use crate::library::Libraries;
 use crate::sources::Sources;
+use ::grap::ForeignFunctions;
 use gid::{CellId, Cells, Value};
 
 pub const ID: CellId = CellId::from_u128(0x3209ad5d23a0c8513f6bd76324a5cf60);
@@ -36,14 +37,19 @@ pub fn of<'a>(sources: &Sources<'a>, cell: CellId) -> Option<&'a str> {
     sources.resolve(cell).and_then(|value| read(value.value))
 }
 
-/// `definitions` as a library that names itself `name` at its identity `id`.
-pub fn named_library<W: Host>(
+/// A library that names itself `name` at its identity `id` and each of
+/// `names`' cells by its spelling, defining `functions`.
+pub fn named_library<'a, W: Host>(
     id: CellId,
-    name: impl Into<String>,
-    mut definitions: Definitions,
+    name: &'a str,
+    names: impl IntoIterator<Item = (CellId, &'a str)>,
+    functions: ForeignFunctions,
 ) -> Library<W> {
-    definitions.insert(id, ::grap::Definition::Value(record(name, [])));
-    Library::new(definitions)
+    let mut cells = Cells::new();
+    for (cell, spelling) in std::iter::once((id, name)).chain(names) {
+        cells.set_value(cell, record(spelling, []));
+    }
+    Library::new(Definitions::from_parts(cells, functions))
 }
 
 /// Each loaded library and the name it gives itself, in load order.
@@ -86,12 +92,11 @@ pub(crate) fn with_name<W: Host>(
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    cells.set_value(vocabulary::NAME, record("name", []));
     named_library(
         ID,
         "name",
-        Definitions::from_parts(cells, Default::default()),
+        [(vocabulary::NAME, "name")],
+        ForeignFunctions::default(),
     )
     .with_completions(completions)
 }

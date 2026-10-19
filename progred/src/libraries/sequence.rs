@@ -3,11 +3,11 @@
 //! Calling the same pure sequence again does not advance it.
 
 use crate::display::Host;
-use crate::libraries::{Definitions, Library, absent, f64, name};
+use crate::libraries::{Library, absent, f64, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
-use gid::{Cells, Value};
+use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x0ad8124ba821acd5fbf2c868371e1492);
 
@@ -182,24 +182,25 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, spelling) in [
-        (RANGE, "range"),
-        (RANGE_STEP, "range step"),
-        (FOR_EACH, "for each"),
-        (COLLECT, "collect"),
-        (ITEMS, "items"),
-        (ACTION, "action"),
-        (COUNT, "count"),
-        (INDEX, "index"),
-        (ITEM, "item"),
-        (NEXT, "next"),
-    ] {
-        cells.set_value(cell, name::record(spelling, []));
-    }
-    cells.set_value(INVALID, absent::named_reason("invalid sequence"));
-    cells.set_value(FINISHED, absent::named_reason("iteration finished"));
-    name::named_library(ID, "sequence", Definitions::from_parts(cells, functions()))
+    name::named_library(
+        ID,
+        "sequence",
+        [
+            (RANGE, "range"),
+            (RANGE_STEP, "range step"),
+            (FOR_EACH, "for each"),
+            (COLLECT, "collect"),
+            (ITEMS, "items"),
+            (ACTION, "action"),
+            (COUNT, "count"),
+            (INDEX, "index"),
+            (ITEM, "item"),
+            (NEXT, "next"),
+            (INVALID, "invalid sequence"),
+            (FINISHED, "iteration finished"),
+        ],
+        functions(),
+    )
 }
 
 #[cfg(test)]

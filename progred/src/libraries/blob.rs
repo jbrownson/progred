@@ -22,7 +22,7 @@ pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    name::named_library(ID, "blob", crate::libraries::Definitions::default())
+    name::named_library(ID, "blob", [], ::grap::ForeignFunctions::default())
         .with_projection(crate::display::runtime_partial(display))
 }
 

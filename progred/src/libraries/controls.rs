@@ -1,12 +1,12 @@
 //! Evaluation-local controls: native widgets emit alongside ordinary Grap values.
-use super::{Definitions, Library, absent, f64, layout, name, presentation, tree};
+use super::{Library, absent, f64, layout, name, presentation, tree};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{self, widget};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, ForeignOverlay, Halt,
     RuntimeValue,
 };
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 use kurbo::{Point, Rect};
 use measured::{Extent, choices::ChoiceLayout};
 use puri::handler::HasHandler;
@@ -612,35 +612,6 @@ fn stored_tree_items<W: Host>(
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (key, label) in [
-        (WITH_CONTROLS, "with controls"),
-        (CONTROLS, "controls"),
-        (VIEW, "view"),
-        (PARAMETERS, "parameters"),
-        (SLIDER, "slider"),
-        (RADIO, "radio"),
-        (TREE_RANGE, "tree range"),
-        (TREE_CURSOR, "tree cursor"),
-        (TREE_PROGRAM_CURSOR, "tree program cursor"),
-        (RANGE, "range"),
-        (POSITION, "position"),
-        (ITEMS, "items"),
-        (ALL, "all"),
-        (OPTIONS, "options"),
-        (KEY, "key"),
-        (MINIMUM, "minimum"),
-        (MAXIMUM, "maximum"),
-        (INITIAL, "initial"),
-        (STATE, "control state"),
-        (UPDATE, "update"),
-        (ON_CHANGE, "on change"),
-        (NO_STATE, "no control state"),
-        (INVALID_INPUT, "invalid control input"),
-        (OUTPUT_REQUIRED, "control output required"),
-    ] {
-        cells.set_value(key, name::record(label, []));
-    }
     let functions = ForeignFunctions::default()
         .register(
             WITH_CONTROLS,
@@ -684,6 +655,36 @@ pub fn library<W: Host>() -> Library<W> {
                 .parameters([KEY, tree::vocabulary::PROGRAM])
                 .tracked(),
         );
-    name::named_library(ID, "controls", Definitions::from_parts(cells, functions))
-        .with_projection(display::runtime_partial(display))
+    name::named_library(
+        ID,
+        "controls",
+        [
+            (WITH_CONTROLS, "with controls"),
+            (CONTROLS, "controls"),
+            (VIEW, "view"),
+            (PARAMETERS, "parameters"),
+            (SLIDER, "slider"),
+            (RADIO, "radio"),
+            (TREE_RANGE, "tree range"),
+            (TREE_CURSOR, "tree cursor"),
+            (TREE_PROGRAM_CURSOR, "tree program cursor"),
+            (RANGE, "range"),
+            (POSITION, "position"),
+            (ITEMS, "items"),
+            (ALL, "all"),
+            (OPTIONS, "options"),
+            (KEY, "key"),
+            (MINIMUM, "minimum"),
+            (MAXIMUM, "maximum"),
+            (INITIAL, "initial"),
+            (STATE, "control state"),
+            (UPDATE, "update"),
+            (ON_CHANGE, "on change"),
+            (NO_STATE, "no control state"),
+            (INVALID_INPUT, "invalid control input"),
+            (OUTPUT_REQUIRED, "control output required"),
+        ],
+        functions,
+    )
+    .with_projection(display::runtime_partial(display))
 }

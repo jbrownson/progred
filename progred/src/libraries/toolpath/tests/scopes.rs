@@ -1,4 +1,5 @@
 use super::*;
+use gid::Cells;
 
 fn line(x: f64) -> Value {
     sequence(vec![

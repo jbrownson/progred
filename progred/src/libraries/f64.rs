@@ -144,25 +144,15 @@ fn parts() -> number::Parts {
             .parameters([vocabulary::START, vocabulary::END, vocabulary::AMOUNT])
             .tracked(),
     );
-    for (cell, name) in [
+    parts.names.extend([
         (vocabulary::LERP, "lerp"),
         (vocabulary::START, "start"),
         (vocabulary::END, "end"),
         (vocabulary::AMOUNT, "amount"),
-    ] {
-        parts.cells.set_value(cell, name::record(name, []));
-    }
-    for (cell, name) in [
         (vocabulary::START_NOT_F64, "start is not f64"),
         (vocabulary::END_NOT_F64, "end is not f64"),
         (vocabulary::AMOUNT_NOT_F64, "amount is not f64"),
-    ] {
-        parts.cells.set_value(cell, absent::named_reason(name));
-    }
-    parts.cells.set_value(
-        vocabulary::PI,
-        value(std::f64::consts::PI).overlaid(name::record("π", [])),
-    );
+    ]);
     parts.calls.push(vocabulary::LERP);
     parts
 }
@@ -198,7 +188,12 @@ fn lerp(
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    convention().library(ID, parts(), std::iter::empty())
+    convention()
+        .library(ID, parts(), std::iter::empty())
+        .with_values([(
+            vocabulary::PI,
+            value(std::f64::consts::PI).overlaid(name::record("π", [])),
+        )])
 }
 
 #[cfg(test)]

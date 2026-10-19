@@ -5,8 +5,8 @@
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::identity::short_id;
-use crate::libraries::{Library, absent, name};
-use gid::{CellId, Cells, Step, Value};
+use crate::libraries::{Library, name};
+use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::{
@@ -480,54 +480,47 @@ pub fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
-    let mut cells = Cells::new();
-    for (cell, value) in [
-        (::grap::vocabulary::FUNCTION, "function"),
-        (::grap::vocabulary::PARAMS, "params"),
-        (::grap::vocabulary::BODY, "body"),
-        (::grap::vocabulary::VALUE, "value"),
-        (::grap::vocabulary::CLOSURE, "closure"),
-        (::grap::vocabulary::ENVIRONMENT, "environment"),
-        (::grap::vocabulary::FFI, "ffi"),
-        (::grap::vocabulary::EVALUATE, "evaluate"),
-        (::grap::vocabulary::EXPRESSION, "expression"),
-        (::grap::source::vocabulary::BODY_ORIGIN, "body origin"),
-        (::grap::source::vocabulary::INPUT, "input source"),
-        (::grap::source::vocabulary::STORED, "document source"),
-        (::grap::source::vocabulary::CELL, "source cell"),
-        (::grap::source::vocabulary::PATH, "source path"),
-        (::grap::source::vocabulary::SOURCE, "definition source"),
-        (vocabulary::GRAP, "grap"),
-    ] {
-        cells.set_value(cell, name::record(value, []));
-    }
-    for (cell, value) in [
-        (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
-        (memo::CYCLE, "computation cycle"),
-        (memo::INPUTS_CHANGED, "inputs changed during computation"),
-        (
-            memo::DIFFERENT_RUNTIME,
-            "computation belongs to another runtime",
-        ),
-        (memo::CANCELLED, "computation cancelled"),
-        (
-            ::grap::absent::EFFECTFUL_DECLINE,
-            "declined after an effect",
-        ),
-        (::grap::absent::MISSING_CELL, "missing cell"),
-        (::grap::absent::CELL_CYCLE, "cell cycle"),
-        (::grap::absent::MALFORMED_LAMBDA, "malformed lambda"),
-        (::grap::absent::INVALID_PARAMETER, "invalid parameter"),
-        (::grap::absent::NOT_CALLABLE, "not callable"),
-        (::grap::absent::MISSING_ARGUMENT, "missing argument"),
-        (::grap::absent::INVALID_ENVIRONMENT, "invalid environment"),
-    ] {
-        cells.set_value(cell, absent::named_reason(value));
-    }
     name::named_library(
         ID,
         "grap",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        [
+            (::grap::vocabulary::FUNCTION, "function"),
+            (::grap::vocabulary::PARAMS, "params"),
+            (::grap::vocabulary::BODY, "body"),
+            (::grap::vocabulary::VALUE, "value"),
+            (::grap::vocabulary::CLOSURE, "closure"),
+            (::grap::vocabulary::ENVIRONMENT, "environment"),
+            (::grap::vocabulary::FFI, "ffi"),
+            (::grap::vocabulary::EVALUATE, "evaluate"),
+            (::grap::vocabulary::EXPRESSION, "expression"),
+            (::grap::source::vocabulary::BODY_ORIGIN, "body origin"),
+            (::grap::source::vocabulary::INPUT, "input source"),
+            (::grap::source::vocabulary::STORED, "document source"),
+            (::grap::source::vocabulary::CELL, "source cell"),
+            (::grap::source::vocabulary::PATH, "source path"),
+            (::grap::source::vocabulary::SOURCE, "definition source"),
+            (vocabulary::GRAP, "grap"),
+            (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
+            (memo::CYCLE, "computation cycle"),
+            (memo::INPUTS_CHANGED, "inputs changed during computation"),
+            (
+                memo::DIFFERENT_RUNTIME,
+                "computation belongs to another runtime",
+            ),
+            (memo::CANCELLED, "computation cancelled"),
+            (
+                ::grap::absent::EFFECTFUL_DECLINE,
+                "declined after an effect",
+            ),
+            (::grap::absent::MISSING_CELL, "missing cell"),
+            (::grap::absent::CELL_CYCLE, "cell cycle"),
+            (::grap::absent::MALFORMED_LAMBDA, "malformed lambda"),
+            (::grap::absent::INVALID_PARAMETER, "invalid parameter"),
+            (::grap::absent::NOT_CALLABLE, "not callable"),
+            (::grap::absent::MISSING_ARGUMENT, "missing argument"),
+            (::grap::absent::INVALID_ENVIRONMENT, "invalid environment"),
+        ],
+        functions(),
     )
     .with_projection(
         // Calls, lambdas, and value wrappers follow evaluator precedence,

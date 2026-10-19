@@ -905,13 +905,11 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
     };
     let libraries = crate::library::Libraries::from_contributions([(
         library_id,
-        crate::libraries::name::named_library::<crate::Editor>(
+        crate::test_support::library(
             library_id,
             "source",
-            crate::library::Definitions::from_parts(
-                doc.cells.clone(),
-                grap::ForeignFunctions::default(),
-            ),
+            doc.cells.clone(),
+            grap::ForeignFunctions::default(),
         ),
     )])
     .0;

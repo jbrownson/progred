@@ -94,6 +94,17 @@ impl<World, Hover> Library<World, Hover> {
         }
     }
 
+    /// Also defines each `(cell, value)` in `values`.
+    pub fn with_values(
+        mut self,
+        values: impl IntoIterator<Item = (gid::CellId, gid::Value)>,
+    ) -> Self {
+        for (cell, value) in values {
+            self.definitions.insert(cell, Definition::Value(value));
+        }
+        self
+    }
+
     pub fn with_projection(mut self, projection: Partial<World, Hover>) -> Self {
         self.projection = Some(projection);
         self

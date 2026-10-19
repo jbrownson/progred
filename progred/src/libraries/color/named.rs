@@ -3,7 +3,7 @@
 
 use super::vocabulary;
 use crate::libraries::name;
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Value};
 
 struct Named {
     id: CellId,
@@ -11,30 +11,32 @@ struct Named {
     rgb: u32,
 }
 
-pub(super) fn insert(cells: &mut Cells) {
-    for color in NAMED {
-        cells.set_value(
-            color.id,
+pub(super) fn colors() -> impl Iterator<Item = (CellId, Value)> {
+    NAMED
+        .iter()
+        .map(|color| {
+            (
+                color.id,
+                name::record(
+                    color.name,
+                    [(
+                        vocabulary::RGB,
+                        Value::from(vec![
+                            (color.rgb >> 16) as u8,
+                            (color.rgb >> 8) as u8,
+                            color.rgb as u8,
+                        ]),
+                    )],
+                ),
+            )
+        })
+        .chain([(
+            TRANSPARENT,
             name::record(
-                color.name,
-                [(
-                    vocabulary::RGB,
-                    Value::from(vec![
-                        (color.rgb >> 16) as u8,
-                        (color.rgb >> 8) as u8,
-                        color.rgb as u8,
-                    ]),
-                )],
+                "transparent",
+                [(vocabulary::RGBA, Value::from(vec![0, 0, 0, 0]))],
             ),
-        );
-    }
-    cells.set_value(
-        TRANSPARENT,
-        name::record(
-            "transparent",
-            [(vocabulary::RGBA, Value::from(vec![0, 0, 0, 0]))],
-        ),
-    );
+        )])
 }
 
 const TRANSPARENT: CellId = CellId::from_u128(0x4ce5a853f1372321370c162c749b79a2);

@@ -1,6 +1,6 @@
 use super::*;
 use crate::driver::Driver;
-use gid::{Document, Step, new_cell_id};
+use gid::{Cells, Document, Step, new_cell_id};
 use png::ColorType::{Grayscale, GrayscaleAlpha, Indexed, Rgb, Rgba};
 
 type Encoder<'a> = png::Encoder<'a, &'a mut Vec<u8>>;

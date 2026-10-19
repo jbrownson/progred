@@ -112,14 +112,31 @@ pub(crate) fn completion_entries_with(
     .collect()
 }
 
+/// A library that names itself `name` at `id` and defines `cells` and
+/// `functions`, whatever their values.
+pub(crate) fn library(
+    id: CellId,
+    name: &str,
+    cells: Cells,
+    functions: grap::ForeignFunctions,
+) -> crate::libraries::Library<crate::Editor> {
+    let mut definitions = crate::library::Definitions::from_parts(cells, functions);
+    definitions.insert(
+        id,
+        grap::Definition::Value(crate::libraries::name::record(name, [])),
+    );
+    crate::library::Library::new(definitions)
+}
+
 /// The loaded libraries of one library, `test` with the id 1, defining `cells`.
 pub(crate) fn library_of(cells: Cells) -> Libraries {
     Libraries::from_contributions([(
         CellId::from_u128(1),
-        crate::libraries::name::named_library::<crate::Editor>(
+        library(
             CellId::from_u128(1),
             "test",
-            crate::library::Definitions::from_parts(cells, grap::ForeignFunctions::default()),
+            cells,
+            grap::ForeignFunctions::default(),
         ),
     )])
     .0

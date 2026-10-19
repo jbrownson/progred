@@ -1,4 +1,5 @@
 use super::*;
+use gid::Cells;
 
 mod hybrid;
 mod normals;
