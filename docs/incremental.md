@@ -42,8 +42,9 @@ not invalidate a reader.
 Missing results are observations too.
 
 Handles identify computations explicitly; no execution path is guessed. The
-editor retains library-owned typed roots under its existing view identity and
-source-qualified location. Different viewports have independent roots. Unused
+editor retains library-owned typed roots keyed by view and occurrence path
+(`Computations::at`, reached through `Site::memo`). Different viewports have
+independent roots. Unused
 roots are released after a pass without demand; replacing the document drops
 the graph. A synchronous node retains its latest result, not slider history.
 An asynchronous node can also retain that result while its replacement runs.
@@ -179,9 +180,11 @@ There is no timer polling loop. Dropping a node or its task owner cancels work;
 replacing a document starts a fresh graph with the same executor/wake capability.
 
 Native editor windows use a single background worker each. An application event
-imports completions and rebuilds the normal frame. The browser uses one
-shared-memory Web Worker, with JS job-pointer transport and page-thread wake
-delivery; the editor starts only after worker initialization succeeds. Wake
+imports completions and rebuilds the normal frame. In the browser, jobs go to
+one shared-memory coordinator Web Worker, which hosts a Rayon pool (see
+[the browser setup](../web/README.md)), with JS job-pointer transport and
+page-thread wake delivery; the editor starts only after worker initialization
+succeeds. Wake
 messages are coalesced to animation frames. Default headless contexts still use
 the inline executor. Tests can supply a controlled
 queue or the threaded executor without a windowing harness.
@@ -190,12 +193,8 @@ queue or the threaded executor without a windowing harness.
 
 A pane declaration can apply an optional `prepare` function to its raw `value`
 data through a tracked application memo before `viewport` receives the result
-and dimensions. The CAM example instead uses the controls' `tree program cursor`:
-it memoizes a final-encoded builder's items and explicit source-linked hierarchy,
-consumes the hierarchy directly, and returns the items to the preview. Its explicit inputs are the
-builder callable and fuel; observed definitions supply the dependencies. Size is
-not captured by the cutting functions, so resize does not invalidate the
-recording upstream of geometry generation. See [trees](trees.md).
+and dimensions. The CAM example instead memoizes its program tree in the
+controls' `tree program cursor`; see [trees](trees.md#editor-collection).
 
 The mesh toolpath viewport composes nested nodes:
 
@@ -244,12 +243,10 @@ The bar resets per refinement and disappears on completion. The mesh tool/path
 can move independently of those pixels. Before any image is available,
 the correctly sized viewport shows the empty progress track.
 
-The implicit renderer starts with a maximum edge of 128 physical pixels and
-approximately doubles both dimensions on each pass, finishing at the exact
-native size, then adds one native-size pass with four times the depth samples.
-Every level uses the same camera and model-space render volume; image and depth
-sampling become finer together until the final depth-only pass. Pixel rounding
-does not change the aspect ratio. Scene compilation is retained across camera
+The implicit renderer refines through the progressive sequence
+[playback](toolpaths.md#playback) describes. Every level uses the same camera
+and model-space render volume, and pixel rounding does not change the aspect
+ratio. Scene compilation is retained across camera
 requests as well as refinement levels, but each voxel raster is independent:
 coarse pixels are not reused to compute finer ones. New view inputs cancel the
 pixel sequence and start a new coarse request, retaining only the latest
@@ -298,17 +295,11 @@ the latest request, and release admits it immediately unless zoom is still
 debounced. Only a handled wheel/pinch that changes this preview's camera resets
 its 150 ms quiet period. Scrolling elsewhere does not postpone its work.
 
-The reusable `puri_widgets::debounce::Debounce` owns one cancellable timer handle.
-It becomes ready when that timer completes **or** its deadline has elapsed.
-The preview samples that readiness using the frame's monotonic time and updates
-an ordinary tracked boolean before demanding the render; that boolean is
-derived, not a flag that only a callback can repair. The shell stores weak timer
-completion handles, fires due ones and refreshes the frame, using Winit's normal
-event-loop deadline. No worker sleeps and no timer captures a document callback.
-Replacing a debounce drops its old handle, so an old delivery cannot release
-the replacement. Document replacement clears the timer queue and interaction
-roots; closing a window drops them. A missing delivery recovers on the next
-natural frame, and an unexpectedly early delivery releases only its own constraint.
+The preview samples its [debounce](puri.md#timers)'s readiness using the
+frame's monotonic time and updates an ordinary tracked boolean before demanding
+the render; that boolean is derived, not a flag that only a callback can repair.
+Document replacement clears the interaction roots along with the timer queue;
+closing a window drops them.
 
 Immediate camera rendering and tool/path updates continue during interaction.
 Replacement mesh jobs finish and catch up during dragging; scene preparation
