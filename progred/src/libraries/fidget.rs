@@ -264,21 +264,28 @@ fn translate_function(
     let Some(field) = evaluated(context, call, environment, vocabulary::FIELD)? else {
         return Ok(context.missing_argument(vocabulary::FIELD));
     };
-    let mut values = Vec::with_capacity(4);
-    values.push((vocabulary::FIELD, field));
-    for coordinate in [
+    let deltas = [
         vocabulary::DELTA_X,
         vocabulary::DELTA_Y,
         vocabulary::DELTA_Z,
-    ] {
-        let value =
-            evaluated(context, call, environment, coordinate)?.unwrap_or_else(|| f32::value(0.0));
-        if !matches!(f32::read(&value), Some(value) if value.is_finite()) {
-            return Ok(::grap::absent::value(vocabulary::INVALID_FIELD));
-        }
-        values.push((coordinate, value));
-    }
-    Ok(node(vocabulary::TRANSLATE, Value::record(values)))
+    ]
+    .into_iter()
+    .map(|coordinate| {
+        evaluated(context, call, environment, coordinate).map(|value| {
+            let value = value.unwrap_or_else(|| f32::value(0.0));
+            f32::read(&value)
+                .filter(|number| number.is_finite())
+                .map(|_| (coordinate, value))
+        })
+    })
+    .collect::<Result<Option<Vec<_>>, _>>()?;
+    Ok(match deltas {
+        Some(deltas) => node(
+            vocabulary::TRANSLATE,
+            Value::record([(vocabulary::FIELD, field)].into_iter().chain(deltas)),
+        ),
+        None => ::grap::absent::value(vocabulary::INVALID_FIELD),
+    })
 }
 
 fn preview_function(
@@ -985,7 +992,7 @@ impl GpuRenderer {
     }
 }
 
-pub(crate) fn volume_display<W: Host>(
+fn volume_display<W: Host>(
     preview: &VolumePreview,
     state: Option<&Value>,
     scale_factor: f64,
@@ -1175,37 +1182,6 @@ pub fn library<W: Host>() -> Library<W> {
         crate::display::runtime_partial(mesh::display),
     ]))
     .with_completions(completion::offers)
-}
-
-fn root_completion() -> crate::display::Completion {
-    crate::libraries::completion::generated(
-        vocabulary::FIDGET,
-        || {
-            let cell = gid::new_cell_id();
-            Value::record([
-                (vocabulary::FIDGET, cell.into()),
-                (
-                    crate::libraries::workspace::vocabulary::PANES,
-                    Value::record([(
-                        crate::libraries::workspace::vocabulary::LEFT,
-                        Value::list([Value::record([
-                            (presentation::vocabulary::VALUE, cell.into()),
-                            (
-                                presentation::vocabulary::VIEWPORT,
-                                vocabulary::PREVIEW_3D.into(),
-                            ),
-                        ])]),
-                    )]),
-                ),
-            ])
-        },
-        Some(crate::selection::pending_at(&[
-            gid::Step::Key(vocabulary::FIDGET),
-            gid::Step::Follow(gid::Resolution::Document),
-        ])),
-    )
-    .with_aliases(["sdf"])
-    .with_detail(ID)
 }
 
 #[cfg(test)]
