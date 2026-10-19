@@ -168,15 +168,11 @@ pub fn on_point<W: Host>(child: Layout<W>, handler: PointHandler) -> Layout<W> {
 
 struct StateDrag {
     drag: Drag,
-    update: crate::display::StateDragGesture,
+    update: StateDragGesture,
     annotate: Annotate,
 }
 
-fn state_drag(
-    drag: Drag,
-    update: crate::display::StateDragGesture,
-    annotate: Annotate,
-) -> Box<dyn Gesture> {
+fn state_drag(drag: Drag, update: StateDragGesture, annotate: Annotate) -> Box<dyn Gesture> {
     Box::new(StateDrag {
         drag,
         update,
@@ -189,7 +185,7 @@ impl Gesture for StateDrag {
         let samples: Vec<_> = samples
             .iter()
             .filter_map(|point| self.drag.advance(*point))
-            .map(|motion| crate::display::StateDragEvent {
+            .map(|motion| StateDragEvent {
                 delta_x: motion.distance.x,
                 delta_y: motion.distance.y,
             })
@@ -214,7 +210,7 @@ fn point(rect: Rect, update: PointHandler, edit: crate::gesture::EditRun) -> Box
 impl Gesture for PointControl {
     fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
         samples.iter().fold(false, |changed, point| {
-            let update = (self.update)(crate::display::PointEvent {
+            let update = (self.update)(PointEvent {
                 x: ((point.x - self.rect.x0) / self.rect.width()).clamp(0.0, 1.0),
                 y: ((point.y - self.rect.y0) / self.rect.height()).clamp(0.0, 1.0),
             });

@@ -1,6 +1,7 @@
 //! Editor commands: insert, delete, clipboard, and collapse.
 
 use crate::Editor;
+use crate::display::widget::navigation::Geometry;
 use crate::location::Location;
 use crate::modifiers;
 use crate::navigate;
@@ -12,7 +13,7 @@ use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 impl Editor {
     fn select_landmark_or_edge(
         &mut self,
-        geometry: navigate::Geometry<'_, Editor>,
+        geometry: Geometry<'_, Editor>,
         root: &crate::display::widget::view::Root,
         path: gid::Path,
     ) {
@@ -39,7 +40,7 @@ impl Editor {
     /// its place. Pressing again on the hole removes it (see insert_key).
     pub(crate) fn delete_key(
         &mut self,
-        geometry: navigate::Geometry<'_, Editor>,
+        geometry: Geometry<'_, Editor>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -54,10 +55,7 @@ impl Editor {
     /// Deletes the selected edge and keeps its place selected as a hole,
     /// ready for a replacement — Backspace/Delete's action, and cut's
     /// second half.
-    pub(crate) fn delete_selected_edge(
-        &mut self,
-        geometry: navigate::Geometry<'_, Editor>,
-    ) -> bool {
+    pub(crate) fn delete_selected_edge(&mut self, geometry: Geometry<'_, Editor>) -> bool {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
@@ -211,7 +209,7 @@ impl Editor {
     /// step back out of a picker.
     pub(crate) fn insert_key(
         &mut self,
-        geometry: navigate::Geometry<'_, Editor>,
+        geometry: Geometry<'_, Editor>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -261,7 +259,7 @@ impl Editor {
     /// Escape steps back one level: a picker opened from a key returns to
     /// where it was opened, so a replacement gets its value back; anything
     /// else clears the selection.
-    fn escape(&mut self, geometry: navigate::Geometry<'_, Editor>) -> bool {
+    fn escape(&mut self, geometry: Geometry<'_, Editor>) -> bool {
         let Some(current) = &self.model.selection else {
             return false;
         };
@@ -276,7 +274,7 @@ impl Editor {
     /// Leaves a picker for the selection it was opened from. A replacement's
     /// origin is its own place, where this frame draws the hole, so that
     /// value is selected afresh rather than through the frame.
-    fn return_to_origin(&mut self, geometry: navigate::Geometry<'_, Editor>) {
+    fn return_to_origin(&mut self, geometry: Geometry<'_, Editor>) {
         let Some(current) = self.model.selection.take() else {
             return;
         };
@@ -300,7 +298,7 @@ impl Editor {
     /// An empty query's Backspace or Delete cancels its picker: back to
     /// where it was opened, else to the stop before the hole it leaves
     /// (after it, for Delete). A label goes back to its record.
-    fn cancel_pending(&mut self, geometry: navigate::Geometry<'_, Editor>, forward: bool) -> bool {
+    fn cancel_pending(&mut self, geometry: Geometry<'_, Editor>, forward: bool) -> bool {
         let Some(current) = &self.model.selection else {
             return false;
         };
@@ -338,7 +336,7 @@ impl Editor {
     /// until a choice commits, so Escape brings it back.
     pub(crate) fn replace_key(
         &mut self,
-        geometry: navigate::Geometry<'_, Editor>,
+        geometry: Geometry<'_, Editor>,
         event: &KeyboardEvent,
     ) -> bool {
         if !event.state.is_down()

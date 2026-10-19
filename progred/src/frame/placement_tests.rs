@@ -766,7 +766,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     let mut count = 0;
     assert!((landmark.select)(
         &mut count,
-        Some(crate::navigate::Direction::Left)
+        Some(puri::handler::NavigationDirection::Left)
     ));
     assert_eq!(count, 10);
     assert_eq!(root, Some(owner.clone()));

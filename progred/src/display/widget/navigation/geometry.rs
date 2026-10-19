@@ -2,7 +2,7 @@
 //! once the frame is placed: scrolling a view to show a place, arriving at a
 //! landmark, and Tab's search for the next place to fill in.
 
-use super::{Direction, Landmark};
+use super::Landmark;
 use crate::display::Host;
 use crate::display::widget::frame::ViewRegion;
 use crate::display::widget::view::Root;
@@ -10,6 +10,7 @@ use crate::model::Model;
 use crate::selection::Selection;
 use gid::Step;
 use kurbo::{Rect, Vec2};
+use puri::handler::NavigationDirection;
 
 /// Borrowed geometry from the installed frame, used by explicit navigation actions.
 pub(crate) struct Geometry<'a, W> {
@@ -93,7 +94,12 @@ impl<W> Geometry<'_, W> {
 
 impl<W: Host> Geometry<'_, W> {
     /// Arrives at `target` as its widget says to, revealing what it selects.
-    pub fn arrive(self, world: &mut W, target: &Landmark<W>, direction: Option<Direction>) -> bool {
+    pub fn arrive(
+        self,
+        world: &mut W,
+        target: &Landmark<W>,
+        direction: Option<NavigationDirection>,
+    ) -> bool {
         let handled = (target.select)(world, direction);
         if handled {
             self.reveal_selection(world.session().model);

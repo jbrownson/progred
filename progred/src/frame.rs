@@ -3,6 +3,7 @@
 //! caller's choice, so a silent mint never draws.
 
 use crate::display::widget::frame::{Cursor, ViewRegion};
+use crate::display::widget::navigation::{Geometry, Landmark};
 use crate::display::widget::source::SourceTrace;
 use crate::display::widget::view::{Root, Target};
 use crate::display::widget::{container, placed, style, view};
@@ -34,7 +35,7 @@ pub(crate) const HOVER_REACH_POINTS: f64 = 8.0;
 pub(crate) struct Dispatch {
     pub(crate) handler: Rc<Handler<Editor, DispatchContext<Editor>>>,
     pub(crate) pointer_root: Option<crate::display::widget::view::Root>,
-    pub(crate) landmarks: Rc<[navigate::Landmark<Editor>]>,
+    pub(crate) landmarks: Rc<[Landmark<Editor>]>,
     pub(crate) view_regions: Rc<[ViewRegion]>,
     pub(crate) hover_geometry: crate::display::widget::frame::HoverGeometry<Hovered>,
 }
@@ -68,8 +69,8 @@ impl FrameState {
 }
 
 impl Dispatch {
-    pub(crate) fn geometry(&self, scale: f64) -> navigate::Geometry<'_, Editor> {
-        navigate::Geometry {
+    pub(crate) fn geometry(&self, scale: f64) -> Geometry<'_, Editor> {
+        Geometry {
             landmarks: &self.landmarks,
             view_regions: &self.view_regions,
             scale,
@@ -152,7 +153,7 @@ impl crate::display::Host for Editor {
 /// continuations. Resolve each once here, not in each painted occurrence.
 fn attribute(
     sources: &sources::Sources<'_>,
-    landmarks: &[navigate::Landmark<Editor>],
+    landmarks: &[Landmark<Editor>],
     root: Option<&Root>,
     completion: Option<&crate::display::widget::offers::Offers<Editor>>,
     hovered: Option<Hovered>,

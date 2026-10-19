@@ -1,8 +1,8 @@
 //! Custom forms obey the same placed navigation policy as structural containers.
 use super::*;
-use crate::display::widget::navigation::Direction;
 use crate::libraries::{control, f64, fidget};
 use ::grap::vocabulary::{BODY, EVALUATE, EXPRESSION, FFI, FUNCTION, PARAMS, VALUE};
+use puri::handler::NavigationDirection;
 
 struct Fixture {
     world: World,
@@ -41,7 +41,7 @@ impl Fixture {
         self.whole.iter().cloned().chain(steps).collect()
     }
 
-    fn check(&mut self, width: f64, from: &Path, direction: Direction, to: &Path) {
+    fn check(&mut self, width: f64, from: &Path, direction: NavigationDirection, to: &Path) {
         let document = self.world.model.doc.clone();
         self.world.model.selection = Some(make_selection(from.clone()));
         let (frame, _) = self.context.place(
@@ -78,7 +78,7 @@ impl Fixture {
 
 #[test]
 fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
-    use Direction::*;
+    use NavigationDirection::*;
     let number = || f64::value(3.0);
     let cases = [
         (
@@ -219,7 +219,7 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
 
 #[test]
 fn expression_list_labels_are_beside_the_whole_list_not_below_its_entry() {
-    use Direction::*;
+    use NavigationDirection::*;
     for callable in [control::vocabulary::ALL, control::vocabulary::DO] {
         let expressions = Value::list([
             text::value("sky"),
@@ -259,7 +259,7 @@ fn expression_list_labels_are_beside_the_whole_list_not_below_its_entry() {
 
 #[test]
 fn cells_around_expression_lists_use_the_same_vertical_entrance_policy() {
-    use Direction::*;
+    use NavigationDirection::*;
     for callable in [control::vocabulary::ALL, control::vocabulary::DO] {
         let expressions = Value::list([
             text::value("sky"),
@@ -308,7 +308,7 @@ fn cells_around_expression_lists_use_the_same_vertical_entrance_policy() {
 
 #[test]
 fn call_function_and_arguments_are_one_form_in_both_presentations() {
-    use Direction::*;
+    use NavigationDirection::*;
     for (width, forward, backward) in [(1500.0, Right, Left), (90.0, Down, Up)] {
         let mut f = Fixture::new(
             ::grap::call(
@@ -333,7 +333,7 @@ fn call_function_and_arguments_are_one_form_in_both_presentations() {
 
 #[test]
 fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
-    use Direction::*;
+    use NavigationDirection::*;
     let parameter = gid::new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(parameter, name::record("parameter", []));
@@ -364,7 +364,7 @@ fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
 
 #[test]
 fn multiline_cell_and_its_function_share_a_vertical_entrance() {
-    use Direction::*;
+    use NavigationDirection::*;
     let cell = gid::new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(
@@ -396,7 +396,7 @@ fn multiline_cell_and_its_function_share_a_vertical_entrance() {
 
 #[test]
 fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling() {
-    use Direction::*;
+    use NavigationDirection::*;
     use control::vocabulary as c;
     let binding = Value::record([
         (c::BIND, text::value("pattern")),
@@ -440,7 +440,7 @@ fn nested_control_forms_preserve_each_whole_stop_and_leave_to_the_outer_sibling(
 
 #[test]
 fn named_color_name_and_spelling_form_one_horizontal_row() {
-    use Direction::*;
+    use NavigationDirection::*;
     let color = crate::libraries::color::value(peniko::Color::new([0.7, 0.3, 0.1, 1.0]));
     let color = Value::record(
         color
@@ -463,7 +463,7 @@ fn named_color_name_and_spelling_form_one_horizontal_row() {
 
 #[test]
 fn tutorial_slots_use_vertical_flow_including_missing_slots() {
-    use Direction::*;
+    use NavigationDirection::*;
     let first = gid::new_cell_id();
     let missing = gid::new_cell_id();
     let last = gid::new_cell_id();

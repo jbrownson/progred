@@ -105,10 +105,12 @@ fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
     assert_eq!(top_slots(&frame), slots);
     let path = [Step::Key(slots[1])];
     assert!((stop(&frame, &path).select)(&mut world, None));
-    assert!(world.delete_selected_edge(crate::navigate::Geometry {
-        landmarks: &frame.landmarks,
-        ..Default::default()
-    }));
+    assert!(
+        world.delete_selected_edge(crate::display::widget::navigation::Geometry {
+            landmarks: &frame.landmarks,
+            ..Default::default()
+        })
+    );
     assert!(world.sources().resolve_path(&path).is_none());
     let frame = editing_frame(&mut world, false);
     assert_eq!(top_slots(&frame), slots);

@@ -1,7 +1,7 @@
 //! Layout navigation through real projections and the ordinary event chain.
 
+use crate::display as d;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
-use crate::display::{self as d, widget::navigation as nav};
 use crate::driver::Driver;
 use crate::libraries::{f64, name, text};
 use crate::location::{Location, Start};
@@ -13,7 +13,7 @@ use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 
 type World = crate::Editor;
-use nav::Direction;
+use puri::handler::NavigationDirection;
 
 const VIEWPORT: kurbo::Size = kurbo::Size::new(900.0, 600.0);
 
@@ -76,7 +76,7 @@ fn fixture(wide: bool) -> (World, Vec<Path>) {
 
 #[test]
 fn navigation_destinations_follow_nested_container_boundaries_and_chosen_layout() {
-    use Direction::*;
+    use NavigationDirection::*;
     for wide in [false, true] {
         let (mut world, paths) = fixture(wide);
         let projection = sample_projection();
@@ -118,7 +118,7 @@ fn navigation_destinations_follow_nested_container_boundaries_and_chosen_layout(
 
 #[test]
 fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
-    use Direction::*;
+    use NavigationDirection::*;
     for record in [false, true] {
         for in_cell in [false, true] {
             for vertical in [false, true] {
@@ -327,7 +327,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
         editing_frame_with_projection(world, false, Some(&projection))
     };
     let frame = build(&mut world);
-    assert!(frame.navigate(&mut world, Direction::Right));
+    assert!(frame.navigate(&mut world, NavigationDirection::Right));
     assert_eq!(
         world.model.selection.as_ref().unwrap().path(),
         [Step::Key(second)]
@@ -493,10 +493,10 @@ fn navigation_workshop_nested_outlines_preserve_occurrences_and_shared_edits() {
         let before = world.model.doc.clone();
         world.model.selection = Some(make_selection(heading.clone()));
         for (direction, path) in [
-            (Direction::Down, &body),
-            (Direction::Down, &first),
-            (Direction::Down, &cell),
-            (Direction::Right, &name),
+            (NavigationDirection::Down, &body),
+            (NavigationDirection::Down, &first),
+            (NavigationDirection::Down, &cell),
+            (NavigationDirection::Right, &name),
         ] {
             let frame = editing_frame(&mut world, false);
             assert!(frame.navigate(&mut world, direction));
@@ -802,7 +802,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    assert!(frame.navigate(&mut world, Direction::Left));
+    assert!(frame.navigate(&mut world, NavigationDirection::Left));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), paths[0]);
 }
 

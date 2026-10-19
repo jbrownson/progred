@@ -166,23 +166,27 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
     for (from, direction, to) in [
         (
             vec![],
-            crate::navigate::Direction::Right,
+            puri::handler::NavigationDirection::Right,
             vec![Step::Key(OUTLINE)],
         ),
         (
             vec![],
-            crate::navigate::Direction::Down,
+            puri::handler::NavigationDirection::Down,
             first_heading.clone(),
         ),
         (
             vec![Step::Key(OUTLINE)],
-            crate::navigate::Direction::Down,
+            puri::handler::NavigationDirection::Down,
             first_heading.clone(),
         ),
-        (first_heading, crate::navigate::Direction::Up, vec![]),
+        (
+            first_heading,
+            puri::handler::NavigationDirection::Up,
+            vec![],
+        ),
         (
             vec![Step::Key(OUTLINE)],
-            crate::navigate::Direction::Left,
+            puri::handler::NavigationDirection::Left,
             vec![],
         ),
     ] {
@@ -368,10 +372,12 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
 
     // Removing the outline field exposes the remaining data structurally.
     assert!((stop(&f, &[Step::Key(OUTLINE)]).select)(&mut world, None));
-    assert!(world.delete_selected_edge(crate::navigate::Geometry {
-        landmarks: &f.landmarks,
-        ..Default::default()
-    }));
+    assert!(
+        world.delete_selected_edge(crate::display::widget::navigation::Geometry {
+            landmarks: &f.landmarks,
+            ..Default::default()
+        })
+    );
     assert!(
         world
             .sources()
@@ -778,10 +784,12 @@ fn outline_headings_delete_and_pick_references_not_bodies() {
         .unwrap()
         .clone();
     let f = frame(&mut world);
-    assert!(world.delete_selected_edge(crate::navigate::Geometry {
-        landmarks: &f.landmarks,
-        ..Default::default()
-    }));
+    assert!(
+        world.delete_selected_edge(crate::display::widget::navigation::Geometry {
+            landmarks: &f.landmarks,
+            ..Default::default()
+        })
+    );
     assert!(world.sources().resolve_path(&e).is_none());
     assert_eq!(world.sources().resolve_path(&[Step::Key(a)]), Some(&before));
     stop(&frame(&mut world), &[Step::Key(a)]);

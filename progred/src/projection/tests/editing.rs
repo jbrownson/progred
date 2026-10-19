@@ -333,14 +333,14 @@ fn directional_line_arrival_is_distinct_from_ordinary_selection() {
         root: Some(text::value("hello")),
         cells: Cells::new(),
     };
-    use crate::navigate::Direction;
+    use puri::handler::NavigationDirection;
 
     for direction in [
         None,
-        Some(Direction::Down),
-        Some(Direction::Up),
-        Some(Direction::Right),
-        Some(Direction::Left),
+        Some(NavigationDirection::Down),
+        Some(NavigationDirection::Up),
+        Some(NavigationDirection::Right),
+        Some(NavigationDirection::Left),
     ] {
         let mut world = editing_world(&doc, &libraries);
         let frame = editing_frame(&mut world, false);
@@ -351,8 +351,11 @@ fn directional_line_arrival_is_distinct_from_ordinary_selection() {
             .unwrap();
         assert!((target.select)(&mut world, direction));
         let selected = world.model.selection.as_ref().unwrap();
-        if matches!(direction, Some(Direction::Left | Direction::Right)) {
-            let offset = if direction == Some(Direction::Right) {
+        if matches!(
+            direction,
+            Some(NavigationDirection::Left | NavigationDirection::Right)
+        ) {
+            let offset = if direction == Some(NavigationDirection::Right) {
                 0
             } else {
                 5

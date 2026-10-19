@@ -13,7 +13,7 @@ pub trait ResolveForDispatch<C, H> {
         widget::frame::DispatchContext<C, H>,
     );
     /// Dispatch an arrow's navigation as the shell does.
-    fn navigate(self, world: &mut C, direction: widget::Direction) -> bool;
+    fn navigate(self, world: &mut C, direction: puri::handler::NavigationDirection) -> bool;
 }
 
 impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::frame::HoverOutput<C, H> {
@@ -46,7 +46,7 @@ impl<C: 'static, H: Clone + 'static> ResolveForDispatch<C, H> for widget::frame:
         )
     }
 
-    fn navigate(self, world: &mut C, direction: widget::Direction) -> bool {
+    fn navigate(self, world: &mut C, direction: puri::handler::NavigationDirection) -> bool {
         let (handler, mut context) = self.resolve_with_context();
         handler
             .dispatch(

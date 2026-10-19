@@ -739,7 +739,7 @@ fn descend_landmark_with(
     scale: f64,
     path: SharedPath,
     secondary: Option<Secondary>,
-    select: crate::navigate::Select<crate::Editor>,
+    select: crate::display::widget::navigation::Select<crate::Editor>,
     scope: crate::editing::Scope,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {

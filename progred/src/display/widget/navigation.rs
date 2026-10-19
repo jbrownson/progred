@@ -3,7 +3,7 @@ use super::{HoverPass, frame::DispatchContext, source::Secondary};
 use gid::Step;
 use kurbo::Rect;
 use measured::Measured;
-use puri::handler::{Event, EventOutcome, Handler};
+use puri::handler::{Event, EventOutcome, Handler, NavigationDirection};
 use std::rc::Rc;
 
 mod geometry;
@@ -11,16 +11,15 @@ mod logical;
 pub(crate) use geometry::{Geometry, advance};
 pub(crate) use logical::Collector;
 
-pub use puri::handler::NavigationDirection as Direction;
-const DIRECTIONS: [Direction; 4] = [
-    Direction::Left,
-    Direction::Right,
-    Direction::Up,
-    Direction::Down,
+const DIRECTIONS: [NavigationDirection; 4] = [
+    NavigationDirection::Left,
+    NavigationDirection::Right,
+    NavigationDirection::Up,
+    NavigationDirection::Down,
 ];
 
 // Pointer/source selection and Select All also use these direct selection helpers.
-pub type Select<World> = Rc<dyn Fn(&mut World, Option<Direction>) -> bool>;
+pub type Select<World> = Rc<dyn Fn(&mut World, Option<NavigationDirection>) -> bool>;
 
 /// Select `site`, as clicking it does.
 pub(crate) fn selecting(site: crate::editing::Site) -> crate::display::Action {

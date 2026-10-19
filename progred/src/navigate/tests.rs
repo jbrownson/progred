@@ -20,13 +20,14 @@ fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Landmark<()> {
 
 #[test]
 fn navigation_direction_accepts_modifiers_but_excludes_other_keys_and_releases() {
-    use crate::navigate::{Direction, direction};
+    use crate::navigate::direction;
+    use puri::handler::NavigationDirection;
 
     for (key, expected) in [
-        (NamedKey::ArrowLeft, Direction::Left),
-        (NamedKey::ArrowRight, Direction::Right),
-        (NamedKey::ArrowUp, Direction::Up),
-        (NamedKey::ArrowDown, Direction::Down),
+        (NamedKey::ArrowLeft, NavigationDirection::Left),
+        (NamedKey::ArrowRight, NavigationDirection::Right),
+        (NamedKey::ArrowUp, NavigationDirection::Up),
+        (NamedKey::ArrowDown, NavigationDirection::Down),
     ] {
         let event = arrow(key);
         assert_eq!(direction(&event), Some(expected));

@@ -2,28 +2,23 @@
 //! selection lands when what it was on goes away. They act through the
 //! installed frame's [`Geometry`].
 
-use crate::display::widget::navigation::advance;
+use crate::display::widget::navigation::{Geometry, Landmark, advance};
 use crate::display::widget::view::{Root, Target};
 use crate::selection::Selection;
 use gid::{Path, Step};
+use puri::handler::NavigationDirection;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
-pub(crate) use crate::display::widget::navigation::Geometry;
-
-pub use crate::display::widget::{Direction, Select};
-
-pub fn direction(event: &KeyboardEvent) -> Option<Direction> {
+pub fn direction(event: &KeyboardEvent) -> Option<NavigationDirection> {
     match &event.key {
-        Key::Named(NamedKey::ArrowLeft) => Some(Direction::Left),
-        Key::Named(NamedKey::ArrowRight) => Some(Direction::Right),
-        Key::Named(NamedKey::ArrowUp) => Some(Direction::Up),
-        Key::Named(NamedKey::ArrowDown) => Some(Direction::Down),
+        Key::Named(NamedKey::ArrowLeft) => Some(NavigationDirection::Left),
+        Key::Named(NamedKey::ArrowRight) => Some(NavigationDirection::Right),
+        Key::Named(NamedKey::ArrowUp) => Some(NavigationDirection::Up),
+        Key::Named(NamedKey::ArrowDown) => Some(NavigationDirection::Down),
         _ => None,
     }
     .filter(|_| event.state.is_down())
 }
-
-pub use crate::display::widget::navigation::Landmark;
 
 /// Where the selection lands after removing `path`: the sibling after it
 /// (before it, moving backward), or, when it's the last (first) of its

@@ -259,7 +259,7 @@ fn state_drag_gets_one_batch_including_threshold_excursions() {
         &mut model.session(),
         &[Point::new(8.0, 0.0), Point::new(1.0, 0.0)],
     );
-    let sample = |x| crate::display::StateDragEvent {
+    let sample = |x| StateDragEvent {
         delta_x: x,
         delta_y: 0.0,
     };
@@ -285,7 +285,7 @@ fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
     model.model.selection = Some(crate::selection::Selection::edge(&root, vec![]));
     let mut gesture = point(
         Rect::new(10.0, 20.0, 110.0, 120.0),
-        Rc::new(|event| crate::display::PointUpdate {
+        Rc::new(|event| PointUpdate {
             value: Value::list([f64::value(event.x), f64::value(event.y)]),
             selection: Some(crate::selection::payload::edge()),
         }),

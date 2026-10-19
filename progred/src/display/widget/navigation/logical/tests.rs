@@ -1,6 +1,6 @@
-use super::super::Direction;
 use super::*;
 use gid::{CellId, Step};
+use puri::handler::NavigationDirection;
 use std::rc::Rc;
 
 /// A chosen layout, traversed the way `ObserveLayout` reports it.
@@ -418,7 +418,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
         handler
             .dispatch(
                 &mut visits,
-                Event::Navigate(Direction::Right),
+                Event::Navigate(NavigationDirection::Right),
                 &mut dispatch
             )
             .handled()

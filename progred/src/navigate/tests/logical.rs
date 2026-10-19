@@ -1,19 +1,19 @@
 //! Arrows over document-authored layouts.
 
 use crate::display::test_support::ResolveForDispatch;
-use crate::display::widget::navigation::Direction;
 use crate::driver::Driver;
 use crate::libraries::{name, text};
 use crate::location::Location;
 use crate::projection::test_support::editing_frame;
 use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value};
+use puri::handler::NavigationDirection;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 
 type World = crate::Editor;
 
-fn step(world: &mut World, direction: Direction) -> bool {
+fn step(world: &mut World, direction: NavigationDirection) -> bool {
     editing_frame(world, false).navigate(world, direction)
 }
 
@@ -49,18 +49,18 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
     }
     // Two columns of unequal length; the second left item has nested containers.
     world.model.selection = Some(make_selection(field("a")));
-    assert!(step(&mut world, Direction::Right));
+    assert!(step(&mut world, NavigationDirection::Right));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), field("d"));
-    assert!(step(&mut world, Direction::Right));
+    assert!(step(&mut world, NavigationDirection::Right));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), field("b"));
-    assert!(step(&mut world, Direction::Down));
+    assert!(step(&mut world, NavigationDirection::Down));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), field("c"));
-    assert!(step(&mut world, Direction::Up));
+    assert!(step(&mut world, NavigationDirection::Up));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), field("b"));
 
     // Running a custom Grap layout did not turn the displayed data into a copy.
     world.model.selection = Some(make_selection(field("a")));
-    assert!(step(&mut world, Direction::Right));
+    assert!(step(&mut world, NavigationDirection::Right));
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(
         selection.scope().location(selection.path()),
@@ -110,10 +110,10 @@ fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
     assert!(rect("b").y1 < rect("d").y0);
 
     for (direction, destination) in [
-        (Direction::Left, "c"),
-        (Direction::Right, "e"),
-        (Direction::Up, "b"),
-        (Direction::Down, "e"),
+        (NavigationDirection::Left, "c"),
+        (NavigationDirection::Right, "e"),
+        (NavigationDirection::Up, "b"),
+        (NavigationDirection::Down, "e"),
     ] {
         world.model.selection = Some(make_selection(field("d")));
         assert!(step(&mut world, direction));
@@ -124,11 +124,11 @@ fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
     }
     world.model.selection = Some(make_selection(field("a")));
     for name in ["b", "c", "d", "e"] {
-        assert!(step(&mut world, Direction::Right));
+        assert!(step(&mut world, NavigationDirection::Right));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), field(name));
     }
     for name in ["d", "c", "b", "a"] {
-        assert!(step(&mut world, Direction::Left));
+        assert!(step(&mut world, NavigationDirection::Left));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), field(name));
     }
 }
@@ -158,15 +158,15 @@ fn logical_example_deep_multiline_cells_share_a_vertical_entrance() {
     // Horizontal traversal still visits each enclosing value.
     for _ in 0..3 {
         path.push(Step::Follow(gid::Resolution::Document));
-        assert!(step(&mut world, Direction::Right));
+        assert!(step(&mut world, NavigationDirection::Right));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
     }
     // Every enclosing value enters the same first content line vertically.
     for depth in 0..=3 {
         world.model.selection = Some(make_selection(path[..depth].to_vec()));
-        assert!(step(&mut world, Direction::Down));
+        assert!(step(&mut world, NavigationDirection::Down));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), content);
-        assert!(step(&mut world, Direction::Up));
+        assert!(step(&mut world, NavigationDirection::Up));
         assert!(world.model.selection.as_ref().unwrap().path().is_empty());
     }
 }
@@ -214,20 +214,20 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
         cells,
     });
     world.model.selection = Some(make_selection(path.clone()));
-    assert!(step(&mut world, Direction::Right));
+    assert!(step(&mut world, NavigationDirection::Right));
     assert_eq!(world.model.selection.as_ref().unwrap().path(), function);
     for from in [path.clone(), function] {
         world.model.selection = Some(make_selection(from));
-        assert!(step(&mut world, Direction::Down));
+        assert!(step(&mut world, NavigationDirection::Down));
         assert_eq!(
             world.model.selection.as_ref().unwrap().path(),
             function_name
         );
-        assert!(step(&mut world, Direction::Up));
+        assert!(step(&mut world, NavigationDirection::Up));
         // The containing list also shares this leading wrapper-only level.
         assert!(world.model.selection.as_ref().unwrap().path().is_empty());
         world.model.selection = Some(make_selection(function_name.clone()));
-        assert!(step(&mut world, Direction::Down));
+        assert!(step(&mut world, NavigationDirection::Down));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), body);
     }
 }
@@ -243,7 +243,7 @@ fn logical_down_enters_an_anonymous_lambda_without_opening_name_completion() {
     });
     world.model.selection = Some(make_selection(vec![]));
     for field in [grap::vocabulary::PARAMS, grap::vocabulary::BODY] {
-        assert!(step(&mut world, Direction::Down));
+        assert!(step(&mut world, NavigationDirection::Down));
         assert_eq!(
             world.model.selection.as_ref().unwrap().path(),
             [Step::Key(field)]
@@ -277,12 +277,12 @@ fn logical_down_enters_vertical_lists_but_passes_single_line_cells_and_lists() {
             cells,
         });
         world.model.selection = Some(make_selection(vec![]));
-        assert!(step(&mut world, Direction::Down));
+        assert!(step(&mut world, NavigationDirection::Down));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), first);
-        assert!(step(&mut world, Direction::Up));
+        assert!(step(&mut world, NavigationDirection::Up));
         assert!(world.model.selection.as_ref().unwrap().path().is_empty());
         world.model.selection = Some(make_selection(first));
-        assert!(step(&mut world, Direction::Down));
+        assert!(step(&mut world, NavigationDirection::Down));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), second);
     }
 }
@@ -312,15 +312,15 @@ fn logical_reading_order_visits_container_stops_and_wraps_between_lines() {
     });
     world.model.selection = Some(make_selection(vec![]));
     for path in &expected[1..] {
-        assert!(step(&mut world, Direction::Right));
+        assert!(step(&mut world, NavigationDirection::Right));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
     }
-    assert!(!step(&mut world, Direction::Right));
+    assert!(!step(&mut world, NavigationDirection::Right));
     for path in expected[..expected.len() - 1].iter().rev() {
-        assert!(step(&mut world, Direction::Left));
+        assert!(step(&mut world, NavigationDirection::Left));
         assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
     }
-    assert!(!step(&mut world, Direction::Left));
+    assert!(!step(&mut world, NavigationDirection::Left));
 }
 
 #[test]
@@ -341,7 +341,7 @@ fn logical_navigation_retains_jump_editing_targets() {
     let heading = vec![Step::Key(OUTLINE), Step::Element(entries[0].clone())];
     let body: Path = heading.iter().cloned().chain([Step::Key(field)]).collect();
     world.model.selection = Some(make_selection(heading));
-    assert!(step(&mut world, Direction::Down));
+    assert!(step(&mut world, NavigationDirection::Down));
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(selection.path(), body);
     assert_eq!(
@@ -362,7 +362,7 @@ fn logical_computed_children_remain_readonly_and_text_handles_keys_first() {
         cells: Cells::new(),
     });
     world.model.selection = Some(make_selection(source.clone()));
-    assert!(step(&mut world, Direction::Right));
+    assert!(step(&mut world, NavigationDirection::Right));
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(selection.path(), result);
     assert!(selection.scope().location(selection.path()).is_none());

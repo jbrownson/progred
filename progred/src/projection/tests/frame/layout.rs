@@ -856,7 +856,7 @@ fn expression_children_are_real() {
 /// The chosen presentation supplies routing, independently of font metrics.
 #[test]
 fn list_navigation_follows_the_selected_layout_alternative() {
-    use crate::display::widget::navigation::Direction;
+    use puri::handler::NavigationDirection;
     let list = Value::list([
         text::value("first"),
         text::value("second"),
@@ -871,8 +871,12 @@ fn list_navigation_follows_the_selected_layout_alternative() {
         cells: Cells::new(),
     };
     for (width, along, across) in [
-        (1400.0, Direction::Right, Direction::Down),
-        (100.0, Direction::Down, Direction::Right),
+        (
+            1400.0,
+            NavigationDirection::Right,
+            NavigationDirection::Down,
+        ),
+        (100.0, NavigationDirection::Down, NavigationDirection::Right),
     ] {
         let selection = make_selection(paths[0].clone());
         let (bench, _) = place(&doc, Some(&selection), width);
@@ -891,12 +895,16 @@ fn list_navigation_follows_the_selected_layout_alternative() {
                     &mut input
                 )
                 .handled(),
-            across == Direction::Right,
+            across == NavigationDirection::Right,
             "vertical rows offer horizontal wrapping without changing their primary flow"
         );
         assert_eq!(
             world.model.selection.as_ref().unwrap().path(),
-            paths[if across == Direction::Right { 1 } else { 0 }]
+            paths[if across == NavigationDirection::Right {
+                1
+            } else {
+                0
+            }]
         );
         world.model.selection = Some(make_selection(paths[0].clone()));
         assert!(

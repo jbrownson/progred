@@ -170,7 +170,10 @@ fn placement_hover_render_and_dispatch_are_distinct_stages() {
             .unwrap()
             .dispatch_key(&mut state, &ui_events::keyboard::KeyboardEvent::default())
     );
-    assert!(select(&mut state, Some(Direction::Left)));
+    assert!(select(
+        &mut state,
+        Some(puri::handler::NavigationDirection::Left)
+    ));
     assert_eq!(state, ["key", "select"]);
 }
 

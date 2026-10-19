@@ -537,11 +537,11 @@ fn camera_gestures_update_open_projection_state() {
     ]);
     let mut orbit = orbit_handler(Some(&state))();
     let state = orbit(
-        crate::display::StateDragEvent {
+        crate::display::widget::gesture::StateDragEvent {
             delta_x: 128.0,
             delta_y: -128.0,
         },
-        &[crate::display::StateDragEvent {
+        &[crate::display::widget::gesture::StateDragEvent {
             delta_x: -256.0,
             delta_y: 256.0,
         }],

@@ -80,7 +80,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
     );
     // What the projection draws a conjected occurrence sharing.
     let secondary = Secondary::Stored(Rc::from(source.as_slice()));
-    let mut landmarks = [navigate::Landmark::<Editor> {
+    let mut landmarks = [crate::display::widget::navigation::Landmark::<Editor> {
         path: occurrence.clone(),
         root: Some(root.clone()),
         rect: Rect::new(0.0, 0.0, 10.0, 10.0),
@@ -928,21 +928,24 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
             Rect::new(10.0, 50.0, 30.0, 70.0),
         ),
     ];
-    let landmarks = targets.map(
-        |(resolution, rect)| navigate::Landmark::<Option<gid::Resolution>> {
-            scope: Default::default(),
-            root: Some(root.clone()),
-            path: Rc::from([Step::Follow(resolution), Step::Key(call)]),
-            rect,
-            select: Rc::new(move |selected, _| {
-                *selected = Some(resolution);
-                true
-            }),
-            secondary: None,
-            selected: false,
-            tab_stop: false,
-        },
-    );
+    let landmarks =
+        targets.map(
+            |(resolution, rect)| crate::display::widget::navigation::Landmark::<
+                Option<gid::Resolution>,
+            > {
+                scope: Default::default(),
+                root: Some(root.clone()),
+                path: Rc::from([Step::Follow(resolution), Step::Key(call)]),
+                rect,
+                select: Rc::new(move |selected, _| {
+                    *selected = Some(resolution);
+                    true
+                }),
+                secondary: None,
+                selected: false,
+                tab_stop: false,
+            },
+        );
     for (resolution, rect) in targets {
         let trace = SourceTrace::InCell {
             cell,

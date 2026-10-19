@@ -2,13 +2,14 @@
 
 use crate::display::widget::HoverPass;
 
-use super::{Context, Select, extent, leaf};
+use super::navigation::Select;
+use super::{Context, extent, leaf};
 use crate::display::{Env, Host, Layout, TextFamily};
 use gid::Value;
 use kurbo::Point;
 use measured::Measured;
 use puri::edit::LineEditDescription;
-use puri::handler::HasHandler;
+use puri::handler::{HasHandler, NavigationDirection};
 use puri::text::TextStyle;
 use std::rc::Rc;
 use uig::Placement;
@@ -112,11 +113,11 @@ pub fn view<W: Host>(
             edit.select();
             if matches!(
                 direction,
-                Some(super::navigation::Direction::Left | super::navigation::Direction::Right)
+                Some(NavigationDirection::Left | NavigationDirection::Right)
             ) {
                 edit.edit_line(&nav_line, &|edit| {
                     match direction {
-                        Some(super::navigation::Direction::Right) => edit.state.cursor_to_start(),
+                        Some(NavigationDirection::Right) => edit.state.cursor_to_start(),
                         _ => edit.state.cursor_to_end(),
                     }
                     true

@@ -74,9 +74,7 @@ pub use measured::RowAlignment;
 /// chain as raw pointer events.
 pub type Action = Rc<dyn Fn(&mut crate::editing::Session<'_>) -> bool>;
 
-pub use widget::gesture::{
-    PointEvent, PointHandler, PointUpdate, StateDragEvent, StateDragGesture, StateDragHandler,
-};
+pub use widget::gesture::{PointEvent, PointHandler, PointUpdate, StateDragHandler};
 
 /// An offer at an explicit completion control. Activation, not highlighting,
 /// runs its handler. The handler owns any edits or selection transitions.

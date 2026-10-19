@@ -17,8 +17,9 @@ use crate::web_worker;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::{canonical, text_dialog, text_store};
 use crate::{
-    command, computations, display::widget::style, gesture, gid_text, menu, navigate, selection,
-    sources, stack, timers, workspace,
+    command, computations,
+    display::widget::{navigation::Geometry, style},
+    gesture, gid_text, menu, selection, sources, stack, timers, workspace,
 };
 use kurbo::{Point, Rect, Size};
 use peniko::Brush;
@@ -573,11 +574,7 @@ impl Editor {
         }
     }
 
-    pub(crate) fn choose_menu(
-        &mut self,
-        command: Command,
-        geometry: navigate::Geometry<'_, Editor>,
-    ) {
+    pub(crate) fn choose_menu(&mut self, command: Command, geometry: Geometry<'_, Editor>) {
         self.menu.close();
         match command {
             Command::Doc(command) => self.run_doc_command(command, geometry),
@@ -591,11 +588,7 @@ impl Editor {
 
     /// A document command against this editor, including the redraw
     /// its view changes require.
-    pub(crate) fn run_doc_command(
-        &mut self,
-        command: DocCommand,
-        geometry: navigate::Geometry<'_, Editor>,
-    ) {
+    pub(crate) fn run_doc_command(&mut self, command: DocCommand, geometry: Geometry<'_, Editor>) {
         match command {
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::Save => self.menu_save(false),
@@ -669,7 +662,7 @@ impl Editor {
     pub(crate) fn menu_key(
         &mut self,
         event: &KeyboardEvent,
-        geometry: navigate::Geometry<'_, Editor>,
+        geometry: Geometry<'_, Editor>,
     ) -> bool {
         let availability = self.menu_availability();
         if let Some(command) = menu::shortcut(event, self.command_modifier)
@@ -695,7 +688,7 @@ impl Editor {
 
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
-    pub(crate) fn step_history(&mut self, back: bool, geometry: navigate::Geometry<'_, Editor>) {
+    pub(crate) fn step_history(&mut self, back: bool, geometry: Geometry<'_, Editor>) {
         self.finish_gesture();
         if self.model.step_history(back) {
             geometry.reveal_selection(&mut self.model);
