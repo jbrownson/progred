@@ -1208,7 +1208,7 @@ impl<'a> Context<'a> {
                 let fields: Vec<_> = record
                     .iter()
                     .map(|(key, value)| {
-                        let child = self.child_origin(origin.clone(), gid::Step::Key(*key));
+                        let child = child_origin(origin.clone(), gid::Step::Key(*key));
                         (*key, self.lower_runtime_code_at(value, child))
                     })
                     .collect();
@@ -1249,8 +1249,7 @@ impl<'a> Context<'a> {
                         .iter()
                         .zip(gid::position::spread(values.len()))
                         .map(|(value, position)| {
-                            let child =
-                                self.child_origin(origin.clone(), gid::Step::Element(position));
+                            let child = child_origin(origin.clone(), gid::Step::Element(position));
                             self.lower_runtime_code_at(value, child)
                         })
                         .collect()
@@ -1272,16 +1271,12 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn child_origin(&mut self, parent: Option<OriginId>, step: gid::Step) -> Option<OriginId> {
-        parent.map(|parent| OriginId(Rc::new(OriginNode::Child { parent, step })))
-    }
-
     fn lower_with(&mut self, value: &Value, origin: Option<OriginId>) -> Expression {
         let (form, fields, elements) = match value {
             Value::Cell(cell) => (Form::Cell(*cell), None, None),
             Value::Record(fields) => {
                 let lower_field = |this: &mut Self, field: CellId, value: &Value| {
-                    let child = this.child_origin(origin.clone(), gid::Step::Key(field));
+                    let child = child_origin(origin.clone(), gid::Step::Key(field));
                     this.lower_with(value, child)
                 };
                 // Lower every field, reusing an already lowered head.
@@ -1334,8 +1329,8 @@ impl<'a> Context<'a> {
                     elements
                         .iter()
                         .map(|(position, value)| {
-                            let child = self
-                                .child_origin(origin.clone(), gid::Step::Element(position.clone()));
+                            let child =
+                                child_origin(origin.clone(), gid::Step::Element(position.clone()));
                             self.lower_with(value, child)
                         })
                         .collect(),
@@ -1540,7 +1535,7 @@ impl<'a> Context<'a> {
         match expression.0.form.clone() {
             Form::Ready(value) => thunk(move |_, _| Ok(value.clone())),
             Form::Data => {
-                let value = self.unbox(RuntimeValue::from(expression.value().clone()));
+                let value = unbox(RuntimeValue::from(expression.value().clone()));
                 thunk(move |_, _| Ok(value.clone()))
             }
             Form::Cell(cell) => {
@@ -1604,7 +1599,7 @@ impl<'a> Context<'a> {
                         Some((cell, index)) => {
                             context.burn()?;
                             match environment.get_at(&context.indices, cell, index) {
-                                Some(value) => context.unbox(value.clone()),
+                                Some(value) => unbox(value.clone()),
                                 // Ordinary cells took the direct path above.
                                 None => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
                             }
@@ -1696,17 +1691,7 @@ impl<'a> Context<'a> {
             .iter()
             .position(|candidate| *candidate == cell)
         {
-            Some(stack_index) => Ok(RuntimeValue::from(absent::with_detail(
-                absent::CELL_CYCLE,
-                absent::CYCLE,
-                Value::list(
-                    self.resolving[stack_index..]
-                        .iter()
-                        .copied()
-                        .chain([cell])
-                        .map(Value::from),
-                ),
-            ))),
+            Some(stack_index) => Ok(cell_cycle(&self.resolving[stack_index..], cell)),
             None => {
                 self.resolving.push(cell);
                 let result = self.eval(expression, environment);
@@ -1763,16 +1748,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn unbox(&self, value: RuntimeValue) -> RuntimeValue {
-        match &value.0 {
-            RuntimeValueKind::Data(Value::Record(fields)) => match Unboxed::recognize(fields) {
-                Some(unboxed) => RuntimeValue::new(RuntimeValueKind::Unboxed(unboxed)),
-                None => value,
-            },
-            _ => value,
-        }
-    }
-
     /// Fuel is part of Grap's contract, not this implementation's: one
     /// burn per expression evaluation that the plain evaluator and each
     /// function's documented argument consumption would perform. An
@@ -1814,7 +1789,7 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         match environment.get_at(&self.indices, cell, index) {
-            Some(value) => Ok(self.unbox(value.clone())),
+            Some(value) => Ok(unbox(value.clone())),
             None => match self.host.resolve(cell) {
                 None => Ok(missing_cell(cell)),
                 Some((resolution, definition)) => {
@@ -1826,17 +1801,7 @@ impl<'a> Context<'a> {
                             self.eval_resolved_cell(index, cell, expression, environment)
                         }
                         CellState::Evaluating { stack_index } => {
-                            Ok(RuntimeValue::from(absent::with_detail(
-                                absent::CELL_CYCLE,
-                                absent::CYCLE,
-                                Value::list(
-                                    self.resolving[stack_index..]
-                                        .iter()
-                                        .copied()
-                                        .chain([cell])
-                                        .map(Value::from),
-                                ),
-                            )))
+                            Ok(cell_cycle(&self.resolving[stack_index..], cell))
                         }
                         CellState::Unknown => {
                             let expression = self.lower_source(
@@ -1942,7 +1907,7 @@ impl<'a> Context<'a> {
                 }
             }
         }?;
-        Ok(self.unbox(value))
+        Ok(unbox(value))
     }
 
     pub fn apply(
@@ -2157,7 +2122,7 @@ impl<'a> Context<'a> {
                 let Some((_, value)) = arguments.iter().find(|(cell, _)| *cell == parameter) else {
                     return Ok(self.missing_runtime_argument(parameter));
                 };
-                self.unbox(value.clone())
+                unbox(value.clone())
             };
             self.burn()?;
             bound.push((parameter, value));
@@ -2309,6 +2274,32 @@ fn missing_cell(cell: CellId) -> RuntimeValue {
         absent::CELL,
         cell.into(),
     ))
+}
+
+/// The absence `cell` answers when its own definition reaches it again;
+/// `resolving` holds the cells under resolution from `cell` on.
+fn cell_cycle(resolving: &[CellId], cell: CellId) -> RuntimeValue {
+    RuntimeValue::from(absent::with_detail(
+        absent::CELL_CYCLE,
+        absent::CYCLE,
+        Value::list(resolving.iter().copied().chain([cell]).map(Value::from)),
+    ))
+}
+
+/// `value` in its unboxed form when it is a record following a
+/// privileged convention.
+fn unbox(value: RuntimeValue) -> RuntimeValue {
+    match &value.0 {
+        RuntimeValueKind::Data(Value::Record(fields)) => match Unboxed::recognize(fields) {
+            Some(unboxed) => RuntimeValue::new(RuntimeValueKind::Unboxed(unboxed)),
+            None => value,
+        },
+        _ => value,
+    }
+}
+
+fn child_origin(parent: Option<OriginId>, step: gid::Step) -> Option<OriginId> {
+    parent.map(|parent| OriginId(Rc::new(OriginNode::Child { parent, step })))
 }
 
 fn runtime_expression(value: RuntimeValue) -> Expression {
