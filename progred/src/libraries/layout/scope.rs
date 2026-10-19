@@ -132,7 +132,7 @@ pub(super) fn display<W: Host>(
             } else {
                 RuntimeValue::record([
                     (::grap::absent::ABSENT, Value::from(INVALID_PROGRAM).into()),
-                    (VALUE, evaluation.result),
+                    (::grap::absent::VALUE, evaluation.result),
                 ])
             },
         )
