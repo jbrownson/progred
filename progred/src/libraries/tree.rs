@@ -89,65 +89,76 @@ fn functions<S: Sink + 'static>(sink: Rc<RefCell<S>>) -> ForeignFunctions {
         sink,
         maps: RefCell::default(),
     });
-    [GROUP, LEAF, MAP]
-        .into_iter()
-        .fold(ForeignFunctions::default(), |functions, function| {
-            let output = output.clone();
-            functions.register(
-                function,
-                ForeignFunction::new(move |context, call, environment| {
-                    let field = if function == LEAF { VALUE } else { CHILDREN };
-                    let Some(expression) = context.field(call, field) else {
-                        return Ok(context.missing_runtime_argument(field));
-                    };
-                    match function {
-                        GROUP => group(
-                            context,
-                            expression,
-                            context.source_origin(call),
-                            environment,
-                            &output,
-                        ),
-                        MAP => {
-                            let Some(map) = context.field(call, MAPPING) else {
-                                return Ok(context.missing_runtime_argument(MAPPING));
-                            };
-                            let map = context.prepare_callable(map, environment)?;
-                            output.maps.borrow_mut().push(map);
-                            let result = children(context, expression, environment, &output);
-                            output.maps.borrow_mut().pop();
-                            result
+    let (group_output, map_output) = (output.clone(), output.clone());
+    ForeignFunctions::default()
+        .register(
+            GROUP,
+            ForeignFunction::new(move |context, call, environment| {
+                let Some(expression) = context.field(call, CHILDREN) else {
+                    return Ok(context.missing_runtime_argument(CHILDREN));
+                };
+                group(
+                    context,
+                    expression,
+                    context.source_origin(call),
+                    environment,
+                    &group_output,
+                )
+            })
+            .tracked(),
+        )
+        .register(
+            MAP,
+            ForeignFunction::new(move |context, call, environment| {
+                let Some(expression) = context.field(call, CHILDREN) else {
+                    return Ok(context.missing_runtime_argument(CHILDREN));
+                };
+                let Some(map) = context.field(call, MAPPING) else {
+                    return Ok(context.missing_runtime_argument(MAPPING));
+                };
+                let map = context.prepare_callable(map, environment)?;
+                map_output.maps.borrow_mut().push(map);
+                let result = children(context, expression, environment, &map_output);
+                map_output.maps.borrow_mut().pop();
+                result
+            })
+            .tracked(),
+        )
+        .register(
+            LEAF,
+            ForeignFunction::new(move |context, call, environment| {
+                let Some(expression) = context.field(call, VALUE) else {
+                    return Ok(context.missing_runtime_argument(VALUE));
+                };
+                let source = context.source_origin(call);
+                let maps = output
+                    .maps
+                    .borrow()
+                    .iter()
+                    .rev()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let value = maps.iter().try_fold(
+                    context.eval(expression, environment)?,
+                    |value, map| {
+                        if value.is_absent() {
+                            Ok(value)
+                        } else {
+                            context.call_prepared(map, [(VALUE, value)])
                         }
-                        LEAF => {
-                            let source = context.source_origin(call);
-                            let mut value = context.eval(expression, environment)?;
-                            let maps = output
-                                .maps
-                                .borrow()
-                                .iter()
-                                .rev()
-                                .cloned()
-                                .collect::<Vec<_>>();
-                            for map in maps {
-                                if value.is_absent() {
-                                    return Ok(value);
-                                }
-                                value = context.call_prepared(&map, [(VALUE, value)])?;
-                            }
-                            if value.is_absent() {
-                                return Ok(value);
-                            }
-                            Ok(context.effect(|| {
-                                output.sink.borrow_mut().leaf(value, source);
-                                RuntimeValue::record([])
-                            }))
-                        }
-                        _ => unreachable!(),
-                    }
+                    },
+                )?;
+                Ok(if value.is_absent() {
+                    value
+                } else {
+                    context.effect(|| {
+                        output.sink.borrow_mut().leaf(value, source);
+                        RuntimeValue::record([])
+                    })
                 })
-                .tracked(),
-            )
-        })
+            })
+            .tracked(),
+        )
 }
 
 /// Install a caller-owned interpretation only for the supplied computation.
@@ -344,21 +355,18 @@ fn same_output(a: &Result<Built, RuntimeValue>, b: &Result<Built, RuntimeValue>)
     }
 }
 
+/// A tree constructor outside a collection, which has nowhere to emit.
+fn output_required(parameters: impl IntoIterator<Item = CellId>) -> ForeignFunction {
+    ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
+        .parameters(parameters)
+        .tracked()
+}
+
 pub fn library<W: Host>() -> Library<W> {
-    let functions = [GROUP, LEAF, MAP]
-        .into_iter()
-        .fold(ForeignFunctions::default(), |functions, cell| {
-            functions.register(
-                cell,
-                ForeignFunction::from_value(|_, _, _| Ok(absent::with_reason(OUTPUT_REQUIRED)))
-                    .parameters(match cell {
-                        LEAF => vec![VALUE],
-                        MAP => vec![CHILDREN, MAPPING],
-                        _ => vec![CHILDREN],
-                    })
-                    .tracked(),
-            )
-        })
+    let functions = ForeignFunctions::default()
+        .register(GROUP, output_required([CHILDREN]))
+        .register(LEAF, output_required([VALUE]))
+        .register(MAP, output_required([CHILDREN, MAPPING]))
         .register(
             COLLECT,
             ForeignFunction::new(|context, call, environment| {
