@@ -2,7 +2,7 @@
 
 use super::{ID, vocabulary};
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
-use crate::libraries::{presentation, workspace};
+use crate::libraries::presentation;
 use gid::Value;
 
 pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
@@ -11,32 +11,15 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
 }
 
 fn root_completion() -> Completion {
-    crate::libraries::completion::generated(
-        vocabulary::FIDGET,
-        || {
-            let cell = gid::new_cell_id();
-            Value::record([
-                (vocabulary::FIDGET, cell.into()),
-                (
-                    workspace::vocabulary::PANES,
-                    Value::record([(
-                        workspace::vocabulary::LEFT,
-                        Value::list([Value::record([
-                            (presentation::vocabulary::VALUE, cell.into()),
-                            (
-                                presentation::vocabulary::VIEWPORT,
-                                vocabulary::PREVIEW_3D.into(),
-                            ),
-                        ])]),
-                    )]),
-                ),
-            ])
-        },
-        Some(crate::selection::pending_at(&[
-            gid::Step::Key(vocabulary::FIDGET),
-            gid::Step::Follow(gid::Resolution::Document),
-        ])),
-    )
+    crate::libraries::completion::starter(vocabulary::FIDGET, |cell| {
+        Value::record([
+            (presentation::vocabulary::VALUE, cell.into()),
+            (
+                presentation::vocabulary::VIEWPORT,
+                vocabulary::PREVIEW_3D.into(),
+            ),
+        ])
+    })
     .with_aliases(["sdf"])
     .with_detail(ID)
 }

@@ -1,7 +1,7 @@
 //! Small combinators for a projection's completion vocabulary.
 
 use crate::display::{Completion, CompletionProvider, CompletionText};
-use gid::Value;
+use gid::{CellId, Resolution, Step, Value};
 use std::rc::Rc;
 
 pub fn select(display: impl Into<CompletionText>, value: Value) -> Completion {
@@ -31,6 +31,31 @@ pub fn generated(
     on_commit: Option<crate::site::Continuation>,
 ) -> Completion {
     insertion(display, None, create, on_commit)
+}
+
+/// Starts an empty document: `key` names a new cell, the left pane shows
+/// what `pane` makes of it, and the cell's definition is picked next.
+pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Completion {
+    generated(
+        key,
+        move || {
+            let cell = gid::new_cell_id();
+            Value::record([
+                (key, cell.into()),
+                (
+                    crate::libraries::workspace::vocabulary::PANES,
+                    Value::record([(
+                        crate::libraries::workspace::vocabulary::LEFT,
+                        Value::list([pane(cell)]),
+                    )]),
+                ),
+            ])
+        },
+        Some(crate::selection::pending_at(&[
+            Step::Key(key),
+            Step::Follow(Resolution::Document),
+        ])),
+    )
 }
 
 fn insertion(

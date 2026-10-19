@@ -547,29 +547,12 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
 }
 
 fn new_program() -> Completion {
-    crate::libraries::completion::generated(
-        vocabulary::GRAP,
-        || {
-            let cell = gid::new_cell_id();
-            Value::record([
-                (vocabulary::GRAP, cell.into()),
-                (
-                    crate::libraries::workspace::vocabulary::PANES,
-                    Value::record([(
-                        crate::libraries::workspace::vocabulary::LEFT,
-                        Value::list([Value::record([(
-                            crate::libraries::presentation::vocabulary::RENDER,
-                            cell.into(),
-                        )])]),
-                    )]),
-                ),
-            ])
-        },
-        Some(crate::selection::pending_at(&[
-            gid::Step::Key(vocabulary::GRAP),
-            gid::Step::Follow(gid::Resolution::Document),
-        ])),
-    )
+    crate::libraries::completion::starter(vocabulary::GRAP, |cell| {
+        Value::record([(
+            crate::libraries::presentation::vocabulary::RENDER,
+            cell.into(),
+        )])
+    })
     .with_detail(ID)
 }
 
