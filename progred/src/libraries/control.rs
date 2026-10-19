@@ -5,7 +5,7 @@
 //! `quote` constructs data while evaluating explicit unquotes.
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-use crate::libraries::{Library, absent, name};
+use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
@@ -486,13 +486,11 @@ fn select(value: &RuntimeValue, cases: &RuntimeValue) -> Selection {
 }
 
 fn pattern_mismatch(pattern: &Value) -> Value {
-    Value::record([
-        (
-            absent::vocabulary::ABSENT,
-            Value::from(vocabulary::PATTERN_MISMATCH),
-        ),
-        (vocabulary::PATTERN, pattern.clone()),
-    ])
+    ::grap::absent::with_detail(
+        vocabulary::PATTERN_MISMATCH,
+        vocabulary::PATTERN,
+        pattern.clone(),
+    )
 }
 
 struct InvalidBinder;
