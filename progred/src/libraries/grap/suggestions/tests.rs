@@ -24,6 +24,7 @@ fn visible(root: Value, path: &[Step]) -> BTreeSet<CellId> {
         name: &|cell| crate::libraries::name::of(&sources, cell),
         libraries: None,
     })
+    .0
     .into_keys()
     .collect()
 }
@@ -81,7 +82,7 @@ fn completion_bindings_sort_nearest_scope_first_then_by_current_name() {
         doc: &document,
         libraries: &libraries,
     };
-    let depths = bindings(&CompletionRequest {
+    let (depths, _) = bindings(&CompletionRequest {
         raw: false,
         query: "",
         kind: CompletionKind::Value,
