@@ -1,7 +1,7 @@
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{RowAlignment, activatable, aligned_row, structure, widget};
-use kurbo::{Affine, BezPath, Stroke};
+use kurbo::{Affine, BezPath, PathEl, Stroke};
 use peniko::Color;
 use puri::draw::Canvas;
 use std::rc::Rc;
@@ -32,49 +32,47 @@ pub(crate) fn display<W: Host>(
 }
 
 pub(super) fn picture<W: Host>(tool: &Tool) -> Option<Layout<W>> {
-    let mut radius: f64 = 0.0;
-    let mut low = f64::INFINITY;
-    let mut high = f64::NEG_INFINITY;
-    for section in tool.sections() {
-        let bounds = section.bounds()?;
-        radius = radius.max(bounds.radius);
-        low = low.min(bounds.min_axial);
-        high = high.max(bounds.max_axial);
-    }
+    let (radius, low, high) = tool.sections().iter().try_fold(
+        (0.0_f64, f64::INFINITY, f64::NEG_INFINITY),
+        |(radius, low, high), section| {
+            let bounds = section.bounds()?;
+            Some((
+                radius.max(bounds.radius),
+                low.min(bounds.min_axial),
+                high.max(bounds.max_axial),
+            ))
+        },
+    )?;
     let width = 110.0;
     let height = 180.0;
     let margin = 8.0;
     let fit = ((width - 2.0 * margin) / (2.0 * radius)).min((height - 2.0 * margin) / (high - low));
-    // This picture's quality is in logical display units, not tool units.
-    let tolerance = 0.25 / fit;
-    let mut paths = Vec::new();
-    for section in tool.sections() {
-        let points = section.outline(tolerance)?;
-        let mut path = BezPath::new();
-        for (i, p) in points.iter().enumerate() {
-            let q = (-p.radius, -p.axial);
-            if i == 0 {
-                path.move_to(q);
-            } else {
-                path.line_to(q);
-            }
-        }
-        for p in points.iter().rev() {
-            path.line_to((p.radius, -p.axial));
-        }
-        path.close_path();
-        paths.push((path, section.kind));
-    }
     let transform = Affine::translate((width / 2.0, height / 2.0))
         * Affine::scale(fit)
         * Affine::translate((0.0, (low + high) / 2.0));
-    for (p, _) in &mut paths {
-        p.apply_affine(transform);
-    }
-    Some(Layout::program(Rc::new(move |context, _| {
+    // This picture's quality is in logical display units, not tool units.
+    let tolerance = 0.25 / fit;
+    let paths = tool
+        .sections()
+        .iter()
+        .map(|section| {
+            let points = section.outline(tolerance)?;
+            let (first, rest) = points.split_first()?;
+            // Up the profile on one side of the axis, and back down its mirror image.
+            let left = |p: &Point| transform * kurbo::Point::new(-p.radius, -p.axial);
+            let right = |p: &Point| transform * kurbo::Point::new(p.radius, -p.axial);
+            let path = std::iter::once(PathEl::MoveTo(left(first)))
+                .chain(rest.iter().map(|p| PathEl::LineTo(left(p))))
+                .chain(points.iter().rev().map(|p| PathEl::LineTo(right(p))))
+                .chain([PathEl::ClosePath])
+                .collect::<BezPath>();
+            Some((path, section.kind))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(Layout::widget(Rc::new(move |context| {
         let scale = context.viewing().scale();
         let paths = paths.clone();
-        measured::choices::ChoiceLayout::fixed(widget::paint(
+        widget::paint(
             widget::Extent {
                 width: width * scale,
                 ascent: height * scale / 2.0,
@@ -103,6 +101,6 @@ pub(super) fn picture<W: Host>(tool: &Tool) -> Option<Layout<W>> {
                     transform,
                 );
             },
-        ))
+        )
     })))
 }
