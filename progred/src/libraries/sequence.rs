@@ -42,21 +42,26 @@ fn evaluated(
     }
 }
 
+/// A count or an index a range can step through exactly: whole, not
+/// negative, and at most 2^53, past which f64 integers have gaps.
+fn exact(number: f64) -> bool {
+    number >= 0.0 && number.fract() == 0.0 && number <= 9_007_199_254_740_992.0
+}
+
 fn range(
     context: &mut Context,
     call: &Expression,
     env: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let count = evaluated(context, call, env, COUNT)?;
-    if count.is_absent() {
-        return Ok(count);
-    }
-    let Some(count) = count.as_f64().filter(|n| {
-        n.is_finite() && *n >= 0.0 && n.fract() == 0.0 && *n <= 9_007_199_254_740_992.0
-    }) else {
-        return Ok(invalid());
-    };
-    Ok(range_tail(context, count, 0.0))
+    Ok(if count.is_absent() {
+        count
+    } else {
+        match count.as_f64().filter(|count| exact(*count)) {
+            Some(count) => range_tail(context, count, 0.0),
+            None => invalid(),
+        }
+    })
 }
 
 fn range_tail(context: &mut Context, count: f64, index: f64) -> RuntimeValue {
@@ -73,34 +78,27 @@ fn range_step(
     env: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let count = evaluated(context, call, env, COUNT)?;
-    if count.is_absent() {
-        return Ok(count);
-    }
-    let index = evaluated(context, call, env, INDEX)?;
-    if index.is_absent() {
-        return Ok(index);
-    }
-    let (Some(count), Some(index)) = (count.as_f64(), index.as_f64()) else {
-        return Ok(invalid());
-    };
-    if !count.is_finite()
-        || count < 0.0
-        || count.fract() != 0.0
-        || count > 9_007_199_254_740_992.0
-        || !index.is_finite()
-        || index < 0.0
-        || index.fract() != 0.0
-        || index > count
-    {
-        return Ok(invalid());
-    }
-    Ok(if index == count {
-        ::grap::absent::value(FINISHED).into()
+    Ok(if count.is_absent() {
+        count
     } else {
-        RuntimeValue::record([
-            (ITEM, RuntimeValue::f64(index)),
-            (NEXT, range_tail(context, count, index + 1.0)),
-        ])
+        let index = evaluated(context, call, env, INDEX)?;
+        if index.is_absent() {
+            index
+        } else {
+            match (count.as_f64(), index.as_f64()) {
+                (Some(count), Some(index)) if exact(count) && exact(index) && index <= count => {
+                    if index == count {
+                        ::grap::absent::value(FINISHED).into()
+                    } else {
+                        RuntimeValue::record([
+                            (ITEM, RuntimeValue::f64(index)),
+                            (NEXT, range_tail(context, count, index + 1.0)),
+                        ])
+                    }
+                }
+                _ => invalid(),
+            }
+        }
     })
 }
 
@@ -126,28 +124,32 @@ fn consume(
     let mut collected = Vec::new();
     loop {
         let result = context.call_prepared(&sequence, [])?;
-        if result.is_absent() {
-            if result.absent_reason() != Some(FINISHED) {
-                return Ok(result);
+        match (
+            result.absent_reason(),
+            result.field(ITEM),
+            result.field(NEXT),
+        ) {
+            (Some(vocabulary::FINISHED), _, _) => {
+                break Ok(if collect {
+                    RuntimeValue::list(collected)
+                } else {
+                    RuntimeValue::record([])
+                });
             }
-            return Ok(if collect {
-                RuntimeValue::list(collected)
-            } else {
-                RuntimeValue::record([])
-            });
-        }
-        let (Some(item), Some(next)) = (result.field(ITEM), result.field(NEXT)) else {
-            return Ok(invalid());
-        };
-        if let Some(action) = &action {
-            let result = context.call_prepared(action, [(ITEM, item)])?;
-            if result.is_absent() {
-                return Ok(result);
+            (Some(_), _, _) => break Ok(result),
+            (None, Some(item), Some(next)) => {
+                if let Some(action) = &action {
+                    let result = context.call_prepared(action, [(ITEM, item)])?;
+                    if result.is_absent() {
+                        break Ok(result);
+                    }
+                } else {
+                    collected.push(item);
+                }
+                sequence = context.prepare_runtime_callable(next, env);
             }
-        } else {
-            collected.push(item);
+            (None, _, _) => break Ok(invalid()),
         }
-        sequence = context.prepare_runtime_callable(next, env);
     }
 }
 

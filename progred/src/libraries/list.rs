@@ -4,19 +4,17 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, f64, name, number};
-
-pub const ID: gid::CellId = gid::CellId::from_u128(0x7b0fa421250c1b5c8a78a3a95b172cb6);
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
 use gid::Value;
 
+pub const ID: gid::CellId = gid::CellId::from_u128(0x7b0fa421250c1b5c8a78a3a95b172cb6);
+
 /// Half-open index ranges are ordinary two-element lists of f64 integers.
 pub(crate) fn index_range(value: &Value) -> Option<std::ops::Range<usize>> {
     let list = value.as_list()?;
-    if list.len() != 2 {
-        return None;
-    }
+    (list.len() == 2).then_some(())?;
     let mut values = list.values();
     let mut next = || ::grap::f64::to_usize(f64::read(values.next()?)?);
     let range = next()?..next()?;
@@ -59,6 +57,14 @@ fn evaluated(
         .transpose()
 }
 
+fn not_list() -> RuntimeValue {
+    ::grap::absent::value(vocabulary::NOT_LIST).into()
+}
+
+fn out_of_bounds() -> RuntimeValue {
+    ::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into()
+}
+
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
@@ -70,10 +76,10 @@ fn functions() -> ForeignFunctions {
                 let Some(item) = evaluated(context, call, environment, vocabulary::ITEM)? else {
                     return Ok(context.missing_runtime_argument(vocabulary::ITEM));
                 };
-                let Some(values) = list.list_values() else {
-                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
-                };
-                Ok(RuntimeValue::list(std::iter::once(item).chain(values)))
+                Ok(match list.list_values() {
+                    Some(values) => RuntimeValue::list(std::iter::once(item).chain(values)),
+                    None => not_list(),
+                })
             })
             .parameters([vocabulary::LIST, vocabulary::ITEM])
             .tracked(),
@@ -89,10 +95,10 @@ fn functions() -> ForeignFunctions {
                 else {
                     return Ok(context.missing_runtime_argument(number::vocabulary::RIGHT));
                 };
-                let (Some(left), Some(right)) = (left.list_values(), right.list_values()) else {
-                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
-                };
-                Ok(RuntimeValue::list(left.chain(right)))
+                Ok(match (left.list_values(), right.list_values()) {
+                    (Some(left), Some(right)) => RuntimeValue::list(left.chain(right)),
+                    _ => not_list(),
+                })
             })
             .parameters([number::vocabulary::LEFT, number::vocabulary::RIGHT])
             .tracked(),
@@ -106,7 +112,7 @@ fn functions() -> ForeignFunctions {
                 Ok(list
                     .list_len()
                     .map(|length| RuntimeValue::f64(length as f64))
-                    .unwrap_or_else(|| ::grap::absent::value(vocabulary::NOT_LIST).into()))
+                    .unwrap_or_else(not_list))
             })
             .parameters([vocabulary::LIST])
             .tracked(),
@@ -121,15 +127,14 @@ fn functions() -> ForeignFunctions {
                     return Ok(context.missing_runtime_argument(vocabulary::INDEX));
                 };
                 let index = context.eval(index, environment)?;
-                if list.list_len().is_none() {
-                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
-                }
-                let Some(index) = index.as_f64().and_then(::grap::f64::to_usize) else {
-                    return Ok(::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into());
-                };
-                Ok(list
-                    .list_get(index)
-                    .unwrap_or_else(|| ::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into()))
+                Ok(match list.list_len() {
+                    Some(_) => index
+                        .as_f64()
+                        .and_then(::grap::f64::to_usize)
+                        .and_then(|index| list.list_get(index))
+                        .unwrap_or_else(out_of_bounds),
+                    None => not_list(),
+                })
             })
             .parameters([vocabulary::LIST, vocabulary::INDEX])
             .tracked(),
@@ -140,13 +145,13 @@ fn functions() -> ForeignFunctions {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
                     return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
-                let Some(mut values) = list.list_values() else {
-                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
-                };
-                if values.next().is_none() {
-                    return Ok(::grap::absent::value(vocabulary::OUT_OF_BOUNDS).into());
-                }
-                Ok(RuntimeValue::list(values))
+                Ok(match list.list_values() {
+                    Some(mut values) => match values.next() {
+                        Some(_) => RuntimeValue::list(values),
+                        None => out_of_bounds(),
+                    },
+                    None => not_list(),
+                })
             })
             .parameters([vocabulary::LIST])
             .tracked(),
@@ -166,23 +171,26 @@ fn functions() -> ForeignFunctions {
                 loop {
                     let result =
                         context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
-                    if result.is_absent() {
-                        if result.absent_reason() != Some(vocabulary::FINISHED) {
-                            break Ok(result);
-                        }
-                        break Ok(RuntimeValue::record([
-                            (vocabulary::LIST, RuntimeValue::list(items)),
-                            (vocabulary::STATE, state),
-                        ]));
-                    }
-                    let (Some(item), Some(next)) = (
+                    match (
+                        result.absent_reason(),
                         result.field(vocabulary::ITEM),
                         result.field(vocabulary::STATE),
-                    ) else {
-                        break Ok(::grap::absent::value(vocabulary::INVALID_STEP).into());
-                    };
-                    items.push(item);
-                    state = next;
+                    ) {
+                        (Some(vocabulary::FINISHED), _, _) => {
+                            break Ok(RuntimeValue::record([
+                                (vocabulary::LIST, RuntimeValue::list(items)),
+                                (vocabulary::STATE, state),
+                            ]));
+                        }
+                        (Some(_), _, _) => break Ok(result),
+                        (None, Some(item), Some(next)) => {
+                            items.push(item);
+                            state = next;
+                        }
+                        (None, _, _) => {
+                            break Ok(::grap::absent::value(vocabulary::INVALID_STEP).into());
+                        }
+                    }
                 }
             })
             .parameters([vocabulary::INITIAL, vocabulary::STEP])
@@ -194,8 +202,7 @@ fn functions() -> ForeignFunctions {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
                     return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
-                let Some(mut accumulator) =
-                    evaluated(context, call, environment, vocabulary::INITIAL)?
+                let Some(accumulator) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
                     return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
                 };
@@ -203,19 +210,18 @@ fn functions() -> ForeignFunctions {
                     return Ok(context.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
-                let Some(values) = list.list_values() else {
-                    return Ok(::grap::absent::value(vocabulary::NOT_LIST).into());
-                };
-                for item in values {
-                    accumulator = context.call_prepared(
-                        &step,
-                        [
-                            (vocabulary::ACCUMULATOR, accumulator),
-                            (vocabulary::ITEM, item),
-                        ],
-                    )?;
+                match list.list_values() {
+                    Some(mut values) => values.try_fold(accumulator, |accumulator, item| {
+                        context.call_prepared(
+                            &step,
+                            [
+                                (vocabulary::ACCUMULATOR, accumulator),
+                                (vocabulary::ITEM, item),
+                            ],
+                        )
+                    }),
+                    None => Ok(not_list()),
                 }
-                Ok(accumulator)
             })
             .parameters([vocabulary::LIST, vocabulary::INITIAL, vocabulary::STEP])
             .tracked(),

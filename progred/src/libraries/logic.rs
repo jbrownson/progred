@@ -52,12 +52,13 @@ fn functions() -> ForeignFunctions {
             } else {
                 match read(&value) {
                     Some(true) => Value::record([]),
-                    accepted => ::grap::absent::with_detail(
-                        if accepted.is_some() {
-                            vocabulary::CONDITION_NOT_MET
-                        } else {
-                            vocabulary::NOT_BOOL
-                        },
+                    Some(false) => ::grap::absent::with_detail(
+                        vocabulary::CONDITION_NOT_MET,
+                        vocabulary::CONDITION,
+                        value,
+                    ),
+                    None => ::grap::absent::with_detail(
+                        vocabulary::NOT_BOOL,
                         vocabulary::CONDITION,
                         value,
                     ),

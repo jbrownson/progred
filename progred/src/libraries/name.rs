@@ -79,16 +79,17 @@ pub(crate) fn with_name<W: Host>(
     let has_name = input
         .value
         .is_some_and(|value| value.contains_field(vocabulary::NAME));
-    if !has_name && input.pending != Some(Pending::Child(step.clone())) {
-        return content;
+    if has_name || input.pending == Some(Pending::Child(step.clone())) {
+        crate::display::row(
+            6.0,
+            [
+                descend_local([step], projection(), &input.default_projection),
+                content,
+            ],
+        )
+    } else {
+        content
     }
-    crate::display::row(
-        6.0,
-        [
-            descend_local([step], projection(), &input.default_projection),
-            content,
-        ],
-    )
 }
 
 pub fn library<W: Host>() -> Library<W> {

@@ -1,20 +1,20 @@
 //! Open sRGB RGB8 and RGBA8 conventions with an editable projected spelling.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, f64, line_edit, name};
-use gid::{Step, Value};
-
-pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
 use crate::display::{
     PointEvent, PointUpdate, TextFamily, centered_row, col, descend, on_activate, on_hover,
     on_point, popover, widget,
 };
+use crate::libraries::{Library, f64, line_edit, name};
 use ::grap::RuntimeValue;
+use gid::{Step, Value};
 use kurbo::{Affine, Rect, RoundedRect, Stroke};
 use peniko::Color;
 use puri::draw::{Canvas, CanvasSink};
 use puri_widgets::color_picker::{self, Hsva};
 use std::rc::Rc;
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
 
 mod named;
 

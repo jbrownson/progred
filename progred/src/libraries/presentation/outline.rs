@@ -34,18 +34,17 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 elements.list_len()?;
                 let heading = d::runtime_partial(heading);
                 d::structure::list_column_with(input, 24.0, Some(heading), |position, heading| {
-                    let Some(key) = elements.list_element(&position).and_then(|v| v.as_cell())
-                    else {
-                        return heading;
-                    };
-                    section(
-                        position,
-                        key,
-                        heading,
-                        &here,
-                        &fields,
-                        &input.default_projection,
-                    )
+                    match elements.list_element(&position).and_then(|v| v.as_cell()) {
+                        Some(key) => section(
+                            position,
+                            key,
+                            heading,
+                            &here,
+                            &fields,
+                            &input.default_projection,
+                        ),
+                        None => heading,
+                    }
                 })
             }
         });

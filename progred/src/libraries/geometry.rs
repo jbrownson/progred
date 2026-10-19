@@ -3,10 +3,10 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, f64, name};
+use ::grap::{ForeignFunction, ForeignFunctions};
 use gid::Value;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xac27c33e44d2df4f3d1753bcebd2cfe5);
-use ::grap::{ForeignFunction, ForeignFunctions};
 
 pub mod vocabulary {
     use gid::CellId;

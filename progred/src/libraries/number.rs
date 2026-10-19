@@ -375,45 +375,49 @@ fn wrap_typed<N: std::str::FromStr>(
     site: &crate::editing::Site,
     symbols: &[(&'static str, CellId)],
 ) -> bool {
-    if !event.state.is_down()
-        || event.modifiers.ctrl()
-        || event.modifiers.meta()
-        || event.modifiers.alt()
-    {
-        return false;
+    typed_operator(event, symbols).is_some_and(|operator| {
+        let mut edit = site.open(session);
+        let wrapped = ends_a_number::<N>(edit.selected())
+            && edit.value().cloned().is_some_and(|left| {
+                edit.replace(::grap::call(
+                    Value::from(operator),
+                    [(vocabulary::LEFT, left)],
+                ))
+            });
+        if wrapped {
+            edit.pend(&[gid::Step::Key(vocabulary::RIGHT)]);
+        }
+        wrapped
+    })
+}
+
+/// The operator among `symbols` that an unmodified keypress types.
+fn typed_operator(
+    event: &ui_events::keyboard::KeyboardEvent,
+    symbols: &[(&'static str, CellId)],
+) -> Option<CellId> {
+    let plain = event.state.is_down()
+        && !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.alt());
+    match &event.key {
+        ui_events::keyboard::Key::Character(typed) if plain => symbols
+            .iter()
+            .find(|(spelling, _)| *spelling == typed.as_str())
+            .map(|&(_, operator)| operator),
+        _ => None,
     }
-    let ui_events::keyboard::Key::Character(typed) = &event.key else {
-        return false;
-    };
-    let Some(&(_, operator)) = symbols
-        .iter()
-        .find(|(spelling, _)| *spelling == typed.as_str())
-    else {
-        return false;
-    };
-    let mut edit = site.open(session);
-    match edit.selected() {
-        crate::editing::Selected::Elsewhere => return false,
-        crate::editing::Selected::Here => {}
+}
+
+/// Whether an operator typed now follows the whole number: the number is
+/// selected, or its line is being typed with the caret after all of it.
+fn ends_a_number<N: std::str::FromStr>(selected: crate::editing::Selected<'_>) -> bool {
+    match selected {
+        crate::editing::Selected::Elsewhere => false,
+        crate::editing::Selected::Here => true,
         crate::editing::Selected::Typing(line) => {
             let (anchor, focus) = line.selection_offsets();
-            if anchor != focus
-                || focus != line.text().len()
-                || line.text().trim().parse::<N>().is_err()
-            {
-                return false;
-            }
+            anchor == focus && focus == line.text().len() && line.text().trim().parse::<N>().is_ok()
         }
     }
-    let Some(left) = edit.value().cloned() else {
-        return false;
-    };
-    let wrapped = ::grap::call(Value::from(operator), [(vocabulary::LEFT, left)]);
-    if !edit.replace(wrapped) {
-        return false;
-    }
-    edit.pend(&[gid::Step::Key(vocabulary::RIGHT)]);
-    true
 }
 
 pub(crate) trait Scrubbable: Copy + Display + PartialOrd + 'static {

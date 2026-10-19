@@ -5,6 +5,7 @@
 //! an absent result exposes its source. An explicit viewport function also
 //! receives the pane's assigned logical width and height.
 
+use crate::display::at;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::libraries::{Library, f64, layout, name};
 use gid::Step;
@@ -12,7 +13,6 @@ use gid::Step;
 mod outline;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xd22b834154d60b1df228f9bb4d3c13de);
-use crate::display::at;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -159,49 +159,52 @@ pub(crate) fn document_libraries<W: Host>(loaded: Partial<W>) -> Partial<W> {
     crate::display::runtime_partial(move |input| {
         let value = input.value?;
         let occurrence: std::rc::Rc<[Step]> = input.env.occurrence().into();
-        if DRAWING.with(|drawing| {
-            let drawing = drawing.borrow();
-            drawing.len() >= NESTING || drawing.contains(&occurrence)
-        }) {
-            return None;
-        }
-        input.env.libraries().into_iter().find_map(|library| {
-            if !library.keys.iter().any(|key| value.field(*key).is_some()) {
-                return None;
-            }
-            let projection = library.projection;
-            let (evaluation, layout) = layout::scope::run(
-                || input.site(),
-                |scope| {
-                    input.env.apply_runtime_scoped(
-                        &projection,
-                        &[(vocabulary::VALUE, value.clone())],
-                        Some(scope),
-                    )
-                },
-            );
-            let layout = match layout {
-                // The view chose what to show; only a field being added
-                // follows it.
-                Some(layout) => {
-                    crate::display::structure::with_extra_fields(input, |_| true, layout)
-                }
-                None if evaluation.completed && !evaluation.result.is_absent() => {
-                    crate::display::at_with_projection(
-                        [Step::Key(vocabulary::RESULT)],
-                        evaluation.result,
-                        Some(loaded.clone()),
-                        Some(loaded.clone()),
-                    )
-                }
-                None => return None,
-            };
-            let occurrence = occurrence.clone();
-            Some(Layout::new(move |builder| {
-                let _drawing = Drawing::at(occurrence.clone());
-                layout.run(builder)
-            }))
-        })
+        DRAWING
+            .with(|drawing| {
+                let drawing = drawing.borrow();
+                drawing.len() < NESTING && !drawing.contains(&occurrence)
+            })
+            .then_some(())?;
+        input
+            .env
+            .libraries()
+            .into_iter()
+            .filter(|library| library.keys.iter().any(|key| value.field(*key).is_some()))
+            .find_map(|library| {
+                let projection = library.projection;
+                let (evaluation, layout) = layout::scope::run(
+                    || input.site(),
+                    |scope| {
+                        input.env.apply_runtime_scoped(
+                            &projection,
+                            &[(vocabulary::VALUE, value.clone())],
+                            Some(scope),
+                        )
+                    },
+                );
+                let layout = match layout {
+                    // The view chose what to show; only a field being added
+                    // follows it.
+                    Some(layout) => {
+                        crate::display::structure::with_extra_fields(input, |_| true, layout)
+                    }
+                    None => {
+                        (evaluation.completed && !evaluation.result.is_absent()).then(|| {
+                            crate::display::at_with_projection(
+                                [Step::Key(vocabulary::RESULT)],
+                                evaluation.result,
+                                Some(loaded.clone()),
+                                Some(loaded.clone()),
+                            )
+                        })?
+                    }
+                };
+                let occurrence = occurrence.clone();
+                Some(Layout::new(move |builder| {
+                    let _drawing = Drawing::at(occurrence.clone());
+                    layout.run(builder)
+                }))
+            })
     })
 }
 

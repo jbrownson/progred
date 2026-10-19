@@ -2,14 +2,14 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, f64, name, u64};
-use gid::Value;
-
-pub const ID: gid::CellId = gid::CellId::from_u128(0x953e2838d5985718dd4e91f0af673fe3);
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
+use gid::Value;
 use std::cell::Cell;
 use std::rc::Rc;
+
+pub const ID: gid::CellId = gid::CellId::from_u128(0x953e2838d5985718dd4e91f0af673fe3);
 
 pub mod vocabulary {
     use gid::CellId;
@@ -76,21 +76,21 @@ fn functions() -> ForeignFunctions {
         .register(
             vocabulary::WITH_RANDOM,
             ForeignFunction::new(|context, call, environment| {
-                let seed = match evaluated(context, call, environment, vocabulary::SEED)? {
-                    Some(seed) => match u64::read(&seed) {
-                        Some(seed) => seed,
+                // An omitted seed is zero; one that isn't a u64 is invalid.
+                match evaluated(context, call, environment, vocabulary::SEED)?
+                    .map_or(Some(0), |seed| u64::read(&seed))
+                {
+                    Some(seed) => match context.field(call, ::grap::vocabulary::EXPRESSION) {
+                        Some(expression) => context
+                            .with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
+                                context.eval(expression, environment)
+                            }),
                         None => {
-                            return Ok(::grap::absent::value(vocabulary::INVALID_SEED).into());
+                            Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION))
                         }
                     },
-                    None => 0,
-                };
-                let Some(expression) = context.field(call, ::grap::vocabulary::EXPRESSION) else {
-                    return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
-                };
-                context.with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
-                    context.eval(expression, environment)
-                })
+                    None => Ok(::grap::absent::value(vocabulary::INVALID_SEED).into()),
+                }
             })
             .parameters([::grap::vocabulary::EXPRESSION]),
         )

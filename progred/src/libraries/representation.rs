@@ -75,10 +75,11 @@ pub(crate) fn infix_display<W: Host>(
     operators: &[(CellId, Precedence)],
     input: &ProjectionInput<'_, W, RuntimeValue>,
 ) -> Option<Layout<W>> {
-    match &input.pending {
-        None | Some(Pending::Field | Pending::Child(Step::Key(_))) => {}
-        Some(Pending::Child(_)) => return None,
-    }
+    matches!(
+        &input.pending,
+        None | Some(Pending::Field | Pending::Child(Step::Key(_)))
+    )
+    .then_some(())?;
     let binds = |call: &RuntimeValue| {
         let function = call.field(FUNCTION)?.as_cell()?;
         operators
