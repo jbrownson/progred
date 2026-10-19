@@ -366,12 +366,7 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
         ])
         .unwrap(),
     );
-    editor.stack.projection = crate::web_embed::tutorial_slots(
-        Some(&format!("{},{}", fields["second"], fields["first"])),
-        editor.stack.projection,
-        &editor.stack.libraries,
-    )
-    .unwrap();
+    crate::test_support::set_tutorial_slots(&mut editor, &[fields["second"], fields["first"]]);
     editor.drawn_menu = false;
     (editor, fields)
 }

@@ -71,44 +71,9 @@ pub fn cam_position(progress: f64) -> Value {
     ])
 }
 
-/// The growing-forest lesson as its tutorial page embeds it.
+/// The growing forest with all of its code, as tutorial.html's closing
+/// exercise embeds it.
 pub fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) {
-    use crate::libraries::{
-        absent, blob, color, control, controls, f64, grap, layout, list, logic, name, number,
-        presentation, text,
-    };
-    let (doc, fields) = crate::gid_text::parse(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../website/public/lessons/growing-forest.gid"
-    )))
-    .unwrap();
-    let mut editor = crate::test_editor_with_stack(
-        doc,
-        crate::stack::load_selected(&[
-            name::ID,
-            text::ID,
-            blob::ID,
-            absent::ID,
-            color::ID,
-            control::ID,
-            number::ID,
-            f64::ID,
-            grap::ID,
-            layout::ID,
-            controls::ID,
-            presentation::ID,
-            logic::ID,
-            list::ID,
-            crate::libraries::sequence::ID,
-        ])
-        .unwrap(),
-    );
-    editor.stack.projection = crate::web_embed::tutorial_slots(
-        Some(&format!("{},{}", fields["second"], fields["first"])),
-        editor.stack.projection,
-        &editor.stack.libraries,
-    )
-    .unwrap();
-    editor.drawn_menu = false;
-    (editor, fields)
+    let (editor, mut page) = crate::tutorials::embed("tutorial.html", "yours");
+    (editor, std::mem::take(&mut page.names))
 }
