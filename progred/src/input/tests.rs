@@ -585,7 +585,7 @@ fn every_input_receives_the_installed_dispatch_context() {
         let mut pass = crate::display::widget::HoverPass::<(), _>::new(&Default::default());
         pass.in_view(root.clone(), |pass| {
             pass.visit(|output| {
-                output.claim(crate::display::widget::frame::Probe::exact(
+                output.claim(puri::hover::Probe::exact(
                     uig::Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0)),
                     hover.clone(),
                 ));

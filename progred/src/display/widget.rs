@@ -2,10 +2,11 @@
 //! Layout measures and places these without interpreting a widget description.
 
 use crate::display::{Host, Layout};
-pub use frame::{HoverContext, HoverInput, HoverPass, Probe};
+pub use frame::{HoverContext, HoverInput, HoverPass};
 use gid::Value;
 pub use measured::Extent;
 use measured::Measured;
+use puri::hover::Probe;
 use puri::text::{TextCtx, TextMetrics};
 use std::rc::Rc;
 use uig::Placement;

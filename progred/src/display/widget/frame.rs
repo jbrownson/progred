@@ -9,11 +9,9 @@ use super::{
 use kurbo::{Affine, Point, Rect, Vec2};
 use measured::Measured;
 use puri::draw::{Canvas, CanvasSink};
-use puri::frame::AfterHover;
-pub use puri::frame::Render;
+use puri::frame::{AfterHover, Render};
 use puri::handler::{Handler, HasHandler};
-use puri::hover::Claim;
-pub use puri::hover::Probe;
+use puri::hover::{Claim, Probe};
 use puri::interact::is_primary_contact;
 use std::rc::Rc;
 use ui_events::pointer::PointerButtonEvent;

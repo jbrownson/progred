@@ -3,7 +3,7 @@
 //! are returned for later execution, and a clipped-out placement draws and
 //! claims nothing.
 
-use super::frame::{Attribution, Cursor, DispatchContext, Probe};
+use super::frame::{Attribution, Cursor, DispatchContext};
 use super::offers::Offers;
 use super::{HoverContext, HoverPass, extent};
 use kurbo::{Affine, Point, Rect, Stroke};
@@ -12,6 +12,7 @@ use peniko::{Brush, ImageData};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::LineEditDescription;
 use puri::handler::{Handler, HasHandler};
+use puri::hover::Probe;
 use puri::text::{TextCtx, TextStyle};
 use ui_events::keyboard::KeyboardEvent;
 use uig::Placement;

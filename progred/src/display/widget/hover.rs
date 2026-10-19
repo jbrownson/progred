@@ -1,8 +1,8 @@
 //! Hover regions and feedback are ordinary placement decorators.
 
-use super::frame::Probe;
 use super::{before, style};
 use crate::display::Layout;
+use puri::hover::Probe;
 use std::rc::Rc;
 
 pub fn on_hover<World: 'static, Hover: Clone + PartialEq + 'static>(

@@ -3,13 +3,13 @@
 use crate::display::widget::{HoverContext, HoverPass};
 use crate::hover::Hover;
 
-use super::frame::Probe;
 use super::offers::Entry;
 use super::style::{Styles, face_style, primary_highlight_stroke};
 use super::{container, extent, leaf, popover, scroll};
 use kurbo::{Insets, Point, Size, Vec2};
 use measured::{Extent, Measured, col, pad};
 use puri::handler::HasHandler;
+use puri::hover::Probe;
 use puri::text::TextCtx;
 use puri_widgets::text_frame;
 use std::rc::Rc;

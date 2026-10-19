@@ -145,7 +145,7 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
                         move |output: &mut widget::HoverContext<'_, crate::Editor, Hovered>,
                               placement| {
                             placements.borrow_mut().push((id, placement.rect));
-                            output.claim(crate::display::widget::frame::Probe::exact(
+                            output.claim(puri::hover::Probe::exact(
                                 placement,
                                 Hovered::Tree(Hover::Entry(id)),
                             ));

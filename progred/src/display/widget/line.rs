@@ -111,7 +111,7 @@ pub fn view<W: Host>(
             // Arriving from the left or right places the caret at that edge.
             output.on_arrival(stop.clone(), navigation);
             if !placement.clipped_out() {
-                output.claim(super::frame::Probe::retaining(placement, target));
+                output.claim(puri::hover::Probe::retaining(placement, target));
             }
             let command = output.input.command_modifier;
             output.handler().on_pointer_down(move |world, event| {

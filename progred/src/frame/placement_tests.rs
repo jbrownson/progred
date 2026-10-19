@@ -732,10 +732,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
             descent: 20.0,
         },
         move |output: &mut widget::HoverContext<'_, usize, _>, placement| {
-            output.claim(crate::display::widget::frame::Probe::retaining(
-                placement,
-                target.clone(),
-            ));
+            output.claim(puri::hover::Probe::retaining(placement, target.clone()));
             output
                 .handler()
                 .on_pointer_down_with(move |count, _, hovered| {
