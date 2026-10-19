@@ -14,8 +14,11 @@ hierarchy, mints no identity, and owns no global clipboard, window, clock, or
 focus service. Platform services arrive only as caller-supplied capabilities in
 the dispatch context. Puri grows only as Progred needs it.
 
-Line editing borrows Parley's `PlainEditor` behavior, constructed transiently
-for each pass and dispatch.
+Masonry is a quarry, not a foundation: Puri inherits none of its widget tree,
+pods, or context protocol. Code taken from it is vendored with attribution and
+purified in place; trivial widgets are rewritten instead. None is vendored
+today: line editing borrows Parley's `PlainEditor` behavior, constructed
+transiently for each pass and dispatch.
 
 The caller owns focus, any focus order, and durable interaction state; a
 description receives focus as an input. Durable helper state holds only
