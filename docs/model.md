@@ -1,8 +1,7 @@
 # Data and editor model
 
-This describes the current implementation. It is a reference for
-working on the code, not an attribution of design intent to the owner. Earlier
-models and unverified rationale are preserved in [historical notes](history/model-notes.md).
+Earlier models and unverified rationale are preserved in
+[historical notes](history/model-notes.md).
 Open work is listed separately in [deferred work](deferred.md).
 
 ## Data and resolution
@@ -19,7 +18,8 @@ display, and cell evaluation use that value. Definitions are neither merged nor
 implicitly composed. Duplicate indicators and inspection UI are deferred.
 
 Each library has one definition per cell: either an ordinary value or a native
-definition pairing a descriptive value with its Rust implementation. Reads and
+definition (`grap::Definition::Foreign`) pairing a descriptive value with its
+Rust implementation. Reads and
 calls use the same lookup. Reading a native definition uses its description;
 calling it invokes its implementation. An absent or non-callable result does
 not try another source. Library descriptions (currently name records) live in
@@ -31,9 +31,7 @@ library values remain read-only. See [Sources](../progred/src/sources.rs),
 [Library and Libraries](../progred/src/library.rs), and
 [Grap evaluation](projections.md#evaluation).
 
-The text bridge is a temporary import/export representation. Its binders and
-spelling do not add GID semantics. Native binary storage is not implemented;
-see [the bridge format](gid-text.md).
+Documents are saved and loaded through the [text bridge](gid.md#text-bridge).
 
 ## Occurrences, definitions, and views
 
@@ -90,7 +88,7 @@ definition can itself still be replaced or removed from a writable document.
 [`Selection`](../progred/src/selection.rs) owns a workspace root, path, GID
 payload, and optional Rust editor. Its stages distinguish an existing edge,
 a pending value, and a pending record label. Annotation records live in a
-path-keyed [`Annotations`](../progred/src/annotations.rs) trie owned by the view;
+path-keyed [`Annotations`](../progred/src/annotations.rs) map owned by the view;
 folding is one convention in those records. Space folds and unfolds the selected
 occurrence. Clicking a fold's `…` selects the occurrence as it opens it, so Space
 closes it again.
@@ -140,8 +138,8 @@ the current location: a writable missing value uses the pending picker, while
 an existing value is selected normally. An explicit pending or label payload
 can still request those modes intentionally, but no caller needs one as setup.
 The picker renders an empty query by default without writing selection state and
-materializes its editor only on input; query, caret, choice, scroll, and expansion
-state are optional. This applies to empty roots, bare-cell definitions, missing
+materializes its editor only on input; query, caret, choice, and scroll state
+are optional. This applies to empty roots, bare-cell definitions, missing
 record fields, and inserted list positions, without a special selection callback
 for each. Read-only locations do not enter a picker.
 
@@ -176,15 +174,12 @@ rawer view, where the value reads as the record it is, can.
 The live `LineEditState` owns text, caret, IME, and text-drag state. A projection
 at the selected location receives a GID description derived from that state.
 A capability replacement decodes it once into the live editor; there is no
-second retained editor representation to synchronize. The path library encodes
-typed paths as ordinary GID lists: `{key: cell}`, `{element: {indexable: blob}}`,
-and `{follow: document}` or `{follow: {library: cell}}`. Decoding checks each
-step and the canonical list-position bytes. Encoding a position does not
-extend its lifetime: loading a document still regenerates its list positions.
+second retained editor representation to synchronize. Paths reach Grap as
+[ordinary GID data](gid.md).
 
 Generic Grap handlers receive GID events and caller-supplied capabilities.
 Site and selection access are scoped foreign calls. `site path` returns the
-projected site's document path; `selection get` reads the selection payload
+site's occurrence path in its view; `selection get` reads the selection payload
 there. `selection set` takes an explicit `path` and `value`, interpreted in
 the supplied document and view, so it can move selection to another location.
 An absent value clears selection only at the specified path. Reads observe
@@ -199,9 +194,10 @@ with no per-call snapshots or rollback. Tests can replace these foreign function
 with a recording interpreter.
 
 The projection supplies a line's spelling, presentation, and conversion callback.
-The current line handler owns the callback; selection retains neither a Rust
-callback nor a Grap callable. The line is the stock native widget function
-carried by `Layout::widget`; layout has no line-editor constructor or interpreter
+The current line editor's handler owns the callback; selection retains neither a
+Rust callback nor a Grap callable. The line editor, `display::line_edit`, is the
+stock native widget function carried by `Layout::widget`; layout has no
+line-editor constructor or interpreter
 arm. The editor supplies current state and scoped editing capabilities, then
 incorporates the widget's render closures, handlers, hover claim, and navigation
 transition. Progred's [line edit](../progred/src/editing.rs)
@@ -212,33 +208,32 @@ can remain in the editor while the last valid value remains in the document.
 Loaded library values decline writes. Projections decide how unrelated fields
 survive an edit. Atomic libraries supply native conversion functions.
 
-The line control groups the first document write into undo and coalesces later
-writes in that editing run. The shell no longer runs a general post-event
-conversion step. Query editing similarly resets its completion choice and scroll
-at the editing operation, not after unrelated events.
+Query editing resets its completion choice and scroll at the editing operation,
+not after unrelated events.
 
 In the normal projection, blobs use a monospace hex line with a fixed `0x`
 prefix. The buffer contains the full hex digits, including for blobs longer
 than the structural summary. Edits accept complete bytes in either case;
-empty hex denotes an empty blob. Query entry and editing share the blob
-library's parser. Raw retains its compact structural blob display.
+empty hex denotes an empty blob. Query entry and editing share GID's hex reader,
+`gid::read_hex`. Raw retains its compact structural blob display.
 
 A selected, writable
 line with no editing state uses its current projected spelling with the caret
 at the end. Rendering and input use the same default; projection does not store
-it just because the line is selected. On an editing interaction, the line control
+it just because the line is selected. On an editing interaction, the line editor
 materializes state from that default. Its current handler supplies conversion. Existing
 caret, in-progress spelling, and IME state take precedence. Raw and read-only
 views do not acquire an editor from a plain selection.
 
 Ordinary selection therefore needs only a location, including after completion,
 paste, deletion, and undo. Navigation targets receive an optional arrival
-direction. The line widget places the caret at the beginning when moving Right
+direction. The line editor places the caret at the beginning when moving Right
 into it and at the end when moving Left; ordinary and vertical arrivals keep
 the default. This policy belongs to the widget, not navigation dispatch. Pointer
 placement remains an explicit interaction. The shell does not inspect values
 or the render tree to infer editability. See
-[navigation](../progred/src/navigate.rs).
+[`Select`](../progred/src/display/widget/navigation.rs) and
+[the line editor](../progred/src/display/widget/line.rs).
 
 Arrow keys move the selection between stops that projections declare, in an
 order the chosen layout determines; [layout navigation](navigation.md) is the
@@ -296,9 +291,8 @@ then offers Raw's. A picker can also take keys that choose an offer at once
 from an empty query, as Raw's brackets do. No provider is hidden in traversal
 context. Only the active picker asks for offers.
 
-This is a deliberately simple starting point, reached by removing more
-elaborate behavior. What was removed, and what may come back in another form,
-is recorded in [deferred work](deferred.md#completion-after-the-strip-back).
+[Deferred work](deferred.md#completion-after-the-strip-back) lists what
+completion may add.
 
 Each request includes the query, field/value kind, the question asked of a
 library (what it offers anywhere, what it reads the query as, or what a document
@@ -396,10 +390,11 @@ so typing goes inside: the cell's value, an element of the list, or a field of
 the record. Escape steps back out to it.
 
 A library completion consists of presentation metadata and an activation handler
-receiving `&mut Editor`. Clicking or pressing Enter runs it; highlighting or
-moving between suggestions does not. Handlers may edit, change selection, or
-start an interaction without inserting data. An optional advertised value supplies
-source/filter metadata only; it never determines activation behavior.
+receiving the dispatch's `Session`. Clicking or pressing Enter runs it;
+highlighting or moving between suggestions does not. Handlers may edit, change
+selection, or start an interaction without inserting data. An optional
+advertised value supplies source/filter metadata only; it never determines
+activation behavior.
 
 The completion library's `insert` and `generated` helpers build ordinary insertion
 handlers. They accept an optional `on_commit` continuation, run at the committed
@@ -414,10 +409,10 @@ replace or clear it. A low-level offer with no continuation leaves that selectio
 unchanged, including an active pending query. Stock offer combinators supply the
 policy: `completion::select` selects the inserted value, and an insertion
 continuing with `pending_at` opens a label's missing value. Text, numbers, and blobs simply select their
-location; their line controls supply default editing when projected. Completions
+location; their line editors supply default editing when projected. Completions
 do not copy editor text, caret, or write-back rules into the selection. Query
 caret positions are not translated across parsing. These same offers work in
-Raw without an override, since that projection contains no atomic line control.
+Raw without an override, since that projection contains no atomic line editor.
 Enter commits only through the placed completion control; the shell has no
 fallback which inserts query text after its offers decline.
 
@@ -544,7 +539,7 @@ Examples and replace-in-place New Document are development/demo conveniences,
 not the intended production File menu. Cmd+N (Ctrl+N on non-Mac hosts) and the
 example shortcuts replace the current document after confirming any unsaved
 changes. With no desktop window, they create one. Cmd+Shift+N / Ctrl+Shift+N
-is New Window; Open also continues to create a separate window.
+is New Window; Open creates a separate window.
 
 Replacement keeps the window, surface, geometry, fonts, text-shaping cache,
 clipboard, library stack, physical pointer/modifier input, and debug-display

@@ -45,7 +45,10 @@ partial or lazy access where useful. Those goals must not be constrained
 by the temporary text bridge.
 
 The path library represents traversal steps and list-position bytes as ordinary
-records, lists, and blobs. This is a library convention, not another GID atom.
+records, lists, and blobs: a path is a list of `{key: cell}`,
+`{element: {indexable: blob}}`, and `{follow: document}` or
+`{follow: {library: cell}}` steps, and decoding checks each step and the
+canonical list-position bytes. This is a library convention, not another GID atom.
 Runtime list positions still have session lifetime; serializing a path as data
 does not make its element addresses survive a document reload.
 
