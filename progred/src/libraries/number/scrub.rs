@@ -16,7 +16,7 @@ pub(crate) struct ScrubEvent {
 
 pub(crate) struct ScrubUpdate {
     pub value: Value,
-    pub spelling: Option<String>,
+    pub spelling: String,
 }
 
 pub(crate) type ScrubGesture = Box<dyn FnMut(ScrubEvent) -> ScrubUpdate>;
@@ -91,11 +91,9 @@ impl Gesture for Scrub {
                     distance_y: motion.distance.y,
                 });
                 let wrote = self.edit.write(session, update.value);
-                if let Some(spelling) = update.spelling
-                    && let Some(selected) = self.edit.selected(session)
-                {
-                    *selected.edit_line_mut(&spelling) =
-                        puri::edit::LineEditState::new(&spelling).with_cursor_at_end();
+                if let Some(selected) = self.edit.selected(session) {
+                    *selected.edit_line_mut(&update.spelling) =
+                        puri::edit::LineEditState::new(&update.spelling).with_cursor_at_end();
                     self.edited_spelling = true;
                 }
                 wrote

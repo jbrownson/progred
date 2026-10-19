@@ -27,7 +27,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
                     Rc::new(|| {
                         Box::new(|_| crate::libraries::number::scrub::ScrubUpdate {
                             value: f64_convention::value(13.0),
-                            spelling: Some("13".into()),
+                            spelling: "13".into(),
                         })
                     }),
                 ),
@@ -85,7 +85,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
                 Rc::new(|| {
                     Box::new(|_| crate::libraries::number::scrub::ScrubUpdate {
                         value: f64_convention::value(13.0),
-                        spelling: None,
+                        spelling: "13".into(),
                     })
                 }),
             ),

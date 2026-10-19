@@ -218,7 +218,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                         let scrubbed = scrub.update(event);
                         ScrubUpdate {
                             value: original.overlaid(encode(scrubbed.value)),
-                            spelling: Some(scrubbed.value.spelling(scrubbed.precision)),
+                            spelling: scrubbed.value.spelling(scrubbed.precision),
                         }
                     })
                 }),

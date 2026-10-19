@@ -68,7 +68,7 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
             Rc::new(|| {
                 Box::new(|_| ScrubUpdate {
                     value: f64::value(2.0),
-                    spelling: Some("2.0".into()),
+                    spelling: "2.0".into(),
                 })
             }),
         )
@@ -146,7 +146,7 @@ fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
                 value += event.movement_x;
                 ScrubUpdate {
                     value: f64::value(value),
-                    spelling: Some(format!("{value:.1}")),
+                    spelling: format!("{value:.1}"),
                 }
             })
         }),
@@ -203,7 +203,7 @@ fn scrubbing_a_batch_preserves_the_precision_path_and_one_undo_step() {
                 value += event.movement_x * if event.distance_y == 0.0 { 1.0 } else { 0.1 };
                 ScrubUpdate {
                     value: f64::value(value),
-                    spelling: None,
+                    spelling: value.to_string(),
                 }
             })
         }),
