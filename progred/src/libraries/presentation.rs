@@ -45,16 +45,22 @@ pub fn viewport_display<W: Host>(
     width: f64,
     height: f64,
 ) -> Option<Layout<W>> {
-    viewport(input.value?)?;
+    let declaration = input.value?;
     if width <= 0.0 || height <= 0.0 {
-        return Some(crate::display::row(0.0, []));
+        viewport(declaration).map(|_| crate::display::row(0.0, []))
+    } else {
+        viewport_runtime_output(declaration, input.env, width, height).map(result_or_value)
     }
-    let result = viewport_runtime_output(input.value?, input.env, width, height)?;
-    Some(if result.is_absent() {
+}
+
+/// A projection's result in place, or where it's absent, the value it
+/// projects, so the absence exposes its source.
+fn result_or_value<W: Host>(result: ::grap::RuntimeValue) -> Layout<W> {
+    if result.is_absent() {
         crate::display::descend([Step::Key(vocabulary::VALUE)], None, None)
     } else {
         at([Step::Key(vocabulary::RESULT)], &result)
-    })
+    }
 }
 
 fn viewport_runtime_output(
@@ -206,14 +212,10 @@ pub fn projected_display<W: Host>(
 ) -> Option<Layout<W>> {
     let value = input.value?.field(vocabulary::VALUE)?;
     let function = input.value?.field(vocabulary::PROJECTION)?;
-    let result = input
-        .env
-        .apply_expression_runtime(&function, &[(vocabulary::VALUE, value)]);
-    Some(if result.is_absent() {
-        crate::display::descend([Step::Key(vocabulary::VALUE)], None, None)
-    } else {
-        at([Step::Key(vocabulary::RESULT)], &result)
-    })
+    Some(result_or_value(input.env.apply_expression_runtime(
+        &function,
+        &[(vocabulary::VALUE, value)],
+    )))
 }
 
 pub fn library<W: Host>() -> Library<W> {
