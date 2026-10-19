@@ -433,8 +433,12 @@ impl<P> Driver<P> {
     }
 
     /// Hold Ctrl and click.
+    /// Click at `point` holding the editor's command key, as picking does.
     pub(crate) fn pick_at(&mut self, point: Point) {
-        self.hold(ModifiersState::CONTROL);
+        self.hold(match self.editor().command_modifier {
+            puri::keyboard::CommandModifier::Meta => ModifiersState::SUPER,
+            puri::keyboard::CommandModifier::Control => ModifiersState::CONTROL,
+        });
         self.click_at(point);
         self.hold(ModifiersState::empty());
     }
