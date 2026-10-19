@@ -95,7 +95,7 @@ impl EditRun {
                 self.path.clone(),
                 payload,
             );
-            next.preserve_recorded(recorded);
+            next.set_recorded(recorded);
             model.selection = Some(next);
         }
     }

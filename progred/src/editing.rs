@@ -112,7 +112,7 @@ pub(crate) fn commit_line(
             .is_some_and(|location| crate::selection::set_value(doc, libraries, &location, next))
     }) {
         let first = !selection.recorded();
-        selection.preserve_recorded(true);
+        selection.set_recorded(true);
         first
     } else {
         false

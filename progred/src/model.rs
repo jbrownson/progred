@@ -48,7 +48,15 @@ impl Model {
 
     pub fn mark_saved(&mut self) {
         self.saved = self.doc.clone();
-        selection::break_edit_run(self.selection.as_mut());
+        self.break_edit_run();
+    }
+
+    /// Breaks the open edit run: the next write records a fresh undo
+    /// step. Runs must not straddle a save or a view-history step.
+    fn break_edit_run(&mut self) {
+        if let Some(selection) = &mut self.selection {
+            selection.set_recorded(false);
+        }
     }
 
     pub fn snapshot(&self) -> Snapshot {
@@ -108,7 +116,7 @@ impl Model {
             true
         });
         if changed {
-            selection::break_edit_run(self.selection.as_mut());
+            self.break_edit_run();
             self.history.record(before);
         }
         changed

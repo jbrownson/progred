@@ -154,7 +154,7 @@ impl Selection {
     pub(crate) fn relocate(&mut self, root: Root, path: Path) {
         self.root = root;
         self.path = path;
-        self.preserve_recorded(false);
+        self.set_recorded(false);
     }
 
     /// The selection as data — what a projection at this path receives.
@@ -216,9 +216,10 @@ impl Selection {
         self.editor.as_ref().is_some_and(|editor| editor.recorded)
     }
 
-    /// Carry an open write-through run across a data-driven selection
-    /// payload replacement at the same path.
-    pub(crate) fn preserve_recorded(&mut self, recorded: bool) {
+    /// Sets whether the mounted editor's write-through run has recorded
+    /// its undo step: its first write does, a payload replacement at the
+    /// same place carries the run over, and anything that ends it clears it.
+    pub(crate) fn set_recorded(&mut self, recorded: bool) {
         if let Some(editor) = &mut self.editor {
             editor.recorded = recorded;
         }
@@ -628,14 +629,6 @@ pub fn at(path: &[Step], payload: Value) -> crate::site::Continuation {
 /// After a commit, open a pending at `path` below the committing site.
 pub fn pending_at(path: &[Step]) -> crate::site::Continuation {
     at(path, payload::empty_pending())
-}
-
-/// Breaks the open edit run: the next write records a fresh undo
-/// step. Runs must not straddle a save or a view-history step.
-pub fn break_edit_run(selection: Option<&mut Selection>) {
-    if let Some(editor) = selection.and_then(|selection| selection.editor.as_mut()) {
-        editor.recorded = false;
-    }
 }
 
 /// The selection as data: the payload projections receive when their

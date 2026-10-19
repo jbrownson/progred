@@ -727,7 +727,7 @@ fn write_through_opens_one_step_per_editor_life() {
     assert!(!write_text(&mut doc, &lib, &mut selection));
 
     // Breaking the run (a save) makes the next write a new step.
-    break_edit_run(Some(&mut selection));
+    selection.set_recorded(false);
     selection.edit_mut().unwrap().set_text("abcd");
     assert!(write_text(&mut doc, &lib, &mut selection));
 
