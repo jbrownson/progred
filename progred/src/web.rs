@@ -10,6 +10,11 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+/// Report panics on the browser's console, in the page and each worker.
+pub fn install_panic_hook() {
+    console_error_panic_hook::set_once();
+}
+
 /// Sends `event` into the editor's loop, once there is one.
 fn send(event: UserEvent) {
     WEB_PROXY.with(|proxy| {

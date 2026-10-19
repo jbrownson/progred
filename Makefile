@@ -144,11 +144,17 @@ sandbox-app:
 	@./tools/build-macos-app
 
 # Cargo skips unchanged builds; wasm-bindgen reruns only for a newer binary,
-# using the release matching Cargo.lock.
+# using the release matching Cargo.lock. Both builds go to the page, which
+# loads the fallback where it can't share memory with workers.
 build-web:
 	@set -e; . ./tools/web-build-settings.sh; \
 	$(NATIVE_CARGO) web-threaded build $$web_cargo_args; \
-	wasm=target/sandbox/build-web/$$web_target/release/progred.wasm; \
-	if [ ! -f web/pkg/progred_bg.wasm ] || [ ! -f web/pkg/progred.js ] || [ "$$wasm" -nt web/pkg/progred_bg.wasm ]; then \
-		./tools/wasm-bindgen $$web_bindgen_args "$$wasm"; \
-	fi
+	$(NATIVE_CARGO) web-fallback build $$web_cargo_args; \
+	bind() { \
+		wasm=target/sandbox/$$1/$$web_target/release/progred.wasm; out=$$2; shift 2; \
+		if [ ! -f $$out/progred_bg.wasm ] || [ ! -f $$out/progred.js ] || [ "$$wasm" -nt $$out/progred_bg.wasm ]; then \
+			./tools/wasm-bindgen "$$@" "$$wasm"; \
+		fi; \
+	}; \
+	bind build-web web/pkg $$web_bindgen_args; \
+	bind build-web-fallback web/pkg-fallback $$web_fallback_bindgen_args

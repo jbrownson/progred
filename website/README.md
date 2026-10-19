@@ -47,7 +47,8 @@ inject the beacon into every embedded editor too.
 
 Opening `public/index.html` directly is not supported: the WebAssembly module
 and JavaScript imports need HTTP rather than a `file://` origin, and the threaded
-editor needs the isolation headers provided by the local server.
+editor needs the isolation headers provided by the local server. Without them,
+the page runs the fallback build, which can't render 3D toolpath previews.
 
 `python3 website/preview.py` is the same launcher without the shell wrapper.
 `--open` also opens the default
@@ -70,7 +71,8 @@ for a free port when running an additional preview alongside this one.
   are shared. Edit and refresh.
 - `public/lessons/*.gid` are the small, ordinary documents used by the exercises.
   They are fetched at startup, not compiled into the editor.
-- `/editor/` serves the existing `web/` host and generated `web/pkg/` build.
+- `/editor/` serves the existing `web/` host and the generated `web/pkg/` and
+  `web/pkg-fallback/` builds.
 - Editor changes require `make build-web` and a refresh.
 - The server exposes only these two directories, not the repository or its Git data.
 - Each iframe owns an independent editor session. Its Reset button reloads only
@@ -216,9 +218,10 @@ not subscribe, serialize state, or send these messages.
 
 The editor's shared-memory workers need cross-origin isolation, so the
 preview server supplies COOP/COEP headers for the website and the embedded
-editor; [the browser host notes](../web/README.md) describe the workers and
-presentation. For deployment, use HTTPS and configure those same headers. GitHub Pages alone
-does not provide the header configuration this threaded build requires. The
+editor; [the browser host notes](../web/README.md) describe the workers,
+the fallback build for pages without isolation, and presentation. For
+deployment, use HTTPS and configure those same headers. GitHub Pages alone
+does not provide the header configuration the threaded build requires. The
 Cloudflare configuration below supplies them without a service worker.
 
 ## Publishing on Cloudflare
@@ -226,7 +229,7 @@ Cloudflare configuration below supplies them without a service worker.
 This is a static website using Workers Static Assets, not a server-side Worker.
 `wrangler.jsonc` points at `target/website`; `package.py` assembles that directory
 from `public/`, the editor page and worker scripts, and wasm-bindgen's generated
-modules. Source files, development diagnostics, and build tools aren't published.
+modules for both builds. Source files, development diagnostics, and build tools aren't published.
 `_headers` applies isolation headers to the page, embeds, WASM, and worker scripts.
 Assets revalidate on each visit, and unknown URLs return 404, not the homepage.
 

@@ -97,12 +97,17 @@ cargo_command() {
             run_sandboxed 1 0 "$audit_path" audit --file "$project_root/Cargo.lock" "$@"
             ;;
         # Browser workers rebuild std with atomics; native builds stay stable.
-        web-threaded-fetch | web-threaded)
+        # The fallback, for pages without shared memory, builds without them.
+        web-threaded-fetch | web-threaded | web-fallback)
             web_command=$1
             shift
             . "$tool_dir/web-build-settings.sh"
             use_toolchain "$web_toolchain"
             target_dir="$build_root/build-web"
+            if [ "$web_command" = web-fallback ]; then
+                web_rustflags=$web_fallback_rustflags
+                target_dir="$build_root/build-web-fallback"
+            fi
             if [ "$web_command" = web-threaded-fetch ]; then
                 run_sandboxed 1 0 "$cargo_path" fetch --locked \
                     --manifest-path "$toolchain_root/lib/rustlib/src/rust/library/sysroot/Cargo.toml" \
@@ -113,7 +118,7 @@ cargo_command() {
             fi
             ;;
         "")
-            echo "usage: tools/$wrapper audit | fetch | update | resolve | web-threaded-fetch | web-threaded <cargo command> | <cargo command> [arguments...]" >&2
+            echo "usage: tools/$wrapper audit | fetch | update | resolve | web-threaded-fetch | web-threaded <cargo command> | web-fallback <cargo command> | <cargo command> [arguments...]" >&2
             exit 2
             ;;
         # Builds are offline; fetch the locked graph first if anything is

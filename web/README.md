@@ -133,12 +133,17 @@ Development builds and tests go without it, so a commit doesn't rebuild
 progred.
 
 The browser build uses a shared-memory coordinator for the existing CAM background
-jobs. It requires a secure context (localhost or HTTPS) and cross-origin
-isolation, and WebAssembly SIMD support. The local server supplies
+jobs. Shared memory requires cross-origin isolation, which requires a secure
+context (localhost or HTTPS). The local server supplies
 `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: require-corp` for the site, editor, and worker.
-A plain file URL, ordinary `python -m http.server`, or LAN HTTP is not sufficient.
-Unsupported hosts show an error instead of silently doing heavy work inline.
+Where the page isn't isolated (ordinary `python -m http.server`, LAN HTTP, or a
+browser or proxy that drops those headers), `load.mjs` loads a second build
+from `web/pkg-fallback` instead. It has no workers: Rayon runs on the page's
+thread, and the editor's `Computations` have no background tasks, so the three
+3D toolpath previews draw a note in their box rather than freeze the page.
+Everything else behaves the same. Both builds need WebAssembly SIMD, and
+neither runs from a `file://` URL.
 
 One-time build prerequisites:
 
@@ -163,7 +168,10 @@ When `rustup` is already on `PATH`, skip the installer and run
 before the fetch.
 
 `make build-web` rebuilds the standard library with atomics and enables SIMD in
-the build sandbox, then generates `web/pkg` with `tools/wasm-bindgen`. That
+the build sandbox, then generates `web/pkg` with `tools/wasm-bindgen`. It also
+builds the fallback (`tools/linux-cargo web-fallback`, or `sandbox-cargo` on
+macOS), rebuilding the standard library without atomics into its own target
+folder, and generates `web/pkg-fallback`. That
 script runs the wasm-bindgen CLI matching the lockfile, downloading the release
 once into `target/tools` and checking its published SHA-256, so a separately
 installed CLI can't fall out of step with the crate. Native builds continue

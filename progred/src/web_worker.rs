@@ -19,11 +19,6 @@ pub fn worker_threads() -> usize {
     rayon::current_num_threads()
 }
 
-/// Report panics on the browser's console, in the page and each worker.
-pub fn install_panic_hook() {
-    console_error_panic_hook::set_once();
-}
-
 #[wasm_bindgen(raw_module = "../worker-host.js")]
 extern "C" {
     #[wasm_bindgen(js_name = submitJob)]

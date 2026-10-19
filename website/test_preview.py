@@ -22,10 +22,12 @@ class LauncherTests(unittest.TestCase):
         self.root = Path(self.directory.name)
         self.editor = self.root / "web"
         (self.editor / "pkg").mkdir(parents=True)
+        (self.editor / "pkg-fallback").mkdir()
 
     def built_files(self):
-        (self.editor / "pkg/progred_bg.wasm").write_bytes(b"\0asm")
-        (self.editor / "pkg/progred.js").write_text("// generated editor")
+        for package in ("pkg", "pkg-fallback"):
+            (self.editor / package / "progred_bg.wasm").write_bytes(b"\0asm")
+            (self.editor / package / "progred.js").write_text("// generated editor")
 
     def test_existing_editor_is_reused_without_running_a_build_only_when_asked(self):
         self.built_files()
@@ -33,11 +35,12 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(prepare_editor(self.root, reuse=True), self.editor)
             build.assert_not_called()
 
-    def test_missing_either_generated_file_builds_with_the_repository_workflow(self):
-        for missing in ("progred_bg.wasm", "progred.js"):
+    def test_missing_any_generated_file_builds_with_the_repository_workflow(self):
+        for missing in ("pkg/progred_bg.wasm", "pkg/progred.js",
+                        "pkg-fallback/progred_bg.wasm", "pkg-fallback/progred.js"):
             with self.subTest(missing=missing):
                 self.built_files()
-                (self.editor / "pkg" / missing).unlink()
+                (self.editor / missing).unlink()
                 with patch("preview.subprocess.run", side_effect=lambda *a, **k: self.built_files()) as build, patch("builtins.print"):
                     self.assertEqual(prepare_editor(self.root, reuse=True), self.editor)
                     build.assert_called_once_with(["make", "build-web"], cwd=self.root, check=True)

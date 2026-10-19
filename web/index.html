@@ -57,7 +57,7 @@
     <canvas id="progred"></canvas>
     <div id="loading">Loading Progred…</div>
     <script type="module">
-      import init, * as wasm from "./pkg/progred.js";
+      import { loadEditor } from "./load.mjs";
       import { startWorker } from "./worker-host.js";
       import { commandIsMeta } from "./platform.mjs";
       import { isTheme, savedTheme } from "./theme.mjs";
@@ -66,6 +66,7 @@
       import { routeKeyboard } from "./keyboard.mjs";
 
       const loading = document.querySelector("#loading");
+      let wasm;
       const fail = (error) => {
         console.error(error);
         loading.hidden = false;
@@ -119,19 +120,22 @@
           if (!response.ok) throw new Error(`Could not load the example (${response.status})`);
           source = await response.text();
         }
-        if (!crossOriginIsolated) throw new Error("This editor needs an HTTPS page with cross-origin isolation enabled by its host");
-        await init();
+        const threaded = globalThis.crossOriginIsolated === true;
+        let url;
+        ({ wasm, url } = await loadEditor(threaded));
         const example = params.get("example");
         if (example !== null) {
           if (documentUrl !== null) throw new Error("Choose either a document or an example");
           source = wasm.example_source(example);
           if (source === undefined) throw new Error(`There's no example named ${example}`);
         }
-        await startWorker(wasm, new URL("./pkg/progred.js", location.href).href,
-          wasm.computation_finished, fail,
-          params.has("threads") ? Number(params.get("threads")) : undefined);
+        if (threaded) {
+          await startWorker(wasm, url, wasm.computation_finished, fail,
+            params.has("threads") ? Number(params.get("threads")) : undefined);
+        }
         const renderer = await wasm.prepare_renderer(canvas);
-        console.info(`Progred presentation: ${renderer}; ${wasm.worker_threads()} render workers`);
+        console.info(`Progred presentation: ${renderer}; `
+          + (threaded ? `${wasm.worker_threads()} render workers` : "no render workers (the page isn't cross-origin isolated)"));
         const channel = params.get("observe");
         const onChange = channel === null ? undefined : (state) => {
           window.parent.postMessage({ type: "progred:change", channel, state: JSON.parse(state) }, location.origin);

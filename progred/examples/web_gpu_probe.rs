@@ -37,7 +37,7 @@ mod web {
 
     #[wasm_bindgen]
     pub async fn start_gpu_probe(canvas: web_sys::HtmlCanvasElement) -> Result<String, JsValue> {
-        progred::web_worker::initialize();
+        progred::install_panic_hook();
         let renderer = progred::web_render::Renderer::new(canvas).await?;
         let name = renderer.name().to_owned();
         RENDERER.with(|r| *r.borrow_mut() = Some(renderer));
