@@ -2,9 +2,8 @@
 
 GID is the native data model and, eventually, its own binary storage
 stack. This document specifies a temporary textual import/export
-notation: the raw projection's grammar made writable for hand authoring,
-LLM authoring, Git, and other text-based tools while projectional
-authoring matures. It does not define GID semantics and is not an
+notation, close to Raw's, for hand authoring, LLM authoring, Git, and
+other text-based tools while projectional authoring matures. It does not define GID semantics and is not an
 intermediate representation from which the native binary format will be
 compiled. Binders, textual layout, and parser leniencies exist only at
 this bridge.
@@ -15,9 +14,8 @@ repository; model changes update the parser and checked-in fixtures together.
 
 ## Doctrine: saving canonicalizes
 
-The cells serializer's rule was "parsable means canonical." This text
-bridge deliberately relaxes it: the PARSER is lenient in the defined
-ways below — nowhere else — and the PRINTER is the canon. Loading a
+The PARSER is lenient in the defined ways below — nowhere else — and
+the PRINTER is the canon. Loading a
 lenient file and saving rewrites it canonically. Strictness moves
 from the reader to the writer, because being writable by hand is the
 format's purpose. Structural damage is still an error: an unbalanced
@@ -27,6 +25,7 @@ length, an unknown escape, or a cell label with no following value.
 Defined leniencies, exhaustively:
 
 - cell-id case (canonical output is lowercase),
+- blob hex case (canonical output is lowercase),
 - trailing commas present or absent,
 - whitespace anywhere between tokens,
 - binders used without a `binders` entry: a cell id is minted on load
@@ -60,7 +59,7 @@ rule.
 
 ## Values
 
-The value grammar is the raw projection's:
+The value grammar is close to Raw's:
 
 - `{label: value, …}` — a record. A label is always a cell identity,
   written as a bare cell-id literal or binder (the label IS a link). Quoted labels
