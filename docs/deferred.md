@@ -147,6 +147,12 @@ positions fixes that, and a CRDT would need them anyway. Reading could still
 accept a plain `[1, 2, 3]` and mint positions for it, while saving always writes
 them, even if the text gets noisier.
 
+## Native GID storage
+
+GID's native binary representation isn't designed yet; see [GID](gid.md). The
+`.gid` extension is reserved for it: when it lands, it takes over the extension
+and the [text bridge](gid-text.md) moves aside.
+
 ## Names beyond one string
 
 The owner's direction, from 18 October 2026: a name will become more than a

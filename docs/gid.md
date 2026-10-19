@@ -36,7 +36,8 @@ The Rust implementation shares record, list, and blob storage across clones.
 Blobs wrap `Arc<Vec<u8>>`: construction takes ownership of the existing byte
 buffer without copying it, and clones share it.
 There is no size cutoff, interning, or storage identity in value equality,
-hashing, or serialization. See [the storage measurements](performance.md).
+hashing, or serialization. See the blob microbenchmark in
+[performance checks](performance.md).
 
 The native binary representation is not designed yet. It should follow
 the model directly and eventually support the needs of a projectional
@@ -59,5 +60,5 @@ import/export notation. It exists for hand authoring, Git, debugging,
 LLM tooling, and other text-bound systems while Progred's own authoring
 matures. Its binders, parser leniencies, and textual layout are not GID
 semantics. Checked-in `*.gid` files are fixtures for that bridge;
-`.gid` is reserved for the future native representation. When that lands, it
-takes over the extension and the bridge moves aside.
+[deferred work](deferred.md#native-gid-storage) reserves the extension for the
+native representation.
