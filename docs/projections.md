@@ -1,10 +1,9 @@
 # Grap and projections
 
-This describes the current implementation. Grap is embedded in ordinary GID values.
-Its evaluator, library conventions, projection composition, and editor
-adaptation have separate responsibilities. Earlier rationale and proposed
-language directions are [historical notes](history/projections-notes.md), not
-current requirements or verified statements of the owner's intent.
+Grap is embedded in ordinary GID values. Its evaluator, library conventions,
+projection composition, and editor adaptation have separate responsibilities.
+Earlier rationale and proposed language directions are in
+[historical notes](history/projections-notes.md).
 
 ## Packages and libraries
 

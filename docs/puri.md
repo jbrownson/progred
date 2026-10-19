@@ -1,8 +1,7 @@
 # Puri and the editor frame
 
-This describes the current code and its boundaries;
-it does not attribute the earlier framework comparisons or future plans to the
-owner. Those notes are retained in [history](history/puri-notes.md).
+Earlier framework comparisons and future plans are retained in
+[history](history/puri-notes.md).
 
 ## Ownership
 
