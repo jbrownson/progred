@@ -145,20 +145,28 @@ impl<P> Driver<P> {
             .editor
             .text_clipboard
             .copy(value.to_string(), Some(value));
-        self.keystroke(Key::Character("v".into()), crate::test_support::command())
+        self.keystroke(Key::Character("v".into()), self.command())
     }
 
     /// The command key's Z; whether there was anything to undo.
     pub(crate) fn undo(&mut self) -> bool {
-        self.keystroke(Key::Character("z".into()), crate::test_support::command())
+        self.keystroke(Key::Character("z".into()), self.command())
     }
 
     /// The command key's Shift-Z; whether there was anything to redo.
     pub(crate) fn redo(&mut self) -> bool {
         self.keystroke(
             Key::Character("z".into()),
-            crate::test_support::command() | Modifiers::SHIFT,
+            self.command() | Modifiers::SHIFT,
         )
+    }
+
+    /// The editor's command key, as a key press holds it.
+    fn command(&self) -> Modifiers {
+        match self.editor().command_modifier {
+            puri::keyboard::CommandModifier::Meta => Modifiers::META,
+            puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
+        }
     }
 
     /// The text of the line the selection edits, if it edits one.
@@ -432,7 +440,6 @@ impl<P> Driver<P> {
         self.double_click_at(self.text_at(path));
     }
 
-    /// Hold Ctrl and click.
     /// Click at `point` holding the editor's command key, as picking does.
     pub(crate) fn pick_at(&mut self, point: Point) {
         self.hold(match self.editor().command_modifier {
