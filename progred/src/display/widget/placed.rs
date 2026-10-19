@@ -18,7 +18,7 @@ use ui_events::keyboard::KeyboardEvent;
 use uig::Placement;
 
 pub struct Placed<'a, 'input, C: 'static, H: 'static> {
-    pub(crate) context: &'a mut HoverContext<'input, C, H>,
+    context: &'a mut HoverContext<'input, C, H>,
     visible: bool,
 }
 

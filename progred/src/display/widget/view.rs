@@ -3,7 +3,6 @@
 use super::HoverPass;
 use super::container;
 use super::frame::ViewRegion;
-use super::placed::before;
 use gid::Path;
 use kurbo::Vec2;
 use measured::Measured;
@@ -72,8 +71,8 @@ pub fn scrolled_at<C: 'static, H: 'static>(
 ) -> Measured<HoverPass<C, H>> {
     let extent = child.extent;
     let scrolled = container::scrolled(child, offset, scale, on_scroll);
-    before(scrolled, move |output, placement| {
-        output.context.view_region(ViewRegion {
+    super::before_place(scrolled, move |placement, output| {
+        output.view_region(ViewRegion {
             root,
             rect: placement.rect,
             maximum: super::scroll::maximum(extent, placement.rect.size(), scale),
