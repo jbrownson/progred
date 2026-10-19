@@ -249,7 +249,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             assert_eq!(line.text, spelling);
             assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("", ""));
             assert_eq!(
-                (line.update)(&env, "next", Some(value)),
+                (line.update)("next", Some(value)),
                 Some(crate::libraries::text::value("next"))
             );
             assert!(

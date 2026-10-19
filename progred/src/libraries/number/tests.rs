@@ -2,32 +2,10 @@ use super::*;
 
 #[test]
 fn every_convention_updates_a_missing_location_from_text() {
-    use crate::libraries::{f32, f64, text, u64};
-    for (library, update, spelling, expected) in [
-        (
-            f64::library::<crate::Editor>(),
-            f64::vocabulary::UPDATE,
-            "2.5",
-            f64::value(2.5),
-        ),
-        (
-            f32::library(),
-            f32::vocabulary::UPDATE,
-            "2.5",
-            f32::value(2.5),
-        ),
-        (u64::library(), u64::vocabulary::UPDATE, "2", u64::value(2)),
-    ] {
-        let call = ::grap::call(
-            update.into(),
-            [(line_edit::vocabulary::INPUT, text::value(spelling))],
-        );
-        let functions = library.functions();
-        assert_eq!(
-            crate::libraries::test_evaluate(&call, |_| None, &functions, 20).result,
-            expected
-        );
-    }
+    use crate::libraries::{f32, f64, u64};
+    assert_eq!(edit("2.5", None, f64::value), Some(f64::value(2.5)));
+    assert_eq!(edit("2.5", None, f32::value), Some(f32::value(2.5)));
+    assert_eq!(edit("2", None, u64::value), Some(u64::value(2)));
 }
 
 #[test]

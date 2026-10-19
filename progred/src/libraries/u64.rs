@@ -10,7 +10,6 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const U64: CellId = CellId::from_u128(0xfc77282178c2fa31b80aed2b8b6f7888);
-    pub const UPDATE: CellId = CellId::from_u128(0xd02b945cdf6210536bdf4d0fcc895f05);
     pub const SUM: CellId = CellId::from_u128(0x2b63a57fb5065d7ae992241b3018fcb5);
     pub const SUBTRACT: CellId = CellId::from_u128(0x74203a2808e4216a6eff871dd39ab313);
     pub const MULTIPLY: CellId = CellId::from_u128(0xeb9073084d92e0ecb2253ff70a27c03e);
@@ -69,7 +68,6 @@ pub(crate) fn convention() -> number::Convention<u64> {
     number::Convention {
         name: "u64",
         tag: vocabulary::U64,
-        update: vocabulary::UPDATE,
         left_not: vocabulary::LEFT_NOT_U64,
         right_not: vocabulary::RIGHT_NOT_U64,
         operand_not: vocabulary::OPERAND_NOT_U64,

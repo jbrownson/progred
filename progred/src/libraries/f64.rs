@@ -40,9 +40,6 @@ pub mod vocabulary {
     pub const START: CellId = CellId::from_u128(0x4b4fb6349d2fd798e7aafca85a2deca8);
     pub const END: CellId = CellId::from_u128(0x3a816b0af0160bc77ba1948b122b3f29);
     pub const AMOUNT: CellId = CellId::from_u128(0x55e66fc5eb91699cf12833fb0a15d4b6);
-    /// The f64 line's write-back rule: parse the typed spelling,
-    /// other fields carried; unparseable input declines.
-    pub const UPDATE: CellId = CellId::from_u128(0x6b95d2e04c7a1f38b1a08e57d24c96fb);
     pub const LEFT_NOT_F64: CellId = CellId::from_u128(0x50c0d2fd8fe0325a8e0e41f79ce86eff);
     pub const RIGHT_NOT_F64: CellId = CellId::from_u128(0xcab77cffe8c38745dd8e748ece331409);
     pub const OPERAND_NOT_F64: CellId = CellId::from_u128(0x9c2a4845e1c67df6dd43ac1116e76441);
@@ -88,7 +85,6 @@ pub(crate) fn convention() -> number::Convention<f64> {
     number::Convention {
         name: "f64",
         tag: vocabulary::F64,
-        update: vocabulary::UPDATE,
         left_not: vocabulary::LEFT_NOT_F64,
         right_not: vocabulary::RIGHT_NOT_F64,
         operand_not: vocabulary::OPERAND_NOT_F64,

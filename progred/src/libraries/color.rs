@@ -1,7 +1,7 @@
 //! Open sRGB RGB8 and RGBA8 conventions with an editable projected spelling.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, f64, line_edit, name, text};
+use crate::libraries::{Library, f64, line_edit, name};
 use gid::{Cells, Step, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x25d0e2034b4bd65bebb4811d65eab89c);
@@ -9,7 +9,7 @@ use crate::display::{
     PointEvent, PointUpdate, TextFamily, centered_row, col, descend, on_activate, on_hover,
     on_point, popover, widget,
 };
-use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
+use ::grap::RuntimeValue;
 use kurbo::{Affine, Rect, RoundedRect, Stroke};
 use peniko::Color;
 use puri::draw::{Canvas, CanvasSink};
@@ -23,10 +23,8 @@ pub mod vocabulary {
 
     pub const RGB: CellId = CellId::from_u128(0x6c8a17cbe463186cc8b07e536ccffa6b);
     pub const RGBA: CellId = CellId::from_u128(0xf77aef58bcc71dd838f089adc650e2d4);
-    pub const UPDATE: CellId = CellId::from_u128(0xd3fd7b475567d1881c9023c90bd9864c);
     pub const PICKER: CellId = CellId::from_u128(0xd30d721bc1db563c75f899cc15c10580);
     pub const HUE: CellId = CellId::from_u128(0x4d226747147aa5cc9e6629e34c43a366);
-    pub const INVALID_INPUT: CellId = CellId::from_u128(0x55167b59c5530135d0738c9d2f7d264b);
 }
 
 #[derive(Clone, Copy)]
@@ -312,34 +310,7 @@ fn picker<W: Host>(original: &Value, encoded: Encoded, hue: f64) -> Layout<W> {
     )
 }
 
-fn functions() -> ForeignFunctions {
-    ForeignFunctions::default().register(
-        vocabulary::UPDATE,
-        ForeignFunction::from_value(|context, call, environment| {
-            let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
-                return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
-            };
-            let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
-                return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
-            };
-            let current = context.eval_to_value(current, environment)?;
-            let input = context.eval_to_value(input, environment)?;
-            Ok(text::read(&input)
-                .and_then(|spelling| edit(spelling, Some(&current)))
-                .unwrap_or_else(|| {
-                    ::grap::absent::with_detail(
-                        vocabulary::INVALID_INPUT,
-                        line_edit::vocabulary::INPUT,
-                        input.clone(),
-                    )
-                }))
-        })
-        .parameters([line_edit::vocabulary::INPUT, line_edit::vocabulary::CURRENT])
-        .tracked(),
-    )
-}
-
-pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
+fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
     replace_color(current?, parse(spelling)?)
 }
 
@@ -435,18 +406,13 @@ pub fn library<W: Host>() -> Library<W> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::RGB, name::record("rgb", []));
     cells.set_value(vocabulary::RGBA, name::record("rgba", []));
-    cells.set_value(vocabulary::UPDATE, name::record("color update", []));
     cells.set_value(vocabulary::PICKER, name::record("color picker", []));
     cells.set_value(vocabulary::HUE, name::record("hue", []));
-    cells.set_value(
-        vocabulary::INVALID_INPUT,
-        name::record("invalid color input", []),
-    );
     named::insert(&mut cells);
     name::named_library(
         ID,
         "color",
-        crate::libraries::Definitions::from_parts(cells, functions()),
+        crate::libraries::Definitions::from_parts(cells, Default::default()),
     )
     .with_projection(crate::display::runtime_partial(display))
     .with_completions(completions)

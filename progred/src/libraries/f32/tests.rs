@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{absent, line_edit, logic, name};
+use crate::libraries::{absent, logic, name};
 use gid::new_cell_id;
 
 fn call(function: CellId, left: Value, right: Value) -> Value {
@@ -33,21 +33,11 @@ fn representation_is_open_library_data() {
 }
 
 #[test]
-fn spelling_round_trips_through_the_update_function() {
-    let updated = crate::libraries::test_evaluate(
-        &::grap::call(
-            ::grap::ffi(vocabulary::UPDATE),
-            [(
-                line_edit::vocabulary::INPUT,
-                crate::libraries::text::value("3.5"),
-            )],
-        ),
-        |_| None,
-        &functions(),
-        20,
+fn spelling_round_trips_through_the_line_conversion() {
+    assert_eq!(
+        number::edit("3.5", None, value).as_ref().and_then(read),
+        Some(3.5)
     );
-
-    assert_eq!(read(&updated.result), Some(3.5));
 }
 
 #[test]

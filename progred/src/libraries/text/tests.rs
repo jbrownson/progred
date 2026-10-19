@@ -17,28 +17,15 @@ fn utf8_is_an_open_convention_over_bytes() {
             .update(extra, Value::from(vec![1])),
     );
     assert_eq!(read(&enriched), Some("hello"));
-    let written = crate::libraries::test_evaluate(
-        &::grap::call(
-            ::grap::ffi(vocabulary::UPDATE),
-            [
-                (line_edit::vocabulary::CURRENT, enriched.clone()),
-                (line_edit::vocabulary::INPUT, value("hi")),
-            ],
-        ),
-        |_| None,
-        &functions(),
-        100,
-    );
-
     assert_eq!(
-        written.result,
-        Value::record(
+        edit("hi", Some(&enriched)),
+        Some(Value::record(
             value("hi")
                 .as_record()
                 .unwrap()
                 .clone()
                 .update(extra, Value::from(vec![1])),
-        )
+        ))
     );
 }
 

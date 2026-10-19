@@ -93,7 +93,7 @@ pub(crate) fn commit_line(
         .filter(|_| selection.writable(&sources))
         .and_then(|editor| {
             let current = selection.value(&sources);
-            update(&sources, editor.text(), current).filter(|next| current != Some(next))
+            update(editor.text(), current).filter(|next| current != Some(next))
         });
     if next.is_some_and(|next| {
         selection

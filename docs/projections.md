@@ -461,8 +461,8 @@ widgets, generic over the editor that hosts them: a handler opens its
 ordinary [editing helpers](../progred/src/editing.rs); no generic-world callback
 dictionary is installed at each location. Editing's `edit_line` applies editing
 operations and conversion, with undo grouping owned by Progred. The current
-handler owns conversion, not the selection payload. The line library adapts
-Grap conversions explicitly; native controls do not round-trip through Grap.
+handler owns conversion, not the selection payload. Line conversions are
+native functions; they do not round-trip through Grap.
 Completion uses an ordinary native widget factory with explicit kind/provider
 inputs. The app adapter constructs document-specific offers and pending
 state; the reusable card owns row ink, navigation, and scrolling. Drawing-program

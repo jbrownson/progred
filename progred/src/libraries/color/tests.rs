@@ -94,7 +94,7 @@ fn rgb_and_rgba_are_open_library_data() {
 }
 
 #[test]
-fn spelling_round_trips_through_the_update_function() {
+fn spelling_round_trips_through_the_line_conversion() {
     let extra = new_cell_id();
     let current = Value::record(
         value(Color::from_rgba8(0xb4, 0xe0, 0xfe, 0xff))
@@ -103,23 +103,9 @@ fn spelling_round_trips_through_the_update_function() {
             .clone()
             .update(extra, Value::from(b"metadata".to_vec())),
     );
-    let update = |input: &str| {
-        crate::libraries::test_evaluate(
-            &::grap::call(
-                ::grap::ffi(vocabulary::UPDATE),
-                [
-                    (line_edit::vocabulary::CURRENT, current.clone()),
-                    (line_edit::vocabulary::INPUT, text::value(input)),
-                ],
-            ),
-            |_| None,
-            &functions(),
-            100,
-        )
-        .result
-    };
+    let update = |input: &str| edit(input, Some(&current));
 
-    let updated = update("ebb4cc99");
+    let updated = update("ebb4cc99").unwrap();
     assert_eq!(
         read(&updated),
         Some(Color::from_rgba8(0xeb, 0xb4, 0xcc, 0x99)),
@@ -134,16 +120,14 @@ fn spelling_round_trips_through_the_update_function() {
         Some(&Value::from(vec![0xeb, 0xb4, 0xcc, 0x99])),
     );
     assert_eq!(
-        read(&update("b4e")),
+        update("b4e").as_ref().and_then(read),
         Some(Color::from_rgba8(0xbb, 0x44, 0xee, 0xff)),
     );
     assert_eq!(
-        read(&update("b4e8")),
+        update("b4e8").as_ref().and_then(read),
         Some(Color::from_rgba8(0xbb, 0x44, 0xee, 0x88)),
     );
-    assert!(crate::libraries::absent::is_absent(&update(
-        "rebeccapurple"
-    )));
+    assert_eq!(update("rebeccapurple"), None);
 }
 
 #[test]

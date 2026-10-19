@@ -83,7 +83,6 @@ fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence>
 pub(crate) struct Convention<N> {
     pub name: &'static str,
     pub tag: CellId,
-    pub update: CellId,
     pub left_not: CellId,
     pub right_not: CellId,
     pub operand_not: CellId,
@@ -124,10 +123,6 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
     ) -> Parts {
         let mut cells = Cells::new();
         cells.set_value(self.tag, name::record(self.name, []));
-        cells.set_value(
-            self.update,
-            name::record(format!("{} update", self.name), []),
-        );
         for (cell, reason) in [
             (self.left_not, format!("left is not {}", self.name)),
             (self.right_not, format!("right is not {}", self.name)),
@@ -139,8 +134,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         operations.into_iter().fold(
             Parts {
                 cells,
-                functions: ForeignFunctions::default()
-                    .register(self.update, self.update_function()),
+                functions: ForeignFunctions::default(),
                 calls: Vec::new(),
                 infix: Vec::new(),
                 symbols: Vec::new(),
@@ -310,31 +304,6 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             }
         })
         .parameters([vocabulary::LEFT, vocabulary::RIGHT])
-        .tracked()
-    }
-
-    /// Text from a line control. A missing location has no current value.
-    fn update_function(self) -> ForeignFunction {
-        ForeignFunction::from_value(move |context, call, environment| {
-            let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
-                return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
-            };
-            let current = context
-                .field(call, line_edit::vocabulary::CURRENT)
-                .map(|current| context.eval_to_value(current, environment))
-                .transpose()?;
-            let input = context.eval_to_value(input, environment)?;
-            Ok(crate::libraries::text::read(&input)
-                .and_then(|text| edit(text, current.as_ref(), self.encode))
-                .unwrap_or_else(|| {
-                    ::grap::absent::with_detail(
-                        self.invalid_input,
-                        line_edit::vocabulary::INPUT,
-                        input.clone(),
-                    )
-                }))
-        })
-        .parameters([line_edit::vocabulary::INPUT])
         .tracked()
     }
 }

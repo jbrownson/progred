@@ -4,7 +4,7 @@ use crate::display::widget::HoverPass;
 
 use super::navigation::Select;
 use super::{Context, extent, leaf};
-use crate::display::{Env, Host, Layout, TextFamily};
+use crate::display::{Host, Layout, TextFamily};
 use gid::Value;
 use kurbo::Point;
 use measured::Measured;
@@ -25,7 +25,7 @@ pub struct LineEdit {
     pub family: TextFamily,
 }
 
-pub type LineUpdate = Rc<dyn Fn(&dyn Env, &str, Option<&Value>) -> Option<Value>>;
+pub type LineUpdate = Rc<dyn Fn(&str, Option<&Value>) -> Option<Value>>;
 
 pub fn line_edit<W: Host>(line: LineEdit) -> crate::display::host::Layout<W> {
     Layout::widget(Rc::new(move |context| view(context, line.clone())))

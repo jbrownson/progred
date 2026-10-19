@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{line_edit, logic, name};
+use crate::libraries::{logic, name};
 use ::grap;
 use gid::new_cell_id;
 
@@ -27,37 +27,20 @@ fn representation_is_open_library_data() {
             .clone()
             .update(extra, Value::from(b"metadata".to_vec())),
     );
-    let update = |input: &str| {
-        crate::libraries::test_evaluate(
-            &grap::call(
-                grap::ffi(vocabulary::UPDATE),
-                [
-                    (line_edit::vocabulary::CURRENT, current.clone()),
-                    (
-                        line_edit::vocabulary::INPUT,
-                        crate::libraries::text::value(input),
-                    ),
-                ],
-            ),
-            |_| None,
-            &functions(),
-            100,
-        )
-        .result
-    };
+    let update = |input: &str| number::edit(input, Some(&current), value);
 
     assert_eq!(read(&current), Some(u64::MAX));
     assert_eq!(
         update("42"),
-        Value::record(
+        Some(Value::record(
             value(42)
                 .as_record()
                 .unwrap()
                 .clone()
                 .update(extra, Value::from(b"metadata".to_vec())),
-        )
+        ))
     );
-    assert!(crate::libraries::absent::is_absent(&update("-1")));
+    assert_eq!(update("-1"), None);
 }
 
 #[test]

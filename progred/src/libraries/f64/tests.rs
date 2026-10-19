@@ -21,7 +21,7 @@ fn infix_children(layout: &Layout) -> Option<Vec<Recorded<crate::Editor, crate::
     )
 }
 use crate::display::recording::{Recordable, Recorded};
-use crate::libraries::{line_edit, logic};
+use crate::libraries::logic;
 
 use crate::display::test_support::{NoEval, ProjectionCall, inspect, unshared};
 use crate::libraries::test_widgets::projection_input;
@@ -149,36 +149,18 @@ fn representation_is_library_data() {
             .update(extra, Value::from(b"degrees".to_vec())),
     );
     assert_eq!(read(&with_extra), Some(2.5));
-    let update = |input: &str| {
-        crate::libraries::test_evaluate(
-            &grap::call(
-                grap::ffi(vocabulary::UPDATE),
-                [
-                    (line_edit::vocabulary::CURRENT, with_extra.clone()),
-                    (
-                        line_edit::vocabulary::INPUT,
-                        crate::libraries::text::value(input),
-                    ),
-                ],
-            ),
-            |_| None,
-            &functions(),
-            100,
-        )
-        .result
-    };
-    // Unparseable input returns an absent — the line editor drops
-    // the write whole.
-    assert!(crate::libraries::absent::is_absent(&update("junk")));
+    let update = |input: &str| number::edit(input, Some(&with_extra), value);
+    // Unparseable input declines the write whole.
+    assert_eq!(update("junk"), None);
     assert_eq!(
         update("3"),
-        Value::record(
+        Some(Value::record(
             value(3.0)
                 .as_record()
                 .unwrap()
                 .clone()
                 .update(extra, Value::from(b"degrees".to_vec())),
-        )
+        ))
     );
 }
 

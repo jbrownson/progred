@@ -12,7 +12,6 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const F32: CellId = CellId::from_u128(0x64810cfeb0631ca8875e282d1ad4af79);
-    pub const UPDATE: CellId = CellId::from_u128(0x9c34c242d73e090cbd62de1242ad74ae);
     pub const SUM: CellId = CellId::from_u128(0x257e5967d826e69d28929cf365667ae1);
     pub const SUBTRACT: CellId = CellId::from_u128(0x5cd7408dab067d8b92c7a1bd9cda7b05);
     pub const MULTIPLY: CellId = CellId::from_u128(0xd4df1fe63a95cda53c19ad7220054c24);
@@ -70,7 +69,6 @@ pub(crate) fn convention() -> number::Convention<f32> {
     number::Convention {
         name: "f32",
         tag: vocabulary::F32,
-        update: vocabulary::UPDATE,
         left_not: vocabulary::LEFT_NOT_F32,
         right_not: vocabulary::RIGHT_NOT_F32,
         operand_not: vocabulary::OPERAND_NOT_F32,

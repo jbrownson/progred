@@ -210,9 +210,7 @@ the text. The callback receives the live value and spelling; `None` declines a
 write. An equal result does not rewrite the document. Invalid intermediate text
 can remain in the editor while the last valid value remains in the document.
 Loaded library values decline writes. Projections decide how unrelated fields
-survive an edit. Native atomic libraries use native conversion functions; the
-line library's `grap` adapter calls a Grap conversion with text and current value
-as data, mapping absent to `None`.
+survive an edit. Atomic libraries supply native conversion functions.
 
 The line control groups the first document write into undo and coalesces later
 writes in that editing run. The shell no longer runs a general post-event
