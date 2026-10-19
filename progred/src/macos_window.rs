@@ -1,6 +1,8 @@
 use objc2_app_kit::{NSView, NSWindow};
 use objc2_foundation::{NSPoint, NSString, NSURL};
+use std::ffi::c_void;
 use std::path::Path;
+use std::ptr::NonNull;
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
@@ -22,18 +24,23 @@ pub(crate) fn palette(
     .palette()
 }
 
-fn with_appkit_window(window: &Window, f: impl FnOnce(&NSWindow)) {
-    let RawWindowHandle::AppKit(handle) = window
+/// The AppKit view Winit draws `window` in, which it owns for at least as
+/// long as `window`.
+pub(crate) fn ns_view(window: &Window) -> NonNull<c_void> {
+    match window
         .window_handle()
         .expect("macOS window handle")
         .as_raw()
-    else {
-        unreachable!("macOS builds use AppKit window handles")
-    };
+    {
+        RawWindowHandle::AppKit(handle) => handle.ns_view,
+        _ => unreachable!("macOS builds use AppKit window handles"),
+    }
+}
 
+fn with_appkit_window(window: &Window, f: impl FnOnce(&NSWindow)) {
     // SAFETY: Winit owns this main-thread NSView for at least as long
     // as `window`; the borrowed reference is used only for this call.
-    let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+    let view = unsafe { ns_view(window).cast::<NSView>().as_ref() };
     f(&view.window().expect("winit NSView window"));
 }
 
