@@ -3,7 +3,7 @@ use puri::edit::TextClipboard;
 
 #[test]
 fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
-    fn projection(marker: CellId) -> Projection<EditingWorld> {
+    fn projection(marker: CellId) -> Projection {
         Projection::new([crate::display::partial(move |input| {
             let spelling = text::read(input.value?)?;
             Some(crate::display::line_edit(crate::display::LineEdit {

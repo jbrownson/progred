@@ -276,7 +276,7 @@ fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
 
 /// A stack of `libraries` whose projection shows `slots` as a tutorial
 /// page does.
-fn tutorial_stack(libraries: &[CellId], slots: &str) -> crate::stack::Stack<crate::Editor> {
+fn tutorial_stack(libraries: &[CellId], slots: &str) -> crate::stack::Stack {
     let mut stack = crate::stack::load_selected(libraries).unwrap();
     stack.projection =
         crate::web_embed::tutorial_slots(Some(slots), stack.projection, &stack.libraries).unwrap();

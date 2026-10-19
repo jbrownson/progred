@@ -3,7 +3,7 @@
 use crate::command::{AppCommand, Command};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::editor::new_editor;
-use crate::editor::{AfterDiscard, Editor, EditorRunner, RenderState};
+use crate::editor::{AfterDiscard, EditorRunner, RenderState};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::frame::Paint;
 use crate::input::PendingPaint;
@@ -70,7 +70,7 @@ pub(crate) struct App {
     /// filter or extend its libraries independently; this master copy
     /// seeds new editors.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-    pub(crate) stack: stack::Stack<Editor>,
+    pub(crate) stack: stack::Stack,
     /// The font database master; editors hold cheap clones over the
     /// same shared font data.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]

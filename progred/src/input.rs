@@ -165,12 +165,7 @@ fn queue<T>(
 
 impl EditorRunner {
     #[cfg(any(target_arch = "wasm32", test))]
-    pub(crate) fn stack_changed(
-        &mut self,
-        stack: crate::stack::Stack<crate::Editor>,
-        scale: f64,
-        viewport: Size,
-    ) {
+    pub(crate) fn stack_changed(&mut self, stack: crate::stack::Stack, scale: f64, viewport: Size) {
         self.flush_pending_continuous();
         self.editor.replace_stack(stack);
         self.refresh_frame(scale, viewport);

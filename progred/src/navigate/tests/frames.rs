@@ -17,7 +17,7 @@ use puri::handler::NavigationDirection;
 
 const VIEWPORT: kurbo::Size = kurbo::Size::new(900.0, 600.0);
 
-fn sample_projection() -> Projection<World> {
+fn sample_projection() -> Projection {
     Projection::new([d::runtime_partial(|input| {
         if let Some(items) = d::structure::list_items(input, None) {
             let items: Vec<_> = items.into_iter().map(|(_, layout)| layout).collect();

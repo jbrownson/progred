@@ -114,7 +114,7 @@ pub(crate) struct Editor {
     pub(crate) layout_cx: LayoutContext<Brush>,
     pub(crate) text_clipboard: Clipboard,
     pub(crate) text_cache: puri::text::TextCache,
-    pub(crate) stack: stack::Stack<Editor>,
+    pub(crate) stack: stack::Stack,
     pub(crate) model: Model,
     /// Where the document lives; `None` is untitled until the first
     /// save asks for a path.
@@ -285,7 +285,7 @@ pub(crate) fn new_editor(
     palette: style::Palette,
     command_modifier: puri::keyboard::CommandModifier,
     drawn_menu: bool,
-    stack: stack::Stack<Editor>,
+    stack: stack::Stack,
     font_cx: FontContext,
     doc: gid::Document,
     doc_path: Option<PathBuf>,
@@ -762,7 +762,7 @@ impl Editor {
     /// so a new stack keeps the document, selection, and folds but discards
     /// gestures and memoized work computed under the old one.
     #[cfg(any(target_arch = "wasm32", test))]
-    pub(crate) fn replace_stack(&mut self, stack: stack::Stack<Editor>) {
+    pub(crate) fn replace_stack(&mut self, stack: stack::Stack) {
         self.finish_gesture();
         self.computations.reset();
         self.stack = stack;
@@ -857,7 +857,7 @@ pub(crate) fn test_editor(doc: gid::Document) -> Editor {
 }
 
 #[cfg(test)]
-pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack<Editor>) -> Editor {
+pub(crate) fn test_editor_with_stack(doc: gid::Document, stack: stack::Stack) -> Editor {
     let mut editor = new_editor(
         style::Theme::Light.palette(),
         modifiers::native(),

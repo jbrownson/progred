@@ -343,7 +343,7 @@ fn partials_receive_selection_and_annotations_positionally() {
         cells: Cells::new(),
     };
     let lib = core_libraries();
-    let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
+    let projection: Projection = Projection::new([crate::display::partial(probe)]);
     let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();
@@ -426,7 +426,7 @@ fn a_projection_defined_as_data_realizes() {
         cells: Cells::new(),
     };
     let lib = core_libraries();
-    let projection: Projection<crate::Editor> = Projection::new([crate::display::partial(probe)]);
+    let projection: Projection = Projection::new([crate::display::partial(probe)]);
     let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::fonts::bundled_font_context();
     let mut layouts = parley::LayoutContext::new();

@@ -11,39 +11,6 @@ use crate::projection::Partial;
 use crate::projection::Projection;
 use std::rc::Rc;
 
-pub struct Stack<World> {
-    pub libraries: Libraries,
-    pub projection: Projection<World>,
-    pub pane_projection: Projection<World>,
-    pub completions: crate::display::CompletionProvider,
-    /// The projections libraries bring, in load order, so an area can leave
-    /// some of them off.
-    partials: Rc<[(gid::CellId, crate::display::Partial<World, Hovered>)]>,
-}
-
-impl<World> Clone for Stack<World> {
-    fn clone(&self) -> Self {
-        Self {
-            libraries: self.libraries.clone(),
-            projection: self.projection.clone(),
-            pane_projection: self.pane_projection.clone(),
-            completions: self.completions.clone(),
-            partials: self.partials.clone(),
-        }
-    }
-}
-
-impl<World> Stack<World> {
-    /// What an area can leave off, and its name, in the order projections
-    /// are tried: each library that brings a projection, then the libraries
-    /// the document declares, which stand together under their root key.
-    pub fn projections(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
-        crate::libraries::name::library_names(&self.libraries)
-            .filter(|(library, _)| self.partials.iter().any(|(id, _)| id == library))
-            .chain([(workspace::vocabulary::LIBRARIES, "document libraries")])
-    }
-}
-
 /// The libraries Plain reads through, for the editor and the tutorial page
 /// alike: names, text, bytes and absent values read as themselves, and
 /// numbers as numbers, but nothing else a library draws, so calls,
@@ -58,9 +25,29 @@ pub const PLAIN: [gid::CellId; 7] = [
     u64::ID,
 ];
 
-impl Stack<crate::Editor> {
+#[derive(Clone)]
+pub struct Stack {
+    pub libraries: Libraries,
+    pub projection: Projection,
+    pub pane_projection: Projection,
+    pub completions: crate::display::CompletionProvider,
+    /// The projections libraries bring, in load order, so an area can leave
+    /// some of them off.
+    partials: Rc<[(gid::CellId, Partial)]>,
+}
+
+impl Stack {
+    /// What an area can leave off, and its name, in the order projections
+    /// are tried: each library that brings a projection, then the libraries
+    /// the document declares, which stand together under their root key.
+    pub fn projections(&self) -> impl Iterator<Item = (gid::CellId, &str)> + '_ {
+        crate::libraries::name::library_names(&self.libraries)
+            .filter(|(library, _)| self.partials.iter().any(|(id, _)| id == library))
+            .chain([(workspace::vocabulary::LIBRARIES, "document libraries")])
+    }
+
     /// Plain's projection, from those of its libraries this stack loads.
-    pub fn plain(&self) -> Projection<crate::Editor> {
+    pub fn plain(&self) -> Projection {
         Projection::new(
             PLAIN
                 .into_iter()
@@ -82,10 +69,7 @@ impl Stack<crate::Editor> {
 
     /// The document and pane projections with `hidden` libraries' own
     /// projections left off.
-    pub fn without(
-        &self,
-        hidden: &[gid::CellId],
-    ) -> (Projection<crate::Editor>, Projection<crate::Editor>) {
+    pub fn without(&self, hidden: &[gid::CellId]) -> (Projection, Projection) {
         projections(
             self.partials
                 .iter()
@@ -96,12 +80,12 @@ impl Stack<crate::Editor> {
     }
 }
 
-pub fn load() -> Stack<crate::Editor> {
+pub fn load() -> Stack {
     compose(BUILT_INS.iter().map(|(id, build)| (*id, build())))
 }
 
 #[cfg(any(test, target_arch = "wasm32"))]
-pub fn load_selected(ids: &[gid::CellId]) -> Result<Stack<crate::Editor>, String> {
+pub fn load_selected(ids: &[gid::CellId]) -> Result<Stack, String> {
     ids.iter()
         .map(|id| {
             BUILT_INS
@@ -116,7 +100,7 @@ pub fn load_selected(ids: &[gid::CellId]) -> Result<Stack<crate::Editor>, String
 
 fn compose(
     contributions: impl IntoIterator<Item = (gid::CellId, Library<crate::Editor, Hovered>)>,
-) -> Stack<crate::Editor> {
+) -> Stack {
     let (libraries, partials, providers) = Libraries::from_contributions(contributions);
     let completions = crate::libraries::completion::combine(providers);
     let partials: Rc<[_]> = partials.into();
@@ -136,7 +120,7 @@ fn compose(
 fn projections(
     partials: impl IntoIterator<Item = Partial>,
     document_libraries: bool,
-) -> (Projection<crate::Editor>, Projection<crate::Editor>) {
+) -> (Projection, Projection) {
     let partials: Vec<_> = partials.into_iter().collect();
     let loaded = crate::display::compose_partials(partials.clone());
     let projection = Projection::new(

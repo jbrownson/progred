@@ -233,7 +233,7 @@ fn run_document(
     binders: gid_text::Binders,
     doc_path: Option<PathBuf>,
     drawn_menu: bool,
-    stack: stack::Stack<Editor>,
+    stack: stack::Stack,
     command_modifier: puri::keyboard::CommandModifier,
     palette: display::widget::style::Palette,
     #[cfg(target_arch = "wasm32")] on_change: Option<web_sys::js_sys::Function>,

@@ -41,7 +41,7 @@ pub(crate) fn editing_frame(
 pub(crate) fn editing_frame_with_projection(
     world: &mut EditingWorld,
     raw: bool,
-    projection: Option<&Projection<EditingWorld>>,
+    projection: Option<&Projection>,
 ) -> crate::frame::HoverOutput<EditingWorld> {
     editing_frame_at(world, raw, projection, None)
 }
@@ -49,7 +49,7 @@ pub(crate) fn editing_frame_with_projection(
 pub(crate) fn editing_frame_at(
     world: &mut EditingWorld,
     raw: bool,
-    projection: Option<&Projection<EditingWorld>>,
+    projection: Option<&Projection>,
     pointer: Option<Point>,
 ) -> crate::frame::HoverOutput<EditingWorld> {
     editing_frame_with_annotations(world, raw, projection, pointer, &Annotations::default())
@@ -58,7 +58,7 @@ pub(crate) fn editing_frame_at(
 pub(crate) fn editing_frame_with_annotations(
     world: &mut EditingWorld,
     raw: bool,
-    projection: Option<&Projection<EditingWorld>>,
+    projection: Option<&Projection>,
     pointer: Option<Point>,
     annotations: &Annotations,
 ) -> crate::frame::HoverOutput<EditingWorld> {
@@ -329,7 +329,7 @@ pub(crate) fn place_with_annotations(
 
 pub(crate) struct BenchContext {
     pub(crate) computations: crate::computations::Computations,
-    pub(crate) stack: crate::stack::Stack<World>,
+    pub(crate) stack: crate::stack::Stack,
     pub(crate) styles: crate::display::widget::style::Styles,
     pub(crate) fonts: parley::FontContext,
     pub(crate) layouts: parley::LayoutContext<Brush>,

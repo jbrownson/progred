@@ -105,7 +105,7 @@ impl<P> Driver<P> {
     }
 
     /// The page swaps the libraries the editor draws and reads with.
-    pub(crate) fn stack(&mut self, stack: crate::stack::Stack<crate::Editor>) {
+    pub(crate) fn stack(&mut self, stack: crate::stack::Stack) {
         self.runner
             .stack_changed(stack, self.scale(), self.viewport);
         self.present();

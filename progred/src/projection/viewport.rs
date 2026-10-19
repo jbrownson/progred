@@ -27,10 +27,7 @@ pub(crate) fn entry<'a>(sources: Sources<'a>, path: &[Step]) -> Option<Entry<'a>
     presentation::viewport(value).map(|_| Entry { value, path })
 }
 
-pub(crate) fn projection(
-    ambient: &Projection<crate::Editor>,
-    size: Size,
-) -> Projection<crate::Editor> {
+pub(crate) fn projection(ambient: &Projection, size: Size) -> Projection {
     ambient
         .clone()
         .with_entry(crate::display::partial(move |input| {

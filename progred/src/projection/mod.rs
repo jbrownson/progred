@@ -50,21 +50,13 @@ type SharedPath = Rc<[Step]>;
 
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
-pub struct Projection<World> {
-    partial: crate::display::Partial<World, Hovered>,
-    entry: Option<crate::display::Partial<World, Hovered>>,
+#[derive(Clone)]
+pub struct Projection {
+    partial: Partial,
+    entry: Option<Partial>,
 }
 
-impl<World> Clone for Projection<World> {
-    fn clone(&self) -> Self {
-        Self {
-            partial: self.partial.clone(),
-            entry: self.entry.clone(),
-        }
-    }
-}
-
-impl<World: 'static> Default for Projection<World> {
+impl Default for Projection {
     fn default() -> Self {
         Self {
             partial: crate::display::runtime_partial(|_| None),
@@ -73,10 +65,8 @@ impl<World: 'static> Default for Projection<World> {
     }
 }
 
-impl<World: 'static> Projection<World> {
-    pub fn new(
-        partials: impl IntoIterator<Item = crate::display::Partial<World, Hovered>>,
-    ) -> Self {
+impl Projection {
+    pub fn new(partials: impl IntoIterator<Item = Partial>) -> Self {
         Self {
             partial: crate::display::compose_partials(partials),
             entry: None,
@@ -85,13 +75,13 @@ impl<World: 'static> Projection<World> {
 
     /// The composed partials, without the entry.
     #[cfg(any(test, target_arch = "wasm32"))]
-    pub(crate) fn partial(&self) -> &crate::display::Partial<World, Hovered> {
+    pub(crate) fn partial(&self) -> &Partial {
         &self.partial
     }
 
     /// Prepend a partial at entry, following cells to their definitions.
     /// Its children and computed results use the ordinary projection.
-    pub fn with_entry(self, partial: crate::display::Partial<World, Hovered>) -> Self {
+    pub fn with_entry(self, partial: Partial) -> Self {
         Self {
             entry: Some(partial),
             ..self
@@ -107,8 +97,8 @@ impl<World: 'static> Projection<World> {
 
     fn apply(
         &self,
-        input: &crate::display::ProjectionInput<'_, World, Hovered, grap::RuntimeValue>,
-    ) -> Option<crate::display::Layout<World, Hovered>> {
+        input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered, grap::RuntimeValue>,
+    ) -> Option<Layout> {
         self.entry
             .as_ref()
             .and_then(|entry| entry(input))
@@ -372,7 +362,7 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
 #[allow(clippy::too_many_arguments)]
 fn prepare(
     cx: &Cx,
-    projection: &Projection<crate::Editor>,
+    projection: &Projection,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Ancestry,
@@ -400,7 +390,7 @@ fn prepare(
 
 struct ProjectionScope<'a, 's> {
     cx: &'a Cx<'s>,
-    projection: &'a Projection<crate::Editor>,
+    projection: &'a Projection,
     path: &'a [Step],
     ancestors: &'a Ancestry,
     value: Option<&'a grap::RuntimeValue>,
@@ -523,7 +513,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
 
 fn prepare_at(
     cx: &Cx,
-    projection: &Projection<crate::Editor>,
+    projection: &Projection,
     tcx: &mut TextCtx,
     path: &[Step],
     ground: Ground,
@@ -644,7 +634,7 @@ pub struct ProjectDescription<'a> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    pub projection: Option<&'a Projection<crate::Editor>>,
+    pub projection: Option<&'a Projection>,
 }
 
 pub(crate) fn project(
@@ -864,7 +854,7 @@ fn ground_with(
 #[allow(clippy::too_many_arguments)]
 fn prepare_descend_path(
     cx: &Cx,
-    projection: &Projection<crate::Editor>,
+    projection: &Projection,
     tcx: &mut TextCtx,
     parent_path: &[Step],
     ancestors: &Ancestry,
@@ -927,7 +917,7 @@ fn prepare_descend_path(
 #[allow(clippy::too_many_arguments)]
 fn prepare_value(
     cx: &Cx,
-    projection: &Projection<crate::Editor>,
+    projection: &Projection,
     current_projection: Option<&Partial>,
     default_projection: Option<&Partial>,
     tcx: &mut TextCtx,
@@ -1078,7 +1068,7 @@ fn prepare_value(
 #[allow(clippy::too_many_arguments)]
 fn value_layout(
     cx: &Cx,
-    projection: &Projection<crate::Editor>,
+    projection: &Projection,
     current_projection: Option<&Partial>,
     default_projection: &Partial,
     path: &[Step],

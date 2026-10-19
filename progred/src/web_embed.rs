@@ -7,7 +7,7 @@ use ::grap::path;
 use gid::{Document, Path, Resolution, Step, Value};
 use std::rc::Rc;
 
-pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack<Editor>, String> {
+pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack, String> {
     match ids {
         None => Ok(crate::stack::load()),
         Some(ids) => {
@@ -36,7 +36,7 @@ pub(crate) fn peeled(
     projections: &str,
     slots: Option<&str>,
     names: bool,
-) -> Result<crate::stack::Stack<Editor>, String> {
+) -> Result<crate::stack::Stack, String> {
     let mut stack = self::libraries(libraries)?;
     stack.projection = self::libraries(Some(projections))?.projection;
     let slots = match (names, slots) {
@@ -130,9 +130,9 @@ fn same_as_above(slots: &[(gid::CellId, Level)], root: Option<&Value>) -> Vec<bo
 
 pub(crate) fn tutorial_slots(
     ids: Option<&str>,
-    projection: crate::projection::Projection<Editor>,
+    projection: crate::projection::Projection,
     libraries: &crate::library::Libraries,
-) -> Result<crate::projection::Projection<Editor>, String> {
+) -> Result<crate::projection::Projection, String> {
     match ids {
         None => Ok(projection),
         Some(ids) => {

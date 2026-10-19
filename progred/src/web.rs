@@ -50,10 +50,7 @@ thread_local! {
         const { std::cell::RefCell::new((None, None)) };
 }
 
-pub(crate) fn stack(
-    projections: &str,
-    names: bool,
-) -> Result<crate::stack::Stack<crate::Editor>, String> {
+pub(crate) fn stack(projections: &str, names: bool) -> Result<crate::stack::Stack, String> {
     PAGE.with(|page| {
         let (libraries, slots) = &*page.borrow();
         web_embed::peeled(libraries.as_deref(), projections, slots.as_deref(), names)

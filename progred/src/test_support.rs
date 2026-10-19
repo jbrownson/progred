@@ -97,9 +97,7 @@ impl Libraries {
     }
 }
 
-pub(crate) fn root_completions<World>(
-    stack: &crate::stack::Stack<World>,
-) -> Vec<crate::display::Completion> {
+pub(crate) fn root_completions(stack: &crate::stack::Stack) -> Vec<crate::display::Completion> {
     let document = Document {
         root: None,
         cells: Cells::new(),
@@ -336,17 +334,17 @@ pub(crate) fn projected_completion_entries(
 pub(crate) fn projected_completion_entries_with(
     doc: &Document,
     selection: &Selection,
-    projection: Option<&Projection<crate::Editor>>,
+    projection: Option<&Projection>,
     provider: Option<&crate::display::CompletionProvider>,
 ) -> Vec<Entry<crate::Editor>> {
     projected_completion_entries_in(&crate::stack::load(), doc, selection, projection, provider)
 }
 
 pub(crate) fn projected_completion_entries_in(
-    stack: &crate::stack::Stack<crate::Editor>,
+    stack: &crate::stack::Stack,
     doc: &Document,
     selection: &Selection,
-    projection: Option<&Projection<crate::Editor>>,
+    projection: Option<&Projection>,
     provider: Option<&crate::display::CompletionProvider>,
 ) -> Vec<Entry<crate::Editor>> {
     let styles = crate::display::widget::style::editor(

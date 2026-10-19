@@ -10,7 +10,7 @@ fn world(root: Value) -> crate::Editor {
     })
 }
 
-fn projection(world: &crate::Editor, rule: Partial) -> Projection<crate::Editor> {
+fn projection(world: &crate::Editor, rule: Partial) -> Projection {
     Projection::new([rule, world.stack.projection.partial.clone()])
 }
 
@@ -523,7 +523,7 @@ fn missing_jump_target_is_a_real_editable_location() {
 
 /// A computed record holding a reference, drawn by `at` where the same path
 /// also names stored data.
-fn computed_reference() -> (crate::Editor, Projection<crate::Editor>, [CellId; 3]) {
+fn computed_reference() -> (crate::Editor, Projection, [CellId; 3]) {
     let (marker, source, field, cell) =
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let mut world = world(Value::record([
