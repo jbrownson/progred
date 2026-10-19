@@ -46,6 +46,10 @@ fn gpu_result<T, E: std::fmt::Debug>(stage: &str, result: Result<T, E>) -> Optio
 
 const DEFAULT_PREVIEW_SIZE: f64 = 256.0;
 const ORBIT_DEGREES_PER_POINT: f32 = 180.0 / 256.0;
+/// Scrolling multiplies the zoom by `exp` of this per point.
+const LOG_ZOOM_PER_POINT: f64 = 0.0025;
+const MIN_ZOOM: f32 = 0.05;
+const MAX_ZOOM: f32 = 20.0;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -612,7 +616,7 @@ fn camera(state: Option<&Value>) -> Camera {
     Camera {
         yaw: read(vocabulary::YAW, Camera::default().yaw),
         pitch: read(vocabulary::PITCH, Camera::default().pitch).rem_euclid(360.0),
-        zoom: read(vocabulary::ZOOM, Camera::default().zoom).clamp(0.05, 20.0),
+        zoom: read(vocabulary::ZOOM, Camera::default().zoom).clamp(MIN_ZOOM, MAX_ZOOM),
     }
 }
 
@@ -653,39 +657,35 @@ fn orbit_handler(state: Option<&Value>) -> crate::display::StateDragHandler {
     })
 }
 
-fn zoom_handler(
+fn scroll_zoom(
     state: Option<&Value>,
-) -> impl Fn(Vec2) -> (Option<Value>, puri::handler::ScrollOutcome<Vec2>) + 'static {
-    let state = state.cloned();
-    let initial = camera(state.as_ref());
-    move |event| {
-        let requested = initial.zoom * (event.y as f32 * 0.0025).exp();
-        let zoom = requested.clamp(0.05, 20.0);
-        if zoom == initial.zoom {
-            (None, puri::handler::ScrollOutcome::unhandled(event))
-        } else {
-            (
-                Some(with_camera(state.as_ref(), Camera { zoom, ..initial })),
-                puri::handler::ScrollOutcome::with_remainder(Vec2::new(
-                    event.x,
-                    if zoom == requested {
-                        0.0
-                    } else {
-                        event.y - (f64::from(zoom) / f64::from(initial.zoom)).ln() / 0.0025
-                    },
-                )),
-            )
-        }
+    delta: Vec2,
+) -> (Option<Value>, puri::handler::ScrollOutcome<Vec2>) {
+    let initial = camera(state);
+    let requested = initial.zoom * (delta.y as f32 * LOG_ZOOM_PER_POINT as f32).exp();
+    let zoom = requested.clamp(MIN_ZOOM, MAX_ZOOM);
+    if zoom == initial.zoom {
+        (None, puri::handler::ScrollOutcome::unhandled(delta))
+    } else {
+        (
+            Some(with_camera(state, Camera { zoom, ..initial })),
+            puri::handler::ScrollOutcome::with_remainder(Vec2::new(
+                delta.x,
+                if zoom == requested {
+                    0.0
+                } else {
+                    delta.y - (f64::from(zoom) / f64::from(initial.zoom)).ln() / LOG_ZOOM_PER_POINT
+                },
+            )),
+        )
     }
 }
 
 fn pinch_zoom(state: Option<&Value>, delta: f32) -> Option<Value> {
-    if !delta.is_finite() {
-        return None;
-    }
     let initial = camera(state);
-    let zoom = (initial.zoom * (1.0 + delta)).clamp(0.05, 20.0);
-    (zoom != initial.zoom).then(|| with_camera(state, Camera { zoom, ..initial }))
+    let zoom = (initial.zoom * (1.0 + delta)).clamp(MIN_ZOOM, MAX_ZOOM);
+    (delta.is_finite() && zoom != initial.zoom)
+        .then(|| with_camera(state, Camera { zoom, ..initial }))
 }
 
 pub(crate) use volume::SceneObject;
@@ -1041,7 +1041,7 @@ pub(crate) fn interactive_volume<W: Host, V>(
                 move |world: &mut W, delta| {
                     let mut session = world.session();
                     let mut edit = site.open(&mut session);
-                    let (state, outcome) = zoom_handler(edit.state())(delta);
+                    let (state, outcome) = scroll_zoom(edit.state(), delta);
                     if let Some(state) = state {
                         edit.set_state(state);
                         activity.zoomed(session.timers, web_time::Instant::now());

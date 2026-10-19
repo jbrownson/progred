@@ -564,7 +564,7 @@ fn camera_gestures_update_open_projection_state() {
             .is_some_and(|camera| camera.contains_key(&other_camera))
     );
 
-    let state = zoom_handler(Some(&state))(Vec2::new(0.0, 100.0))
+    let state = scroll_zoom(Some(&state), Vec2::new(0.0, 100.0))
         .0
         .expect("vertical scroll zooms");
     assert!((camera(Some(&state)).zoom - 0.25_f32.exp()).abs() < 0.0001);
@@ -599,7 +599,7 @@ fn zoom_keeps_volume_voxels_cubic_without_shortening_the_view() {
 
 #[test]
 fn horizontal_scroll_declines_camera_zoom() {
-    assert!(zoom_handler(None)(Vec2 { x: 10.0, y: 0.0 }).0.is_none());
+    assert!(scroll_zoom(None, Vec2 { x: 10.0, y: 0.0 }).0.is_none());
 }
 
 #[test]
@@ -640,15 +640,18 @@ fn camera_zoom_declines_at_its_limits() {
             },
         );
         assert!(
-            zoom_handler(Some(&state))(Vec2 { x: 0.0, y: delta_y })
+            scroll_zoom(Some(&state), Vec2 { x: 0.0, y: delta_y })
                 .0
                 .is_none()
         );
         assert!(
-            zoom_handler(Some(&state))(Vec2 {
-                x: 0.0,
-                y: -delta_y,
-            })
+            scroll_zoom(
+                Some(&state),
+                Vec2 {
+                    x: 0.0,
+                    y: -delta_y,
+                }
+            )
             .0
             .is_some()
         );
@@ -658,7 +661,7 @@ fn camera_zoom_declines_at_its_limits() {
 #[test]
 fn camera_zoom_passes_unused_scroll_to_its_parent() {
     for (delta_y, limit) in [(2000.0, 20.0), (-2000.0, 0.05)] {
-        let (state, outcome) = zoom_handler(None)(Vec2 { x: 8.0, y: delta_y });
+        let (state, outcome) = scroll_zoom(None, Vec2 { x: 8.0, y: delta_y });
         let zoom = camera(state.as_ref()).zoom;
         assert_eq!(zoom, limit);
         assert!(outcome.handled());
@@ -667,7 +670,7 @@ fn camera_zoom_passes_unused_scroll_to_its_parent() {
         let consumed = delta_y - outcome.remaining.y;
         assert!(((consumed * 0.0025).exp() - f64::from(zoom)).abs() < 0.0001);
     }
-    let (_, outcome) = zoom_handler(None)(Vec2 { x: 8.0, y: 10.0 });
+    let (_, outcome) = scroll_zoom(None, Vec2 { x: 8.0, y: 10.0 });
     assert_eq!(outcome.remaining, Vec2 { x: 8.0, y: 0.0 });
 }
 
