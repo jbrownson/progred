@@ -937,13 +937,13 @@ impl ForeignFunctions {
     }
 }
 
-type ScopedCall<'a, T> = dyn for<'context> Fn(CellId, &mut Context<'context>, &Expression, &Environment) -> Result<T, Halt>
+type OverlayFn<'a, T> = dyn for<'context> Fn(CellId, &mut Context<'context>, &Expression, &Environment) -> Result<T, Halt>
     + 'a;
 
 #[derive(Clone, Copy)]
 enum OverlayCall<'a> {
-    Runtime(&'a ScopedCall<'a, RuntimeValue>),
-    Value(&'a ScopedCall<'a, Value>),
+    Runtime(&'a OverlayFn<'a, RuntimeValue>),
+    Value(&'a OverlayFn<'a, Value>),
 }
 
 /// A synchronous, borrowed layer of foreign functions. It lets a host
@@ -2391,8 +2391,9 @@ pub fn evaluate(expression: &Value, host: &dyn Host, fuel: usize) -> Evaluation 
     context(host, None, fuel).run(expression)
 }
 
-/// Interpret runtime-held syntax at an optional source location. Embedded
-/// native callables retain their own code origins and lexical captures.
+/// Interpret runtime-held syntax, rooting its source origins at `origin`;
+/// without one, it has none. Embedded native callables retain their own
+/// code origins and lexical captures.
 pub fn evaluate_runtime_at(
     expression: &RuntimeValue,
     origin: Option<SourceOrigin>,
@@ -2451,7 +2452,10 @@ pub fn evaluate_value(expression: &Value, host: &dyn Host, fuel: usize) -> Evalu
     evaluate(expression, host, fuel).into_value()
 }
 
-/// Explicitly interpret runtime-held syntax without serializing its embedded callables.
+/// Interpret runtime-held syntax without serializing its embedded
+/// callables. Syntax held as GID data has input paths as its source
+/// origins, as through [`evaluate`]; generated syntax has none. `overlay`
+/// lends foreign functions for this synchronous evaluation only.
 pub fn evaluate_runtime_scoped<'a>(
     expression: &RuntimeValue,
     host: &dyn Host,
