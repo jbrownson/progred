@@ -162,7 +162,6 @@ fn completions(
 /// The seed belongs only to the picker. The first point interaction writes the
 /// chosen color through the same location and gesture machinery as an edit.
 fn missing_picker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    input.value.is_none().then_some(())?;
     input.writable.then_some(())?;
     let hue = picker_hue(input.selection)?;
     let seed = Encoded::Rgb([255, 0, 0]);
@@ -335,10 +334,18 @@ fn swatch<W: Host>(color: Color) -> Layout<W> {
 }
 
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    if input.value.is_none() {
-        return missing_picker(input);
+    match input.value {
+        Some(value) => present(input, value),
+        None => missing_picker(input),
     }
-    let encoded = encoded_runtime(input.value?)?;
+}
+
+/// A color as its swatch, any text name, and its hex spelling.
+fn present<W: Host>(
+    input: &ProjectionInput<'_, W, RuntimeValue>,
+    value: &RuntimeValue,
+) -> Option<Layout<W>> {
+    let encoded = encoded_runtime(value)?;
     let color = decoded_color(encoded);
     let initial_hue = hsva(encoded).hue;
     let selected_hue = picker_hue(input.selection);
@@ -363,12 +370,11 @@ pub fn display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<
     let swatch = if input.writable
         && let Some(hue) = selected_hue
     {
-        popover(swatch, picker(input.value?.as_value(), encoded, hue))
+        popover(swatch, picker(value.as_value(), encoded, hue))
     } else {
         swatch
     };
-    let name = input
-        .value?
+    let name = value
         .field(name::vocabulary::NAME)
         .filter(|value| value.as_text().is_some())
         .map(|_| descend([Step::Key(name::vocabulary::NAME)], None, None));
