@@ -50,7 +50,7 @@ pub mod vocabulary {
         CellId::from_u128(0x9e3fa2dd570e0b38a8b0053585f4dde2);
 }
 
-pub fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::MATCH,
@@ -572,7 +572,7 @@ fn matches_pattern(
 
 /// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
-pub fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
@@ -662,9 +662,7 @@ enum BindingForm {
 /// `let` and `where` are the same sequential binding call with two
 /// arrangements. Keeping the function field visible makes switching
 /// between the prefix and postfix forms an ordinary graph edit.
-pub fn bindings_display<W: Host>(
-    input: &ProjectionInput<'_, W, RuntimeValue>,
-) -> Option<Layout<W>> {
+fn bindings_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
@@ -768,7 +766,7 @@ fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option
 /// rather than as a generic call with a redundant `expression` label.
 /// Unrelated fields do not change recognition. Active field insertion
 /// still uses the ordinary record/call projection.
-pub fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     input.pending.is_none().then_some(())?;
     let function = fields.field(::grap::vocabulary::FUNCTION)?;
@@ -791,7 +789,7 @@ pub fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> O
 /// Unquote marks an expression embedded in a quoted template. Its prefix
 /// is a handle for the whole unquote; the body keeps its own stored location.
 /// A just-inserted unquote is already one, so its empty hole offers code.
-pub fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     let fields = input.value?;
     match &input.pending {
         None => fields.contains_field(vocabulary::UNQUOTE),
@@ -816,7 +814,7 @@ pub fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) ->
 
 /// `do [a, b, c]` evaluates as a control form while retaining the
 /// ordinary list projection for its ordered expressions.
-pub fn do_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
+fn do_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     expression_list_display(input, vocabulary::DO)
 }
 

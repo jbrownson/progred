@@ -12,7 +12,9 @@ fn evaluate(expression: &Value) -> Value {
     crate::test_support::test_evaluate(
         expression,
         |cell| library.definitions.value(cell).cloned(),
-        &crate::test_support::foreign_functions(&library).merge(control::functions()),
+        &crate::test_support::foreign_functions(&library).merge(
+            crate::test_support::foreign_functions(&control::library::<crate::Editor>()),
+        ),
         200,
     )
     .result

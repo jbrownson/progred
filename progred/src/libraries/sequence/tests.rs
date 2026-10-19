@@ -90,7 +90,8 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
             ])),
         ),
     );
-    let functions = functions().merge(control::functions());
+    let control = crate::test_support::foreign_functions(&control::library::<crate::Editor>());
+    let functions = functions().merge(control);
     for value in [f64::value(42.0), ::grap::absent::value(INVALID)] {
         let sequence = ::grap::call(producer.clone(), [(captured, value.clone())]);
         let result = crate::test_support::test_evaluate(

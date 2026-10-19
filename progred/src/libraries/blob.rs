@@ -8,11 +8,11 @@ use std::rc::Rc;
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0x4ab5da466a7c5f1202f5ef862f5ff915);
 
-pub fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
+fn edit(spelling: &str, _: Option<&Value>) -> Option<Value> {
     gid::read_hex(spelling.trim()).map(Value::from)
 }
 
-pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     Some(crate::display::line_edit(crate::display::LineEdit {
         text: gid::hex_string(input.value?.as_blob()?),
         update: Rc::new(edit),

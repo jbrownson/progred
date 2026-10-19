@@ -146,7 +146,7 @@ fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction {
     .tracked()
 }
 
-pub fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(vocabulary::WIDTH, dimension(|(width, _)| width))
         .register(vocabulary::HEIGHT, dimension(|(_, height)| height))

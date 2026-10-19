@@ -371,7 +371,7 @@ fn volume_preview_function(
     )
 }
 
-pub fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions {
     [
         (vocabulary::SUM, binary_function(vocabulary::SUM)),
         (vocabulary::SUBTRACT, binary_function(vocabulary::SUBTRACT)),

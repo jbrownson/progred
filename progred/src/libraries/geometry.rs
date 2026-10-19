@@ -23,7 +23,7 @@ pub fn value(radius: f64) -> Value {
     )])
 }
 
-pub fn functions() -> ForeignFunctions {
+fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::CIRCLE,
         ForeignFunction::from_value(|context, call, environment| {
