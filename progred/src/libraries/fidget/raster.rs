@@ -303,30 +303,41 @@ impl ViewRequest {
         progress: Option<&(dyn Fn(Progress) + Sync)>,
     ) -> Result<Option<DepthImage>, incremental::Error> {
         cancel.check()?;
-        let views = match passes {
+        match passes {
             Passes::Final => refine_depth(self.view_at(self.pixels), final_depth_multiplier)
                 .map(|view| vec![view]),
             Passes::Progressive { first_max_edge } => {
                 self.refinements(first_max_edge, final_depth_multiplier)
             }
-        };
-        let Some(views) = views else {
-            return Ok(None);
-        };
-        let mut previous = None;
-        let mut views = views.into_iter().peekable();
-        while let Some(view) = views.next() {
-            cancel.check()?;
-            let frame =
-                partial::render(scene, &view, previous.as_ref(), cancel, publish, progress)?;
-            let Some(frame) = frame else { return Ok(None) };
-            if views.peek().is_none() {
-                return Ok(Some(frame));
-            }
-            publish(frame.clone())?;
-            previous = Some(frame);
         }
-        unreachable!("the native resolution is always present")
+        .map_or(Ok(None), |views| {
+            render_passes(scene, &views, None, cancel, publish, progress)
+        })
+    }
+}
+
+/// Render `views` in order, each over the image of the one before, and
+/// publish every image but the last, which is the result.
+fn render_passes(
+    scene: &SoftwareScene,
+    views: &[VolumeView],
+    previous: Option<&DepthImage>,
+    cancel: &incremental::Cancellation,
+    publish: &mut (dyn FnMut(DepthImage) -> Result<(), incremental::Error> + Send),
+    progress: Option<&(dyn Fn(Progress) + Sync)>,
+) -> Result<Option<DepthImage>, incremental::Error> {
+    match views.split_first() {
+        Some((view, finer)) => {
+            cancel.check()?;
+            match partial::render(scene, view, previous, cancel, publish, progress)? {
+                Some(frame) if !finer.is_empty() => {
+                    publish(frame.clone())?;
+                    render_passes(scene, finer, Some(&frame), cancel, publish, progress)
+                }
+                frame => Ok(frame),
+            }
+        }
+        None => Ok(None),
     }
 }
 
