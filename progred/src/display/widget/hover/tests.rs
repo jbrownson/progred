@@ -17,7 +17,8 @@ fn place_at(
     placement: Placement,
     input: HoverInput<'_, u32>,
 ) -> HoverOutput<(), u32> {
-    crate::display::test_support::place_before(&layout, placement, input).expect("native decorator")
+    crate::display::test_support::place_decoration(&layout, placement, input)
+        .expect("native decorator")
 }
 
 #[test]

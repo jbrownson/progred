@@ -1,7 +1,7 @@
 use crate::display::Env;
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
-use crate::display::test_support::{place_before, press_at};
+use crate::display::test_support::{place_decoration, press_at};
 use crate::display::widget;
 use crate::display::widget::placed::leaf;
 use crate::projection::Layout;
@@ -66,7 +66,7 @@ pub fn point_update(
     layout: &impl Recordable<Editor, Hovered>,
     point: crate::display::PointEvent,
 ) -> crate::display::PointUpdate {
-    let output = place_before(
+    let output = place_decoration(
         layout,
         Placement::root(Rect::new(0.0, 0.0, 100.0, 100.0)),
         Default::default(),
@@ -96,7 +96,7 @@ pub fn point_update(
 
 pub fn claim(layout: &impl Recordable<Editor, Hovered>) -> Option<puri::hover::Claim<Hovered>> {
     let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
-    place_before(
+    place_decoration(
         layout,
         placement,
         widget::HoverInput {
@@ -200,7 +200,7 @@ pub fn project_runtime(
 }
 
 pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
-    let output = place_before(
+    let output = place_decoration(
         layout,
         Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
         Default::default(),
@@ -215,7 +215,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
 }
 
 pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
-    let output = place_before(
+    let output = place_decoration(
         layout,
         Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0)),
         Default::default(),

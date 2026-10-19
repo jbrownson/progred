@@ -369,15 +369,20 @@ impl crate::display::Toolkit for NoSite<'_> {
 
 /// What the decorator `layout` leads or ends with places at `placement`,
 /// the pointer as `input` says; `None` when it isn't a decorator.
-pub fn place_before<W: 'static, H: Clone + 'static>(
+pub fn place_decoration<W: 'static, H: Clone + 'static>(
     layout: &impl Recordable<W, H>,
     placement: uig::Placement,
     input: widget::HoverInput<'_, H>,
 ) -> Option<widget::frame::HoverOutput<W, H>> {
     match layout.record() {
-        Recorded::Before { before, .. } | Recorded::After { after: before, .. } => {
+        Recorded::Before {
+            before: decoration, ..
+        }
+        | Recorded::After {
+            after: decoration, ..
+        } => {
             let mut output = widget::frame::HoverOutput::default();
-            with_context(&NoProject, |context| before(context))(
+            with_context(&NoProject, |context| decoration(context))(
                 &mut widget::HoverContext::new(input, &mut output, &mut Default::default()),
                 placement,
             );
