@@ -123,7 +123,8 @@ pub(crate) struct Cx<'a> {
     pub(crate) selected_trace: Option<SourceTrace>,
 }
 
-/// One occurrence in a view, as the widgets drawing it read the view.
+/// One occurrence in a view, as the widgets drawing it and the projections
+/// building its layout read the view.
 struct Occurrence<'a> {
     cx: &'a Cx<'a>,
     path: &'a [Step],
@@ -132,6 +133,11 @@ struct Occurrence<'a> {
 impl Occurrence<'_> {
     fn below(&self, steps: &[Step]) -> Path {
         self.path.iter().chain(steps).cloned().collect()
+    }
+
+    /// Where what Grap evaluates `steps` below this occurrence comes from.
+    fn origin(&self, steps: &[Step]) -> Option<grap::SourceOrigin> {
+        crate::display::Toolkit::trace_below(self, steps).map(crate::hover::to_grap)
     }
 }
 
@@ -233,42 +239,7 @@ impl crate::display::Toolkit for Occurrence<'_> {
     }
 }
 
-#[derive(Clone, Default)]
-struct Ancestry {
-    /// Cells crossed by `Follow`, used to stop projection cycles.
-    cells: HashSet<CellId>,
-    /// The nearest followed definition and the start of its relative path.
-    enclosing: Option<(CellId, gid::Resolution, usize)>,
-    ground: Ground,
-}
-
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-enum Ground {
-    #[default]
-    Writable,
-    Readonly,
-}
-
-struct ProjectEnv<'a, 's> {
-    cx: &'a Cx<'s>,
-    path: &'a [Step],
-}
-
-impl ProjectEnv<'_, '_> {
-    /// Where what Grap evaluates `steps` below this occurrence comes from.
-    fn origin(&self, steps: &[Step]) -> Option<grap::SourceOrigin> {
-        crate::display::Toolkit::trace_below(
-            &Occurrence {
-                cx: self.cx,
-                path: self.path,
-            },
-            steps,
-        )
-        .map(crate::hover::to_grap)
-    }
-}
-
-impl crate::display::Env for ProjectEnv<'_, '_> {
+impl crate::display::Env for Occurrence<'_> {
     fn apply_expression_runtime(
         &self,
         function: &grap::RuntimeValue,
@@ -326,6 +297,7 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
             .apply_runtime(self.cx.view, self.path, function, arguments, fuel)
     }
 
+    /// Unlike [`crate::display::Toolkit::name`], Raw's view names nothing.
     fn name(&self, cell: CellId) -> Option<&str> {
         self.cx.name(cell)
     }
@@ -341,6 +313,22 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
     fn occurrence(&self) -> &[Step] {
         self.path
     }
+}
+
+#[derive(Clone, Default)]
+struct Ancestry {
+    /// Cells crossed by `Follow`, used to stop projection cycles.
+    cells: HashSet<CellId>,
+    /// The nearest followed definition and the start of its relative path.
+    enclosing: Option<(CellId, gid::Resolution, usize)>,
+    ground: Ground,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Ground {
+    #[default]
+    Writable,
+    Readonly,
 }
 
 /// Prepare `layout` at the occurrence `scope` describes, with its explicit
@@ -1047,7 +1035,7 @@ fn value_layout(
             let state = cx.annotations.at(path);
             let occurrence = || cx.site(Rc::from(path));
             let input = crate::display::ProjectionInput {
-                env: &ProjectEnv { cx, path },
+                env: &Occurrence { cx, path },
                 default_projection: default_projection.clone(),
                 value,
                 scale_factor: cx.styles.scale,
