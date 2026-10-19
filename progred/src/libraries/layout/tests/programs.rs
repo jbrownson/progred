@@ -2,9 +2,10 @@
 //! the same layouts built as data.
 
 use crate::annotations::Annotations;
+use crate::frame::test_support::ProfileView;
 use crate::libraries::{control::vocabulary as control, layout, presentation, text};
 use crate::perf::{distribution, iterations};
-use crate::projection::test_support::{BenchContext, ProfileView};
+use crate::projection::test_support::BenchContext;
 use crate::sources::Sources;
 use crate::test_support::core_libraries;
 use crate::test_values::call;

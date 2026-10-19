@@ -27,6 +27,7 @@ visual testing.
   functions directly. Prefer these where they can say what's being tested.
 - **Frames.** The frame harness in
   [`projection/test_support.rs`](../progred/src/projection/test_support.rs)
+  and [`frame/test_support.rs`](../progred/src/frame/test_support.rs)
   builds whole headless frames from an editor state and inspects their draw
   lists, hover, and handlers. A library's frame tests sit beside the library,
   as the number library's do in `libraries/number/tests/frames.rs`.

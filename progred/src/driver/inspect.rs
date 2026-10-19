@@ -385,12 +385,7 @@ impl<P> Driver<P> {
 
     /// What the pointer would land on at `point`.
     pub(crate) fn hover_at(&self, point: Point) -> Option<Hovered> {
-        crate::frame::hover_target(self.runner.frame.dispatch.hover_geometry.probe(
-            Some(point),
-            None,
-            0.0,
-        ))
-        .0
+        crate::frame::test_support::hover_at(&self.runner.frame.dispatch, point)
     }
 
     /// The first point, scanning the window on a 4-pixel grid, where the

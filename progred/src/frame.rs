@@ -161,7 +161,7 @@ impl crate::display::Host for Editor {
 
 /// What this frame's hover winner and selection refer to, shared by its
 /// continuations. Resolve each once here, not in each painted occurrence.
-pub(crate) fn attribute(
+fn attribute(
     sources: &sources::Sources<'_>,
     landmarks: &[Landmark<Editor>],
     root: Option<&Root>,
@@ -205,7 +205,7 @@ pub(crate) fn attribute(
 }
 
 /// Interpret the winning claim as an editor target and its owning view.
-pub(crate) fn hover_target(
+fn hover_target(
     claim: Option<(Option<crate::display::widget::view::Root>, Claim<Hovered>)>,
 ) -> (Option<Hovered>, Option<crate::display::widget::view::Root>) {
     match claim {
@@ -578,16 +578,16 @@ fn view_projection<'a>(
 /// What a view shows: the path of its root and the value there, the
 /// projection drawing them, and whether that's a viewport filling its pane,
 /// drawn without a margin or scrolling.
-pub(crate) struct ViewContent<'a> {
-    pub(crate) root_path: Cow<'a, [gid::Step]>,
-    pub(crate) root: Option<&'a gid::Value>,
-    pub(crate) projection: Cow<'a, projection::Projection>,
-    pub(crate) viewport: bool,
+struct ViewContent<'a> {
+    root_path: Cow<'a, [gid::Step]>,
+    root: Option<&'a gid::Value>,
+    projection: Cow<'a, projection::Projection>,
+    viewport: bool,
 }
 
 /// What `view` shows in an area of `size` at `scale`: a standard pane whose
 /// value is a viewport fills the pane with it.
-pub(crate) fn view_content<'a>(
+fn view_content<'a>(
     stack: &'a stack::Stack,
     sources: sources::Sources<'a>,
     view: &'a workspace::View,
@@ -626,7 +626,7 @@ pub(crate) fn view_content<'a>(
 }
 
 /// The margin around a view's content: none for a viewport filling its pane.
-pub(crate) fn content_margin(viewport: bool, scale: f64) -> f64 {
+fn content_margin(viewport: bool, scale: f64) -> f64 {
     if viewport { 0.0 } else { 12.0 * scale }
 }
 
@@ -967,5 +967,7 @@ fn project_frame(
 
 #[cfg(test)]
 mod placement_tests;
+#[cfg(test)]
+pub(crate) mod test_support;
 #[cfg(test)]
 mod tests;

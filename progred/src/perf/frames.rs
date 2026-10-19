@@ -3,9 +3,10 @@
 use crate::annotations::Annotations;
 use crate::command::Example;
 use crate::frame::Hovered;
+use crate::frame::test_support::ProfileView;
 use crate::perf::{distribution, iterations};
 use crate::projection::Projection;
-use crate::projection::test_support::{Bench, BenchContext, FrameTimes, ProfileView};
+use crate::projection::test_support::{Bench, BenchContext, FrameTimes};
 use crate::selection::Selection;
 use crate::sources::Sources;
 use gid::{Document, Step, Value};

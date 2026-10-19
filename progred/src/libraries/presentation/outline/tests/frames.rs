@@ -3,6 +3,7 @@ use crate::display::test_support::Landmarks;
 use crate::display::widget::navigation::Landmark;
 use crate::driver::Driver;
 use crate::frame::Hovered;
+use crate::frame::test_support::settle;
 use crate::hover::Hover;
 use crate::libraries::presentation::vocabulary::{OUTLINE, RESULT};
 use crate::libraries::{f64, name};

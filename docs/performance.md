@@ -164,9 +164,10 @@ These are a smoke check of the checked-in example, not a performance guarantee.
 
 The opt-in tests in `progred/src/perf/frames.rs`, and the layout library's FFI
 canary, share one headless frame harness,
-`progred/src/projection/test_support.rs`. They are not assertions about
-interactive frame rate, and ordinary builds and launches contain none of this
-instrumentation.
+`progred/src/projection/test_support.rs`, which binds frames and sizes windows
+by the frame's own rules in `progred/src/frame/test_support.rs`. They are not
+assertions about interactive frame rate, and ordinary builds and launches
+contain none of this instrumentation.
 
 `make perf` prints only each canary's headline timing. To see the phases
 below, run the canaries through Cargo, serially in an optimized build:

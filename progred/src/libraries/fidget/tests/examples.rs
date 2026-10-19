@@ -1,8 +1,9 @@
 use super::*;
 use crate::annotations::Annotations;
 use crate::display::test_support::Landmarks;
+use crate::frame::test_support::{ProfileView, settle};
 use crate::gid_text::Binders;
-use crate::projection::test_support::{ProfileView, editing_frame, settle};
+use crate::projection::test_support::editing_frame;
 use crate::test_support::{core_libraries, src};
 use gid::{Document, Position, Record, Step};
 use kurbo::Point;
