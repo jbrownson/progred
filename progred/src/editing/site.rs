@@ -40,10 +40,8 @@ impl Site {
 
     /// Where this occurrence is stored, if anywhere: what a jump to it
     /// draws.
-    pub(crate) fn location(&self) -> Option<crate::location::Location<'static>> {
-        self.scope
-            .location(&self.path)
-            .map(crate::location::Location::into_owned)
+    pub(crate) fn location(&self) -> Option<crate::location::Location<'_>> {
+        self.scope.location(&self.path)
     }
 
     /// What hovering this occurrence shows.
@@ -63,7 +61,7 @@ impl Site {
 
     /// A drag's writes to the value here, recorded as one undo step.
     pub(crate) fn edit_run(&self) -> crate::gesture::EditRun {
-        crate::gesture::EditRun::new(self.root.clone(), self.path.to_vec(), self.scope.clone())
+        crate::gesture::EditRun::new(self.clone())
     }
 
     /// Edits of this occurrence, through the session a dispatch lends.

@@ -864,7 +864,7 @@ pub fn jump_to<World: 'static, Hover: 'static>(
             context.text,
             build,
             steps.clone(),
-            document,
+            document.into_owned(),
             projection.clone(),
             None,
         ),

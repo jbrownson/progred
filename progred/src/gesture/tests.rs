@@ -1,7 +1,8 @@
 use super::*;
 use crate::Editor;
+use crate::display::widget::view::Root;
 use crate::libraries::f64;
-use gid::Step;
+use gid::{Path, Step};
 use std::rc::Rc;
 
 use crate::libraries::number::scrub::{ScrubHandler, ScrubUpdate};
@@ -13,7 +14,7 @@ fn model(value: Value) -> Editor {
 }
 
 fn scrub(origin: Point, scale: f64, root: Root, path: Path, handler: ScrubHandler) -> Active {
-    let edit = EditRun::new(root.clone(), path.clone(), Default::default());
+    let edit = Site::new(root, path.into(), Default::default()).edit_run();
     crate::libraries::number::scrub::scrub(
         Drag::new(origin, scale, DRAG_THRESHOLD),
         handler(),
@@ -28,7 +29,7 @@ fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
     let root = world.model.workspace.document_root().clone();
     let other_path = vec![Step::Key(gid::new_cell_id())];
     world.model.selection = Some(Selection::edge(&root, other_path.clone()));
-    let mut edit = EditRun::new(root, vec![], Default::default());
+    let mut edit = Site::new(root, Rc::from([]), Default::default()).edit_run();
     assert!(Rc::ptr_eq(&original, &world.model.doc));
     assert!(!edit.write(&mut world.session(), f64::value(10.0)));
     assert!(Rc::ptr_eq(&original, &world.model.doc));

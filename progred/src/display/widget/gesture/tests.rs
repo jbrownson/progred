@@ -281,7 +281,7 @@ fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
             value: Value::list([f64::value(event.x), f64::value(event.y)]),
             selection: Some(crate::selection::payload::edge()),
         }),
-        crate::gesture::EditRun::new(root.clone(), vec![], Default::default()),
+        crate::editing::Site::new(root.clone(), Rc::from([]), Default::default()).edit_run(),
     );
     assert!(gesture.advance(&mut model.session(), &[Point::new(30.0, 40.0)]));
     assert_eq!(
