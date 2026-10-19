@@ -34,13 +34,11 @@ pub(crate) fn raster_surface(
 ) -> Option<ImageData> {
     let pixels = raster_size(preview.size, scale)?;
     let view = view(preview, camera(state), pixels)?;
-    Some(ImageData {
-        data: renderer.render(geometry, &view, surface)?.into(),
-        format: ImageFormat::Rgba8,
-        alpha_type: ImageAlphaType::Alpha,
-        width: pixels.width(),
-        height: pixels.height(),
-    })
+    Some(rgba_image(
+        pixels.width(),
+        pixels.height(),
+        renderer.render(geometry, &view, surface)?,
+    ))
 }
 
 impl Renderer {

@@ -40,13 +40,7 @@ fn whole_passes(
             cancel.check()?;
             let rgba = scene.render(view, cancel);
             cancel.check()?;
-            match rgba.map(|rgba| ImageData {
-                data: rgba.into(),
-                format: ImageFormat::Rgba8,
-                alpha_type: ImageAlphaType::Alpha,
-                width: view.size.width(),
-                height: view.size.height(),
-            }) {
+            match rgba.map(|rgba| rgba_image(view.size.width(), view.size.height(), rgba)) {
                 Some(image) if !finer.is_empty() => {
                     publish(image)?;
                     whole_passes(scene, finer, cancel, publish)

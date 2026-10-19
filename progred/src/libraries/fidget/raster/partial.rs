@@ -3,16 +3,6 @@ use super::*;
 use fidget_engine::raster::voxel::SceneTile;
 use std::sync::Mutex;
 
-fn image(width: u32, height: u32, pixels: Vec<u8>) -> ImageData {
-    ImageData {
-        data: pixels.into(),
-        format: ImageFormat::Rgba8,
-        alpha_type: ImageAlphaType::Alpha,
-        width,
-        height,
-    }
-}
-
 struct Assembly {
     width: usize,
     height: usize,
@@ -90,7 +80,7 @@ impl Assembly {
 
     fn snapshot(&self) -> DepthImage {
         DepthImage {
-            image: image(self.width as u32, self.height as u32, self.pixels.clone()),
+            image: rgba_image(self.width as u32, self.height as u32, self.pixels.clone()),
             depth: self.depth.clone().into(),
             partial: self.partial,
         }
@@ -141,7 +131,7 @@ pub(super) fn render(
     }
     cancel.check()?;
     Ok(output.map(|()| DepthImage {
-        image: image(view.size.width(), view.size.height(), state.assembly.pixels),
+        image: rgba_image(view.size.width(), view.size.height(), state.assembly.pixels),
         depth: state.assembly.depth.into(),
         partial: false,
     }))

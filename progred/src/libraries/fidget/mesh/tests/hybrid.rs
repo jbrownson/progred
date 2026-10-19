@@ -109,13 +109,7 @@ fn composition_fixture() -> (Geometry, View, puri::mesh::DepthImage, usize) {
         height: 4,
     };
     let frame = puri::mesh::DepthImage {
-        image: ImageData {
-            data: [180, 120, 60, 255].repeat(32).into(),
-            format: ImageFormat::Rgba8,
-            alpha_type: ImageAlphaType::Alpha,
-            width: 8,
-            height: 4,
-        },
+        image: rgba_image(8, 4, [180, 120, 60, 255].repeat(32)),
         depth: vec![0.5; 32].into(),
         partial: false,
     };

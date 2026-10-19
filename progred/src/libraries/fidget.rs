@@ -580,15 +580,22 @@ fn raster_size(size: Size, scale: f64) -> Option<PixelRenderSize> {
     ))
 }
 
-fn image_layout<W: Host>(size: Size, raster_size: PixelRenderSize, rgba: Vec<u8>) -> Layout<W> {
-    let image = ImageData {
+/// An image of straight-alpha RGBA8 pixels.
+fn rgba_image(width: u32, height: u32, rgba: Vec<u8>) -> ImageData {
+    ImageData {
         data: rgba.into(),
         format: ImageFormat::Rgba8,
         alpha_type: ImageAlphaType::Alpha,
-        width: raster_size.width(),
-        height: raster_size.height(),
-    };
-    widget::image::image(size, image)
+        width,
+        height,
+    }
+}
+
+fn image_layout<W: Host>(size: Size, raster_size: PixelRenderSize, rgba: Vec<u8>) -> Layout<W> {
+    widget::image::image(
+        size,
+        rgba_image(raster_size.width(), raster_size.height(), rgba),
+    )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

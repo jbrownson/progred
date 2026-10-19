@@ -43,7 +43,7 @@ fn finished_empty_pixels_are_distinct_from_unfinished_pixels() {
 #[test]
 fn finer_pass_preserves_previous_pixels_until_replaced_including_empty_pixels() {
     let previous = DepthImage {
-        image: image(2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]),
+        image: rgba_image(2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]),
         depth: vec![1.0; 2].into(),
         partial: false,
     };
