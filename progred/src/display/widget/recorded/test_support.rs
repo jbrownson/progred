@@ -1,6 +1,6 @@
 //! What a recording drew, for tests of the programs that draw.
 
-use super::{Faces, Record, Recorded, draw};
+use super::{Record, Recorded, draw};
 use crate::display::widget::source::SourceTrace;
 use crate::display::widget::style::Styles;
 use crate::hover::Hover;
@@ -18,7 +18,7 @@ impl Drawing {
         input: Option<SourceTrace>,
         styles: &Styles,
     ) -> Self {
-        Self(draw(record, host, input, Faces::new(styles)))
+        Self(draw(record, host, input, styles.clone()))
     }
 
     pub(crate) fn is_empty(&self) -> bool {

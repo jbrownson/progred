@@ -167,6 +167,14 @@ fn line_family(family: crate::display::TextFamily) -> GenericFamily {
     }
 }
 
+/// The brush `paint` stands for in `styles`.
+pub fn brush(styles: &Styles, paint: crate::display::Paint) -> Brush {
+    match paint {
+        crate::display::Paint::Face(face) => face_style(styles, face).brush.clone(),
+        crate::display::Paint::Brush(brush) => brush,
+    }
+}
+
 pub fn face_style(styles: &Styles, face: crate::display::Face) -> &TextStyle {
     match face {
         crate::display::Face::Name => &styles.name,

@@ -6,7 +6,7 @@
 
 use super::HoverPass;
 use super::placed::leaf;
-use super::style::{Styles, face_style};
+use super::style::{Styles, brush};
 use crate::display::Host;
 use crate::display::widget::source::SourceTrace;
 use crate::hover::{Hover, SourceCalls};
@@ -28,15 +28,15 @@ pub type Record = Rc<dyn Fn(&dyn grap::Host, &mut Recorder) -> bool>;
 pub struct Recorder {
     drawn: Recorded,
     input: Option<SourceTrace>,
-    faces: Faces,
+    styles: Styles,
 }
 
 impl Recorder {
-    fn new(input: Option<SourceTrace>, faces: Faces) -> Self {
+    fn new(input: Option<SourceTrace>, styles: Styles) -> Self {
         Self {
             drawn: Recorded::default(),
             input,
-            faces,
+            styles,
         }
     }
 
@@ -60,7 +60,7 @@ impl Recorder {
         }
         self.drawn
             .commands
-            .fill(shape, self.faces.resolve(paint), transform);
+            .fill(shape, brush(&self.styles, paint), transform);
     }
 }
 
@@ -95,19 +95,19 @@ fn recorded_leaf<W: Host>(
         ascent: ascent * scale,
         descent: descent * scale,
     };
-    let faces = Faces::new(styles);
     let input = toolkit.trace_below(program);
     let sources = toolkit.sources();
     let document = sources.doc.clone();
     let libraries = sources.libraries.clone();
     // Recording runs after the projection pass's borrows end, so it keeps
-    // its own clones of the document and libraries.
+    // its own clones of the theme, the document and the libraries.
+    let theme = styles.clone();
     let drawing = Rc::new(LazyCell::new(move || {
         let sources = Sources {
             doc: &document,
             libraries: &libraries,
         };
-        draw(&record, &sources, input, faces)
+        draw(&record, &sources, input, theme)
     }));
     let highlight = styles.accent_wash.brush.clone();
     let selected_highlight = styles.selection_wash.clone();
@@ -144,29 +144,13 @@ fn draw(
     record: &Record,
     host: &dyn grap::Host,
     input: Option<SourceTrace>,
-    faces: Faces,
+    styles: Styles,
 ) -> Recorded {
-    let mut recorder = Recorder::new(input, faces);
+    let mut recorder = Recorder::new(input, styles);
     if record(host, &mut recorder) {
         recorder.drawn
     } else {
         Recorded::default()
-    }
-}
-
-/// Recording happens after the frame's style borrow ends, so it keeps a copy.
-struct Faces(Styles);
-
-impl Faces {
-    fn new(styles: &Styles) -> Self {
-        Self(styles.clone())
-    }
-
-    fn resolve(&self, paint: crate::display::Paint) -> Brush {
-        match paint {
-            crate::display::Paint::Brush(brush) => brush,
-            crate::display::Paint::Face(face) => face_style(&self.0, face).brush.clone(),
-        }
     }
 }
 

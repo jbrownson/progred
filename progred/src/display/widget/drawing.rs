@@ -39,12 +39,9 @@ pub fn prepare<W: 'static, H: 'static>(
         }
         Leaf::Drawing(drawing) => {
             let scale = context.toolkit.styles().scale;
-            let drawing = drawing.clone().map_paint(|paint| match paint {
-                Paint::Face(face) => widget::style::face_style(context.toolkit.styles(), face)
-                    .brush
-                    .clone(),
-                Paint::Brush(brush) => brush,
-            });
+            let drawing = drawing
+                .clone()
+                .map_paint(|paint| widget::style::brush(context.toolkit.styles(), paint));
             widget::leaf(
                 Extent {
                     width: drawing.width * scale,
