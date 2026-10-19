@@ -64,7 +64,7 @@ fn page(id: &str) -> Embed {
 
 /// What the page says about its embedded editor.
 pub(super) struct Page {
-    pub(super) names: crate::gid_text::Binders,
+    names: crate::gid_text::Binders,
     /// The page's choice of libraries and slots, which peeling draws from.
     libraries: Option<String>,
     slots: Option<String>,
@@ -72,49 +72,59 @@ pub(super) struct Page {
     done: usize,
 }
 
-/// The editor `page` embeds in its section `id`, set up as the editor's
-/// address there asks, and what the page says about it.
-pub(super) fn embed(page: &str, id: &str) -> (crate::Editor, Page) {
-    let (src, tasks) = section(page, id);
+/// The value of the option `name` in the editor's address `src`.
+fn option(src: &str, name: &str) -> Option<String> {
     let (_, query) = src.split_once('?').expect("the editor's options");
-    let option = |name: &str| {
-        query
-            .split('&')
-            .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
-            .map(str::to_owned)
-    };
-    let document = option("document").expect("a document");
+    query
+        .split('&')
+        .find_map(|pair| pair.strip_prefix(name)?.strip_prefix('='))
+        .map(str::to_owned)
+}
+
+/// The editor at the address `src`, set up as its options ask, and the names
+/// its document binds.
+fn editor_at(src: &str) -> (crate::Editor, crate::gid_text::Binders) {
+    let document = option(src, "document").expect("a document");
     let (doc, names) = crate::gid_text::parse(&website(
         document
             .strip_prefix("../")
             .expect("a document beside the editor"),
     ))
     .unwrap();
-    let libraries = option("libraries");
-    let slots = option("tutorial-slots");
-    let mut stack = crate::web_embed::libraries(libraries.as_deref()).unwrap();
-    stack.projection =
-        crate::web_embed::tutorial_slots(slots.as_deref(), stack.projection, &stack.libraries)
-            .unwrap();
+    let mut stack = crate::web_embed::libraries(option(src, "libraries").as_deref()).unwrap();
+    stack.projection = crate::web_embed::tutorial_slots(
+        option(src, "tutorial-slots").as_deref(),
+        stack.projection,
+        &stack.libraries,
+    )
+    .unwrap();
     let mut editor = crate::test_editor_with_stack(doc, stack);
     editor.command_modifier = puri::keyboard::CommandModifier::Control;
-    editor.drawn_menu = option("menu").as_deref() != Some("hidden");
-    (
-        editor,
-        Page {
-            names,
-            libraries,
-            slots,
-            tasks,
-            done: 0,
-        },
-    )
+    editor.drawn_menu = option(src, "menu").as_deref() != Some("hidden");
+    (editor, names)
+}
+
+/// The editor `page` embeds in its section `id`, set up as the editor's
+/// address there asks, and the names its document binds.
+pub(super) fn embed(page: &str, id: &str) -> (crate::Editor, crate::gid_text::Binders) {
+    editor_at(&section(page, id).0)
 }
 
 impl Driver<Page> {
     pub(super) fn open(page: &str, id: &str) -> Self {
-        let (editor, page) = embed(page, id);
-        Self::embedded(editor, VIEWPORT, page)
+        let (src, tasks) = section(page, id);
+        let (editor, names) = editor_at(&src);
+        Self::embedded(
+            editor,
+            VIEWPORT,
+            Page {
+                names,
+                libraries: option(&src, "libraries"),
+                slots: option(&src, "tutorial-slots"),
+                tasks,
+                done: 0,
+            },
+        )
     }
 
     /// Begin the page's next numbered task, which must be `id`.

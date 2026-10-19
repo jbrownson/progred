@@ -163,10 +163,7 @@ impl<P> Driver<P> {
 
     /// The editor's command key, as a key press holds it.
     fn command(&self) -> Modifiers {
-        match self.editor().command_modifier {
-            puri::keyboard::CommandModifier::Meta => Modifiers::META,
-            puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
-        }
+        crate::test_support::command_keys(self.editor().command_modifier)
     }
 
     /// The text of the line the selection edits, if it edits one.

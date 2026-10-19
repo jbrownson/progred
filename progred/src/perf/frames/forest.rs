@@ -81,7 +81,7 @@ fn forest_slider_profile_loop() {
 fn forest_source_hover_profile_loop() {
     let (editor, names) = crate::test_examples::website_growing_forest_editor();
     let mut runner = crate::EditorRunner::new(editor);
-    let modifiers = crate::test_support::command();
+    let modifiers = crate::test_support::command_keys(runner.editor.command_modifier);
     runner.editor.modifiers = modifiers;
     runner.refresh_frame(1.0, SIZE);
     paint(&mut runner);

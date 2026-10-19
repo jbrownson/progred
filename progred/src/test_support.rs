@@ -332,7 +332,12 @@ pub(crate) fn positions(value: &Value) -> Vec<Position> {
 
 /// The keys of the platform's command modifier, for tests that press it.
 pub(crate) fn command() -> Modifiers {
-    match crate::modifiers::native() {
+    command_keys(crate::modifiers::native())
+}
+
+/// The keys a press holds for the command modifier `command`.
+pub(crate) fn command_keys(command: puri::keyboard::CommandModifier) -> Modifiers {
+    match command {
         puri::keyboard::CommandModifier::Meta => Modifiers::META,
         puri::keyboard::CommandModifier::Control => Modifiers::CONTROL,
     }

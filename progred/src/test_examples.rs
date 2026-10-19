@@ -74,6 +74,5 @@ pub fn cam_position(progress: f64) -> Value {
 /// The growing forest with all of its code, as tutorial.html's closing
 /// exercise embeds it.
 pub fn website_growing_forest_editor() -> (crate::Editor, crate::gid_text::Binders) {
-    let (editor, mut page) = crate::tutorials::embed("tutorial.html", "yours");
-    (editor, std::mem::take(&mut page.names))
+    crate::tutorials::embed("tutorial.html", "yours")
 }
