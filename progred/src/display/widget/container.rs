@@ -66,34 +66,23 @@ pub fn gate_starts<World: 'static, Input: 'static>(
     child: Handler<World, Input>,
     placement: Placement,
 ) -> Handler<World, Input> {
-    Handler::from_function(move |world, event, input| {
-        if let Event::Scroll(events) = event {
-            return puri::scroll::filter(
-                events,
-                |event| {
-                    placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                },
-                |events| child.dispatch(world, Event::Scroll(events), input),
-            );
+    Handler::from_function(move |world, event, input| match event {
+        Event::Scroll(events) => puri::scroll::filter(
+            events,
+            |event| placement.contains(Point::new(event.state.position.x, event.state.position.y)),
+            |events| child.dispatch(world, Event::Scroll(events), input),
+        ),
+        Event::Gesture(events) => puri::gesture::filter(
+            events,
+            |event| placement.contains(Point::new(event.state.position.x, event.state.position.y)),
+            |events| child.dispatch(world, Event::Gesture(events), input),
+        ),
+        Event::PointerDown(down)
+            if !placement.contains(Point::new(down.state.position.x, down.state.position.y)) =>
+        {
+            EventOutcome::decline(Event::PointerDown(down))
         }
-        if let Event::Gesture(events) = event {
-            return puri::gesture::filter(
-                events,
-                |event| {
-                    placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                },
-                |events| child.dispatch(world, Event::Gesture(events), input),
-            );
-        }
-        let position = match &event {
-            Event::PointerDown(event) => Some(event.state.position),
-            _ => None,
-        };
-        if position.is_some_and(|point| !placement.contains(Point::new(point.x, point.y))) {
-            EventOutcome::decline(event)
-        } else {
-            child.dispatch(world, event, input)
-        }
+        event => child.dispatch(world, event, input),
     })
 }
 

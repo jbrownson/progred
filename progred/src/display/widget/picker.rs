@@ -10,6 +10,7 @@ use crate::display::widget::placed::{before, decorate, on_key, text, text_edit};
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
 use crate::display::{Host, Toolkit};
 use crate::hover::Hover;
+use crate::location::Location;
 use crate::selection::{Selection, Stage};
 use gid::Step;
 use kurbo::{Insets, Point};
@@ -159,12 +160,23 @@ fn query_content<W: Host>(
     query: &LineEditState,
     picker: &Picker<W>,
 ) -> Measured<HoverPass<W, W::Hover>> {
-    let styles = toolkit.styles();
     // This is only reached for an active writable picker. Keep the boundary
     // total if a caller supplies an unmapped occurrence anyway.
-    let Some(location) = toolkit.location() else {
-        return crate::display::widget::empty(tcx, styles);
-    };
+    match toolkit.location() {
+        Some(location) => located_query(toolkit, tcx, &location, query, picker),
+        None => crate::display::widget::empty(tcx, toolkit.styles()),
+    }
+}
+
+/// [`query_content`] for a hole stored at `location`.
+fn located_query<W: Host>(
+    toolkit: &dyn Toolkit,
+    tcx: &mut TextCtx,
+    location: &Location<'_>,
+    query: &LineEditState,
+    picker: &Picker<W>,
+) -> Measured<HoverPass<W, W::Hover>> {
+    let styles = toolkit.styles();
     // The card and keyboard commit must answer from one list, read from
     // where the hole's location starts.
     let start = location.start;
@@ -284,30 +296,30 @@ fn query_content<W: Host>(
         .flatten();
     let card = before(card, move |p, _| {
         p.handler().on_key_with(move |world: &mut W, event, input| {
-            let Some(activate) = typed.as_ref().filter(|_| {
+            if let Some(activate) = typed.as_ref().filter(|_| {
                 event.state.is_down()
                     && event.key == Key::Named(NamedKey::Tab)
                     && !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.alt())
-            }) else {
-                return false;
-            };
-            activate(world);
-            let committed = {
-                let session = world.session();
-                session
-                    .model
-                    .selection
-                    .as_ref()
-                    .is_some_and(|selected| selected.stage(&session.sources()) == Stage::Edge)
-            };
-            if committed {
-                crate::display::widget::navigation::advance(
-                    world,
-                    input.geometry(scale),
-                    event.modifiers.shift(),
-                );
+            }) {
+                activate(world);
+                let committed =
+                    {
+                        let session = world.session();
+                        session.model.selection.as_ref().is_some_and(|selected| {
+                            selected.stage(&session.sources()) == Stage::Edge
+                        })
+                    };
+                if committed {
+                    crate::display::widget::navigation::advance(
+                        world,
+                        input.geometry(scale),
+                        event.modifiers.shift(),
+                    );
+                }
+                true
+            } else {
+                false
             }
-            true
         });
     });
     super::container::floating(trigger, card, move |placement, extent| {

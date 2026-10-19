@@ -22,26 +22,22 @@ pub fn insertion_gap<W: 'static, H: Clone + PartialEq + 'static>(
                 descent: height * scale,
             },
             move |output, placement| {
-                let Some(hover) = target else {
-                    return;
-                };
-                if placement.clipped_out() {
-                    return;
-                }
-                output.render(move |canvas, resolved| {
-                    if resolved.hovered.as_ref() == Some(&hover) {
-                        let rect = placement.visible_rect();
-                        let y = placement.rect.center().y;
-                        if y >= rect.y0 && y <= rect.y1 {
-                            canvas.stroke_shape(
-                                kurbo::Line::new((rect.x0, y), (rect.x1, y)).into(),
-                                Stroke::new(scale),
-                                brush,
-                                Affine::IDENTITY,
-                            );
+                if let Some(hover) = target.filter(|_| !placement.clipped_out()) {
+                    output.render(move |canvas, resolved| {
+                        if resolved.hovered.as_ref() == Some(&hover) {
+                            let rect = placement.visible_rect();
+                            let y = placement.rect.center().y;
+                            if y >= rect.y0 && y <= rect.y1 {
+                                canvas.stroke_shape(
+                                    kurbo::Line::new((rect.x0, y), (rect.x1, y)).into(),
+                                    Stroke::new(scale),
+                                    brush,
+                                    Affine::IDENTITY,
+                                );
+                            }
                         }
-                    }
-                });
+                    });
+                }
             },
         )
     }))

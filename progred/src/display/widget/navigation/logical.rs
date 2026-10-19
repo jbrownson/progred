@@ -271,9 +271,14 @@ impl Accumulator {
             ) {
                 self.lines.baseline = 0;
             }
-            self.child_index = 1;
-            return;
+        } else {
+            self.append(child);
         }
+        self.child_index += 1;
+    }
+
+    /// Joins a child after the first as this composition places it.
+    fn append(&mut self, child: Lines) {
         match self.composition {
             Composition::Row(RowAlignment::Baseline) | Composition::Layers => {
                 let baseline = self.lines.baseline.max(child.baseline);
@@ -302,7 +307,6 @@ impl Accumulator {
                 self.lines.rows.extend(child.rows);
             }
         }
-        self.child_index += 1;
     }
 }
 

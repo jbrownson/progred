@@ -65,15 +65,8 @@ pub(crate) fn handlers<W: Host>(
                         .contains(Point::new(event.state.position.x, event.state.position.y))
                     && match input.hovered().and_then(W::tree) {
                         Some(hover @ (Hover::Source(_) | Hover::Calls(_))) => {
-                            let target = {
-                                let session = world.session();
-                                let sources = session.sources();
-                                let Some(source) = hover_source(&sources, &input.landmarks, hover)
-                                else {
-                                    return true;
-                                };
-                                source_landmark(&sources, &input.landmarks, &source)
-                            };
+                            let target =
+                                drawn_source(&world.session().sources(), &input.landmarks, hover);
                             if let Some(target) = target {
                                 input.geometry(scale).arrive(world, target, None);
                             }
@@ -90,9 +83,7 @@ pub(crate) fn handlers<W: Host>(
                 && match input.hovered().and_then(W::tree) {
                     Some(hover @ (Hover::Source(_) | Hover::Calls(_))) => {
                         let session = world.session();
-                        let sources = session.sources();
-                        let target = hover_source(&sources, &input.landmarks, hover)
-                            .and_then(|source| source_landmark(&sources, &input.landmarks, &source))
+                        let target = drawn_source(&session.sources(), &input.landmarks, hover)
                             .and_then(|landmark| {
                                 landmark.root.clone().map(|root| (root, landmark.rect))
                             });
@@ -108,6 +99,16 @@ pub(crate) fn handlers<W: Host>(
             EventOutcome::from_handled(event, handled)
         });
     }
+}
+
+/// The landmark where the source `hover` rests on is drawn, if it is.
+fn drawn_source<'a, World>(
+    sources: &Sources<'_>,
+    landmarks: &'a [super::navigation::Landmark<World>],
+    hover: &Hover,
+) -> Option<&'a super::navigation::Landmark<World>> {
+    hover_source(sources, landmarks, hover)
+        .and_then(|source| source_landmark(sources, landmarks, &source))
 }
 
 /// Source availability is a property of this projection, not of evaluation or

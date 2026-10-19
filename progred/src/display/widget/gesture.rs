@@ -122,17 +122,18 @@ pub fn drag_outlined<W: 'static, H: 'static>(
             let scale = context.toolkit.styles().scale;
             let palette = context.toolkit.styles().palette;
             Box::new(move |child| {
-                if !writable {
-                    return child;
+                if writable {
+                    super::before_place(child, move |placement, output| {
+                        if output.input.picking && !placement.clipped_out() {
+                            let outline = super::style::highlight_outline(scale, placement.rect);
+                            output.render(move |canvas, _| {
+                                super::style::outline_wash(palette.literal, scale, canvas, outline);
+                            });
+                        }
+                    })
+                } else {
+                    child
                 }
-                super::before_place(child, move |placement, output| {
-                    if output.input.picking && !placement.clipped_out() {
-                        let outline = super::style::highlight_outline(scale, placement.rect);
-                        output.render(move |canvas, _| {
-                            super::style::outline_wash(palette.literal, scale, canvas, outline);
-                        });
-                    }
-                })
             })
         }),
     )
