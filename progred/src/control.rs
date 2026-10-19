@@ -14,7 +14,7 @@ use crate::driver::{Driver, keystroke_for};
 use crate::gid_text::{self, Binders};
 use crate::library::Libraries;
 use crate::sources::Sources;
-use gid::{CellId, Cells, Document, Value};
+use gid::{CellId, Cells, Document};
 use kurbo::{Point, Size, Vec2};
 use puri::draw::DrawList;
 use puri_vello::capture::Gpu;
@@ -225,16 +225,21 @@ fn respond(libraries: &Libraries, binders: &Binders, request: &[u8]) -> String {
     let result = std::str::from_utf8(request)
         .map_err(|error| error.to_string())
         .and_then(gid_text::parse)
-        .map(|(doc, _)| {
-            ::grap::evaluate_value(
-                doc.root.as_ref().unwrap_or(&Value::record([])),
-                &Sources {
-                    doc: &doc,
-                    libraries,
-                },
-                ::grap::DEFAULT_FUEL,
-            )
-            .result
+        .and_then(|(doc, _)| {
+            doc.root
+                .as_ref()
+                .map(|root| {
+                    ::grap::evaluate_value(
+                        root,
+                        &Sources {
+                            doc: &doc,
+                            libraries,
+                        },
+                        ::grap::DEFAULT_FUEL,
+                    )
+                    .result
+                })
+                .ok_or_else(|| "a request's root is the expression to evaluate".to_owned())
         })
         .unwrap_or_else(computer::invalid_request);
     gid_text::print(

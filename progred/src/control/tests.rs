@@ -1,7 +1,7 @@
 use super::computer::vocabulary::*;
 use super::*;
 use crate::libraries::{f64, text};
-use gid::Step;
+use gid::{Step, Value};
 use puri::keyboard::CommandModifier;
 
 fn session(root: Value) -> Rc<RefCell<Session>> {
@@ -158,12 +158,14 @@ fn scrolling_down_moves_a_long_document_up() {
 }
 
 #[test]
-fn requests_that_are_not_documents_say_so() {
+fn requests_that_are_not_documents_or_have_no_root_say_so() {
     let session = session(text::value("hello"));
     let binders = computer::binders();
-    let reply = respond(&Session::libraries(&session), &binders, b"{root: [}");
-    let root = gid_text::parse(&reply).unwrap().0.root.unwrap();
-    assert_eq!(::grap::absent::reason(&root), Some(INVALID_REQUEST));
+    for request in [&b"{root: [}"[..], b"{}"] {
+        let reply = respond(&Session::libraries(&session), &binders, request);
+        let root = gid_text::parse(&reply).unwrap().0.root.unwrap();
+        assert_eq!(::grap::absent::reason(&root), Some(INVALID_REQUEST));
+    }
 }
 
 #[test]
