@@ -70,7 +70,7 @@ pub(crate) fn tab(
 ) -> bool {
     event.state.is_down()
         && event.key == Key::Named(NamedKey::Tab)
-        && !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.alt())
+        && crate::modifiers::at_most_shift(&event.modifiers)
         && (advance(editor, geometry, event.modifiers.shift())
             || !cfg!(target_arch = "wasm32") && editor.model.selection.take().is_some())
 }

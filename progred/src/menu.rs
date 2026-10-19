@@ -224,8 +224,7 @@ pub fn navigate(
             Navigation::Handled
         }
         (Some(_), Key::Named(NamedKey::Escape | NamedKey::Tab))
-            if down
-                && !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.alt()) =>
+            if down && crate::modifiers::at_most_shift(&event.modifiers) =>
         {
             state.close();
             Navigation::Handled

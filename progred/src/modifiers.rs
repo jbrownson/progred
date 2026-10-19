@@ -26,7 +26,12 @@ pub(crate) fn chord(command: CommandModifier, event: &KeyboardEvent, key: &str) 
 }
 
 pub(crate) fn plain(modifiers: &Modifiers) -> bool {
-    !(modifiers.ctrl() || modifiers.meta() || modifiers.alt() || modifiers.shift())
+    at_most_shift(modifiers) && !modifiers.shift()
+}
+
+/// Whether `modifiers` hold no Ctrl, Meta or Alt; Shift may be held.
+pub(crate) fn at_most_shift(modifiers: &Modifiers) -> bool {
+    !(modifiers.ctrl() || modifiers.meta() || modifiers.alt())
 }
 
 #[cfg(test)]

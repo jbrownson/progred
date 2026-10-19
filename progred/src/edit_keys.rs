@@ -315,9 +315,7 @@ impl Editor {
         let replacing = match (&event.key, &self.model.selection) {
             (Key::Character(typed), Some(current))
                 if event.state.is_down()
-                    && !(event.modifiers.ctrl()
-                        || event.modifiers.meta()
-                        || event.modifiers.alt())
+                    && modifiers::at_most_shift(&event.modifiers)
                     && !typed.trim().is_empty()
                     && current.stage(&sources) == selection::Stage::Edge
                     && current.value(&sources).is_some()

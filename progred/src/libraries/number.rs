@@ -405,8 +405,7 @@ fn typed_operator(
     event: &ui_events::keyboard::KeyboardEvent,
     symbols: &[(&'static str, CellId)],
 ) -> Option<CellId> {
-    let plain = event.state.is_down()
-        && !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.alt());
+    let plain = event.state.is_down() && crate::modifiers::at_most_shift(&event.modifiers);
     match &event.key {
         ui_events::keyboard::Key::Character(typed) if plain => symbols
             .iter()

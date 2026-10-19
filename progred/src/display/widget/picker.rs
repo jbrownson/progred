@@ -295,11 +295,11 @@ fn located_query<W: Host>(
         .flatten();
     let card = before(card, move |p, _| {
         p.handler().on_key_with(move |world: &mut W, event, input| {
-            if let Some(activate) = typed.as_ref().filter(|_| {
-                event.state.is_down()
-                    && event.key == Key::Named(NamedKey::Tab)
-                    && !(event.modifiers.ctrl() || event.modifiers.meta() || event.modifiers.alt())
-            }) {
+            if event.state.is_down()
+                && event.key == Key::Named(NamedKey::Tab)
+                && crate::modifiers::at_most_shift(&event.modifiers)
+                && let Some(activate) = typed.as_ref()
+            {
                 activate(world);
                 let committed =
                     {
