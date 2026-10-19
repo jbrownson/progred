@@ -560,6 +560,24 @@ fn puri_commands_are_ordinary_display_data() {
 }
 
 #[test]
+fn a_path_that_does_not_start_by_moving_is_junk() {
+    let stroked = |elements: Vec<Value>| {
+        drawing(
+            10.0,
+            10.0,
+            0.0,
+            [stroke(
+                path(elements),
+                1.0,
+                Value::from(vocabulary::INK_FACE),
+            )],
+        )
+    };
+    assert!(decoded(&stroked(vec![line_to(5.0, 5.0), move_to(0.0, 0.0)])).is_none());
+    assert!(decoded(&stroked(vec![move_to(0.0, 0.0), line_to(5.0, 5.0)])).is_some());
+}
+
+#[test]
 fn junk_falls_through_whole() {
     assert!(decoded(&Value::record([])).is_none());
     assert!(decoded(&text::value("plain text is not a layout")).is_none());

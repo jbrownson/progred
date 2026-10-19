@@ -553,13 +553,14 @@ fn read_shape(value: &Value) -> Option<Shape> {
             ),
         )))
     } else if let Some(content) = fields.get(&vocabulary::PATH) {
-        Some(Shape::Path(
-            content
-                .as_list()?
-                .values()
-                .map(read_path_element)
-                .collect::<Option<BezPath>>()?,
-        ))
+        content
+            .as_list()?
+            .values()
+            .map(read_path_element)
+            .collect::<Option<Vec<_>>>()
+            // A path starts by moving to a point.
+            .filter(|elements| matches!(elements.first(), None | Some(PathEl::MoveTo(_))))
+            .map(|elements| Shape::Path(BezPath::from_vec(elements)))
     } else {
         None
     }
