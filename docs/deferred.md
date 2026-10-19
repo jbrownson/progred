@@ -711,6 +711,14 @@ Tab navigation, grow-selection commands, directional history, and moving a list
 item with a modifier-plus-arrow shortcut remain separate decisions. The range
 controls also remain pointer/touch-only.
 
+## One control-state model
+
+The plain `slider` hands each change to its Grap `on change` handler, which
+replaces the control state through `update`; the radio, the tree controls and a
+tree cursor's slider still store their values under keys in that state
+themselves. Moving them to the slider's value-and-handler interface would leave
+one model.
+
 ## Inline lists with block children
 
 An ordinary list's inline row uses its children's preferred forms, which can be

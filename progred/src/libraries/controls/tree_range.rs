@@ -227,12 +227,12 @@ pub(super) fn cursor_from_tree<W: Host>(
     let mut widgets = Vec::new();
     if let Some(slider) = selection.slider(position) {
         let selection = selection.clone();
-        widgets.push(slider_widget_with(
+        widgets.push(keyed_slider(
             key,
             slider,
             width,
             selection.ticks(),
-            Rc::new(move |position| cursor_state(&selection, position)),
+            move |position| cursor_state(&selection, position),
         ));
     }
     widgets.extend(selection.range_widgets(key, width, Some(position), decorate));

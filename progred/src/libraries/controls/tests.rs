@@ -512,7 +512,7 @@ fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
         .open(editor.session())
         .annotate(&root, &[], Value::record([(camera, A.into())]));
     let doc = editor.model.doc.clone();
-    let control = slider_widget(
+    let control = handler_slider(
         Slider::new(0.0, 1.0, 0.2).unwrap(),
         180.0,
         update_function().into(),
@@ -960,12 +960,12 @@ fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
     crate::editing::Scope::default()
         .open(editor.session())
         .annotate(&root, &[], Value::record([(camera, Value::record([]))]));
-    let control = slider_widget_with(
+    let control = keyed_slider(
         A,
         Slider::new(0.0, 1.0, 0.2).unwrap(),
         180.0,
         Vec::new(),
-        Rc::new(f64::value),
+        f64::value,
     );
     let measured = with_context(&Output::default(), |context| control(context));
     let height = measured.extent.height();
@@ -1083,7 +1083,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     let captured = RefCell::new(None);
     let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let expression = context.field(call, ITEMS).unwrap();
-        captured.replace(stored_tree_items(context, expression.clone()));
+        captured.replace(stored_item_links(context, expression.clone()));
         context.eval_to_value(expression, environment)
     };
     let result = ::grap::apply_value(
@@ -1244,7 +1244,7 @@ fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
     libraries.insert(library, definitions);
     let emit = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let expression = context.field(call, ITEMS).unwrap();
-        assert!(stored_tree_items::<crate::Editor>(context, expression.clone()).is_none());
+        assert!(stored_item_links::<crate::Editor>(context, expression.clone()).is_none());
         context.eval_to_value(expression, environment)
     };
     assert_eq!(

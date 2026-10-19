@@ -50,7 +50,8 @@ use presentation::vocabulary::VALUE;
 use vocabulary::*;
 
 type Widget<W> = widget::Widget<W, <W as Host>::Hover>;
-type Change = Rc<dyn Fn(&mut crate::editing::Session<'_>, &crate::editing::Site, Value)>;
+/// What a slider does with the value it's dragged to.
+type Change = Rc<dyn Fn(&mut crate::editing::Session<'_>, &crate::editing::Site, f64)>;
 
 const PADDING_X: f64 = 10.0;
 const PADDING_Y: f64 = 4.0;
@@ -154,9 +155,8 @@ fn apply_change(
 
 struct Drag {
     site: crate::editing::Site,
-    on_change: Change,
+    change: Change,
     slider: Slider,
-    value: Rc<dyn Fn(f64) -> Value>,
     rect: Rect,
     scale: f64,
 }
@@ -164,43 +164,43 @@ struct Drag {
 impl widget::gesture::Gesture for Drag {
     fn advance(&mut self, session: &mut crate::editing::Session<'_>, samples: &[Point]) -> bool {
         if let Some(point) = samples.last() {
-            (self.on_change)(
+            (self.change)(
                 session,
                 &self.site,
-                (self.value)(self.slider.value_at(self.rect, self.scale, *point)),
+                self.slider.value_at(self.rect, self.scale, *point),
             );
         }
         false
     }
 }
 
-fn slider_widget<W: Host>(slider: Slider, width: f64, handler: ::grap::RuntimeValue) -> Widget<W> {
+/// A slider whose changes go to its Grap `on change` handler.
+fn handler_slider<W: Host>(slider: Slider, width: f64, handler: ::grap::RuntimeValue) -> Widget<W> {
     slider_control(
         slider,
         width,
         Vec::new(),
-        Rc::new(f64::value),
         Rc::new(move |session, site, value| {
-            apply_change(session, site, &handler, value);
+            apply_change(session, site, &handler, f64::value(value));
         }),
     )
 }
 
-fn slider_widget_with<W: Host>(
+/// A slider that stores `value` of where it's dragged under `key`.
+fn keyed_slider<W: Host>(
     key: CellId,
     slider: Slider,
     width: f64,
     ticks: Vec<puri_widgets::slider::TickLevel>,
-    value: Rc<dyn Fn(f64) -> Value>,
+    value: impl Fn(f64) -> Value + 'static,
 ) -> Widget<W> {
     slider_control(
         slider,
         width,
         ticks,
-        value,
-        Rc::new(move |session, site, value| {
+        Rc::new(move |session, site, position| {
             let mut edit = site.open(session);
-            let state = set_state(edit.state(), key, value);
+            let state = set_state(edit.state(), key, value(position));
             edit.set_state(state);
         }),
     )
@@ -210,15 +210,13 @@ fn slider_control<W: Host>(
     slider: Slider,
     width: f64,
     ticks: Vec<puri_widgets::slider::TickLevel>,
-    value: Rc<dyn Fn(f64) -> Value>,
-    on_change: Change,
+    change: Change,
 ) -> Widget<W> {
     let ticks: Rc<[puri_widgets::slider::TickLevel]> = ticks.into();
     Rc::new(move |context| {
         let scale = context.viewing().scale();
         let site = context.site();
-        let value = value.clone();
-        let on_change = on_change.clone();
+        let change = change.clone();
         let ticks = ticks.clone();
         let rail = widget::leaf(
             Extent {
@@ -240,9 +238,8 @@ fn slider_control<W: Host>(
                         world.session().start_gesture(
                             Box::new(Drag {
                                 site: site.clone(),
-                                on_change: on_change.clone(),
+                                change: change.clone(),
                                 slider,
-                                value: value.clone(),
                                 rect: placement.rect,
                                 scale,
                             }),
@@ -436,7 +433,7 @@ fn controls_output<W: Host>(
             return Ok(context.effect(|| {
                 widgets
                     .borrow_mut()
-                    .push(slider_widget(slider, width - 2.0 * PADDING_X, handler));
+                    .push(handler_slider(slider, width - 2.0 * PADDING_X, handler));
                 RuntimeValue::f64(slider.value)
             }));
         }
@@ -512,7 +509,7 @@ fn controls_output<W: Host>(
             let Some(expression) = context.field(call, ITEMS) else {
                 return Ok(context.missing_runtime_argument(ITEMS));
             };
-            let decorate = stored_tree_items(context, expression.clone());
+            let decorate = stored_item_links(context, expression.clone());
             let items = context.eval_to_value(expression, environment)?;
             if ::grap::absent::is_absent(&items) {
                 return Ok(items.into());
@@ -599,7 +596,9 @@ fn controls_output<W: Host>(
     }
 }
 
-fn stored_tree_items<W: Host>(
+/// When `expression` is a list stored in source, a link from each of its
+/// items to where that item is stored.
+fn stored_item_links<W: Host>(
     context: &Context,
     expression: Expression,
 ) -> Option<tree_range::ItemDecoration<W>> {
