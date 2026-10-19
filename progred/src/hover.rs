@@ -102,6 +102,23 @@ impl SourceCalls {
         })
     }
 }
+
+/// `trace` as Grap records a source, the inverse of [`from_grap`].
+pub(crate) fn to_grap(trace: SourceTrace) -> grap::SourceOrigin {
+    match trace {
+        SourceTrace::Stored(path) => grap::SourceOrigin::Stored(path.to_vec()),
+        SourceTrace::InCell {
+            cell,
+            resolution,
+            path,
+        } => grap::SourceOrigin::Cell {
+            cell,
+            resolution,
+            path: path.to_vec(),
+        },
+    }
+}
+
 pub(crate) fn from_grap(
     origin: grap::SourceOrigin,
     input: Option<&SourceTrace>,

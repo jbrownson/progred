@@ -262,23 +262,16 @@ struct ProjectEnv<'a, 's> {
 }
 
 impl ProjectEnv<'_, '_> {
+    /// Where what Grap evaluates `steps` below this occurrence comes from.
     fn origin(&self, steps: &[Step]) -> Option<grap::SourceOrigin> {
-        let path: Vec<_> = self.path.iter().chain(steps).cloned().collect();
-        let location = self.cx.edits.location(&path)?;
-        Some(
-            match SourceTrace::from_location(&self.cx.sources, &location) {
-                SourceTrace::Stored(path) => grap::SourceOrigin::Stored(path.to_vec()),
-                SourceTrace::InCell {
-                    cell,
-                    resolution,
-                    path,
-                } => grap::SourceOrigin::Cell {
-                    cell,
-                    resolution,
-                    path: path.to_vec(),
-                },
+        crate::display::Toolkit::trace_below(
+            &Occurrence {
+                cx: self.cx,
+                path: self.path,
             },
+            steps,
         )
+        .map(crate::hover::to_grap)
     }
 }
 
