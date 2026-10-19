@@ -168,7 +168,7 @@ impl Editor {
                 if text.is_empty() {
                     return false;
                 }
-                selection::from_clipboard(&text)
+                selection::resolve_query(&text)
             }
         };
         self.paste_value(value)

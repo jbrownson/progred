@@ -353,7 +353,7 @@ fn a_shadowing_document_definition_stays_editable() {
     Rc::make_mut(&mut doc)
         .cells
         .set_value(cell, Value::list([]));
-    let pending = pending_into(&root, &Scope::default().view(src(&doc, &lib)), &[]).unwrap();
+    let pending = pending_into(&root, &Scope::default().view(src(&doc, &lib)), &[], true).unwrap();
     assert_eq!(
         pending.path().first(),
         Some(&Step::Follow(gid::Resolution::Document))
@@ -479,6 +479,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         &crate::test_root(),
         &sources,
         &[Step::Follow(gid::Resolution::Document), key("tags")],
+        true,
     )
     .unwrap();
     assert!(matches!(into.path().last(), Some(Step::Element(_))));
@@ -546,7 +547,7 @@ fn clipboard_spellings_round_trip() {
     for value in atoms {
         let (text, structural) = to_clipboard(&value);
         assert!(!structural);
-        assert_eq!(from_clipboard(&text), value);
+        assert_eq!(resolve_query(&text), value);
     }
     let structures = [
         Value::from(cell),
@@ -568,11 +569,11 @@ fn clipboard_spellings_round_trip() {
     assert_eq!(to_clipboard(&crate::test_values::text("hi")).0, "\"hi\"");
     assert_eq!(to_clipboard(&Value::from(vec![0xff_u8])).0, "0xff");
     assert_eq!(
-        from_clipboard("loose text"),
+        resolve_query("loose text"),
         crate::test_values::text("loose text")
     );
     let spelled = to_clipboard(&Value::record([])).0;
-    assert_eq!(from_clipboard(&spelled), crate::test_values::text(&spelled));
+    assert_eq!(resolve_query(&spelled), crate::test_values::text(&spelled));
 }
 
 #[test]

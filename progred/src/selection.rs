@@ -489,19 +489,17 @@ fn pending_beside(root: &Root, read: &Read, path: &[Step], after: bool) -> Optio
     Some(pending_in(root, read, fresh_path))
 }
 
-pub(crate) fn pending_after(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
-    pending_beside(root, read, path, true)
-}
-
-pub(crate) fn pending_before(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
-    pending_beside(root, read, path, false)
-}
-
 /// A pending element inside the list at `path` — inline, or a link's
-/// cell value, normalized through Follow — appended at the end or
-/// prepended at the front. Only lists take elements, by type, and
-/// the owning cell must be writable, as in [`pending_edge`].
-fn pending_into_at(root: &Root, read: &Read, path: &[Step], end: bool) -> Option<Selection> {
+/// cell value, normalized through Follow — appended at the `end`, as
+/// "add to this list" does, or else prepended at the front. Only lists
+/// take elements, by type, and the owning cell must be writable, as in
+/// [`pending_edge`].
+pub(crate) fn pending_into(
+    root: &Root,
+    read: &Read,
+    path: &[Step],
+    end: bool,
+) -> Option<Selection> {
     let value = read.resolve_path(path)?;
     let (list_path, elements) = match value {
         Value::List(elements) => (path.to_vec(), elements),
@@ -526,16 +524,6 @@ fn pending_into_at(root: &Root, read: &Read, path: &[Step], end: bool) -> Option
     Some(pending_in(root, read, fresh_path))
 }
 
-/// Appends: "add to this list" goes at the end — the within chord's
-/// meaning on a list, where fields don't exist.
-pub(crate) fn pending_into(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
-    pending_into_at(root, read, path, true)
-}
-
-pub(crate) fn pending_into_first(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
-    pending_into_at(root, read, path, false)
-}
-
 /// Plain Enter: a new peer BESIDE the selection — continue the
 /// enumeration you are in. An element pends a sibling (before with
 /// shift); a field value pends a new field on its parent; the root
@@ -551,18 +539,13 @@ pub(crate) fn pending_enter(
     if let Some((Step::Follow(_), reference)) = path.split_last() {
         return pending_enter(root, read, reference, before);
     }
-    let beside = if before {
-        pending_before(root, read, path)
-    } else {
-        pending_after(root, read, path)
-    };
-    beside
+    pending_beside(root, read, path, !before)
         .or_else(|| {
             path.split_last()
                 .and_then(|(_, parent)| pending_edge(root, read, parent.to_vec()))
         })
         .or_else(|| pending_edge(root, read, path.to_vec()))
-        .or_else(|| pending_into(root, read, path))
+        .or_else(|| pending_into(root, read, path, true))
 }
 
 /// The command chord: author WITHIN the selection — a new field on
@@ -576,10 +559,10 @@ pub(crate) fn pending_insert(
     front: bool,
 ) -> Option<Selection> {
     if front {
-        pending_into_first(root, read, path)
+        pending_into(root, read, path, false)
     } else {
         pending_edge(root, read, path.to_vec())
-            .or_else(|| pending_into(root, read, path))
+            .or_else(|| pending_into(root, read, path, true))
             .or_else(|| pending_follow(root, read, path))
     }
 }
@@ -626,13 +609,6 @@ pub fn to_clipboard(value: &Value) -> (String, bool) {
             true,
         ),
     }
-}
-
-/// The value clipboard TEXT denotes — always the query reading:
-/// quoted text, `0x` blobs, and bare text. Text is never structure;
-/// structure rides the private format, read by [`from_structure`].
-pub fn from_clipboard(text: &str) -> Value {
-    resolve_query(text)
 }
 
 /// The value the private clipboard format's bytes denote.

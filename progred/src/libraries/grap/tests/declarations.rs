@@ -414,7 +414,8 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
         let sources = src(&doc, &libraries);
         let scope = crate::editing::Scope::default();
         let list_path = &binder_path[..1];
-        let pending = pending_into(&crate::test_root(), &scope.view(sources), list_path).unwrap();
+        let pending =
+            pending_into(&crate::test_root(), &scope.view(sources), list_path, true).unwrap();
         let missing_path = pending.path().to_vec();
         assert!(sources.resolve_path(&missing_path).is_none());
         let mut world = editing_world(&doc, &libraries);
