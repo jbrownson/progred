@@ -270,29 +270,21 @@ fn operation(
                 context: &mut Context,
                 program: &RuntimeValue,
                 output: &Output,
-            ) -> Result<RuntimeValue, Halt> {
+            ) -> Result<RuntimeValue, Error> {
                 context.burn()?;
-                if let Some(list) = program.list_values() {
-                    for child in list {
-                        let value = sequence(context, &child, output)?;
-                        if value.absent_reason().is_some() {
-                            return Ok(value);
-                        }
-                    }
-                    Ok(RuntimeValue::record([]))
+                if let Some(mut list) = program.list_values() {
+                    list.try_for_each(|child| present(sequence(context, &child, output)?).map(drop))
+                        .map(|()| RuntimeValue::record([]))
                 } else {
                     context.effect(|| output.sink.borrow_mut().end_path());
                     let result = context.apply_expression(program, []);
                     context.effect(|| output.sink.borrow_mut().end_path());
-                    result
+                    Ok(result?)
                 }
             }
             let program = argument(context, call, PROGRAM)?;
-            let program = context.eval(program, environment)?;
-            if program.absent_reason().is_some() {
-                return Ok(program);
-            }
-            return Ok(sequence(context, &program, output)?);
+            let program = present(context.eval(program, environment)?)?;
+            sequence(context, &program, output)
         }
         START_AT | LINE_TO => {
             let point = point(context, call, environment)?;
@@ -309,6 +301,7 @@ fn operation(
             } else {
                 emission.line_to(point)?;
             }
+            Ok(RuntimeValue::record([]))
         }
         MAP_POINTS | MAP_AXES => {
             let mapper = argument(context, call, MAPPER)?;
@@ -323,26 +316,22 @@ fn operation(
             Rc::make_mut(&mut mappers.borrow_mut()).push(mapper);
             let value = context.eval(expression, environment);
             mappers.replace(parent);
-            return Ok(value?);
+            Ok(value?)
         }
         WITH_TOOL => {
             let tool = argument(context, call, cutter::vocabulary::TOOL)?;
             let expression = argument(context, call, ::grap::vocabulary::EXPRESSION)?;
-            let value = context.eval(tool, environment)?;
-            if value.absent_reason().is_some() {
-                return Ok(value);
-            }
+            let value = present(context.eval(tool, environment)?)?;
             let tool = cutter::Tool::read(value.as_value()).ok_or_else(invalid)?;
             // Release the sink borrow before evaluating the body: nested calls
             // emit into it too. Always leave the scope, including on a halt.
             context.effect(|| output.sink.borrow_mut().enter_tool(&tool));
             let value = context.eval(expression, environment);
             context.effect(|| output.sink.borrow_mut().leave_tool());
-            return Ok(value?);
+            Ok(value?)
         }
         _ => unreachable!("only toolpath emitters are installed in this scope"),
     }
-    Ok(RuntimeValue::record([]))
 }
 
 /// Run with caller-owned output. Consumers that need atomic results stage their
