@@ -183,19 +183,17 @@ impl EditorRunner {
     }
 
     pub(crate) fn focus_changed(&mut self, focused: bool, scale: f64, viewport: Size) -> bool {
-        // Alt+Tab away and back is no tap of Alt.
-        self.editor.menu.interrupt();
         if self.editor.focused == focused {
             false
         } else {
+            // Alt+Tab away and back is no tap of Alt.
+            self.editor.menu.interrupt();
             self.flush_pending_continuous();
-            if !focused {
-                self.editor.model.selection = None;
-            }
             self.editor.focused = focused;
             if focused {
                 self.refresh_frame(scale, viewport);
             } else {
+                self.editor.model.selection = None;
                 // Focus loss can take the release away from this window, so
                 // the press is forgotten and cancelled. Departure alone does
                 // not cancel: Winit forwards macOS drags outside the client

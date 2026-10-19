@@ -114,6 +114,29 @@ fn tapping_alt_enters_and_leaves_the_bar_unless_something_comes_between() {
 }
 
 #[test]
+fn tapping_alt_enters_the_bar_when_the_page_reports_focus_before_each_key() {
+    let mut driver = empty();
+    let scale = driver.runner.editor.zoom;
+    for (state, modifiers) in [
+        (KeyState::Down, Modifiers::ALT),
+        (KeyState::Up, Modifiers::empty()),
+    ] {
+        driver.runner.focus_changed(true, scale, VIEWPORT);
+        driver.runner.forwarded_key(
+            &KeyboardEvent {
+                key: Key::Named(NamedKey::Alt),
+                state,
+                modifiers,
+                ..Default::default()
+            },
+            scale,
+            VIEWPORT,
+        );
+    }
+    assert_eq!(driver.runner.editor.menu.open(), Some(0));
+}
+
+#[test]
 fn disabled_items_and_outside_clicks_do_not_reach_the_document() {
     let mut driver = empty();
     let edit = point_for(&driver, Hover::Heading(2));
