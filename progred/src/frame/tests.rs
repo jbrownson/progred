@@ -1231,7 +1231,9 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
                         let height =
                             f64::read(&context.eval_to_value(height, environment)?).unwrap();
                         calls.borrow_mut().push(Size::new(width, height));
-                        Ok(layout::selectable(layout::drawing(width, 0.0, height, [])))
+                        Ok(layout::test_support::selectable(
+                            layout::test_support::drawing(width, 0.0, height, []),
+                        ))
                     }
                 }),
             ),

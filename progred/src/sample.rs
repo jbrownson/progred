@@ -132,16 +132,16 @@ pub fn at_display_partial() -> Value {
                                         Value::from(control::vocabulary::QUOTE),
                                         [(
                                             grap::vocabulary::EXPRESSION,
-                                            layout::on(
-                                                layout::row(
+                                            layout::test_support::on(
+                                                layout::test_support::row(
                                                     4.0,
                                                     [
-                                                        layout::drawing(
+                                                        layout::test_support::drawing(
                                                             10.0,
                                                             8.0,
                                                             2.0,
-                                                            [layout::stroke(
-                                                                layout::rounded_rect(
+                                                            [layout::test_support::stroke(
+                                                                layout::test_support::rounded_rect(
                                                                     0.5, 0.5, 9.0, 9.0, 2.0,
                                                                 ),
                                                                 1.0,
@@ -151,7 +151,7 @@ pub fn at_display_partial() -> Value {
                                                             )],
                                                         ),
                                                         spliced_text(sample_vocabulary::ROW),
-                                                        layout::text_leaf(
+                                                        layout::test_support::text_leaf(
                                                             "×",
                                                             layout::vocabulary::DIM_FACE,
                                                         ),

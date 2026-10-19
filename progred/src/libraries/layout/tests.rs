@@ -1,3 +1,4 @@
+use super::test_support::*;
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::text;

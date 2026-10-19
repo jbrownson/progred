@@ -308,7 +308,10 @@ fn nested_failures_propagate_and_recovery_is_not_overridden_by_the_scope() {
 
 #[test]
 fn scope_does_not_reinterpret_plain_values_or_escape_into_returned_closures() {
-    let value = super::super::row(2.0, [super::super::text_leaf("data", NAME_FACE)]);
+    let value = super::super::test_support::row(
+        2.0,
+        [super::super::test_support::text_leaf("data", NAME_FACE)],
+    );
     let (result, layout) = evaluate(&quote(value.clone()), 10000);
     assert_eq!(result.result.to_value(), value);
     assert!(layout.is_none());

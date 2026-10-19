@@ -46,7 +46,7 @@ fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {
                     (layout::vocabulary::HEIGHT, f64::value(160.25)),
                 ]
             );
-            layout::drawing(420.5, 0.0, 160.25, []).into()
+            layout::test_support::drawing(420.5, 0.0, 160.25, []).into()
         }
         fn evaluate_runtime(&self, _: &RuntimeValue, _: usize, _: &[Step]) -> RuntimeValue {
             panic!("viewport sources are passed as data")

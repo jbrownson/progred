@@ -91,7 +91,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
             [
                 (
                     vocabulary::SHAPE,
-                    crate::libraries::layout::rect(0.0, 0.0, 10.0, 10.0),
+                    super::super::test_support::rect(0.0, 0.0, 10.0, 10.0),
                 ),
                 (
                     vocabulary::PAINT,

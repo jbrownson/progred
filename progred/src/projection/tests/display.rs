@@ -408,14 +408,14 @@ fn a_projection_defined_as_data_realizes() {
     // intents and realized through the ordinary pipeline — the same
     // boundary a Grap-backed library projection can use.
     fn probe(input: &ProjectionInput<'_>) -> Option<Layout> {
-        use crate::libraries::layout as data;
+        use crate::libraries::layout::{test_support as data, vocabulary};
         input.value?.as_blob()?;
         data::decode(
             &data::selectable(data::row(
                 4.0,
                 [
-                    data::text_leaf("from", data::vocabulary::NAME_FACE),
-                    data::text_leaf("data", data::vocabulary::DIM_FACE),
+                    data::text_leaf("from", vocabulary::NAME_FACE),
+                    data::text_leaf("data", vocabulary::DIM_FACE),
                 ],
             )),
             &input.site(),

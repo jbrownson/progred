@@ -190,7 +190,7 @@ fn drawing_frame(
     libraries: &Libraries,
     shape_function: CellId,
 ) -> Measured<HoverPass<crate::Editor>> {
-    let drawing = layout_data::program_drawing(
+    let drawing = layout_data::test_support::program_drawing(
         40.0,
         0.0,
         40.0,
@@ -209,8 +209,9 @@ fn drawing_frame(
             ],
         ),
     );
-    let layout = layout_data::decode(&drawing, &crate::libraries::test_widgets::test_site())
-        .expect("a program drawing decodes");
+    let layout =
+        layout_data::test_support::decode(&drawing, &crate::libraries::test_widgets::test_site())
+            .expect("a program drawing decodes");
     let mut build = measured::choices::ChoiceBuild::default();
     let prepared = crate::display::test_support::with_sources(
         Sources { doc, libraries },
@@ -231,7 +232,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
             shape_function,
             grap::ForeignFunction::from_value(move |_, _, _| {
                 count.set(count.get() + 1);
-                Ok(layout_data::rect(0.0, 0.0, 10.0, 10.0))
+                Ok(layout_data::test_support::rect(0.0, 0.0, 10.0, 10.0))
             }),
         ),
     ));
@@ -341,7 +342,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
                 grap::ForeignFunctions::default().register(
                     shape_function,
                     grap::ForeignFunction::from_value(move |_, _, _| {
-                        Ok(layout_data::rect(0.0, 0.0, width, 10.0))
+                        Ok(layout_data::test_support::rect(0.0, 0.0, width, 10.0))
                     }),
                 ),
             ),

@@ -53,7 +53,7 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
             ],
         )
     } else {
-        quote(layout::row(
+        quote(layout::test_support::row(
             6.0,
             [
                 Value::record([(
@@ -66,7 +66,7 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
                         ),
                     ]),
                 )]),
-                layout::text_leaf("value", l::STRING_FACE),
+                layout::test_support::text_leaf("value", l::STRING_FACE),
             ],
         ))
     };
@@ -86,7 +86,7 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
             )],
         )
     } else {
-        quote(layout::col(
+        quote(layout::test_support::col(
             0,
             2.0,
             calls.map(|call| Value::record([(control::UNQUOTE, call)])),

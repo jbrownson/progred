@@ -38,9 +38,9 @@ fn last_kind(world: &crate::Editor) -> Option<CellId> {
 fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
     fn probe(input: &ProjectionInput<'_>) -> Option<Layout> {
         input.value?.as_blob()?;
-        layout_data::decode(
-            &layout_data::on(
-                layout_data::text_leaf("go", event_fields::NAME_FACE),
+        layout_data::test_support::decode(
+            &layout_data::test_support::on(
+                layout_data::test_support::text_leaf("go", event_fields::NAME_FACE),
                 grap::lambda(
                     [event_fields::EVENT],
                     grap::call(
