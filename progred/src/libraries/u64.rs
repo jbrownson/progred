@@ -2,6 +2,7 @@
 
 use crate::display::Host;
 use crate::libraries::{Library, number};
+use ::grap::RuntimeValue;
 use gid::{CellId, Value};
 
 pub const ID: CellId = CellId::from_u128(0xb7212cd0aed055a7a2fbe4036b7f3e51);
@@ -25,16 +26,15 @@ pub mod vocabulary {
 }
 
 pub fn value(value: u64) -> Value {
-    Value::record([(vocabulary::U64, Value::from(value.to_le_bytes().to_vec()))])
+    number::le_value(vocabulary::U64, value.to_le_bytes())
 }
 
 pub fn read(value: &Value) -> Option<u64> {
-    value
-        .as_record()?
-        .get(&vocabulary::U64)
-        .and_then(Value::as_blob)
-        .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
-        .map(u64::from_le_bytes)
+    number::le_bytes(value, vocabulary::U64).map(u64::from_le_bytes)
+}
+
+fn read_runtime(value: &RuntimeValue) -> Option<u64> {
+    number::le_runtime_bytes(value, vocabulary::U64).map(u64::from_le_bytes)
 }
 
 impl number::Scrubbable for u64 {
@@ -74,13 +74,9 @@ pub(crate) fn convention() -> number::Convention<u64> {
         invalid_input: vocabulary::INVALID_INPUT,
         encode: value,
         runtime: |number| value(number).into(),
-        read: |value| {
-            Some(u64::from_le_bytes(
-                value.field(vocabulary::U64)?.as_blob()?.try_into().ok()?,
-            ))
-        },
+        read: read_runtime,
         eval: |context, expression, environment| {
-            Ok(read(&context.eval_to_value(expression, environment)?))
+            Ok(read_runtime(&context.eval(expression, environment)?))
         },
     }
 }

@@ -41,6 +41,24 @@ pub fn library<W: Host>() -> Library<W> {
     )
 }
 
+/// `bytes` under `tag`: how f32 and u64 encode a number, little-endian.
+pub(crate) fn le_value<const N: usize>(tag: CellId, bytes: [u8; N]) -> Value {
+    Value::record([(tag, Value::from(bytes.to_vec()))])
+}
+
+/// The bytes `le_value` put under `tag`, if there are `N` of them.
+pub(crate) fn le_bytes<const N: usize>(value: &Value, tag: CellId) -> Option<[u8; N]> {
+    value.as_record()?.get(&tag)?.as_blob()?.try_into().ok()
+}
+
+/// `le_bytes` of a runtime value, read without materializing it.
+pub(crate) fn le_runtime_bytes<const N: usize>(
+    value: &RuntimeValue,
+    tag: CellId,
+) -> Option<[u8; N]> {
+    value.field(tag)?.as_blob()?.try_into().ok()
+}
+
 pub(crate) fn completions<N: std::str::FromStr + Display>(
     query: &str,
     representation: CellId,
