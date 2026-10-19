@@ -190,7 +190,9 @@ fn final_only_tiles_validate_depth_and_propagate_cancellation() {
 fn assembly_matches_renderer_at_every_pixel_with_parallel_out_of_order_tiles() {
     let request = super::super::tests::request(41.0, 27.0);
     let cancel = incremental::Cancellation::default();
-    let scene = SoftwareScene::new(&request.preview.objects, &cancel).unwrap();
+    let scene = SoftwareScene::new(&request.preview.objects, &cancel)
+        .unwrap()
+        .unwrap();
     let view = request.view().view_at(request.pixels);
     let assembly = Mutex::new(Assembly::new(41, 27, view.size.depth(), None));
     let shade = shading(&VoxelRenderConfig {

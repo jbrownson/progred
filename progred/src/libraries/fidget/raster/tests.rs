@@ -35,7 +35,9 @@ pub(super) fn request(width: f64, height: f64) -> Request {
 fn prepared_scene_matches_fresh_compilation_across_views_and_cancellation() {
     let mut request = request(41.0, 27.0);
     let preparation = incremental::Cancellation::default();
-    let scene = SoftwareScene::new(&request.preview.objects, &preparation).unwrap();
+    let scene = SoftwareScene::new(&request.preview.objects, &preparation)
+        .unwrap()
+        .unwrap();
     // The prepared result must not retain the preparation job's cancel flag.
     preparation.cancel();
     for yaw in [0.0, 30.0, 90.0] {

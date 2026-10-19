@@ -21,9 +21,9 @@ impl Request {
         else {
             return Ok(None);
         };
-        let scene = SoftwareScene::new(&self.preview.objects, cancel);
-        cancel.check()?;
-        let Some(scene) = scene else { return Ok(None) };
+        let Some(scene) = SoftwareScene::new(&self.preview.objects, cancel)? else {
+            return Ok(None);
+        };
         let mut views = views.into_iter().peekable();
         while let Some(view) = views.next() {
             cancel.check()?;

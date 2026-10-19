@@ -829,7 +829,10 @@ fn cpu_volume(
     view: &VolumeView,
     cancellation: &incremental::Cancellation,
 ) -> Option<Vec<u8>> {
-    raster::SoftwareScene::new(objects, cancellation)?.render(view, cancellation)
+    raster::SoftwareScene::new(objects, cancellation)
+        .ok()
+        .flatten()?
+        .render(view, cancellation)
 }
 
 #[derive(Default)]

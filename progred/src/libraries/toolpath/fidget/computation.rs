@@ -167,14 +167,11 @@ pub(crate) fn image(
         ready,
         permitted,
         |request, cancel| {
-            let objects = match scene(request) {
-                Ok(objects) => objects,
-                Err(failure) => return Ok(Err(failure)),
-            };
-            cancel.check()?;
-            let compiled = SoftwareScene::new(&objects, cancel);
-            cancel.check()?;
-            Ok(compiled.ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)))
+            Ok(match scene(request) {
+                Ok(objects) => SoftwareScene::new(&objects, cancel)?
+                    .ok_or_else(|| ::grap::absent::value(fidget::vocabulary::INVALID_FIELD)),
+                Err(failure) => Err(failure),
+            })
         },
         move |scene, view, cancel, publish, progress| {
             Ok(view

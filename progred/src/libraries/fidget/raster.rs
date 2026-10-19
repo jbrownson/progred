@@ -51,17 +51,27 @@ pub(crate) struct SoftwareScene {
 }
 
 impl SoftwareScene {
-    pub fn new(objects: &[SceneObject], cancel: &incremental::Cancellation) -> Option<Self> {
-        let mut compiled = Vec::with_capacity(objects.len());
-        for object in objects {
-            cancel.check().ok()?;
-            compiled.push(VmShape::from(object.tree.clone()).try_into().ok()?);
-        }
-        cancel.check().ok()?;
-        Some(Self {
-            scene: fidget_engine::raster::voxel::Scene::new(compiled, &render_cancel(cancel))?,
+    /// None when an object doesn't compile; an error once `cancel` is cancelled.
+    pub fn new(
+        objects: &[SceneObject],
+        cancel: &incremental::Cancellation,
+    ) -> Result<Option<Self>, incremental::Error> {
+        let compiled = objects
+            .iter()
+            .map(|object| {
+                cancel.check()?;
+                Ok(VmShape::from(object.tree.clone()).try_into().ok())
+            })
+            .collect::<Result<Option<Vec<_>>, _>>()?;
+        cancel.check()?;
+        let scene = compiled.and_then(|compiled| {
+            fidget_engine::raster::voxel::Scene::new(compiled, &render_cancel(cancel))
+        });
+        cancel.check()?;
+        Ok(scene.map(|scene| Self {
+            scene,
             colors: objects.iter().map(|o| o.color).collect(),
-        })
+        }))
     }
 
     pub(super) fn render(
@@ -217,18 +227,17 @@ impl Request {
         publish: &mut (dyn FnMut(DepthImage) -> Result<(), incremental::Error> + Send),
         progress: Option<&(dyn Fn(Progress) + Sync)>,
     ) -> Result<Option<DepthImage>, incremental::Error> {
-        cancel.check()?;
-        let scene = SoftwareScene::new(&self.preview.objects, cancel);
-        cancel.check()?;
-        let Some(scene) = scene else { return Ok(None) };
-        self.view().render(
-            &scene,
-            passes,
-            final_depth_multiplier,
-            cancel,
-            publish,
-            progress,
-        )
+        match SoftwareScene::new(&self.preview.objects, cancel)? {
+            Some(scene) => self.view().render(
+                &scene,
+                passes,
+                final_depth_multiplier,
+                cancel,
+                publish,
+                progress,
+            ),
+            None => Ok(None),
+        }
     }
 }
 
