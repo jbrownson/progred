@@ -1,6 +1,7 @@
-//! Test helpers shared by several modules' tests: sources over the core
-//! libraries, small documents, key events, and completion offers, read
-//! directly or through a projection.
+//! Test helpers shared by several modules' tests: editors and sources over
+//! small documents and the core libraries, libraries of a test's own, Grap
+//! hosts that evaluate with a library's functions, key events, and
+//! completion offers, read directly or through a projection.
 
 use crate::display::CompletionKind;
 use crate::display::widget::offers::Entry;

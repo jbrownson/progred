@@ -1,5 +1,9 @@
-//! A recording interpreter for projection calls. Production programs retain
-//! no parallel request encoding; tests obtain one by running the same function.
+//! The display layer's test harness: placed frames resolved for dispatch; a
+//! recording interpreter for projection calls (production programs retain no
+//! parallel request encoding; tests obtain one by running the same
+//! function); widget contexts over small views and the fonts they measure
+//! with; placed decorations; painted commands and landmark lookup; and
+//! pointer events.
 
 use puri::handler::Handler;
 
