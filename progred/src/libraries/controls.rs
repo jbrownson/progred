@@ -378,12 +378,9 @@ fn controls_over<W: Host>(
     view: ChoiceLayout<widget::HoverPass<W, W::Hover>>,
     controls: Vec<measured::Measured<widget::HoverPass<W, W::Hover>>>,
 ) -> ChoiceLayout<widget::HoverPass<W, W::Hover>> {
+    // The padding is part of the control surface too, not an orbit handle.
     let controls = widget::before_place(measured::col(0, 0.0, controls), |placement, output| {
-        output.claim(puri::hover::Probe::occludes(placement));
-        // The padding is part of the control surface too, not an orbit handle.
-        output.handler().on_pointer_down(move |_, event| {
-            placement.contains(Point::new(event.state.position.x, event.state.position.y))
-        });
+        output.occlude(placement)
     });
     ChoiceLayout::attach(view, ChoiceLayout::fixed(controls), |view, controls| {
         measured::overlay_into(view, controls, |placement, extent| {
@@ -409,19 +406,21 @@ fn controls_output<W: Host>(
     let widgets: RefCell<Vec<Widget<W>>> = RefCell::new(Vec::new());
     // Each control spans the width inside its padding.
     let width = width - 2.0 * PADDING_X;
-    let emit =
-        |function, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
-            match function {
-                SLIDER => slider(context, call, environment, width, &widgets),
-                RADIO => radio(context, call, environment, state, width, &widgets),
-                TREE_RANGE => tree_range(context, call, environment, state, width, &widgets),
-                TREE_CURSOR => tree_cursor(context, call, environment, state, width, &widgets),
-                TREE_PROGRAM_CURSOR => {
-                    tree_program_cursor(context, call, environment, state, width, frame, &widgets)
-                }
-                _ => unreachable!("the overlay calls only the controls"),
+    let emit = |function,
+                context: &mut Context<'_>,
+                call: &Expression,
+                environment: &Environment| {
+        match function {
+            SLIDER => slider(context, call, environment, width, &widgets),
+            RADIO => radio(context, call, environment, state, width, &widgets),
+            TREE_RANGE => tree_range_control(context, call, environment, state, width, &widgets),
+            TREE_CURSOR => tree_cursor(context, call, environment, state, width, &widgets),
+            TREE_PROGRAM_CURSOR => {
+                tree_program_cursor(context, call, environment, state, width, frame, &widgets)
             }
-        };
+            _ => unreachable!("the overlay calls only the controls"),
+        }
+    };
     let evaluation = ::grap::apply(
         controls,
         [
@@ -544,7 +543,7 @@ fn radio<W: Host>(
     }))
 }
 
-fn tree_range<W: Host>(
+fn tree_range_control<W: Host>(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
