@@ -503,41 +503,35 @@ impl Workspace {
     }
 
     pub fn start_resize(&mut self, divider: Divider, start: Vec2) -> bool {
-        let (before, after) = match &divider {
-            Divider::Columns(Side::Left) => (self.left_width, 0.0),
-            Divider::Columns(Side::Right) => (self.right_width, 0.0),
+        let sizes = match &divider {
+            Divider::Columns(Side::Left) => Some((self.left_width, 0.0)),
+            Divider::Columns(Side::Right) => Some((self.right_width, 0.0)),
             Divider::Panes {
                 side,
                 before,
                 after,
             } => {
-                let column = self.column(*side);
-                let Some(before) = column
-                    .panes
-                    .iter()
-                    .find(|pane| pane.view.root == *before)
-                    .map(|pane| pane.height)
-                else {
-                    return false;
+                let height = |root: &Root| {
+                    self.column(*side)
+                        .panes
+                        .iter()
+                        .find(|pane| pane.view.root == *root)
+                        .map(|pane| pane.height)
                 };
-                let Some(after) = column
-                    .panes
-                    .iter()
-                    .find(|pane| pane.view.root == *after)
-                    .map(|pane| pane.height)
-                else {
-                    return false;
-                };
-                (before, after)
+                height(before).zip(height(after))
             }
         };
-        self.dragging = Some(Drag {
-            divider,
-            start,
-            before,
-            after,
-        });
-        true
+        if let Some((before, after)) = sizes {
+            self.dragging = Some(Drag {
+                divider,
+                start,
+                before,
+                after,
+            });
+            true
+        } else {
+            false
+        }
     }
 
     pub fn resize(&mut self, divider: &Divider, point: Vec2, size: Size) -> bool {

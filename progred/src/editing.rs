@@ -177,38 +177,35 @@ pub(crate) fn author_in<W>(
         .iter()
         .rposition(|step| !matches!(step, Step::Follow(_)))
         .map_or(&[][..], |last| &container[..=last]);
-    let Some(current) = session
+    let within = command.pressed(&event.modifiers);
+    let sources = session.sources();
+    let pending = session
         .model
         .selection
         .as_ref()
-        .filter(|current| current.root() == root && current.path().starts_with(reached))
-    else {
-        return false;
-    };
-    let sources = session.sources();
-    if current.stage(&sources) != selection::Stage::Edge
-        || current.value_edit().is_some() && !command.pressed(&event.modifiers)
-    {
-        return false;
+        .filter(|current| {
+            current.root() == root
+                && current.path().starts_with(reached)
+                && current.stage(&sources) == selection::Stage::Edge
+                && (current.value_edit().is_none() || within)
+        })
+        .and_then(|_| enter_pending(session, within, event.modifiers.shift()))
+        .filter(|pending| {
+            let lands = match pending.stage(&sources) {
+                selection::Stage::Label => pending.path(),
+                _ => pending
+                    .path()
+                    .split_last()
+                    .map_or(&[][..], |(_, parent)| parent),
+            };
+            lands == container
+        });
+    match pending {
+        Some(pending) => {
+            session.model.selection = Some(pending);
+            geometry.reveal_selection(session.model);
+            true
+        }
+        None => false,
     }
-    let Some(pending) = enter_pending(
-        session,
-        command.pressed(&event.modifiers),
-        event.modifiers.shift(),
-    ) else {
-        return false;
-    };
-    let lands = match pending.stage(&sources) {
-        selection::Stage::Label => pending.path(),
-        _ => pending
-            .path()
-            .split_last()
-            .map_or(&[][..], |(_, parent)| parent),
-    };
-    if lands != container {
-        return false;
-    }
-    session.model.selection = Some(pending);
-    geometry.reveal_selection(session.model);
-    true
 }

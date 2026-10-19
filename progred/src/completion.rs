@@ -15,51 +15,44 @@ pub(crate) fn commit(
     definition: Option<Value>,
     on_commit: Option<Continuation>,
 ) -> bool {
-    let Some((root, scope)) = session
-        .model
-        .selection
-        .as_ref()
-        .map(|selection| (selection.root().clone(), selection.scope().clone()))
-    else {
-        return false;
-    };
     let before = session.model.snapshot();
     let model = &mut *session.model;
     let libraries = session.libraries;
-    let (Some(selection), Some(view)) = (model.selection.as_ref(), model.workspace.view_mut(&root))
-    else {
-        return false;
-    };
-    let Some(prepared) = prepare(
-        &Sources {
-            doc: &model.doc,
-            libraries,
-        },
-        selection,
-        &view.annotations,
-        value,
-        definition,
-        on_commit.as_ref(),
-    ) else {
-        return false;
-    };
-    if prepared.document_changed {
-        model.doc = prepared.document;
-        model.history.record(before);
+    if let Some(selection) = &model.selection
+        && let Some(view) = model.workspace.view_mut(selection.root())
+        && let Some(prepared) = prepare(
+            &Sources {
+                doc: &model.doc,
+                libraries,
+            },
+            selection,
+            &view.annotations,
+            value,
+            definition,
+            on_commit.as_ref(),
+        )
+    {
+        let (root, scope) = (selection.root().clone(), selection.scope().clone());
+        if prepared.document_changed {
+            model.doc = prepared.document;
+            model.history.record(before);
+        }
+        crate::site::install_scoped(
+            prepared.effects,
+            &Sources {
+                doc: &model.doc,
+                libraries,
+            },
+            &root,
+            scope,
+            &prepared.path,
+            &mut view.annotations,
+            &mut model.selection,
+        );
+        true
+    } else {
+        false
     }
-    crate::site::install_scoped(
-        prepared.effects,
-        &Sources {
-            doc: &model.doc,
-            libraries,
-        },
-        &root,
-        scope,
-        &prepared.path,
-        &mut view.annotations,
-        &mut model.selection,
-    );
-    true
 }
 
 pub(crate) struct Prepared {

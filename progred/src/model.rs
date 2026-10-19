@@ -105,11 +105,10 @@ impl Model {
         let changed = self.workspace.view_mut(root).is_some_and(|view| {
             let previous = crate::annotations::folded(view.annotations.at(path), default);
             let next = closed.unwrap_or(!previous);
-            if previous == next {
-                return false;
+            previous != next && {
+                crate::annotations::set_collapsed(&mut view.annotations, path, default, next);
+                true
             }
-            crate::annotations::set_collapsed(&mut view.annotations, path, default, next);
-            true
         });
         if changed {
             self.break_edit_run();

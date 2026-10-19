@@ -254,68 +254,82 @@ fn event_foreign(
     path: &[gid::Step],
     staged: &RefCell<PendingChanges>,
 ) -> Result<Value, grap::Halt> {
-    if function == vocabulary::PATH {
-        return Ok(grap::path::value(path));
-    }
-    if function == vocabulary::GET {
-        return Ok(staged
+    match function {
+        vocabulary::PATH => Ok(grap::path::value(path)),
+        vocabulary::GET => Ok(staged
             .borrow()
             .annotation
             .clone()
-            .unwrap_or_else(|| absent::value(vocabulary::NO_STATE)));
-    }
-    if function == vocabulary::SELECTION_GET {
-        return Ok(staged
+            .unwrap_or_else(|| absent::value(vocabulary::NO_STATE))),
+        vocabulary::SET => set_state(context, call, environment, staged),
+        vocabulary::SELECTION_GET => Ok(staged
             .borrow()
             .selection
             .as_ref()
             .filter(|(selected_path, _)| selected_path == path)
             .map(|(_, payload)| payload.clone())
-            .unwrap_or_else(|| absent::value(vocabulary::NO_SELECTION)));
+            .unwrap_or_else(|| absent::value(vocabulary::NO_SELECTION))),
+        vocabulary::SELECTION_SET => set_selection(context, call, environment, staged),
+        _ => unreachable!("only site and selection capabilities are installed in this scope"),
     }
-    if function == vocabulary::SELECTION_SET {
-        let Some(expression) = context.field(call, vocabulary::SELECTION_PATH) else {
-            return Ok(context.missing_argument(vocabulary::SELECTION_PATH));
-        };
-        let encoded = context.eval_to_value(expression, environment)?;
-        let Some(path) = grap::path::read(&encoded) else {
-            return Ok(absent::with_detail(
-                grap::path::vocabulary::INVALID_PATH,
-                vocabulary::VALUE,
-                encoded,
-            ));
-        };
-        let Some(expression) = context.field(call, vocabulary::VALUE) else {
-            return Ok(context.missing_argument(vocabulary::VALUE));
-        };
-        let value = context.eval_to_value(expression, environment)?;
+}
+
+/// SET: stages VALUE, evaluated, as the site's state, or clears it when
+/// VALUE is absent.
+fn set_state(
+    context: &mut grap::Context,
+    call: &grap::Expression,
+    environment: &grap::Environment,
+    staged: &RefCell<PendingChanges>,
+) -> Result<Value, grap::Halt> {
+    let Some(expression) = context.field(call, vocabulary::VALUE) else {
+        return Ok(context.missing_argument(vocabulary::VALUE));
+    };
+    let value = context.eval_to_value(expression, environment)?;
+    let value = (!absent::is_absent(&value)).then_some(value.clone());
+    Ok(context.effect(|| {
         let mut staged = staged.borrow_mut();
-        if !absent::is_absent(&value)
-            || staged
-                .selection
-                .as_ref()
-                .is_some_and(|(selected, _)| selected == &path)
-        {
-            context.effect(|| {
-                staged.select(path, value.clone());
-            });
-        }
-        return Ok(Value::record([]));
+        staged.annotation = value;
+        staged.annotation_changed = true;
+        Value::record([])
+    }))
+}
+
+/// SELECTION_SET: stages selecting SELECTION_PATH with VALUE, or, VALUE
+/// absent, deselecting it if it is selected.
+fn set_selection(
+    context: &mut grap::Context,
+    call: &grap::Expression,
+    environment: &grap::Environment,
+    staged: &RefCell<PendingChanges>,
+) -> Result<Value, grap::Halt> {
+    let Some(expression) = context.field(call, vocabulary::SELECTION_PATH) else {
+        return Ok(context.missing_argument(vocabulary::SELECTION_PATH));
+    };
+    let encoded = context.eval_to_value(expression, environment)?;
+    let Some(path) = grap::path::read(&encoded) else {
+        return Ok(absent::with_detail(
+            grap::path::vocabulary::INVALID_PATH,
+            vocabulary::VALUE,
+            encoded,
+        ));
+    };
+    let Some(expression) = context.field(call, vocabulary::VALUE) else {
+        return Ok(context.missing_argument(vocabulary::VALUE));
+    };
+    let value = context.eval_to_value(expression, environment)?;
+    let mut staged = staged.borrow_mut();
+    if !absent::is_absent(&value)
+        || staged
+            .selection
+            .as_ref()
+            .is_some_and(|(selected, _)| selected == &path)
+    {
+        context.effect(|| {
+            staged.select(path, value.clone());
+        });
     }
-    if function == vocabulary::SET {
-        let Some(expression) = context.field(call, vocabulary::VALUE) else {
-            return Ok(context.missing_argument(vocabulary::VALUE));
-        };
-        let value = context.eval_to_value(expression, environment)?;
-        let value = (!absent::is_absent(&value)).then_some(value.clone());
-        return Ok(context.effect(|| {
-            let mut staged = staged.borrow_mut();
-            staged.annotation = value;
-            staged.annotation_changed = true;
-            Value::record([])
-        }));
-    }
-    unreachable!("only site and selection capabilities are installed in this scope")
+    Ok(Value::record([]))
 }
 
 #[cfg(test)]
