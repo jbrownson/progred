@@ -191,12 +191,7 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
     assert!(stock_playback.remove(&STOCK).is_some());
     assert_eq!(Value::Record(stock_playback), *model_playback);
     let settings = super::playback::Settings::read(model_playback).unwrap();
-    assert!(
-        settings
-            .remaining_stock(&Recording::default())
-            .unwrap()
-            .is_none()
-    );
+    assert!(settings.removal().is_none());
     stock.insert(PLAYBACK, model_playback.clone());
     assert_eq!(
         stock, model,

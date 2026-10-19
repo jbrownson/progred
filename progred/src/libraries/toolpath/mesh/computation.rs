@@ -24,7 +24,7 @@ pub(crate) struct ViewGeometry {
 #[derive(Clone, PartialEq)]
 struct Surface {
     model: fidget::mesh::Shape,
-    removal: Option<(Arc<Recording>, playback::Settings)>,
+    removal: Option<(Arc<Recording>, playback::Removal)>,
     depth: u8,
 }
 
@@ -111,8 +111,8 @@ impl Layers {
                     removal: settings
                         .playback
                         .as_ref()
-                        .filter(|playback| playback.stock_color().is_some())
-                        .map(|playback| (record.path.clone(), playback.clone())),
+                        .and_then(playback::Settings::removal)
+                        .map(|removal| (record.path.clone(), removal)),
                     depth,
                 }))
             }
@@ -199,12 +199,12 @@ fn updating_color(color: [f32; 3]) -> [f32; 3] {
 
 fn remaining_shape(request: &Surface) -> Outcome<fidget::mesh::Shape> {
     let mut shape = request.model.clone();
-    if let Some((path, playback)) = &request.removal
-        && let Some(stock) = playback
-            .remaining_stock(path)
-            .map_err(|_| ::grap::absent::value(INVALID_INPUT))?
-    {
-        shape.objects = vec![stock];
+    if let Some((path, removal)) = &request.removal {
+        shape.objects = vec![
+            removal
+                .remaining(path)
+                .map_err(|_| ::grap::absent::value(INVALID_INPUT))?,
+        ];
     }
     Ok(shape)
 }

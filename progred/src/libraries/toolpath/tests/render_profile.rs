@@ -87,8 +87,9 @@ fn volume(objects: Vec<SceneObject>, height: f64) -> implicit::VolumePreview {
 fn stock_render_profile() {
     let (recording, _) = record_example();
     let stock = cube_playback(1.0)
-        .remaining_stock(&recording)
+        .removal()
         .unwrap()
+        .remaining(&recording)
         .unwrap();
     let request = implicit::raster::Request::new(volume(vec![stock], 188.0), None, 1.0).unwrap();
     let start = Instant::now();
@@ -143,7 +144,7 @@ fn cam_render_profile() {
         .unwrap();
     let settings = cube_playback(progress);
     let start = Instant::now();
-    let stock = settings.remaining_stock(&recording).unwrap().unwrap();
+    let stock = settings.removal().unwrap().remaining(&recording).unwrap();
     eprintln!("stock construction {:?}", start.elapsed());
     let start = Instant::now();
     let mut tubes = super::super::fidget::tests::Tubes::new(0.005).unwrap();
@@ -441,7 +442,7 @@ fn cam_render_profile() {
     let mesh = std::env::var("CAM_MESH").is_ok();
     if mesh {
         let shape = implicit::mesh::Shape::from(&preview(vec![
-            settings.remaining_stock(&recording).unwrap().unwrap(),
+            settings.removal().unwrap().remaining(&recording).unwrap(),
         ]));
         let start = Instant::now();
         let mut geometry = puri::mesh::Geometry::default();

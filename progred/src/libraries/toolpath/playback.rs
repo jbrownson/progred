@@ -19,9 +19,21 @@ pub(super) struct Settings {
     stock_color: Option<[u8; 3]>,
 }
 
+/// Playback that shows what's left of the stock it cuts, in place of the
+/// model.
+#[derive(Clone, PartialEq)]
+pub(super) struct Removal {
+    playback: Settings,
+    color: [u8; 3],
+}
+
 impl Settings {
-    pub(super) fn stock_color(&self) -> Option<[u8; 3]> {
-        self.stock_color
+    /// This playback's removal, when it shows the stock in place of the model.
+    pub(super) fn removal(&self) -> Option<Removal> {
+        Some(Removal {
+            color: self.stock_color?,
+            playback: self.clone(),
+        })
     }
 
     pub(super) fn read(value: &Value) -> Option<Self> {
@@ -62,32 +74,6 @@ impl Settings {
             stock_max,
             stock_color,
         })
-    }
-
-    pub(super) fn remaining_stock(
-        &self,
-        path: &Recording,
-    ) -> Result<Option<volume::SceneObject>, InvalidPath> {
-        let Some(color) = self.stock_color else {
-            return Ok(None);
-        };
-        let mut stock =
-            Stock::block(self.stock_min, self.stock_max).ok_or(InvalidPath::CoordinateRange)?;
-        path.playback_cursor(
-            self.cursor,
-            self.focus.clone(),
-            |a, b, axis, tool, completed| {
-                let tool = tool.ok_or(InvalidPath::MissingTool)?;
-                if completed {
-                    stock.cut(tool, a, b, axis, self.profile_tolerance)?;
-                }
-                Ok(())
-            },
-        )?;
-        Ok(Some(volume::SceneObject {
-            tree: stock.into_field(),
-            color,
-        }))
     }
 
     pub(super) fn draw(
@@ -138,6 +124,30 @@ impl Settings {
             }
         }
         Ok(())
+    }
+}
+
+impl Removal {
+    /// The stock left once `path` has cut it.
+    pub(super) fn remaining(&self, path: &Recording) -> Result<volume::SceneObject, InvalidPath> {
+        let playback = &self.playback;
+        let mut stock = Stock::block(playback.stock_min, playback.stock_max)
+            .ok_or(InvalidPath::CoordinateRange)?;
+        path.playback_cursor(
+            playback.cursor,
+            playback.focus.clone(),
+            |a, b, axis, tool, completed| {
+                let tool = tool.ok_or(InvalidPath::MissingTool)?;
+                if completed {
+                    stock.cut(tool, a, b, axis, playback.profile_tolerance)?;
+                }
+                Ok(())
+            },
+        )?;
+        Ok(volume::SceneObject {
+            tree: stock.into_field(),
+            color: self.color,
+        })
     }
 }
 

@@ -364,7 +364,7 @@ fn implicit_playback_contains_only_stock_not_paths_or_visible_cutter() {
     let path = Arc::new(path);
     let mut settings = settings(0.0);
     let playback = playback(0.5);
-    let expected = playback.remaining_stock(&path).unwrap().unwrap();
+    let expected = playback.removal().unwrap().remaining(&path).unwrap();
     settings.playback = Some(playback);
     let rendered = scene(SceneRequest::new(path, &settings)).unwrap();
     assert_eq!(

@@ -31,7 +31,7 @@ pub(crate) fn profile(
     let path = recorded.path().unwrap();
     let settings = cube_playback(progress);
     let start = Instant::now();
-    let stock = settings.remaining_stock(path).unwrap().unwrap();
+    let stock = settings.removal().unwrap().remaining(path).unwrap();
     let stock_ms = start.elapsed().as_secs_f64() * 1000.0;
     let start = Instant::now();
     let paths =

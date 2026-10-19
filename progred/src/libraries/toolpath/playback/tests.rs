@@ -125,7 +125,11 @@ fn playback_switches_tools_and_subtracts_both_from_one_stock() {
         });
     }
     let samples = |progress| {
-        let object = settings(progress).remaining_stock(&path).unwrap().unwrap();
+        let object = settings(progress)
+            .removal()
+            .unwrap()
+            .remaining(&path)
+            .unwrap();
         let shape = VmShape::from(object.tree);
         let mut evaluator = VmShape::new_float_slice_eval();
         evaluator
@@ -171,7 +175,7 @@ fn untooled_paths_can_be_drawn_but_cannot_remove_stock() {
     assert_eq!(drawing.path.segments().count(), 1);
     for progress in [0.0, 0.5, 1.0] {
         assert!(matches!(
-            settings(progress).remaining_stock(&path),
+            settings(progress).removal().unwrap().remaining(&path),
             Err(InvalidPath::MissingTool)
         ));
     }
@@ -192,7 +196,7 @@ fn focused_stock_contains_earlier_cuts_but_not_later_ones() {
     for (progress, expected) in [(0.0, [true, false, false]), (1.0, [true, true, false])] {
         let mut playback = settings(progress);
         playback.focus = Some(1..2);
-        let object = playback.remaining_stock(&program).unwrap().unwrap();
+        let object = playback.removal().unwrap().remaining(&program).unwrap();
         let shape = VmShape::from(object.tree);
         let mut evaluator = VmShape::new_float_slice_eval();
         let samples = evaluator

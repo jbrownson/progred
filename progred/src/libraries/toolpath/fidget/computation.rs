@@ -17,7 +17,7 @@ pub(crate) struct Settings {
 #[derive(Clone, PartialEq)]
 enum SceneRequest {
     Model(Vec<volume::SceneObject>),
-    Stock(Arc<Recording>, playback::Settings),
+    Stock(Arc<Recording>, playback::Removal),
 }
 
 impl SceneRequest {
@@ -25,9 +25,9 @@ impl SceneRequest {
         match settings
             .playback
             .as_ref()
-            .filter(|p| p.stock_color().is_some())
+            .and_then(playback::Settings::removal)
         {
-            Some(playback) => Self::Stock(path, playback.clone()),
+            Some(removal) => Self::Stock(path, removal),
             None => Self::Model(settings.request.preview.objects.clone()),
         }
     }
@@ -319,16 +319,13 @@ fn image_with<S: Send + Sync + 'static>(
 }
 
 fn scene(request: SceneRequest) -> Outcome<Vec<volume::SceneObject>> {
-    let invalid = || ::grap::absent::value(INVALID_INPUT);
-    Ok(match request {
-        SceneRequest::Model(objects) => objects,
-        SceneRequest::Stock(path, playback) => vec![
-            playback
-                .remaining_stock(&path)
-                .map_err(|_| invalid())?
-                .ok_or_else(invalid)?,
-        ],
-    })
+    match request {
+        SceneRequest::Model(objects) => Ok(objects),
+        SceneRequest::Stock(path, removal) => removal
+            .remaining(&path)
+            .map(|stock| vec![stock])
+            .map_err(|_| ::grap::absent::value(INVALID_INPUT)),
+    }
 }
 
 #[cfg(test)]
