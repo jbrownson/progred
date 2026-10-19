@@ -1,5 +1,6 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
+use crate::display::test_support::mouse;
 use crate::libraries::layout as layout_data;
 use crate::libraries::{f64 as f64_convention, text};
 use crate::projection::Layout;
@@ -63,11 +64,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
     let mut state = PointerState::default();
     state.position.x = 1.0;
     state.position.y = 1.0;
-    let mouse = PointerInfo {
-        pointer_id: Some(PointerId::PRIMARY),
-        persistent_device_id: None,
-        pointer_type: PointerType::Mouse,
-    };
+    let mouse = mouse();
     assert!(handler.dispatch_pointer_down(
         &mut events,
         &PointerButtonEvent {

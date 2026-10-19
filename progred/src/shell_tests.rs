@@ -1,10 +1,9 @@
+use crate::display::test_support::mouse;
 use crate::input::{PendingPointer, PendingScroll, continuous_input};
 use kurbo::{Point, Size};
 use ui_events::ScrollDelta;
 use ui_events::keyboard::Modifiers;
-use ui_events::pointer::{
-    PointerId, PointerInfo, PointerScrollEvent, PointerState, PointerType, PointerUpdate,
-};
+use ui_events::pointer::{PointerId, PointerScrollEvent, PointerState, PointerUpdate};
 use winit::dpi::PhysicalPosition;
 use winit::event::{DeviceId, ElementState, MouseButton, WindowEvent};
 
@@ -13,11 +12,7 @@ fn pending(delta: ScrollDelta, x: f64) -> PendingScroll {
     state.position.x = x;
     PendingScroll {
         events: vec![PointerScrollEvent {
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
+            pointer: mouse(),
             delta,
             state,
         }],

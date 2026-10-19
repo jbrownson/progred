@@ -19,10 +19,7 @@ use kurbo::{Point, Rect};
 use measured::Extent;
 use peniko::Brush;
 use ui_events::ScrollDelta;
-use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
-    PointerType,
-};
+use ui_events::pointer::{PointerButton, PointerScrollEvent, PointerState};
 use uig::Placement;
 
 mod completion;

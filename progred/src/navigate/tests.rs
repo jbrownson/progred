@@ -1,5 +1,5 @@
 use super::*;
-use crate::test_support::arrow;
+use crate::test_support::key_down;
 use crate::test_values::key;
 use kurbo::Rect;
 use std::rc::Rc;
@@ -29,7 +29,7 @@ fn navigation_direction_accepts_modifiers_but_excludes_other_keys_and_releases()
         (NamedKey::ArrowUp, NavigationDirection::Up),
         (NamedKey::ArrowDown, NavigationDirection::Down),
     ] {
-        let event = arrow(key);
+        let event = key_down(key, Modifiers::empty());
         assert_eq!(direction(&event), Some(expected));
         assert_eq!(
             direction(&KeyboardEvent {
@@ -55,11 +55,7 @@ fn navigation_direction_accepts_modifiers_but_excludes_other_keys_and_releases()
         }
     }
     assert_eq!(
-        direction(&KeyboardEvent {
-            key: Key::Character("a".into()),
-            modifiers: Modifiers::META,
-            ..arrow(NamedKey::ArrowDown)
-        }),
+        direction(&key_down(Key::Character("a".into()), Modifiers::META)),
         None
     );
 }
@@ -86,11 +82,7 @@ fn command_a_selects_the_current_views_root() {
         ..stop(path, 0.0, 0.0, 100.0, 20.0)
     })
     .collect();
-    let event = KeyboardEvent {
-        key: Key::Character("a".into()),
-        modifiers: crate::modifiers::command(),
-        ..arrow(NamedKey::ArrowDown)
-    };
+    let event = key_down(Key::Character("a".into()), crate::modifiers::command());
     for (root, path) in [(&document, vec![]), (&pane, pane_path)] {
         let target = select_all(crate::modifiers::native(), &landmarks, root, &event)
             .expect("Select All reaches the view root");

@@ -464,8 +464,24 @@ impl<World> Landmarks<World> for [widget::navigation::Landmark<World>] {
 /// The mouse, as a pointer event names it.
 pub fn mouse() -> ui_events::pointer::PointerInfo {
     ui_events::pointer::PointerInfo {
-        pointer_id: None,
+        pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
         persistent_device_id: None,
         pointer_type: ui_events::pointer::PointerType::Mouse,
+    }
+}
+
+/// The mouse's primary button pressed at `point`, `modifiers` held.
+pub fn press_at(
+    point: kurbo::Point,
+    modifiers: ui_events::keyboard::Modifiers,
+) -> ui_events::pointer::PointerButtonEvent {
+    ui_events::pointer::PointerButtonEvent {
+        button: Some(ui_events::pointer::PointerButton::Primary),
+        pointer: mouse(),
+        state: ui_events::pointer::PointerState {
+            position: (point.x, point.y).into(),
+            modifiers,
+            ..Default::default()
+        },
     }
 }

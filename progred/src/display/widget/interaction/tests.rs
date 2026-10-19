@@ -1,23 +1,14 @@
 use super::*;
 use crate::display::recording::{Recorded, record};
+use crate::display::test_support::press_at;
 use crate::display::widget::HoverContext;
 use crate::display::widget::frame::HoverOutput;
 use kurbo::{Point, Rect};
 use measured::Extent;
 use puri::handler::HasHandler;
-use ui_events::pointer::{PointerButton, PointerButtonEvent, PointerState};
+use ui_events::keyboard::Modifiers;
+use ui_events::pointer::PointerButton;
 use uig::Placement;
-
-fn press(x: f64) -> PointerButtonEvent {
-    PointerButtonEvent {
-        button: Some(PointerButton::Primary),
-        pointer: crate::display::test_support::mouse(),
-        state: PointerState {
-            position: (x, 5.0).into(),
-            ..Default::default()
-        },
-    }
-}
 
 #[test]
 fn presses_use_settled_hover_not_a_second_hit_test() {
@@ -39,7 +30,7 @@ fn presses_use_settled_hover_not_a_second_hit_test() {
         let handler = frame.handler.unwrap();
         let mut world = (0, 0);
         // Holding the frame's command key is what makes a press pick.
-        let mut event = press(25.0);
+        let mut event = press_at(Point::new(25.0, 5.0), Modifiers::empty());
         if picking {
             event.state.modifiers = crate::modifiers::command();
         }
@@ -53,7 +44,7 @@ fn presses_use_settled_hover_not_a_second_hit_test() {
                 expected
             );
         }
-        let mut secondary = press(5.0);
+        let mut secondary = press_at(Point::new(5.0, 5.0), Modifiers::empty());
         secondary.button = Some(PointerButton::Secondary);
         assert!(!handler.dispatch_pointer_down_with(
             &mut world,
@@ -131,12 +122,10 @@ fn leading_handlers_run_after_children_and_receive_declined_input() {
         let output = crate::display::widget::frame::place(measured, placement, &Default::default());
         let output = output.bind(Default::default());
         let mut world = vec![];
-        assert!(
-            output
-                .handler
-                .unwrap()
-                .dispatch_pointer_down(&mut world, &press(5.0))
-        );
+        assert!(output.handler.unwrap().dispatch_pointer_down(
+            &mut world,
+            &press_at(Point::new(5.0, 5.0), Modifiers::empty())
+        ));
         assert_eq!(
             world,
             if accepts {

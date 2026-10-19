@@ -13,7 +13,7 @@ use gid::{CellId, Cells, Document, Path, Position, Step, Value, new_cell_id};
 use kurbo::{Point, Rect};
 use puri::text::TextCtx;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
 use uig::Placement;
 
 pub(crate) fn core_libraries() -> Libraries {
@@ -297,11 +297,12 @@ pub(crate) fn positions(value: &Value) -> Vec<Position> {
     value.as_list().unwrap().keys().cloned().collect()
 }
 
-pub(crate) fn arrow(named: NamedKey) -> KeyboardEvent {
+/// `key` going down with `modifiers` held.
+pub(crate) fn key_down(key: impl Into<Key>, modifiers: Modifiers) -> KeyboardEvent {
     KeyboardEvent {
-        key: Key::Named(named),
+        key: key.into(),
         state: KeyState::Down,
-        modifiers: Modifiers::empty(),
+        modifiers,
         ..Default::default()
     }
 }

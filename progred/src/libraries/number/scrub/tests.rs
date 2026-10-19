@@ -1,12 +1,15 @@
 use super::*;
 use crate::display::test_support::ResolveForDispatch;
+use crate::display::test_support::press_at;
 use crate::display::widget::placed::leaf;
 use crate::libraries::f64 as f64_convention;
-use crate::libraries::test_widgets::{drag_frame, gesture_place, press, target};
+use crate::libraries::test_widgets::{drag_frame, gesture_place, target};
 use crate::selection::{Stage, pending_value};
 use gid::{Step, new_cell_id};
+use kurbo::Point;
 use measured::Extent;
 use puri::handler::HasHandler;
+use ui_events::keyboard::Modifiers;
 use uig::Placement;
 
 #[test]
@@ -41,7 +44,14 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
         }
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
-            &press(x, pick),
+            &press_at(
+                Point::new(x, 5.0),
+                if pick {
+                    crate::modifiers::command()
+                } else {
+                    Modifiers::empty()
+                },
+            ),
             &mut crate::frame::DispatchContext::new(
                 owns_view.then(crate::test_root),
                 Some(target()),
@@ -122,7 +132,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         );
         assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
-            &press(5.0, true),
+            &press_at(Point::new(5.0, 5.0), crate::modifiers::command()),
             &mut crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target())),
         ));
         assert_eq!(raw_contacts.get(), usize::from(raw));

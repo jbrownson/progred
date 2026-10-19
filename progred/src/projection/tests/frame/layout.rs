@@ -1,6 +1,8 @@
 use super::*;
 use crate::clipboard::Clipboard;
+use crate::display::test_support::press_at;
 use puri::edit::TextClipboard;
+use ui_events::keyboard::Modifiers;
 
 #[test]
 fn runtime_render_preserves_native_closures_through_evaluation() {
@@ -209,21 +211,9 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             (content.center(), Some("1")),
         ] {
             world.text_clipboard = Clipboard::default();
-            assert!(handler.dispatch_pointer_down(
-                &mut world,
-                &PointerButtonEvent {
-                    button: Some(PointerButton::Primary),
-                    pointer: PointerInfo {
-                        pointer_id: Some(PointerId::PRIMARY),
-                        persistent_device_id: None,
-                        pointer_type: PointerType::Mouse
-                    },
-                    state: PointerState {
-                        position: (point.x, point.y).into(),
-                        ..Default::default()
-                    },
-                }
-            ));
+            assert!(
+                handler.dispatch_pointer_down(&mut world, &press_at(point, Modifiers::empty()))
+            );
             assert_eq!(world.text_clipboard.get_text().as_deref(), expected);
         }
     }
@@ -1173,18 +1163,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                 crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
             assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
                 &mut world,
-                &PointerButtonEvent {
-                    button: Some(PointerButton::Primary),
-                    pointer: PointerInfo {
-                        pointer_id: Some(PointerId::PRIMARY),
-                        persistent_device_id: None,
-                        pointer_type: PointerType::Mouse
-                    },
-                    state: PointerState {
-                        position: (point.x, point.y).into(),
-                        ..Default::default()
-                    },
-                },
+                &press_at(point, Modifiers::empty()),
                 &mut input,
             ));
             assert!(Rc::ptr_eq(&before, &world.model.doc));
@@ -1258,18 +1237,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         );
         frame.resolve_for_dispatch().dispatch_pointer_down_with(
             world,
-            &PointerButtonEvent {
-                button: Some(PointerButton::Primary),
-                pointer: PointerInfo {
-                    pointer_id: Some(PointerId::PRIMARY),
-                    persistent_device_id: None,
-                    pointer_type: PointerType::Mouse,
-                },
-                state: PointerState {
-                    position: (point.x, point.y).into(),
-                    ..Default::default()
-                },
-            },
+            &press_at(point, Modifiers::empty()),
             &mut input,
         )
     };
@@ -1365,18 +1333,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         let mut input = crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
         assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
-            &PointerButtonEvent {
-                button: Some(PointerButton::Primary),
-                pointer: PointerInfo {
-                    pointer_id: Some(PointerId::PRIMARY),
-                    persistent_device_id: None,
-                    pointer_type: PointerType::Mouse,
-                },
-                state: PointerState {
-                    position: (point.x, point.y).into(),
-                    ..Default::default()
-                },
-            },
+            &press_at(point, Modifiers::empty()),
             &mut input,
         ));
         assert!(Rc::ptr_eq(&before, &world.model.doc));

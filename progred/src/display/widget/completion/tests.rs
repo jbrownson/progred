@@ -1,9 +1,11 @@
 use super::*;
 use crate::display::Face;
+use crate::display::test_support::mouse;
 use crate::display::test_support::{ResolveForDispatch, painted};
 use crate::display::widget::frame::{Attribution, DispatchContext, HoverInput, HoverOutput, place};
 use crate::display::widget::style::{Theme, editor, primary_highlight};
 use crate::frame::Hovered;
+use crate::test_support::key_down;
 use gid::Value;
 use kurbo::Rect;
 use peniko::Brush;
@@ -11,7 +13,7 @@ use puri::draw::{DrawCmd, DrawList, Shape};
 use puri::hover::Claim;
 use puri::text::TextCache;
 use ui_events::ScrollDelta;
-use ui_events::keyboard::{KeyState, KeyboardEvent};
+use ui_events::keyboard::Modifiers;
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
     PointerUpdate,
@@ -78,11 +80,7 @@ fn a_completion_without_an_edit_still_consumes_its_activation() {
     let mut attempts = 0;
     assert!(placed.resolve_for_dispatch().dispatch_key(
         &mut attempts,
-        &KeyboardEvent {
-            key: Key::Named(NamedKey::Enter),
-            state: KeyState::Down,
-            ..Default::default()
-        }
+        &key_down(NamedKey::Enter, Modifiers::empty())
     ));
     assert_eq!(attempts, 1);
 }
@@ -300,11 +298,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             .map(|(_, claim)| claim),
         Some(Claim::Direct(Hovered::Tree(Hover::Entry(0)))),
     );
-    let pointer = PointerInfo {
-        pointer_id: Some(PointerId::PRIMARY),
-        persistent_device_id: None,
-        pointer_type: PointerType::Mouse,
-    };
+    let pointer = mouse();
     let mut pointer_state = PointerState::default();
     pointer_state.position.x = 10.0;
     pointer_state.position.y = 10.0;
@@ -361,34 +355,31 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
             .map(|(_, claim)| claim)
             != Some(Claim::Direct(Hovered::Tree(Hover::Entry(0))))
     }));
-    let press = |key| KeyboardEvent {
-        key: Key::Named(key),
-        state: KeyState::Down,
-        ..Default::default()
-    };
     for key in [NamedKey::ArrowDown, NamedKey::ArrowUp] {
         assert!(
             frame(state, None)
                 .resolve_for_dispatch()
-                .dispatch_key(&mut state, &press(key))
+                .dispatch_key(&mut state, &key_down(key, Modifiers::empty()))
         );
     }
     assert_eq!(state, (0.0, 0));
     for _ in 0..12 {
-        frame(state, None)
-            .resolve_for_dispatch()
-            .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+        frame(state, None).resolve_for_dispatch().dispatch_key(
+            &mut state,
+            &key_down(NamedKey::ArrowDown, Modifiers::empty()),
+        );
     }
     let offset = state.0;
     assert!(offset > 0.0);
     frame(state, None)
         .resolve_for_dispatch()
-        .dispatch_key(&mut state, &press(NamedKey::ArrowUp));
+        .dispatch_key(&mut state, &key_down(NamedKey::ArrowUp, Modifiers::empty()));
     assert_eq!(state, (offset, 11));
     for _ in 11..entries.len() {
-        frame(state, None)
-            .resolve_for_dispatch()
-            .dispatch_key(&mut state, &press(NamedKey::ArrowDown));
+        frame(state, None).resolve_for_dispatch().dispatch_key(
+            &mut state,
+            &key_down(NamedKey::ArrowDown, Modifiers::empty()),
+        );
     }
     // Down stops at the last row.
     assert_eq!(state.1, entries.len() - 1);
@@ -398,7 +389,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     assert!(
         !frame(state, None)
             .resolve_for_dispatch()
-            .dispatch_key(&mut state, &press(NamedKey::Tab))
+            .dispatch_key(&mut state, &key_down(NamedKey::Tab, Modifiers::empty()))
     );
     assert_eq!(state, before_tab);
 }
@@ -452,11 +443,7 @@ fn a_card_placed_shorter_scrolls_what_it_cannot_show() {
             .claim
             .is_none()
     );
-    let down = KeyboardEvent {
-        key: Key::Named(NamedKey::ArrowDown),
-        state: KeyState::Down,
-        ..Default::default()
-    };
+    let down = key_down(NamedKey::ArrowDown, Modifiers::empty());
     for _ in 0..3 {
         hovered(state, None)
             .resolve_for_dispatch()
@@ -552,11 +539,6 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
         assert_eq!(rects.len(), 1);
         assert!(rects[0].contains(selected_point));
     };
-    let press = |key| KeyboardEvent {
-        key: Key::Named(key),
-        state: KeyState::Down,
-        ..Default::default()
-    };
     let move_to = |point: Point, pointer_type| {
         let mut current = PointerState::default();
         current.position.x = point.x;
@@ -586,13 +568,13 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
     assert!(
         frame(&world, None, None)
             .resolve_for_dispatch()
-            .dispatch_key(&mut world, &press(NamedKey::ArrowUp))
+            .dispatch_key(&mut world, &key_down(NamedKey::ArrowUp, Modifiers::empty()))
     );
     assert_eq!(world.view.1, 1);
     highlight(frame(&world, None, None), Hover::Entry(2), points[1]);
     frame(&world, None, None)
         .resolve_for_dispatch()
-        .dispatch_key(&mut world, &press(NamedKey::Enter));
+        .dispatch_key(&mut world, &key_down(NamedKey::Enter, Modifiers::empty()));
     assert_eq!(world.committed, Some(1));
 
     frame(&world, None, None)
@@ -601,7 +583,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
     assert_eq!(world.view.1, 0);
     frame(&world, None, None)
         .resolve_for_dispatch()
-        .dispatch_key(&mut world, &press(NamedKey::Enter));
+        .dispatch_key(&mut world, &key_down(NamedKey::Enter, Modifiers::empty()));
     assert_eq!(world.committed, Some(0));
 
     let mut dragging = move_to(points[2], PointerType::Mouse);
@@ -669,22 +651,20 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
             },
         )
     };
-    let press = |key| KeyboardEvent {
-        key: Key::Named(key),
-        state: KeyState::Down,
-        ..Default::default()
-    };
     let mut world = World::default();
     assert!(
         frame(&world, &entries, None)
             .resolve_for_dispatch()
-            .dispatch_key(&mut world, &press(NamedKey::Enter))
+            .dispatch_key(&mut world, &key_down(NamedKey::Enter, Modifiers::empty()))
     );
     assert_eq!(world.committed.take(), Some(Value::list([])));
     // Down stays on the only row.
     frame(&world, &entries, None)
         .resolve_for_dispatch()
-        .dispatch_key(&mut world, &press(NamedKey::ArrowDown));
+        .dispatch_key(
+            &mut world,
+            &key_down(NamedKey::ArrowDown, Modifiers::empty()),
+        );
     assert_eq!(world.view, (0.0, 0));
     let two = [
         entries[0].clone(),
@@ -698,19 +678,22 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     ];
     frame(&world, &two, None)
         .resolve_for_dispatch()
-        .dispatch_key(&mut world, &press(NamedKey::ArrowDown));
+        .dispatch_key(
+            &mut world,
+            &key_down(NamedKey::ArrowDown, Modifiers::empty()),
+        );
     assert_eq!(world.view, (0.0, 1));
     assert!(
         frame(&world, &two, None)
             .resolve_for_dispatch()
-            .dispatch_key(&mut world, &press(NamedKey::Enter))
+            .dispatch_key(&mut world, &key_down(NamedKey::Enter, Modifiers::empty()))
     );
     assert_eq!(world.committed.take(), Some(Value::record([])));
     // A shorter list clamps the choice to its last row.
     assert!(
         frame(&world, &entries, None)
             .resolve_for_dispatch()
-            .dispatch_key(&mut world, &press(NamedKey::Enter))
+            .dispatch_key(&mut world, &key_down(NamedKey::Enter, Modifiers::empty()))
     );
     assert_eq!(world.committed.take(), Some(Value::list([])));
 
@@ -732,11 +715,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     pointer_state.position.y = point.y;
     let event = PointerButtonEvent {
         button: Some(PointerButton::Primary),
-        pointer: PointerInfo {
-            pointer_id: Some(PointerId::PRIMARY),
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        },
+        pointer: mouse(),
         state: pointer_state,
     };
     assert!(placed.resolve_for_dispatch().dispatch_pointer_down_with(
@@ -751,7 +730,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
     assert!(
         !frame(&world, &[], None)
             .resolve_for_dispatch()
-            .dispatch_key(&mut world, &press(NamedKey::Enter))
+            .dispatch_key(&mut world, &key_down(NamedKey::Enter, Modifiers::empty()))
     );
 }
 

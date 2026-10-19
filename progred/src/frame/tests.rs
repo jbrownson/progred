@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::source::Secondary;
+use crate::test_support::key_down;
 use gid::{CellId, Cells, Document, Step, Value};
 
 type HoverLog = Rc<std::cell::RefCell<Vec<(&'static str, f64)>>>;
@@ -497,7 +498,7 @@ fn selection_reveal_uses_installed_geometry_before_one_successor_build() {
 
 #[test]
 fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
-    use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+    use ui_events::keyboard::{Modifiers, NamedKey};
     let mut runner = scrolling_runner(&Default::default());
     let viewport = Size::new(500.0, 400.0);
     runner.refresh_frame(1.0, viewport);
@@ -537,11 +538,7 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
     assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
 
     assert!(runner.keyboard_event(
-        &KeyboardEvent {
-            key: Key::Named(NamedKey::ArrowDown),
-            state: KeyState::Down,
-            ..Default::default()
-        },
+        &key_down(NamedKey::ArrowDown, Modifiers::empty()),
         1.0,
         viewport,
     ));
@@ -627,7 +624,7 @@ fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> gid::Path {
 
 #[test]
 fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
-    use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+    use ui_events::keyboard::{Modifiers, NamedKey};
     for key in [NamedKey::ArrowDown, NamedKey::Delete, NamedKey::Backspace] {
         let projected = Rc::new(std::cell::Cell::new(0));
         let mut runner = scrolling_runner(&projected);
@@ -645,15 +642,7 @@ fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
         runner.refresh_frame(1.0, viewport);
         assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
         projected.set(0);
-        assert!(runner.keyboard_event(
-            &KeyboardEvent {
-                key: Key::Named(key),
-                state: KeyState::Down,
-                ..Default::default()
-            },
-            1.0,
-            viewport
-        ));
+        assert!(runner.keyboard_event(&key_down(key, Modifiers::empty()), 1.0, viewport));
         let selection = runner.editor.model.selection.as_ref().unwrap();
         if key == NamedKey::Delete {
             // Deleting keeps the place selected, as a hole.
@@ -675,7 +664,7 @@ fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
 
 #[test]
 fn omitted_menu_keeps_history_but_not_menu_commands() {
-    use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
+    use ui_events::keyboard::{Key, Modifiers, NamedKey};
     let doc = crate::gid_text::parse(include_str!("../../fixtures/values.gid"))
         .unwrap()
         .0;
@@ -689,30 +678,24 @@ fn omitted_menu_keeps_history_but_not_menu_commands() {
         .record(runner.editor.model.snapshot());
     Rc::make_mut(&mut runner.editor.model.doc).root = Some(gid::Value::list([]));
     runner.refresh_frame(1.0, viewport);
-    let input = |key, modifiers| KeyboardEvent {
-        key,
-        modifiers,
-        state: KeyState::Down,
-        ..Default::default()
-    };
     assert!(runner.keyboard_event(
-        &input(Key::Character("z".into()), Modifiers::CONTROL),
+        &key_down(Key::Character("z".into()), Modifiers::CONTROL),
         1.0,
         viewport
     ));
     assert_eq!(runner.editor.model.doc.root, doc.root);
     for event in [
-        input(Key::Character("n".into()), Modifiers::CONTROL),
-        input(Key::Character("r".into()), Modifiers::CONTROL),
-        input(Key::Character("d".into()), Modifiers::CONTROL),
-        input(Key::Character("p".into()), Modifiers::CONTROL),
-        input(Key::Character("1".into()), Modifiers::CONTROL),
-        input(Key::Named(NamedKey::F10), Modifiers::empty()),
+        key_down(Key::Character("n".into()), Modifiers::CONTROL),
+        key_down(Key::Character("r".into()), Modifiers::CONTROL),
+        key_down(Key::Character("d".into()), Modifiers::CONTROL),
+        key_down(Key::Character("p".into()), Modifiers::CONTROL),
+        key_down(Key::Character("1".into()), Modifiers::CONTROL),
+        key_down(Key::Named(NamedKey::F10), Modifiers::empty()),
     ] {
         assert!(!runner.keyboard_event(&event, 1.0, viewport));
     }
     assert!(runner.keyboard_event(
-        &input(
+        &key_down(
             Key::Character("z".into()),
             Modifiers::CONTROL | Modifiers::SHIFT
         ),
@@ -725,7 +708,7 @@ fn omitted_menu_keeps_history_but_not_menu_commands() {
 #[test]
 fn raw_shortcut_is_contributed_only_by_the_menu() {
     use puri::keyboard::CommandModifier;
-    use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
+    use ui_events::keyboard::{Key, Modifiers};
     for (modifier, modifiers) in [
         (CommandModifier::Meta, Modifiers::META),
         (CommandModifier::Control, Modifiers::CONTROL),
@@ -740,12 +723,7 @@ fn raw_shortcut_is_contributed_only_by_the_menu() {
             assert!(!runner.editor.menu_toggles().raw);
             assert_eq!(
                 runner.keyboard_event(
-                    &KeyboardEvent {
-                        key: Key::Character("r".into()),
-                        modifiers,
-                        state: KeyState::Down,
-                        ..Default::default()
-                    },
+                    &key_down(Key::Character("r".into()), modifiers),
                     1.0,
                     viewport
                 ),
@@ -758,7 +736,7 @@ fn raw_shortcut_is_contributed_only_by_the_menu() {
 
 #[test]
 fn native_and_drawn_history_commands_reveal_even_the_same_selection() {
-    use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
+    use ui_events::keyboard::{Key, Modifiers};
     for drawn in [false, true] {
         let mut runner = scrolling_runner(&Default::default());
         runner.editor.drawn_menu = drawn;
@@ -775,12 +753,7 @@ fn native_and_drawn_history_commands_reveal_even_the_same_selection() {
         // selection equality is not involved in the command's policy.
         if drawn {
             assert!(runner.keyboard_event(
-                &KeyboardEvent {
-                    key: Key::Character("z".into()),
-                    modifiers: Modifiers::CONTROL,
-                    state: KeyState::Down,
-                    ..Default::default()
-                },
+                &key_down(Key::Character("z".into()), Modifiers::CONTROL),
                 1.0,
                 viewport
             ));

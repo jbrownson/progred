@@ -1,5 +1,5 @@
 use super::*;
-use ui_events::pointer::PointerId;
+use crate::display::test_support::mouse;
 
 #[test]
 fn grap_navigation_events_express_direction_without_a_physical_key() {
@@ -18,7 +18,7 @@ fn grap_navigation_events_express_direction_without_a_physical_key() {
 #[test]
 fn grap_pinch_delta_is_dimensionless_and_position_is_local() {
     let event = PointerGestureEvent {
-        pointer: crate::display::test_support::mouse(),
+        pointer: mouse(),
         state: PointerState {
             position: (25.0, 40.0).into(),
             ..Default::default()
@@ -46,11 +46,7 @@ fn grap_motion_preserves_the_batch_in_local_coordinates() {
         state
     };
     let mut event = PointerUpdate {
-        pointer: PointerInfo {
-            pointer_id: Some(PointerId::PRIMARY),
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        },
+        pointer: mouse(),
         current: sample(40.0),
         coalesced: vec![sample(20.0), sample(30.0)],
         predicted: vec![sample(50.0)],

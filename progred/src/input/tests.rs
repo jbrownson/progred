@@ -1,13 +1,16 @@
 use super::*;
+use crate::display::test_support::{mouse, press_at};
 use crate::display::{Layout, partial, widget};
 use crate::libraries::{f64, text};
 use crate::projection::Projection;
 use crate::selection;
+use crate::test_support::key_down;
 use gid::{Cells, Document};
+use kurbo::Point;
 use puri::handler::{HasHandler, ScrollOutcome};
 use std::cell::RefCell;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyState};
+use ui_events::keyboard::Key;
 use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerState, PointerUpdate};
 use ui_events_winit::WindowEventTranslation;
 use winit::dpi::PhysicalPosition;
@@ -78,11 +81,7 @@ fn instrumented_runner(log: &Log) -> EditorRunner {
 }
 
 fn key() -> KeyboardEvent {
-    KeyboardEvent {
-        key: Key::Character("x".into()),
-        state: KeyState::Down,
-        ..Default::default()
-    }
+    key_down(Key::Character("x".into()), Modifiers::empty())
 }
 
 #[test]
@@ -113,16 +112,19 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
         cells,
     }));
     runner.refresh_frame(1.0, VIEWPORT);
-    let press = |key| KeyboardEvent {
-        key: Key::Named(key),
-        state: KeyState::Down,
-        ..Default::default()
-    };
     let root = runner.editor.model.workspace.document_root().clone();
     runner.editor.model.selection = Some(selection::Selection::edge(&root, cell_path.clone()));
     runner.refresh_frame(1.0, VIEWPORT);
-    assert!(!runner.keyboard_event(&press(NamedKey::ArrowDown), 1.0, VIEWPORT));
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+    assert!(!runner.keyboard_event(
+        &key_down(NamedKey::ArrowDown, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowRight, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     assert_eq!(
         runner.editor.model.selection.as_ref().unwrap().path(),
         name_path
@@ -140,12 +142,20 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
         (0, 0)
     );
     // Backward traversal visits the cell, then its enclosing list.
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     assert_eq!(
         runner.editor.model.selection.as_ref().unwrap().path(),
         cell_path
     );
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     assert!(
         runner
             .editor
@@ -156,7 +166,11 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
             .path()
             .is_empty()
     );
-    assert!(!runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+    assert!(!runner.keyboard_event(
+        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
 }
 
 #[test]
@@ -173,27 +187,38 @@ fn arrows_edit_text_before_routing_and_arrive_at_the_near_text_edge() {
     let root = runner.editor.model.workspace.document_root().clone();
     runner.editor.model.selection = Some(selection::Selection::edge(&root, paths[0].clone()));
     runner.refresh_frame(1.0, VIEWPORT);
-    let press = |key| KeyboardEvent {
-        key: Key::Named(key),
-        state: KeyState::Down,
-        ..Default::default()
-    };
     // Plain selection defaults to the end; Left first moves within "ab".
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     let selected = runner.editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), paths[0]);
     assert_eq!(selected.edit().unwrap().selection_offsets(), (1, 1));
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowRight, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     assert_eq!(
         runner.editor.model.selection.as_ref().unwrap().path(),
         paths[0]
     );
     // Only at the boundary does Right hand off to the list's next item.
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowRight, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     let selected = runner.editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), paths[1]);
     assert_eq!(selected.edit().unwrap().selection_offsets(), (0, 0));
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     let selected = runner.editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), paths[0]);
     assert_eq!(selected.edit().unwrap().selection_offsets(), (2, 2));
@@ -227,16 +252,7 @@ fn modified_arrows_edit_text_then_navigate_at_its_boundary() {
             (NamedKey::ArrowRight, 1, 0),
             (NamedKey::ArrowRight, 1, 2),
         ] {
-            assert!(runner.keyboard_event(
-                &KeyboardEvent {
-                    key: Key::Named(key),
-                    state: KeyState::Down,
-                    modifiers,
-                    ..Default::default()
-                },
-                1.0,
-                VIEWPORT
-            ));
+            assert!(runner.keyboard_event(&key_down(key, modifiers), 1.0, VIEWPORT));
             let selected = runner.editor.model.selection.as_ref().unwrap();
             assert_eq!(selected.path(), paths[index]);
             assert_eq!(
@@ -271,41 +287,64 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
     let root = runner.editor.model.workspace.document_root().clone();
     runner.editor.model.selection = Some(selection::Selection::edge(&root, name_path.clone()));
     runner.refresh_frame(1.0, VIEWPORT);
-    let press = |key| KeyboardEvent {
-        key: Key::Named(key),
-        state: KeyState::Down,
-        ..Default::default()
-    };
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowRight, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     let selected = runner.editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), paths[1]);
     assert_eq!(selected.edit().unwrap().selection_offsets(), (0, 0));
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     let selected = runner.editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), name_path);
     assert_eq!(selected.edit().unwrap().selection_offsets(), (4, 4));
 
     for _ in 0.."tilt".len() {
-        assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+        assert!(runner.keyboard_event(
+            &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+            1.0,
+            VIEWPORT
+        ));
     }
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     assert_eq!(
         runner.editor.model.selection.as_ref().unwrap().path(),
         paths[0]
     );
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowRight, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     assert_eq!(
         runner.editor.model.selection.as_ref().unwrap().path(),
         name_path
     );
     for _ in 0.."tilt".len() + 1 + "45".len() + 1 {
-        assert!(runner.keyboard_event(&press(NamedKey::ArrowRight), 1.0, VIEWPORT));
+        assert!(runner.keyboard_event(
+            &key_down(NamedKey::ArrowRight, Modifiers::empty()),
+            1.0,
+            VIEWPORT
+        ));
     }
     assert_eq!(
         runner.editor.model.selection.as_ref().unwrap().path(),
         paths[2]
     );
-    assert!(runner.keyboard_event(&press(NamedKey::ArrowLeft), 1.0, VIEWPORT));
+    assert!(runner.keyboard_event(
+        &key_down(NamedKey::ArrowLeft, Modifiers::empty()),
+        1.0,
+        VIEWPORT
+    ));
     let selected = runner.editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), paths[1]);
     assert_eq!(selected.edit().unwrap().selection_offsets(), (2, 2));
@@ -541,14 +580,7 @@ fn every_input_receives_the_installed_dispatch_context() {
                 EventOutcome::accept()
             }
         });
-        let button = PointerButtonEvent {
-            button: Some(ui_events::pointer::PointerButton::Primary),
-            pointer: crate::display::test_support::mouse(),
-            state: PointerState {
-                position: (20.0, 20.0).into(),
-                ..Default::default()
-            },
-        };
+        let button = press_at(Point::new(20.0, 20.0), Modifiers::empty());
         match kind {
             "key" => {
                 runner.keyboard_event(&key(), 1.0, VIEWPORT);
@@ -661,7 +693,7 @@ fn scrolling_delivers_one_batch_and_builds_one_successor() {
     runner.refresh_frame(1.0, VIEWPORT);
     log.take();
     let events = [10.0, -10.0].map(|y| PointerScrollEvent {
-        pointer: crate::display::test_support::mouse(),
+        pointer: mouse(),
         state: PointerState {
             position: (20.0, 20.0).into(),
             ..Default::default()
@@ -705,7 +737,7 @@ fn replacing_a_document_drops_the_old_dispatch_before_building_its_successor() {
     let mut runner = instrumented_runner(&log);
     runner.refresh_frame(1.0, VIEWPORT);
     log.borrow_mut().clear();
-    let pointer = crate::display::test_support::mouse();
+    let pointer = mouse();
     let current = PointerState {
         position: (20.0, 20.0).into(),
         ..Default::default()
@@ -799,7 +831,7 @@ fn scroll_settles_before_paired_motion_without_an_extra_frame() {
         position: (20.0, 20.0).into(),
         ..Default::default()
     };
-    let pointer = crate::display::test_support::mouse();
+    let pointer = mouse();
     let motion = PointerEvent::Move(PointerUpdate {
         pointer,
         current: state.clone(),
@@ -911,11 +943,7 @@ fn pointer_release_and_cancellation_update_the_computation_input() {
         let pressed = runner.editor.computations.pointer_pressed.clone();
         move |read| Ok(*pressed.read(read))
     });
-    let button = PointerButtonEvent {
-        button: Some(ui_events::pointer::PointerButton::Primary),
-        pointer: crate::display::test_support::mouse(),
-        state: PointerState::default(),
-    };
+    let button = press_at(Point::ZERO, Modifiers::empty());
     for release in [
         PointerEvent::Up(button.clone()),
         PointerEvent::Cancel(button.pointer),

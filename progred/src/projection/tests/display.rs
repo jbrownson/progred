@@ -1,7 +1,9 @@
 use super::*;
+use crate::display::test_support::press_at;
 use crate::display::widget::style;
 use crate::projection::Layout;
 use crate::projection::test_support::ProjectionInput;
+use ui_events::keyboard::Modifiers;
 
 #[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {
@@ -478,15 +480,7 @@ fn a_projection_defined_as_data_realizes() {
     );
     assert!(placed.resolve_for_dispatch().dispatch_pointer_down_with(
         &mut crate::test_editor(doc.clone()),
-        &PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            state: PointerState::default(),
-        },
+        &press_at(Point::ZERO, Modifiers::empty()),
         &mut pointer,
     ));
 }

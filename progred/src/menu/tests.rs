@@ -1,55 +1,56 @@
 use super::*;
+use crate::test_support::key_down;
 use ui_events::keyboard::{KeyState, Modifiers, NamedKey};
-
-fn key(key: &str, modifiers: Modifiers) -> KeyboardEvent {
-    KeyboardEvent {
-        key: Key::Character(key.into()),
-        modifiers,
-        state: KeyState::Down,
-        ..Default::default()
-    }
-}
 
 #[test]
 fn shortcuts_are_drawn_application_commands() {
     assert_eq!(
         shortcut(
-            &key("n", Modifiers::CONTROL),
+            &key_down(Key::Character("n".into()), Modifiers::CONTROL),
             puri::keyboard::CommandModifier::Control
         ),
         Some(Command::App(AppCommand::New))
     );
     assert_eq!(
         shortcut(
-            &key("N", Modifiers::CONTROL | Modifiers::SHIFT),
+            &key_down(
+                Key::Character("N".into()),
+                Modifiers::CONTROL | Modifiers::SHIFT
+            ),
             puri::keyboard::CommandModifier::Control
         ),
         Some(Command::App(AppCommand::NewWindow))
     );
     assert_eq!(
         shortcut(
-            &key("s", Modifiers::CONTROL),
+            &key_down(Key::Character("s".into()), Modifiers::CONTROL),
             puri::keyboard::CommandModifier::Control
         ),
         Some(Command::Doc(DocCommand::Save))
     );
     assert_eq!(
         shortcut(
-            &key("S", Modifiers::CONTROL | Modifiers::SHIFT),
+            &key_down(
+                Key::Character("S".into()),
+                Modifiers::CONTROL | Modifiers::SHIFT
+            ),
             puri::keyboard::CommandModifier::Control
         ),
         Some(Command::Doc(DocCommand::SaveAs))
     );
     assert_eq!(
         shortcut(
-            &key("s", Modifiers::META),
+            &key_down(Key::Character("s".into()), Modifiers::META),
             puri::keyboard::CommandModifier::Control
         ),
         None
     );
     assert_eq!(
         shortcut(
-            &key("s", Modifiers::CONTROL | Modifiers::ALT),
+            &key_down(
+                Key::Character("s".into()),
+                Modifiers::CONTROL | Modifiers::ALT
+            ),
             puri::keyboard::CommandModifier::Control
         ),
         None
@@ -67,7 +68,7 @@ fn example_shortcuts_follow_menu_order() {
     ] {
         assert_eq!(
             shortcut(
-                &key(digit, Modifiers::CONTROL),
+                &key_down(Key::Character(digit.into()), Modifiers::CONTROL),
                 puri::keyboard::CommandModifier::Control
             ),
             Some(Command::App(AppCommand::Example(example)))
@@ -80,19 +81,11 @@ fn removed_example_shortcuts_are_unclaimed() {
     for digit in ["6", "7", "8", "9"] {
         assert_eq!(
             shortcut(
-                &key(digit, Modifiers::CONTROL),
+                &key_down(Key::Character(digit.into()), Modifiers::CONTROL),
                 puri::keyboard::CommandModifier::Control
             ),
             None
         );
-    }
-}
-
-fn named(key: NamedKey) -> KeyboardEvent {
-    KeyboardEvent {
-        key: Key::Named(key),
-        state: KeyState::Down,
-        ..Default::default()
     }
 }
 
@@ -130,7 +123,7 @@ fn arrows_walk_enabled_items_and_wrap() {
             &mut state,
             &menus,
             availability,
-            &named(NamedKey::ArrowDown)
+            &key_down(NamedKey::ArrowDown, Modifiers::empty())
         ),
         Navigation::Handled
     ));
@@ -140,13 +133,18 @@ fn arrows_walk_enabled_items_and_wrap() {
             &mut state,
             &menus,
             availability,
-            &named(NamedKey::ArrowDown)
+            &key_down(NamedKey::ArrowDown, Modifiers::empty())
         ),
         Navigation::Handled
     ));
     assert_eq!(state.cursor(), Some(1));
     assert!(matches!(
-        navigate(&mut state, &menus, availability, &named(NamedKey::Enter)),
+        navigate(
+            &mut state,
+            &menus,
+            availability,
+            &key_down(NamedKey::Enter, Modifiers::empty())
+        ),
         Navigation::Activate(Command::Doc(DocCommand::Redo))
     ));
 }
@@ -161,7 +159,7 @@ fn horizontal_arrows_switch_menus_and_select_the_first_enabled_item() {
             &mut state,
             &menus,
             all_enabled(),
-            &named(NamedKey::ArrowDown)
+            &key_down(NamedKey::ArrowDown, Modifiers::empty())
         ),
         Navigation::Handled
     ));
@@ -171,7 +169,7 @@ fn horizontal_arrows_switch_menus_and_select_the_first_enabled_item() {
             &mut state,
             &menus,
             all_enabled(),
-            &named(NamedKey::ArrowRight)
+            &key_down(NamedKey::ArrowRight, Modifiers::empty())
         ),
         Navigation::Handled
     ));
@@ -182,7 +180,7 @@ fn horizontal_arrows_switch_menus_and_select_the_first_enabled_item() {
             &mut state,
             &menus,
             all_enabled(),
-            &named(NamedKey::ArrowLeft)
+            &key_down(NamedKey::ArrowLeft, Modifiers::empty())
         ),
         Navigation::Handled
     ));
@@ -194,18 +192,43 @@ fn horizontal_arrows_switch_menus_and_select_the_first_enabled_item() {
 fn keyboard_entry_endpoints_and_dismissal() {
     let menus = definition([]);
     let mut state = State::default();
-    navigate(&mut state, &menus, all_enabled(), &named(NamedKey::F10));
+    navigate(
+        &mut state,
+        &menus,
+        all_enabled(),
+        &key_down(NamedKey::F10, Modifiers::empty()),
+    );
     assert_eq!(state.open(), Some(0));
     assert_eq!(state.cursor(), Some(0));
-    navigate(&mut state, &menus, all_enabled(), &named(NamedKey::End));
+    navigate(
+        &mut state,
+        &menus,
+        all_enabled(),
+        &key_down(NamedKey::End, Modifiers::empty()),
+    );
     assert_eq!(state.cursor(), Some(commands(&menus[..1]).count() - 1));
-    navigate(&mut state, &menus, all_enabled(), &named(NamedKey::Home));
+    navigate(
+        &mut state,
+        &menus,
+        all_enabled(),
+        &key_down(NamedKey::Home, Modifiers::empty()),
+    );
     assert_eq!(state.cursor(), Some(0));
     for key in [NamedKey::Escape, NamedKey::Tab, NamedKey::F10] {
-        navigate(&mut state, &menus, all_enabled(), &named(key));
+        navigate(
+            &mut state,
+            &menus,
+            all_enabled(),
+            &key_down(key, Modifiers::empty()),
+        );
         assert_eq!(state.open(), None);
         assert_eq!(state.cursor(), None);
-        navigate(&mut state, &menus, all_enabled(), &named(NamedKey::F10));
+        navigate(
+            &mut state,
+            &menus,
+            all_enabled(),
+            &key_down(NamedKey::F10, Modifiers::empty()),
+        );
     }
 }
 
@@ -227,7 +250,7 @@ fn a_tap_of_alt_on_its_own_enters_and_leaves_the_bar() {
     };
     // Its repeats while held are still the one press.
     assert!(!alt(&mut state, NamedKey::Alt, true, Modifiers::ALT));
-    let mut repeat = named(NamedKey::Alt);
+    let mut repeat = key_down(NamedKey::Alt, Modifiers::empty());
     repeat.modifiers = Modifiers::ALT;
     repeat.repeat = true;
     navigate(&mut state, &menus, all_enabled(), &repeat);
@@ -242,7 +265,12 @@ fn a_tap_of_alt_on_its_own_enters_and_leaves_the_bar() {
     // Chords aren't taps: another key between, Alt pressed with Shift (a
     // layout switch on many desktops) or Ctrl, AltGr, or a click.
     alt(&mut state, NamedKey::Alt, true, Modifiers::ALT);
-    navigate(&mut state, &menus, all_enabled(), &key("x", Modifiers::ALT));
+    navigate(
+        &mut state,
+        &menus,
+        all_enabled(),
+        &key_down(Key::Character("x".into()), Modifiers::ALT),
+    );
     assert!(!alt(&mut state, NamedKey::Alt, false, Modifiers::empty()));
     for held in [Modifiers::SHIFT, Modifiers::CONTROL] {
         alt(&mut state, NamedKey::Alt, true, held | Modifiers::ALT);
@@ -278,7 +306,7 @@ fn menu_sections_toggle_and_switch() {
 #[test]
 fn an_open_menu_captures_other_key_downs() {
     let mut state = State::default();
-    let mut event = key("x", Modifiers::empty());
+    let mut event = key_down(Key::Character("x".into()), Modifiers::empty());
     assert!(!state.captures_key(&event));
     state.toggle(0);
     assert!(state.captures_key(&event));

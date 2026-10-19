@@ -1,17 +1,16 @@
 use crate::display::Env;
 use crate::display::recording::{Recordable, Recorded};
 use crate::display::test_support::with_context;
+use crate::display::test_support::{mouse, press_at};
 use crate::display::widget;
 use crate::display::widget::placed::leaf;
 use crate::projection::Layout;
 use crate::projection::test_support::ProjectionInput;
 use crate::{Editor, frame::Hovered};
+use kurbo::Point;
 use kurbo::Rect;
 use measured::Extent;
 use ui_events::keyboard::Modifiers;
-use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-};
 use uig::Placement;
 
 /// Exercise an offer's actual handler, including its selection effects.
@@ -56,7 +55,6 @@ pub fn point_update(
     layout: &impl Recordable<Editor, Hovered>,
     point: crate::display::PointEvent,
 ) -> crate::display::PointUpdate {
-    use ui_events::pointer::{PointerButton, PointerButtonEvent};
     let Recorded::Before { before, .. } = layout.record() else {
         panic!("expected a point-control wrapper");
     };
@@ -73,11 +71,7 @@ pub fn point_update(
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 100.0, 100.0)),
     );
-    let mut event = PointerButtonEvent {
-        button: Some(PointerButton::Primary),
-        pointer: crate::display::test_support::mouse(),
-        state: Default::default(),
-    };
+    let mut event = press_at(Point::ZERO, Modifiers::empty());
     event.state.position = (50.0, 50.0).into();
     assert!(
         output
@@ -236,7 +230,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
     world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
     let event = ui_events::pointer::PointerButtonEvent {
         button: Some(ui_events::pointer::PointerButton::Primary),
-        pointer: crate::display::test_support::mouse(),
+        pointer: mouse(),
         state: ui_events::pointer::PointerState {
             modifiers: ui_events::keyboard::Modifiers::META
                 | ui_events::keyboard::Modifiers::CONTROL,
@@ -276,26 +270,6 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
 
 pub fn target() -> Hovered {
     crate::libraries::test_widgets::hover(vec![])
-}
-
-pub fn press(x: f64, pick: bool) -> PointerButtonEvent {
-    PointerButtonEvent {
-        button: Some(PointerButton::Primary),
-        pointer: PointerInfo {
-            pointer_id: Some(PointerId::PRIMARY),
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        },
-        state: PointerState {
-            position: (x, 5.0).into(),
-            modifiers: if pick {
-                Modifiers::META | Modifiers::CONTROL
-            } else {
-                Modifiers::empty()
-            },
-            ..Default::default()
-        },
-    }
 }
 
 pub fn gesture_place(

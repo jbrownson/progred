@@ -1,4 +1,5 @@
 use super::*;
+use crate::display::test_support::{mouse, press_at};
 use crate::svg::write_cmds;
 
 #[test]
@@ -291,15 +292,10 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         let mut state = ui_events::pointer::PointerState::default();
         state.position.x = 5.0;
         state.position.y = 5.0;
-        state.modifiers =
-            ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
+        state.modifiers = crate::modifiers::command();
         let event = ui_events::pointer::PointerButtonEvent {
             button: Some(PointerButton::Primary),
-            pointer: ui_events::pointer::PointerInfo {
-                pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: ui_events::pointer::PointerType::Mouse,
-            },
+            pointer: mouse(),
             state,
         };
         let frame = placed.bind(Default::default());
@@ -389,7 +385,6 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
 #[test]
 fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     use puri::handler::Event;
-    use ui_events::keyboard::Modifiers;
 
     let mut editor = crate::test_editor(Document::default());
     let source_view = editor.model.workspace.document_root().clone();
@@ -448,7 +443,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         0.0
     );
 
-    let modifiers = Modifiers::META | Modifiers::CONTROL;
+    let modifiers = crate::modifiers::command();
     input.modifiers = modifiers;
     for event in [Event::HoverChanged, Event::ModifiersChanged(&modifiers)] {
         editor
@@ -482,19 +477,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     );
 
     input.root = Some(drawing_view);
-    let event = ui_events::pointer::PointerButtonEvent {
-        button: Some(PointerButton::Primary),
-        pointer: ui_events::pointer::PointerInfo {
-            pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
-            persistent_device_id: None,
-            pointer_type: ui_events::pointer::PointerType::Mouse,
-        },
-        state: ui_events::pointer::PointerState {
-            position: (5.0, 5.0).into(),
-            modifiers,
-            ..Default::default()
-        },
-    };
+    let event = press_at(Point::new(5.0, 5.0), modifiers);
     editor.pressed = true;
     assert!(handler.dispatch_pointer_down_with(&mut editor, &event, &mut input));
     let selected = editor.model.selection.as_ref().unwrap();

@@ -1,18 +1,17 @@
 use super::*;
+use crate::display::test_support::press_at;
 use crate::display::test_support::{Landmarks, ResolveForDispatch};
 use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::libraries::{f32, f64, text, u64};
 use crate::projection::test_support::*;
 use crate::selection::pending_value;
+use crate::test_support::key_down;
 use crate::test_values::numeric_calls;
 use gid::{Cells, Document, Step, new_cell_id};
 use kurbo::Point;
 use puri::hover::Claim;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers};
-use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-};
+use ui_events::keyboard::{Key, Modifiers};
 
 #[test]
 fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
@@ -38,11 +37,7 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
             let frame = editing_frame(&mut world, false);
             assert!(frame.resolve_for_dispatch().dispatch_key(
                 &mut world,
-                &KeyboardEvent {
-                    key: Key::Character(typed.into()),
-                    state: KeyState::Down,
-                    ..Default::default()
-                },
+                &key_down(Key::Character(typed.into()), Modifiers::empty()),
             ));
         }
         assert_eq!(world.model.doc.root, Some(cell.into()));
@@ -99,23 +94,14 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
                 crate::frame::DispatchContext::new(Some(crate::test_root()), Some(hovered.clone()));
             frame.resolve_for_dispatch().dispatch_pointer_down_with(
                 &mut world,
-                &PointerButtonEvent {
-                    button: Some(PointerButton::Primary),
-                    pointer: PointerInfo {
-                        pointer_id: Some(PointerId::PRIMARY),
-                        persistent_device_id: None,
-                        pointer_type: PointerType::Mouse,
+                &press_at(
+                    point,
+                    if pick {
+                        crate::modifiers::command()
+                    } else {
+                        Modifiers::empty()
                     },
-                    state: PointerState {
-                        position: (point.x, point.y).into(),
-                        modifiers: if pick {
-                            Modifiers::META | Modifiers::CONTROL
-                        } else {
-                            Modifiers::empty()
-                        },
-                        ..Default::default()
-                    },
-                },
+                ),
                 &mut dispatch,
             );
             assert_eq!(world.gesture.is_some(), scrub, "{contact}");
