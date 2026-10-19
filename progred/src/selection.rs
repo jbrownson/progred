@@ -57,15 +57,10 @@ pub enum Stage {
 }
 
 impl Selection {
-    /// Reify a payload at a host-owned path. This is the mutation
-    /// boundary used by Grap capabilities after decoding the path.
-    /// Editor fields are decoded once into
-    /// their live owner, then removed from the stored payload.
-    #[cfg(test)]
-    pub(crate) fn from_payload(root: &Root, sources: &Sources, path: Path, payload: Value) -> Self {
-        Self::from_scoped_payload(root, sources, Scope::default(), path, payload)
-    }
-
+    /// Reify a payload at a host-owned path, read through `scope`: the
+    /// mutation boundary Grap capabilities use after decoding the path.
+    /// Editor fields are decoded once into their live owner, then removed
+    /// from the stored payload.
     pub(crate) fn from_scoped_payload(
         root: &Root,
         sources: &Sources,
@@ -108,21 +103,14 @@ impl Selection {
     }
 
     pub fn edge(root: &Root, path: Path) -> Self {
-        edge_selection(root, path, None)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn from_line(
-        root: &Root,
-        sources: &Sources,
-        path: Path,
-        line: crate::display::LineEdit,
-    ) -> Self {
-        let mut selection = Self::edge(root, path);
-        if selection.writable(sources) {
-            selection.edit_line_mut(&line.text);
+        Self {
+            root: root.clone(),
+            path,
+            scope: Scope::default(),
+            payload: payload::edge(),
+            editor: None,
+            origin: None,
         }
-        selection
     }
 
     pub fn path(&self) -> &[Step] {
@@ -302,16 +290,6 @@ impl Selection {
         &mut editor.line
     }
 
-    /// Reseed a pending's query — the test paths.
-    #[cfg(test)]
-    pub(crate) fn with_query(mut self, text: &str) -> Selection {
-        if let Some(editor) = &mut self.editor {
-            editor.line = line_edit(text);
-        }
-        self.reset_completion_for_query();
-        self
-    }
-
     fn query_changed(&self) -> bool {
         self.editor.as_ref().is_some_and(|editor| {
             editor.query && payload::query(&self.payload).unwrap_or("") != editor.line.text()
@@ -325,22 +303,6 @@ impl Selection {
             self.payload = payload::with_completion_query(&self.payload, editor.line.text());
         }
     }
-}
-
-fn edge_selection(root: &Root, path: Path, editor: Option<Editor>) -> Selection {
-    Selection {
-        root: root.clone(),
-        path,
-        scope: Default::default(),
-        payload: payload::edge(),
-        editor,
-        origin: None,
-    }
-}
-
-#[cfg(test)]
-pub(crate) fn line_edit(text: &str) -> LineEditState {
-    LineEditState::new(text).with_cursor_at_end()
 }
 
 /// Deletes the value at `location`, where it's stored. Within a value it
@@ -386,19 +348,6 @@ fn store(doc: &mut Rc<Document>, start: Start, value: Option<Value>) {
 /// exist, and its value is being authored.
 pub fn pending_value(root: &Root, path: Path) -> Selection {
     pending_with_query(root, path, "")
-}
-
-/// An edge with no editor mounted — the test paths' plain selection.
-#[cfg(test)]
-pub(crate) fn bare_edge(root: &Root, path: Path) -> Selection {
-    Selection {
-        root: root.clone(),
-        path,
-        scope: Default::default(),
-        payload: payload::edge(),
-        editor: None,
-        origin: None,
-    }
 }
 
 /// A value pending with a seeded query — the clipboard, replacement, and

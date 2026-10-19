@@ -17,9 +17,10 @@ fn a_plain_missing_name_selection_offers_and_commits_text() {
     };
     let path = vec![Step::Key(name::vocabulary::NAME)];
     for payload in [Value::record([]), crate::selection::payload::edge()] {
-        let selected = Selection::from_payload(
+        let selected = Selection::from_scoped_payload(
             &root,
             &src(&doc, &stack.libraries),
+            Default::default(),
             path.clone(),
             payload.clone(),
         );

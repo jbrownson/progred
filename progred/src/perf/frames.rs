@@ -149,12 +149,13 @@ fn color_picker_frame() -> impl FnMut() -> Bench {
         root: None,
     }
     .prepare(&doc);
-    let selection = Selection::from_payload(
+    let selection = Selection::from_scoped_payload(
         &crate::test_root(),
         &Sources {
             doc: &doc,
             libraries: &context.stack.libraries,
         },
+        Default::default(),
         Vec::new(),
         payload,
     );

@@ -40,8 +40,13 @@ fn replacing_query_text_settles_completion_state_before_the_next_edit() {
             f64::value(30.0),
         ),
     ]);
-    let mut selected =
-        Selection::from_payload(&crate::test_root(), &src(&doc, &libraries), vec![], payload);
+    let mut selected = Selection::from_scoped_payload(
+        &crate::test_root(),
+        &src(&doc, &libraries),
+        Default::default(),
+        vec![],
+        payload,
+    );
     assert_eq!(selected.choice(), 0);
     assert_eq!(selected.completion_scroll(), 0.0);
     selected.edit_query(|line| {

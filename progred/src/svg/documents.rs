@@ -174,7 +174,7 @@ fn svg_bench_renders_the_placeholder_notation() {
             root: Some(crate::test_values::text("asdf")),
             cells: Cells::new(),
         },
-        Some(&crate::selection::bare_edge(
+        Some(&crate::selection::Selection::edge(
             &crate::test_root(),
             Vec::new(),
         )),
@@ -196,6 +196,15 @@ fn svg_bench_renders_the_placeholder_notation() {
     );
 }
 
+/// `pending` with `query` typed into it, the caret at its end.
+fn typed(mut pending: Selection, query: &str) -> Selection {
+    pending.edit_query(|line| {
+        *line = puri::edit::LineEditState::new(query).with_cursor_at_end();
+        true
+    });
+    pending
+}
+
 #[test]
 fn svg_bench_renders_a_pending_edge() {
     let doc = sample_document();
@@ -213,22 +222,24 @@ fn svg_bench_renders_a_pending_edge() {
         edge.stage(&src(&doc, &library)),
         crate::selection::Stage::Label
     );
-    let typing = edge.with_query("na");
+    let typing = typed(edge, "na");
     render(&doc, Some(&typing), 560.0, "raw_pending_edge.svg");
 
     let doc = Document {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let typing = pending_edge(
-        &crate::test_root(),
-        &Scope::default().view(Sources {
-            doc: &doc,
-            libraries: &library,
-        }),
-        Vec::new(),
-    )
-    .unwrap()
-    .with_query("field");
+    let typing = typed(
+        pending_edge(
+            &crate::test_root(),
+            &Scope::default().view(Sources {
+                doc: &doc,
+                libraries: &library,
+            }),
+            Vec::new(),
+        )
+        .unwrap(),
+        "field",
+    );
     render(&doc, Some(&typing), 320.0, "pending_field_slot.svg");
 }

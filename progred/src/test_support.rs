@@ -285,9 +285,10 @@ pub(crate) fn activate_projected(
 ) -> crate::Editor {
     let mut editor = crate::test_editor(doc.clone());
     editor.model.workspace.document.root = selection.root().clone();
-    editor.model.selection = Some(Selection::from_payload(
+    editor.model.selection = Some(Selection::from_scoped_payload(
         selection.root(),
         &editor.sources(),
+        Default::default(),
         selection.path().to_vec(),
         selection.payload(),
     ));

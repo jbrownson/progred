@@ -384,7 +384,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     let empty = Annotations::default();
     let cold = width(None, &empty);
     let selected = width(
-        Some(&crate::selection::bare_edge(
+        Some(&crate::selection::Selection::edge(
             &crate::test_root(),
             Vec::new(),
         )),

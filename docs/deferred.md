@@ -468,12 +468,12 @@ first:
       event encoding has moved to the layout library. What's left is mostly
       two groups. Nine write-through tests in projection/tests/editing.rs
       get their editing selection by projecting a frame and pressing End;
-      targeted, each would build it from its library's own line editor, as
-      `Selection::from_line` does, before `editing::commit_line`. Seven in
-      frame/layout.rs check the toolkit's placement, hover and dispatch
-      through a throwaway projection in a whole frame; targeted, they'd
-      measure and place the layout in display's tests, which first needs
-      display's test support to hover and dispatch a placed layout.
+      targeted, each would build it from its library's own line editor,
+      mounted with `Selection::edit_line_mut`, before `editing::commit_line`.
+      Seven in frame/layout.rs check the toolkit's placement, hover and
+      dispatch through a throwaway projection in a whole frame; targeted,
+      they'd measure and place the layout in display's tests, which first
+      needs display's test support to hover and dispatch a placed layout.
    7. ~~Give the captures and the frame canaries modules of their own, with
       the SVG writer in test support.~~ Done on 17 October 2026. The SVG
       writer and its captures are `crate::svg`, and the frame canaries

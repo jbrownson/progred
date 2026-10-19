@@ -341,22 +341,9 @@ fn saving_and_folding_break_typing_runs() {
         cells: Cells::new(),
     });
     let root = model.workspace.document_root().clone();
-    model.selection = Some(selection::Selection::from_line(
-        &root,
-        &Sources {
-            doc: &model.doc,
-            libraries: &libraries,
-        },
-        path.clone(),
-        crate::display::LineEdit {
-            text: "a".into(),
-            placeholder: None,
-            update: crate::libraries::line_edit::native(text::edit),
-            prefix: "\"".into(),
-            suffix: "\"".into(),
-            family: Default::default(),
-        },
-    ));
+    let mut typing = selection::Selection::edge(&root, path.clone());
+    typing.edit_line_mut("a");
+    model.selection = Some(typing);
     let type_text = |model: &mut Model, text| {
         let before = model.snapshot();
         let selection = model.selection.as_mut().unwrap();

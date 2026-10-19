@@ -157,12 +157,8 @@ fn custom_update_can_bind_an_absent_and_return_a_value() {
         suffix: String::new(),
         family: Default::default(),
     };
-    let mut selected = Selection::from_line(
-        &crate::test_root(),
-        &src(&doc, &libraries),
-        vec![],
-        line.clone(),
-    );
+    let mut selected = Selection::edge(&crate::test_root(), vec![]);
+    selected.edit_line_mut(&line.text);
     assert!(crate::editing::commit_line(
         &mut doc,
         &libraries,
