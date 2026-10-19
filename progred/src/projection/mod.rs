@@ -1062,12 +1062,8 @@ fn pick_target(
         let value = value.clone();
         let select = select.clone();
         p.pick(Hovered::Tree(Hover::Value(path.clone())), move |world| {
-            let mut session = world.session();
-            if !session
-                .pending()
-                .is_some_and(|picking| picking.pick(value.to_value()))
-            {
-                select(&mut session);
+            if !crate::display::widget::interaction::pick(world, &value) {
+                select(&mut world.session());
             }
             true
         });
