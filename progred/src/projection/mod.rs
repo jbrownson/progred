@@ -110,10 +110,6 @@ pub(crate) struct Cx<'a> {
     pub(crate) sources: Sources<'a>,
     pub(crate) edits: crate::editing::Scope,
     /// Names and field order derive from this view bit.
-    /// Raw opens only the cells it reaches directly: references inside a
-    /// cell's definition start folded, so a call doesn't inline its callee
-    /// and a shared cell isn't expanded again at every use. A cell that is
-    /// only a reference to another opens through to it.
     pub(crate) raw: bool,
     pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
@@ -865,13 +861,16 @@ fn prepare_value(
     let child_projection = child_projection.as_ref().unwrap_or(projection);
     // Ancestry is already available from projection; folds must not re-read an
     // occurrence as a document path (and computed values have no such path).
+    // Only the cells a view reaches directly open: references inside a cell's
+    // definition start folded, so a call doesn't inline its callee, nor a
+    // shared cell expand again at every use, whichever projection draws them.
+    // A cell that is only a reference to another opens through to it.
     let fold_default = value.and_then(|value| {
         let folded = value.as_cell().is_some_and(|cell| {
             ancestors.cells.contains(&cell)
-                || cx.raw
-                    && ancestors
-                        .enclosing
-                        .is_some_and(|(_, _, start)| path.len() > start)
+                || ancestors
+                    .enclosing
+                    .is_some_and(|(_, _, start)| path.len() > start)
         });
         crate::selection::collapse_default_for_value(&cx.sources, value, folded)
     });

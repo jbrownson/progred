@@ -522,19 +522,21 @@ pub(crate) fn collapse_default_for_value(
     collapsible.then_some(folded)
 }
 
-/// A single plain value, such as a number, text or a color: bytes, or a
-/// record whose one field besides its name holds bytes. A cell holding one
-/// shows it whole, so it never folds.
+/// Nothing more than a name and a plain value: bytes, or a record holding,
+/// besides its name, nothing or one field of bytes, such as a parameter, a
+/// number, text or a color. A cell holding one shows the same closed as
+/// open, so it never folds.
 fn plain(value: &Value) -> bool {
     value.as_blob().is_some()
         || value.as_record().is_some_and(|fields| {
             let mut kept = fields
                 .iter()
                 .filter(|(key, _)| *key != crate::libraries::name::vocabulary::NAME);
-            matches!(
-                (kept.next(), kept.next()),
-                (Some((_, field)), None) if field.as_blob().is_some()
-            )
+            match (kept.next(), kept.next()) {
+                (None, _) => true,
+                (Some((_, field)), None) => field.as_blob().is_some(),
+                _ => false,
+            }
         })
 }
 
