@@ -73,10 +73,9 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
     });
     let root = editor.model.workspace.document_root().clone();
     let source = vec![Step::Key(field)];
-    let scope = crate::editing::Scope::default().with_conject(
+    let scope = crate::editing::Scope::default().located(
         occurrence.to_vec(),
         crate::location::Location::root(source.clone()),
-        crate::display::Conject::descend(),
     );
     // What the projection draws a conjected occurrence sharing.
     let secondary = Secondary::Stored(Rc::from(source.as_slice()));

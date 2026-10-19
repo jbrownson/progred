@@ -147,14 +147,12 @@ intermediate containers. It preserves the current location interpretation,
 except that following a cell starts a location at its definition.
 `jump(steps, document_path)` extends the occurrence path by `steps`
 but reads from an absolute, source-qualified document path. Its descendants
-conject to that source. `jump_with_conject` takes any location instead, such as
-one within a cell's definition, and supplies the lower level function,
-`(&projection_suffix, &location_path) -> Option<Path>`, used by both projection
-reads and later edits; the result keeps the location's start. No inverse is
-required.
+conject to that source, for both projection reads and later edits; no inverse
+is required. `jump_to` reads from wherever a site is stored instead, such as
+within a cell's definition, and keeps that location's start.
 
 `at(steps, value)` instead projects the supplied value with no document source.
-Its conject returns `None`, including for ordinary descendants. A cell followed
+Its conject gives no location, including for ordinary descendants. A cell followed
 inside it still starts a location at its definition, which is stored data, and
 an explicit nested jump can establish a source. Existing stored-child partials
 use `descend`, not `at` with a copy of the source value. Computed results
@@ -596,8 +594,7 @@ column of a centered numerator, a rule, and a centered denominator, with no
 measurement in Grap. `descend` takes `step`; `descend path` takes
 `steps`; `jump` takes `steps` and `document path`; `at` takes `steps` and `value`.
 All paths use the path library, with no opaque editor or scope value in Grap.
-Custom native conject functions are currently Rust-side; the Grap-facing jump
-provides the standard document-path interpretation.
+The Grap-facing jump provides the standard document-path interpretation.
 `canvas` accepts width/ascent/descent and a drawing-program value;
 it does not construct a list of draw commands. Its optional fuel argument
 configures the later drawing evaluation, as with the stored drawing convention;

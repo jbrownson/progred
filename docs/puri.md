@@ -203,9 +203,10 @@ Puri's text editor remains independent of these document operations.
 The location-facing callbacks capture an
 [editing scope](../progred/src/editing/scope.rs). At dispatch, the scope opens
 an `Edit` interface over the session the dispatch lends. Opening it
-neither allocates nor copies the editor. The scope interprets locations with
-an optional-path-returning `Conject`, not arbitrary replacements of every editor
-operation; the normal projection uses its allocation-free identity case.
+neither allocates nor copies the editor. The scope interprets locations
+through conjects, a jump's location or a computed value's none, not arbitrary
+replacements of every editor operation; the normal projection uses its
+allocation-free identity case.
 Selection and annotations remain local to the occurrence, while document reads
 and mutations resolve through the same conject. Document-editing shell commands
 use the scope retained by the selection too. Copy and fold are instead supplied

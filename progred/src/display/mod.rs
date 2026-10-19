@@ -10,8 +10,6 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 pub mod builder;
-mod conject;
-pub use conject::Conject;
 pub mod host;
 pub use host::Host;
 mod measure;
@@ -837,35 +835,16 @@ pub fn jump<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     document: impl Into<Vec<Step>>,
 ) -> Layout<World, Hover> {
-    jump_with_conject(
-        steps,
-        crate::location::Location::root(document.into()),
-        Conject::descend(),
-        None,
-        None,
-    )
-}
-
-/// Low-level jump: the conject interprets the suffix below the new occurrence
-/// relative to the path of `document`, which keeps its start. It is also used
-/// to locate the value being projected.
-pub fn jump_with_conject<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
-    document: crate::location::Location<'static>,
-    conject: Conject,
-    projection: Option<Partial<World, Hover>>,
-    default_projection: Option<Partial<World, Hover>>,
-) -> Layout<World, Hover> {
     let steps = steps.into();
+    let document = crate::location::Location::root(document.into());
     Layout::program(Rc::new(move |context, build| {
         context.project.jump(
             context.text,
             build,
             steps.clone(),
             document.clone(),
-            conject.clone(),
-            projection.clone(),
-            default_projection.clone(),
+            None,
+            None,
         )
     }))
 }
@@ -886,7 +865,6 @@ pub fn jump_to<World: 'static, Hover: 'static>(
             build,
             steps.clone(),
             document,
-            Conject::descend(),
             projection.clone(),
             None,
         ),

@@ -22,7 +22,6 @@ pub trait Project<World, Hover> {
         build: &mut ChoiceBuild<HoverPass<World, Hover>>,
         steps: Vec<Step>,
         document: crate::location::Location<'static>,
-        conject: crate::display::Conject,
         current: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;

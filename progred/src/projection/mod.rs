@@ -459,13 +459,12 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         steps: Vec<Step>,
         document: Location<'static>,
-        conject: crate::display::Conject,
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let path: Vec<_> = self.path.iter().cloned().chain(steps).collect();
         let cx = Cx {
-            edits: self.cx.edits.with_conject(path.clone(), document, conject),
+            edits: self.cx.edits.located(path.clone(), document),
             ..self.cx.clone()
         };
         let value = cx.edits.view(cx.sources).resolve_path(&path);

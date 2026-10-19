@@ -28,22 +28,16 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
         ProjectionCall::Jump {
             steps: actual,
             document,
-            conject,
             projection,
             default_projection,
         } => {
             assert_eq!(actual, steps);
-            assert_eq!(document, crate::location::Location::root(source.clone()));
-            assert_eq!(
-                conject.apply(&steps, &document.path),
-                Some([source, steps].concat())
-            );
+            assert_eq!(document, crate::location::Location::root(source));
             assert!(projection.is_none());
             assert!(default_projection.is_none());
         }
         _ => panic!("source jump"),
     }
-    assert_eq!(Conject::detached().apply(&[], &[]), None);
 }
 
 fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {

@@ -452,7 +452,7 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
         selected.value(&world.sources()),
         Some(&text::value("before"))
     );
-    // Rebuilding remints the conject closure; this must not discard text state.
+    // Rebuilding remints the jump's scope; this must not discard text state.
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     assert!(frame.resolve_for_dispatch().dispatch_key(
         &mut world,
@@ -682,69 +682,6 @@ fn explicit_jump_can_establish_a_source_below_at() {
         [computed_rect.inset(3.0)]
     );
     assert_eq!(grounds(&drawing.0, palette.paper), [jumped.inset(3.0)]);
-}
-
-#[test]
-fn custom_conject_is_used_for_both_descendant_reads_and_writes() {
-    let (marker, source, occurrence, shown, real) = (
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-        new_cell_id(),
-    );
-    let mut world = world(Value::record([
-        (marker, Value::record([])),
-        (source, Value::record([(real, text::value("actual"))])),
-    ]));
-    let projection = projection(
-        &world,
-        d::partial(move |input| {
-            input.value?.as_record()?.get(&marker)?;
-            Some(d::jump_with_conject(
-                [Step::Key(occurrence)],
-                crate::location::Location::root(vec![Step::Key(source)]),
-                d::Conject::new(move |path, document| {
-                    Some(
-                        document
-                            .iter()
-                            .cloned()
-                            .chain(path.iter().map(|step| {
-                                if *step == Step::Key(shown) {
-                                    Step::Key(real)
-                                } else {
-                                    step.clone()
-                                }
-                            }))
-                            .collect(),
-                    )
-                }),
-                Some(d::partial(move |_| {
-                    Some(d::descend([Step::Key(shown)], None, None))
-                })),
-                None,
-            ))
-        }),
-    );
-    let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
-    let path = [Step::Key(occurrence), Step::Key(shown)];
-    assert!((stop(&frame, &path).select)(&mut world, None));
-    assert_eq!(
-        world
-            .model
-            .selection
-            .as_ref()
-            .unwrap()
-            .value(&world.sources()),
-        Some(&text::value("actual"))
-    );
-    assert!(world.paste_value(text::value("new")));
-    assert_eq!(
-        world
-            .sources()
-            .resolve_path(&[Step::Key(source), Step::Key(real)]),
-        Some(&text::value("new"))
-    );
 }
 
 #[test]

@@ -12,11 +12,7 @@ fn path() -> Path {
 
 impl Scope {
     fn jump(&self, occurrence: Path, document: Path) -> Self {
-        self.with_conject(
-            occurrence,
-            Location::root(document),
-            crate::display::Conject::descend(),
-        )
+        self.located(occurrence, Location::root(document))
     }
 }
 
@@ -61,10 +57,9 @@ fn conjects_compose_and_the_identity_scope_borrows_its_path() {
     let child = Step::Key(new_cell_id());
     let inner_source = [first.clone(), vec![child.clone()]].concat();
     let scope = Scope::default().jump(first.clone(), source.clone());
-    let inner = scope.with_conject(
+    let inner = scope.located(
         second.clone(),
         scope.location(&inner_source).unwrap().into_owned(),
-        crate::display::Conject::descend(),
     );
     let expected = [source.clone(), vec![child]].concat();
     assert_eq!(inner.location(&second), Some(Location::root(expected)));

@@ -157,7 +157,6 @@ pub enum ProjectionCall<W, H> {
     Jump {
         steps: Vec<Step>,
         document: crate::location::Location<'static>,
-        conject: crate::display::Conject,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
     },
@@ -226,14 +225,12 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
         _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         steps: Vec<Step>,
         document: crate::location::Location<'static>,
-        conject: crate::display::Conject,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
         self.record(ProjectionCall::Jump {
             steps,
             document,
-            conject,
             projection,
             default_projection,
         })
@@ -413,7 +410,6 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         _: Vec<Step>,
         _: crate::location::Location<'static>,
-        _: crate::display::Conject,
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {

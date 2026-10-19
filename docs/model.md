@@ -97,10 +97,11 @@ closes it again.
 
 Selection also retains a native editing scope, which maps an occurrence to its
 location, if any. Ordinary document projection uses its allocation-free identity
-case. A scope installs a **conject** at an occurrence: an ordinary function of
-the remaining projection path and a location's path, returning an optional path
-from that location's start. Reads and writes use the same function; there is no
-independently configurable read/write pair or inverse mapping. Several
+case. A scope installs a **conject** at an occurrence: a location whose path
+the remaining projection path continues from that location's start, as a jump
+installs, or no location at all, as a computed value has. Reads and writes use
+the same conject; there is no independently configurable read/write pair or
+inverse mapping. Several
 occurrences may conject to one source. Selection, navigation, and annotations
 stay occurrence-local, while source-linked hover uses the conject. Line editing,
 gestures, completion insertion, structural paste/deletion, and history retain

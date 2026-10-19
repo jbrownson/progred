@@ -20,12 +20,12 @@ struct Layer {
 }
 
 enum Reading {
-    /// A projection's own reading of a location through its conject, which
-    /// maps the steps beneath the occurrence onto that location's.
-    Conject {
-        location: Location<'static>,
-        conject: crate::display::Conject,
-    },
+    /// A projection's conject to a location, as a jump reads it: the steps
+    /// beneath the occurrence continue that location's.
+    Located(Location<'static>),
+    /// A computed value's conject: nothing at or beneath the occurrence is
+    /// stored, until a cell inside it starts a location again.
+    Detached,
     /// A cell's definition, followed at the occurrence: a location starts
     /// there, however the cell was reached.
     Cell {
@@ -63,25 +63,16 @@ impl Scope {
         })))
     }
 
-    /// Install a conject for this occurrence. Other occurrences keep their
-    /// enclosing interpretation; the function sees the suffix below this one.
-    pub(crate) fn with_conject(
-        &self,
-        occurrence: Path,
-        location: Location<'static>,
-        conject: crate::display::Conject,
-    ) -> Self {
-        self.layer(occurrence, Reading::Conject { location, conject })
+    /// The occurrence reads `location`, and what's beneath it what's beneath
+    /// that. Other occurrences keep their enclosing interpretation.
+    pub(crate) fn located(&self, occurrence: Path, location: Location<'static>) -> Self {
+        self.layer(occurrence, Reading::Located(location))
     }
 
     /// A computed value at this occurrence: nothing at or beneath it is
     /// stored, until a cell inside it starts a location again.
     pub(crate) fn detached(&self, occurrence: Path) -> Self {
-        self.with_conject(
-            occurrence,
-            Location::root(Vec::new()),
-            crate::display::Conject::detached(),
-        )
+        self.layer(occurrence, Reading::Detached)
     }
 
     /// The occurrence follows `cell` to its definition from `source`, where
@@ -99,12 +90,11 @@ impl Scope {
             Some(layer) => match path.strip_prefix(layer.occurrence.as_slice()) {
                 None => layer.within.location(path),
                 Some(rest) => match &layer.reading {
-                    Reading::Conject { location, conject } => {
-                        conject.apply(rest, &location.path).map(|path| Location {
-                            start: location.start,
-                            path: path.into(),
-                        })
-                    }
+                    Reading::Located(location) => Some(Location {
+                        start: location.start,
+                        path: location.path.iter().chain(rest).cloned().collect(),
+                    }),
+                    Reading::Detached => None,
                     Reading::Cell { cell, resolution } => {
                         Some(Location::in_cell(*cell, *resolution, rest))
                     }

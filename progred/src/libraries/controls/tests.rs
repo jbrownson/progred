@@ -64,7 +64,6 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
         _: Vec<gid::Step>,
         _: crate::location::Location<'static>,
-        _: display::Conject,
         _: Option<Partial>,
         _: Option<Partial>,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
