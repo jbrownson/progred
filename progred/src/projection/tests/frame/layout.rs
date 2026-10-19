@@ -1,6 +1,7 @@
 use super::*;
 use crate::clipboard::Clipboard;
 use crate::display::test_support::primary_press;
+use crate::driver::Driver;
 use puri::edit::TextClipboard;
 use puri::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::Modifiers;
@@ -1116,40 +1117,22 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
                         d::col(0, 0.0, vertical),
                     ]))
                 }));
-            let frame = editing_frame(&mut world);
+            editing_frame(&mut world);
             assert_eq!(visits.get(), count, "alternatives share projected children");
+            let mut driver = Driver::new(world, Driver::VIEWPORT);
             let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
-            let rect = frame
-                .landmarks
-                .iter()
-                .find(|d| d.path.is_empty())
-                .unwrap()
-                .rect;
+            let rect = driver.rect(&[]);
             let point = (0..rect.width().ceil() as usize)
                 .map(|x| Point::new(rect.x0 + x as f64 + 0.5, rect.center().y))
-                .find(|point| {
-                    matches!(frame.hover_geometry.probe(Some(*point), None, 0.0),
-                    Some((_, Claim::Direct(ref hover))) if *hover == target)
-                })
+                .find(|point| driver.hover_at(*point).as_ref() == Some(&target))
                 .expect("the plain separator gets its insertion target from the list combinator");
-            let before = world.model.doc.clone();
-            let mut input =
-                crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
-            assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
-                &mut world,
-                &primary_press(point, Modifiers::empty()),
-                &mut input,
-            ));
-            assert!(Rc::ptr_eq(&before, &world.model.doc));
-            assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
-            assert!(editing_frame(&mut world).completion.is_some());
-            assert!(crate::completion::commit(
-                &mut world.session(),
-                f64::value(9.0),
-                None,
-                None
-            ));
-            assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(9.0)));
+            let before = driver.editor().model.doc.clone();
+            driver.click_at(point);
+            assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
+            assert_eq!(driver.selection(), path);
+            assert!(driver.picker_entries().is_some());
+            assert!(driver.paste(&f64::value(9.0)));
+            assert_eq!(driver.value(&path), f64::value(9.0));
         }
     }
 }
@@ -1284,49 +1267,43 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
             )
             .unwrap(),
         )];
-        let mut world = crate::test_editor(doc);
-        let frame = editing_frame(&mut world);
-        let rect = |path: &[Step]| frame.landmarks.landmark(path).unwrap().rect;
+        // A window whose content is 500 points wide, too narrow for the
+        // flat literal.
+        let mut driver = Driver::new(
+            crate::test_editor(doc),
+            kurbo::Size::new(524.0, Driver::VIEWPORT.height),
+        );
         let items: Vec<_> = positions
             .iter()
-            .map(|p| rect(&[Step::Element(p.clone())]))
+            .map(|p| driver.rect(&[Step::Element(p.clone())]))
             .collect();
         assert!(
             items[1].y0 > items[0].y1,
             "the standard list chose its vertical alternative"
         );
-        let list = rect(&[]);
+        let list = driver.rect(&[]);
         let top = boundary.checked_sub(1).map_or(list.y0, |i| items[i].y1);
         let bottom = items.get(boundary).map_or(list.y1, |r| r.y0);
         let point = Point::new(items[0].center().x, (top + bottom) / 2.0);
-        let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
-        assert!(matches!(frame.hover_geometry.probe(Some(point), None, 0.0),
-            Some((_, Claim::Direct(ref hover))) if *hover == target));
-        let before = world.model.doc.clone();
-        let mut input = crate::frame::DispatchContext::new(Some(crate::test_root()), Some(target));
-        assert!(frame.resolve_for_dispatch().dispatch_pointer_down_with(
-            &mut world,
-            &primary_press(point, Modifiers::empty()),
-            &mut input,
-        ));
-        assert!(Rc::ptr_eq(&before, &world.model.doc));
-        assert_eq!(world.model.selection.as_ref().unwrap().path(), path);
-        let pending_frame = editing_frame(&mut world);
-        assert!(pending_frame.completion.is_some());
+        assert_eq!(
+            driver.hover_at(point),
+            Some(Hovered::Tree(Hover::Value(Rc::from(path.clone()))))
+        );
+        let before = driver.editor().model.doc.clone();
+        driver.click_at(point);
+        assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
+        assert_eq!(driver.selection(), path);
+        assert!(driver.picker_entries().is_some());
         let Step::Element(inserted) = &path[0] else {
             unreachable!()
         };
-        let pending = pending_frame.landmarks.landmark(&path).unwrap().rect;
+        let pending = driver.rect(&path);
         for (neighbor, before) in [
             (boundary.checked_sub(1).and_then(|i| positions.get(i)), true),
             (positions.get(boundary), false),
         ] {
             if let Some(neighbor) = neighbor {
-                let neighbor_rect = pending_frame
-                    .landmarks
-                    .landmark(&[Step::Element(neighbor.clone())])
-                    .unwrap()
-                    .rect;
+                let neighbor_rect = driver.rect(&[Step::Element(neighbor.clone())]);
                 let (low, high, y) = if before {
                     (neighbor, inserted, (neighbor_rect.y1 + pending.y0) / 2.0)
                 } else {
@@ -1335,19 +1312,14 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
                 let adjacent = vec![Step::Element(
                     gid::position::between(Some(low), Some(high)).unwrap(),
                 )];
-                assert!(!matches!(
-                    pending_frame.hover_geometry.probe(Some(Point::new(pending.center().x, y)), None, 0.0),
-                    Some((_, Claim::Direct(Hovered::Tree(Hover::Value(ref p))))) if p.as_ref() == adjacent
-                ));
+                assert_ne!(
+                    driver.hover_at(Point::new(pending.center().x, y)),
+                    Some(Hovered::Tree(Hover::Value(Rc::from(adjacent))))
+                );
             }
         }
-        assert!(crate::completion::commit(
-            &mut world.session(),
-            f64::value(9.0),
-            None,
-            None
-        ));
-        assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(9.0)));
+        assert!(driver.paste(&f64::value(9.0)));
+        assert_eq!(driver.value(&path), f64::value(9.0));
     }
 }
 

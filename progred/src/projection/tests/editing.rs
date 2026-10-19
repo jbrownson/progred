@@ -298,44 +298,25 @@ fn directional_line_arrival_is_distinct_from_ordinary_selection() {
 
 #[test]
 fn deletion_and_history_landings_need_no_line_initialization() {
-    let libraries = core_libraries();
-    let doc = Document {
-        root: Some(Value::list([text::value("first"), text::value("survivor")])),
-        cells: Cells::new(),
-    };
-    let positions = positions(doc.root.as_ref().unwrap());
+    let mut driver = Driver::of(Value::list([text::value("first"), text::value("survivor")]));
+    let positions = driver.positions(&[]);
     let first = vec![Step::Element(positions[0].clone())];
     let second = vec![Step::Element(positions[1].clone())];
-    let mut model = crate::model::Model::new(doc.clone());
-    let root = model.workspace.document_root().clone();
-    model.selection = Some(Selection::edge(&root, Default::default(), first.clone()));
-    model.history.record(model.snapshot());
-    let drawn = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
-    assert!(delete_edge(
-        &mut model.doc,
-        &libraries,
-        &crate::location::Location::root(&first)
-    ));
-    let next = crate::navigate::selection_after_removing(
-        &drawn.runner.frame.dispatch.landmarks,
-        &crate::test_root(),
-        &first,
-        true,
-    );
-    assert_eq!(next, second);
-    model.selection = Some(Selection::edge(&root, Default::default(), next));
-    for (undo, expected) in [(false, "survivor!"), (true, "first!")] {
-        if undo {
-            assert!(model.step_history(true));
-        }
-        let selected = model.selection.as_ref().unwrap();
-        assert!(selected.edit().is_none());
-        let mut editor = crate::test_editor((*model.doc).clone());
-        editor.model.selection = Some(make_selection(selected.path().to_vec()));
-        let mut driver = Driver::new(editor, Driver::VIEWPORT);
-        driver.type_text("!");
-        assert_eq!(driver.line(), Some(expected));
-    }
+    driver.select(&first);
+    // A cut leaves a hole, and Delete removes it, landing on what followed.
+    assert!(driver.keystroke(Key::Character("x".into()), crate::test_support::command()));
+    driver.press(NamedKey::Delete);
+    assert_eq!(driver.selection(), second);
+    assert!(driver.line().is_none());
+    driver.type_text("!");
+    assert_eq!(driver.line(), Some("survivor!"));
+    // Undoing the typing, then the cut, lands back on the first item.
+    assert!(driver.undo());
+    assert!(driver.undo());
+    assert_eq!(driver.selection(), first);
+    assert!(driver.line().is_none());
+    driver.type_text("!");
+    assert_eq!(driver.line(), Some("first!"));
 }
 
 #[test]

@@ -7,7 +7,6 @@ use crate::hover::Hover;
 use crate::identity::short_id;
 use crate::libraries::{f64, name, text};
 use crate::projection::test_support::Bench;
-use crate::selection::pending_value;
 use crate::test_support::{EMPTY_SLOTS, positions, set_tutorial_slots};
 use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 use kurbo::Point;
@@ -170,19 +169,12 @@ fn tutorial_slots_have_no_gap_insertions_and_do_not_override_children() {
     }
     let position = gid::position::between(positions.first(), positions.get(1)).unwrap();
     let path = vec![Step::Key(slots[0]), Step::Element(position)];
-    world.model.selection = Some(pending_value(
-        &crate::test_root(),
-        Default::default(),
-        path.clone(),
-    ));
-    assert!(editing_frame(&mut world).completion.is_some());
-    assert!(crate::completion::commit(
-        &mut world.session(),
-        f64::value(5.0),
-        None,
-        None
-    ));
-    assert_eq!(world.sources().resolve_path(&path), Some(&f64::value(5.0)));
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    driver.click_between(&[Step::Key(slots[0])], 0);
+    assert_eq!(driver.selection(), path);
+    assert!(driver.picker_entries().is_some());
+    assert!(driver.paste(&f64::value(5.0)));
+    assert_eq!(driver.value(&path), f64::value(5.0));
 }
 
 #[test]

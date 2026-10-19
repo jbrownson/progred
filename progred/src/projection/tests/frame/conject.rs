@@ -383,24 +383,14 @@ fn missing_jump_target_is_a_real_editable_location() {
             Some(d::jump([Step::Key(occurrence)], [Step::Key(missing)]))
         }),
     );
-    let frame = editing_frame(&mut world);
-    assert!((stop(&frame, &[Step::Key(occurrence)]).select)(
-        &mut world, None
-    ));
-    let frame = editing_frame(&mut world);
-    assert!(frame.completion.is_some());
-    assert!(crate::completion::commit(
-        &mut world.session(),
-        text::value("created"),
-        None,
-        None
-    ));
-    assert_eq!(
-        world.sources().resolve_path(&[Step::Key(missing)]),
-        Some(&text::value("created"))
-    );
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    driver.select(&[Step::Key(occurrence)]);
+    assert!(driver.picker_entries().is_some());
+    assert!(driver.paste(&text::value("created")));
+    assert_eq!(driver.value(&[Step::Key(missing)]), text::value("created"));
     assert!(
-        world
+        driver
+            .editor()
             .sources()
             .resolve_path(&[Step::Key(occurrence)])
             .is_none()
@@ -432,22 +422,23 @@ fn computed_reference() -> (crate::Editor, [CellId; 3]) {
 
 #[test]
 fn at_and_its_descendants_have_no_source_even_when_their_paths_exist() {
-    let (mut world, [source, field, _]) = computed_reference();
+    let (world, [source, field, _]) = computed_reference();
     let before = world.model.doc.clone();
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     for path in [
         vec![Step::Key(source)],
         vec![Step::Key(source), Step::Key(field)],
     ] {
-        let frame = editing_frame(&mut world);
-        assert!((stop(&frame, &path).select)(&mut world, None));
-        let selected = world.model.selection.as_ref().unwrap();
+        driver.select(&path);
+        let editor = driver.editor();
+        let selected = editor.model.selection.as_ref().unwrap();
         assert_eq!(selected.path(), path);
         assert!(selected.location().is_none());
-        assert!(!selected.writable(&world.sources()));
-        assert!(!world.paste_value(text::value("must not write")));
-        assert!(!world.delete_selected_edge(Default::default()));
+        assert!(!selected.writable(&editor.sources()));
+        assert!(!driver.paste(&text::value("must not write")));
+        assert!(!driver.keystroke(Key::Named(NamedKey::Delete), Modifiers::empty()));
     }
-    assert!(Rc::ptr_eq(&before, &world.model.doc));
+    assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
 }
 
 #[test]
@@ -463,37 +454,38 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
         }),
     );
     let before = world.model.doc.clone();
-    let frame = editing_frame(&mut world);
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     let definition = gid::Resolution::Library(text::ID);
     let path = [
         Step::Key(source),
         Step::Key(field),
         Step::Follow(definition),
     ];
-    assert!((stop(&frame, &path).select)(&mut world, None));
-    let selected = world.model.selection.as_ref().unwrap();
+    driver.select(&path);
+    let editor = driver.editor();
+    let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(
         selected.location(),
         Some(Location::in_cell(text::ID, definition, Vec::new()))
     );
-    assert!(selected.value(&world.sources()).is_some());
-    assert!(!selected.writable(&world.sources()));
-    assert!(!world.paste_value(text::value("must not write")));
-    assert!(!world.delete_selected_edge(Default::default()));
-    assert!(Rc::ptr_eq(&before, &world.model.doc));
+    assert!(selected.value(&editor.sources()).is_some());
+    assert!(!selected.writable(&editor.sources()));
+    assert!(!driver.paste(&text::value("must not write")));
+    assert!(!driver.keystroke(Key::Named(NamedKey::Delete), Modifiers::empty()));
+    assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
 }
 
 #[test]
 fn a_cell_followed_from_a_computed_value_is_its_stored_definition() {
-    let (mut world, [source, field, cell]) = computed_reference();
-    let frame = editing_frame(&mut world);
+    let (world, [source, field, cell]) = computed_reference();
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     let path = [
         Step::Key(source),
         Step::Key(field),
         Step::Follow(gid::Resolution::Document),
     ];
-    assert!((stop(&frame, &path).select)(&mut world, None));
-    let selected = world.model.selection.as_ref().unwrap();
+    driver.select(&path);
+    let selected = driver.editor().model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), path);
     assert_eq!(
         selected.location(),
@@ -503,20 +495,19 @@ fn a_cell_followed_from_a_computed_value_is_its_stored_definition() {
             Vec::new()
         ))
     );
-    assert!(world.paste_value(text::value("pasted")));
+    assert!(driver.paste(&text::value("pasted")));
     assert_eq!(
-        world.model.doc.cells.value(cell),
+        driver.editor().model.doc.cells.value(cell),
         Some(&text::value("pasted"))
     );
     assert_eq!(
-        world
-            .sources()
-            .resolve_path(&[Step::Key(source), Step::Key(field)]),
-        Some(&cell.into()),
+        driver.value(&[Step::Key(source), Step::Key(field)]),
+        cell.into(),
         "the stored path the occurrence spells is untouched"
     );
-    assert!(world.delete_selected_edge(Default::default()));
-    assert_eq!(world.model.doc.cells.value(cell), None);
+    // Delete would edit the selected text; a cut deletes its edge.
+    assert!(command(&mut driver, Key::Character("x".into())));
+    assert_eq!(driver.editor().model.doc.cells.value(cell), None);
 }
 
 #[test]
@@ -543,31 +534,29 @@ fn explicit_jump_can_establish_a_source_below_at() {
             }
         }),
     );
-    let frame = editing_frame(&mut world);
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     let path = [Step::Key(computed), Step::Key(occurrence)];
-    let jumped = stop(&frame, &path).rect;
-    let computed_rect = stop(&frame, &[Step::Key(computed)]).rect;
-    assert!((stop(&frame, &path).select)(&mut world, None));
+    let palette = style::Theme::Light.palette();
+    assert_eq!(
+        grounds(&driver.painted().0, palette.readonly_ground),
+        [driver.rect(&[Step::Key(computed)]).inset(3.0)]
+    );
+    assert_eq!(
+        grounds(&driver.painted().0, palette.paper),
+        [driver.rect(&path).inset(3.0)]
+    );
+    driver.select(&path);
+    let editor = driver.editor();
     assert!(
-        world
+        editor
             .model
             .selection
             .as_ref()
             .unwrap()
-            .writable(&world.sources())
+            .writable(&editor.sources())
     );
-    assert!(world.paste_value(text::value("changed")));
-    assert_eq!(
-        world.sources().resolve_path(&[Step::Key(source)]),
-        Some(&text::value("changed"))
-    );
-    let drawing = settle(frame, &world.sources()).list;
-    let palette = style::Theme::Light.palette();
-    assert_eq!(
-        grounds(&drawing.0, palette.readonly_ground),
-        [computed_rect.inset(3.0)]
-    );
-    assert_eq!(grounds(&drawing.0, palette.paper), [jumped.inset(3.0)]);
+    assert!(driver.paste(&text::value("changed")));
+    assert_eq!(driver.value(&[Step::Key(source)]), text::value("changed"));
 }
 
 #[test]
@@ -588,17 +577,14 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
             ))
         }),
     );
-    let frame = editing_frame(&mut world);
-    assert!(!frame.landmarks.landmark(&[Step::Key(source)]).is_some());
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    assert!(!driver.drawn(&[Step::Key(source)]));
     let path = [Step::Key(source), Step::Key(child)];
-    assert!((stop(&frame, &path).select)(&mut world, None));
+    driver.select(&path);
     assert_eq!(
-        world.model.selection.as_ref().unwrap().location(),
+        driver.editor().model.selection.as_ref().unwrap().location(),
         Some(Location::root(&path[..]))
     );
-    assert!(world.paste_value(text::value("changed")));
-    assert_eq!(
-        world.sources().resolve_path(&path),
-        Some(&text::value("changed"))
-    );
+    assert!(driver.paste(&text::value("changed")));
+    assert_eq!(driver.value(&path), text::value("changed"));
 }

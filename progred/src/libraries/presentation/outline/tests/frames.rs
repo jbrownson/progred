@@ -653,22 +653,14 @@ fn nested_outline_composes_jumps_and_cell_follows() {
 #[test]
 fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     let a = new_cell_id();
-    let mut world = crate::editor_of(Value::record([(OUTLINE, Value::list([a.into()]))]));
-    let p = body(&entry(&world, &[], a), a);
-    let f = editing_frame(&mut world);
-    assert!((stop(&f, &p).select)(&mut world, None));
-    assert!(editing_frame(&mut world).completion.is_some());
-    assert!(crate::completion::commit(
-        &mut world.session(),
-        f64::value(4.0),
-        None,
-        None
-    ));
-    assert_eq!(
-        world.sources().resolve_path(&[Step::Key(a)]),
-        Some(&f64::value(4.0))
-    );
+    let mut driver = Driver::of(Value::record([(OUTLINE, Value::list([a.into()]))]));
+    let p = body(&entry(driver.editor(), &[], a), a);
+    driver.select(&p);
+    assert!(driver.picker_entries().is_some());
+    assert!(driver.paste(&f64::value(4.0)));
+    assert_eq!(driver.value(&[Step::Key(a)]), f64::value(4.0));
 
+    let mut world = driver.runner.editor;
     world.model.selection = pending_edge(
         &crate::test_root(),
         &crate::editing::Scope::default().view(world.sources()),
