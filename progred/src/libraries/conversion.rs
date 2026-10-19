@@ -16,7 +16,9 @@ pub mod vocabulary {
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::F32_FROM_F64,
-        f32::convention().conversion(|operand| operand.as_f64().map(|number| number as f32)),
+        f32::convention().conversion(f32::vocabulary::INVALID_INPUT, |operand| {
+            operand.as_f64().map(|number| number as f32)
+        }),
     )
 }
 

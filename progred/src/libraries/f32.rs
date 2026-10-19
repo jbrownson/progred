@@ -21,7 +21,6 @@ pub mod vocabulary {
     pub const EQUAL: CellId = CellId::from_u128(0xe0637a60944f8dd9afd2fb4c28214dc3);
     pub const LEFT_NOT_F32: CellId = CellId::from_u128(0x2f7a7dfd96df51008a563a36e075e50b);
     pub const RIGHT_NOT_F32: CellId = CellId::from_u128(0xd4a7b035dc57953dca5c1d20cb591d0d);
-    pub const OPERAND_NOT_F32: CellId = CellId::from_u128(0xcc210598ba95d6d2a4fb8baa13e92864);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0x722482f3e369634464ae68add98480e6);
 }
 
@@ -70,8 +69,6 @@ pub(crate) fn convention() -> number::Convention<f32> {
         tag: vocabulary::F32,
         left_not: vocabulary::LEFT_NOT_F32,
         right_not: vocabulary::RIGHT_NOT_F32,
-        operand_not: vocabulary::OPERAND_NOT_F32,
-        invalid_input: vocabulary::INVALID_INPUT,
         encode: value,
         runtime: |number| value(number).into(),
         read: read_runtime,
@@ -83,7 +80,7 @@ pub(crate) fn convention() -> number::Convention<f32> {
 
 fn parts() -> number::Parts {
     use number::Operation::{Arithmetic, Comparison};
-    convention().parts([
+    let mut parts = convention().parts([
         (vocabulary::SUM, "+", Arithmetic(|left, right| left + right)),
         (
             vocabulary::SUBTRACT,
@@ -110,7 +107,12 @@ fn parts() -> number::Parts {
             "==",
             Comparison(|left, right| left == right),
         ),
-    ])
+    ]);
+    // Why the conversion library's conversion to f32 declines.
+    parts
+        .names
+        .push((vocabulary::INVALID_INPUT, "invalid f32 input"));
+    parts
 }
 
 pub fn library<W: Host>() -> Library<W> {

@@ -69,7 +69,7 @@ fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence>
     match operation {
         Operation::Comparison(_) => Some(Precedence::Comparison),
         Operation::Arithmetic(_) | Operation::Checked(..) => Precedence::of_symbol(spelling),
-        Operation::Unary(_) | Operation::Predicate(_) => None,
+        Operation::Unary(..) | Operation::Predicate(..) => None,
     }
 }
 
@@ -82,8 +82,6 @@ pub(crate) struct Convention<N> {
     pub tag: CellId,
     pub left_not: CellId,
     pub right_not: CellId,
-    pub operand_not: CellId,
-    pub invalid_input: CellId,
     pub encode: fn(N) -> Value,
     pub runtime: fn(N) -> RuntimeValue,
     pub read: fn(&RuntimeValue) -> Option<N>,
@@ -97,8 +95,10 @@ pub(crate) enum Operation<N> {
     /// Fails with the given reason instead of producing a result.
     Checked(fn(N, N) -> Option<N>, CellId),
     Comparison(fn(N, N) -> bool),
-    Unary(fn(N) -> N),
-    Predicate(fn(N) -> bool),
+    /// Declines with the given reason for an operand that isn't this number.
+    Unary(fn(N) -> N, CellId),
+    /// Declines with the given reason for an operand that isn't this number.
+    Predicate(fn(N) -> bool, CellId),
 }
 
 /// A convention's operations' names, functions, and projected call forms,
@@ -152,8 +152,6 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         let reasons = [
             (self.left_not, format!("left is not {}", self.name)),
             (self.right_not, format!("right is not {}", self.name)),
-            (self.operand_not, format!("operand is not {}", self.name)),
-            (self.invalid_input, format!("invalid {} input", self.name)),
         ];
         name::named_library(
             id,
@@ -260,14 +258,20 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             Operation::Comparison(apply) => {
                 self.binary(move |left, right| logic::value(apply(left, right)).into())
             }
-            Operation::Unary(apply) => self.unary(move |operand| (self.runtime)(apply(operand))),
-            Operation::Predicate(apply) => {
-                self.unary(move |operand| logic::value(apply(operand)).into())
+            Operation::Unary(apply, operand_not) => {
+                self.unary(operand_not, move |operand| (self.runtime)(apply(operand)))
             }
+            Operation::Predicate(apply, operand_not) => self.unary(operand_not, move |operand| {
+                logic::value(apply(operand)).into()
+            }),
         }
     }
 
-    fn unary(self, operation: impl Fn(N) -> RuntimeValue + 'static) -> ForeignFunction {
+    fn unary(
+        self,
+        operand_not: CellId,
+        operation: impl Fn(N) -> RuntimeValue + 'static,
+    ) -> ForeignFunction {
         let operation = Rc::new(operation);
         ForeignFunction::staged(move |context, call| {
             match context.field(call, vocabulary::OPERAND) {
@@ -276,7 +280,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                     Rc::new(move |context, environment| {
                         Ok(match (self.eval)(context, operand.clone(), environment)? {
                             Some(operand) => operation(operand),
-                            None => ::grap::absent::value(self.operand_not).into(),
+                            None => ::grap::absent::value(operand_not).into(),
                         })
                     })
                 }
@@ -289,8 +293,13 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
         .tracked()
     }
 
-    /// To this type from another, whose operand it reads itself.
-    pub(crate) fn conversion(self, convert: fn(&RuntimeValue) -> Option<N>) -> ForeignFunction {
+    /// To this type from another, whose operand it reads itself, declining
+    /// with `invalid_input` when it can't.
+    pub(crate) fn conversion(
+        self,
+        invalid_input: CellId,
+        convert: fn(&RuntimeValue) -> Option<N>,
+    ) -> ForeignFunction {
         ForeignFunction::staged(move |context, call| {
             match context.field(call, vocabulary::OPERAND) {
                 Some(operand) => Rc::new(move |context, environment| {
@@ -298,7 +307,7 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
                     Ok(match convert(&operand) {
                         Some(number) => (self.runtime)(number),
                         None => ::grap::absent::with_detail(
-                            self.invalid_input,
+                            invalid_input,
                             vocabulary::OPERAND,
                             operand.to_value(),
                         )

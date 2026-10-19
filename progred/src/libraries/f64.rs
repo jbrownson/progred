@@ -38,7 +38,6 @@ pub mod vocabulary {
     pub const START_NOT_F64: CellId = CellId::from_u128(0x809d7bba33afaf8a673846f0c44cd2e6);
     pub const END_NOT_F64: CellId = CellId::from_u128(0x17081dd43c4af46c54408cd125eaf3e2);
     pub const AMOUNT_NOT_F64: CellId = CellId::from_u128(0xe1977104f3574cd37a99ef9083dde01f);
-    pub const INVALID_INPUT: CellId = CellId::from_u128(0xa344d4784dae693385d91140b3c030a2);
 }
 
 // The convention itself lives in the evaluator, which privileges it
@@ -79,8 +78,6 @@ pub(crate) fn convention() -> number::Convention<f64> {
         tag: vocabulary::F64,
         left_not: vocabulary::LEFT_NOT_F64,
         right_not: vocabulary::RIGHT_NOT_F64,
-        operand_not: vocabulary::OPERAND_NOT_F64,
-        invalid_input: vocabulary::INVALID_INPUT,
         encode: value,
         runtime: RuntimeValue::f64,
         read: RuntimeValue::as_f64,
@@ -120,14 +117,30 @@ fn parts() -> number::Parts {
             "==",
             Comparison(|left, right| left == right),
         ),
-        (vocabulary::SIN, "sin", Unary(f64::sin)),
-        (vocabulary::COS, "cos", Unary(f64::cos)),
-        (vocabulary::FLOOR, "floor", Unary(f64::floor)),
-        (vocabulary::CEIL, "ceil", Unary(f64::ceil)),
+        (
+            vocabulary::SIN,
+            "sin",
+            Unary(f64::sin, vocabulary::OPERAND_NOT_F64),
+        ),
+        (
+            vocabulary::COS,
+            "cos",
+            Unary(f64::cos, vocabulary::OPERAND_NOT_F64),
+        ),
+        (
+            vocabulary::FLOOR,
+            "floor",
+            Unary(f64::floor, vocabulary::OPERAND_NOT_F64),
+        ),
+        (
+            vocabulary::CEIL,
+            "ceil",
+            Unary(f64::ceil, vocabulary::OPERAND_NOT_F64),
+        ),
         (
             vocabulary::IS_FINITE,
             "is finite",
-            Predicate(f64::is_finite),
+            Predicate(f64::is_finite, vocabulary::OPERAND_NOT_F64),
         ),
     ]);
     parts.functions = parts.functions.register(
@@ -141,6 +154,7 @@ fn parts() -> number::Parts {
         (vocabulary::START, "start"),
         (vocabulary::END, "end"),
         (vocabulary::AMOUNT, "amount"),
+        (vocabulary::OPERAND_NOT_F64, "operand is not f64"),
         (vocabulary::START_NOT_F64, "start is not f64"),
         (vocabulary::END_NOT_F64, "end is not f64"),
         (vocabulary::AMOUNT_NOT_F64, "amount is not f64"),
