@@ -3,8 +3,8 @@
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope, Face};
-use crate::libraries::{Definitions, Library, text};
-use crate::library::Libraries;
+use crate::libraries::{Library, text};
+use crate::library::{Definitions, Libraries};
 use crate::sources::Sources;
 use ::grap::ForeignFunctions;
 use gid::{CellId, Cells, Value};

@@ -2,7 +2,6 @@
 //! library and exports its complete contribution to the editor, through
 //! the interface in [`crate::library`].
 
-pub use crate::library::Definitions;
 /// A built-in library's contribution, over a world that hosts the toolkit.
 pub type Library<W> = crate::library::Library<W, <W as crate::display::Host>::Hover>;
 #[cfg(test)]

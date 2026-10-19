@@ -1,9 +1,10 @@
 use super::super::computation::{Outcome, Recorded, recording};
 use super::*;
 use crate::computations::Computations;
-use fidget::raster::{Frame, Passes, SoftwareScene, ViewRequest};
+use fidget::raster::{Passes, SoftwareScene, ViewRequest};
 use incremental::background::{Availability, Progress};
 use incremental::{Input, Memo};
+use puri::mesh::DepthImage;
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct Settings {
@@ -33,7 +34,7 @@ impl SceneRequest {
 }
 
 pub(crate) struct ViewImage {
-    pub image: Option<Frame>,
+    pub image: Option<DepthImage>,
     pub pending: bool,
     pub stale: bool,
     pub progress: Option<Progress>,
@@ -90,9 +91,9 @@ impl Computation {
             Arc<SceneRequest>,
             ViewRequest,
             &incremental::Cancellation,
-            &mut (dyn FnMut(Outcome<Frame>) -> Result<(), incremental::Error> + Send),
+            &mut (dyn FnMut(Outcome<DepthImage>) -> Result<(), incremental::Error> + Send),
             &(dyn Fn(Progress) + Sync),
-        ) -> Result<Outcome<Frame>, incremental::Error>
+        ) -> Result<Outcome<DepthImage>, incremental::Error>
         + Send
         + Sync
         + 'static,
@@ -206,9 +207,9 @@ fn image_with<S: Send + Sync + 'static>(
         &S,
         ViewRequest,
         &incremental::Cancellation,
-        &mut (dyn FnMut(Outcome<Frame>) -> Result<(), incremental::Error> + Send),
+        &mut (dyn FnMut(Outcome<DepthImage>) -> Result<(), incremental::Error> + Send),
         &(dyn Fn(Progress) + Sync),
-    ) -> Result<Outcome<Frame>, incremental::Error>
+    ) -> Result<Outcome<DepthImage>, incremental::Error>
     + Send
     + Sync
     + 'static,

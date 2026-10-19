@@ -4,7 +4,7 @@ use fidget_engine::raster::voxel::ScenePixel;
 #[test]
 fn publication_preserves_callback_failure() {
     let mut count = 0;
-    let mut publish = |_: Frame| {
+    let mut publish = |_: DepthImage| {
         count += 1;
         Err(incremental::Error::Cancelled)
     };
@@ -42,7 +42,7 @@ fn finished_empty_pixels_are_distinct_from_unfinished_pixels() {
 
 #[test]
 fn finer_pass_preserves_previous_pixels_until_replaced_including_empty_pixels() {
-    let previous = Frame {
+    let previous = DepthImage {
         image: image(2, 1, vec![10, 20, 30, 255, 40, 50, 60, 255]),
         depth: vec![1.0; 2].into(),
         partial: false,

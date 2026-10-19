@@ -55,7 +55,7 @@ enum View {
 
 /// A current implicit image, ready to refine the mesh.
 struct Refinement {
-    frame: fidget::raster::Frame,
+    frame: puri::mesh::DepthImage,
     pending: bool,
     progress: Option<incremental::background::Progress>,
 }

@@ -25,7 +25,7 @@ struct Assembly {
 
 struct Publication<'a> {
     assembly: Assembly,
-    publish: &'a mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
+    publish: &'a mut (dyn FnMut(DepthImage) -> Result<(), incremental::Error> + Send),
     error: Option<incremental::Error>,
     last: web_time::Instant,
 }
@@ -41,7 +41,7 @@ impl Publication<'_> {
 }
 
 impl Assembly {
-    fn new(width: usize, height: usize, depth_count: u32, previous: Option<&Frame>) -> Self {
+    fn new(width: usize, height: usize, depth_count: u32, previous: Option<&DepthImage>) -> Self {
         let mut pixels = vec![0; width * height * 4];
         let mut depth = vec![-1.0; width * height];
         if let Some(previous) = previous {
@@ -88,8 +88,8 @@ impl Assembly {
         self.completed += tile.size[0] * tile.size[1];
     }
 
-    fn snapshot(&self) -> Frame {
-        Frame {
+    fn snapshot(&self) -> DepthImage {
+        DepthImage {
             image: image(self.width as u32, self.height as u32, self.pixels.clone()),
             depth: self.depth.clone().into(),
             partial: self.partial,
@@ -100,11 +100,11 @@ impl Assembly {
 pub(super) fn render(
     scene: &SoftwareScene,
     view: &VolumeView,
-    previous: Option<&Frame>,
+    previous: Option<&DepthImage>,
     cancel: &incremental::Cancellation,
-    publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
+    publish: &mut (dyn FnMut(DepthImage) -> Result<(), incremental::Error> + Send),
     progress: Option<&(dyn Fn(Progress) + Sync)>,
-) -> Result<Option<Frame>, incremental::Error> {
+) -> Result<Option<DepthImage>, incremental::Error> {
     let assembly = Assembly::new(
         view.size.width() as usize,
         view.size.height() as usize,
@@ -140,7 +140,7 @@ pub(super) fn render(
         return Err(error);
     }
     cancel.check()?;
-    Ok(output.map(|()| Frame {
+    Ok(output.map(|()| DepthImage {
         image: image(view.size.width(), view.size.height(), state.assembly.pixels),
         depth: state.assembly.depth.into(),
         partial: false,

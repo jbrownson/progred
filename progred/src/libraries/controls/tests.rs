@@ -652,7 +652,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
 
 #[test]
 fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arguments() {
-    use crate::{computations::Computations, libraries::Definitions};
+    use crate::{computations::Computations, library::Definitions};
     use std::cell::Cell;
 
     // Constructing the declaration only evaluates its arguments. Running the
@@ -1070,7 +1070,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     let (owner, library, probe) = (gid::new_cell_id(), gid::new_cell_id(), gid::new_cell_id());
     let items = Value::list([A.into(), A.into()]);
     let positions: Vec<_> = items.as_list().unwrap().keys().cloned().collect();
-    let mut definitions = crate::libraries::Definitions::default();
+    let mut definitions = crate::library::Definitions::default();
     definitions.insert(
         owner,
         ::grap::Definition::Value(::grap::lambda(
@@ -1232,7 +1232,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
 fn generated_tree_items_are_not_misattributed_to_the_argument_expression() {
     let (owner, library, probe) = (gid::new_cell_id(), gid::new_cell_id(), gid::new_cell_id());
     let items = Value::list([A.into(), B.into()]);
-    let mut definitions = crate::libraries::Definitions::default();
+    let mut definitions = crate::library::Definitions::default();
     definitions.insert(
         owner,
         ::grap::Definition::Value(::grap::lambda(

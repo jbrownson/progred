@@ -1,5 +1,6 @@
 use super::*;
-use crate::libraries::{Definitions, control::vocabulary as c, f64};
+use crate::libraries::{control::vocabulary as c, f64};
+use crate::library::Definitions;
 use ::grap::vocabulary as g;
 use gid::Cells;
 

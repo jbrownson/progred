@@ -8,7 +8,7 @@ mod partial;
 pub(crate) mod performance;
 #[cfg(test)]
 mod reference;
-pub(crate) use puri::mesh::DepthImage as Frame;
+use puri::mesh::DepthImage;
 
 // Software rendering evaluates with Fidget's VM, on every platform. Its JIT
 // rendered the CAM stock four times slower on Apple Silicon, and won only on
@@ -214,9 +214,9 @@ impl Request {
         passes: Passes,
         final_depth_multiplier: u32,
         cancel: &incremental::Cancellation,
-        publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
+        publish: &mut (dyn FnMut(DepthImage) -> Result<(), incremental::Error> + Send),
         progress: Option<&(dyn Fn(Progress) + Sync)>,
-    ) -> Result<Option<Frame>, incremental::Error> {
+    ) -> Result<Option<DepthImage>, incremental::Error> {
         cancel.check()?;
         let scene = SoftwareScene::new(&self.preview.objects, cancel);
         cancel.check()?;
@@ -290,9 +290,9 @@ impl ViewRequest {
         passes: Passes,
         final_depth_multiplier: u32,
         cancel: &incremental::Cancellation,
-        publish: &mut (dyn FnMut(Frame) -> Result<(), incremental::Error> + Send),
+        publish: &mut (dyn FnMut(DepthImage) -> Result<(), incremental::Error> + Send),
         progress: Option<&(dyn Fn(Progress) + Sync)>,
-    ) -> Result<Option<Frame>, incremental::Error> {
+    ) -> Result<Option<DepthImage>, incremental::Error> {
         cancel.check()?;
         let views = match passes {
             Passes::Final => refine_depth(self.view_at(self.pixels), final_depth_multiplier)

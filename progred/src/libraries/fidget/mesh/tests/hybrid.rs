@@ -1,6 +1,6 @@
 use super::*;
 
-fn raster(preview: &VolumePreview, state: Option<&Value>) -> raster::Frame {
+fn raster(preview: &VolumePreview, state: Option<&Value>) -> puri::mesh::DepthImage {
     raster::Request::new(preview.clone(), state, 1.0)
         .unwrap()
         .render_software_tiles(
@@ -96,7 +96,7 @@ fn quad(geometry: &mut Geometry, x: std::ops::Range<f32>, z: f32, color: [f32; 3
         .extend([0, 1, 2, 0, 2, 3].map(|i| i + offset));
 }
 
-fn composition_fixture() -> (Geometry, View, raster::Frame, usize) {
+fn composition_fixture() -> (Geometry, View, puri::mesh::DepthImage, usize) {
     let mut geometry = Geometry::default();
     quad(&mut geometry, -1.0..0.0, -0.2, [1.0, 0.0, 0.0]); // behind implicit plane
     quad(&mut geometry, 0.0..1.0, 0.4, [0.0, 1.0, 0.0]); // in front
@@ -108,7 +108,7 @@ fn composition_fixture() -> (Geometry, View, raster::Frame, usize) {
         width: 8,
         height: 4,
     };
-    let frame = raster::Frame {
+    let frame = puri::mesh::DepthImage {
         image: ImageData {
             data: [180, 120, 60, 255].repeat(32).into(),
             format: ImageFormat::Rgba8,
@@ -179,7 +179,7 @@ fn check_composition(mut render: impl FnMut(&Mesh, &View, Surface) -> Vec<u8>) {
     );
 
     // A different raster resolution uses nearest samples, never interpolates depth.
-    let small = raster::Frame {
+    let small = puri::mesh::DepthImage {
         image: ImageData {
             data: [180, 120, 60, 255].repeat(8).into(),
             width: 4,

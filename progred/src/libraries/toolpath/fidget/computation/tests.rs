@@ -106,7 +106,7 @@ fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures
             cancel.check()?;
             let mut rendered = rendered.lock().unwrap();
             rendered.push((scene, view));
-            Ok(Ok(fidget::raster::Frame {
+            Ok(Ok(puri::mesh::DepthImage {
                 image: peniko::ImageData {
                     data: vec![rendered.len() as u8, 0, 0, 255].into(),
                     format: peniko::ImageFormat::Rgba8,
@@ -300,7 +300,7 @@ fn current_refinements_are_not_dimmed_like_stale_images() {
                 width: 1,
                 height: 1,
             };
-            let image = fidget::raster::Frame {
+            let image = puri::mesh::DepthImage {
                 image,
                 depth: vec![1.0].into(),
                 partial: false,
