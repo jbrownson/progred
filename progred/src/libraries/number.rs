@@ -407,7 +407,7 @@ fn typed_operator(
     }
 }
 
-/// Whether an operator typed now follows the whole number: the number is
+/// Whether a typed operator follows the whole number: the number is
 /// selected, or its line is being typed with the caret after all of it.
 fn ends_a_number<N: std::str::FromStr>(selected: crate::editing::Selected<'_>) -> bool {
     match selected {
