@@ -136,21 +136,61 @@ pub(crate) fn first_value(libraries: &Libraries, cell: CellId) -> Option<&Value>
         .map(|(_, definition)| definition.value())
 }
 
-pub(crate) fn root_completions(stack: &crate::stack::Stack) -> Vec<crate::display::Completion> {
-    let document = Document::default();
-    let sources = src(&document, &stack.libraries);
-    (stack.completions)(&crate::display::CompletionRequest {
+/// A request for `kind` offers matching `query` in `scope`, at the root of
+/// an empty document read over no libraries.
+pub(crate) fn bare_request(
+    kind: crate::display::CompletionKind,
+    scope: crate::display::CompletionScope,
+    query: &str,
+) -> crate::display::CompletionRequest<'_> {
+    crate::display::CompletionRequest {
         raw: false,
-        query: "",
-        kind: crate::display::CompletionKind::Value,
-        scope: crate::display::CompletionScope::Start,
+        query,
+        kind,
+        scope,
         path: &[],
         value_at: &|_| None,
+        resolve: &|_| None,
+        cells: &Vec::new,
+        name: &|_| None,
+        libraries: None,
+    }
+}
+
+/// What `ask` answers to a request for `kind` offers matching `query` in
+/// `scope` at `path`, read through `sources`.
+pub(crate) fn ask_over<R>(
+    sources: &Sources,
+    kind: crate::display::CompletionKind,
+    scope: crate::display::CompletionScope,
+    query: &str,
+    path: &[Step],
+    ask: impl FnOnce(&crate::display::CompletionRequest<'_>) -> R,
+) -> R {
+    ask(&crate::display::CompletionRequest {
+        raw: false,
+        query,
+        kind,
+        scope,
+        path,
+        value_at: &|path| sources.resolve_path(path),
         resolve: &|cell| sources.resolve(cell),
         cells: &|| sources.cells(),
-        name: &|cell| crate::libraries::name::of(&sources, cell),
+        name: &|cell| crate::libraries::name::of(sources, cell),
         libraries: None,
     })
+}
+
+pub(crate) fn root_completions(stack: &crate::stack::Stack) -> Vec<crate::display::Completion> {
+    let document = Document::default();
+    ask_over(
+        &src(&document, &stack.libraries),
+        crate::display::CompletionKind::Value,
+        crate::display::CompletionScope::Start,
+        "",
+        &[],
+        |request| (stack.completions)(request),
+    )
     .unwrap_or_default()
 }
 
@@ -175,22 +215,20 @@ pub(crate) fn completion_entries_with(
     providers: Option<&crate::display::CompletionProvider>,
     contextual: Option<&crate::display::CompletionProvider>,
 ) -> Vec<Entry<CompletionResult>> {
-    use crate::display::{CompletionRequest, CompletionScope};
-    let value_at = |path: &[Step]| sources.resolve_path(path);
     let offers = contextual.map_or_else(
         || crate::display::raw::picker(*kind).offers,
         |provider| crate::display::ranked(provider.clone()),
     );
-    offers(&CompletionRequest {
+    offers(&crate::display::CompletionRequest {
         raw,
         query,
         kind: *kind,
-        scope: CompletionScope::Everything,
+        scope: crate::display::CompletionScope::Everything,
         path: &[],
-        value_at: &value_at,
+        value_at: &|path| sources.resolve_path(path),
         resolve: &|cell| sources.resolve(cell),
         cells: &|| sources.cells(),
-        name: &|cell| crate::libraries::name::of(&sources, cell),
+        name: &|cell| crate::libraries::name::of(sources, cell),
         libraries: providers,
     })
     .into_iter()

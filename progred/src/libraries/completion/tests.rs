@@ -1,23 +1,12 @@
 use super::*;
-use crate::display::{CompletionKind, CompletionRequest, CompletionScope};
+use crate::display::{CompletionKind, CompletionScope};
 use crate::libraries::fidget;
-use crate::test_support::{activated, completion_entries_with, library_offers, src};
+use crate::test_support::{activated, bare_request, completion_entries_with, library_offers, src};
 use gid::{Document, new_cell_id};
 
 #[test]
 fn combined_providers_preserve_order_and_explicit_empty_vocabularies() {
-    let request = CompletionRequest {
-        raw: false,
-        query: "",
-        kind: CompletionKind::Field,
-        scope: CompletionScope::Everything,
-        path: &[],
-        value_at: &|_| None,
-        resolve: &|_| None,
-        cells: &Vec::new,
-        name: &|_| None,
-        libraries: None,
-    };
+    let request = bare_request(CompletionKind::Field, CompletionScope::Everything, "");
     let calls = Rc::new(std::cell::Cell::new(0));
     let counted = calls.clone();
     let unspecified: CompletionProvider = Rc::new(move |_| {

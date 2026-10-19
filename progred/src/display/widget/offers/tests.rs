@@ -76,7 +76,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
 
 #[test]
 fn providers_receive_the_query_kind_and_source_qualified_list_path() {
-    use crate::display::{CompletionKind, CompletionProvider, CompletionRequest, CompletionScope};
+    use crate::display::{CompletionKind, CompletionProvider, CompletionScope};
     let cell = new_cell_id();
     let present = new_cell_id();
     let missing = new_cell_id();
@@ -124,40 +124,37 @@ fn providers_receive_the_query_kind_and_source_qualified_list_path() {
             ),
         ])
     });
-    let value_at = |path: &[Step]| sources.resolve_path(path);
-    let request = CompletionRequest {
-        raw: false,
-        query: "offered",
-        kind: CompletionKind::Field,
-        scope: CompletionScope::Everything,
-        path: &path,
-        value_at: &value_at,
-        resolve: &|cell| sources.resolve(cell),
-        cells: &|| sources.cells(),
-        name: &|cell| crate::libraries::name::of(&sources, cell),
-        libraries: None,
-    };
-    let entries = ranked(provider)(&request);
-    assert_eq!(entries.len(), 1);
-    assert_eq!(
-        activated(&test_entry(entries[0].clone(), CompletionKind::Field)).label,
-        Some((missing, None))
-    );
+    crate::test_support::ask_over(
+        &sources,
+        CompletionKind::Field,
+        CompletionScope::Everything,
+        "offered",
+        &path,
+        |request| {
+            let entries = ranked(provider)(request);
+            assert_eq!(entries.len(), 1);
+            assert_eq!(
+                activated(&test_entry(entries[0].clone(), CompletionKind::Field)).label,
+                Some((missing, None))
+            );
 
-    // A projection that answers nothing offers nothing; only a hole without
-    // a projection's offers gets everything.
-    let unspecified: CompletionProvider = Rc::new(|_| None);
-    let empty: CompletionProvider = Rc::new(|_| Some(vec![]));
-    for provider in [unspecified, empty] {
-        assert!(ranked::<crate::Editor>(provider)(&request).is_empty());
-    }
-    let libraries = crate::stack::load().completions;
-    assert!(
-        !(crate::display::raw::picker::<crate::Editor>(CompletionKind::Field).offers)(
-            &CompletionRequest {
-                libraries: Some(&libraries),
-                ..request
+            // A projection that answers nothing offers nothing; only a hole without
+            // a projection's offers gets everything.
+            let unspecified: CompletionProvider = Rc::new(|_| None);
+            let empty: CompletionProvider = Rc::new(|_| Some(vec![]));
+            for provider in [unspecified, empty] {
+                assert!(ranked::<crate::Editor>(provider)(request).is_empty());
             }
+        },
+    );
+    assert!(
+        !crate::test_support::completion_entries_with(
+            &sources,
+            false,
+            &CompletionKind::Field,
+            "offered",
+            Some(&crate::stack::load().completions),
+            None,
         )
         .is_empty()
     );

@@ -79,16 +79,13 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
         };
         let enumerate = || order.clone();
         let request = CompletionRequest {
-            raw: false,
-            query: "",
-            kind: CompletionKind::Value,
-            scope: CompletionScope::Everything,
-            path: &[],
-            value_at: &|_| None,
             resolve: &resolve,
             cells: &enumerate,
-            name: &|_| None,
-            libraries: None,
+            ..crate::test_support::bare_request(
+                CompletionKind::Value,
+                CompletionScope::Everything,
+                "",
+            )
         };
         assert_eq!(
             call_completions(&request)

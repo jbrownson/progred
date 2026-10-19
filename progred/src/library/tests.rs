@@ -254,18 +254,11 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
         crate::display::CompletionKind::Field,
     ] {
         assert_eq!(
-            providers[0](&CompletionRequest {
-                raw: false,
-                query: "query",
+            providers[0](&crate::test_support::bare_request(
                 kind,
-                scope: crate::display::CompletionScope::Everything,
-                path: &[],
-                value_at: &|_| None,
-                resolve: &|_| None,
-                cells: &Vec::new,
-                name: &|_| None,
-                libraries: None,
-            })
+                crate::display::CompletionScope::Everything,
+                "query"
+            ))
             .unwrap()[0]
                 .display,
             "query".into()

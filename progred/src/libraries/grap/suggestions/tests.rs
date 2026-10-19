@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::ask_over;
 use ::grap::vocabulary::EXPRESSION;
 use gid::Cells;
 
@@ -12,18 +13,14 @@ fn visible(root: Value, path: &[Step]) -> BTreeSet<CellId> {
         doc: &document,
         libraries: &libraries,
     };
-    bindings(&CompletionRequest {
-        raw: false,
-        query: "",
-        kind: CompletionKind::Value,
-        scope: CompletionScope::Everything,
+    ask_over(
+        &sources,
+        CompletionKind::Value,
+        CompletionScope::Everything,
+        "",
         path,
-        value_at: &|path| sources.resolve_path(path),
-        resolve: &|cell| sources.resolve(cell),
-        cells: &Vec::new,
-        name: &|cell| crate::libraries::name::of(&sources, cell),
-        libraries: None,
-    })
+        bindings,
+    )
     .0
     .into_keys()
     .collect()
@@ -54,19 +51,15 @@ fn completion_bindings_sort_nearest_scope_first_then_by_current_name() {
             doc: &document,
             libraries: &libraries,
         };
-        let request = CompletionRequest {
-            raw: false,
-            query: "",
-            kind: CompletionKind::Value,
-            scope: CompletionScope::Everything,
-            path: &[Step::Key(BODY), Step::Key(BODY)],
-            value_at: &|path| sources.resolve_path(path),
-            resolve: &|cell| sources.resolve(cell),
-            cells: &Vec::new,
-            name: &|cell| crate::libraries::name::of(&sources, cell),
-            libraries: None,
-        };
-        let offers = offers(&request).unwrap();
+        let offers = ask_over(
+            &sources,
+            CompletionKind::Value,
+            CompletionScope::Everything,
+            "",
+            &[Step::Key(BODY), Step::Key(BODY)],
+            offers,
+        )
+        .unwrap();
         assert_eq!(
             offers
                 .iter()
@@ -82,18 +75,14 @@ fn completion_bindings_sort_nearest_scope_first_then_by_current_name() {
         doc: &document,
         libraries: &libraries,
     };
-    let (depths, _) = bindings(&CompletionRequest {
-        raw: false,
-        query: "",
-        kind: CompletionKind::Value,
-        scope: CompletionScope::Everything,
-        path: &[Step::Key(BODY), Step::Key(BODY)],
-        value_at: &|path| sources.resolve_path(path),
-        resolve: &|cell| sources.resolve(cell),
-        cells: &Vec::new,
-        name: &|cell| crate::libraries::name::of(&sources, cell),
-        libraries: None,
-    });
+    let (depths, _) = ask_over(
+        &sources,
+        CompletionKind::Value,
+        CompletionScope::Everything,
+        "",
+        &[Step::Key(BODY), Step::Key(BODY)],
+        bindings,
+    );
     assert_eq!(
         depths[&outer], 1,
         "a rebound cell belongs to the nearest scope"

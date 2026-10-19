@@ -16,15 +16,7 @@ fn new_color_is_only_offered_where_its_picker_can_be_presented() {
         for kind in [CompletionKind::Value, CompletionKind::Field] {
             let request = CompletionRequest {
                 raw,
-                kind,
-                query: "color",
-                scope: CompletionScope::Everything,
-                path: &[],
-                value_at: &|_| None,
-                resolve: &|_| None,
-                cells: &Vec::new,
-                name: &|_| None,
-                libraries: None,
+                ..crate::test_support::bare_request(kind, CompletionScope::Everything, "color")
             };
             assert_eq!(
                 completions(&request).is_some(),
