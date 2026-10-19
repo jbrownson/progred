@@ -158,7 +158,8 @@ editor doesn't take never starts its typing.
 
 Deleting a selected value keeps its place selected as a hole, so the next
 keystrokes write its replacement; Backspace or Delete on the hole's empty query
-removes it, landing on the stop before it (after it, for Delete). Typing over a
+removes it, Backspace landing on the sibling before it, else on its container,
+and Delete on the stop after it, even past its container's end. Typing over a
 selected value opens a picker in its place seeded with what was typed: an
 explicit pending payload over the existing value, which projection draws as
 missing until a choice commits, so the document is untouched until then. One of

@@ -54,6 +54,31 @@ fn deleting_empties_a_place_then_removing_it_moves_toward_the_key() {
 }
 
 #[test]
+fn removing_a_containers_only_hole_backs_out_or_moves_on() {
+    let [list, next] = {
+        let mut keys = [new_cell_id(), new_cell_id()];
+        keys.sort();
+        keys
+    };
+    for (key, lands) in [(NamedKey::Backspace, list), (NamedKey::Delete, next)] {
+        let mut driver = driver(Value::record([
+            (list, Value::list([Value::list([])])),
+            (next, text::value("next")),
+        ]));
+        let element = driver.element(&[Step::Key(list)], 0, &[]);
+        driver.select(&element);
+        driver.press(key);
+        assert_eq!(driver.selection(), element, "{key:?} keeps the place");
+        driver.press(key);
+        assert_eq!(
+            driver.selection(),
+            [Step::Key(lands)],
+            "{key:?} removes the hole"
+        );
+    }
+}
+
+#[test]
 fn escape_returns_a_picker_to_where_it_was_opened() {
     let (mut driver, paths) = three_lists();
     let document = driver.editor().model.doc.clone();

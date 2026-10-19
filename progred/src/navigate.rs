@@ -20,18 +20,20 @@ pub fn direction(event: &KeyboardEvent) -> Option<NavigationDirection> {
     .filter(|_| event.state.is_down())
 }
 
-/// Where the selection lands after removing `path`: the sibling after it
-/// (before it, moving backward), or, when it's the last (first) of its
-/// siblings, the one after (before) its nearest ancestor that has one; else
-/// the same the other way; else its parent.
+/// Where the selection lands after removing `path`. Moving forward, on the
+/// stop after it: its next sibling, or, when it's the last of its siblings,
+/// the one after its nearest ancestor that has one. Otherwise, and moving
+/// backward, on the sibling before it, else its parent.
 pub fn selection_after_removing<World>(
     landmarks: &[Landmark<World>],
     root: Option<&Root>,
     path: &[Step],
     forward: bool,
 ) -> Path {
-    sibling(landmarks, root, path, forward)
-        .or_else(|| sibling(landmarks, root, path, !forward))
+    forward
+        .then(|| following(landmarks, root, path))
+        .flatten()
+        .or_else(|| preceding(landmarks, root, path))
         .unwrap_or_else(|| {
             path.split_last()
                 .map(|(_, parent)| parent.to_vec())
@@ -134,37 +136,49 @@ fn root_target<'a, World>(
     landmark_at(landmarks, root, path)
 }
 
-/// The neighboring sibling in placement order, continuing through
-/// ancestors at the ends — where the selection lands after a removal,
-/// via [`selection_after_removing`].
-fn sibling<World>(
+/// The stop after the drawn `path`: its next sibling, else the one after its
+/// nearest ancestor that has one.
+fn following<World>(
     landmarks: &[Landmark<World>],
     root: Option<&Root>,
     path: &[Step],
-    next: bool,
 ) -> Option<Path> {
-    let mut path = path.to_vec();
-    loop {
-        let (_, parent) = path.split_last()?;
-        let siblings: Vec<&[Step]> = landmarks
-            .iter()
-            .filter(|landmark| root.is_none_or(|root| landmark.root.as_ref() == Some(root)))
-            .map(|landmark| landmark.path.as_ref())
-            .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
-            .collect();
-        let index = siblings.iter().position(|p| *p == path)?;
-        let neighbor = if next {
-            siblings.get(index + 1)
-        } else {
-            index.checked_sub(1).and_then(|index| siblings.get(index))
-        };
-        match neighbor {
-            Some(found) => return Some(found.to_vec()),
-            None => {
-                path.pop();
-            }
-        }
-    }
+    let (parent, siblings, index) = siblings(landmarks, root, path)?;
+    siblings
+        .get(index + 1)
+        .map(|next| next.to_vec())
+        .or_else(|| following(landmarks, root, parent))
+}
+
+/// The sibling before the drawn `path`.
+fn preceding<World>(
+    landmarks: &[Landmark<World>],
+    root: Option<&Root>,
+    path: &[Step],
+) -> Option<Path> {
+    let (_, siblings, index) = siblings(landmarks, root, path)?;
+    index
+        .checked_sub(1)
+        .and_then(|index| siblings.get(index))
+        .map(|previous| previous.to_vec())
+}
+
+/// The drawn `path`'s parent, and its siblings in placement order, itself
+/// among them at `index`.
+fn siblings<'a, World>(
+    landmarks: &'a [Landmark<World>],
+    root: Option<&Root>,
+    path: &'a [Step],
+) -> Option<(&'a [Step], Vec<&'a [Step]>, usize)> {
+    let (_, parent) = path.split_last()?;
+    let siblings: Vec<&[Step]> = landmarks
+        .iter()
+        .filter(|landmark| root.is_none_or(|root| landmark.root.as_ref() == Some(root)))
+        .map(|landmark| landmark.path.as_ref())
+        .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
+        .collect();
+    let index = siblings.iter().position(|p| *p == path)?;
+    Some((parent, siblings, index))
 }
 
 #[cfg(test)]

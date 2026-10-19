@@ -286,8 +286,10 @@ impl Editor {
     }
 
     /// An empty query's Backspace or Delete cancels its picker: back to
-    /// where it was opened, else to the stop before the hole it leaves
-    /// (after it, for Delete). A label goes back to its record.
+    /// where it was opened, else beside the hole it leaves, as
+    /// [`navigate::selection_after_removing`] chooses: Backspace on the
+    /// sibling before it or else its container, Delete on the stop after
+    /// it. A label goes back to its record.
     fn cancel_pending(&mut self, geometry: Geometry<'_, Editor>, forward: bool) -> bool {
         let Some(current) = &self.model.selection else {
             return false;
