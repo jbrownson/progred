@@ -826,9 +826,10 @@ fn cpu_volume(
 }
 
 #[derive(Default)]
-pub(crate) struct PreviewRenderer {
+struct PreviewRenderer {
+    /// None before the first render, and while the process has no GPU.
     #[cfg(not(target_arch = "wasm32"))]
-    gpu: GpuState,
+    gpu: Option<GpuRenderer>,
 }
 
 impl PreviewRenderer {
@@ -848,7 +849,7 @@ impl PreviewRenderer {
             ]);
         }
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(image) = self.gpu.render(&preview.objects, &view) {
+        if let Some(image) = gpu_render(&mut self.gpu, &preview.objects, &view) {
             return Some(image);
         }
         cpu_volume(&preview.objects, &view, &Default::default())
@@ -856,28 +857,15 @@ impl PreviewRenderer {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[derive(Default)]
-enum GpuState {
-    #[default]
-    Uninitialized,
-    Available(GpuRenderer),
-    Unavailable,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl GpuState {
-    fn render(&mut self, objects: &[SceneObject], view: &VolumeView) -> Option<Vec<u8>> {
-        if matches!(self, Self::Uninitialized) {
-            *self = match shared_gpu() {
-                Some(gpu) => Self::Available(GpuRenderer::new(gpu)),
-                None => Self::Unavailable,
-            };
-        }
-        match self {
-            Self::Available(renderer) => renderer.render(objects, view),
-            Self::Uninitialized | Self::Unavailable => None,
-        }
+fn gpu_render(
+    gpu: &mut Option<GpuRenderer>,
+    objects: &[SceneObject],
+    view: &VolumeView,
+) -> Option<Vec<u8>> {
+    if gpu.is_none() {
+        *gpu = shared_gpu().map(GpuRenderer::new);
     }
+    gpu.as_mut()?.render(objects, view)
 }
 
 /// The process's one GPU device, or `None` after a failed attempt, which isn't
