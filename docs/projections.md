@@ -166,7 +166,7 @@ projection path, not a fabricated field or writable document location.
 
 The composed partial interface receives `Option<&RuntimeValue>`; `partial`
 adapts GID-oriented projections to `Option<&Value>`, while `runtime_partial`
-retains lowered children and callbacks. `None` means a missing location, not a GID
+retains runtime children and callbacks. `None` means a missing location, not a GID
 absent or an empty string. `descend` offers the resolved value or its absence to
 the chosen partial; if it declines, the fallback renders structure for `Some`
 or the standard empty picker for `None`. There is no separate `missing` parameter
@@ -181,7 +181,7 @@ Fold captures the value's collapse default and updates only occurrence-local
 annotations; even an occurrence with no document source can copy and fold.
 Only the deletion half of cut requires a document destination.
 
-The shared `readonly` decoration uses the palette's read-only ground for computed
+The shared read-only decoration uses the palette's `readonly_ground` for computed
 output and external definitions. Preparation threads the enclosing ground through
 projection composition, including `at`, so nested results do not darken it again.
 Writable jumps restore the paper ground. Decoration and edit authority stay
@@ -455,7 +455,7 @@ placement continuations contribute interaction and ink.
 
 The stock [line widget](../progred/src/display/widget/line.rs),
 [delimiters](../progred/src/display/widget/delimiter.rs), borders, and the
-[interaction functions](../progred/src/display/widget/interaction.rs) for click,
+[interaction functions](../progred/src/display/widget/interaction.rs) for
 activation and picking are ordinary native widgets and decorators, built on
 `widget::before` and `widget::after`; [Puri and the editor
 frame](puri.md#widgets-and-hover-continuations) describes how their placements
@@ -828,7 +828,7 @@ Drawing-source origins are separate from failures.
 
 ## Equivalent host representations
 
-The runtime can carry unboxed f64 numbers and text, and containers with lowered
+The runtime can carry unboxed f64 numbers and text, and containers with runtime
 children. Numbers and text stay unboxed through calls, containers, and
 environments until a generic boundary asks for `Value`. Their encoders and
 decoders live with the runtime carrier and are re-exported by the f64 and text
@@ -932,7 +932,7 @@ constructors that just assemble evaluated arguments should use `Context::eval`
 and `RuntimeValue` containers, leaving conversion to a real GID boundary.
 
 Environment lookups and structural matching operate on these equivalent host
-representations. Lowering must be transparent to Grap behavior, including
+representations. Unboxing must be transparent to Grap behavior, including
 when a value comes through a cell or a constructed container. Origin metadata
 preserves both the definition source and the relative path; it cannot identify
 a definition by cell alone. See [source identity](model.md#occurrences-definitions-and-views).

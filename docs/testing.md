@@ -47,7 +47,7 @@ visual testing.
   [`progred/fixtures`](../progred/fixtures). Helpers shared by tests in
   several modules live in [`crate::test_support`](../progred/src/test_support.rs):
   - the loaded core libraries and reading contexts;
-  - selections and arrow keys;
+  - selections and key events;
   - completion entries, both directly and through a projection.
 
   Each module's tests live beside it in its own `tests.rs`.
@@ -60,7 +60,7 @@ visual testing.
   the keyboard would, reads the selection, its stage and the edited line,
   chooses among the picker's entries, and takes input-method text and the
   window's focus, appearance and libraries. A flow's test sits with the code
-  that implements it: the editing keys in `commands`, arrows and Tab in
+  that implements it: the editing keys in `edit_keys`, arrows and Tab in
   `navigate`, a library's flows beside the library, and the tutorial page's in
   `web_embed`. The tutorial tests follow the tutorial page's steps with it, and
   the menu interaction tests use it too. Its input also serves the

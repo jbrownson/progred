@@ -240,11 +240,11 @@ Puri does not know this policy; it still receives ordinary events and handlers.
 [Navigation](navigation.md) covers how whole values and multiline blocks join
 lines, dispatch, the arrow policy, and arrival.
 
-The [projection helpers](../progred/src/display/projection.rs) only declare
-whole-value and leaf stops and compose common inline-or-indented head/body
-layouts. They use the ordinary layout functions, with no navigation-specific
-row/column wrappers. `group(content)` uses the generic `widget::around`
-placement boundary, not a layout opcode.
+The [projection helpers](../progred/src/display/mod.rs) beside `row` and `col`
+only declare whole-value and leaf stops and compose common inline-or-indented
+head/body layouts. They use the ordinary layout functions, with no
+navigation-specific row/column wrappers. `group(content)` uses the generic
+`widget::around` placement boundary, not a layout opcode.
 
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,

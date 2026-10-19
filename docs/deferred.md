@@ -349,7 +349,7 @@ first:
      edits where they are allowed, the selection, per-path state, drags, and
      the picker.
    - **Text in Grap.** Done on 17 October 2026, at the owner's direction: Grap
-     owns text's encoding beside f64's and lowers text as it lowers numbers.
+     owns text's encoding beside f64's and unboxes text as it unboxes numbers.
      More number formats will come later, with no rush. A new one adds a native
      form to the runtime's unboxed values, moves its encoding into Grap as f32's
      and u64's would, and reads and builds through `RuntimeValue` like f64.
@@ -433,8 +433,9 @@ first:
      the editor, and frame.rs for its hover;
    - ~~let the model own the vocabularies and codecs it interprets, as grap
      owns f64's convention;~~ done on 17 October 2026;
-   - ~~back `editing::Access` with the model and the libraries rather than
-     `&mut Editor`, and let the shell set the window title after dispatch;~~
+   - ~~back the session edits act through (`editing::Session`) with the model
+     and the libraries rather than `&mut Editor`, and let the shell set the
+     window title after dispatch;~~
      done on 17 October 2026;
    - ~~move the hover types and the completion helpers down, and route calls
      into the projection runtime through `Project`.~~ Done by 18 October
@@ -514,8 +515,8 @@ first:
    and libraries values are read from (`Sources`) and the code that drew
    something (`SourceTrace`, `source_link`, `SourceCalls`).
 6. ~~Give the occurrence-to-location mapping one owning module, and pass an
-   opaque handle through display and the libraries instead of `Location` and
-   `Conject`.~~ Done on 17 October 2026: a scope maps occurrences to where
+   opaque handle through display and the libraries instead of `Location` and a
+   conject.~~ Done on 17 October 2026: a scope maps occurrences to where
    they're stored, a library names a place by its `Site`, and only the
    toolkit's jumps and source traces see `Location`.
 7. Move the rest of the volume and CAM geometry out of progred, into crates
@@ -597,7 +598,7 @@ algorithms are separate research.
 The [2026-09-04 tree profile](history/tree-profile-2026-09-04.md) records measurements
 from that implementation; timings are historical observations, not guarantees.
 
-### Lowered results across evaluator boundaries
+### Runtime results across evaluator boundaries
 
 Public evaluation and application return owned `RuntimeValue`s, and the
 projection, presentation, controls, drawing, layout, toolpath, and tree chains
@@ -615,7 +616,7 @@ retain runtime callbacks and results. Still GID-oriented, by explicit adapters:
 
 Explicitly expanding a native closure's representation materializes its body
 and environment, and document edits and copying are intentional GID boundaries.
-Do not preserve a creator's dynamic stack as a caller. Keeping values lowered is
+Do not preserve a creator's dynamic stack as a caller. Keeping runtime values is
 an efficiency choice, not the only way to preserve source annotations: closure
 code origins round-trip as explicit GID metadata.
 
