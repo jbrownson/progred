@@ -104,7 +104,7 @@ fn typing_over_a_value_replaces_it_and_escape_brings_it_back() {
         driver.press(NamedKey::Enter);
     }
     assert_eq!(driver.value(&paths[1]), Value::record([]));
-    assert!(driver.keystroke(Key::Character("z".into()), crate::test_support::command()));
+    assert!(driver.undo());
     assert_eq!(
         driver.value(&paths[1]),
         Value::list([]),
@@ -149,10 +149,7 @@ fn enter_on_a_value_that_fills_a_cell_continues_beside_its_reference() {
         ])),
         cells,
     };
-    let mut driver = Driver::new(
-        crate::test_editor_with_stack(doc, crate::stack::load()),
-        Driver::VIEWPORT,
-    );
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let first = driver.element(&[Step::Key(items)], 0, &[]);
     let follow = Step::Follow(gid::Resolution::Document);
     // A new element pends beside the reference in its list; a new field

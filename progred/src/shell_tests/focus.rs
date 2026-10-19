@@ -9,7 +9,7 @@ use kurbo::Point;
 use peniko::{Brush, Color};
 use puri::draw::DrawCmd;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, NamedKey};
+use ui_events::keyboard::NamedKey;
 use ui_events::pointer::PointerEvent;
 use ui_events_winit::WindowEventTranslation;
 use winit::dpi::PhysicalPosition;
@@ -47,7 +47,7 @@ fn changing_palette_repaints_without_losing_edits_selection_or_history() {
         assert!(Rc::ptr_eq(&document, &driver.editor().model.doc));
         assert_eq!(driver.line(), Some("hello!"));
     }
-    assert!(driver.keystroke(Key::Character("z".into()), crate::test_support::command()));
+    assert!(driver.undo());
     assert_eq!(text::read(&driver.value(&[])), Some("hello"));
 }
 

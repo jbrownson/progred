@@ -303,7 +303,7 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
     use crate::selection::Stage;
     use kurbo::Point;
     use puri::draw::{DrawCmd, Shape};
-    use ui_events::keyboard::{Key, NamedKey};
+    use ui_events::keyboard::NamedKey;
     let function = new_cell_id();
     let argument = new_cell_id();
     let mut cells = Cells::new();
@@ -375,10 +375,7 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
     assert_eq!(driver.selection(), path);
     assert_eq!(driver.stage(), Some(Stage::Edge));
     assert!(driver.picker_entries().is_none());
-    assert!(
-        driver.keystroke(Key::Character("z".into()), crate::test_support::command()),
-        "one undo for the whole drag"
-    );
+    assert!(driver.undo(), "one undo for the whole drag");
     assert_eq!(driver.editor().model.doc.root, Some(root));
     assert!(!driver.editor().model.history.can_undo());
 }

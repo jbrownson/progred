@@ -11,7 +11,7 @@ use crate::test_support::{make_selection, positions};
 use gid::{Cells, Document, Path, Step, Value, new_cell_id};
 use puri::handler::test_support::DispatchShorthands;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
 
 type World = crate::Editor;
 use puri::handler::NavigationDirection;
@@ -366,7 +366,7 @@ fn navigation_runner_installs_successor_handlers_before_the_next_key_without_pai
 fn navigation_named_number_hands_off_from_name_at_text_boundary() {
     let mut driver = Driver::of(f64::value(45.0).overlaid(name::record("tilt", [])));
     driver.select(&[Step::Key(name::vocabulary::NAME)]);
-    assert!(driver.keystroke(Key::Named(NamedKey::ArrowRight), Modifiers::empty()));
+    driver.press(NamedKey::ArrowRight);
     assert_eq!(driver.selection(), []);
     assert_eq!(driver.line_selection(), Some((0, 0)));
 }
@@ -594,7 +594,7 @@ fn navigation_outline_connects_heading_and_body_before_adjacent_sections() {
         let mut walk = |start: &Path, moves: &[(NamedKey, &Path)]| {
             driver.select(start);
             for (key, expected) in moves {
-                assert!(driver.keystroke(Key::Named(*key), Modifiers::empty()));
+                driver.press(*key);
                 assert_eq!(driver.selection(), **expected);
                 assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
             }
@@ -651,7 +651,7 @@ fn navigation_example_cells_leave_vertical_navigation_to_the_list() {
         (NamedKey::ArrowRight, &name),
         (NamedKey::ArrowDown, &cells[1]),
     ] {
-        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        driver.press(key);
         assert_eq!(driver.selection(), *expected);
     }
 }
@@ -679,7 +679,7 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
         // Down uses the widget's ordinary default, with no explicit caret.
         (NamedKey::ArrowDown, 1, None),
     ] {
-        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        driver.press(key);
         assert_eq!(driver.selection(), paths[row]);
         assert_eq!(driver.line_selection(), offset.map(|n| (n, n)));
         assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
@@ -705,7 +705,7 @@ fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&cells[0]);
     let mut step = |key, path: Path, offset: Option<usize>| {
-        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        driver.press(key);
         assert_eq!(driver.selection(), path);
         assert_eq!(driver.line_selection(), offset.map(|n| (n, n)));
         assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
@@ -751,7 +751,7 @@ fn navigation_empty_cell_stops_before_entering_missing_contents() {
         // Left must first move through the text to its boundary.
         if start == 2 {
             for _ in 0..5 {
-                assert!(driver.keystroke(Key::Named(NamedKey::ArrowLeft), Modifiers::empty()));
+                driver.press(NamedKey::ArrowLeft);
             }
         }
         let contents: Path = paths[1]
@@ -765,7 +765,7 @@ fn navigation_empty_cell_stops_before_entering_missing_contents() {
             [&contents, &paths[1]]
         };
         for expected in stops {
-            assert!(driver.keystroke(Key::Named(direction), Modifiers::empty()));
+            driver.press(direction);
             assert_eq!(driver.selection(), *expected);
             assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
         }
@@ -856,7 +856,7 @@ fn navigation_example_lists_leave_vertical_navigation_to_the_outer_list() {
             (NamedKey::ArrowUp, &lists[0]),
             (NamedKey::ArrowRight, &first_text),
         ] {
-            assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+            driver.press(key);
             assert_eq!(driver.selection(), *expected, "width={width}, key={key:?}");
         }
         assert_eq!(driver.line_selection(), Some((0, 0)));
@@ -900,7 +900,7 @@ fn navigation_nested_list_has_one_leading_stop_in_both_directions() {
         (NamedKey::ArrowLeft, &list, None),
         (NamedKey::ArrowLeft, &e, Some(1)),
     ] {
-        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        driver.press(key);
         assert_eq!(driver.selection(), *path);
         assert_eq!(driver.line_selection(), offset.map(|n| (n, n)));
         assert!(Rc::ptr_eq(&driver.editor().model.doc, &document));
@@ -922,7 +922,7 @@ fn navigation_empty_list_stops_once_in_either_direction() {
         (NamedKey::ArrowLeft, 1),
         (NamedKey::ArrowLeft, 0),
     ] {
-        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        driver.press(key);
         assert_eq!(driver.selection(), paths[expected]);
     }
 }
@@ -969,7 +969,7 @@ fn content_after_a_multiline_block_stays_on_its_content_line() {
     );
     let mut check = |from: &Path, key: NamedKey, to: &Path| {
         driver.select(from);
-        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        driver.press(key);
         assert_eq!(driver.selection(), *to, "{key:?} from {from:?}");
     };
 

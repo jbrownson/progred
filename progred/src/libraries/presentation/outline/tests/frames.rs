@@ -14,7 +14,7 @@ use gid::{Cells, Document, Path, new_cell_id};
 use kurbo::{Point, Rect};
 use peniko::Brush;
 use puri::draw::{DrawCmd, Shape};
-use ui_events::keyboard::{Key, Modifiers, NamedKey};
+use ui_events::keyboard::{Key, NamedKey};
 use winit::keyboard::ModifiersState;
 
 fn document() -> (Document, CellId, CellId, CellId) {
@@ -202,7 +202,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             Driver::new(editor, kurbo::Size::new(700.0, 600.0))
         };
         let arrow = |driver: &mut Driver, key, path: &Path| {
-            assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+            driver.press(key);
             assert_eq!(driver.selection(), *path);
         };
         let mut open = driver(false);

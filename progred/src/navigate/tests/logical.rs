@@ -10,7 +10,7 @@ use gid::{Cells, Document, Path, Step, Value};
 use puri::handler::NavigationDirection;
 use puri::handler::test_support::DispatchShorthands;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
 
 type World = crate::Editor;
 
@@ -348,7 +348,7 @@ fn logical_computed_children_remain_readonly_and_text_handles_keys_first() {
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&[]);
     for offset in [0, 1] {
-        assert!(driver.keystroke(Key::Named(NamedKey::ArrowRight), Modifiers::empty()));
+        driver.press(NamedKey::ArrowRight);
         assert_eq!(driver.selection(), source);
         assert_eq!(driver.line_selection(), Some((offset, offset)));
     }

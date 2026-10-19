@@ -53,10 +53,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
                     )
                 })
             })]);
-            let mut world = crate::test_editor(Document {
-                root: Some(root),
-                cells: Cells::new(),
-            });
+            let mut world = crate::editor_of(root);
             world.stack.projection = projection;
             editing_frame(&mut world);
             assert_eq!(
@@ -199,10 +196,7 @@ fn descents_replace_current_and_default_projections_independently() {
                 )
             })
         })]);
-        let mut world = crate::test_editor(Document {
-            root: Some(root.clone()),
-            cells: Cells::new(),
-        });
+        let mut world = crate::editor_of(root.clone());
         world.stack.projection = projection;
         editing_frame(&mut world);
         assert_eq!(
@@ -298,10 +292,7 @@ fn record_combinator_chooses_a_projection_for_each_field() {
         }),
         default_projection,
     ]);
-    let mut world = crate::test_editor(Document {
-        root: Some(root),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(root);
     world.stack.projection = projection;
     editing_frame(&mut world);
     let mut actual = seen.borrow().clone();

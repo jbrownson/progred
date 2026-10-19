@@ -357,14 +357,8 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
             vec![Step::Follow(gid::Resolution::Library(library))],
         ),
     ] {
-        let mut editor = {
-            let mut editor = crate::test_editor(Document {
-                root: Some(value),
-                cells: Cells::new(),
-            });
-            editor.stack.libraries = libraries.clone();
-            editor
-        };
+        let mut editor = crate::editor_of(value);
+        editor.stack.libraries = libraries.clone();
         if raw {
             editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
         }
@@ -505,7 +499,7 @@ fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
         );
     }
     // The whole run of edits is one undo step.
-    assert!(driver.keystroke(Key::Character("z".into()), crate::test_support::command()));
+    assert!(driver.undo());
     assert_eq!(
         driver.editor().model.doc.cells.value(cell),
         Some(&Value::from(bytes))

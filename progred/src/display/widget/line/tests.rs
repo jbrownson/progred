@@ -38,7 +38,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     use crate::test_values::key;
     let doc = crate::sample::sample_document();
     let mut driver = crate::driver::Driver::new(
-        crate::test_editor_with_stack(doc, crate::stack::load()),
+        crate::test_editor(doc),
         // Tall enough to show the style's color without scrolling.
         kurbo::Size::new(900.0, 1200.0),
     );
