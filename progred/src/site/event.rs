@@ -184,15 +184,14 @@ fn pointer_fields(
     scale: f64,
     state: &PointerState,
     command: CommandModifier,
-) -> Vec<(CellId, Value)> {
-    let mut fields = vec![
+) -> [(CellId, Value); 5] {
+    [
         (X, grap::f64::value(state.position.x - placement.rect.x0)),
         (Y, grap::f64::value(state.position.y - placement.rect.y0)),
         (COUNT, grap::f64::value(f64::from(state.count))),
         (SCALE, grap::f64::value(scale)),
-    ];
-    fields.push(modifier_field(&state.modifiers, command));
-    fields
+        modifier_field(&state.modifiers, command),
+    ]
 }
 
 fn pointer_button_value(
@@ -203,12 +202,16 @@ fn pointer_button_value(
     event: &PointerButtonEvent,
     command: CommandModifier,
 ) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.state, command);
     let touch = event.pointer.pointer_type == PointerType::Touch;
-    if !touch && event.button == Some(PointerButton::Primary) {
-        fields.push((BUTTON, Value::Cell(PRIMARY)));
-    }
-    event_value(if touch { touch_kind } else { pointer_kind }, fields)
+    event_value(
+        if touch { touch_kind } else { pointer_kind },
+        pointer_fields(placement, scale, &event.state, command)
+            .into_iter()
+            .chain(
+                (!touch && event.button == Some(PointerButton::Primary))
+                    .then(|| (BUTTON, Value::Cell(PRIMARY))),
+            ),
+    )
 }
 
 fn pointer_motion_fields(
@@ -217,12 +220,13 @@ fn pointer_motion_fields(
     touch: bool,
     state: &PointerState,
     command: CommandModifier,
-) -> Vec<(CellId, Value)> {
-    let mut fields = pointer_fields(placement, scale, state, command);
-    if !touch && state.buttons.contains(PointerButton::Primary) {
-        fields.push((BUTTON, Value::Cell(PRIMARY)));
-    }
-    fields
+) -> impl Iterator<Item = (CellId, Value)> {
+    pointer_fields(placement, scale, state, command)
+        .into_iter()
+        .chain(
+            (!touch && state.buttons.contains(PointerButton::Primary))
+                .then(|| (BUTTON, Value::Cell(PRIMARY))),
+        )
 }
 
 fn pointer_move_value(
@@ -232,16 +236,17 @@ fn pointer_move_value(
     command: CommandModifier,
 ) -> Value {
     let touch = event.pointer.pointer_type == PointerType::Touch;
-    let mut fields = pointer_motion_fields(placement, scale, touch, &event.current, command);
-    fields.push((
-        COALESCED,
-        Value::list(event.coalesced.iter().map(|sample| {
-            Value::record(pointer_motion_fields(
-                placement, scale, touch, sample, command,
-            ))
-        })),
-    ));
-    event_value(if touch { TOUCH_MOVE } else { POINTER_MOVE }, fields)
+    event_value(
+        if touch { TOUCH_MOVE } else { POINTER_MOVE },
+        pointer_motion_fields(placement, scale, touch, &event.current, command).chain([(
+            COALESCED,
+            Value::list(event.coalesced.iter().map(|sample| {
+                Value::record(pointer_motion_fields(
+                    placement, scale, touch, sample, command,
+                ))
+            })),
+        )]),
+    )
 }
 
 fn pointer_cancel_value(event: &PointerInfo) -> Value {
@@ -261,16 +266,19 @@ fn scroll_value(
     event: &PointerScrollEvent,
     command: CommandModifier,
 ) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.state, command);
     let (x, y) = match event.delta {
         ScrollDelta::PageDelta(x, y) | ScrollDelta::LineDelta(x, y) => (f64::from(x), f64::from(y)),
         ScrollDelta::PixelDelta(delta) => (delta.x, delta.y),
     };
-    fields.extend([
-        (DELTA_X, grap::f64::value(x)),
-        (DELTA_Y, grap::f64::value(y)),
-    ]);
-    event_value(SCROLL, fields)
+    event_value(
+        SCROLL,
+        pointer_fields(placement, scale, &event.state, command)
+            .into_iter()
+            .chain([
+                (DELTA_X, grap::f64::value(x)),
+                (DELTA_Y, grap::f64::value(y)),
+            ]),
+    )
 }
 
 fn gesture_value(
@@ -279,53 +287,55 @@ fn gesture_value(
     event: &PointerGestureEvent,
     command: CommandModifier,
 ) -> Value {
-    let mut fields = pointer_fields(placement, scale, &event.state, command);
     let (kind, delta) = match event.gesture {
         PointerGesture::Pinch(delta) => (PINCH, delta),
         PointerGesture::Rotate(delta) => (ROTATION, delta),
     };
-    fields.push((DELTA, grap::f64::value(f64::from(delta))));
-    event_value(kind, fields)
+    event_value(
+        kind,
+        pointer_fields(placement, scale, &event.state, command)
+            .into_iter()
+            .chain([(DELTA, grap::f64::value(f64::from(delta)))]),
+    )
 }
 
 fn key_value(event: &KeyboardEvent, command: CommandModifier) -> Value {
-    let mut fields = vec![
-        (
-            EVENT_STATE,
-            Value::Cell(match event.state {
-                KeyState::Down => DOWN,
-                KeyState::Up => UP,
-            }),
-        ),
-        (CONTENT, grap::text::value(event.key.to_string())),
-    ];
-    if event.repeat {
-        fields.push((REPEAT, marker()));
-    }
-    fields.push(modifier_field(&event.modifiers, command));
-    event_value(KEY, fields)
+    event_value(
+        KEY,
+        [
+            (
+                EVENT_STATE,
+                Value::Cell(match event.state {
+                    KeyState::Down => DOWN,
+                    KeyState::Up => UP,
+                }),
+            ),
+            (CONTENT, grap::text::value(event.key.to_string())),
+        ]
+        .into_iter()
+        .chain(event.repeat.then(|| (REPEAT, marker())))
+        .chain([modifier_field(&event.modifiers, command)]),
+    )
 }
 
 fn ime_value(event: &ImeEvent) -> Value {
-    let mut fields = Vec::new();
-    let state = match event {
-        ImeEvent::Enabled => IME_ENABLED,
-        ImeEvent::Disabled => IME_DISABLED,
-        ImeEvent::Preedit(content, cursor) => {
-            fields.push((CONTENT, grap::text::value(content)));
-            if let Some((start, end)) = cursor {
-                fields.extend([
-                    (START, grap::f64::value(*start as f64)),
-                    (END, grap::f64::value(*end as f64)),
-                ]);
-            }
-            IME_PREEDIT
-        }
-        ImeEvent::Commit(content) => {
-            fields.push((CONTENT, grap::text::value(content)));
-            IME_COMMIT
-        }
+    let (state, content, cursor) = match event {
+        ImeEvent::Enabled => (IME_ENABLED, None, None),
+        ImeEvent::Disabled => (IME_DISABLED, None, None),
+        ImeEvent::Preedit(content, cursor) => (IME_PREEDIT, Some(content), *cursor),
+        ImeEvent::Commit(content) => (IME_COMMIT, Some(content), None),
     };
-    fields.push((EVENT_STATE, Value::Cell(state)));
-    event_value(IME, fields)
+    event_value(
+        IME,
+        content
+            .map(|content| (CONTENT, grap::text::value(content)))
+            .into_iter()
+            .chain(cursor.into_iter().flat_map(|(start, end)| {
+                [
+                    (START, grap::f64::value(start as f64)),
+                    (END, grap::f64::value(end as f64)),
+                ]
+            }))
+            .chain([(EVENT_STATE, Value::Cell(state))]),
+    )
 }

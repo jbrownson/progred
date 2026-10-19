@@ -62,12 +62,14 @@ fn grap_motion_preserves_the_batch_in_local_coordinates() {
         assert_eq!(fields.get(&X), Some(&grap::f64::value(30.0)));
         let earlier = fields.get(&COALESCED).unwrap();
         let expected = [10.0, 20.0].map(|x| {
-            let mut fields =
-                pointer_fields(placement, 2.0, &sample(x + 10.0), CommandModifier::Control);
-            if pointer_type == PointerType::Mouse {
-                fields.push((BUTTON, Value::Cell(PRIMARY)));
-            }
-            Value::record(fields)
+            Value::record(
+                pointer_fields(placement, 2.0, &sample(x + 10.0), CommandModifier::Control)
+                    .into_iter()
+                    .chain(
+                        (pointer_type == PointerType::Mouse)
+                            .then(|| (BUTTON, Value::Cell(PRIMARY))),
+                    ),
+            )
         });
         assert_eq!(earlier, &Value::list(expected));
     }
