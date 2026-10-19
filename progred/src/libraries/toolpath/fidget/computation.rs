@@ -320,7 +320,7 @@ fn image_with<S: Send + Sync + 'static>(
 
 fn scene(request: SceneRequest) -> Outcome<Vec<volume::SceneObject>> {
     let invalid = || ::grap::absent::value(INVALID_INPUT);
-    let objects = match request {
+    Ok(match request {
         SceneRequest::Model(objects) => objects,
         SceneRequest::Stock(path, playback) => vec![
             playback
@@ -328,12 +328,7 @@ fn scene(request: SceneRequest) -> Outcome<Vec<volume::SceneObject>> {
                 .map_err(|_| invalid())?
                 .ok_or_else(invalid)?,
         ],
-    };
-    if objects.len() > usize::from(u16::MAX) + 1 {
-        Err(::grap::absent::value(fidget::vocabulary::INVALID_SCENE))
-    } else {
-        Ok(objects)
-    }
+    })
 }
 
 #[cfg(test)]
