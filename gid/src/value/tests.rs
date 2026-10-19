@@ -262,3 +262,24 @@ fn entries_sort_by_key_and_a_repeated_key_keeps_its_last_value() {
         [(first, blob("y")), (second, blob("z"))]
     );
 }
+
+#[test]
+fn overlaying_a_record_keeps_its_fields_under_the_patch() {
+    let current = Value::record([(label("a"), blob("a")), (label("b"), blob("b"))]);
+    assert_eq!(
+        current.overlaid(Value::record([
+            (label("b"), blob("patched")),
+            (label("k"), blob("k"))
+        ])),
+        Value::record([
+            (label("a"), blob("a")),
+            (label("b"), blob("patched")),
+            (label("k"), blob("k")),
+        ])
+    );
+    assert_eq!(current.overlaid(blob("atom")), blob("atom"));
+    assert_eq!(
+        blob("atom").overlaid(Value::record([(label("a"), blob("a"))])),
+        Value::record([(label("a"), blob("a"))])
+    );
+}

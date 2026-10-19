@@ -9,7 +9,6 @@ use gid::CellId;
 use gid::{Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0x1fdb573a2c56a7063546c195318214bc);
-use crate::display::overlay_value;
 #[cfg(test)]
 use ::grap;
 #[cfg(test)]
@@ -166,7 +165,7 @@ fn parts() -> number::Parts {
     }
     parts.cells.set_value(
         vocabulary::PI,
-        overlay_value(&value(std::f64::consts::PI), name::record("π", [])),
+        value(std::f64::consts::PI).overlaid(name::record("π", [])),
     );
     parts.calls.push(vocabulary::LERP);
     parts

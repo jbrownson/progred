@@ -770,28 +770,18 @@ fn record_forms<W: 'static, H: Clone + 'static>(
             value: shared(field.value),
         })
         .collect::<Vec<_>>();
-    let mut flat = Vec::new();
-    for (index, field) in fields.iter().enumerate() {
-        if index > 0 {
-            flat.push(dim(", "));
-        }
-        flat.push(row(
-            0.0,
-            [field.label.clone(), dim(" "), field.value.clone()],
-        ));
-    }
-    let mut rows = fields
+    let trailing = trailing.into_iter().map(shared).collect::<Vec<_>>();
+    let flat = fields
+        .iter()
+        .map(|field| row(0.0, [field.label.clone(), dim(" "), field.value.clone()]))
+        .chain(trailing.iter().cloned())
+        .enumerate()
+        .flat_map(|(index, item)| (index > 0).then(|| dim(", ")).into_iter().chain([item]))
+        .collect::<Vec<_>>();
+    let rows = fields
         .into_iter()
         .map(|field| hug(field.label, field.value, 6.0))
-        .collect::<Vec<_>>();
-    for tail in trailing {
-        let tail = shared(tail);
-        if !flat.is_empty() {
-            flat.push(dim(", "));
-        }
-        flat.push(tail.clone());
-        rows.push(tail);
-    }
+        .chain(trailing);
     [row(0.0, flat), col(0, 2.0, rows)]
 }
 
@@ -955,21 +945,6 @@ pub fn alternatives<World: 'static, Hover: 'static>(
         let options = options.iter().map(|option| option.run(builder)).collect();
         builder.alternatives(options)
     })
-}
-
-/// If both values are records, `patch` fields win on shared keys.
-/// Otherwise `patch`.
-pub fn overlay_value(current: &Value, patch: Value) -> Value {
-    match (current.as_record(), patch.as_record()) {
-        (Some(current), Some(patch)) => {
-            let mut overlaid = current.clone();
-            for (field, value) in patch {
-                overlaid.insert(*field, value.clone());
-            }
-            Value::Record(overlaid)
-        }
-        _ => patch,
-    }
 }
 
 #[cfg(test)]

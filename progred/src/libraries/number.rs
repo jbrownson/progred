@@ -3,8 +3,8 @@
 //! operation identities stay with each representation until dispatch
 //! evaluates arguments once per call.
 
+use crate::display::activatable;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-use crate::display::{activatable, overlay_value};
 use crate::libraries::representation::{Precedence, calls, infix_display, tagged};
 use crate::libraries::{Library, absent, line_edit, logic, name};
 use ::grap::{
@@ -444,7 +444,7 @@ pub(crate) fn layout<W: Host, N: Scrubbable + std::str::FromStr>(
                 Box::new(move |event| {
                     let scrubbed = scrub.update(event);
                     ScrubUpdate {
-                        value: overlay_value(&original, encode(scrubbed.value)),
+                        value: original.overlaid(encode(scrubbed.value)),
                         spelling: Some(scrubbed.value.spelling(scrubbed.precision)),
                     }
                 })
@@ -468,7 +468,7 @@ pub(crate) fn edit<N: std::str::FromStr>(
     let value = encode(spelling.trim().parse().ok()?);
     Some(
         current
-            .map(|current| overlay_value(current, value.clone()))
+            .map(|current| current.overlaid(value.clone()))
             .unwrap_or(value),
     )
 }

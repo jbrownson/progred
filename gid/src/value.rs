@@ -280,6 +280,17 @@ impl Value {
             _ => None,
         }
     }
+
+    /// `patch` laid over this value: where both are records, these fields
+    /// with `patch`'s added or replacing theirs; otherwise `patch`.
+    pub fn overlaid(&self, patch: Value) -> Value {
+        match (self.as_record(), patch.as_record()) {
+            (Some(fields), Some(patched)) => {
+                Value::Record(fields.iter().chain(patched).cloned().collect())
+            }
+            _ => patch,
+        }
+    }
 }
 
 impl PartialEq for Value {

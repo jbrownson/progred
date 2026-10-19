@@ -84,14 +84,8 @@ pub fn list_with<W: Host, S>(
 where
     S: FnOnce(Option<W::Hover>) -> Layout<W>,
 {
-    let mut separated = Vec::with_capacity(items.len() * 2 + 1);
-    for index in 0..=items.len() {
-        let before = index
-            .checked_sub(1)
-            .and_then(|i| items.get(i))
-            .map(|(p, _)| p);
-        let after = items.get(index).map(|(p, _)| p);
-        if let Some(render) = separator(before, after) {
+    let gap = |before: Option<&gid::Position>, after: Option<&gid::Position>| {
+        separator(before, after).map(|render| {
             let beside_pending = matches!(
                 &input.pending,
                 Some(Pending::Child(Step::Element(position)))
@@ -102,16 +96,24 @@ where
                 .flatten()
                 .map(|position| input.site().below(&[Step::Element(position)]));
             let content = render(site.as_ref().map(|site| W::Hover::from(site.hover())));
-            let content = match site {
+            widget::fill_width(match site {
                 Some(site) => activatable(content, &site),
                 None => content,
-            };
-            separated.push(widget::fill_width(content));
-        }
-        if let Some((position, layout)) = items.get(index) {
-            separated.push(item(position.clone(), layout.clone()));
-        }
-    }
+            })
+        })
+    };
+    // Sized for every gap and item, so the list fills it without regrowing.
+    let mut separated = Vec::with_capacity(items.len() * 2 + 1);
+    separated.extend((0..=items.len()).flat_map(|index| {
+        let before = index
+            .checked_sub(1)
+            .and_then(|i| items.get(i))
+            .map(|(p, _)| p);
+        let after = items.get(index);
+        gap(before, after.map(|(p, _)| p))
+            .into_iter()
+            .chain(after.map(|(position, layout)| item(position.clone(), layout.clone())))
+    }));
     separated
 }
 

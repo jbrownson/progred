@@ -24,7 +24,7 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
         (f32::value(45.0), f32::value(455.0)),
         (u64::value(45), u64::value(455)),
     ] {
-        let named = crate::display::overlay_value(&before, name::record("tilt", []));
+        let named = before.overlaid(name::record("tilt", []));
         let mut cells = Cells::new();
         cells.set_value(cell, named);
         let mut world = crate::test_editor(Document {
@@ -48,10 +48,7 @@ fn named_numbers_edit_the_name_and_numeric_facet_at_their_own_locations() {
         assert_eq!(world.model.doc.root, Some(cell.into()));
         assert_eq!(
             world.model.doc.cells.value(cell),
-            Some(&crate::display::overlay_value(
-                &after,
-                name::record("tilt angle", [])
-            )),
+            Some(&after.overlaid(name::record("tilt angle", []))),
         );
     }
 }
@@ -67,7 +64,7 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
         ] {
             let name_contact = contact == "name";
             let scrub = pick && !name_contact;
-            let value = crate::display::overlay_value(&number, name::record("tilt", []));
+            let value = number.overlaid(name::record("tilt", []));
             let cell = new_cell_id();
             let number_path = vec![Step::Follow(gid::Resolution::Document)];
             let name_path = vec![number_path[0].clone(), Step::Key(name::vocabulary::NAME)];
@@ -154,10 +151,8 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
         assert!(editing_frame(&mut world, false).completion.is_some());
         world.model.selection = None;
         for name in [text::value(""), Value::list([text::value("unusual name")])] {
-            Rc::make_mut(&mut world.model.doc).root = Some(crate::display::overlay_value(
-                &number,
-                Value::record([(name::vocabulary::NAME, name)]),
-            ));
+            Rc::make_mut(&mut world.model.doc).root =
+                Some(number.overlaid(Value::record([(name::vocabulary::NAME, name)])));
             let frame = editing_frame(&mut world, false);
             assert!(frame.landmarks.iter().any(|d| d.path.as_ref() == path));
         }

@@ -260,10 +260,7 @@ fn logical_down_enters_vertical_lists_but_passes_single_line_cells_and_lists() {
         let mut cells = Cells::new();
         cells.set_value(
             id,
-            crate::display::overlay_value(
-                &crate::libraries::f64::value(45.0),
-                name::record("first", []),
-            ),
+            crate::libraries::f64::value(45.0).overlaid(name::record("first", [])),
         );
         let root = Value::list([
             if cell { id.into() } else { inner },

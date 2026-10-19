@@ -375,10 +375,7 @@ fn navigation_runner_installs_successor_handlers_before_the_next_key_without_pai
 #[test]
 fn navigation_named_number_hands_off_from_name_at_text_boundary() {
     let world = crate::test_editor(Document {
-        root: Some(d::overlay_value(
-            &f64::value(45.0),
-            name::record("tilt", []),
-        )),
+        root: Some(f64::value(45.0).overlaid(name::record("tilt", []))),
         cells: Cells::new(),
     });
     let mut driver = Driver::new(world, VIEWPORT);

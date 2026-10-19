@@ -12,7 +12,6 @@ use crate::libraries::{Library, line_edit, name};
 use gid::{Cells, Value};
 
 pub const ID: gid::CellId = gid::CellId::from_u128(0xeaaf309c36a65d2811083944da29aec9);
-use crate::display::overlay_value;
 use ::grap::{ForeignFunction, ForeignFunctions};
 
 pub mod vocabulary {
@@ -32,7 +31,7 @@ pub use ::grap::text::{read, value};
 pub fn edit(spelling: &str, current: Option<&Value>) -> Option<Value> {
     Some(
         current
-            .map(|current| overlay_value(current, value(spelling)))
+            .map(|current| current.overlaid(value(spelling)))
             .unwrap_or_else(|| value(spelling)),
     )
 }
