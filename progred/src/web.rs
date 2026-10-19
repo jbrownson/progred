@@ -96,18 +96,19 @@ pub fn computation_finished() {
 /// Ask what to call a saved file; `None` is a cancelled prompt. A name
 /// without the extension gets it, so a bare "forest" saves as forest.gid.
 pub(crate) fn ask_name(default: &str) -> Option<String> {
-    let answer = web_sys::window()?
+    web_sys::window()?
         .prompt_with_message_and_default("Save as", default)
-        .ok()??;
-    let answer = answer.trim();
-    if answer.is_empty() {
-        return None;
-    }
-    Some(if answer.ends_with(".gid") {
-        answer.to_owned()
-    } else {
-        format!("{answer}.gid")
-    })
+        .ok()?
+        .as_deref()
+        .map(str::trim)
+        .filter(|answer| !answer.is_empty())
+        .map(|answer| {
+            if answer.ends_with(".gid") {
+                answer.to_owned()
+            } else {
+                format!("{answer}.gid")
+            }
+        })
 }
 
 /// Hand the browser a file to save: a link to the text, clicked.
@@ -130,34 +131,31 @@ pub(crate) fn download(name: &str, text: &str) -> Result<(), wasm_bindgen::JsVal
 /// Offer the browser's file picker; the chosen file's text arrives as
 /// [`UserEvent::Opened`] once read.
 pub(crate) fn pick_document(proxy: winit::event_loop::EventLoopProxy<UserEvent>) {
-    let Some(document) = web_sys::window().and_then(|window| window.document()) else {
-        return;
-    };
-    let Ok(element) = document.create_element("input") else {
-        return;
-    };
-    let input: web_sys::HtmlInputElement = element.unchecked_into();
-    input.set_type("file");
-    input.set_accept(".gid");
-    let picked = input.clone();
-    let chosen = wasm_bindgen::closure::Closure::once(move || {
-        let Some(file) = picked.files().and_then(|files| files.get(0)) else {
-            return;
-        };
-        let name = file.name();
-        wasm_bindgen_futures::spawn_local(async move {
-            match wasm_bindgen_futures::JsFuture::from(file.text()).await {
-                Ok(text) => {
-                    let source = text.as_string().unwrap_or_default();
-                    let _ = proxy.send_event(UserEvent::Opened { name, source });
-                }
-                Err(error) => web_sys::console::error_1(&error),
+    if let Some(document) = web_sys::window().and_then(|window| window.document())
+        && let Ok(element) = document.create_element("input")
+    {
+        let input: web_sys::HtmlInputElement = element.unchecked_into();
+        input.set_type("file");
+        input.set_accept(".gid");
+        let picked = input.clone();
+        let chosen = wasm_bindgen::closure::Closure::once(move || {
+            if let Some(file) = picked.files().and_then(|files| files.get(0)) {
+                let name = file.name();
+                wasm_bindgen_futures::spawn_local(async move {
+                    match wasm_bindgen_futures::JsFuture::from(file.text()).await {
+                        Ok(text) => {
+                            let source = text.as_string().unwrap_or_default();
+                            let _ = proxy.send_event(UserEvent::Opened { name, source });
+                        }
+                        Err(error) => web_sys::console::error_1(&error),
+                    }
+                });
             }
         });
-    });
-    input.set_onchange(Some(chosen.as_ref().unchecked_ref()));
-    chosen.forget();
-    input.click();
+        input.set_onchange(Some(chosen.as_ref().unchecked_ref()));
+        chosen.forget();
+        input.click();
+    }
 }
 
 /// A bundled example's document, named by its file without `.gid`.

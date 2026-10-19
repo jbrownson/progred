@@ -90,21 +90,13 @@ pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
         repeat: event.repeat(),
         is_composing: event.is_composing(),
     };
-    APP.with(|slot| {
-        let Some(app) = slot.borrow().upgrade() else {
-            return false;
-        };
+    if let Some(app) = APP.with(|slot| slot.borrow().upgrade())
         // A synthetic reentrant event cannot borrow the editor. Leave it to
         // the browser instead of queuing an edit after its default action.
-        let Ok(mut app) = app.try_borrow_mut() else {
-            return false;
-        };
-        let Some(runner) = app.editors.first_mut() else {
-            return false;
-        };
-        let Some(window) = runner.editor.window() else {
-            return false;
-        };
+        && let Ok(mut app) = app.try_borrow_mut()
+        && let Some(runner) = app.editors.first_mut()
+        && let Some(window) = runner.editor.window()
+    {
         let scale = runner.editor.scale(&window);
         let viewport = crate::editor::viewport(&window);
         let focus_changed =
@@ -115,5 +107,7 @@ pub fn browser_keyboard(event: web_sys::KeyboardEvent) -> bool {
             window.request_redraw();
         }
         handled
-    })
+    } else {
+        false
+    }
 }

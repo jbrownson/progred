@@ -545,125 +545,123 @@ impl App {
         index: usize,
         event: WindowEvent,
     ) {
-        let runner = &mut self.editors[index];
-        let window = match &runner.editor.state {
-            RenderState::Active { window, .. } => window.clone(),
-            RenderState::Suspended(_) => return,
-        };
-        let scale = runner.editor.scale(&window);
-        let viewport = viewport(&window);
-        // Preserve motion samples without minting intermediate frames.
-        // Discrete input (including release/cancel) first settles the batch.
-        if runner.flush_before_window_event(&event) {
-            window.request_redraw();
-        }
-
-        #[cfg(target_os = "macos")]
-        if matches!(event, WindowEvent::ThemeChanged(_)) {
-            change_palette(
-                runner,
-                macos_window::palette(self.appearance, window.theme()),
-            );
-        }
-
-        if let WindowEvent::Focused(_focused) = event {
-            #[cfg(not(target_arch = "wasm32"))]
-            let focused = _focused;
-            #[cfg(target_arch = "wasm32")]
-            let focused = browser_editor_focused(&window);
-            if runner.focus_changed(focused, scale, viewport) {
+        if let RenderState::Active { window, .. } = &self.editors[index].editor.state {
+            let window = window.clone();
+            let runner = &mut self.editors[index];
+            let scale = runner.editor.scale(&window);
+            let viewport = viewport(&window);
+            // Preserve motion samples without minting intermediate frames.
+            // Discrete input (including release/cancel) first settles the batch.
+            if runner.flush_before_window_event(&event) {
                 window.request_redraw();
             }
-            return;
-        }
 
-        if let WindowEvent::ModifiersChanged(state) = &event {
-            runner.modifiers_changed(
-                ui_events_winit::keyboard::from_winit_modifier_state(state.state()),
-                scale,
-                viewport,
-            );
-            window.request_redraw();
-        }
-
-        if !matches!(
-            event,
-            WindowEvent::KeyboardInput {
-                is_synthetic: true,
-                ..
+            #[cfg(target_os = "macos")]
+            if matches!(event, WindowEvent::ThemeChanged(_)) {
+                change_palette(
+                    runner,
+                    macos_window::palette(self.appearance, window.theme()),
+                );
             }
-        ) {
-            let ime = match &event {
-                WindowEvent::Ime(ime) => Some(match ime {
-                    Ime::Enabled => ImeEvent::Enabled,
-                    Ime::Disabled => ImeEvent::Disabled,
-                    Ime::Preedit(text, cursor) => ImeEvent::Preedit(text.clone(), *cursor),
-                    Ime::Commit(text) => ImeEvent::Commit(text.clone()),
-                }),
-                _ => None,
-            };
-            let translation = runner.editor.reducer.reduce(scale, &event);
-            let redraw = match (ime, translation) {
-                (Some(ime), _) => runner.ime_event(&ime, scale, viewport),
-                (None, Some(WindowEventTranslation::Keyboard(event))) => {
-                    runner.keyboard_event(&event, scale, viewport)
-                }
-                (None, Some(WindowEventTranslation::Pointer(event))) => {
-                    runner.pointer_event(&event, scale, viewport)
-                }
-                _ => false,
-            };
-            if redraw {
+
+            if let WindowEvent::ModifiersChanged(state) = &event {
+                runner.modifiers_changed(
+                    ui_events_winit::keyboard::from_winit_modifier_state(state.state()),
+                    scale,
+                    viewport,
+                );
                 window.request_redraw();
             }
-        }
 
-        match event {
-            WindowEvent::CloseRequested => {
-                #[cfg(any(target_os = "macos", target_os = "linux"))]
-                self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
-                #[cfg(target_arch = "wasm32")]
-                self.request_discard(event_loop, index, AfterDiscard::Quit);
-            }
-
-            WindowEvent::Resized(size) => {
-                let valid = size.width != 0 && size.height != 0;
-                #[cfg(not(target_arch = "wasm32"))]
-                if let RenderState::Active {
-                    surface,
-                    valid_surface,
+            if !matches!(
+                event,
+                WindowEvent::KeyboardInput {
+                    is_synthetic: true,
                     ..
-                } = &mut self.editors[index].editor.state
-                {
-                    if valid {
-                        self.context
-                            .resize_surface(surface, size.width, size.height);
+                }
+            ) {
+                let ime = match &event {
+                    WindowEvent::Ime(ime) => Some(match ime {
+                        Ime::Enabled => ImeEvent::Enabled,
+                        Ime::Disabled => ImeEvent::Disabled,
+                        Ime::Preedit(text, cursor) => ImeEvent::Preedit(text.clone(), *cursor),
+                        Ime::Commit(text) => ImeEvent::Commit(text.clone()),
+                    }),
+                    _ => None,
+                };
+                let translation = runner.editor.reducer.reduce(scale, &event);
+                let redraw = match (ime, translation) {
+                    (Some(ime), _) => runner.ime_event(&ime, scale, viewport),
+                    (None, Some(WindowEventTranslation::Keyboard(event))) => {
+                        runner.keyboard_event(&event, scale, viewport)
                     }
-                    *valid_surface = valid;
-                }
-                if valid {
-                    self.redraw(index);
-                }
-            }
-
-            WindowEvent::ScaleFactorChanged { .. } => {
-                window.request_redraw();
-            }
-
-            // The hover is the pointer RELATIVE TO CONTENT, and a
-            // moved window shifts that relation with no pointer event
-            // — and no way to re-measure it (a title-bar drag carries
-            // the mouse along; an OS-driven move doesn't; winit can't
-            // say where the pointer now sits). The honest state is
-            // unknown until the next move.
-            WindowEvent::Moved(_) => {
-                if self.editors[index].window_moved(scale, viewport) {
+                    (None, Some(WindowEventTranslation::Pointer(event))) => {
+                        runner.pointer_event(&event, scale, viewport)
+                    }
+                    _ => false,
+                };
+                if redraw {
                     window.request_redraw();
                 }
             }
 
-            WindowEvent::RedrawRequested => self.redraw(index),
-            _ => {}
+            match event {
+                WindowEvent::Focused(_focused) => {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let focused = _focused;
+                    #[cfg(target_arch = "wasm32")]
+                    let focused = browser_editor_focused(&window);
+                    if self.editors[index].focus_changed(focused, scale, viewport) {
+                        window.request_redraw();
+                    }
+                }
+
+                WindowEvent::CloseRequested => {
+                    #[cfg(any(target_os = "macos", target_os = "linux"))]
+                    self.request_discard(event_loop, index, AfterDiscard::CloseWindow);
+                    #[cfg(target_arch = "wasm32")]
+                    self.request_discard(event_loop, index, AfterDiscard::Quit);
+                }
+
+                WindowEvent::Resized(size) => {
+                    let valid = size.width != 0 && size.height != 0;
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if let RenderState::Active {
+                        surface,
+                        valid_surface,
+                        ..
+                    } = &mut self.editors[index].editor.state
+                    {
+                        if valid {
+                            self.context
+                                .resize_surface(surface, size.width, size.height);
+                        }
+                        *valid_surface = valid;
+                    }
+                    if valid {
+                        self.redraw(index);
+                    }
+                }
+
+                WindowEvent::ScaleFactorChanged { .. } => {
+                    window.request_redraw();
+                }
+
+                // The hover is the pointer RELATIVE TO CONTENT, and a
+                // moved window shifts that relation with no pointer event
+                // — and no way to re-measure it (a title-bar drag carries
+                // the mouse along; an OS-driven move doesn't; winit can't
+                // say where the pointer now sits). The honest state is
+                // unknown until the next move.
+                WindowEvent::Moved(_) => {
+                    if self.editors[index].window_moved(scale, viewport) {
+                        window.request_redraw();
+                    }
+                }
+
+                WindowEvent::RedrawRequested => self.redraw(index),
+                _ => {}
+            }
         }
     }
 }
@@ -803,38 +801,45 @@ impl App {
     /// Gate an action on unsaved changes: a clean document proceeds
     /// immediately; a dirty one asks first, in the browser through its
     /// confirm dialog, and on the desktop through the window's sheet,
-    /// continuing through a [`UserEvent::Discard`] when it resolves. Async
-    /// is the one rfd path that presents natively on macOS (begin-sheet
-    /// with a completion): the sync API falls back, parentless, to a
-    /// CFUserNotification panel that arrives unfocused and warns on the
-    /// console, and, parented, presents twice, as a sheet and a modal
-    /// loop. The sheet's completion lands on the main run loop, so the
-    /// answer is awaited on a throwaway thread and routed back through the
-    /// proxy; blocking here would deadlock the loop the sheet needs.
+    /// continuing through a [`UserEvent::Discard`] when it resolves.
     fn request_discard(&mut self, event_loop: &ActiveEventLoop, index: usize, then: AfterDiscard) {
-        if self.editors[index].editor.pending_discard.is_some() {
-            return;
-        }
-        if !self.editors[index].editor.model.dirty() {
-            self.proceed(event_loop, index, then);
-            return;
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            let accepted = web_sys::window()
-                .and_then(|window| window.confirm_with_message("Discard unsaved changes?").ok())
-                .unwrap_or(false);
-            if accepted {
-                self.proceed(event_loop, index, then);
+        let editor = &self.editors[index].editor;
+        match (editor.pending_discard.is_some(), editor.model.dirty()) {
+            // Already asking.
+            (true, _) => {}
+            (false, false) => self.proceed(event_loop, index, then),
+            (false, true) => {
+                #[cfg(target_arch = "wasm32")]
+                self.confirm_discard(event_loop, index, then);
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                self.show_discard_sheet(index, then);
             }
-            return;
         }
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+    }
+
+    /// Ask through the browser's confirm dialog, proceeding if accepted.
+    #[cfg(target_arch = "wasm32")]
+    fn confirm_discard(&mut self, event_loop: &ActiveEventLoop, index: usize, then: AfterDiscard) {
+        if web_sys::window()
+            .and_then(|window| window.confirm_with_message("Discard unsaved changes?").ok())
+            .unwrap_or(false)
         {
-            let editor = &mut self.editors[index].editor;
-            let RenderState::Active { window, .. } = &editor.state else {
-                return;
-            };
+            self.proceed(event_loop, index, then);
+        }
+    }
+
+    /// Ask through the window's sheet. Async is the one rfd path that
+    /// presents natively on macOS (begin-sheet with a completion): the sync
+    /// API falls back, parentless, to a CFUserNotification panel that
+    /// arrives unfocused and warns on the console, and, parented, presents
+    /// twice, as a sheet and a modal loop. The sheet's completion lands on
+    /// the main run loop, so the answer is awaited on a throwaway thread and
+    /// routed back through the proxy; blocking here would deadlock the loop
+    /// the sheet needs.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn show_discard_sheet(&mut self, index: usize, then: AfterDiscard) {
+        let editor = &mut self.editors[index].editor;
+        if let RenderState::Active { window, .. } = &editor.state {
             let window_id = window.id();
             editor.pending_discard = Some(then);
             // rfd reports a custom button by its label; one spelling.
