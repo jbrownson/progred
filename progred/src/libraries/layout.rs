@@ -19,7 +19,7 @@ use crate::display::{
     descend, leaf, overlay as layout_overlay, pickable, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
-use kurbo::{Affine, BezPath, Circle, Line, Point, Rect, RoundedRect, Stroke};
+use kurbo::{Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Stroke};
 use peniko::{Brush, ColorStop, Gradient};
 use puri::draw::{Command, Drawing, Leaf, Shape};
 
@@ -553,11 +553,13 @@ fn read_shape(value: &Value) -> Option<Shape> {
             ),
         )))
     } else if let Some(content) = fields.get(&vocabulary::PATH) {
-        let mut path = BezPath::new();
-        for element in content.as_list()?.values() {
-            read_path_element(&mut path, element)?;
-        }
-        Some(Shape::Path(path))
+        Some(Shape::Path(
+            content
+                .as_list()?
+                .values()
+                .map(read_path_element)
+                .collect::<Option<BezPath>>()?,
+        ))
     } else {
         None
     }
@@ -573,15 +575,15 @@ fn read_box(value: &Value) -> Option<(f64, f64, f64, f64)> {
     ))
 }
 
-fn read_path_element(path: &mut BezPath, value: &Value) -> Option<()> {
+fn read_path_element(value: &Value) -> Option<PathEl> {
     let fields = value.as_record()?;
     if let Some(content) = fields.get(&vocabulary::MOVE_TO) {
-        path.move_to(read_point(content)?);
+        Some(PathEl::MoveTo(read_point(content)?))
     } else if let Some(content) = fields.get(&vocabulary::LINE_TO) {
-        path.line_to(read_point(content)?);
+        Some(PathEl::LineTo(read_point(content)?))
     } else if let Some(content) = fields.get(&vocabulary::QUAD_TO) {
         let content = content.as_record()?;
-        path.quad_to(
+        Some(PathEl::QuadTo(
             Point::new(
                 read_number(content.get(&vocabulary::X1)?)?,
                 read_number(content.get(&vocabulary::Y1)?)?,
@@ -590,10 +592,10 @@ fn read_path_element(path: &mut BezPath, value: &Value) -> Option<()> {
                 read_number(content.get(&vocabulary::X)?)?,
                 read_number(content.get(&vocabulary::Y)?)?,
             ),
-        );
+        ))
     } else if let Some(content) = fields.get(&vocabulary::CURVE_TO) {
         let content = content.as_record()?;
-        path.curve_to(
+        Some(PathEl::CurveTo(
             Point::new(
                 read_number(content.get(&vocabulary::X1)?)?,
                 read_number(content.get(&vocabulary::Y1)?)?,
@@ -606,13 +608,12 @@ fn read_path_element(path: &mut BezPath, value: &Value) -> Option<()> {
                 read_number(content.get(&vocabulary::X)?)?,
                 read_number(content.get(&vocabulary::Y)?)?,
             ),
-        );
-    } else if fields.get(&vocabulary::CLOSE).is_some() {
-        path.close_path();
+        ))
     } else {
-        return None;
+        fields
+            .contains_key(&vocabulary::CLOSE)
+            .then_some(PathEl::ClosePath)
     }
-    Some(())
 }
 
 fn read_point(value: &Value) -> Option<Point> {
