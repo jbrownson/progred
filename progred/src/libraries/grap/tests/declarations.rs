@@ -210,10 +210,7 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
 
 #[test]
 fn anonymous_lambda_marker_still_opens_name_completion_when_clicked() {
-    let mut world = crate::test_editor(Document {
-        root: Some(grap::lambda([], f64::value(3.0))),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(grap::lambda([], f64::value(3.0)));
     let before = world.model.doc.clone();
     let name_path = [Step::Key(name::vocabulary::NAME)];
     let marker = editing_frame(&mut world, false)

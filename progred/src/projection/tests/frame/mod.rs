@@ -29,7 +29,7 @@ fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
     let drawn = |projection| {
         let mut editor = crate::test_editor_with_stack(doc.clone(), crate::stack::load());
         editor.model.workspace.document.projection = projection;
-        let driver = crate::driver::Driver::new(editor, kurbo::Size::new(900.0, 600.0));
+        let driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
         let glyphs = |field| {
             let rect = driver.rect(&[Step::Key(field)]);
             crate::display::test_support::painted(&driver.painted().0)

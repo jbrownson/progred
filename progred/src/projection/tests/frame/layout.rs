@@ -6,10 +6,7 @@ use puri::edit::TextClipboard;
 fn runtime_render_preserves_native_closures_through_evaluation() {
     use crate::display as d;
     use std::cell::Cell;
-    let mut world = crate::test_editor(Document {
-        root: Some(Value::record([])),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(Value::record([]));
     let sources = crate::sources::Sources {
         doc: &world.model.doc,
         libraries: &world.stack.libraries,
@@ -104,10 +101,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
             Some(children),
         ))
     })]);
-    let mut world = crate::test_editor(Document {
-        root: Some(Value::record([])),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(Value::record([]));
     let frame = editing_frame_with_projection(&mut world, false, Some(&projection));
     assert_eq!(visits.get(), 1);
     let path = vec![Step::Key(result), Step::Key(field), Step::Element(position)];
@@ -409,10 +403,7 @@ fn decorative_and_pending_slots_share_the_active_query_frame() {
         input.value?;
         Some(crate::display::slot())
     })]);
-    let empty = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let empty = Document::default();
     let decorative = Document {
         root: Some(Value::record([])),
         cells: Cells::new(),

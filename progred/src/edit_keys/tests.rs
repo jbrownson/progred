@@ -5,21 +5,8 @@ use crate::libraries::{f64, text};
 use crate::selection::Stage;
 use crate::test_support::positions;
 use gid::{Cells, Document, Path, Step, Value, new_cell_id};
-use kurbo::Size;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
-
-const VIEWPORT: Size = Size::new(600.0, 400.0);
-
-fn driver(root: Value) -> Driver {
-    Driver::new(
-        crate::test_editor(Document {
-            root: Some(root),
-            cells: Cells::new(),
-        }),
-        VIEWPORT,
-    )
-}
 
 /// A document of three empty lists, the middle one selected.
 fn three_lists() -> (Driver, [Path; 3]) {
@@ -30,7 +17,7 @@ fn three_lists() -> (Driver, [Path; 3]) {
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
-    let mut driver = driver(root);
+    let mut driver = Driver::of(root);
     driver.select(&paths[1]);
     (driver, paths)
 }
@@ -61,7 +48,7 @@ fn removing_a_containers_only_hole_backs_out_or_moves_on() {
         keys
     };
     for (key, lands) in [(NamedKey::Backspace, list), (NamedKey::Delete, next)] {
-        let mut driver = driver(Value::record([
+        let mut driver = Driver::of(Value::record([
             (list, Value::list([Value::list([])])),
             (next, text::value("next")),
         ]));
@@ -128,7 +115,7 @@ fn typing_over_a_value_replaces_it_and_escape_brings_it_back() {
 #[test]
 fn enter_ends_typing_in_a_value_before_it_adds_anything_beside() {
     let x = new_cell_id();
-    let mut driver = driver(Value::record([(x, f64::value(2.0))]));
+    let mut driver = Driver::of(Value::record([(x, f64::value(2.0))]));
     driver.select(&[Step::Key(x)]);
     // "25e" is still becoming a number, so 25 is what was written.
     driver.type_text("5e");
@@ -164,7 +151,7 @@ fn enter_on_a_value_that_fills_a_cell_continues_beside_its_reference() {
     };
     let mut driver = Driver::new(
         crate::test_editor_with_stack(doc, crate::stack::load()),
-        VIEWPORT,
+        Driver::VIEWPORT,
     );
     let first = driver.element(&[Step::Key(items)], 0, &[]);
     let follow = Step::Follow(gid::Resolution::Document);
@@ -191,7 +178,7 @@ fn enter_on_a_value_that_fills_a_cell_continues_beside_its_reference() {
 
 #[test]
 fn enter_beside_text_in_a_list_adds_an_element_but_nothing_within_the_text() {
-    let mut driver = driver(Value::list([text::value("a"), text::value("b")]));
+    let mut driver = Driver::of(Value::list([text::value("a"), text::value("b")]));
     let first = driver.element(&[], 0, &[]);
     let enter = |driver: &mut Driver, modifiers| {
         driver.select(&first);
@@ -211,7 +198,7 @@ fn enter_beside_text_in_a_list_adds_an_element_but_nothing_within_the_text() {
 
 #[test]
 fn pasting_a_copied_value_over_a_number_or_text_replaces_it() {
-    let mut driver = driver(Value::list([
+    let mut driver = Driver::of(Value::list([
         f64::value(1.0),
         f64::value(2.0),
         text::value("hello"),

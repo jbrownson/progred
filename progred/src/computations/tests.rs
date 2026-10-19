@@ -37,10 +37,7 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
         libraries.insert(library, definitions);
         let computations = Computations::default();
         let root = Root::document();
-        let mut doc = Document {
-            root: None,
-            cells: gid::Cells::new(),
-        };
+        let mut doc = Document::default();
         let callable = grap::lambda(
             [argument],
             grap::call(
@@ -111,10 +108,7 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     );
     let mut libraries = Libraries::default();
     libraries.insert(library, definitions);
-    let mut doc = Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let mut doc = Document::default();
     let computations = Computations::default();
     let view = Root::document();
     let expression = grap::call(function.into(), [(input, input.into())]);
@@ -172,10 +166,7 @@ fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
     use grap::{RuntimeValue, SourceOrigin};
     let computations = Computations::default();
     let view = Root::document();
-    let doc = Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let doc = Document::default();
     let libraries = Libraries::default();
     let sources = Sources {
         doc: &doc,

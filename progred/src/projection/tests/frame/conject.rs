@@ -4,10 +4,7 @@ use crate::display::widget::style;
 use crate::projection::Partial;
 
 fn world(root: Value) -> crate::Editor {
-    crate::test_editor(Document {
-        root: Some(root),
-        cells: Cells::new(),
-    })
+    crate::editor_of(root)
 }
 
 fn projection(world: &crate::Editor, rule: Partial) -> Projection {

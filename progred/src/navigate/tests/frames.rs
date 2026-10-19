@@ -15,8 +15,6 @@ use ui_events::keyboard::{Key, KeyState, KeyboardEvent, Modifiers, NamedKey};
 type World = crate::Editor;
 use puri::handler::NavigationDirection;
 
-const VIEWPORT: kurbo::Size = kurbo::Size::new(900.0, 600.0);
-
 fn sample_projection() -> Projection {
     Projection::new([d::runtime_partial(|input| {
         if let Some(items) = d::structure::list_items(input, None) {
@@ -65,13 +63,7 @@ fn fixture(wide: bool) -> (World, Vec<Path>) {
         ],
         vec![Step::Element(outer[1].clone())],
     ];
-    (
-        crate::test_editor(Document {
-            root: Some(root),
-            cells: Cells::new(),
-        }),
-        paths,
-    )
+    (crate::editor_of(root), paths)
 }
 
 #[test]
@@ -303,10 +295,7 @@ fn navigation_arrival_through_jump_retains_editing_context() {
     let source = new_cell_id();
     let first = new_cell_id();
     let second = new_cell_id();
-    let mut world = crate::test_editor(Document {
-        root: Some(Value::record([(source, text::value("shared"))])),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(Value::record([(source, text::value("shared"))]));
     world.model.selection = Some(make_selection(vec![Step::Key(first)]));
     let build = |world: &mut World| {
         let ordinary = sample_projection();
@@ -353,7 +342,7 @@ fn navigation_runner_installs_successor_handlers_before_the_next_key_without_pai
     world.stack.projection = sample_projection();
     let mut runner = crate::EditorRunner::new(world);
     runner.editor.model.selection = Some(make_selection(paths[2].clone()));
-    let viewport = VIEWPORT;
+    let viewport = Driver::VIEWPORT;
     runner.refresh_frame(1.0, viewport);
     for expected in [3, 3, 3, 3, 3, 3, 3, 4] {
         assert!(runner.keyboard_event(
@@ -374,11 +363,7 @@ fn navigation_runner_installs_successor_handlers_before_the_next_key_without_pai
 
 #[test]
 fn navigation_named_number_hands_off_from_name_at_text_boundary() {
-    let world = crate::test_editor(Document {
-        root: Some(f64::value(45.0).overlaid(name::record("tilt", []))),
-        cells: Cells::new(),
-    });
-    let mut driver = Driver::new(world, VIEWPORT);
+    let mut driver = Driver::of(f64::value(45.0).overlaid(name::record("tilt", [])));
     driver.select(&[Step::Key(name::vocabulary::NAME)]);
     assert!(driver.keystroke(Key::Named(NamedKey::ArrowRight), Modifiers::empty()));
     assert_eq!(driver.selection(), []);
@@ -388,7 +373,7 @@ fn navigation_named_number_hands_off_from_name_at_text_boundary() {
 #[test]
 fn navigation_example_projects_and_navigates_without_an_app_window() {
     let (doc, _) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
-    let mut driver = Driver::new(crate::test_editor(doc), VIEWPORT);
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let selections: Vec<Path> = (0..5)
         .map(|_| {
             driver.press(NamedKey::ArrowDown);
@@ -657,7 +642,7 @@ fn navigation_example_cells_leave_vertical_navigation_to_the_list() {
             Step::Key(name::vocabulary::NAME),
         ])
         .collect();
-    let mut driver = Driver::new(world, VIEWPORT);
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&cells[0]);
     for (key, expected) in [
         (NamedKey::ArrowDown, &cells[1]),
@@ -677,16 +662,13 @@ fn navigation_horizontal_row_wrapping_preserves_text_arrival_direction() {
         .into_iter()
         .map(|p| vec![Step::Element(p)])
         .collect();
-    let mut world = crate::test_editor(Document {
-        root: Some(root),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(root);
     world.stack.projection = Projection::new([
         d::structure::list_column(8.0, None),
         world.stack.projection.partial().clone(),
     ]);
     let document = world.model.doc.clone();
-    let mut driver = Driver::new(world, VIEWPORT);
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&paths[0]);
     // The ordinary initial caret is at the end. Wrapping must preserve the
     // horizontal arrival, rather than turning Right into a Down event.
@@ -719,7 +701,7 @@ fn navigation_example_cells_use_horizontal_contents_and_vertical_siblings() {
             .collect()
     };
     let document = world.model.doc.clone();
-    let mut driver = Driver::new(world, VIEWPORT);
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&cells[0]);
     let mut step = |key, path: Path, offset: Option<usize>| {
         assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
@@ -761,12 +743,9 @@ fn navigation_empty_cell_stops_before_entering_missing_contents() {
         .map(|p| vec![Step::Element(p)])
         .collect();
     for (start, direction) in [(0, NamedKey::ArrowRight), (2, NamedKey::ArrowLeft)] {
-        let world = crate::test_editor(Document {
-            root: Some(outer.clone()),
-            cells: Cells::new(),
-        });
+        let world = crate::editor_of(outer.clone());
         let document = world.model.doc.clone();
-        let mut driver = Driver::new(world, VIEWPORT);
+        let mut driver = Driver::new(world, Driver::VIEWPORT);
         driver.select(&paths[start]);
         // Left must first move through the text to its boundary.
         if start == 2 {
@@ -799,10 +778,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
         .into_iter()
         .map(|p| vec![Step::Element(p)])
         .collect();
-    let mut world = crate::test_editor(Document {
-        root: Some(root),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(root);
     let ordinary = sample_projection();
     let projection = Projection::new([
         d::runtime_partial(|input| crate::libraries::text::display(input).map(d::group)),
@@ -905,12 +881,9 @@ fn navigation_nested_list_has_one_leading_stop_in_both_directions() {
         .chain([Step::Element(inner_positions[1].clone())])
         .collect();
     let h = vec![Step::Element(outer_positions[2].clone())];
-    let world = crate::test_editor(Document {
-        root: Some(outer),
-        cells: Cells::new(),
-    });
+    let world = crate::editor_of(outer);
     let document = world.model.doc.clone();
-    let mut driver = Driver::new(world, VIEWPORT);
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&e);
     for (key, path, offset) in [
         (NamedKey::ArrowRight, &list, None),
@@ -940,11 +913,7 @@ fn navigation_empty_list_stops_once_in_either_direction() {
         .into_iter()
         .map(|p| vec![Step::Element(p)])
         .collect();
-    let world = crate::test_editor(Document {
-        root: Some(outer),
-        cells: Cells::new(),
-    });
-    let mut driver = Driver::new(world, VIEWPORT);
+    let mut driver = Driver::of(outer);
     driver.select(&paths[0]);
     for (key, expected) in [
         (NamedKey::ArrowRight, 1),

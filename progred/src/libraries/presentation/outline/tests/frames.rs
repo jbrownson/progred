@@ -386,13 +386,10 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
 #[test]
 fn outline_library_tint_stops_at_the_heading() {
     let key = crate::libraries::workspace::vocabulary::PANES;
-    let mut world = crate::test_editor(Document {
-        root: Some(Value::record([
-            (OUTLINE, Value::list([key.into()])),
-            (key, Value::list([f64::value(1.0), f64::value(2.0)])),
-        ])),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(Value::record([
+        (OUTLINE, Value::list([key.into()])),
+        (key, Value::list([f64::value(1.0), f64::value(2.0)])),
+    ]));
     let heading_path = entry(&world, &[], key);
     let body_path = body(&heading_path, key);
     world
@@ -830,10 +827,7 @@ fn nested_outline_composes_jumps_and_cell_follows() {
 #[test]
 fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     let a = new_cell_id();
-    let mut world = crate::test_editor(Document {
-        root: Some(Value::record([(OUTLINE, Value::list([a.into()]))])),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(Value::record([(OUTLINE, Value::list([a.into()]))]));
     let p = body(&entry(&world, &[], a), a);
     let f = frame(&mut world);
     assert!((stop(&f, &p).select)(&mut world, None));

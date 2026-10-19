@@ -1,6 +1,6 @@
 use super::*;
 use crate::frame::Hovered;
-use gid::{Cells, Document, new_cell_id};
+use gid::new_cell_id;
 
 #[test]
 fn a_site_below_another_hovers_and_selects_the_appended_path() {
@@ -17,10 +17,7 @@ fn a_site_below_another_hovers_and_selects_the_appended_path() {
         Hovered::from(site.hover()),
         Hovered::Tree(Hover::Value(Rc::from(expected.clone())))
     );
-    let mut world = crate::test_editor(Document {
-        root: Some(Value::record([])),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(Value::record([]));
     site.open(&mut world.session()).select();
     assert_eq!(world.model.selection.as_ref().unwrap().path(), expected);
     site.open(&mut world.session())

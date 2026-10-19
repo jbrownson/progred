@@ -7,12 +7,23 @@ use super::{Driver, keystroke_for};
 use crate::display::test_support::Landmarks;
 use crate::frame::Hovered;
 use gid::{CellId, Position, Step, Value};
-use kurbo::{Point, Rect};
+use kurbo::{Point, Rect, Size};
 use puri::draw::{DrawCmd, Shape};
 use puri::hover::Claim;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 use winit::keyboard::ModifiersState;
+
+impl Driver {
+    /// The window tests drive unless they need another.
+    pub(crate) const VIEWPORT: Size = Size::new(900.0, 600.0);
+
+    /// An editor of a document whose root is `root`, in a window of
+    /// [`Self::VIEWPORT`].
+    pub(crate) fn of(root: Value) -> Self {
+        Self::new(crate::editor_of(root), Self::VIEWPORT)
+    }
+}
 
 impl<P> Driver<P> {
     pub(crate) fn click_at(&mut self, point: Point) {

@@ -237,10 +237,7 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         ),
     ));
     let libraries = Libraries::from_contributions([(new_cell_id(), library)]).0;
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
     for expected in 1..=2 {
         let selected = Rc::new(std::cell::RefCell::new(Vec::new()));
@@ -360,10 +357,7 @@ fn drawing_frames_observe_missing_and_changed_foreign_definitions() {
         crate::test_support::first_value(&before, shape_function),
         crate::test_support::first_value(&after, shape_function)
     );
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     for (libraries, expected) in [
         (Libraries::default(), vec![]),
         (before, vec![10.0]),
@@ -397,10 +391,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     use puri::handler::Event;
     use ui_events::keyboard::Modifiers;
 
-    let mut editor = crate::test_editor(Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(Document::default());
     let source_view = editor.model.workspace.document_root().clone();
     let drawing_view = crate::display::widget::view::Root::document();
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);

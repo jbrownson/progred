@@ -9,10 +9,7 @@ use kurbo::Point;
 use puri::drag::Drag;
 
 fn model(value: Value) -> Editor {
-    crate::test_editor(gid::Document {
-        root: Some(value),
-        cells: gid::Cells::new(),
-    })
+    crate::editor_of(value)
 }
 
 fn scrub(origin: Point, scale: f64, root: Root, path: Path, handler: ScrubHandler) -> Active {

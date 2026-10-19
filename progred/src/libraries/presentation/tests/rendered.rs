@@ -23,7 +23,7 @@ fn rendered_in_a_pane(program: CellId, render: Value, cells: Cells) -> Driver {
             ])),
             cells,
         }),
-        kurbo::Size::new(900.0, 600.0),
+        Driver::VIEWPORT,
     )
 }
 

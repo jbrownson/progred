@@ -51,10 +51,7 @@ fn reveal_clamps_an_offset_left_stale_by_a_resize() {
 
 #[test]
 fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let root = editor.model.workspace.document_root().clone();
     let other = Root::document();
     let landmarks: [Landmark<()>; 2] = [

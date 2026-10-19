@@ -141,10 +141,7 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
         f32::value(1.0),
         u64::value(1),
     ] {
-        let mut world = crate::test_editor(Document {
-            root: Some(number.clone()),
-            cells: Cells::new(),
-        });
+        let mut world = crate::editor_of(number.clone());
         let plain = editing_frame(&mut world, false);
         assert!(!plain.landmarks.iter().any(|d| d.path.as_ref() == path));
         world.model.selection = Some(pending_value(&crate::test_root(), path.to_vec()));

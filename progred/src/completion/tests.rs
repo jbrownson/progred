@@ -12,10 +12,7 @@ use std::rc::Rc;
 fn completion_insertion_never_invents_or_overwrites_selection_policy() {
     let libraries = core_libraries();
     let root = crate::test_root();
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let pending = crate::selection::pending_with_query(&root, vec![], "original query");
     let old_payload = pending.payload();
     for continuation in [

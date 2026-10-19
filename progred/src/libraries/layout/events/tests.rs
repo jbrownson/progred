@@ -6,7 +6,7 @@ use crate::projection::Layout;
 use crate::projection::Projection;
 use crate::projection::test_support::ProjectionInput;
 use crate::projection::test_support::editing_frame_with_projection;
-use gid::{CellId, Cells, Document, Record, Value};
+use gid::{CellId, Record, Value};
 use layout_data::vocabulary as event_fields;
 use puri::handler::ImeEvent;
 use ui_events::ScrollDelta;
@@ -56,10 +56,7 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
             &input.site(),
         )
     }
-    let mut events = crate::test_editor(Document {
-        root: Some(Value::from(vec![7u8])),
-        cells: Cells::new(),
-    });
+    let mut events = crate::editor_of(Value::from(vec![7u8]));
     let projection = Projection::new([crate::display::partial(probe)]);
     let placed = editing_frame_with_projection(&mut events, false, Some(&projection));
     let handler = placed.resolve_for_dispatch();

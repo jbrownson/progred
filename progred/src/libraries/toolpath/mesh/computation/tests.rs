@@ -1,16 +1,13 @@
 use super::*;
 use crate::libraries::control;
 use crate::library::Definitions;
-use gid::{Cells, Document, Value, new_cell_id};
+use gid::{Document, Value, new_cell_id};
 use std::cell::Cell;
 
 fn preview() -> fidget::VolumePreview {
     // Use the ordinary preview decoder, including its volume defaults.
     let stack = crate::stack::load();
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let sources = crate::sources::Sources {
         doc: &doc,
         libraries: &stack.libraries,
@@ -380,10 +377,7 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
         ),
     );
     libraries.insert(new_cell_id(), definitions);
-    let mut doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let mut doc = Document::default();
     doc.cells.set_value(endpoint, f64::value(0.5));
     let program = ::grap::lambda(
         [],

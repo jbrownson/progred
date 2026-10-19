@@ -16,10 +16,7 @@ use uig::Placement;
 
 /// Exercise an offer's actual handler, including its selection effects.
 pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
-    let mut world = crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    });
+    let mut world = crate::test_editor(gid::Document::default());
     world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
     (offer.activate)(&mut world.session());
     world
@@ -66,10 +63,7 @@ pub fn point_update(
     let place = with_context(&crate::display::test_support::NoProject, |context| {
         before(context)
     });
-    let mut world = crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    });
+    let mut world = crate::test_editor(gid::Document::default());
     world.model.selection = Some(crate::selection::Selection::edge(
         &crate::test_root(),
         vec![],
@@ -238,10 +232,7 @@ pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
-    let mut world = crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    });
+    let mut world = crate::test_editor(gid::Document::default());
     world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
     let event = ui_events::pointer::PointerButtonEvent {
         button: Some(ui_events::pointer::PointerButton::Primary),
@@ -272,10 +263,7 @@ pub fn event_annotation(layout: &impl Recordable<Editor, Hovered>) -> Option<gid
         &mut widget::HoverContext::new(Default::default(), &mut output, &mut Default::default()),
         uig::Placement::root(kurbo::Rect::new(0.0, 0.0, 20.0, 20.0)),
     );
-    let mut world = crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    });
+    let mut world = crate::test_editor(gid::Document::default());
     output.handler?.dispatch_key(
         &mut world,
         &ui_events::keyboard::KeyboardEvent {

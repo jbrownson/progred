@@ -240,10 +240,7 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
             event.state.modifiers =
                 ui_events::keyboard::Modifiers::META | ui_events::keyboard::Modifiers::CONTROL;
         }
-        let mut world = crate::test_editor(gid::Document {
-            root: None,
-            cells: gid::Cells::new(),
-        });
+        let mut world = crate::test_editor(gid::Document::default());
         if picking {
             world.model.selection = Some(crate::selection::pending_value(
                 world.model.workspace.document_root(),
@@ -825,10 +822,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
     ));
     let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
     for covered in [false, true] {
-        let mut editor = crate::test_editor(gid::Document {
-            root: None,
-            cells: gid::Cells::new(),
-        });
+        let mut editor = crate::test_editor(gid::Document::default());
         let count = std::rc::Rc::new(std::cell::Cell::new(0));
         let mut frame = HoverOutput::default();
         let mut navigation = Default::default();

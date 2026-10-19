@@ -68,7 +68,7 @@ fn empty_slots_make_values_through_the_picker() {
         &mut editor,
         &["first", "second", "third"].map(|key| names[key]),
     );
-    let mut driver = Driver::new(editor, kurbo::Size::new(900.0, 600.0));
+    let mut driver = Driver::new(editor, Driver::VIEWPORT);
     // `[` opens the list it makes, so 7 goes inside it.
     for (slot, typed) in [("first", "42"), ("second", "\"hello\""), ("third", "[7")] {
         driver.select(&[Step::Key(names[slot])]);
@@ -92,14 +92,11 @@ fn empty_slots_make_values_through_the_picker() {
 fn tutorial_slots_keep_their_order_after_delete_refill_and_undo() {
     let slots = [new_cell_id(), new_cell_id(), new_cell_id()];
     let original = Value::record([(new_cell_id(), f64::value(2.0))]);
-    let mut world = crate::test_editor(Document {
-        root: Some(Value::record([
-            (slots[0], f64::value(1.0)),
-            (slots[1], original.clone()),
-            (slots[2], f64::value(3.0)),
-        ])),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(Value::record([
+        (slots[0], f64::value(1.0)),
+        (slots[1], original.clone()),
+        (slots[2], f64::value(3.0)),
+    ]));
     set_tutorial_slots(&mut world, &slots);
     let frame = editing_frame(&mut world, false);
     assert_eq!(top_slots(&frame), slots);
@@ -255,10 +252,7 @@ fn peeling_switches_projections_off_and_names_last() {
 #[test]
 fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
     let slots = [new_cell_id(), new_cell_id()];
-    let mut world = crate::test_editor(Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut world = crate::test_editor(Document::default());
     set_tutorial_slots(&mut world, &slots);
     let frame = editing_frame(&mut world, false);
     assert!(top_slots(&frame).is_empty());

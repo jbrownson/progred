@@ -1,5 +1,4 @@
 use super::*;
-use gid::Cells;
 
 fn line(x: f64) -> Value {
     sequence(vec![
@@ -236,10 +235,7 @@ fn editing_a_tool_invalidates_the_recording_even_when_points_are_unchanged() {
     let tool_id = gid::new_cell_id();
     let small = cutter::Tool::square(0.2, 0.4).unwrap();
     let large = cutter::Tool::square(0.4, 0.4).unwrap();
-    let mut doc = gid::Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let mut doc = gid::Document::default();
     doc.cells.set_value(tool_id, small.value());
     let libraries = crate::stack::load().libraries;
     let computations = Computations::from_sources(Sources {

@@ -1,7 +1,7 @@
 use super::super::super::computation::recording;
 use super::*;
 use crate::libraries::{control, f32};
-use gid::{Cells, Document, new_cell_id};
+use gid::{Document, new_cell_id};
 use incremental::background::{Executor, Job};
 use std::{collections::VecDeque, sync::Mutex};
 
@@ -105,10 +105,7 @@ fn async_images_reuse_paths_replace_pending_requests_and_expose_current_failures
     };
     let stack = crate::stack::load();
     let endpoint = new_cell_id();
-    let mut doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let mut doc = Document::default();
     doc.cells.set_value(endpoint, f64::value(0.5));
     let queue = Arc::new(Mutex::new(VecDeque::<Job>::new()));
     let computations = Computations::new(

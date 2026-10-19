@@ -4,7 +4,7 @@ use crate::display::widget::placed::leaf;
 use crate::libraries::f64 as f64_convention;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, press, target};
 use crate::selection::{Stage, pending_value};
-use gid::{Cells, Document, Step, new_cell_id};
+use gid::{Step, new_cell_id};
 use measured::Extent;
 use puri::handler::HasHandler;
 use uig::Placement;
@@ -35,10 +35,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
             ),
             covered,
         );
-        let mut world = crate::test_editor(Document {
-            root: Some(f64_convention::value(1.0)),
-            cells: Cells::new(),
-        });
+        let mut world = crate::editor_of(f64_convention::value(1.0));
         if pending {
             world.model.selection = Some(pending_value(&crate::test_root(), vec![]));
         }
@@ -67,10 +64,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
     for (pending, raw) in [(false, false), (true, false), (false, true), (true, true)] {
         let field = new_cell_id();
         let value = f64_convention::value(1.0);
-        let mut world = crate::test_editor(Document {
-            root: Some(value.clone()),
-            cells: Cells::new(),
-        });
+        let mut world = crate::editor_of(value.clone());
         if pending {
             world.model.selection =
                 Some(pending_value(&crate::test_root(), vec![Step::Key(field)]));

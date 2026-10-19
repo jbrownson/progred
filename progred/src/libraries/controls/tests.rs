@@ -322,10 +322,7 @@ fn collect_tree_has_the_same_meaning_inside_controls_without_a_key() {
     );
     let libraries = crate::stack::load().libraries;
     let expected = ::grap::evaluate_value(&collect, &libraries, 1000).result;
-    let empty = gid::Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let empty = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &empty,
         libraries: &libraries,
@@ -363,10 +360,7 @@ fn program_cursor_distinguishes_an_empty_group_from_an_empty_list_leaf() {
                 ],
             ),
         );
-        let empty = gid::Document {
-            root: None,
-            cells: Cells::new(),
-        };
+        let empty = gid::Document::default();
         let sources = crate::sources::Sources {
             doc: &empty,
             libraries: &libraries,
@@ -432,10 +426,7 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
         1000,
     )
     .result;
-    let empty = gid::Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let empty = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &empty,
         libraries: &libraries,
@@ -502,10 +493,7 @@ fn controls_receive_arbitrary_state_and_an_update_callable() {
 
 #[test]
 fn slider_handler_can_store_a_float_and_preserves_other_annotations() {
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let root = editor.model.workspace.document_root().clone();
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
     crate::editing::Scope::default()
@@ -593,10 +581,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
             ),
         )
     }
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let site = crate::editing::Site::new(
         editor.model.workspace.document_root().clone(),
         Rc::from([]),
@@ -689,10 +674,7 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
         );
         let mut libraries = crate::stack::load().libraries;
         libraries.insert(library, definitions);
-        let mut doc = gid::Document {
-            root: None,
-            cells: Cells::new(),
-        };
+        let mut doc = gid::Document::default();
         doc.cells.set_value(input, f64::value(1.0));
         let expression = ::grap::call(
             WITH_CONTROLS.into(),
@@ -777,10 +759,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
         ],
     );
     let declaration = ::grap::evaluate_value(&call, &libraries, 10_000).result;
-    let empty = gid::Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let empty = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &empty,
         libraries: &libraries,
@@ -836,10 +815,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
         "controls paint above the full view without a background strip hiding it"
     );
     let dispatch = frame.handler.unwrap();
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let mut event = ui_events::pointer::PointerButtonEvent {
         button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
@@ -884,10 +860,7 @@ fn radio_options_require_distinct_values_and_preserve_callable_data() {
 
 #[test]
 fn radio_dispatch_updates_value_without_touching_playback_camera_or_document() {
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let original = editor.model.doc.clone();
     let root = editor.model.workspace.document_root().clone();
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
@@ -950,10 +923,7 @@ fn radio_dispatch_updates_value_without_touching_playback_camera_or_document() {
 
 #[test]
 fn slider_dispatch_updates_only_its_own_view_state_and_keeps_camera_fields() {
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let original = editor.model.doc.clone();
     let root = editor.model.workspace.document_root().clone();
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
@@ -1167,10 +1137,7 @@ fn stored_tree_sources_are_captured_by_widgets_not_inserted_into_items() {
     assert_eq!(draws(Some(sources[0].clone()), Some(sources[0].clone())), 1);
 
     let frame = build(None, None);
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let root = editor.model.workspace.document_root().clone();
     let mut input = crate::frame::DispatchContext::new(
         None,
@@ -1306,10 +1273,7 @@ fn tree_cursor_stacks_disjoint_rows_without_extra_frame_padding() {
         ]
     );
 
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let event = ui_events::pointer::PointerButtonEvent {
         button: Some(ui_events::pointer::PointerButton::Primary),
         pointer: crate::display::test_support::mouse(),
@@ -1341,10 +1305,7 @@ fn tree_cursor_stacks_disjoint_rows_without_extra_frame_padding() {
 
 #[test]
 fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let original = editor.model.doc.clone();
     let root = editor.model.workspace.document_root().clone();
     let camera = crate::libraries::fidget::vocabulary::CAMERA;
@@ -1414,10 +1375,7 @@ fn tree_range_dispatch_resets_finer_ranges_and_preserves_other_view_state() {
 fn notched_slider_double_click_selects_its_full_range_without_starting_a_drag() {
     for cursor in [false, true] {
         for finest in [false, true] {
-            let mut editor = crate::test_editor(gid::Document {
-                root: None,
-                cells: Cells::new(),
-            });
+            let mut editor = crate::test_editor(gid::Document::default());
             let original = editor.model.doc.clone();
             let root = editor.model.workspace.document_root().clone();
             let tree = Value::list([
@@ -1510,10 +1468,7 @@ fn tree_cursor_current_item_click_preserves_finer_filters_until_dragging_out() {
             (15.0, 1, 0..2),
             (50.0, 2, 0..4),
         ] {
-            let mut editor = crate::test_editor(gid::Document {
-                root: None,
-                cells: Cells::new(),
-            });
+            let mut editor = crate::test_editor(gid::Document::default());
             let root = editor.model.workspace.document_root().clone();
             let selection = tree_range::Selection::new(&tree, None)
                 .select(1, 0..1, None)
@@ -1613,10 +1568,7 @@ fn tree_cursor_updates_range_and_position_together() {
         );
         editor.finish_gesture();
     }
-    let mut editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut editor = crate::test_editor(gid::Document::default());
     let original = editor.model.doc.clone();
     let tree = Value::list([
         Value::list([B.into(), B.into()]),

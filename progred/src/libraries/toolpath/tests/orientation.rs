@@ -1,5 +1,4 @@
 use super::*;
-use gid::Cells;
 
 #[test]
 fn axes_are_normalized_and_invalid_axes_do_not_emit() {
@@ -13,10 +12,7 @@ fn axes_are_normalized_and_invalid_axes_do_not_emit() {
     assert!((x.cross(&y) - z).norm() < 1e-6);
 
     let stack = crate::stack::load();
-    let doc = gid::Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &doc,
         libraries: &stack.libraries,

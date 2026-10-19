@@ -234,13 +234,10 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
 
 #[test]
 fn logical_down_enters_an_anonymous_lambda_without_opening_name_completion() {
-    let mut world = crate::test_editor(Document {
-        root: Some(grap::lambda(
-            [],
-            text::value("a long function body ".repeat(40)),
-        )),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(grap::lambda(
+        [],
+        text::value("a long function body ".repeat(40)),
+    ));
     world.model.selection = Some(make_selection(vec![]));
     for field in [grap::vocabulary::PARAMS, grap::vocabulary::BODY] {
         assert!(step(&mut world, NavigationDirection::Down));
@@ -303,10 +300,7 @@ fn logical_reading_order_visits_container_stops_and_wraps_between_lines() {
         ],
         vec![Step::Element(outer[1].clone())],
     ];
-    let mut world = crate::test_editor(Document {
-        root: Some(root),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(root);
     world.model.selection = Some(make_selection(vec![]));
     for path in &expected[1..] {
         assert!(step(&mut world, NavigationDirection::Right));
@@ -354,10 +348,7 @@ fn logical_computed_children_remain_readonly_and_text_handles_keys_first() {
     let result = vec![Step::Key(
         crate::libraries::presentation::vocabulary::RESULT,
     )];
-    let mut world = crate::test_editor(Document {
-        root: Some(root),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(root);
     world.model.selection = Some(make_selection(source.clone()));
     assert!(step(&mut world, NavigationDirection::Right));
     let selection = world.model.selection.as_ref().unwrap();
@@ -365,7 +356,7 @@ fn logical_computed_children_remain_readonly_and_text_handles_keys_first() {
     assert!(selection.scope().location(selection.path()).is_none());
 
     let document = world.model.doc.clone();
-    let mut driver = Driver::new(world, kurbo::Size::new(900.0, 600.0));
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&[]);
     for offset in [0, 1] {
         assert!(driver.keystroke(Key::Named(NamedKey::ArrowRight), Modifiers::empty()));

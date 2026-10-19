@@ -1079,10 +1079,7 @@ fn call_offers_follow_resolved_definitions_without_evaluating_them() {
 #[test]
 fn built_in_call_completion_opens_its_first_argument() {
     use crate::libraries::{f64::vocabulary::SUM, number::vocabulary::LEFT};
-    let document = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let document = Document::default();
     let libraries = core_libraries();
     let everything = library_offers(
         crate::stack::load().completions,
@@ -1134,7 +1131,7 @@ fn grap_results_take_no_typing() {
         &mut editor,
         &[names["first"], names["second"], names["third"]],
     );
-    let mut driver = crate::driver::Driver::new(editor, kurbo::Size::new(900.0, 600.0));
+    let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
     driver.select(&[
         Step::Key(names["second"]),
         Step::Key(presentation::vocabulary::RESULT),
@@ -1169,7 +1166,7 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
             root: Some(Value::record([(vocabulary::GRAP, function.into())])),
             cells,
         }),
-        kurbo::Size::new(900.0, 600.0),
+        crate::driver::Driver::VIEWPORT,
     );
     let params = [
         Step::Key(vocabulary::GRAP),

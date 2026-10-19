@@ -25,7 +25,7 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
                 root: Some(Value::record([(owner, value)])),
                 cells,
             }),
-            kurbo::Size::new(900.0, 600.0),
+            crate::driver::Driver::VIEWPORT,
         );
         let mut selected = vec![Step::Key(owner)];
         if evaluated {

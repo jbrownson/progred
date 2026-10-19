@@ -15,10 +15,7 @@ use ui_events::pointer::{
 const VIEWPORT: Size = Size::new(500.0, 400.0);
 
 fn runner() -> EditorRunner {
-    let mut editor = crate::test_editor(Document {
-        root: Some(Value::record([])),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(Value::record([]));
     editor.stack.projection = Projection::new([partial(|input| {
         Some(super::super::interactive_volume(
             Layout::widget(Rc::new(|_| {

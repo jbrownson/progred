@@ -177,13 +177,10 @@ fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
     );
     // A pane draws the picture; the document, read raw with its panes
     // unfolded, draws the picture's source.
-    let mut editor = crate::test_editor(gid::Document {
-        root: Some(Value::record([(
-            workspace::vocabulary::PANES,
-            Value::record([(workspace::vocabulary::LEFT, Value::list([picture]))]),
-        )])),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(Value::record([(
+        workspace::vocabulary::PANES,
+        Value::record([(workspace::vocabulary::LEFT, Value::list([picture]))]),
+    )]));
     editor.model.workspace.document.projection = crate::workspace::Projection::Raw;
     crate::annotations::set_collapsed(
         &mut editor.model.workspace.document.annotations,
@@ -191,7 +188,7 @@ fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
         false,
         false,
     );
-    let mut driver = crate::driver::Driver::new(editor, kurbo::Size::new(900.0, 600.0));
+    let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
     let pane = driver.element(
         &[
             Step::Key(workspace::vocabulary::PANES),

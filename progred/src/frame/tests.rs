@@ -10,10 +10,7 @@ const HOVER_VIEWPORT: Size = Size::new(500.0, 400.0);
 #[test]
 fn scrolling_a_view_that_no_longer_exists_declines() {
     use ui_events::pointer::PointerScrollEvent;
-    let mut editor = crate::test_editor(Document {
-        root: Some(Value::record([])),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(Value::record([]));
     let gone = crate::display::widget::view::Root::pane(vec![Step::Key(gid::new_cell_id())]);
     let event = PointerScrollEvent {
         pointer: crate::display::test_support::mouse(),
@@ -32,12 +29,9 @@ fn scrolling_a_view_that_no_longer_exists_declines() {
 
 #[test]
 fn the_document_view_reports_content_that_does_not_depend_on_its_height() {
-    let mut editor = crate::test_editor(Document {
-        root: Some(Value::list(
-            (0..40).map(|n| crate::libraries::f64::value(n as f64)),
-        )),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(Value::list(
+        (0..40).map(|n| crate::libraries::f64::value(n as f64)),
+    ));
     editor.drawn_menu = false;
     let mut runner = EditorRunner::new(editor);
     let scale = 2.0;
@@ -65,13 +59,10 @@ fn the_document_view_reports_content_that_does_not_depend_on_its_height() {
 fn source_hover_conjects_the_occurrence_in_its_own_view() {
     let field = gid::new_cell_id();
     let occurrence: Rc<[Step]> = Rc::from([Step::Key(gid::new_cell_id())]);
-    let mut editor = crate::test_editor(Document {
-        root: Some(Value::record([(
-            field,
-            crate::libraries::text::value("shared"),
-        )])),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(Value::record([(
+        field,
+        crate::libraries::text::value("shared"),
+    )]));
     let root = editor.model.workspace.document_root().clone();
     let source = vec![Step::Key(field)];
     let scope = crate::editing::Scope::default().located(
@@ -164,10 +155,7 @@ fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {
     use crate::libraries::f64;
     use puri::handler::EventOutcome;
 
-    let mut editor = crate::test_editor(Document {
-        root: Some(f64::value(0.0)),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(f64::value(0.0));
     editor.pointer = Some(Point::new(25.0, 25.0));
     editor.stack.projection = projection::Projection::new([partial({
         let log = log.clone();
@@ -401,10 +389,7 @@ fn new_input_supersedes_an_unpainted_target_without_replaying_stale_handlers() {
 
 #[test]
 fn hover_notifications_include_view_ownership_and_are_reset_with_the_document() {
-    let mut runner = EditorRunner::new(crate::test_editor(Document {
-        root: None,
-        cells: Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::test_editor(Document::default()));
     let roots = Rc::new(std::cell::RefCell::new(Vec::new()));
     runner.frame.dispatch.handler_mut().on({
         let roots = roots.clone();
@@ -425,26 +410,16 @@ fn hover_notifications_include_view_ownership_and_are_reset_with_the_document() 
     runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
     assert_eq!(roots.take(), [Some(first), Some(second)]);
     runner.frame.hover_awaits_paint = true;
-    runner.adopt_model(
-        Document {
-            root: None,
-            cells: Cells::new(),
-        },
-        None,
-        Default::default(),
-    );
+    runner.adopt_model(Document::default(), None, Default::default());
     assert!(runner.frame.notified_hover.is_none());
     assert!(!runner.frame.hover_awaits_paint);
     assert!(!runner.frame_presented());
 }
 
 fn scrolling_runner(projected: &Rc<std::cell::Cell<usize>>) -> EditorRunner {
-    let mut editor = crate::test_editor(Document {
-        root: Some(Value::list(
-            (0..40).map(|n| crate::libraries::f64::value(n as f64)),
-        )),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(Value::list(
+        (0..40).map(|n| crate::libraries::f64::value(n as f64)),
+    ));
     let projected = projected.clone();
     editor.stack.projection =
         projection::Projection::new([crate::display::partial(move |input| {
@@ -756,10 +731,7 @@ fn raw_shortcut_is_contributed_only_by_the_menu() {
         (CommandModifier::Control, Modifiers::CONTROL),
     ] {
         for menu in [false, true] {
-            let mut editor = crate::test_editor(Document {
-                root: Some(Value::list([])),
-                cells: Cells::new(),
-            });
+            let mut editor = crate::editor_of(Value::list([]));
             editor.drawn_menu = menu;
             editor.command_modifier = modifier;
             let mut runner = crate::EditorRunner::new(editor);
@@ -1400,10 +1372,7 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
 
 #[test]
 fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
-    let editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    });
+    let editor = crate::test_editor(gid::Document::default());
     let target = |index| Hovered::Tree(hover::Hover::Entry(index));
     let viewport = Rect::new(-100.0, -100.0, 100.0, 100.0);
     for (prior, pointer, pressed, covered, expected) in [
@@ -1452,10 +1421,7 @@ fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
 
 #[test]
 fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
-    let editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    });
+    let editor = crate::test_editor(gid::Document::default());
     let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
     for (x, pressed, expected) in [
         (5.0, false, Some(target.clone())),
@@ -1488,10 +1454,7 @@ fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
 
 #[test]
 fn a_hovered_target_shows_the_cursor_it_asked_for() {
-    let mut runner = EditorRunner::new(crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::test_editor(gid::Document::default()));
     let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
     for (x, expected) in [
         (5.0, winit::window::CursorIcon::ColResize),
@@ -1591,10 +1554,7 @@ fn hover_frame(
 
 #[test]
 fn building_a_frame_leaves_installed_hover_and_dispatch_unchanged() {
-    let mut runner = EditorRunner::new(crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::test_editor(gid::Document::default()));
     let prior = Hovered::Tree(hover::Hover::Entry(7));
     runner.frame.hover = Some(prior.clone());
     let prior_root = Root::document();
@@ -1618,10 +1578,7 @@ fn building_a_frame_leaves_installed_hover_and_dispatch_unchanged() {
 
 #[test]
 fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
-    let editor = crate::test_editor(gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    });
+    let editor = crate::test_editor(gid::Document::default());
     let root = editor.model.workspace.document_root().clone();
     let prior_root = Root::pane(vec![Step::Key(gid::new_cell_id())]);
     let prior = Hovered::Tree(hover::Hover::Entry(7));
@@ -1667,10 +1624,7 @@ fn pressed_hover_keeps_its_owner_and_skips_probes_until_release() {
                 root.clone()
             })
         );
-        let mut runner = EditorRunner::new(crate::test_editor(gid::Document {
-            root: None,
-            cells: gid::Cells::new(),
-        }));
+        let mut runner = EditorRunner::new(crate::test_editor(gid::Document::default()));
         runner.editor.pointer = Some(Point::new(6.0, 5.0));
         runner.editor.pressed = pressed;
         drop(runner.install_frame(frame, 1.0, Size::new(100.0, 100.0)));
@@ -1722,7 +1676,8 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
         ])),
         cells: Cells::new(),
     };
-    let mut driver = crate::driver::Driver::new(crate::test_editor(doc), Size::new(900.0, 600.0));
+    let mut driver =
+        crate::driver::Driver::new(crate::test_editor(doc), crate::driver::Driver::VIEWPORT);
     let drawn = |driver: &crate::driver::Driver, key| {
         driver
             .drawn_under(&[])

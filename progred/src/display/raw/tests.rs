@@ -106,10 +106,7 @@ fn a_typed_blob_leads_the_value_offers_and_names_a_new_label() {
 fn typed_numbers_offer_each_valid_representation_then_literal_text() {
     use crate::libraries::{f32, u64};
     let stack = crate::stack::load();
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let sources = src(&doc, &stack.libraries);
     for raw in [false, true] {
         for (query, expected) in [
@@ -202,10 +199,7 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
 #[test]
 fn exact_readings_precede_text_unless_explicitly_quoted() {
     use crate::libraries::{f32, u64};
-    let document = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let document = Document::default();
     let libraries = core_libraries();
     let sources = src(&document, &libraries);
     let entries = completion_entries(&sources, false, false, "12");
@@ -230,10 +224,7 @@ fn exact_readings_precede_text_unless_explicitly_quoted() {
 
 #[test]
 fn completion_interpretation_order_is_independent_of_the_value_type() {
-    let document = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let document = Document::default();
     let libraries = Libraries::default();
     let provider: crate::display::CompletionProvider = Rc::new(|request| {
         (request.scope == crate::display::CompletionScope::Literal).then(|| {
@@ -273,10 +264,7 @@ fn completion_interpretation_order_is_independent_of_the_value_type() {
 #[test]
 fn raw_completions_explicitly_select_structure_without_mounting_hidden_editors() {
     let libraries = core_libraries();
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let entries = completion_entries(&src(&doc, &libraries), true, false, "2.5");
     for value in [text::value("2.5"), f64::value(2.5)] {
         let offer = activated(
@@ -291,10 +279,7 @@ fn raw_completions_explicitly_select_structure_without_mounting_hidden_editors()
 
 #[test]
 fn library_readings_are_asked_only_for_raw_s_values() {
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let libraries = Libraries::default();
     let sources = src(&doc, &libraries);
     let calls = Rc::new(std::cell::Cell::new(0));
@@ -355,10 +340,7 @@ fn library_readings_are_asked_only_for_raw_s_values() {
 
 #[test]
 fn completion_callbacks_create_values_and_mint_only_on_activation() {
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let libraries = crate::library::Libraries::default();
     let sources = src(&doc, &libraries);
     let entries = completion_entries(&sources, false, false, "");
@@ -411,10 +393,7 @@ fn completion_callbacks_create_values_and_mint_only_on_activation() {
 
 #[test]
 fn completion_constructor_aliases_rank_ahead_of_literal_text() {
-    let document = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let document = Document::default();
     let libraries = crate::library::Libraries::default();
     let sources = src(&document, &libraries);
     for raw in [false, true] {

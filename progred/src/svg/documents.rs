@@ -135,10 +135,7 @@ fn svg_bench_renders_fidget_source() {
 
 #[test]
 fn svg_bench_renders_the_placeholder_notation() {
-    let empty = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let empty = Document::default();
     render(&empty, None, 320.0, "raw_placeholder_root.svg");
     // The engaged twin: same slot, same rect, selection blue.
     render(

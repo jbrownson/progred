@@ -7,10 +7,7 @@ use gid::{CellId, Cells, Document, new_cell_id};
 
 #[test]
 fn replacing_query_text_settles_completion_state_before_the_next_edit() {
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let libraries = core_libraries();
     let payload = Value::record([
         (
@@ -293,10 +290,7 @@ fn selecting_an_empty_value_slot_pends() {
     );
     assert!(external.edit().is_none());
     // The empty document's root is the same rule.
-    let empty = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let empty = Document::default();
     assert_eq!(
         make_selection(vec![]).stage(&src(&empty, &lib)),
         crate::selection::Stage::Pending
@@ -306,10 +300,7 @@ fn selecting_an_empty_value_slot_pends() {
 #[test]
 fn runtime_fold_classification_matches_stored_data() {
     use grap::RuntimeValue as Runtime;
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let lib = core_libraries();
     let sources = src(&doc, &lib);
     let extra = new_cell_id();
@@ -377,10 +368,7 @@ fn the_pending_payload_is_derived_from_the_live_editor() {
 
 #[test]
 fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
-    let document = gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let document = gid::Document::default();
     let empty = crate::library::Libraries::default();
     let stack = crate::stack::load();
     let site = vec![gid::Step::Key(gid::new_cell_id())];

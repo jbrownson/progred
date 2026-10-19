@@ -2,7 +2,7 @@ use super::*;
 use crate::display::{CompletionKind, CompletionRequest, CompletionScope};
 use crate::libraries::fidget;
 use crate::test_support::{activated, completion_entries_with, library_offers, src};
-use gid::{Cells, Document, new_cell_id};
+use gid::{Document, new_cell_id};
 
 #[test]
 fn combined_providers_preserve_order_and_explicit_empty_vocabularies() {
@@ -51,10 +51,7 @@ fn combined_providers_preserve_order_and_explicit_empty_vocabularies() {
 #[test]
 fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
     let stack = crate::stack::load();
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = Document::default();
     let sources = src(&doc, &stack.libraries);
     let calls = Rc::new(std::cell::Cell::new(0));
     let count = calls.clone();

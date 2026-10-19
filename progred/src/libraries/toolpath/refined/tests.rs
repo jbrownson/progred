@@ -2,7 +2,7 @@ use super::super::playback;
 use super::*;
 use crate::libraries::{control, f32, f64, layout};
 use crate::library::Definitions;
-use gid::{Cells, Document, Value, new_cell_id};
+use gid::{Document, Value, new_cell_id};
 use incremental::background::{Executor, Job};
 use std::{
     cell::Cell,
@@ -108,13 +108,7 @@ impl Fixture {
             ),
         );
         libraries.insert(new_cell_id(), definitions);
-        computations.begin(
-            Rc::new(Document {
-                root: None,
-                cells: Cells::new(),
-            }),
-            libraries,
-        );
+        computations.begin(Rc::new(Document::default()), libraries);
         let program = ::grap::lambda(
             [],
             ::grap::call(

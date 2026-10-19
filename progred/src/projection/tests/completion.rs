@@ -187,10 +187,7 @@ fn without_the_text_library_nothing_offers_a_string() {
         )])),
         cells,
     };
-    let empty = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let empty = Document::default();
     let ids = crate::stack::load()
         .libraries
         .iter()
@@ -440,10 +437,7 @@ fn atomic_completions_select_and_the_projection_supplies_default_editing() {
 
 #[test]
 fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
-    let doc = Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let doc = Document::default();
     let displays = |query: &str| {
         projected_completion_entries(
             &doc,
@@ -543,10 +537,7 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
                     || fields.contains_key(&fidget::vocabulary::FIDGET)
             })
     };
-    let empty = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let empty = Document::default();
     let root_selection = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
     let root_entries = projected_completion_entries(&empty, &root_selection);
     assert!(root_entries.iter().any(|entry| template(inserted_value(

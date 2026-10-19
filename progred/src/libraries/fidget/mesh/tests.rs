@@ -1,5 +1,4 @@
 use super::*;
-use gid::Cells;
 use puri::mesh::{Normal, Vertex};
 
 mod cpu;
@@ -47,10 +46,7 @@ fn cancellation_does_not_publish_a_partial_mesh() {
 #[test]
 fn mesh_function_returns_an_ordinary_declaration() {
     let stack = crate::stack::load();
-    let doc = gid::Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = gid::Document::default();
     let sources = crate::sources::Sources {
         doc: &doc,
         libraries: &stack.libraries,

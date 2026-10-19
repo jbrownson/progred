@@ -280,10 +280,7 @@ fn grouped_recording_preserves_leaf_order_absents_and_fuel() {
 fn recording_memo_retains_runtime_results_and_source_distinctions() {
     use std::rc::Rc;
     let host = crate::stack::load().libraries;
-    let doc = gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let doc = gid::Document::default();
     let computations = Computations::from_sources(crate::sources::Sources {
         doc: &doc,
         libraries: &host,

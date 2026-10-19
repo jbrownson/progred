@@ -25,6 +25,15 @@ pub(crate) fn test_editor(doc: Document) -> crate::Editor {
     test_editor_with_stack(doc, crate::stack::load())
 }
 
+/// A focused editor of a document whose root is `root`, with every built-in
+/// library.
+pub(crate) fn editor_of(root: Value) -> crate::Editor {
+    test_editor(Document {
+        root: Some(root),
+        cells: Cells::new(),
+    })
+}
+
 pub(crate) fn test_editor_with_stack(doc: Document, stack: crate::stack::Stack) -> crate::Editor {
     let mut editor = crate::editor::new_editor(
         crate::display::widget::style::Theme::Light.palette(),
@@ -133,10 +142,7 @@ pub(crate) fn first_value(libraries: &Libraries, cell: CellId) -> Option<&Value>
 }
 
 pub(crate) fn root_completions(stack: &crate::stack::Stack) -> Vec<crate::display::Completion> {
-    let document = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let document = Document::default();
     let sources = src(&document, &stack.libraries);
     (stack.completions)(&crate::display::CompletionRequest {
         raw: false,

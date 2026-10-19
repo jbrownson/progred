@@ -291,10 +291,7 @@ pub(crate) fn with_empty_view<W: 'static, H: 'static, R>(
 
 /// An empty document read over no libraries.
 fn with_empty<R>(run: impl FnOnce(crate::sources::Sources<'_>) -> R) -> R {
-    let document = gid::Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let document = gid::Document::default();
     let libraries = crate::library::Libraries::default();
     run(crate::sources::Sources {
         doc: &document,

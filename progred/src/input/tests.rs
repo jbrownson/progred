@@ -17,10 +17,7 @@ const VIEWPORT: Size = Size::new(500.0, 400.0);
 type Log = Rc<RefCell<Vec<(&'static str, f64)>>>;
 
 fn instrumented_runner(log: &Log) -> EditorRunner {
-    let mut editor = crate::test_editor(Document {
-        root: Some(f64::value(0.0)),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(f64::value(0.0));
     editor.stack.projection = Projection::new([partial({
         let log = log.clone();
         move |input| {
@@ -172,10 +169,7 @@ fn arrows_edit_text_before_routing_and_arrive_at_the_near_text_edge() {
         .keys()
         .map(|position| vec![gid::Step::Element(position.clone())])
         .collect();
-    let mut runner = EditorRunner::new(crate::test_editor(Document {
-        root: Some(list),
-        cells: Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::editor_of(list));
     let root = runner.editor.model.workspace.document_root().clone();
     runner.editor.model.selection = Some(selection::Selection::edge(&root, paths[0].clone()));
     runner.refresh_frame(1.0, VIEWPORT);
@@ -221,10 +215,7 @@ fn modified_arrows_edit_text_then_navigate_at_its_boundary() {
             .keys()
             .map(|p| vec![gid::Step::Element(p.clone())])
             .collect();
-        let mut editor = crate::test_editor(Document {
-            root: Some(list),
-            cells: Cells::new(),
-        });
+        let mut editor = crate::editor_of(list);
         editor.command_modifier = command;
         let root = editor.model.workspace.document_root().clone();
         editor.model.selection = Some(selection::Selection::edge(&root, paths[1].clone()));
@@ -276,10 +267,7 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
         .cloned()
         .chain([gid::Step::Key(name::vocabulary::NAME)])
         .collect();
-    let mut runner = EditorRunner::new(crate::test_editor(Document {
-        root: Some(list),
-        cells: Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::editor_of(list));
     let root = runner.editor.model.workspace.document_root().clone();
     runner.editor.model.selection = Some(selection::Selection::edge(&root, name_path.clone()));
     runner.refresh_frame(1.0, VIEWPORT);
@@ -325,10 +313,7 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
 
 #[test]
 fn focus_changes_clear_selection_cancel_gestures_and_gate_keyboard_input() {
-    let mut runner = EditorRunner::new(crate::test_editor(Document {
-        root: Some(text::value("hello")),
-        cells: Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
     let root = runner.editor.model.workspace.document_root().clone();
     runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
@@ -365,10 +350,7 @@ fn focus_changes_clear_selection_cancel_gestures_and_gate_keyboard_input() {
 
 #[test]
 fn only_a_focused_text_edit_offers_a_composition_area() {
-    let mut runner = EditorRunner::new(crate::test_editor(Document {
-        root: Some(text::value("hello")),
-        cells: Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
     runner.refresh_frame(1.0, VIEWPORT);
     assert_eq!(runner.frame.input_area, None);
     let root = runner.editor.model.workspace.document_root().clone();
@@ -386,10 +368,7 @@ fn only_a_focused_text_edit_offers_a_composition_area() {
 
 #[test]
 fn a_picker_query_offers_a_composition_area() {
-    let mut runner = EditorRunner::new(crate::test_editor(Document {
-        root: None,
-        cells: Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::test_editor(Document::default()));
     let root = runner.editor.model.workspace.document_root().clone();
     runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
@@ -398,10 +377,7 @@ fn a_picker_query_offers_a_composition_area() {
 
 #[test]
 fn focus_loss_ends_ime_composition_without_changing_committed_text() {
-    let mut runner = EditorRunner::new(crate::test_editor(Document {
-        root: Some(text::value("hello")),
-        cells: Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
     let root = runner.editor.model.workspace.document_root().clone();
     runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
@@ -953,10 +929,7 @@ fn pointer_release_and_cancellation_update_the_computation_input() {
 
 #[test]
 fn touch_without_prior_motion_selects_the_contact_and_text_input_uses_its_handler() {
-    let mut runner = EditorRunner::new(crate::test_editor(Document {
-        root: Some(text::value("hello")),
-        cells: Cells::new(),
-    }));
+    let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
     let contact = PointerButtonEvent {
         button: None,
         pointer: PointerInfo {

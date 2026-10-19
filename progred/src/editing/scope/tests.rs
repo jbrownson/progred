@@ -31,10 +31,7 @@ fn fixture(value: Value) -> (crate::Editor, Root, Path, Path, Scope) {
     let Step::Key(field) = source[0] else {
         unreachable!()
     };
-    let editor = crate::test_editor(Document {
-        root: Some(Value::record([(field, value)])),
-        cells: Cells::new(),
-    });
+    let editor = crate::editor_of(Value::record([(field, value)]));
     let root = editor.model.workspace.document_root().clone();
     let scope = Scope::default().jump(occurrence.clone(), source.clone());
     (editor, root, source, occurrence, scope)
@@ -325,10 +322,7 @@ fn gesture_writes_share_the_scope_and_one_undo_step() {
 
 #[test]
 fn redirected_library_values_remain_read_only_and_failed_writes_do_not_detach() {
-    let mut editor = crate::test_editor(Document {
-        root: Some(text::ID.into()),
-        cells: Cells::new(),
-    });
+    let mut editor = crate::editor_of(text::ID.into());
     let source = vec![Step::Follow(gid::Resolution::Library(text::ID))];
     let occurrence = path();
     let scope = Scope::default().jump(occurrence.clone(), source.clone());

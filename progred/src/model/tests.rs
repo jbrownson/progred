@@ -308,10 +308,7 @@ fn rejected_writes_do_not_detach_the_saved_snapshot() {
         &crate::location::Location::root(&bad_path)
     ));
     assert!(!model.dirty());
-    let mut empty = Model::new(Document {
-        root: None,
-        cells: Cells::new(),
-    });
+    let mut empty = Model::new(Document::default());
     assert!(!crate::location::delete_edge(
         &mut empty.doc,
         &Libraries::default(),

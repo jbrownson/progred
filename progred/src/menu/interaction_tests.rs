@@ -18,10 +18,7 @@ fn driver(doc: Document) -> Driver {
 }
 
 fn empty() -> Driver {
-    driver(Document {
-        root: None,
-        cells: Cells::new(),
-    })
+    driver(Document::default())
 }
 
 fn menu_at(driver: &Driver, point: Point) -> Option<Hover> {

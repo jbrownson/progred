@@ -12,7 +12,7 @@ fn list_insertion_through_a_comma_and_whole_list_selection() {
             doc,
             crate::stack::load_selected(&[name::ID, text::ID, blob::ID]).unwrap(),
         ),
-        kurbo::Size::new(900.0, 600.0),
+        Driver::VIEWPORT,
     );
     driver.click_between(&[], 0);
     driver.type_text("\"peaches\"");

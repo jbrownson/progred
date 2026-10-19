@@ -5,26 +5,16 @@ use crate::libraries::number::vocabulary::{LEFT, RIGHT};
 use crate::libraries::{f64, text, u64};
 use crate::selection::Stage;
 use gid::{Cells, Document, Step, Value, new_cell_id};
-use kurbo::Size;
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 
-const VIEWPORT: Size = Size::new(600.0, 400.0);
-
-fn driver(editor: crate::Editor) -> Driver {
-    Driver::new(editor, VIEWPORT)
-}
-
 fn editor(root: Value) -> crate::Editor {
-    crate::test_editor(Document {
-        root: Some(root),
-        cells: Cells::new(),
-    })
+    crate::editor_of(root)
 }
 
 #[test]
 fn typing_an_operator_after_a_number_makes_it_the_left_operand() {
     let typed = |root: Value, typed: &str| {
-        let mut driver = driver(editor(root));
+        let mut driver = Driver::of(root);
         driver.select(&[]);
         driver.type_text(typed);
         driver
@@ -56,7 +46,7 @@ fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
         .unwrap()
         .clone()
         .update(note, text::value("hi"));
-    let mut driver = driver(editor(Value::record([(x, Value::record(number))])));
+    let mut driver = Driver::of(Value::record([(x, Value::record(number))]));
     // The number view leaves its own field undrawn, unlike the record view.
     assert!(driver.drawn(&[Step::Key(x), Step::Key(note)]));
     assert!(!driver.drawn(&[Step::Key(x), Step::Key(f64::vocabulary::F64)]));
@@ -81,7 +71,7 @@ fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
 #[test]
 fn enter_adds_no_field_within_a_number_unless_its_view_shows_a_record() {
     let enter = |editor: crate::Editor, command: bool| {
-        let mut driver = driver(editor);
+        let mut driver = Driver::new(editor, Driver::VIEWPORT);
         driver.select(&[]);
         let modifiers = if command {
             crate::modifiers::command()

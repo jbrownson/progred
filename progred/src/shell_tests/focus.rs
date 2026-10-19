@@ -5,7 +5,7 @@ use crate::driver::Driver;
 use crate::libraries::{f64, text};
 use crate::selection::Stage;
 use gid::{Cells, Document, Value, new_cell_id};
-use kurbo::{Point, Size};
+use kurbo::Point;
 use peniko::{Brush, Color};
 use puri::draw::DrawCmd;
 use std::rc::Rc;
@@ -15,10 +15,11 @@ use ui_events_winit::WindowEventTranslation;
 use winit::dpi::PhysicalPosition;
 use winit::event::{DeviceId, WindowEvent};
 
-const VIEWPORT: Size = Size::new(900.0, 600.0);
-
 fn driver(root: Option<Value>, cells: Cells) -> Driver {
-    Driver::new(crate::test_editor(Document { root, cells }), VIEWPORT)
+    Driver::new(
+        crate::test_editor(Document { root, cells }),
+        Driver::VIEWPORT,
+    )
 }
 
 fn selection_marks(commands: &[DrawCmd], alpha: f32) -> usize {
@@ -30,7 +31,7 @@ fn selection_marks(commands: &[DrawCmd], alpha: f32) -> usize {
 
 #[test]
 fn changing_palette_repaints_without_losing_edits_selection_or_history() {
-    let mut driver = driver(Some(text::value("hello")), Cells::new());
+    let mut driver = Driver::of(text::value("hello"));
     driver.select(&[]);
     driver.type_text("!");
     let document = driver.editor().model.doc.clone();
@@ -54,7 +55,7 @@ fn changing_palette_repaints_without_losing_edits_selection_or_history() {
 #[test]
 fn native_appearance_follows_system_until_overridden_and_can_follow_again() {
     use winit::window::Theme::{Dark, Light};
-    let mut driver = driver(Some(text::value("hello")), Cells::new());
+    let mut driver = Driver::of(text::value("hello"));
     let document = driver.editor().model.doc.clone();
     for (preference, observed, expected) in [
         (None, Some(Dark), style::Theme::Dark),
@@ -72,7 +73,7 @@ fn native_appearance_follows_system_until_overridden_and_can_follow_again() {
 
 #[test]
 fn focus_loss_cancels_and_forgets_a_press() {
-    let mut driver = driver(Some(text::value("hello")), Cells::new());
+    let mut driver = Driver::of(text::value("hello"));
     driver.press_at(Point::new(10.0, 10.0));
     assert!(driver.editor().pressed);
     assert!(driver.focus(false));
@@ -114,7 +115,7 @@ fn focus_loss_removes_primary_and_secondary_selection_marks() {
 
 #[test]
 fn focus_loss_discards_invalid_atom_draft_without_changing_the_document() {
-    let mut driver = driver(Some(f64::value(7.0)), Cells::new());
+    let mut driver = Driver::of(f64::value(7.0));
     driver.select(&[]);
     driver.type_text("x");
     assert_eq!(driver.line(), Some("7x"));

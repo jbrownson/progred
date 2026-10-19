@@ -3,14 +3,11 @@ use crate::display::test_support::ResolveForDispatch;
 use crate::display::widget::view::Root;
 use crate::libraries::f64;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, press, target};
-use gid::{Cells, Document, Path, Step};
+use gid::{Document, Path, Step};
 use ui_events::pointer::{PointerButton, PointerType};
 
 fn model(value: Value) -> crate::Editor {
-    crate::test_editor(Document {
-        root: Some(value),
-        cells: Cells::new(),
-    })
+    crate::editor_of(value)
 }
 
 /// A state drag from `origin` that annotates `path` in `root`'s view.
@@ -64,10 +61,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
             ),
             covered,
         );
-        let mut world = crate::test_editor(Document {
-            root: None,
-            cells: Cells::new(),
-        });
+        let mut world = crate::test_editor(Document::default());
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
             &press(5.0, false),
@@ -141,10 +135,7 @@ fn state_drag_starts_only_at_a_visible_primary_contact_in_its_own_view() {
             ),
             false,
         );
-        let mut world = crate::test_editor(Document {
-            root: None,
-            cells: Cells::new(),
-        });
+        let mut world = crate::test_editor(Document::default());
         let mut event = press(x, false);
         event.button = button;
         event.pointer.pointer_type = pointer_type;
@@ -175,10 +166,7 @@ fn readonly_gesture_controls_do_not_start_or_construct_edit_runs() {
         ),
     ] {
         let frame = drag_frame(gesture_place(layout, true), false);
-        let mut world = crate::test_editor(Document {
-            root: None,
-            cells: Cells::new(),
-        });
+        let mut world = crate::test_editor(Document::default());
         assert!(
             !frame
                 .handler

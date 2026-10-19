@@ -13,10 +13,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
 
     let stack = crate::stack::load();
     let path = [Step::Key(FIDGET)];
-    let mut document = Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let mut document = Document::default();
     let offer = crate::libraries::completion::select(SPHERE, SPHERE.into()).with_detail(fidget::ID);
     let expected_value = offer.test_value();
     let expected_selection = crate::libraries::test_widgets::activate_completion(&offer)

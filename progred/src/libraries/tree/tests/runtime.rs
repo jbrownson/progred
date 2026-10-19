@@ -89,10 +89,7 @@ fn collection_and_mapping_retain_callbacks_and_positions() {
 #[test]
 fn memo_keeps_runtime_input_output_and_absence_origins_distinct() {
     let host = crate::stack::load().libraries;
-    let doc = gid::Document {
-        root: None,
-        cells: Cells::new(),
-    };
+    let doc = gid::Document::default();
     let computations = crate::computations::Computations::from_sources(crate::sources::Sources {
         doc: &doc,
         libraries: &host,

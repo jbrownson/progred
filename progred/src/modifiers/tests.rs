@@ -25,12 +25,9 @@ fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
             Modifiers::META,
         ),
     ] {
-        let mut editor = crate::test_editor(gid::Document {
-            root: Some(text::value("hello")),
-            cells: gid::Cells::new(),
-        });
+        let mut editor = crate::editor_of(text::value("hello"));
         editor.command_modifier = command;
-        let mut driver = crate::driver::Driver::new(editor, kurbo::Size::new(900.0, 600.0));
+        let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
         // Select all of the text with the page's command key, and type over it.
         driver.select(&[]);
         assert!(driver.keystroke(Key::Character("a".into()), modifiers));

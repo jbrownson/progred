@@ -1095,16 +1095,10 @@ fn quote_and_unquote_are_offered_under_their_marks() {
     use crate::libraries::grap::vocabulary::GRAP;
     use crate::selection::Stage;
     use ::grap::vocabulary::{BODY, EXPRESSION};
-    use gid::{Cells, Document, Step};
+    use gid::Step;
     use ui_events::keyboard::NamedKey;
 
-    let mut driver = Driver::new(
-        crate::test_editor(Document {
-            root: Some(Value::record([(GRAP, new_cell_id().into())])),
-            cells: Cells::new(),
-        }),
-        kurbo::Size::new(900.0, 600.0),
-    );
+    let mut driver = Driver::of(Value::record([(GRAP, new_cell_id().into())]));
     let program = vec![Step::Key(GRAP), Step::Follow(gid::Resolution::Document)];
     driver.select(&program);
     driver.type_text("λ");

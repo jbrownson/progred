@@ -84,10 +84,7 @@ fn setters_return_unit_on_set_and_clear_while_missing_reads_are_specific() {
 #[test]
 fn capabilities_read_replace_and_clear_their_own_staged_value() {
     let stack = crate::stack::load();
-    let doc = Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let doc = Document::default();
     let sources = Sources {
         doc: &doc,
         libraries: &stack.libraries,
@@ -150,10 +147,7 @@ fn capabilities_read_replace_and_clear_their_own_staged_value() {
 #[test]
 fn event_changes_commit_with_an_ordinary_absent_but_not_a_decline() {
     let stack = crate::stack::load();
-    let doc = Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let doc = Document::default();
     let sources = Sources {
         doc: &doc,
         libraries: &stack.libraries,
@@ -280,10 +274,7 @@ fn sequence(expressions: impl IntoIterator<Item = Value>) -> Value {
 #[test]
 fn selection_effect_moves_to_a_full_path_and_local_reads_observe_the_move() {
     let stack = crate::stack::load();
-    let doc = Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let doc = Document::default();
     let sources = Sources {
         doc: &doc,
         libraries: &stack.libraries,
@@ -337,10 +328,7 @@ fn selection_effect_moves_to_a_full_path_and_local_reads_observe_the_move() {
 #[test]
 fn clearing_another_location_does_not_clear_the_selection() {
     let stack = crate::stack::load();
-    let doc = Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let doc = Document::default();
     let sources = Sources {
         doc: &doc,
         libraries: &stack.libraries,
@@ -364,10 +352,7 @@ fn clearing_another_location_does_not_clear_the_selection() {
 #[test]
 fn malformed_paths_do_not_stage_selection_effects() {
     let stack = crate::stack::load();
-    let doc = Document {
-        root: None,
-        cells: gid::Cells::new(),
-    };
+    let doc = Document::default();
     let sources = Sources {
         doc: &doc,
         libraries: &stack.libraries,

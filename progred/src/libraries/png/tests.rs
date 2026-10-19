@@ -1,6 +1,6 @@
 use super::*;
 use crate::driver::Driver;
-use gid::{Cells, Document, Step, new_cell_id};
+use gid::{Step, new_cell_id};
 use png::ColorType::{Grayscale, GrayscaleAlpha, Indexed, Rgb, Rgba};
 
 type Encoder<'a> = png::Encoder<'a, &'a mut Vec<u8>>;
@@ -130,16 +130,6 @@ fn width_and_height_read_the_header() {
     assert!(::grap::absent::is_absent(&call(vocabulary::WIDTH, [])));
 }
 
-fn driver(root: Value) -> Driver {
-    Driver::new(
-        crate::test_editor(Document {
-            root: Some(root),
-            cells: Cells::new(),
-        }),
-        Size::new(640.0, 480.0),
-    )
-}
-
 #[test]
 fn the_editor_shows_the_picture_and_the_record_around_it() {
     let rgba = [255, 0, 0, 255, 0, 0, 255, 128];
@@ -151,11 +141,11 @@ fn the_editor_shows_the_picture_and_the_record_around_it() {
             .clone()
             .update(note, crate::libraries::text::value("red, then faint blue")),
     );
-    let shown = driver(picture);
+    let shown = Driver::of(picture);
     assert_eq!(shown.images(), [rgba.to_vec()]);
     assert!(shown.drawn(&[Step::Key(note)]));
 
-    let broken = driver(value(vec![1, 2, 3]));
+    let broken = Driver::of(value(vec![1, 2, 3]));
     assert!(broken.images().is_empty());
     assert!(broken.drawn(&[Step::Key(vocabulary::PNG)]));
 }

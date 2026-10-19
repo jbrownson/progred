@@ -2,7 +2,7 @@ use super::*;
 use crate::display::recording::{Recorded, record};
 use crate::display::widget::frame::{Attribution, HoverOutput, place};
 use crate::frame::Hovered;
-use gid::{Cells, Document};
+use gid::Document;
 use kurbo::{Affine, Point, Rect, Stroke};
 use peniko::Color;
 use puri::draw::{DrawCmd, DrawList, Shape};
@@ -398,10 +398,7 @@ fn native_decorators_preserve_front_to_back_input_and_back_to_front_paint() {
     let output = output.bind(Default::default());
     assert!(log.borrow().is_empty());
     assert!(!output.handler.unwrap().dispatch_key(
-        &mut crate::test_editor(Document {
-            root: None,
-            cells: Cells::new()
-        }),
+        &mut crate::test_editor(Document::default()),
         &KeyboardEvent::default()
     ));
     assert_eq!(&*log.borrow(), &["after", "child", "before"]);

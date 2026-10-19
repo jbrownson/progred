@@ -288,13 +288,8 @@ fn closing_the_picker_removes_only_its_selection_state() {
 fn a_read_only_swatch_selects_its_color() {
     use crate::libraries::presentation::vocabulary::RESULT;
     let color = value(Color::from_rgb8(0x50, 0x96, 0xdc));
-    let mut driver = crate::driver::Driver::new(
-        crate::test_editor(gid::Document {
-            root: Some(Value::record([(::grap::vocabulary::EVALUATE, color)])),
-            cells: gid::Cells::new(),
-        }),
-        kurbo::Size::new(900.0, 600.0),
-    );
+    let mut driver =
+        crate::driver::Driver::of(Value::record([(::grap::vocabulary::EVALUATE, color)]));
     // The evaluated result is computed, so it's read-only.
     let result = vec![gid::Step::Key(RESULT)];
     let rect = driver.rect(&result);
@@ -327,7 +322,7 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
             root: Some(root.clone()),
             cells,
         }),
-        kurbo::Size::new(900.0, 600.0),
+        Driver::VIEWPORT,
     );
     // A Grap argument's hole offers the libraries' values, a new color among
     // them.

@@ -758,7 +758,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
 #[test]
 fn completion_activation_precedes_the_real_editor_it_covers() {
     use crate::libraries::text;
-    use gid::{Cells, Document, Step};
+    use gid::Step;
     // An empty record above a long line of text: typing over the record
     // opens a picker whose card covers the line.
     let root = Value::list([Value::record([]), text::value(&"long ".repeat(40))]);
@@ -767,13 +767,8 @@ fn completion_activation_precedes_the_real_editor_it_covers() {
             crate::test_support::positions(&root)[index].clone(),
         )]
     });
-    let mut driver = crate::driver::Driver::new(
-        crate::test_editor(Document {
-            root: Some(root),
-            cells: Cells::new(),
-        }),
-        kurbo::Size::new(600.0, 400.0),
-    );
+    let mut driver =
+        crate::driver::Driver::new(crate::editor_of(root), kurbo::Size::new(600.0, 400.0));
     driver.select(&hole);
     driver.type_text("\"t");
     assert_eq!(driver.picker_entries().unwrap()[0], "\"t\"");

@@ -467,13 +467,10 @@ fn tutorial_slots_use_vertical_flow_including_missing_slots() {
     let first = gid::new_cell_id();
     let missing = gid::new_cell_id();
     let last = gid::new_cell_id();
-    let mut world = crate::test_editor(Document {
-        root: Some(Value::record([
-            (first, text::value("first")),
-            (last, f64::value(3.0)),
-        ])),
-        cells: Cells::new(),
-    });
+    let mut world = crate::editor_of(Value::record([
+        (first, text::value("first")),
+        (last, f64::value(3.0)),
+    ]));
     let projection = crate::web_embed::tutorial_slots(
         Some(&format!("{first},{missing},{last}")),
         world.stack.projection.clone(),
