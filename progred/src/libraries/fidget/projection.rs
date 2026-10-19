@@ -21,7 +21,6 @@ fn precedence(marker: CellId) -> Option<Precedence> {
 fn form(value: &Value) -> Option<(CellId, &Value)> {
     let fields = value.as_record()?;
     let marker = one_marker(fields)?;
-    (marker != TRANSLATE).then_some(())?;
     let content = fields.get(&marker)?;
     if marker == AXIS {
         content.as_cell()?;

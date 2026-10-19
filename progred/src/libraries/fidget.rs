@@ -430,23 +430,10 @@ fn one_marker_by(contains: impl Fn(CellId) -> bool) -> Option<CellId> {
 fn parameters(marker: CellId) -> Option<&'static [CellId]> {
     use vocabulary::*;
     match marker {
-        TRANSLATE => Some(&[FIELD, DELTA_X, DELTA_Y, DELTA_Z]),
         SUM | SUBTRACT | MULTIPLY | DIVIDE | MIN | MAX | UNION | DIFFERENCE | INTERSECTION => {
             Some(&[LEFT, RIGHT])
         }
         NEGATE | ABS | SQRT | SQUARE | SIN | COS => Some(&[OPERAND]),
-        PREVIEW_MESH => Some(&[
-            presentation::vocabulary::VALUE,
-            crate::libraries::layout::vocabulary::WIDTH,
-            crate::libraries::layout::vocabulary::HEIGHT,
-            MIN_X,
-            MAX_X,
-            MIN_Y,
-            MAX_Y,
-            MIN_Z,
-            MAX_Z,
-            MESH_DEPTH,
-        ]),
         _ => None,
     }
 }
