@@ -350,43 +350,103 @@ impl crate::display::Env for ProjectEnv<'_, '_> {
     }
 }
 
-/// Prepare a projection with its explicit source and current widget inputs.
-/// Box composition itself belongs to the display measurement interpreter.
-#[allow(clippy::too_many_arguments)]
+/// Prepare `layout` at the occurrence `scope` describes, with its explicit
+/// source and current widget inputs. Box composition itself belongs to the
+/// display measurement interpreter.
 fn prepare(
-    cx: &Cx,
-    projection: &Projection,
+    scope: &ProjectionScope<'_, '_>,
     tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &Ancestry,
-    value: Option<&grap::RuntimeValue>,
     layout: Layout,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-    let project = ProjectionScope {
-        cx,
-        projection,
-        path,
-        ancestors,
-        value,
-    };
     layout.measure(
         &mut crate::display::widget::Context {
-            project: &project,
+            project: scope,
             text: tcx,
-            toolkit: &Occurrence { cx, path },
-            value,
+            toolkit: &Occurrence {
+                cx: scope.cx,
+                path: scope.path,
+            },
+            value: scope.value,
         },
         build,
     )
 }
 
+/// One occurrence being projected: its view's context, the projection it
+/// draws with, its path, its ancestry, and its value.
+#[derive(Clone, Copy)]
 struct ProjectionScope<'a, 's> {
     cx: &'a Cx<'s>,
     projection: &'a Projection,
     path: &'a [Step],
     ancestors: &'a Ancestry,
     value: Option<&'a grap::RuntimeValue>,
+}
+
+impl ProjectionScope<'_, '_> {
+    /// Adds GID steps to the occurrence and resolves through its conject.
+    /// Current and descendant projections are independent replacements.
+    /// Missing locations use the standard empty picker, without a value.
+    fn descend_path(
+        &self,
+        tcx: &mut TextCtx,
+        build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
+        steps: &[Step],
+        current: Option<Partial>,
+        default: Option<Partial>,
+    ) -> ChoiceLayout<HoverPass<crate::Editor>> {
+        let cx = self.cx;
+        let mut path = self.path.to_vec();
+        let mut ancestors = self.ancestors.clone();
+        let mut value = self.value.cloned();
+        let mut edits = None;
+        for step in steps {
+            let followed = match step {
+                Step::Follow(source) => value
+                    .as_ref()
+                    .and_then(grap::RuntimeValue::as_cell)
+                    .map(|cell| (cell, *source)),
+                Step::Key(_) | Step::Element(_) => None,
+            };
+            path.push(step.clone());
+            if let Some((cell, source)) = followed {
+                ancestors.cells.insert(cell);
+                ancestors.enclosing = Some((cell, source, path.len()));
+                // Following a cell starts a location at its definition, whatever
+                // the route here, computed values included.
+                edits = Some(edits.as_ref().unwrap_or(&cx.edits).in_cell(
+                    path.clone(),
+                    cell,
+                    source,
+                ));
+            }
+            let scope = edits.as_ref().unwrap_or(&cx.edits);
+            value = match (!scope.descends()).then(|| scope.location(&path)).flatten() {
+                Some(location) => cx.sources.read(&location).map(grap::RuntimeValue::from),
+                None => value.as_ref().and_then(|value| {
+                    child::of(value, step, |cell, source| cx.sources.value(cell, source))
+                }),
+            };
+        }
+        let scoped = edits.map(|edits| Cx {
+            edits,
+            ..cx.clone()
+        });
+        prepare_value(
+            ProjectionScope {
+                cx: scoped.as_ref().unwrap_or(cx),
+                path: &path,
+                ancestors: &ancestors,
+                value: value.as_ref(),
+                ..*self
+            },
+            current.as_ref(),
+            default.as_ref(),
+            tcx,
+            build,
+        )
+    }
 }
 
 impl crate::display::widget::project::Project<crate::Editor, Hovered> for ProjectionScope<'_, '_> {
@@ -398,18 +458,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-        prepare_descend_path(
-            self.cx,
-            self.projection,
-            text,
-            self.path,
-            self.ancestors,
-            self.value,
-            steps,
-            current,
-            default,
-            build,
-        )
+        self.descend_path(text, build, steps, current, default)
     }
     #[cfg(any(test, target_arch = "wasm32"))]
     fn descend_raw(
@@ -423,17 +472,12 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             ..self.cx.clone()
         };
         let nothing = crate::display::partial(|_| None);
-        prepare_descend_path(
-            &cx,
-            self.projection,
+        ProjectionScope { cx: &cx, ..*self }.descend_path(
             text,
-            self.path,
-            self.ancestors,
-            self.value,
+            build,
             std::slice::from_ref(&step),
             Some(nothing.clone()),
             Some(nothing),
-            build,
         )
     }
     fn jump(
@@ -450,33 +494,46 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             edits: self.cx.edits.located(path.clone(), document),
             ..self.cx.clone()
         };
-        let value = cx.edits.view(cx.sources).resolve_path(&path);
+        let value = cx
+            .edits
+            .view(cx.sources)
+            .resolve_path(&path)
+            .cloned()
+            .map(grap::RuntimeValue::from);
         let mut ancestry = self.ancestors.clone();
         // Following the same source through jumps must not bypass cycle checks.
         if let Some(location) = cx.edits.location(&path) {
-            if let Start::Cell { cell, .. } = location.start {
-                ancestry.cells.insert(cell);
-            }
-            for (i, step) in location.path.iter().enumerate() {
-                if matches!(step, Step::Follow(_))
-                    && let Some(cell) = cx
-                        .sources
-                        .read_from(location.start, &location.path[..i])
-                        .and_then(Value::as_cell)
-                {
-                    ancestry.cells.insert(cell);
+            ancestry.cells.extend(
+                match location.start {
+                    Start::Cell { cell, .. } => Some(cell),
+                    Start::Root => None,
                 }
-            }
+                .into_iter()
+                .chain(
+                    location
+                        .path
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, step)| matches!(step, Step::Follow(_)))
+                        .filter_map(|(i, _)| {
+                            cx.sources
+                                .read_from(location.start, &location.path[..i])
+                                .and_then(Value::as_cell)
+                        }),
+                ),
+            );
         }
         prepare_value(
-            &cx,
-            self.projection,
+            ProjectionScope {
+                cx: &cx,
+                path: &path,
+                ancestors: &ancestry,
+                value: value.as_ref(),
+                ..*self
+            },
             current.as_ref(),
             default.as_ref(),
             text,
-            &path,
-            &ancestry,
-            value.cloned().map(grap::RuntimeValue::from).as_ref(),
             build,
         )
     }
@@ -489,52 +546,28 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-        prepare_at(
-            self.cx,
-            self.projection,
+        let path: Vec<_> = self.path.iter().cloned().chain(steps).collect();
+        let cx = Cx {
+            edits: self.cx.edits.detached(path.clone()),
+            ..self.cx.clone()
+        };
+        prepare_value(
+            ProjectionScope {
+                cx: &cx,
+                path: &path,
+                ancestors: &Ancestry {
+                    ground: self.ancestors.ground,
+                    ..Ancestry::default()
+                },
+                value: Some(&value),
+                ..*self
+            },
+            current.as_ref(),
+            default.as_ref(),
             text,
-            self.path,
-            self.ancestors.ground,
-            steps,
-            value,
-            current,
-            default,
             build,
         )
     }
-}
-
-fn prepare_at(
-    cx: &Cx,
-    projection: &Projection,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    ground: Ground,
-    steps: Vec<Step>,
-    nested: grap::RuntimeValue,
-    current_projection: Option<Partial>,
-    default_projection: Option<Partial>,
-    build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
-) -> ChoiceLayout<HoverPass<crate::Editor>> {
-    let path: Vec<_> = path.iter().cloned().chain(steps).collect();
-    let cx = Cx {
-        edits: cx.edits.detached(path.clone()),
-        ..cx.clone()
-    };
-    prepare_value(
-        &cx,
-        projection,
-        current_projection.as_ref(),
-        default_projection.as_ref(),
-        tcx,
-        &path,
-        &Ancestry {
-            ground,
-            ..Ancestry::default()
-        },
-        Some(&nested),
-        build,
-    )
 }
 
 /// The resolved hover's tree identity, for ink that lights its own
@@ -693,14 +726,16 @@ fn prepare_project(
         ..Ancestry::default()
     });
     let layout = prepare_value(
-        &cx,
-        projection,
+        ProjectionScope {
+            cx: &cx,
+            projection,
+            path: root_path,
+            ancestors: &ancestry,
+            value: root.cloned().map(grap::RuntimeValue::from).as_ref(),
+        },
         None,
         None,
         tcx,
-        root_path,
-        &ancestry,
-        root.cloned().map(grap::RuntimeValue::from).as_ref(),
         &mut build,
     );
     build.finish(layout)
@@ -836,85 +871,24 @@ fn ground_with(
     })
 }
 
-/// Adds GID steps to the occurrence and resolves through its conject.
-/// Current and descendant projections are independent replacements.
-/// Missing locations use the standard empty picker, without a value.
-#[allow(clippy::too_many_arguments)]
-fn prepare_descend_path(
-    cx: &Cx,
-    projection: &Projection,
-    tcx: &mut TextCtx,
-    parent_path: &[Step],
-    ancestors: &Ancestry,
-    parent: Option<&grap::RuntimeValue>,
-    steps: &[Step],
-    current_projection: Option<Partial>,
-    default_projection: Option<Partial>,
-    build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
-) -> ChoiceLayout<HoverPass<crate::Editor>> {
-    let mut path = parent_path.to_vec();
-    let mut ancestors = ancestors.clone();
-    let mut value = parent.cloned();
-    let mut edits = None;
-    for step in steps {
-        let followed = match step {
-            Step::Follow(source) => value
-                .as_ref()
-                .and_then(grap::RuntimeValue::as_cell)
-                .map(|cell| (cell, *source)),
-            Step::Key(_) | Step::Element(_) => None,
-        };
-        path.push(step.clone());
-        if let Some((cell, source)) = followed {
-            ancestors.cells.insert(cell);
-            ancestors.enclosing = Some((cell, source, path.len()));
-            // Following a cell starts a location at its definition, whatever
-            // the route here, computed values included.
-            edits = Some(
-                edits
-                    .as_ref()
-                    .unwrap_or(&cx.edits)
-                    .in_cell(path.clone(), cell, source),
-            );
-        }
-        let scope = edits.as_ref().unwrap_or(&cx.edits);
-        value = match (!scope.descends()).then(|| scope.location(&path)).flatten() {
-            Some(location) => cx.sources.read(&location).map(grap::RuntimeValue::from),
-            None => value.as_ref().and_then(|value| {
-                child::of(value, step, |cell, source| cx.sources.value(cell, source))
-            }),
-        };
-    }
-    let scoped = edits.map(|edits| Cx {
-        edits,
-        ..cx.clone()
-    });
-    prepare_value(
-        scoped.as_ref().unwrap_or(cx),
-        projection,
-        current_projection.as_ref(),
-        default_projection.as_ref(),
-        tcx,
-        &path,
-        &ancestors,
-        value.as_ref(),
-        build,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
+/// The occurrence `scope` describes, drawn with `current_projection` when
+/// given, its children with `default_projection`.
 fn prepare_value(
-    cx: &Cx,
-    projection: &Projection,
+    scope: ProjectionScope<'_, '_>,
     current_projection: Option<&Partial>,
     default_projection: Option<&Partial>,
     tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &Ancestry,
-    value: Option<&grap::RuntimeValue>,
     build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
 ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-    let value = value.filter(|_| !cx.pending_at(path));
+    let ProjectionScope {
+        cx,
+        projection,
+        path,
+        ancestors,
+        ..
+    } = scope;
+    // A picker over a value draws its hole instead.
+    let value = scope.value.filter(|_| !cx.pending_at(path));
     let source = cx.edits.location(path);
     let ground = ground(cx, source.as_ref(), value);
     let changed_ground = (ground != ancestors.ground).then_some(ground);
@@ -946,13 +920,10 @@ fn prepare_value(
         crate::selection::collapse_default_for_value(&cx.sources, value, folded)
     });
     let layout = value_layout(
-        cx,
-        projection,
+        ProjectionScope { value, ..scope },
         current_projection,
         &child_projection.partial,
-        path,
         source.as_ref(),
-        value,
         fold_default,
     );
     let prepared = match layout {
@@ -972,12 +943,13 @@ fn prepare_value(
         }
         Some(layout) => {
             let inner = prepare(
-                cx,
-                child_projection,
+                &ProjectionScope {
+                    projection: child_projection,
+                    ancestors,
+                    value,
+                    ..scope
+                },
                 tcx,
-                path,
-                ancestors,
-                value,
                 layout,
                 build,
             );
@@ -1053,17 +1025,22 @@ fn prepare_value(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// What the occurrence `scope` describes draws as, its own projection's
+/// layout, else Raw's.
 fn value_layout(
-    cx: &Cx,
-    projection: &Projection,
+    scope: ProjectionScope<'_, '_>,
     current_projection: Option<&Partial>,
     default_projection: &Partial,
-    path: &[Step],
     source: Option<&Location>,
-    value: Option<&grap::RuntimeValue>,
     fold_default: Option<bool>,
 ) -> Option<Layout> {
+    let ProjectionScope {
+        cx,
+        projection,
+        path,
+        value,
+        ..
+    } = scope;
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
     if let Some(value) = value
