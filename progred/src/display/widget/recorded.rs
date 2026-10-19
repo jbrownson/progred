@@ -182,35 +182,18 @@ struct Hit {
     transform: Affine,
     inverse: Affine,
     bounds: Rect,
-    source: HitSource,
-}
-
-enum HitSource {
-    Exact(SourceTrace),
-    Calls(SourceCalls),
-}
-
-impl From<SourceTrace> for HitSource {
-    fn from(source: SourceTrace) -> Self {
-        Self::Exact(source)
-    }
-}
-
-impl From<SourceCalls> for HitSource {
-    fn from(source: SourceCalls) -> Self {
-        Self::Calls(source)
-    }
+    calls: SourceCalls,
 }
 
 impl Hit {
-    fn new(shape: puri::draw::Shape, transform: Affine, source: impl Into<HitSource>) -> Self {
+    fn new(shape: puri::draw::Shape, transform: Affine, calls: SourceCalls) -> Self {
         let bounds = transform.transform_rect_bbox(shape_bounds(&shape));
         Self {
             shape,
             transform,
             inverse: transform.inverse(),
             bounds,
-            source: source.into(),
+            calls,
         }
     }
 
@@ -226,10 +209,7 @@ impl Recorded {
             .iter()
             .rev()
             .find(|hit| hit.contains(point))
-            .map(|hit| match &hit.source {
-                HitSource::Calls(calls) => Hover::Calls(calls.clone()),
-                HitSource::Exact(source) => Hover::Source(source.clone()),
-            })
+            .map(|hit| Hover::Calls(hit.calls.clone()))
     }
 
     fn highlight<C: Canvas + ?Sized>(
@@ -239,10 +219,7 @@ impl Recorded {
         source: &SourceTrace,
         brush: &Brush,
     ) {
-        for hit in self.hits.iter().filter(|hit| match &hit.source {
-            HitSource::Calls(calls) => calls.contains(source),
-            HitSource::Exact(hit) => hit == source,
-        }) {
+        for hit in self.hits.iter().filter(|hit| hit.calls.contains(source)) {
             canvas.fill(hit.shape.clone(), brush.clone(), outer * hit.transform);
         }
     }
