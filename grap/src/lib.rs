@@ -1636,9 +1636,9 @@ impl<'a> Context<'a> {
                     Some((_, Definition::Foreign(definition))) => {
                         PreparedCallTargetKind::Foreign(definition.implementation.clone())
                     }
-                    Some((resolution, Definition::Value(value))) => PreparedCallTargetKind::Value(
-                        self.lower_source(&value, OriginRoot::Cell { cell, resolution }),
-                    ),
+                    Some((resolution, Definition::Value(value))) => {
+                        PreparedCallTargetKind::Value(self.lowered_cell(cell, resolution, &value))
+                    }
                     None => PreparedCallTargetKind::Missing,
                 };
                 let target = Rc::new(PreparedCallTarget {
@@ -1677,6 +1677,27 @@ impl<'a> Context<'a> {
             }
             PreparedCallTargetKind::Missing => Ok(missing_cell(cell)),
         })
+    }
+
+    /// `cell`'s definition lowered once per evaluation and shared by every
+    /// call site that calls it, so their compiled code and call caches are
+    /// shared too.
+    fn lowered_cell(&mut self, cell: CellId, resolution: Resolution, value: &Value) -> Expression {
+        let index = cell_index(&self.indices, cell);
+        while self.cell_states.len() <= index.0 {
+            self.cell_states.push(CellState::Unknown);
+        }
+        match &self.cell_states[index.0] {
+            CellState::Ready(expression) => expression.clone(),
+            CellState::Evaluating { .. } => {
+                self.lower_source(value, OriginRoot::Cell { cell, resolution })
+            }
+            CellState::Unknown => {
+                let expression = self.lower_source(value, OriginRoot::Cell { cell, resolution });
+                self.cell_states[index.0] = CellState::Ready(expression.clone());
+                expression
+            }
+        }
     }
 
     fn eval_definition(
