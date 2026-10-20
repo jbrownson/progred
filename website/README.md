@@ -255,15 +255,16 @@ chosen commit is pushed to a `website-live` branch on GitHub:
    `jbrownson/progred`.
 2. Name the Worker **progred** (matching `wrangler.jsonc`).
 3. Set the production branch to **website-live**, root directory to **website**,
-   build command to **npm run build**, and deploy command to **npm run deploy**,
-   which runs for `website-live` and puts the build live.
-4. Turn on builds for non-production branches, limited to **master**, and keep
-   their deploy command (the wizard's preview command) at its default,
-   **npx wrangler versions upload**, which builds a preview without deploying
-   it. Cloudflare installs the locked npm dependencies and supplies `CI=true`
-   and deployment authentication.
-5. Check the generated HTTPS `workers.dev` address first. Then add `prog.red`
-   as a custom domain; DNS setup is a separate step, not part of the build.
+   build command to **npm run build**, and deploy command to **npm run stage**.
+   The deploy command runs for `website-live`, and this one stages a version
+   rather than deploying it, as described below.
+4. Leave non-production branch builds disabled, so the wizard's preview command
+   (the non-production branch deploy command) never runs; its default is fine.
+   Cloudflare installs the locked npm dependencies and supplies `CI=true` and
+   deployment authentication.
+5. Deploy the first version from **Deployments** and check the generated HTTPS
+   `workers.dev` address. Then add `prog.red` as a custom domain; DNS setup is a
+   separate step, not part of the build.
 
 Do not connect the development branch as production just to get through the
 wizard: **Settings → Build → Branch control** can select `website-live` if it
@@ -273,26 +274,24 @@ isn't offered during creation. Don't deploy until the production branch is set.
 each with a Redirect Rule (302) to the matching short path, so `_redirects`
 decides what each one opens.
 
-Every push to `master` builds a preview without making it live, served at
-`master-progred.<account>.workers.dev` (each preview also has an address of its
-own, shown in the build log and on the Worker's **Deployments** page). Publishing
-means advancing `website-live` to a commit, typically one previewed on master;
-Cloudflare builds it again and deploys it to prog.red:
+Publishing takes two steps. Advancing `website-live` to a commit has Cloudflare
+build it as a new version of the `progred` Worker without making it live:
 
 ```sh
 git push origin HEAD:website-live
 ```
 
-(only when intentionally requested). The build is pinned (the Rust nightly,
-wasm-bindgen and the npm lockfile), so the same commit makes the same site, and
-the full editor's menu bar shows the commit a site was built from. `website-live`
-is always what's live. Previews served from `workers.dev` aren't counted in Web
-Analytics, which counts prog.red alone. Each preview is a full build, so if
-build minutes run short, limit previews to a branch pushed only when wanted.
+(only when intentionally requested; pushes to `master` alone build nothing).
+The latest such version is served at `staged-progred.<account>.workers.dev`,
+and each has an address of its own, shown in the build log and on the Worker's
+**Deployments** page. When it looks right, deploy that version from
+**Deployments**, which serves exactly those files on prog.red. The full
+editor's menu bar shows the commit a site was built from. Versions served from
+`workers.dev` aren't counted in Web Analytics, which counts prog.red alone.
 
-Don't force-push to undo a release: deploy an earlier version from
-**Deployments** for an immediate rollback, then fix or revert the source and
-publish a new commit. No credentials belong in this repository.
+To undo a release, deploy an earlier version from **Deployments**; don't
+force-push. Then fix or revert the source and stage a new commit. No
+credentials belong in this repository.
 
 The hosted Linux build and public site were verified on September 21, 2026.
 The generated build directory and npm dependencies are ignored by Git.
