@@ -28,7 +28,10 @@ fn traversal_uses_the_path_library_for_every_step() {
     let value = node(
         vocabulary::AT,
         Value::record([
-            (vocabulary::STEPS, crate::libraries::path::value(&steps)),
+            (
+                vocabulary::STEPS,
+                crate::libraries::editor::path::value(&steps),
+            ),
             (vocabulary::VALUE, child.clone()),
         ]),
     );
@@ -37,7 +40,7 @@ fn traversal_uses_the_path_library_for_every_step() {
     ));
     let value = node(
         vocabulary::DESCEND_PATH,
-        crate::libraries::path::value(&steps),
+        crate::libraries::editor::path::value(&steps),
     );
     assert!(matches!(decoded(&value).map(|layout| inspect(&layout)),
         Some(ProjectionCall::Descend { steps: decoded, .. }) if decoded == steps
@@ -46,10 +49,13 @@ fn traversal_uses_the_path_library_for_every_step() {
     let value = node(
         vocabulary::JUMP,
         Value::record([
-            (vocabulary::STEPS, crate::libraries::path::value(&steps)),
+            (
+                vocabulary::STEPS,
+                crate::libraries::editor::path::value(&steps),
+            ),
             (
                 vocabulary::DOCUMENT_PATH,
-                crate::libraries::path::value(&document),
+                crate::libraries::editor::path::value(&document),
             ),
         ]),
     );
@@ -493,9 +499,9 @@ fn intents_and_leaves_decode() {
     let handler = ::grap::lambda(
         [],
         ::grap::call(
-            crate::libraries::site::vocabulary::SET.into(),
+            crate::libraries::editor::site::vocabulary::SET.into(),
             [(
-                crate::libraries::site::vocabulary::VALUE,
+                crate::libraries::editor::site::vocabulary::VALUE,
                 Value::from(vec![7u8]),
             )],
         ),

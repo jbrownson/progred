@@ -1013,8 +1013,8 @@ fn document_function_completion_inserts_a_call_and_opens_its_first_argument() {
         payload
             .as_record()
             .unwrap()
-            .get(&crate::libraries::selection::vocabulary::STAGE),
-        Some(&crate::libraries::selection::vocabulary::PENDING.into())
+            .get(&crate::libraries::editor::selection::vocabulary::STAGE),
+        Some(&crate::libraries::editor::selection::vocabulary::PENDING.into())
     );
 }
 
@@ -1099,8 +1099,8 @@ fn built_in_call_completion_opens_its_first_argument() {
         payload
             .as_record()
             .unwrap()
-            .get(&crate::libraries::selection::vocabulary::STAGE),
-        Some(&crate::libraries::selection::vocabulary::PENDING.into())
+            .get(&crate::libraries::editor::selection::vocabulary::STAGE),
+        Some(&crate::libraries::editor::selection::vocabulary::PENDING.into())
     );
 }
 

@@ -96,7 +96,7 @@ fn click_heading(driver: &mut Driver, path: &[Step]) {
 #[test]
 fn cam_outline_leaves_panes_in_the_collapsed_extras() {
     let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    let panes = crate::libraries::workspace::vocabulary::PANES;
+    let panes = crate::libraries::editor::workspace::vocabulary::PANES;
     assert!(entry_paths(doc.root.as_ref().unwrap(), &[], panes).is_empty());
     assert!(!crate::workspace::declarations(doc.root.as_ref()).is_empty());
     let mut world = crate::test_editor(doc);
@@ -304,7 +304,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
 
 #[test]
 fn outline_library_tint_stops_at_the_heading() {
-    let key = crate::libraries::workspace::vocabulary::PANES;
+    let key = crate::libraries::editor::workspace::vocabulary::PANES;
     let mut world = crate::editor_of(Value::record([
         (OUTLINE, Value::list([key.into()])),
         (key, Value::list([f64::value(1.0), f64::value(2.0)])),

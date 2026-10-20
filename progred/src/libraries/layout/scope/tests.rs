@@ -157,7 +157,7 @@ fn grap_recursion_calls_emit_the_same_native_location_operations() {
         gid::Step::Key(gid::new_cell_id()),
     ];
     let document = vec![gid::Step::Key(gid::new_cell_id())];
-    let encoded = crate::libraries::path::value(&steps);
+    let encoded = crate::libraries::editor::path::value(&steps);
     let (result, layout) = evaluate(&call(DESCEND_PATH, [(STEPS, quote(encoded.clone()))]), 1000);
     assert!(result.completed);
     assert!(
@@ -170,7 +170,7 @@ fn grap_recursion_calls_emit_the_same_native_location_operations() {
                 (STEPS, quote(encoded.clone())),
                 (
                     DOCUMENT_PATH,
-                    quote(crate::libraries::path::value(&document)),
+                    quote(crate::libraries::editor::path::value(&document)),
                 ),
             ],
         ),

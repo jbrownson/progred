@@ -200,7 +200,7 @@ fn capture_cam_async(mode: CellId) {
 #[test]
 #[ignore = "regenerates the website's document-libraries image"]
 fn website_libraries_image() {
-    use crate::libraries::workspace::vocabulary::LIBRARIES;
+    use crate::libraries::editor::workspace::vocabulary::LIBRARIES;
     let (mut doc, _) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../examples/libraries.gid"

@@ -5,7 +5,7 @@
 //! and numbers the f64 convention. Interaction either attaches
 //! host-provided editor intents or a Grap handler to generic event
 //! data. Event dispatch supplies a capability overlay closed over the
-//! projection site. Traversal uses the path library's step convention.
+//! projection site. Traversal uses the path step convention.
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
 //!
@@ -212,7 +212,8 @@ fn at(steps: impl IntoIterator<Item = Step>, value: ::grap::RuntimeValue) -> ::g
             (vocabulary::VALUE, value),
             (
                 vocabulary::STEPS,
-                crate::libraries::path::value(&steps.into_iter().collect::<Vec<_>>()).into(),
+                crate::libraries::editor::path::value(&steps.into_iter().collect::<Vec<_>>())
+                    .into(),
             ),
         ]),
     )])
@@ -281,7 +282,7 @@ fn decode_with<W: Host>(
     place: &Place<'_>,
     site: &impl Fn() -> crate::editing::Site,
 ) -> Option<Layout<W>> {
-    use crate::libraries::path;
+    use crate::libraries::editor::path;
     use vocabulary::*;
     let (marker, content) = MARKERS
         .into_iter()

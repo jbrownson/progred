@@ -7,7 +7,7 @@ pub(crate) fn grap_at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
             (g::PARAMS, Value::list([])),
             (
                 g::ENVIRONMENT,
-                Value::record([(crate::libraries::site::vocabulary::VALUE, payload)]),
+                Value::record([(crate::libraries::editor::site::vocabulary::VALUE, payload)]),
             ),
             (
                 g::BODY,
@@ -21,18 +21,21 @@ pub(crate) fn grap_at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
                                 [
                                     (
                                         crate::libraries::grap::numbers::vocabulary::LEFT,
-                                        call(crate::libraries::site::vocabulary::PATH.into(), []),
+                                        call(
+                                            crate::libraries::editor::site::vocabulary::PATH.into(),
+                                            [],
+                                        ),
                                     ),
                                     (
                                         crate::libraries::grap::numbers::vocabulary::RIGHT,
-                                        crate::libraries::path::value(path),
+                                        crate::libraries::editor::path::value(path),
                                     ),
                                 ],
                             ),
                         ),
                         (
-                            crate::libraries::site::vocabulary::VALUE,
-                            crate::libraries::site::vocabulary::VALUE.into(),
+                            crate::libraries::editor::site::vocabulary::VALUE,
+                            crate::libraries::editor::site::vocabulary::VALUE.into(),
                         ),
                     ],
                 ),
@@ -46,7 +49,7 @@ use gid::Value;
 
 #[test]
 fn the_vocabulary_alone_grants_no_selection_access() {
-    let library = library::<crate::Editor>();
+    let library = crate::libraries::editor::library::<crate::Editor>();
     assert_eq!(
         crate::test_support::test_evaluate(
             &::grap::call(Value::from(vocabulary::GET), []),
@@ -75,19 +78,19 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
                      context: &mut ::grap::Context,
                      call: &::grap::Expression,
                      environment: &::grap::Environment| {
-        if function == crate::libraries::site::vocabulary::PATH {
-            Ok(crate::libraries::path::value(&site))
+        if function == crate::libraries::editor::site::vocabulary::PATH {
+            Ok(crate::libraries::editor::path::value(&site))
         } else {
             let path = context.field(call, vocabulary::PATH).unwrap();
             let path = context.eval_to_value(path, environment)?;
             let value = context
-                .field(call, crate::libraries::site::vocabulary::VALUE)
+                .field(call, crate::libraries::editor::site::vocabulary::VALUE)
                 .unwrap();
             let value = context.eval_to_value(value, environment)?;
             Ok(context.effect(|| {
                 writes
                     .borrow_mut()
-                    .push((crate::libraries::path::read(&path).unwrap(), value));
+                    .push((crate::libraries::editor::path::read(&path).unwrap(), value));
                 Value::record([])
             }))
         }
@@ -95,7 +98,10 @@ fn a_grap_selection_effect_can_run_with_a_different_interpreter() {
     let functions =
         crate::test_support::foreign_functions(&crate::libraries::list::library::<crate::Editor>());
     let overlay = ::grap::ForeignOverlay::from_value(
-        &[crate::libraries::site::vocabulary::PATH, vocabulary::SET],
+        &[
+            crate::libraries::editor::site::vocabulary::PATH,
+            vocabulary::SET,
+        ],
         &interpret,
     );
     let result = ::grap::apply_value(

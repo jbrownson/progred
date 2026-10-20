@@ -1,7 +1,7 @@
 //! Nested lists supply structure; everything else is an uninterpreted leaf.
 //! Selection is occurrence-based, so repeated values remain independent.
 use super::*;
-use crate::libraries::path;
+use crate::libraries::editor::path;
 use puri_widgets::range_slider::{self, RangeSlider};
 use puri_widgets::tree_slider::{self, Cursor, Intent};
 use std::ops::Range;

@@ -157,7 +157,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
 
 #[test]
 fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
-    use crate::libraries::{layout::test_support as stored, workspace};
+    use crate::libraries::{editor::workspace, layout::test_support as stored};
     let program = grap::call(
         vocabulary::FILL.into(),
         [

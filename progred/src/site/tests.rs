@@ -1,5 +1,8 @@
 use super::*;
-use crate::libraries::{grap::control, path as path_data, selection as selection_capability, site};
+use crate::libraries::{
+    editor::path as path_data, editor::selection as selection_capability, editor::site,
+    grap::control,
+};
 use gid::Document;
 
 fn evaluate(

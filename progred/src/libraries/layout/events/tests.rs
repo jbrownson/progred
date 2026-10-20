@@ -47,9 +47,9 @@ fn grap_event_handlers_receive_all_event_kinds_at_the_projected_site() {
                 grap::lambda(
                     [event_fields::EVENT],
                     grap::call(
-                        crate::libraries::site::vocabulary::SET.into(),
+                        crate::libraries::editor::site::vocabulary::SET.into(),
                         [(
-                            crate::libraries::site::vocabulary::VALUE,
+                            crate::libraries::editor::site::vocabulary::VALUE,
                             event_fields::EVENT.into(),
                         )],
                     ),

@@ -1,14 +1,15 @@
 //! Per-path editor state as data: each workspace view holds one map of it
 //! by path. Each path holds one open record under convention keys, so
 //! independent concerns compose at a node without owning it. The runtime
-//! uses typed paths; the path library exposes their GID representation.
+//! uses typed paths; the editor library's path module exposes their GID
+//! representation.
 
 use gid::{CellId, Step, Value};
 use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Fold override: one of two named states, absent meaning the default
-/// (collapsed inside a cycle). The site library names these.
+/// (collapsed inside a cycle). The editor library names these.
 pub const FOLD: CellId = CellId::from_u128(0x3fa8d15e60b7c2941d8ea05b47f2c6d3);
 pub const FOLDED: CellId = CellId::from_u128(0x84c07f3b9ad2561e02c6b4d81f7a39e5);
 pub const EXPANDED: CellId = CellId::from_u128(0x1d5b0c47e8f6a923d7405c9128b3fae6);

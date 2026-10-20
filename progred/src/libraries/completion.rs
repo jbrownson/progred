@@ -43,9 +43,9 @@ pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Complet
             Value::record([
                 (key, cell.into()),
                 (
-                    crate::libraries::workspace::vocabulary::PANES,
+                    crate::libraries::editor::workspace::vocabulary::PANES,
                     Value::record([(
-                        crate::libraries::workspace::vocabulary::LEFT,
+                        crate::libraries::editor::workspace::vocabulary::LEFT,
                         Value::list([pane(cell)]),
                     )]),
                 ),

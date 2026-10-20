@@ -338,7 +338,7 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
     let destination: Vec<_> = site.iter().chain(&child).cloned().collect();
     for payload in [
         payload::edge(),
-        ::grap::absent::value(crate::libraries::selection::vocabulary::NO_SELECTION),
+        ::grap::absent::value(crate::libraries::editor::selection::vocabulary::NO_SELECTION),
     ] {
         for selected in [None, Some(destination.clone()), Some(site.clone())] {
             let initial = || crate::site::PendingChanges {
@@ -360,7 +360,7 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
             ));
             let mut interpreted = initial();
             assert!(crate::site::grap(
-                crate::libraries::selection::tests::grap_at(&child, payload.clone()),
+                crate::libraries::editor::selection::tests::grap_at(&child, payload.clone()),
                 [],
             )(
                 &crate::editing::Scope::default().view(crate::sources::Sources {

@@ -531,7 +531,7 @@ pub mod payload {
         use gid::CellId;
 
         /// A selection's stage: an edge, or a pending value or label being
-        /// typed. The selection library names these.
+        /// typed. The editor library names these.
         pub const STAGE: CellId = CellId::from_u128(0x6a1fd3082b9c47e5f60d21a8c45e9b37);
         pub const EDGE: CellId = CellId::from_u128(0x2f74c8a1936e05bd4c17e2b98d60a5f4);
         pub const PENDING: CellId = CellId::from_u128(0x91d5e60b3a8f27c4058b39f6d2c471ea);

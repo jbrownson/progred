@@ -45,7 +45,7 @@ system: direct manipulation, cross-document references, indexing, and
 partial or lazy access where useful. Those goals must not be constrained
 by the temporary text bridge.
 
-The path library represents traversal steps and list-position bytes as ordinary
+The path convention represents traversal steps and list-position bytes as ordinary
 records, lists, and blobs: a path is a list of `{key: cell}`,
 `{element: {indexable: blob}}`, and `{follow: document}` or
 `{follow: {library: cell}}` steps, and decoding checks each step and the

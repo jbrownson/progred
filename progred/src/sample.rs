@@ -1,6 +1,8 @@
 //! Progred's sample GID document used by tests and render fixtures.
 
-use crate::libraries::{grap::control, layout, name, selection as selection_capability, site};
+use crate::libraries::{
+    editor::selection as selection_capability, editor::site, grap::control, layout, name,
+};
 use crate::test_values::label;
 use gid::{Document, Value};
 

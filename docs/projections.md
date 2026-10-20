@@ -57,7 +57,7 @@ ordinary reachable data; configuration is never discovered through a reserved
 cell address or other data outside ordinary root reachability.
 
 A document declares its own libraries under the root's `libraries` field, which
-the workspace library names beside `panes`, and the editor reads it only at the
+the editor library names beside `panes`, and the editor reads it only at the
 root. Each entry, or the cell it names, is a record of the `keys` the library
 owns and the `projection` that draws a record carrying any of them: a function
 of `value`, the same convention a pane's projection uses. One built-in library,
@@ -459,8 +459,8 @@ The generic [layout choice engine](../ui/measured/src/choices.rs) belongs to
 `measured`, independently of those editor adaptations.
 
 Grap's `descend`, `descend path`, `jump`, and `at` forms decode through the
-[path library](../progred/src/libraries/path.rs), also used by site and selection
-capabilities. Field keys, list positions, and source-qualified definition
+[path convention](../progred/src/libraries/editor/path.rs), also used by site and
+selection capabilities. Field keys, list positions, and source-qualified definition
 follows have one encoder/decoder. They produce ordinary preparation functions
 using an explicit projection scope; layout has no parallel path vocabulary or
 traversal opcodes. Preparation interleaves descendant projection and measurement
@@ -509,7 +509,7 @@ operation. Generic Grap
 event handlers receive GID event values. [`site`](../progred/src/site.rs)
 creates temporary selection/annotation capabilities in the current document
 and view. `site path` exposes the actual projection path through the
-[path library](../progred/src/libraries/path.rs); the local selection getter needs no
+[path convention](../progred/src/libraries/editor/path.rs); the local selection getter needs no
 address, while the setter accepts one explicitly. Writes are staged and
 committed unless the handler explicitly declines or evaluation halts. An ordinary
 absent result is still a completed result. Completion continuations
@@ -582,7 +582,7 @@ container offers its child, which a column sets to its widest: a fraction is a
 column of a centered numerator, a rule, and a centered denominator, with no
 measurement in Grap. `descend` takes `step`; `descend path` takes
 `steps`; `jump` takes `steps` and `document path`; `at` takes `steps` and `value`.
-All paths use the path library, with no opaque editor or scope value in Grap.
+All paths use the path convention, with no opaque editor or scope value in Grap.
 The Grap-facing jump provides the standard document-path interpretation.
 `canvas` accepts width/ascent/descent and a drawing-program value;
 it does not construct a list of draw commands. Its optional fuel argument
@@ -878,8 +878,7 @@ the closure. The ordinary record forms are:
 ```
 
 Paths use the existing path-library convention. The shared codec lives in
-`grap::path`; Progred's path library re-exports it and supplies its presentation
-names. These are ordinary GID records, not new atoms. The editor anchors source
+`grap::path`; Progred's editor library re-exports it and names its cells. These are ordinary GID records, not new atoms. The editor anchors source
 at the closest enclosing cell definition, or the document root when there is
 none. A cell origin does not remember which reference occurrence led to it.
 The low-level evaluator's `input source` form remains relative to a

@@ -226,7 +226,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
                 control::vocabulary::EXPRESSIONS,
                 Value::list([
                     grap::call(
-                        crate::libraries::selection::tests::grap_at(
+                        crate::libraries::editor::selection::tests::grap_at(
                             &[],
                             crate::selection::payload::edge(),
                         ),

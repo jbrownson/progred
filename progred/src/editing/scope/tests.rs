@@ -1,5 +1,8 @@
 use super::*;
-use crate::libraries::{grap::control, path as path_data, selection as selection_data, site, text};
+use crate::libraries::{
+    editor::path as path_data, editor::selection as selection_data, editor::site, grap::control,
+    text,
+};
 use crate::location::Location;
 use gid::{Cells, Document, new_cell_id};
 use std::borrow::Cow;

@@ -12,6 +12,7 @@ pub mod completion;
 mod conformance;
 pub mod controls;
 pub mod declared;
+pub mod editor;
 pub mod f32;
 pub mod f64;
 pub mod fidget;
@@ -21,19 +22,15 @@ pub mod list;
 pub mod logic;
 pub mod name;
 pub mod number;
-pub mod path;
 pub mod png;
 pub mod presentation;
 pub mod random;
 pub mod representation;
-pub mod selection;
 pub mod sequence;
-pub mod site;
 pub mod text;
 pub mod toolpath;
 pub mod tree;
 pub mod u64;
-pub mod workspace;
 
 #[cfg(test)]
 pub(crate) mod test_widgets;

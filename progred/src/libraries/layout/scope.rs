@@ -2,7 +2,7 @@
 //! borrowed FFIs emit into this Rust buffer, including through calls and loops.
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::path;
+use crate::libraries::editor::path;
 use ::grap::{Context, Evaluation, ForeignOverlay, RuntimeValue};
 use std::cell::RefCell;
 use vocabulary::*;

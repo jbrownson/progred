@@ -1,7 +1,7 @@
 //! What a pane renders edits where it came from.
 
 use crate::driver::Driver;
-use crate::libraries::{presentation, text, workspace};
+use crate::libraries::{editor::workspace, presentation, text};
 use crate::location::Location;
 use crate::selection::Stage;
 use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
