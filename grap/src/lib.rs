@@ -133,8 +133,8 @@ pub struct ForeignFunction {
     tracked: bool,
     parameters: Option<Rc<[CellId]>>,
     /// The operation this function runs, when the evaluator can run it
-    /// directly.
-    primitive: Option<primitive::Primitive>,
+    /// directly; behind a pointer so copying a function stays cheap.
+    primitive: Option<Rc<primitive::Primitive>>,
 }
 
 /// One host definition. Native implementations retain their ordinary
@@ -249,7 +249,7 @@ impl ForeignFunction {
     }
 
     fn as_primitive(mut self, primitive: primitive::Primitive) -> Self {
-        self.primitive = Some(primitive);
+        self.primitive = Some(Rc::new(primitive));
         self
     }
 }
@@ -1712,9 +1712,9 @@ impl<'a> Context<'a> {
             None => {
                 let kind = match self.host.resolve(cell) {
                     Some((_, Definition::Foreign(definition))) => {
-                        match definition.implementation.primitive {
+                        match &definition.implementation.primitive {
                             Some(primitive) => PreparedCallTargetKind::Primitive(
-                                primitive,
+                                **primitive,
                                 primitive.operands(self, call),
                             ),
                             None => {
