@@ -56,5 +56,4 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
-    .with_projection(crate::display::partial(workspace::display))
 }

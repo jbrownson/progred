@@ -628,38 +628,46 @@ fn view_content<'a>(
             )),
             viewport: true,
         },
-        (Target::Document, None) => ViewContent {
-            root_path: Cow::Borrowed(&[]),
-            root: sources.root(),
-            projection: view_projection(stack, view, false),
-            viewport: false,
-        },
-        (Target::Pane { path }, None) => {
-            let root_path = pane_path(sources, view, path);
+        (target, None) => {
+            let root_path = root_path(sources, view, target);
             ViewContent {
                 root: sources.resolve_path(&root_path),
                 root_path: Cow::Owned(root_path),
-                projection: view_projection(stack, view, true),
+                projection: view_projection(stack, view, matches!(target, Target::Pane { .. })),
                 viewport: false,
             }
         }
     }
 }
 
-/// What a pane declared at `declaration` draws: the place its entry names,
-/// while it shows the editor library, which interprets locations, and the
-/// entry itself otherwise.
-fn pane_path(
+/// Where `view` starts drawing. While it shows the editor library, which
+/// interprets both, a pane whose entry is a location starts at that place,
+/// and a workspace record starts at its main value, so the workspace's own
+/// fields stay out of sight and out of reach. Otherwise a view starts at the
+/// document's root or a pane's entry.
+fn root_path(
     sources: sources::Sources<'_>,
     view: &workspace::View,
-    declaration: &[gid::Step],
+    target: &Target,
 ) -> Vec<gid::Step> {
-    view.shown
-        .shows(crate::libraries::editor::ID)
-        .then(|| sources.resolve_path(declaration))
-        .flatten()
-        .and_then(|entry| workspace::location_path(entry, declaration))
-        .unwrap_or_else(|| declaration.to_vec())
+    let declared = match target {
+        Target::Document => Vec::new(),
+        Target::Pane { path } => path.clone(),
+    };
+    if !view.shown.shows(crate::libraries::editor::ID) {
+        return declared;
+    }
+    let mut path = match target {
+        Target::Pane { path } => sources
+            .resolve_path(path)
+            .and_then(|entry| workspace::location_path(entry, path))
+            .unwrap_or(declared),
+        Target::Document => declared,
+    };
+    if let Some(main) = workspace::main_path(sources.resolve_path(&path)) {
+        path.extend(main);
+    }
+    path
 }
 
 /// Whether `view` labels cells with their names: only with the name library

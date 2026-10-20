@@ -363,8 +363,8 @@ of its own beside Grap's; see [Notebook and REPL](#notebook-and-repl).
 ## Workspace documents
 
 A document whose root has a `panes` field is a workspace, and the editor
-swallows it: it shows the panes, and the editor library draws the workspace
-record transparently as its `main` value ([the model](model.md#panes)). Plain
+swallows it: it shows the panes, and a view of the workspace record starts at
+its `main` value ([the model](model.md#panes)). Plain
 and Raw, or turning the editor library off, show the whole record. A document
 is wrapped only once something adds a workspace field, such as opening a pane.
 Starting points that open a pane and the examples use this shape. What's left,

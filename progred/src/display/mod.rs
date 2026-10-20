@@ -506,7 +506,7 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, pickable};
-pub use widget::navigation::{group, stop, transparent};
+pub use widget::navigation::{group, stop};
 
 /// `child`, which hovers `site` and selects it when activated.
 pub(crate) fn activatable<W: Host>(
