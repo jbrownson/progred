@@ -6,7 +6,6 @@
 pub type Library<W> = crate::library::Library<W, <W as crate::display::Host>::Hover>;
 
 pub mod absent;
-pub mod blob;
 pub mod color;
 pub mod completion;
 #[cfg(test)]

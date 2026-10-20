@@ -324,8 +324,8 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
 /// running the lesson's implicit refinement inline would double their time.
 fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
-        absent, blob, color, control, controls, conversion, f32, f64, fidget, geometry, grap,
-        layout, list, logic, name, presentation, text, toolpath, tree, u64,
+        absent, color, control, controls, conversion, f32, f64, fidget, geometry, grap, layout,
+        list, logic, name, presentation, text, toolpath, tree, u64,
     };
     let (doc, fields) = crate::gid_text::parse(
         &include_str!(concat!(
@@ -343,7 +343,6 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
         crate::stack::load_selected(&[
             name::ID,
             text::ID,
-            blob::ID,
             absent::ID,
             color::ID,
             control::ID,

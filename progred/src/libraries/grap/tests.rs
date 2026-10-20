@@ -1106,12 +1106,11 @@ fn built_in_call_completion_opens_its_first_argument() {
 
 #[test]
 fn grap_results_take_no_typing() {
-    use crate::libraries::{absent, blob, f64, name, presentation, text};
+    use crate::libraries::{absent, f64, name, presentation, text};
     let (doc, names) = crate::gid_text::parse(include_str!("../../../fixtures/grap.gid")).unwrap();
     let mut editor = crate::test_editor_with_stack(
         doc,
-        crate::stack::load_selected(&[name::ID, text::ID, blob::ID, absent::ID, ID, f64::ID])
-            .unwrap(),
+        crate::stack::load_selected(&[name::ID, text::ID, absent::ID, ID, f64::ID]).unwrap(),
     );
     crate::test_support::set_tutorial_slots(
         &mut editor,

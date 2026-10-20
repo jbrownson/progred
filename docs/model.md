@@ -222,19 +222,20 @@ survive an edit. Atomic libraries supply native conversion functions.
 Query editing resets its completion choice and scroll at the editing operation,
 not after unrelated events.
 
-In the normal projection, blobs use a monospace hex line with a fixed `0x`
-prefix. The buffer contains the full hex digits, including for blobs longer
-than the structural summary. Edits accept complete bytes in either case;
-empty hex denotes an empty blob. Query entry and editing share GID's hex reader,
-`gid::read_hex`. Raw retains its compact structural blob display.
+Raw draws a blob as a monospace hex line with a fixed `0x` prefix, edited in
+place; no library draws blobs. One of more than 16 bytes shows its first eight
+bytes and its length until it's selected, and one of more than 1024 stays that
+way, replaced by typing over it rather than edited. Edits accept complete
+bytes; empty hex denotes an empty blob. Query entry and editing share GID's hex
+reader, `gid::read_hex`.
 
 A selected, writable
 line with no editing state uses its current projected spelling with the caret
 at the end. Rendering and input use the same default; projection does not store
 it just because the line is selected. On an editing interaction, the line editor
 materializes state from that default. Its current handler supplies conversion. Existing
-caret, in-progress spelling, and IME state take precedence. Raw and read-only
-views do not acquire an editor from a plain selection.
+caret, in-progress spelling, and IME state take precedence. Read-only views,
+and Raw outside a blob, do not acquire an editor from a plain selection.
 
 Ordinary selection therefore needs only a location, including after completion,
 paste, deletion, and undo. Navigation targets receive an optional arrival

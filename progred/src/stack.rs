@@ -2,7 +2,7 @@
 
 use crate::frame::Hovered;
 use crate::libraries::{
-    absent, blob, color, control, controls, conversion, declared, f32, f64, fidget, geometry,
+    absent, color, control, controls, conversion, declared, f32, f64, fidget, geometry,
     grap as grap_library, layout, list, logic, name, png, presentation, random, selection,
     sequence, site, text, toolpath, tree, u64, workspace,
 };
@@ -14,17 +14,9 @@ use std::borrow::Cow;
 use std::rc::Rc;
 
 /// The libraries Plain shows, for the editor and the tutorial page alike:
-/// names, text, bytes, absent values and numbers read as themselves, and
+/// names, text, absent values and numbers read as themselves, and
 /// everything else as Raw draws it.
-pub const PLAIN: [gid::CellId; 7] = [
-    name::ID,
-    text::ID,
-    blob::ID,
-    absent::ID,
-    f32::ID,
-    f64::ID,
-    u64::ID,
-];
+pub const PLAIN: [gid::CellId; 6] = [name::ID, text::ID, absent::ID, f32::ID, f64::ID, u64::ID];
 
 /// The sets of libraries the Projections menu offers by name. Any other set
 /// is a custom one.
@@ -176,7 +168,6 @@ type BuildLibrary = fn() -> Library<crate::Editor, Hovered>;
 const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (name::ID, name::library),
     (text::ID, text::library),
-    (blob::ID, blob::library),
     (png::ID, png::library),
     (absent::ID, absent::library),
     (color::ID, color::library),

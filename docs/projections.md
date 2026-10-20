@@ -106,7 +106,7 @@ alone, in the same `Layout` language, with no library's offers or names. It
 declines only at a missing location, draws a cell as its definition between
 parentheses, and shows labels as short ids. Raw and Plain are sets of
 libraries an area shows, as any other set is: Raw shows none, and Plain shows
-the name, text, bytes, absent and number libraries, so those read as
+the name, text, absent and number libraries, so those read as
 themselves and the rest as Raw draws it. Arithmetic is Grap's, not the number
 libraries', so in Plain it stays the call records it is.
 One list in stack.rs defines Plain for the editor and the tutorial page alike.

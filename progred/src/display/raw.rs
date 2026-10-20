@@ -13,14 +13,25 @@ use gid::{Value, new_cell_id};
 use std::rc::Rc;
 
 /// Raw's view of the value at `input`, GID's own kinds and nothing else: a
-/// blob reads as its hex, a cell as its value followed between parentheses,
-/// and lists and records as their structure. Cells, lists and records fold;
-/// lists and records start open, and cells as [`cell_starts_closed`] says.
+/// blob reads as its hex, edited in place, a cell as its value followed
+/// between parentheses, and lists and records as their structure. Cells,
+/// lists and records fold; lists and records start open, and cells as
+/// [`cell_starts_closed`] says.
 pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let value = input.value?;
     Some(match value.shape() {
+        ::grap::Shape::Blob(bytes)
+            if bytes.len() <= SHORT_BLOB
+                || input.selection.is_some() && bytes.len() <= EDITABLE_BLOB =>
+        {
+            crate::display::line_edit(hex_editor(bytes))
+        }
         ::grap::Shape::Blob(bytes) => crate::display::selectable_value(
-            crate::display::id(blob_text(bytes)),
+            crate::display::id(format!(
+                "0x{}… ({} bytes)",
+                gid::hex_string(&bytes[..8]),
+                bytes.len()
+            )),
             &input.site(),
             value,
         ),
@@ -46,16 +57,25 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
     })
 }
 
-/// A blob's hex, its first eight bytes and its length when it's long.
-fn blob_text(bytes: &[u8]) -> String {
-    if bytes.len() <= 16 {
-        format!("0x{}", gid::hex_string(bytes))
-    } else {
-        format!(
-            "0x{}… ({} bytes)",
-            gid::hex_string(&bytes[..8]),
-            bytes.len()
-        )
+/// The most bytes a blob shows whole; a longer one shows its first eight
+/// bytes and its length until it's selected.
+const SHORT_BLOB: usize = 16;
+
+/// The most bytes a selected blob opens as hex to edit; a longer one is
+/// replaced instead, by typing a new value over it.
+const EDITABLE_BLOB: usize = 1024;
+
+/// A blob's bytes, edited as hex. What's typed replaces them only once
+/// it reads as whole bytes.
+fn hex_editor(bytes: &[u8]) -> crate::display::LineEdit {
+    crate::display::LineEdit {
+        text: gid::hex_string(bytes),
+        update: Rc::new(|spelling: &str, _: Option<&Value>| {
+            gid::read_hex(spelling.trim()).map(Value::from)
+        }),
+        prefix: "0x".into(),
+        suffix: String::new(),
+        family: crate::display::TextFamily::Monospace,
     }
 }
 

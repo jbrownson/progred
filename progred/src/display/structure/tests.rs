@@ -1,7 +1,7 @@
 //! Lists and records, edited as a person would.
 
 use crate::driver::Driver;
-use crate::libraries::{blob, name, text};
+use crate::libraries::{name, text};
 use ui_events::keyboard::NamedKey;
 
 #[test]
@@ -10,7 +10,7 @@ fn list_insertion_through_a_comma_and_whole_list_selection() {
     let mut driver = Driver::new(
         crate::test_editor_with_stack(
             doc,
-            crate::stack::load_selected(&[name::ID, text::ID, blob::ID]).unwrap(),
+            crate::stack::load_selected(&[name::ID, text::ID]).unwrap(),
         ),
         Driver::VIEWPORT,
     );

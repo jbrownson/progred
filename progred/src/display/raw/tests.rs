@@ -575,3 +575,17 @@ fn delimiters_make_constructors_in_raw_s_holes_and_are_text_in_grap_s() {
         assert_eq!(driver.line(), Some(key));
     }
 }
+
+#[test]
+fn a_short_blob_takes_only_whole_bytes_typed_as_hex() {
+    let update = hex_editor(&[]).update;
+    for (input, expected) in [
+        ("DEad", Some(vec![0xde, 0xad])),
+        ("", Some(vec![])),
+        (" 00ff ", Some(vec![0x00, 0xff])),
+        ("f", None),
+        ("xyz", None),
+    ] {
+        assert_eq!(update(input, None), expected.map(gid::Value::from));
+    }
+}
