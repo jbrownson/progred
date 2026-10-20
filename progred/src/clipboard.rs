@@ -33,7 +33,7 @@ impl Clipboard {
     pub(crate) fn copy(&mut self, text: String, structure: Option<&Value>) -> bool {
         match self {
             #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-            Self::System => system::copy(text, structure.map(structure_bytes)),
+            Self::System => system::copy(text, structure.is_some()),
             Self::Own {
                 text: held,
                 structure: carried,
@@ -83,31 +83,23 @@ impl TextClipboard for Clipboard {
 /// travel: the value/cell boundary IS the copy boundary. Compact text
 /// and blobs spell as the query language — quoted text and `0x` hex —
 /// and are not structure: their text is their faithful form. Links,
-/// lists, and records spell as Value JSON and ARE: the shell writes
-/// their saved form under the private clipboard format too, whose
-/// presence is what says "structure" — never the text's shape, so
-/// text that happens to spell Value JSON stays text.
+/// lists, and records spell as their saved text form, a document holding
+/// only them, so a paste keeps their list positions, and the paths into
+/// them, and they ARE: the shell writes that spelling under the private
+/// clipboard format too, whose presence is what says "structure" — never
+/// the text's shape, so text that happens to spell a document stays text.
 pub(crate) fn spelling(value: &Value) -> (String, bool) {
     match (text::read(value), value.as_blob()) {
         (Some(text), _) => (format!("\"{text}\""), false),
         (_, Some(_)) => (value.to_string(), false),
-        _ => (
-            serde_json::to_string(value).expect("values serialize"),
-            true,
-        ),
+        _ => {
+            let document = gid::Document {
+                root: Some(value.clone()),
+                cells: gid::Cells::new(),
+            };
+            (crate::gid_text::print(&document, &Default::default()), true)
+        }
     }
-}
-
-/// The private clipboard format's bytes for `value`: the saved text form
-/// of a document holding only it, so a paste keeps its list positions, and
-/// the paths into them, as saving does.
-#[cfg(any(test, target_os = "macos", target_os = "linux"))]
-fn structure_bytes(value: &Value) -> Vec<u8> {
-    let document = gid::Document {
-        root: Some(value.clone()),
-        cells: gid::Cells::new(),
-    };
-    crate::gid_text::print(&document, &Default::default()).into_bytes()
 }
 
 /// The value the private clipboard format's bytes denote.
@@ -126,7 +118,7 @@ mod system {
 
     /// The pasteboard type structural copies ride under, beside their
     /// plain text; its PRESENCE is the structure/text distinction, so
-    /// text that merely spells Value JSON is never mistaken for a copy.
+    /// text that merely spells a document is never mistaken for a copy.
     const FORMAT: &str = "com.progred.value";
 
     pub(super) fn text() -> Option<String> {
@@ -135,16 +127,19 @@ mod system {
             .and_then(|cb| cb.get_text().ok())
     }
 
-    pub(super) fn copy(text: String, structure: Option<Vec<u8>>) -> bool {
+    pub(super) fn copy(text: String, structural: bool) -> bool {
         ClipboardContext::new()
-            .and_then(|cb| match structure {
-                // Both representations: the private format says
-                // "structure", the text reads anywhere.
-                Some(bytes) => cb.set(vec![
-                    ClipboardContent::Other(FORMAT.to_string(), bytes),
-                    ClipboardContent::Text(text),
-                ]),
-                None => cb.set_text(text),
+            .and_then(|cb| {
+                if structural {
+                    // Both representations: the private format says
+                    // "structure", the text reads anywhere.
+                    cb.set(vec![
+                        ClipboardContent::Other(FORMAT.to_string(), text.clone().into_bytes()),
+                        ClipboardContent::Text(text),
+                    ])
+                } else {
+                    cb.set_text(text)
+                }
             })
             .is_ok()
     }

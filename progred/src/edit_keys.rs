@@ -109,7 +109,7 @@ impl Editor {
     /// STRUCTURE — the private format, not a text shape — commits the
     /// value into the pending, ahead of the focused query's own text
     /// paste. Everything else keeps the text path: pasting "hi",
-    /// 0xff, or even text that happens to spell Value JSON lands in
+    /// 0xff, or even text that happens to spell a document lands in
     /// the query as characters. Claims the chord even when the pick
     /// declines (the label stage takes only what can label).
     pub(crate) fn pending_paste_key(&mut self, event: &KeyboardEvent) -> bool {
