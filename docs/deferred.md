@@ -771,6 +771,34 @@ current computation's result. Skipping intermediate meshes during rapid geometry
 edits is another possible policy, with the tradeoff of an older mesh when the
 user next orbits.
 
+## Grap value size and argument lookups
+
+Measured in October 2026: `RuntimeValue` is 64 bytes, a 56-byte kind whose
+largest variant is an inline closure (48), plus an 8-byte cache of its GID
+form, and `Halt` carries a 24-byte `Value`. A result over 16 bytes returns
+through memory rather than registers, which covers most of the evaluator's.
+
+- **NaN-boxing**, making every value 8 bytes, was deferred in August 2026,
+  since staging and the unboxed-number paths took most of the win, and it
+  rewrites the representation throughout the evaluator. The owner's rule: worth
+  doing now only for a large multiple, or for a smaller gain once the model
+  stabilizes. Decoding must canonicalize the NaN bit patterns documents may
+  carry.
+- Putting the closure variant behind a pointer, taking the value to about 40
+  bytes, read slightly slower when tried.
+- Putting a halt's value behind a pointer would bring small results (`()`, an
+  f64, a bool) to 16 bytes or less, in registers. The sizes are measured, the
+  gain isn't.
+- Finding an argument by label (`Context::field`, a binary search over 16-byte
+  cell IDs plus a handle clone) cost about 84 instructions a lookup, 4% of the
+  IoP tree canary, until `ForeignFunction::with_arguments` found the ported
+  functions' arguments once per call site. Its other callers, such as `quote`,
+  drawing records, `do` and list functions that read their arguments by hand,
+  could stage too.
+- The generic parsing costs more per call than the hand-written reads it
+  replaced; staging more than made up for it, leaving the IoP tree canary 1.07%
+  below its count before the construct, from 1.92% above.
+
 ## Decoding PNGs once while visible
 
 The [png library](../progred/src/libraries/png.rs) decodes each visible image
