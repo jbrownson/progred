@@ -631,6 +631,9 @@ pub struct ProjectDescription<'a> {
     pub sources: Sources<'a>,
     pub root: Option<&'a Value>,
     pub root_path: &'a [Step],
+    /// Whether `root` is computed for the view rather than read from the
+    /// document at `root_path`, so it has no place to edit.
+    pub detached: bool,
     /// Selection belonging to this editable view.
     pub selection: Option<&'a Selection>,
     /// Selection from any view, used only to link generated output
@@ -663,6 +666,7 @@ fn prepare_project(
         sources,
         root,
         root_path,
+        detached,
         selection,
         source_selection,
         annotations,
@@ -675,21 +679,27 @@ fn prepare_project(
     // follows, as following that cell in the view would.
     let followed = Location::root(root_path)
         .stored(&sources)
+        .filter(|_| !detached)
         .and_then(|stored| match stored.start {
             Start::Cell { cell, resolution } => {
                 Some((cell, resolution, root_path.len() - stored.path.len()))
             }
             Start::Root => None,
         });
+    let edits = if detached {
+        crate::editing::Scope::default().detached(root_path.to_vec())
+    } else {
+        followed.map_or_else(Default::default, |(cell, source, start)| {
+            crate::editing::Scope::default().in_cell(root_path[..start].to_vec(), cell, source)
+        })
+    };
     let cx = Cx {
         computations,
         focused,
         view,
         completions,
         sources,
-        edits: followed.map_or_else(Default::default, |(cell, source, start)| {
-            crate::editing::Scope::default().in_cell(root_path[..start].to_vec(), cell, source)
-        }),
+        edits,
         names,
         annotations,
         styles,

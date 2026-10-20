@@ -262,6 +262,7 @@ impl BenchContext {
                 sources,
                 root,
                 root_path,
+                detached: false,
                 selection,
                 source_selection: selection,
                 annotations,

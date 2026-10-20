@@ -597,7 +597,10 @@ pub(crate) fn completions<'a>(
 /// drawn without a margin or scrolling.
 struct ViewContent<'a> {
     root_path: Cow<'a, [gid::Step]>,
-    root: Option<&'a gid::Value>,
+    root: Option<Cow<'a, gid::Value>>,
+    /// Whether the view computed its root rather than reading it at
+    /// `root_path`, as for a place that can't be found.
+    detached: bool,
     projection: Cow<'a, projection::Projection>,
     viewport: bool,
 }
@@ -621,7 +624,8 @@ fn view_content<'a>(
     match (view.root.target(), viewport) {
         (_, Some(entry)) => ViewContent {
             root_path: Cow::Owned(entry.path),
-            root: Some(entry.value),
+            root: Some(Cow::Borrowed(entry.value)),
+            detached: false,
             projection: Cow::Owned(projection::viewport::projection(
                 &view_projection(stack, view, false),
                 size / scale,
@@ -630,14 +634,41 @@ fn view_content<'a>(
         },
         (target, None) => {
             let root_path = root_path(sources, view, target);
+            let not_found = not_found(sources, view, target, &root_path);
             ViewContent {
-                root: sources.resolve_path(&root_path),
+                detached: not_found.is_some(),
+                root: not_found
+                    .map(Cow::Owned)
+                    .or_else(|| sources.resolve_path(&root_path).map(Cow::Borrowed)),
                 root_path: Cow::Owned(root_path),
                 projection: view_projection(stack, view, matches!(target, Target::Pane { .. })),
                 viewport: false,
             }
         }
     }
+}
+
+/// What a pane showing a location draws when its place, at `root_path`,
+/// can't be reached, as after its container was deleted: an absent naming
+/// it. A place that's only empty draws as any empty place does, ready to
+/// write.
+fn not_found(
+    sources: sources::Sources<'_>,
+    view: &workspace::View,
+    target: &Target,
+    root_path: &[gid::Step],
+) -> Option<gid::Value> {
+    let Target::Pane { path } = target else {
+        return None;
+    };
+    let location = view
+        .shown
+        .shows(crate::libraries::editor::ID)
+        .then(|| crate::location::read(sources.resolve_path(path)?))
+        .flatten()?;
+    (sources.resolve_path(root_path).is_none()
+        && !crate::location::reachable(&sources, &crate::location::Location::root(root_path)))
+    .then(|| crate::location::not_found(&location))
 }
 
 /// Where `view` starts drawing. While it shows the editor library, which
@@ -722,8 +753,9 @@ fn project_workspace_view(
             view: &view.root,
             completions: Some(&completions),
             sources,
-            root: shown.root,
+            root: shown.root.as_deref(),
             root_path: &shown.root_path,
+            detached: shown.detached,
             selection: model
                 .selection
                 .as_ref()

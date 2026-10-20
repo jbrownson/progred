@@ -22,6 +22,8 @@ pub mod vocabulary {
 
     pub const IN: CellId = CellId::from_u128(0x46f7f059b8b648c7a2a973d7deb5c914);
     pub const STEPS: CellId = CellId::from_u128(0xcb41b29467c842858d8e59860308cf73);
+    /// The reason a place that can't be reached is absent.
+    pub const NOT_FOUND: CellId = CellId::from_u128(0x84f655992c58a9436f12ceac317021d5);
 }
 
 /// `location` as data.
@@ -38,6 +40,18 @@ pub fn value(location: &Location) -> Value {
             steps,
         ]),
     }
+}
+
+/// `location` as an absent: the place, which can't be reached.
+pub fn not_found(location: &Location) -> Value {
+    let described = value(location);
+    let fields = described.as_record().expect("a location is a record");
+    Value::record(
+        fields
+            .iter()
+            .map(|(key, value)| (*key, value.clone()))
+            .chain([(::grap::absent::ABSENT, vocabulary::NOT_FOUND.into())]),
+    )
 }
 
 /// The location `value` describes, when it's one.
@@ -138,6 +152,18 @@ pub fn writable(sources: &Sources, location: &Location) -> bool {
     location
         .stored(sources)
         .is_some_and(|stored| owned(stored.start))
+}
+
+/// Whether a value could be written at `location`, ignoring permissions: it
+/// holds one, or its container does, as for a deleted field or element,
+/// or it's a cell's definition, written or not.
+pub fn reachable(sources: &Sources, location: &Location) -> bool {
+    location
+        .stored(sources)
+        .is_some_and(|stored| match stored.path.split_last() {
+            None => true,
+            Some((_, container)) => sources.read_from(stored.start, container).is_some(),
+        })
 }
 
 /// Writes `value` at `location`, where it's stored: the definition its last

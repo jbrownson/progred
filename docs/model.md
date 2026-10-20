@@ -507,7 +507,10 @@ its pane shows the editor library, the pane draws and edits that place, so it
 stays in sync with the document; Plain and Raw show the entry itself. Open
 Value on Left and Right open the selection's place, starting at its nearest
 cell, so a cell is a location with no steps; a computed value has no place and
-opens as a copy. Close Pane removes the selected pane's entry. Deleting a value
+opens as a copy. A place that's only empty, as after its value was deleted,
+draws as any empty place does, ready to write; one that can't be reached, as
+after its container was deleted, draws a read-only `place not found` absent
+carrying the location. Close Pane removes the selected pane's entry. Deleting a value
 pane's root does too, but a location pane's root is the place it shows, so
 deleting it deletes that content. Opening, closing and moving panes edit these
 lists, so they save and undo with the document. A malformed pane container or

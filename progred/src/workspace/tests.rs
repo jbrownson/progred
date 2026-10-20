@@ -514,6 +514,73 @@ fn closing_a_location_pane_removes_its_entry_and_leaves_its_place() {
     );
 }
 
+#[test]
+fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
+    use crate::driver::Driver;
+    let outer = CellId::from_u128(1);
+    let mut driver = Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(Value::record([(
+                outer,
+                Value::list([crate::libraries::f64::value(1.0)]),
+            )])),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    let element = driver.element(&[Step::Key(outer)], 0, &[]);
+    driver.select(&element);
+    driver
+        .runner
+        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+            editor.run_doc_command(
+                crate::command::DocCommand::OpenPane(Side::Left),
+                dispatch.geometry(1.0),
+            );
+            true
+        });
+    driver.present();
+    let place = [&[Step::Key(vocabulary::MAIN)][..], &element].concat();
+    let remove = |driver: &mut Driver, path: &[Step]| {
+        let editor = &mut driver.runner.editor;
+        let root = crate::spine::without(editor.model.doc.root.as_ref().unwrap(), path).unwrap();
+        Rc::make_mut(&mut editor.model.doc).root = Some(root);
+        driver.present();
+    };
+    let writable = |driver: &Driver| {
+        driver
+            .editor()
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .writable(&driver.editor().sources())
+    };
+    // With only the element deleted, its place in the list is still there to
+    // write, as any empty place is.
+    remove(&mut driver, &place);
+    driver.select(&place);
+    assert!(writable(&driver));
+    // With the list gone too, nothing can be written there, and the pane
+    // says which place it can't find.
+    remove(
+        &mut driver,
+        &[Step::Key(vocabulary::MAIN), Step::Key(outer)],
+    );
+    driver.select(&place);
+    assert!(!writable(&driver));
+    driver.keystroke(
+        ui_events::keyboard::Key::Character("c".into()),
+        crate::test_support::command(),
+    );
+    assert_eq!(
+        driver.copied(),
+        Some(crate::location::not_found(
+            &crate::location::Location::root(place)
+        ))
+    );
+}
+
 fn cell_positions(world: &crate::Editor, cell: CellId) -> Vec<gid::Position> {
     world
         .model
