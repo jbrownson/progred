@@ -1315,7 +1315,18 @@ impl<'a> Context<'a> {
                         let fields = lower_all(self, Some((vocabulary::VALUE, &value)));
                         (Form::Value(value), Some(fields), None)
                     }
-                    (None, None, None) => (Form::Data, Some(lower_all(self, None)), None),
+                    (None, None, None) => (
+                        // A number or text literal is its native value
+                        // from the start, rather than read on every use.
+                        match Unboxed::recognize(fields) {
+                            Some(unboxed) => {
+                                Form::Ready(RuntimeValue::new(RuntimeValueKind::Unboxed(unboxed)))
+                            }
+                            None => Form::Data,
+                        },
+                        Some(lower_all(self, None)),
+                        None,
+                    ),
                 }
             }
             Value::List(elements) => (
@@ -2286,21 +2297,23 @@ impl<'a> Context<'a> {
     }
 }
 
-/// `expression`'s f64 when it's already one without evaluating: data that
-/// reads as a number, or a variable bound to an unboxed one.
+/// `expression`'s f64 when it's already one without evaluating: a number
+/// literal, which lowering made native, or a variable bound to one.
 fn unboxed_f64(expression: &Expression, environment: &Environment) -> Option<f64> {
     match &expression.0.form {
-        // Data unboxes as a number exactly when it reads as one.
-        Form::Data => crate::f64::read(expression.value()),
-        Form::Cell(cell) => environment
-            .get_runtime(*cell)
-            .and_then(|value| match &value.0 {
-                RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
-                    Native::F64(number) => Some(*number),
-                    Native::Text(_) => None,
-                },
-                _ => None,
-            }),
+        // Literals are lowered to their native values.
+        Form::Ready(value) => native_f64(value),
+        Form::Cell(cell) => environment.get_runtime(*cell).and_then(native_f64),
+        _ => None,
+    }
+}
+
+fn native_f64(value: &RuntimeValue) -> Option<f64> {
+    match &value.0 {
+        RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
+            Native::F64(number) => Some(*number),
+            Native::Text(_) => None,
+        },
         _ => None,
     }
 }
