@@ -138,9 +138,9 @@ The example's Grap `diagonal passes` and `sample pass` functions follow
 interior diagonals across the unit square and samples each including both
 endpoints. Its maximum sample spacing is in **UV coordinates**, before mapping;
 it is not a world-space tolerance, stepover, or scallop-height guarantee.
-The row loop uses ordinary list `unfold` to construct one deferred program per
-line. Each line's point loop uses `iterate`, emitting `start at` and `line to`
-without collecting a list of points. Sampling
+The row loop and each line's point loop use `iterate` inside a `tree group`:
+each step emits a tree leaf, a deferred program per line or a path action per
+point, rather than collecting a list. Sampling
 policy is document code, not a toolpath FFI. General `min`, `max`, `ceil`,
 `hypot`, and `is finite` operations are Grap's f64 arithmetic. The example
 rejects nonfinite or fractional row counts and nonpositive/nonfinite spacing;

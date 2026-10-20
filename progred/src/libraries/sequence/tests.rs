@@ -66,7 +66,7 @@ fn calling_again_repeats_and_only_the_successor_advances() {
     );
     assert_eq!(first_item, pull(&first));
     let end = second_item.as_record().unwrap().get(&NEXT).unwrap();
-    assert_eq!(::grap::absent::reason(&pull(end)), Some(FINISHED));
+    assert_eq!(pull(end), Value::record([]));
     assert_eq!(pull(end), pull(end));
 }
 
@@ -81,13 +81,7 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
         [captured],
         ::grap::lambda(
             [],
-            quote(Value::record([
-                (ITEM, unquote(Value::from(captured))),
-                (
-                    NEXT,
-                    unquote(::grap::lambda([], ::grap::absent::value(FINISHED))),
-                ),
-            ])),
+            quote(Value::record([(ITEM, unquote(Value::from(captured)))])),
         ),
     );
     let grap =
@@ -200,13 +194,23 @@ fn empty_sequence_does_not_call_action_and_metadata_is_ignored() {
 }
 
 #[test]
-fn producer_failures_malformed_steps_and_fuel_are_not_completion() {
+fn steps_end_without_next_and_failures_malformed_steps_and_fuel_are_not_completion() {
     let step = gid::new_cell_id();
     let sequence = ::grap::lambda([], call(step, []));
-    for output in [
-        Value::record([]),
-        Value::record([(ITEM, f64::value(1.0))]),
-        ::grap::absent::value(::grap::absent::MISSING_CELL),
+    for (output, expected) in [
+        (Value::record([]), Value::list([])),
+        (
+            Value::record([(ITEM, f64::value(1.0))]),
+            Value::list([f64::value(1.0)]),
+        ),
+        (
+            Value::list([f64::value(1.0)]),
+            ::grap::absent::value(INVALID),
+        ),
+        (
+            ::grap::absent::value(::grap::absent::MISSING_CELL),
+            ::grap::absent::value(::grap::absent::MISSING_CELL),
+        ),
     ] {
         let functions = functions().register(
             step,
@@ -223,14 +227,7 @@ fn producer_failures_malformed_steps_and_fuel_are_not_completion() {
             100,
         );
         assert!(result.completed);
-        assert_eq!(
-            result.result,
-            if ::grap::absent::reason(&output).is_some() {
-                output
-            } else {
-                ::grap::absent::value(INVALID)
-            }
-        );
+        assert_eq!(result.result, expected);
     }
     let result = crate::test_support::test_evaluate(
         &call(

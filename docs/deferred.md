@@ -139,6 +139,15 @@ definition, which for a parameter is its name record. Resolving parameters
 lexically, by the lambda that declares them, would make such a reference an
 absent of its own rather than the parameter's name.
 
+## Where an absent came from
+
+An absent says why a value is missing, and its chain says what caused that
+(see [projections](projections.md)), but not where: which call made it, under
+which bindings. For debugging, each absent could carry the stack and
+environment it was made in, or in a debug mode a whole evaluation trace, so
+an absent shown in the editor leads back to the code that produced it. The
+display for this isn't designed yet.
+
 ## Address lifetime
 
 Paths and source traces already preserve definition source. A future identity

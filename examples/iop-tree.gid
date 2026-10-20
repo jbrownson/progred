@@ -623,9 +623,7 @@
                       pattern: {
                         frontier: [],
                       },
-                      expression: {
-                        absent: finished,
-                      },
+                      expression: {},
                     },
                     {
                       pattern: {

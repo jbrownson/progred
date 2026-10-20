@@ -765,26 +765,31 @@ condition-not-met absent for false, or a not-boolean absent for another value.
 An absent condition propagates unchanged. This is an ordinary guard used in
 `do`, not evaluator syntax or a configurable bind mechanism.
 
-The list library's `iterate` and `unfold` finish only when a step returns
-`{absent: iteration-finished}`. They then return the previous state, and for
-`unfold` the accumulated items as well. Other absents propagate unchanged;
+The list library's `iterate` finishes only when a step returns
+`{absent: iteration-finished}`, and then returns the previous state. An
+`unfold` step returns `{item, state}`: its item, if it has one, joins the list,
+and a step without a `state` is the last, so `{}` ends it. It returns the
+accumulated `list` and the last `state` it was given; a step that isn't a
+record is an invalid-step absent. In both, other absents propagate unchanged;
 actual evaluator halts still halt. `fold` remains an ordinary fold, allowing
 any accumulator value rather than imposing short-circuiting.
 
 The sequence library provides streaming iteration without materializing a list.
-A sequence is a zero-argument callable returning `{item, next}`, where `next`
-is another zero-argument callable, or `{absent: iteration-finished}`. The yielded
-record is open to unrelated fields. Other producer absents propagate unchanged.
+A sequence is a zero-argument callable returning a step, `{item, next}`, where
+`next` is another zero-argument callable. A step without `next` is the last and
+one without `item` yields nothing, so `{}` ends a sequence. Ending isn't a
+failure, so it isn't an absent: an absent step is the producer's failure and
+propagates unchanged, and a step that isn't a record is an invalid-sequence
+absent. The step record is open to unrelated fields.
 Calling the same pure closure again returns the same item; consumers advance by
 calling the returned successor, not by mutating a cursor. `range {count}` produces
 f64 indices from zero up to (excluding) count, a nonnegative integer no greater
 than 2⁵³ so every increment remains exactly representable.
 `for each {items, action}` pulls one item and calls `action {item}` before pulling
 the next; an absent action result stops it, otherwise completion returns `{}`.
-Even an `iteration-finished` absent from the action propagates as a failure;
-only a producer's return can mark completion. `collect {items}` explicitly
-materializes a GID list. Consumers retain the current callable and obey ordinary
-evaluator fuel limits. An empty range is a callable that immediately finishes.
+`collect {items}` explicitly materializes a GID list. Consumers retain the
+current callable and obey ordinary evaluator fuel limits. An empty range is a
+callable that immediately returns `{}`.
 Grap-authored producers can use the same record/callable protocol; there is no
 new evaluator syntax, hidden stream handle, or precomputed list of indices.
 

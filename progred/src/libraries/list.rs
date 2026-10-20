@@ -185,27 +185,25 @@ fn functions() -> ForeignFunctions {
                 };
                 let step = context.prepare_callable(step, environment)?;
                 let mut items = Vec::new();
+                // A step's item, if it has one, joins the list; a step
+                // without a next state is the last.
                 loop {
                     let result =
                         context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
-                    match (
-                        result.absent_reason(),
-                        result.field(vocabulary::ITEM),
-                        result.field(vocabulary::STATE),
-                    ) {
-                        (Some(vocabulary::FINISHED), _, _) => {
+                    if result.absent_reason().is_some() {
+                        break Ok(result);
+                    }
+                    if result.record_len().is_none() {
+                        break Ok(::grap::absent::value(vocabulary::INVALID_STEP).into());
+                    }
+                    items.extend(result.field(vocabulary::ITEM));
+                    match result.field(vocabulary::STATE) {
+                        Some(next) => state = next,
+                        None => {
                             break Ok(RuntimeValue::record([
                                 (vocabulary::LIST, RuntimeValue::list(items)),
                                 (vocabulary::STATE, state),
                             ]));
-                        }
-                        (Some(_), _, _) => break Ok(result),
-                        (None, Some(item), Some(next)) => {
-                            items.push(item);
-                            state = next;
-                        }
-                        (None, _, _) => {
-                            break Ok(::grap::absent::value(vocabulary::INVALID_STEP).into());
                         }
                     }
                 }

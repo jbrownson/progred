@@ -1,6 +1,7 @@
-//! A sequence is a zero-argument callable returning `{item, next}`, where
-//! `next` is its successor callable, or the list library's finished absent.
-//! Calling the same pure sequence again does not advance it.
+//! A sequence is a zero-argument callable returning a step, `{item, next}`,
+//! where `next` is its successor callable. A step without `next` is the last,
+//! and one without `item` yields nothing, so `{}` ends a sequence. Calling the
+//! same pure sequence again does not advance it.
 
 use crate::display::Host;
 use crate::libraries::{Library, f64, name};
@@ -12,7 +13,7 @@ use gid::Value;
 pub const ID: gid::CellId = gid::CellId::from_u128(0x0ad8124ba821acd5fbf2c868371e1492);
 
 pub mod vocabulary {
-    pub use crate::libraries::list::vocabulary::{FINISHED, INDEX, ITEM};
+    pub use crate::libraries::list::vocabulary::{INDEX, ITEM};
     use gid::CellId;
     pub const RANGE: CellId = CellId::from_u128(0x846f3beb349626d4078ab09c988884e3);
     pub const RANGE_STEP: CellId = CellId::from_u128(0x7284caac9215cb0b1186d70347bf6f67);
@@ -88,7 +89,7 @@ fn range_step(
             match (count.as_f64(), index.as_f64()) {
                 (Some(count), Some(index)) if exact(count) && exact(index) && index <= count => {
                     if index == count {
-                        ::grap::absent::value(FINISHED).into()
+                        RuntimeValue::record([])
                     } else {
                         RuntimeValue::record([
                             (ITEM, RuntimeValue::f64(index)),
@@ -123,32 +124,32 @@ fn consume(
         };
         let mut collected = Vec::new();
         loop {
-            let result = context.call_prepared(&sequence, [])?;
-            match (
-                result.absent_reason(),
-                result.field(ITEM),
-                result.field(NEXT),
-            ) {
-                (Some(vocabulary::FINISHED), _, _) => {
+            let step = context.call_prepared(&sequence, [])?;
+            if step.absent_reason().is_some() {
+                break Ok(step);
+            }
+            if step.record_len().is_none() {
+                break Ok(invalid());
+            }
+            if let Some(item) = step.field(ITEM) {
+                if let Some(action) = &action {
+                    let result = context.call_prepared(action, [(ITEM, item)])?;
+                    if result.absent_reason().is_some() {
+                        break Ok(result);
+                    }
+                } else {
+                    collected.push(item);
+                }
+            }
+            match step.field(NEXT) {
+                Some(next) => sequence = context.prepare_runtime_callable(next, env),
+                None => {
                     break Ok(if collect {
                         RuntimeValue::list(collected)
                     } else {
                         RuntimeValue::record([])
                     });
                 }
-                (Some(_), _, _) => break Ok(result),
-                (None, Some(item), Some(next)) => {
-                    if let Some(action) = &action {
-                        let result = context.call_prepared(action, [(ITEM, item)])?;
-                        if result.absent_reason().is_some() {
-                            break Ok(result);
-                        }
-                    } else {
-                        collected.push(item);
-                    }
-                    sequence = context.prepare_runtime_callable(next, env);
-                }
-                (None, _, _) => break Ok(invalid()),
             }
         }
     }
@@ -196,7 +197,6 @@ pub fn library<W: Host>() -> Library<W> {
             (ITEM, "item"),
             (NEXT, "next"),
             (INVALID, "invalid sequence"),
-            (FINISHED, "iteration finished"),
         ],
         functions(),
     )
