@@ -2,18 +2,19 @@
 
 use crate::display::widget::navigation::Geometry;
 use crate::location::Location;
+use crate::occurrence::Step;
 use crate::{display::widget::view::Root, selection, sources::Sources};
-use gid::{Step, Value};
+use gid::Value;
 use puri::edit::EditCtx;
 use puri::keyboard::CommandModifier;
 use ui_events::keyboard::KeyboardEvent;
 
+mod edit;
 mod picking;
-mod scope;
 mod session;
 mod site;
-pub use scope::Read;
-pub(crate) use scope::{Edit, Scope};
+pub(crate) use edit::Edit;
+pub use edit::Read;
 pub(crate) use session::{Session, TextTools};
 pub(crate) use site::{Selected, Site};
 
@@ -139,7 +140,7 @@ pub(crate) fn enter_pending(
     let sources = session.sources();
     match &session.model.selection {
         Some(current) => {
-            let read = current.scope().view(sources);
+            let read = Read { sources };
             if within {
                 selection::pending_insert(current.root(), &read, current.path(), shift)
             } else {

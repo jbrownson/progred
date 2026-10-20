@@ -29,7 +29,7 @@ fn readme_svg_captures() {
     view.annotations
         .set_field(&result_path(&path), STATE, Some(cam_position(0.3)));
     view.annotations.set_field(
-        &result_path(&result_path(&path)),
+        &[result_path(&path), result_path(&[])].concat(),
         f::CAMERA,
         Some(Value::record([
             (f::YAW, crate::libraries::f32::value(30.0)),
@@ -155,7 +155,7 @@ fn editor_toolpath_refined_svg_captures() {
         .view
         .annotations
         .set_field(
-            &result_path(&result_path(&path)),
+            &[result_path(&path), result_path(&[])].concat(),
             f::CAMERA,
             Some(Value::record([
                 (f::YAW, crate::libraries::f32::value(55.0)),

@@ -29,7 +29,7 @@ fn website_command_modifier_is_a_host_input_for_editing_and_source_picking() {
         editor.command_modifier = command;
         let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
         // Select all of the text with the page's command key, and type over it.
-        driver.select(&[]);
+        driver.select::<gid::Step>(&[]);
         assert!(driver.keystroke(Key::Character("a".into()), modifiers));
         driver.type_text("changed");
         assert_eq!(text::read(&driver.value(&[])), Some("changed"));

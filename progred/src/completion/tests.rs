@@ -13,8 +13,7 @@ fn completion_insertion_never_invents_or_overwrites_selection_policy() {
     let libraries = core_libraries();
     let root = crate::test_root();
     let doc = Document::default();
-    let pending =
-        crate::selection::pending_with_query(&root, Default::default(), vec![], "original query");
+    let pending = crate::selection::pending_with_query(&root, vec![], "original query");
     let old_payload = pending.payload();
     for continuation in [
         None,
@@ -73,7 +72,9 @@ fn label_offer_explicitly_opens_its_missing_value() {
     };
     let pending = pending_edge(
         &root,
-        &crate::editing::Scope::default().view(src(&doc, &libraries)),
+        &crate::editing::Read {
+            sources: src(&doc, &libraries),
+        },
         vec![],
     )
     .unwrap();
@@ -188,7 +189,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         cells: Cells::new(),
     };
     let pending =
-        crate::selection::pending_value(&root, Default::default(), vec![Step::Key(field)]);
+        crate::selection::pending_value(&root, crate::occurrence::of(&[Step::Key(field)]));
     let offer = root_completions(&stack)
         .into_iter()
         .find(|offer| offer.display == crate::libraries::grap::vocabulary::GRAP.into())
@@ -196,8 +197,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(crate::selection::pending_value(
         &root,
-        Default::default(),
-        vec![Step::Key(field)],
+        crate::occurrence::of(&[Step::Key(field)]),
     ));
     (offer.activate)(&mut world.session());
     let inserted = world

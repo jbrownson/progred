@@ -11,8 +11,8 @@ use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionSc
 use crate::display::{Host, Toolkit};
 use crate::hover::Hover;
 use crate::location::Location;
+use crate::occurrence::Step;
 use crate::selection::{Selection, Stage};
-use gid::Step;
 use kurbo::{Insets, Point};
 use measured::{Measured, min_width, pad};
 use puri::edit::{EditOperation, LineEditDescription, LineEditPresentation, LineEditState};
@@ -127,7 +127,6 @@ fn pending_target<W: Host>(
         child,
         path.clone(),
         crate::display::widget::navigation::arrival(toolkit.site()),
-        toolkit.scope().clone(),
         None,
         selected,
     );
@@ -181,7 +180,7 @@ fn located_query<W: Host>(
     // where the hole's location starts.
     let start = location.start;
     let sources = toolkit.sources();
-    let value_at = move |path: &[Step]| sources.read_from(start, path);
+    let value_at = move |path: &[gid::Step]| sources.read_from(start, path);
     let resolve = |cell| sources.resolve(cell);
     let request = CompletionRequest {
         query: query.text(),

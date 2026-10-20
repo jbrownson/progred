@@ -41,11 +41,7 @@ fn scrub_start_respects_pending_selection_and_visible_view_geometry() {
         );
         let mut world = crate::editor_of(f64_convention::value(1.0));
         if pending {
-            world.model.selection = Some(pending_value(
-                &crate::test_root(),
-                Default::default(),
-                vec![],
-            ));
+            world.model.selection = Some(pending_value(&crate::test_root(), vec![]));
         }
         let handled = frame.resolve_for_dispatch().dispatch_pointer_down_with(
             &mut world,
@@ -83,8 +79,7 @@ fn scrub_declines_for_pending_pick_and_raw_contact_takes_precedence() {
         if pending {
             world.model.selection = Some(pending_value(
                 &crate::test_root(),
-                Default::default(),
-                vec![Step::Key(field)],
+                crate::occurrence::of(&[Step::Key(field)]),
             ));
         }
         let before = world.model.doc.clone();

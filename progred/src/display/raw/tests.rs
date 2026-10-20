@@ -446,16 +446,19 @@ fn a_new_cell_list_or_record_opens_for_what_goes_inside_it() {
         let (mut driver, place) = made(key);
         let inside = driver.selection();
         let (path, stage) = match key {
-            "(" => ([&place[..], &cell].concat(), Stage::Pending),
+            "(" => (
+                crate::occurrence::of(&[&place[..], &cell].concat()),
+                Stage::Pending,
+            ),
             "[" => (inside.clone(), Stage::Pending),
-            _ => (place.clone(), Stage::Label),
+            _ => (crate::occurrence::of(&place), Stage::Label),
         };
         assert_eq!(inside, path, "{key} selects inside what it made");
         assert_eq!(driver.stage(), Some(stage), "{key}");
         if key == "[" {
             assert!(matches!(
                 inside.split_last(),
-                Some((Step::Element(_), list)) if list == place
+                Some((crate::occurrence::Step::Element(_), list)) if list == place
             ));
         }
         assert!(driver.picker_entries().is_some(), "{key} shows its picker");
@@ -490,7 +493,7 @@ fn constructor_keys_make_their_offer_from_an_empty_query() {
         for key in ["[", "(", "{"] {
             // An empty document's root, or a new field's label on a record.
             let mut driver = document(labels.then(|| Value::record([])));
-            driver.select(&[]);
+            driver.select::<Step>(&[]);
             if labels {
                 driver.press(NamedKey::Enter);
             }
@@ -502,7 +505,10 @@ fn constructor_keys_make_their_offer_from_an_empty_query() {
                 let value = driver.value(&[]);
                 if labels {
                     assert_eq!(value.as_record().unwrap().len(), 0);
-                    assert!(matches!(driver.selection().as_slice(), [Step::Key(_)]));
+                    assert!(matches!(
+                        driver.selection().as_slice(),
+                        [crate::occurrence::Step::Key(_)]
+                    ));
                 } else {
                     match key {
                         "[" => assert_eq!(value, Value::list([])),
@@ -515,13 +521,13 @@ fn constructor_keys_make_their_offer_from_an_empty_query() {
     }
     for modifiers in [Modifiers::CONTROL, Modifiers::META] {
         let mut driver = document(None);
-        driver.select(&[]);
+        driver.select::<Step>(&[]);
         assert!(!driver.keystroke(Key::Character("[".into()), modifiers));
         assert!(driver.editor().model.doc.root.is_none());
     }
     for query in ["\"", "search"] {
         let mut driver = document(None);
-        driver.select(&[]);
+        driver.select::<Step>(&[]);
         driver.type_text(query);
         driver.type_text("[");
         assert!(driver.editor().model.doc.root.is_none());
@@ -530,7 +536,7 @@ fn constructor_keys_make_their_offer_from_an_empty_query() {
     // While an input method composes, the key is its own, and what it
     // commits is typed.
     let mut driver = document(None);
-    driver.select(&[]);
+    driver.select::<Step>(&[]);
     assert!(driver.ime(ImeEvent::Preedit("[".into(), Some((1, 1)))));
     assert!(!driver.keystroke(Key::Character("[".into()), Modifiers::empty()));
     assert!(driver.ime(ImeEvent::Commit("[".into())));
@@ -550,7 +556,7 @@ fn delimiters_make_constructors_in_raw_s_holes_and_are_text_in_grap_s() {
         // Raw draws a plain document's root: the key makes what it does and
         // opens it, its picker showing.
         let mut driver = document(None);
-        driver.select(&[]);
+        driver.select::<Step>(&[]);
         driver.type_text(key);
         assert!(
             driver.editor().model.doc.root.is_some(),

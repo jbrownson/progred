@@ -648,7 +648,9 @@ first:
    opaque handle through display and the libraries instead of `Location` and a
    conject.~~ Done on 17 October 2026: a scope maps occurrences to where
    they're stored, a library names a place by its `Site`, and only the
-   toolkit's jumps and source traces see `Location`.
+   toolkit's jumps and source traces see `Location`. On 20 October 2026 the
+   scope went too: an occurrence path carries its jumps and computed values
+   as steps of its own, so the path alone says where its data is.
 7. Move the rest of the volume and CAM geometry out of progred, into crates
    built optimized like the other dependencies (see item 4). Meshing moved to
    `volume` on 17 October 2026, and the same day the cutter profiles and

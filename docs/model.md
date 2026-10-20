@@ -80,7 +80,7 @@ read-only; reaching the code that made one is source-linked hover's job.
 Computed output uses the same read-only ground as external definitions. Nested
 read-only occurrences do not stack washes; an explicit jump to writable source
 restores the paper ground. This decoration does not change edit permissions:
-those still follow the occurrence's source/conject. A reference to an external
+those still follow the occurrence's source. A reference to an external
 definition can itself still be replaced or removed from a writable document.
 
 ## Selection and editing
@@ -103,29 +103,30 @@ The cells a view reaches directly open, so their projections get going, and so
 do cells holding no cells, which can't cascade. A cell whose whole value is
 another cell opens through to it.
 
-Selection also retains a native editing scope, which maps an occurrence to its
-location, if any. Ordinary document projection uses its allocation-free identity
-case. A scope installs a **conject** at an occurrence: a location whose path
-the remaining projection path continues from that location's start, as a jump
-installs, or no location at all, as a computed value has. Reads and writes use
-the same conject; there is no independently configurable read/write pair or
-inverse mapping. Several
-occurrences may conject to one source. Selection, navigation, and annotations
-stay occurrence-local, while source-linked hover uses the conject. Line editing,
-gestures, completion insertion, structural paste/deletion, and history retain
-that interpretation. Undo restores the scope with the selected path; scopes
-contain no document snapshot or borrow of the editor.
-A scope is a chain of layers, each reading the occurrences at and beneath one
-occurrence: a conject's, or a followed cell's definition. Projection adds a
-cell's layer wherever it follows a cell, which is how a location starts there.
-Identity scopes borrow their input path without allocating. Comparing two
-scopes at an occurrence compares where each says the data is stored.
+An [occurrence path](../progred/src/occurrence.rs) says where its data is, so a
+selection, a site and a landmark are each a view and a path, with nothing
+beside them. Its steps are the document's own, `Key`, `Element` and `Follow`,
+plus two of the editor's: a **jump** restarts the path at a location, as a
+projection's `jump` does, and a **computed** step stops it, as `at` does for a
+supplied value. Resolving a path starts from the document's root, or from its
+last jump's location, and follows the data steps after it; past a computed step
+there's no location until a jump. A cell followed inside a computed value has
+no stored route to it, so following it jumps to its definition, which starts a
+location again. Reads and writes resolve the same way; there is no
+independently configurable read/write pair or inverse mapping. Several
+occurrences may resolve to one source. Selection, navigation, and annotations
+stay occurrence-local, while source-linked hover uses the location. Line
+editing, gestures, completion insertion, structural paste/deletion, and history
+all act on the path, and undo restores the selected path, which carries its own
+interpretation. Occurrence steps are the editor's, not GID's: document paths
+never contain a jump, and no jump can be mistaken for a field.
 If a projection changes what a selected occurrence means, its caller is
 responsible for clearing the selection when necessary; the editor does not
 try to repair arbitrary changes of interpretation.
 
 `descend` extends the current occurrence, `jump` gives a new occurrence an actual
-document source, and `at` projects a supplied value without a source. `None`
+document source, and `at` projects a supplied value without a source, beneath a
+computed step. `None`
 means no document location, not a missing value: `Some(location)` can name an
 absent field and still offer editing. A library source is present but read-only.
 Ordinary descendants of `at` stay detached until they follow a cell, which starts
@@ -135,13 +136,13 @@ fields through jumps: the heading is the real list element, and its body has an
 occurrence beneath that element. Repeating a field yields independent folds and
 selection locations while both bodies edit the same source field.
 
-Copy and fold do not resolve an occurrence through conject. The shared
+Copy and fold do not resolve an occurrence's location. The shared
 projection boundary installs handlers that copy the displayed `Value`, and a
 folding projection changes the occurrence's fold annotation using the default
 it determined. This also works for source-less `at` values. Inner widget
 handlers take precedence (for example, copying a text selection). Structural
-cut copies that same value, then attempts deletion through the selection's
-conject; a source-less value can be copied but not deleted.
+cut copies that same value, then attempts deletion where the selection's path
+says its data is; a source-less value can be copied but not deleted.
 
 On macOS and Linux a structural copy also puts a PNG picture of the copied
 occurrence on the system clipboard, after the private format and before the
@@ -259,7 +260,7 @@ or the render tree to infer editability. See
 Arrow keys move the selection between stops that projections declare, in an
 order the chosen layout determines; [layout navigation](navigation.md) is the
 reference for how stops are declared, ordered, and dispatched. Destinations
-keep the existing occurrence path and editing or conject context, and
+keep the existing occurrence path, which carries its own interpretation, and
 navigation never resolves document paths to choose one.
 
 Line editing uses the host-supplied keyboard convention: Mac Command+Left/Right

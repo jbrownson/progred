@@ -82,19 +82,17 @@ fn fidget_example_shows_each_preview_beside_its_code() {
     let figures = figures(&doc, &names);
     let mut world = crate::test_editor(doc);
     let frame = settle(editing_frame(&mut world), &world.sources());
-    let landmark = |path: &[Step]| frame.landmarks.landmark(path).map(|landmark| landmark.rect);
+    let landmark = |path: &[crate::occurrence::Step]| {
+        frame.landmarks.landmark(path).map(|landmark| landmark.rect)
+    };
     let figure =
         |position: &Position| vec![Step::Key(names["figures"]), Step::Element(position.clone())];
-    let picture = |position: &Position| {
-        let mut path = figure(position);
-        path.push(Step::Key(presentation::vocabulary::RESULT));
-        path
-    };
+    let picture = |position: &Position| crate::test_examples::result_path(&figure(position));
     for (index, (position, _, part, _)) in figures.iter().enumerate() {
         let mut code = figure(position);
         code.push(Step::Key(names[*part]));
         let (code, picture) = (
-            landmark(&code).expect("code"),
+            landmark(&crate::occurrence::of(&code)).expect("code"),
             landmark(&picture(position)).expect("picture"),
         );
         assert!(
@@ -108,7 +106,10 @@ fn fidget_example_shows_each_preview_beside_its_code() {
         .landmarks
         .iter()
         .filter(|landmark| {
-            landmark.path.last() == Some(&Step::Key(presentation::vocabulary::RESULT))
+            landmark.path.ends_with(&[
+                crate::occurrence::Step::Key(presentation::vocabulary::RESULT),
+                crate::occurrence::Step::Computed,
+            ])
         })
         .count();
     assert_eq!(pictured, figures.len());
@@ -144,11 +145,11 @@ fn complex_fidget_examples_render_visible_surfaces() {
         let view = ProfileView {
             size: kurbo::Size::new(side as f64, side as f64),
             scale: 1.0,
-            root: Some(
-                crate::workspace::declarations(doc.root.as_ref())
+            root: Some(crate::occurrence::of(
+                &crate::workspace::declarations(doc.root.as_ref())
                     .remove(0)
                     .path,
-            ),
+            )),
         };
         let (view, mut context) = view.prepare(&doc);
         let (bench, _) = context.frame(view.frame(&doc, &Annotations::default()));

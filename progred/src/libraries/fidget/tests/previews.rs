@@ -45,7 +45,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
             doc.cells.set_value(cell, value);
         }
         let (bench, _) = context.frame(BenchFrame {
-            root: &pane.path,
+            root: &crate::occurrence::of(&pane.path),
             ..BenchFrame::of(&doc, 1400.0)
         });
         bench.list.0.iter().find_map(|command| match command {
@@ -82,14 +82,14 @@ fn fidget_viewport_projects_an_image_at_the_assigned_size() {
         .into_iter()
         .next()
         .expect("the preview is declared as a pane");
-    let source = Some(declaration.path.as_slice());
+    let source = crate::occurrence::of(&declaration.path);
     let mut context = BenchContext::new();
     context.stack.projection = crate::projection::viewport::projection(
         &context.stack.projection,
         kurbo::Size::new(160.0, 96.0),
     );
     let (bench, extent) = context.frame(BenchFrame {
-        root: source.unwrap_or(&[]),
+        root: &source,
         ..BenchFrame::of(&doc, 1400.0)
     });
     let image = bench

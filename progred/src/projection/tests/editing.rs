@@ -41,7 +41,7 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
         })])
     }
     let mut driver = Driver::of(text::value("a"));
-    driver.select(&[]);
+    driver.select::<Step>(&[]);
     for (marker, typed, expected) in [(new_cell_id(), "b", "ab"), (new_cell_id(), "c", "abc")] {
         let mut stack = driver.editor().stack.clone();
         stack.projection = projection(marker);
@@ -58,7 +58,6 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
     let selection = Selection::from_payload(
         &crate::test_root(),
         &editor.sources(),
-        Default::default(),
         vec![],
         payload.clone(),
     );
@@ -89,7 +88,7 @@ fn caret_motion_does_not_run_a_line_conversion() {
         }
     })]);
     let mut driver = Driver::new(editor, Driver::VIEWPORT);
-    driver.select(&[]);
+    driver.select::<Step>(&[]);
     let original = driver.editor().model.doc.clone();
     driver.press(NamedKey::Home);
     assert_eq!(calls.get(), 0);
@@ -116,7 +115,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
     assert_eq!(
         edit(
             &doc,
-            vec![Step::Follow(gid::Resolution::Document), key("name")]
+            vec![Step::Follow(gid::Resolution::Document), key("name").into()]
         )
         .edit()
         .map(LineEditState::text),
@@ -125,7 +124,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
     assert_eq!(
         edit(
             &doc,
-            vec![Step::Follow(gid::Resolution::Document), key("x")]
+            vec![Step::Follow(gid::Resolution::Document), key("x").into()]
         )
         .edit()
         .map(LineEditState::text),
@@ -134,7 +133,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
     // Missing fields and links carry no editor.
     assert!(
         make_selection(vec![
-            Step::Follow(gid::Resolution::Document),
+            gid::Step::Follow(gid::Resolution::Document),
             key("missing")
         ])
         .edit()
@@ -148,7 +147,7 @@ fn line_projection_descriptions_mount_the_rust_editor() {
     assert_eq!(
         edit(
             &doc,
-            vec![Step::Follow(gid::Resolution::Document), key("b")]
+            vec![Step::Follow(gid::Resolution::Document), key("b").into()]
         )
         .edit()
         .map(LineEditState::text),
@@ -192,7 +191,7 @@ fn a_line_control_selects_without_storing_its_default_editor() {
     let selected = make_projected_selection(
         &doc,
         &lib,
-        vec![Step::Follow(gid::Resolution::Document), key("name")],
+        vec![Step::Follow(gid::Resolution::Document), key("name").into()],
     );
     assert!(selected.edit().is_none());
     assert_eq!(selected.payload(), selection_payload::edge());
@@ -207,7 +206,7 @@ fn a_plain_selection_accepts_first_input_using_the_line_default() {
         (Value::from(vec![0xab]), "cd", Value::from(vec![0xab, 0xcd])),
     ] {
         let mut driver = Driver::of(value);
-        driver.select(&[]);
+        driver.select::<Step>(&[]);
         assert!(driver.line().is_none());
         driver.type_text(input);
         assert_eq!(driver.value(&[]), expected);
@@ -222,7 +221,7 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
     for ime in [false, true] {
         let mut driver = Driver::of(text::value("hello"));
         driver.runner.editor.text_clipboard.set_text(" world");
-        driver.select(&[]);
+        driver.select::<Step>(&[]);
         assert!(if ime {
             driver.ime(ImeEvent::Commit(" world".into()))
         } else {
@@ -238,7 +237,6 @@ fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
     let selection = Selection::from_payload(
         &crate::test_root(),
         &editor.sources(),
-        Default::default(),
         vec![],
         Value::record([
             (selection_payload::vocabulary::ANCHOR, f64::value(1.0)),
@@ -335,7 +333,7 @@ fn raw_and_read_only_projections_do_not_activate_a_default_line_editor() {
         (
             false,
             cell.into(),
-            vec![Step::Follow(gid::Resolution::Library(library))],
+            vec![gid::Step::Follow(gid::Resolution::Library(library))],
         ),
     ] {
         let mut editor = crate::editor_of(value);
@@ -375,9 +373,9 @@ fn annotated_numbers_navigate_and_edit_only_the_digits() {
         ),
     ] {
         let mut driver = Driver::of(original);
-        driver.select(&[]);
+        driver.select::<Step>(&[]);
         driver.press(NamedKey::End);
-        assert_eq!(driver.selection(), []);
+        assert!(driver.selection().is_empty());
         assert_eq!(driver.line(), Some(spelling));
         select_line(&mut driver);
         assert!(driver.ime(ImeEvent::Commit("17".into())));
@@ -392,7 +390,7 @@ fn payload_conversion_preserves_an_explicit_caret() {
         crate::test_values::label("name"),
         text::value("hello"),
     )]);
-    let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
+    let path = vec![Step::Follow(gid::Resolution::Document), key("name").into()];
     let mut selection = make_projected_editing_selection(&doc, &libraries, path.clone());
     assert_eq!(selection.edit().unwrap().selection_offsets(), (5, 5));
     selection.edit_mut().unwrap().cursor_to_start();
@@ -401,7 +399,6 @@ fn payload_conversion_preserves_an_explicit_caret() {
     let reified = Selection::from_payload(
         &crate::test_root(),
         &src(&doc, &libraries),
-        Default::default(),
         path,
         selection.payload(),
     );
@@ -416,8 +413,8 @@ fn edits_write_through_to_the_field() {
         crate::test_values::label("name"),
         crate::libraries::text::value("old"),
     )]);
-    let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
-    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
+    let path = vec![gid::Step::Follow(gid::Resolution::Document), key("name")];
+    let mut selection = make_projected_editing_selection(&doc, &lib, crate::occurrence::of(&path));
     selection.edit_mut().unwrap().set_text("new");
     write_text(&mut doc, &lib, &mut selection);
     assert_eq!(
@@ -426,7 +423,7 @@ fn edits_write_through_to_the_field() {
     );
     // A selection without an editor writes nothing.
     let mut plain = make_selection(vec![
-        Step::Follow(gid::Resolution::Document),
+        gid::Step::Follow(gid::Resolution::Document),
         key("missing"),
     ]);
     assert!(!write_text(&mut doc, &lib, &mut plain));
@@ -449,7 +446,7 @@ fn blob_navigation_edits_complete_hex_and_keeps_the_last_valid_bytes() {
         }),
         Driver::VIEWPORT,
     );
-    let path = [Step::Follow(gid::Resolution::Document)];
+    let path = [gid::Step::Follow(gid::Resolution::Document)];
     let original = driver.editor().model.doc.clone();
     driver.select(&path);
     driver.press(NamedKey::End);
@@ -499,7 +496,7 @@ fn compact_f64_values_edit_as_decimal_text() {
         }),
         Driver::VIEWPORT,
     );
-    let path = [Step::Follow(gid::Resolution::Document)];
+    let path = [gid::Step::Follow(gid::Resolution::Document)];
     driver.select(&path);
     driver.press(NamedKey::End);
     assert_eq!(driver.line(), Some("2.5"));
@@ -533,7 +530,7 @@ fn editing_an_f64_keeps_unrelated_fields() {
         }),
         Driver::VIEWPORT,
     );
-    let path = [Step::Follow(gid::Resolution::Document)];
+    let path = [gid::Step::Follow(gid::Resolution::Document)];
     driver.select(&path);
     driver.press(NamedKey::End);
     select_line(&mut driver);
@@ -559,17 +556,18 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
             crate::libraries::text::value("3"),
         ]),
     )]);
-    let list_path = vec![Step::Follow(gid::Resolution::Document), key("dash")];
+    let list_path = vec![gid::Step::Follow(gid::Resolution::Document), key("dash")];
     let ps = positions(src(&doc, &lib).resolve_path(&list_path).unwrap());
     let element = vec![
-        Step::Follow(gid::Resolution::Document),
+        gid::Step::Follow(gid::Resolution::Document),
         key("dash"),
-        Step::Element(ps[1].clone()),
+        gid::Step::Element(ps[1].clone()),
     ];
 
     // Editing an element writes the whole rebuilt list at the
     // owning cell; the sibling keeps its position and value.
-    let mut selection = make_projected_editing_selection(&doc, &lib, element.clone());
+    let mut selection =
+        make_projected_editing_selection(&doc, &lib, crate::occurrence::of(&element));
     selection.edit_mut().unwrap().set_text("9");
     assert!(write_text(&mut doc, &lib, &mut selection));
     assert_eq!(
@@ -596,7 +594,7 @@ fn write_through_opens_one_step_per_editor_life() {
         crate::test_values::label("name"),
         crate::libraries::text::value("a"),
     )]);
-    let path = vec![Step::Follow(gid::Resolution::Document), key("name")];
+    let path = vec![Step::Follow(gid::Resolution::Document), key("name").into()];
     let mut selection = make_projected_editing_selection(&doc, &lib, path);
 
     // First write opens the step; the rest of the run is silent,
@@ -616,7 +614,7 @@ fn write_through_opens_one_step_per_editor_life() {
     let mut fresh = make_projected_editing_selection(
         &doc,
         &lib,
-        vec![Step::Follow(gid::Resolution::Document), key("name")],
+        vec![Step::Follow(gid::Resolution::Document), key("name").into()],
     );
     fresh.edit_mut().unwrap().set_text("x");
     assert!(write_text(&mut doc, &lib, &mut fresh));
@@ -633,11 +631,11 @@ fn a_simple_name_is_an_ordinary_editable_field() {
         ),
     ]);
     let path = vec![
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(name::vocabulary::NAME),
+        gid::Step::Follow(gid::Resolution::Document),
+        gid::Step::Key(name::vocabulary::NAME),
     ];
 
-    let mut selection = make_projected_editing_selection(&doc, &lib, path.clone());
+    let mut selection = make_projected_editing_selection(&doc, &lib, crate::occurrence::of(&path));
     selection.edit_mut().unwrap().set_text("new");
     assert!(write_text(&mut doc, &lib, &mut selection));
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some("new"));
@@ -698,7 +696,6 @@ fn missing_controls_default_without_mutating_selection_until_input() {
             editor.model.selection = Some(Selection::from_payload(
                 &crate::test_root(),
                 &src(&doc, &libraries),
-                Default::default(),
                 path.clone(),
                 payload.clone(),
             ));
@@ -744,7 +741,7 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
             &lib,
             editor.model.selection.as_mut().unwrap()
         ));
-        assert!(editor.sources().resolve_path(&path).is_none());
+        assert!(crate::occurrence::read(&editor.sources(), &path).is_none());
     };
     let mut driver = Driver::new(crate::test_editor((*doc).clone()), Driver::VIEWPORT);
     let original = driver.editor().model.doc.clone();

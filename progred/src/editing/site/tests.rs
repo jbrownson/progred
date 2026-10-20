@@ -6,12 +6,8 @@ use gid::new_cell_id;
 fn a_site_below_another_hovers_and_selects_the_appended_path() {
     let parent = new_cell_id();
     let field = new_cell_id();
-    let site = Site::new(
-        Root::document(),
-        Rc::from([Step::Key(parent)]),
-        Scope::default(),
-    )
-    .below(&[Step::Key(field)]);
+    let site =
+        Site::new(Root::document(), Rc::from([Step::Key(parent)])).below(&[gid::Step::Key(field)]);
     let expected = vec![Step::Key(parent), Step::Key(field)];
     assert_eq!(
         Hovered::from(site.hover()),

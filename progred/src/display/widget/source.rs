@@ -61,11 +61,11 @@ impl SourceTrace {
 #[derive(Clone, Debug)]
 pub enum Secondary {
     Cell(CellId),
-    Stored(Rc<[Step]>),
+    Stored(Rc<[crate::occurrence::Step]>),
     InCell {
         cell: CellId,
         resolution: Resolution,
-        path: Rc<[Step]>,
+        path: Rc<[crate::occurrence::Step]>,
         /// The first step relative to `cell`, immediately after its
         /// `Follow` step in `path`.
         relative_from: usize,
@@ -73,8 +73,10 @@ pub enum Secondary {
 }
 
 impl Secondary {
+    /// What an occurrence at `path`, whose data steps from the root, or from
+    /// the `enclosing` cell's start, are its location's, shares.
     pub fn from_context(
-        path: Rc<[Step]>,
+        path: Rc<[crate::occurrence::Step]>,
         cell: Option<CellId>,
         enclosing: Option<(CellId, Resolution, usize)>,
     ) -> Self {
@@ -94,7 +96,7 @@ impl Secondary {
 
     pub fn from_trace(trace: &SourceTrace) -> Self {
         match trace {
-            SourceTrace::Stored(path) => Self::Stored(path.clone()),
+            SourceTrace::Stored(path) => Self::Stored(crate::occurrence::of(path).into()),
             SourceTrace::InCell {
                 cell,
                 resolution,
@@ -102,7 +104,7 @@ impl Secondary {
             } => Self::InCell {
                 cell: *cell,
                 resolution: *resolution,
-                path: path.clone(),
+                path: crate::occurrence::of(path).into(),
                 relative_from: 0,
             },
         }

@@ -27,7 +27,7 @@ fn list_insertion_through_a_comma_and_whole_list_selection() {
             .collect::<Vec<_>>(),
         ["apples", "peaches", "pears", "plums"]
     );
-    let list = driver.rect(&[]);
+    let list = driver.rect::<gid::Step>(&[]);
     driver.click_at(kurbo::Point::new(list.x0 + 2.0, list.center().y));
     assert!(driver.selection().is_empty(), "{:?}", driver.selection());
 }
@@ -36,7 +36,8 @@ fn list_insertion_through_a_comma_and_whole_list_selection() {
 fn cmd_clicking_a_label_picks_the_label_not_its_value() {
     use crate::frame::Hovered;
     use crate::hover::Hover;
-    use gid::{Document, Step, Value, new_cell_id};
+    use crate::occurrence::Step;
+    use gid::{Document, Value, new_cell_id};
 
     let label_at = |driver: &Driver, key| {
         driver.locate(Hovered::Tree(Hover::Label(std::rc::Rc::from([Step::Key(
@@ -46,7 +47,7 @@ fn cmd_clicking_a_label_picks_the_label_not_its_value() {
 
     // A new record's first label, its value still to come.
     let mut driver = Driver::new(crate::test_editor(Document::default()), Driver::VIEWPORT);
-    driver.click(&[]);
+    driver.click::<Step>(&[]);
     driver.type_text("{");
     driver.choose("new cell");
     let [Step::Key(label)] = driver.selection()[..] else {
@@ -71,5 +72,5 @@ fn cmd_clicking_a_label_picks_the_label_not_its_value() {
     driver.type_text("q");
     assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
     driver.pick_at(label_at(&driver, x));
-    assert_eq!(driver.value(&[Step::Key(y)]), x.into());
+    assert_eq!(driver.value(&[gid::Step::Key(y)]), x.into());
 }

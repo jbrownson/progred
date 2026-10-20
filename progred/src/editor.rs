@@ -570,8 +570,7 @@ impl Editor {
             Some((root, shown)) => {
                 self.model.selection = Some(selection::Selection::edge(
                     &root,
-                    crate::editing::Scope::default(),
-                    shown,
+                    crate::occurrence::of(&shown),
                 ));
             }
             None => self.open_pane(workspace::Side::Right, |_, _| Some(entry)),
@@ -602,14 +601,14 @@ impl Editor {
                 let document = &mut self.model.workspace.document;
                 document.annotations = document
                     .annotations
-                    .under(&[gid::Step::Key(workspace::vocabulary::MAIN)]);
+                    .under(&[crate::occurrence::Step::Key(workspace::vocabulary::MAIN)]);
             }
             self.model
                 .workspace
                 .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
             // The value opens as its column's last pane.
             self.model.selection = self.model.workspace.column(side).panes.last().map(|pane| {
-                selection::Selection::edge(&pane.view.root, crate::editing::Scope::default(), shown)
+                selection::Selection::edge(&pane.view.root, crate::occurrence::of(&shown))
             });
             self.refresh_title();
         }
@@ -652,7 +651,7 @@ impl Editor {
                         // with it.
                         let suffix = selection
                             .path()
-                            .strip_prefix(path.as_slice())
+                            .strip_prefix(crate::occurrence::of(path).as_slice())
                             .map(<[_]>::to_vec);
                         let (value, path) =
                             workspace::move_value(self.model.doc.root.as_ref()?, path, direction)?;
@@ -671,7 +670,10 @@ impl Editor {
             }
             if let Some(selection) = self.model.selection.as_mut() {
                 let path = match suffix {
-                    Some(suffix) => path.into_iter().chain(suffix).collect(),
+                    Some(suffix) => crate::occurrence::of(&path)
+                        .into_iter()
+                        .chain(suffix)
+                        .collect(),
                     None => selection.path().to_vec(),
                 };
                 selection.relocate(next_root, path);

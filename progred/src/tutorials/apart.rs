@@ -178,11 +178,9 @@ fn bytes() {
     );
 
     let record = |bytes: &Embed, slot, key| {
-        bytes.drawn(&[
-            bytes.key(slot),
-            Step::Key(crate::libraries::presentation::vocabulary::RESULT),
-            Step::Key(key),
-        ])
+        let mut path = crate::test_examples::result_path(&[bytes.key(slot)]);
+        path.push(crate::occurrence::Step::Key(key));
+        bytes.drawn(&path)
     };
     let color = crate::libraries::color::vocabulary::RGBA;
     let float = crate::libraries::f32::vocabulary::F32;
@@ -213,10 +211,7 @@ fn numbers() {
     assert_eq!(narrow.to_string(), "0.3");
 
     // Drag the shape to turn it.
-    let view = numbers.rect(&[
-        numbers.key("fifth"),
-        Step::Key(crate::libraries::presentation::vocabulary::RESULT),
-    ]);
+    let view = numbers.rect(&crate::test_examples::result_path(&[numbers.key("fifth")]));
     let before = numbers.images();
     numbers.drag(
         view.center(),
@@ -267,10 +262,9 @@ fn unfinished() {
             .collect::<Vec<_>>(),
         [Some(crate::libraries::grap::numbers::f64::NOT_F64)]
     );
-    assert!(unfinished.drawn(&[
-        unfinished.key("fourth"),
-        Step::Key(crate::libraries::presentation::vocabulary::RESULT),
-    ]));
+    assert!(unfinished.drawn(&crate::test_examples::result_path(&[
+        unfinished.key("fourth")
+    ])));
 }
 
 /// Change the planet's moons and the color its view paints it.

@@ -32,7 +32,7 @@ fn selection_marks(commands: &[DrawCmd], alpha: f32) -> usize {
 #[test]
 fn changing_palette_repaints_without_losing_edits_selection_or_history() {
     let mut driver = Driver::of(text::value("hello"));
-    driver.select(&[]);
+    driver.select::<gid::Step>(&[]);
     driver.type_text("!");
     let document = driver.editor().model.doc.clone();
     fn has_ink(commands: &[DrawCmd], color: Color) -> bool {
@@ -116,7 +116,7 @@ fn focus_loss_removes_primary_and_secondary_selection_marks() {
 #[test]
 fn focus_loss_discards_invalid_atom_draft_without_changing_the_document() {
     let mut driver = Driver::of(f64::value(7.0));
-    driver.select(&[]);
+    driver.select::<gid::Step>(&[]);
     driver.type_text("x");
     assert_eq!(driver.line(), Some("7x"));
     let document = driver.editor().model.doc.clone();
@@ -131,7 +131,7 @@ fn focus_loss_discards_invalid_atom_draft_without_changing_the_document() {
 fn focus_loss_clears_completion_for_values_and_labels() {
     for labels in [false, true] {
         let mut driver = driver(labels.then(|| Value::record([])), Cells::new());
-        driver.select(&[]);
+        driver.select::<gid::Step>(&[]);
         if labels {
             // Enter on a record starts a new field's label.
             driver.press(NamedKey::Enter);

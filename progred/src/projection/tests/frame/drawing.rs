@@ -63,7 +63,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
         doc.cells.set_value(cell, expression.clone());
         displayed.borrow_mut().clear();
         context.frame(BenchFrame {
-            root: &pane.path,
+            root: &crate::occurrence::of(&pane.path),
             ..BenchFrame::of(&doc, 600.0)
         });
         assert!(displayed.borrow().contains(&result));
@@ -92,16 +92,16 @@ fn iop_tree_at_size(size: kurbo::Size) {
         .into_iter()
         .next()
         .expect("the picture is declared as a pane");
-    let source = Some(declaration.path.as_slice());
+    let source = crate::occurrence::of(&declaration.path);
     let mut context = BenchContext::new();
     context.stack.projection =
         crate::projection::viewport::projection(&context.stack.projection, size);
     let (bench, extent) = context.frame(BenchFrame {
-        root: source.unwrap_or(&[]),
+        root: &source,
         ..BenchFrame::of(&doc, 1400.0)
     });
     let (rebuilt, _) = context.frame(BenchFrame {
-        root: source.unwrap_or(&[]),
+        root: &source,
         ..BenchFrame::of(&doc, 1400.0)
     });
     assert_eq!(rebuilt.list.0.len(), bench.list.0.len());
@@ -120,7 +120,7 @@ fn iop_tree_at_size(size: kurbo::Size) {
     };
     let (linked, _) = context.frame(BenchFrame {
         pointer: Some(outer * Point::new(10.0, 10.0)),
-        root: source.unwrap_or(&[]),
+        root: &source,
         ..BenchFrame::of(&doc, 1400.0)
     });
     assert!(
@@ -245,8 +245,8 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         assert!(selected.borrow().is_empty());
         // The drawing is the root's value, so its program is at `drawing/program`.
         let program = [
-            Step::Key(layout_data::vocabulary::DRAWING),
-            Step::Key(layout_data::vocabulary::PROGRAM),
+            gid::Step::Key(layout_data::vocabulary::DRAWING),
+            gid::Step::Key(layout_data::vocabulary::PROGRAM),
         ];
         let source = SourceTrace::Stored(Rc::from(program.clone()));
         let Some((_, Claim::Direct(target))) = placed.claim.clone() else {
@@ -258,9 +258,8 @@ fn drawing_records_once_per_visible_frame_for_hover_and_paint() {
         assert_eq!(trace.sources().next(), Some(source.clone()));
         let mut pointer = crate::frame::DispatchContext::new(None, Some(target));
         pointer.landmarks = Rc::from([crate::display::widget::navigation::Landmark {
-            scope: Default::default(),
             root: Some(crate::test_root()),
-            path: Rc::from(program.clone()),
+            path: crate::occurrence::of(&program).into(),
             rect: bounds,
             select: Rc::new(move |_, _| {
                 picked.borrow_mut().push(source.clone());
@@ -381,7 +380,7 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
     )
     .bind(Default::default());
     let handler = output.handler.unwrap();
-    let path: Rc<[Step]> = Rc::from([Step::Key(layout_data::vocabulary::PROGRAM)]);
+    let path: Rc<[gid::Step]> = Rc::from([gid::Step::Key(layout_data::vocabulary::PROGRAM)]);
     let mut input = crate::frame::DispatchContext::new(
         Some(drawing_view.clone()),
         Some(Hovered::Tree(Hover::Source(SourceTrace::Stored(
@@ -389,17 +388,15 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         )))),
     );
     input.landmarks = Rc::from([crate::display::widget::navigation::Landmark {
-        scope: Default::default(),
         root: Some(source_view.clone()),
-        path: path.clone(),
+        path: crate::occurrence::of(&path).into(),
         rect: Rect::new(0.0, 500.0, 20.0, 530.0),
         select: Rc::new({
             let root = source_view.clone();
             let path = path.clone();
             move |editor: &mut crate::Editor, _| {
-                crate::editing::Scope::default()
-                    .open(editor.session())
-                    .select(&root, &path);
+                crate::editing::Edit::new(editor.session())
+                    .select(&root, &crate::occurrence::of(&path));
                 true
             }
         }),

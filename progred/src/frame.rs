@@ -191,7 +191,7 @@ fn attribute(
     };
     let hovered_trace = match &hovered {
         Some(Hovered::Tree(hover::Hover::Value(_))) if visible => landmark
-            .and_then(|d| d.scope.location(&d.path))
+            .and_then(|d| crate::occurrence::location(&d.path))
             .map(|location| SourceTrace::from_location(sources, &location)),
         Some(Hovered::Tree(hover::Hover::Source(source))) if visible => Some(source.clone()),
         _ => None,
@@ -617,11 +617,10 @@ pub(crate) fn completions<'a>(
 /// projection drawing them, and whether that's a viewport filling its pane,
 /// drawn without a margin or scrolling.
 struct ViewContent<'a> {
-    root_path: Cow<'a, [gid::Step]>,
+    /// Where the view's root is drawn, which says where its data is: a
+    /// computed root, such as a place that can't be found, has none.
+    root_path: crate::occurrence::Path,
     root: Option<Cow<'a, gid::Value>>,
-    /// Whether the view computed its root rather than reading it at
-    /// `root_path`, as for a place that can't be found.
-    detached: bool,
     projection: Cow<'a, projection::Projection>,
     viewport: bool,
 }
@@ -644,9 +643,8 @@ fn view_content<'a>(
     };
     match (view.root.target(), viewport) {
         (_, Some(entry)) => ViewContent {
-            root_path: Cow::Owned(entry.path),
+            root_path: crate::occurrence::of(&entry.path),
             root: Some(Cow::Borrowed(entry.value)),
-            detached: false,
             projection: Cow::Owned(projection::viewport::projection(
                 &view_projection(stack, view, false),
                 size / scale,
@@ -656,12 +654,15 @@ fn view_content<'a>(
         (target, None) => {
             let root_path = root_path(sources, view, target);
             let not_found = not_found(sources, view, target, &root_path);
+            let mut drawn = crate::occurrence::of(&root_path);
+            if not_found.is_some() {
+                drawn.push(crate::occurrence::Step::Computed);
+            }
             ViewContent {
-                detached: not_found.is_some(),
                 root: not_found
                     .map(Cow::Owned)
                     .or_else(|| sources.resolve_path(&root_path).map(Cow::Borrowed)),
-                root_path: Cow::Owned(root_path),
+                root_path: drawn,
                 projection: view_projection(stack, view, matches!(target, Target::Pane { .. })),
                 viewport: false,
             }
@@ -776,7 +777,6 @@ fn project_workspace_view(
             sources,
             root: shown.root.as_deref(),
             root_path: &shown.root_path,
-            detached: shown.detached,
             selection: model
                 .selection
                 .as_ref()

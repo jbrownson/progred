@@ -5,7 +5,7 @@
 
 use crate::display::widget::source::SourceTrace;
 use crate::display::widget::view::Root;
-use crate::editing::{Scope, Site};
+use crate::editing::Site;
 use crate::location::Location;
 use crate::selection::Selection;
 use crate::sources::Sources;
@@ -37,11 +37,9 @@ pub trait Viewing {
 /// place in its view, and the selection and sources in full.
 pub(crate) trait Toolkit: Viewing {
     /// This occurrence's path in its view.
-    fn path(&self) -> &[Step];
+    fn path(&self) -> &[crate::occurrence::Step];
     /// The view this occurrence is drawn in.
     fn view(&self) -> &Root;
-    /// How the view reads this occurrence's path.
-    fn scope(&self) -> &Scope;
     /// This occurrence, as a place to act.
     fn site(&self) -> Site;
     /// The theme, at the view's scale.
@@ -49,7 +47,7 @@ pub(crate) trait Toolkit: Viewing {
     /// The document read over its libraries.
     fn sources(&self) -> Sources<'_>;
     /// Where this occurrence is stored.
-    fn location(&self) -> Option<Location<'_>>;
+    fn location(&self) -> Option<Location<'static>>;
     /// Whether the window has focus.
     fn focused(&self) -> bool;
     /// The selection, while this view has it.

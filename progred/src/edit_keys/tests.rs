@@ -186,7 +186,7 @@ fn enter_beside_text_in_a_list_adds_an_element_but_nothing_within_the_text() {
     assert_eq!(driver.stage(), Some(Stage::Pending));
     assert!(matches!(
         (driver.selection().as_slice(), first.as_slice()),
-        ([Step::Element(position)], [Step::Element(text)]) if position > text
+        ([crate::occurrence::Step::Element(position)], [Step::Element(text)]) if position > text
     ));
     // The text, drawn as one piece, takes nothing within it.
     assert!(!enter(&mut driver, crate::test_support::command()));

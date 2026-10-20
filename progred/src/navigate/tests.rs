@@ -7,7 +7,6 @@ use ui_events::keyboard::{KeyState, Modifiers};
 
 fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Landmark<()> {
     Landmark {
-        scope: Default::default(),
         root: None,
         path: Rc::from(path),
         rect: Rect::new(x0, y0, x1, y1),
@@ -77,9 +76,8 @@ fn command_a_selects_the_current_views_root() {
     ]
     .into_iter()
     .map(|(root, path)| Landmark {
-        scope: Default::default(),
         root: Some(root.clone()),
-        ..stop(path, 0.0, 0.0, 100.0, 20.0)
+        ..stop(crate::occurrence::of(&path), 0.0, 0.0, 100.0, 20.0)
     })
     .collect();
     let event = key_down(Key::Character("a".into()), crate::test_support::command());

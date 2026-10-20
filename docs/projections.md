@@ -156,14 +156,15 @@ ordinary preparation functions, not path-bearing layout opcodes.
 `descend` follows steps of the displayed structure without projecting
 intermediate containers. It preserves the current location interpretation,
 except that following a cell starts a location at its definition.
-`jump(steps, document)` extends the occurrence path by `steps`
-but reads from an absolute, source-qualified document path. Its descendants
-conject to that source, for both projection reads and later edits; no inverse
-is required. `jump_to` reads from wherever a site is stored instead, such as
+`jump(steps, document)` extends the occurrence path by `steps` and a jump
+step to an absolute, source-qualified document path, which it reads from. Its
+descendants' paths continue from that jump, for both projection reads and later
+edits; no inverse is required. `jump_to` reads from wherever a site is stored instead, such as
 within a cell's definition, and keeps that location's start.
 
-`at(steps, value)` instead projects the supplied value with no document source.
-Its conject gives no location, including for ordinary descendants. A cell followed
+`at(steps, value)` instead projects the supplied value with no document source,
+extending the path by `steps` and a computed step, which gives no location,
+including for ordinary descendants. A cell followed
 inside it still starts a location at its definition, which is stored data, and
 an explicit nested jump can establish a source. Existing stored-child partials
 use `descend`, not `at` with a copy of the source value. Computed results
@@ -193,7 +194,7 @@ The shared read-only decoration uses the palette's `readonly_ground` for compute
 output and external definitions. Preparation threads the enclosing ground through
 projection composition, including `at`, so nested results do not darken it again.
 Writable jumps restore the paper ground. Decoration and edit authority stay
-separate: the existing source/conject supplies permissions, and a reference to a
+separate: the occurrence's source supplies permissions, and a reference to a
 read-only definition is still replaceable at its writable occurrence.
 
 The lambda-name partial shows `λ` when the name is missing and unselected.
@@ -401,8 +402,8 @@ columns retain an ordinary empty-list handle.
 A heading selects the real list element, so navigation, insertion, deletion,
 and picking remain list operations. Removing an entry removes only the reference,
 not the source field. The body uses `jump_to` at `outline / element / field`,
-drawing the source record's field where it is stored and composing with any
-enclosing conject. Repeated entries
+drawing the source record's field where it is stored, whatever jumps led to
+the outline. Repeated entries
 therefore share document edits but have independent selection and fold state.
 Section lists use the same unbracketed column with spacing between items.
 A computed outline is stored nowhere, so `jump_to` falls back to

@@ -1,5 +1,6 @@
 use super::*;
-use gid::{CellId, Step};
+use crate::occurrence::Step;
+use gid::CellId;
 use puri::handler::NavigationDirection;
 use std::rc::Rc;
 
@@ -381,7 +382,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
     let paths: [Rc<[Step]>; 2] = std::array::from_fn(|_| Rc::from([Step::Key(gid::new_cell_id())]));
     let views = [
         Root::document(),
-        Root::pane(vec![Step::Key(gid::new_cell_id())]),
+        Root::pane(vec![gid::Step::Key(gid::new_cell_id())]),
     ];
     let mut pass = HoverPass::<Vec<usize>, ()>::new(&HoverInput {
         ..Default::default()
@@ -399,7 +400,6 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
                             visits.push(view * 10 + index);
                             true
                         }),
-                        scope: Default::default(),
                         secondary: None,
                         selected: false,
                         tab_stop: false,

@@ -267,8 +267,9 @@ pub(crate) fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a
     Sources { doc, libraries }
 }
 
+/// A selection of what's drawn at the document path `path`.
 pub(crate) fn make_selection(path: Path) -> Selection {
-    Selection::edge(&crate::test_root(), Default::default(), path)
+    Selection::edge(&crate::test_root(), crate::occurrence::of(&path))
 }
 
 /// The value `spine`'s Key and Element steps reach within `value`; a Follow
@@ -354,7 +355,7 @@ pub(crate) fn key_down(key: impl Into<Key>, modifiers: Modifiers) -> KeyboardEve
 pub(crate) struct CompletionResult {
     pub(crate) value: Option<Value>,
     pub(crate) label: Option<(CellId, Option<Value>)>,
-    pub(crate) selected: Option<(Path, Value)>,
+    pub(crate) selected: Option<(crate::occurrence::Path, Value)>,
 }
 
 /// What choosing `entry` did, as [`test_entry`] records it.
@@ -382,12 +383,12 @@ pub(crate) fn test_entry(
             });
             let root = world.model.workspace.document_root().clone();
             world.model.selection = Some(match kind {
-                CompletionKind::Value => {
-                    crate::selection::pending_value(&root, Default::default(), vec![])
-                }
+                CompletionKind::Value => crate::selection::pending_value(&root, vec![]),
                 CompletionKind::Field => pending_edge(
                     &root,
-                    &crate::editing::Scope::default().view(world.sources()),
+                    &crate::editing::Read {
+                        sources: world.sources(),
+                    },
                     vec![],
                 )
                 .unwrap(),
@@ -402,7 +403,7 @@ pub(crate) fn test_entry(
                 CompletionKind::Value => result.value = world.model.doc.root.clone(),
                 CompletionKind::Field => {
                     let cell = match world.model.selection.as_ref().unwrap().path().first() {
-                        Some(Step::Key(cell)) => *cell,
+                        Some(crate::occurrence::Step::Key(cell)) => *cell,
                         _ => panic!("label activation must select its field"),
                     };
                     result.label = Some((cell, world.model.doc.cells.value(cell).cloned()));
@@ -430,7 +431,6 @@ pub(crate) fn activate_projected(
     editor.model.selection = Some(Selection::from_payload(
         selection.root(),
         &editor.sources(),
-        Default::default(),
         selection.path().to_vec(),
         selection.payload(),
     ));
@@ -443,8 +443,9 @@ pub(crate) fn inserted_value(
     selection: &Selection,
     entry: &Entry<crate::Editor>,
 ) -> Option<Value> {
-    activate_projected(doc, selection, entry)
-        .sources()
-        .resolve_path(selection.path())
-        .cloned()
+    crate::occurrence::read(
+        &activate_projected(doc, selection, entry).sources(),
+        selection.path(),
+    )
+    .cloned()
 }

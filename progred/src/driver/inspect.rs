@@ -6,6 +6,7 @@
 use super::{Driver, keystroke_for};
 use crate::display::test_support::Landmarks;
 use crate::frame::Hovered;
+use crate::occurrence::Step as Occurs;
 use gid::{CellId, Position, Step, Value};
 use kurbo::{Point, Rect, Size};
 use puri::draw::{DrawCmd, Shape};
@@ -123,7 +124,7 @@ impl<P> Driver<P> {
 
     /// Select what's drawn at `path`, as arriving there with the keyboard
     /// would.
-    pub(crate) fn select(&mut self, path: &[Step]) {
+    pub(crate) fn select<S: Clone + Into<Occurs> + std::fmt::Debug>(&mut self, path: &[S]) {
         let select = self
             .landmark(path)
             .unwrap_or_else(|| panic!("nothing drawn at {path:?}"))
@@ -242,7 +243,7 @@ impl<P> Driver<P> {
         self.click_at(self.locate(Hovered::Tree(crate::hover::Hover::Entry(index))));
     }
 
-    pub(crate) fn selection(&self) -> Vec<Step> {
+    pub(crate) fn selection(&self) -> crate::occurrence::Path {
         self.editor()
             .model
             .selection
@@ -268,20 +269,24 @@ impl<P> Driver<P> {
             .map(crate::location::Location::into_owned)
     }
 
-    pub(crate) fn drawn(&self, path: &[Step]) -> bool {
+    pub(crate) fn drawn<S: Clone + Into<Occurs>>(&self, path: &[S]) -> bool {
         self.landmark(path).is_some()
     }
 
     /// What the last frame draws at `path`, if anything.
-    pub(crate) fn landmark(
+    pub(crate) fn landmark<S: Clone + Into<Occurs>>(
         &self,
-        path: &[Step],
+        path: &[S],
     ) -> Option<&crate::display::widget::navigation::Landmark<crate::Editor>> {
-        self.runner.frame.dispatch.landmarks.landmark(path)
+        self.runner
+            .frame
+            .dispatch
+            .landmarks
+            .landmark(&occurrence(path))
     }
 
     /// Where `path` is drawn.
-    pub(crate) fn rect(&self, path: &[Step]) -> Rect {
+    pub(crate) fn rect<S: Clone + Into<Occurs> + std::fmt::Debug>(&self, path: &[S]) -> Rect {
         self.landmark(path)
             .map(|landmark| landmark.rect)
             .unwrap_or_else(|| {
@@ -300,7 +305,7 @@ impl<P> Driver<P> {
 
     /// The middle of the text drawn at `path`: its largest run of glyphs,
     /// not a subscript or a quote mark beside it.
-    pub(crate) fn text_at(&self, path: &[Step]) -> Point {
+    pub(crate) fn text_at<S: Clone + Into<Occurs> + std::fmt::Debug>(&self, path: &[S]) -> Point {
         let rect = self.rect(path);
         crate::display::test_support::painted(&self.painted.0)
             .filter_map(|command| match command {
@@ -328,13 +333,17 @@ impl<P> Driver<P> {
     }
 
     /// Every landmark drawn under `prefix`, and where.
-    pub(crate) fn drawn_under(&self, prefix: &[Step]) -> Vec<(Rc<[Step]>, Rect)> {
+    pub(crate) fn drawn_under<S: Clone + Into<Occurs>>(
+        &self,
+        prefix: &[S],
+    ) -> Vec<(Rc<[Occurs]>, Rect)> {
+        let prefix = occurrence(prefix);
         self.runner
             .frame
             .dispatch
             .landmarks
             .iter()
-            .filter(|landmark| landmark.path.starts_with(prefix))
+            .filter(|landmark| landmark.path.starts_with(&prefix))
             .map(|landmark| (landmark.path.clone(), landmark.rect))
             .collect()
     }
@@ -441,12 +450,12 @@ impl<P> Driver<P> {
         found
     }
 
-    pub(crate) fn click(&mut self, path: &[Step]) {
+    pub(crate) fn click<S: Clone + Into<Occurs> + std::fmt::Debug>(&mut self, path: &[S]) {
         self.click_at(self.rect(path).center());
     }
 
     /// Double-click the text drawn at `path`, selecting its word.
-    pub(crate) fn double_click(&mut self, path: &[Step]) {
+    pub(crate) fn double_click<S: Clone + Into<Occurs> + std::fmt::Debug>(&mut self, path: &[S]) {
         self.double_click_at(self.text_at(path));
     }
 
@@ -467,7 +476,7 @@ impl<P> Driver<P> {
 
     /// Click the swatch of the color at `color`, then somewhere new in the
     /// picker it opens.
-    pub(crate) fn pick_color(&mut self, color: &[Step]) {
+    pub(crate) fn pick_color<S: Clone + Into<Occurs> + std::fmt::Debug>(&mut self, color: &[S]) {
         let swatch = self.rect(color);
         self.click_at(Point::new(swatch.x0 + 7.0, swatch.center().y));
         let picker = self.picker(swatch);
@@ -516,4 +525,10 @@ impl<P> Driver<P> {
             );
         }
     }
+}
+
+/// An occurrence path from either kind of step: the paths tests name are
+/// mostly document paths, which an occurrence path of the same steps is.
+fn occurrence<S: Clone + Into<Occurs>>(path: &[S]) -> crate::occurrence::Path {
+    path.iter().cloned().map(Into::into).collect()
 }

@@ -48,7 +48,7 @@ pub fn view<W: Host>(
         .map(|selection| selection.initial_line(&line.text));
     let editing = active.and_then(|selection| selection.edit().or(default.as_ref()));
     let site = context.site();
-    let path: Rc<[gid::Step]> = Rc::from(path);
+    let path: Rc<[crate::occurrence::Step]> = Rc::from(path);
     let content = match editing {
         Some(state) => {
             let widget = puri::edit::text_edit(

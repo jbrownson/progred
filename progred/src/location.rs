@@ -74,7 +74,7 @@ pub fn read(value: &Value) -> Option<Location<'static>> {
 }
 
 /// Where a location starts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Start {
     /// The document's root value.
     Root,
@@ -88,7 +88,7 @@ pub enum Start {
 /// A start and the steps from it. The steps can still follow cells, as a
 /// route a projection's conject names may; [`Location::stored`] restarts the
 /// location at the last cell it follows.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Location<'a> {
     pub start: Start,
     pub path: Cow<'a, [Step]>,

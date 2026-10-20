@@ -412,7 +412,7 @@ impl Default for Workspace {
         let mut document = View::new(Root::document());
         crate::annotations::set_folded(
             &mut document.annotations,
-            &[Step::Key(vocabulary::PANES)],
+            &[crate::occurrence::Step::Key(vocabulary::PANES)],
             false,
             true,
         );

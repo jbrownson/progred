@@ -45,7 +45,8 @@ fn cycles_collapse_by_default_and_expand_turn_by_turn() {
         root: Some(Value::from(a)),
         cells,
     });
-    let reentry = vec![Step::Follow(gid::Resolution::Document), key("next")];
+    let reentry =
+        crate::occurrence::of(&[gid::Step::Follow(gid::Resolution::Document), key("next")]);
     // Space expands the default-collapsed re-entry.
     let folds = space(&mut driver, &reentry);
     assert!(!crate::annotations::folded(folds.at(&reentry), true));
@@ -103,7 +104,7 @@ fn fold_keys_are_directional_and_stay_sparse() {
     // Matching the default stores nothing.
     assert!(view_annotations(driver.editor()).at(&[]).is_none());
     // A leaf has nothing to fold.
-    let leaf = vec![Step::Follow(gid::Resolution::Document), key("a")];
+    let leaf = crate::occurrence::of(&[gid::Step::Follow(gid::Resolution::Document), key("a")]);
     let folds = press(
         &mut driver,
         &leaf,

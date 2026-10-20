@@ -5,7 +5,7 @@ use super::{Session, Site};
 use crate::selection::{self, Stage};
 use crate::site::Continuation;
 use crate::sources::Sources;
-use gid::{CellId, Step, Value};
+use gid::{CellId, Value};
 use puri::edit::{EditCtx, EditOperation};
 
 /// A pending value or new field's label, which a dispatch's session lends.
@@ -119,17 +119,9 @@ impl Picking<'_, '_> {
             Some(current)
                 if self.stage == Stage::Label
                     && id.as_cell().is_some_and(|label| {
-                        let path: Vec<_> = current
-                            .path()
-                            .iter()
-                            .cloned()
-                            .chain([Step::Key(label)])
-                            .collect();
-                        current
-                            .scope()
-                            .view(session.sources())
-                            .resolve_path(&path)
-                            .is_none()
+                        let path =
+                            crate::occurrence::below(current.path(), &[gid::Step::Key(label)]);
+                        crate::occurrence::read(&session.sources(), &path).is_none()
                     }) =>
             {
                 selection::pending_at(&[])
@@ -158,7 +150,6 @@ impl Picking<'_, '_> {
                 model.selection = Some(selection::Selection::from_payload(
                     current.root(),
                     &sources,
-                    current.scope().clone(),
                     current.path().to_vec(),
                     payload,
                 ));

@@ -4,29 +4,23 @@
 use crate::Editor;
 use crate::display::widget::navigation::{Geometry, landmark_at};
 use crate::display::widget::view::Root;
-use crate::location::Location;
 use crate::modifiers;
 use crate::navigate;
+use crate::occurrence::{Path, Step};
 use crate::selection::{self, Selection};
-use gid::{Path, Step, Value};
+use gid::Value;
 use puri::edit::TextClipboard;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl Editor {
     /// Select what this frame draws at `path` in `root`'s view, else the
-    /// edge there, read through `scope`.
-    fn select_landmark_or_edge(
-        &mut self,
-        geometry: Geometry<'_, Editor>,
-        root: &Root,
-        path: Path,
-        scope: crate::editing::Scope,
-    ) {
+    /// edge there.
+    fn select_landmark_or_edge(&mut self, geometry: Geometry<'_, Editor>, root: &Root, path: Path) {
         match landmark_at(geometry.landmarks, Some(root), &path) {
             Some(target) => {
                 (target.select)(self, None);
             }
-            None => self.model.selection = Some(Selection::edge(root, scope, path)),
+            None => self.model.selection = Some(Selection::edge(root, path)),
         }
     }
 
@@ -58,32 +52,27 @@ impl Editor {
             Some(current) if current.stage(&self.sources()) == selection::Stage::Edge => {
                 let root = current.root().clone();
                 let path = current.path().to_vec();
-                let scope = current.scope().clone();
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
                 // the open run, its frame (pre-run document, edge
                 // intact) already covers the deletion.
                 let covered = current.recorded();
-                current
-                    .location()
-                    .map(Location::into_owned)
-                    .is_some_and(|location| {
-                        let before = self.model.snapshot();
-                        crate::location::delete_edge(
-                            &mut self.model.doc,
-                            &self.stack.libraries,
-                            &location,
-                        ) && {
-                            if !covered {
-                                self.model.history.record(before);
-                                self.refresh_title();
-                            }
-                            self.model.selection =
-                                Some(selection::pending_value(&root, scope, path));
-                            geometry.reveal_selection(&mut self.model);
-                            true
+                current.location().is_some_and(|location| {
+                    let before = self.model.snapshot();
+                    crate::location::delete_edge(
+                        &mut self.model.doc,
+                        &self.stack.libraries,
+                        &location,
+                    ) && {
+                        if !covered {
+                            self.model.history.record(before);
+                            self.refresh_title();
                         }
-                    })
+                        self.model.selection = Some(selection::pending_value(&root, path));
+                        geometry.reveal_selection(&mut self.model);
+                        true
+                    }
+                })
             }
             _ => false,
         }
@@ -167,9 +156,8 @@ impl Editor {
                     current.value(&self.sources()) == Some(&value) || {
                         let root = current.root().clone();
                         let path = current.path().to_vec();
-                        let scope = current.scope().clone();
-                        scope.open(self.session()).replace(&path, value) && {
-                            self.model.selection = Some(Selection::edge(&root, scope, path));
+                        crate::editing::Edit::new(self.session()).replace(&path, value) && {
+                            self.model.selection = Some(Selection::edge(&root, path));
                             true
                         }
                     }
@@ -260,11 +248,10 @@ impl Editor {
         current: Selection,
         origin: Path,
     ) {
-        let scope = current.scope().clone();
         if origin == current.path() {
-            scope.open(self.session()).select(current.root(), &origin);
+            crate::editing::Edit::new(self.session()).select(current.root(), &origin);
         } else {
-            self.select_landmark_or_edge(geometry, current.root(), origin, scope);
+            self.select_landmark_or_edge(geometry, current.root(), origin);
         }
         geometry.reveal_selection(&mut self.model);
     }
@@ -300,12 +287,7 @@ impl Editor {
                         // Cancelling the empty document's root pending
                         // deselects: reselecting it would pend again.
                         if !back.is_empty() || self.model.doc.root.is_some() {
-                            self.select_landmark_or_edge(
-                                geometry,
-                                current.root(),
-                                back,
-                                current.scope().clone(),
-                            );
+                            self.select_landmark_or_edge(geometry, current.root(), back);
                         }
                         geometry.reveal_selection(&mut self.model);
                     }
@@ -335,13 +317,8 @@ impl Editor {
                     && current.writable(&sources) =>
             {
                 Some(
-                    selection::pending_with_query(
-                        current.root(),
-                        current.scope().clone(),
-                        current.path().to_vec(),
-                        typed,
-                    )
-                    .with_origin(current.path().to_vec()),
+                    selection::pending_with_query(current.root(), current.path().to_vec(), typed)
+                        .with_origin(current.path().to_vec()),
                 )
             }
             _ => None,

@@ -2,7 +2,7 @@ use super::*;
 use crate::Editor;
 use crate::display::widget::view::Root;
 use crate::libraries::f64;
-use gid::{Path, Step};
+use crate::occurrence::{Path, Step};
 use std::rc::Rc;
 
 use crate::libraries::number::scrub::{ScrubHandler, ScrubUpdate};
@@ -14,7 +14,7 @@ fn model(value: Value) -> Editor {
 }
 
 fn scrub(origin: Point, scale: f64, root: Root, path: Path, handler: ScrubHandler) -> Active {
-    let edit = Site::new(root, path.into(), Default::default()).edit_run();
+    let edit = Site::new(root, path.into()).edit_run();
     crate::libraries::number::scrub::scrub(
         Drag::new(origin, scale, DRAG_THRESHOLD),
         handler(),
@@ -28,12 +28,8 @@ fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
     let original = world.model.doc.clone();
     let root = world.model.workspace.document_root().clone();
     let other_path = vec![Step::Key(gid::new_cell_id())];
-    world.model.selection = Some(Selection::edge(
-        &root,
-        Default::default(),
-        other_path.clone(),
-    ));
-    let mut edit = Site::new(root, Rc::from([]), Default::default()).edit_run();
+    world.model.selection = Some(Selection::edge(&root, other_path.clone()));
+    let mut edit = Site::new(root, Rc::from([])).edit_run();
     assert!(Rc::ptr_eq(&original, &world.model.doc));
     assert!(!edit.write(&mut world.session(), f64::value(10.0)));
     assert!(Rc::ptr_eq(&original, &world.model.doc));
@@ -57,7 +53,6 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
     world.model.selection = Some(Selection::from_payload(
         &root,
         &world.sources(),
-        Default::default(),
         vec![],
         payload.clone(),
     ));
@@ -93,7 +88,7 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
     let mut active = gesture();
     active.advance(&mut world.session(), &[Point::new(10.0, 0.0)]);
     let other = vec![Step::Key(gid::new_cell_id())];
-    world.model.selection = Some(Selection::edge(&root, Default::default(), other.clone()));
+    world.model.selection = Some(Selection::edge(&root, other.clone()));
     active.finish(&mut world.session());
     assert_eq!(world.model.selection.as_ref().unwrap().path(), other);
 }
@@ -135,7 +130,7 @@ fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
     let mut model = model(f64::value(10.0));
     let original = model.model.doc.clone();
     let root = model.model.workspace.document_root().clone();
-    model.model.selection = Some(Selection::edge(&root, Default::default(), vec![]));
+    model.model.selection = Some(Selection::edge(&root, vec![]));
     let mut gesture = scrub(
         Point::new(100.0, 200.0),
         2.0,

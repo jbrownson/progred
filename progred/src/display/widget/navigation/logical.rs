@@ -2,7 +2,7 @@
 use super::super::frame::DispatchContext;
 use super::super::view::Root;
 use super::landmark_at;
-use gid::Step;
+use crate::occurrence::Step;
 use measured::{Composition, RowAlignment};
 use puri::handler::{Event, EventOutcome, Handler, NavigationDirection};
 use std::rc::Rc;

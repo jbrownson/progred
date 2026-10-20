@@ -1,6 +1,6 @@
 //! Layout collects selectable stops; only the current selection's destinations survive.
 use super::{HoverPass, source::Secondary, view::Root};
-use gid::Step;
+use crate::occurrence::Step;
 use kurbo::Rect;
 use measured::Measured;
 use puri::handler::NavigationDirection;
@@ -66,7 +66,6 @@ pub struct Landmark<World> {
     pub path: Rc<[Step]>,
     pub rect: Rect,
     pub select: Select<World>,
-    pub(crate) scope: crate::editing::Scope,
     /// What it shares with other projections of the same thing.
     pub secondary: Option<Secondary>,
     /// Whether it carries the primary highlight.
@@ -83,7 +82,6 @@ impl<World> Clone for Landmark<World> {
             path: self.path.clone(),
             rect: self.rect,
             select: self.select.clone(),
-            scope: self.scope.clone(),
             secondary: self.secondary.clone(),
             selected: self.selected,
             tab_stop: self.tab_stop,
@@ -122,7 +120,6 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
     path: Rc<[Step]>,
     select: Select<World>,
-    scope: crate::editing::Scope,
     secondary: Option<Secondary>,
     selected: bool,
 ) -> Measured<HoverPass<World, H>> {
@@ -149,7 +146,6 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     path,
                     rect: placement.rect,
                     select,
-                    scope,
                     secondary,
                     selected,
                     tab_stop,

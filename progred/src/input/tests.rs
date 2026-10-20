@@ -87,7 +87,8 @@ fn key() -> KeyboardEvent {
 #[test]
 fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
     use crate::libraries::name;
-    use gid::{Step, Value};
+    use crate::occurrence::Step;
+    use gid::Value;
     use ui_events::keyboard::NamedKey;
     let cell = gid::new_cell_id();
     let list = Value::list([Value::Cell(cell)]);
@@ -113,11 +114,7 @@ fn selected_cell_enters_with_right_and_backs_out_through_each_container() {
     }));
     runner.refresh_frame(1.0, VIEWPORT);
     let root = runner.editor.model.workspace.document_root().clone();
-    runner.editor.model.selection = Some(selection::Selection::edge(
-        &root,
-        Default::default(),
-        cell_path.clone(),
-    ));
+    runner.editor.model.selection = Some(selection::Selection::edge(&root, cell_path.clone()));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(!runner.keyboard_event(
         &key_down(NamedKey::ArrowDown, Modifiers::empty()),
@@ -185,15 +182,11 @@ fn arrows_edit_text_before_routing_and_arrive_at_the_near_text_edge() {
         .as_list()
         .unwrap()
         .keys()
-        .map(|position| vec![gid::Step::Element(position.clone())])
+        .map(|position| vec![crate::occurrence::Step::Element(position.clone())])
         .collect();
     let mut runner = EditorRunner::new(crate::editor_of(list));
     let root = runner.editor.model.workspace.document_root().clone();
-    runner.editor.model.selection = Some(selection::Selection::edge(
-        &root,
-        Default::default(),
-        paths[0].clone(),
-    ));
+    runner.editor.model.selection = Some(selection::Selection::edge(&root, paths[0].clone()));
     runner.refresh_frame(1.0, VIEWPORT);
     // Plain selection defaults to the end; Left first moves within "ab".
     assert!(runner.keyboard_event(
@@ -246,16 +239,12 @@ fn modified_arrows_edit_text_then_navigate_at_its_boundary() {
             .as_list()
             .unwrap()
             .keys()
-            .map(|p| vec![gid::Step::Element(p.clone())])
+            .map(|p| vec![crate::occurrence::Step::Element(p.clone())])
             .collect();
         let mut editor = crate::editor_of(list);
         editor.command_modifier = command;
         let root = editor.model.workspace.document_root().clone();
-        editor.model.selection = Some(selection::Selection::edge(
-            &root,
-            Default::default(),
-            paths[1].clone(),
-        ));
+        editor.model.selection = Some(selection::Selection::edge(&root, paths[1].clone()));
         let mut runner = EditorRunner::new(editor);
         runner.refresh_frame(1.0, VIEWPORT);
         for (key, index, offset) in [
@@ -288,20 +277,16 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
         .as_list()
         .unwrap()
         .keys()
-        .map(|position| vec![gid::Step::Element(position.clone())])
+        .map(|position| vec![crate::occurrence::Step::Element(position.clone())])
         .collect();
     let name_path: Vec<_> = paths[1]
         .iter()
         .cloned()
-        .chain([gid::Step::Key(name::vocabulary::NAME)])
+        .chain([crate::occurrence::Step::Key(name::vocabulary::NAME)])
         .collect();
     let mut runner = EditorRunner::new(crate::editor_of(list));
     let root = runner.editor.model.workspace.document_root().clone();
-    runner.editor.model.selection = Some(selection::Selection::edge(
-        &root,
-        Default::default(),
-        name_path.clone(),
-    ));
+    runner.editor.model.selection = Some(selection::Selection::edge(&root, name_path.clone()));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.keyboard_event(
         &key_down(NamedKey::ArrowRight, Modifiers::empty()),
@@ -370,11 +355,7 @@ fn arrows_route_between_a_numbers_name_and_digits_and_out_to_siblings() {
 fn focus_changes_clear_selection_cancel_gestures_and_gate_keyboard_input() {
     let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
     let root = runner.editor.model.workspace.document_root().clone();
-    runner.editor.model.selection = Some(selection::Selection::edge(
-        &root,
-        Default::default(),
-        vec![],
-    ));
+    runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.keyboard_event(&key(), 1.0, VIEWPORT));
     let document = runner.editor.model.doc.clone();
@@ -413,11 +394,7 @@ fn only_a_focused_text_edit_offers_a_composition_area() {
     runner.refresh_frame(1.0, VIEWPORT);
     assert_eq!(runner.frame.input_area, None);
     let root = runner.editor.model.workspace.document_root().clone();
-    runner.editor.model.selection = Some(selection::Selection::edge(
-        &root,
-        Default::default(),
-        vec![],
-    ));
+    runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     let area = runner
         .frame
@@ -433,11 +410,7 @@ fn only_a_focused_text_edit_offers_a_composition_area() {
 fn a_picker_query_offers_a_composition_area() {
     let mut runner = EditorRunner::new(crate::test_editor(Document::default()));
     let root = runner.editor.model.workspace.document_root().clone();
-    runner.editor.model.selection = Some(selection::Selection::edge(
-        &root,
-        Default::default(),
-        vec![],
-    ));
+    runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.frame.input_area.is_some());
 }
@@ -446,11 +419,7 @@ fn a_picker_query_offers_a_composition_area() {
 fn focus_loss_ends_ime_composition_without_changing_committed_text() {
     let mut runner = EditorRunner::new(crate::editor_of(text::value("hello")));
     let root = runner.editor.model.workspace.document_root().clone();
-    runner.editor.model.selection = Some(selection::Selection::edge(
-        &root,
-        Default::default(),
-        vec![],
-    ));
+    runner.editor.model.selection = Some(selection::Selection::edge(&root, vec![]));
     runner.refresh_frame(1.0, VIEWPORT);
     assert!(runner.ime_event(
         &ImeEvent::Preedit("draft".into(), Some((5, 5))),

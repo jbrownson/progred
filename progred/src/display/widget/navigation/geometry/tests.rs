@@ -56,7 +56,6 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
     let other = Root::document();
     let landmarks: [Landmark<()>; 2] = [
         Landmark {
-            scope: Default::default(),
             root: Some(other.clone()),
             path: Rc::from([]),
             rect: Rect::new(0.0, 0.0, 20.0, 20.0),
@@ -66,7 +65,6 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
             tab_stop: false,
         },
         Landmark {
-            scope: Default::default(),
             root: Some(root.clone()),
             path: Rc::from([]),
             rect: Rect::new(0.0, 1_000.0, 20.0, 1_060.0),

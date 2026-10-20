@@ -4,7 +4,7 @@ use crate::display::widget::view::{Root, Target};
 use crate::location::{Location, Start};
 use crate::{Editor, selection::Stage};
 use ::grap::path;
-use gid::{Document, Path, Resolution, Step, Value};
+use gid::{Document, Resolution, Step, Value};
 use std::rc::Rc;
 
 pub(crate) fn libraries(ids: Option<&str>) -> Result<crate::stack::Stack, String> {
@@ -249,7 +249,7 @@ fn named_reference(
 #[derive(PartialEq, Eq)]
 struct Selection {
     root: Root,
-    path: Path,
+    path: crate::occurrence::Path,
     /// Where the selected data is stored.
     source: Option<Location<'static>>,
     stage: Stage,
@@ -307,7 +307,7 @@ impl Changes {
                         Target::Document => serde_json::json!("document"),
                         Target::Pane { path: root } => serde_json::json!({"pane": path::value(root)}),
                     },
-                    "path": path::value(&selected.path),
+                    "path": crate::occurrence::value(&selected.path),
                     "source": selected.source.as_ref().map(source),
                     "stage": match selected.stage {
                         Stage::Edge => "value",

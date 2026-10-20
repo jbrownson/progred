@@ -13,7 +13,7 @@ mod runtime;
 
 /// The occurrence at the top of `root`, where these tests keep their work.
 fn site(root: &crate::display::widget::view::Root) -> crate::editing::Site {
-    crate::editing::Site::new(root.clone(), Rc::from([]), Default::default())
+    crate::editing::Site::new(root.clone(), Rc::from([]))
 }
 
 fn group(children: Value) -> Value {

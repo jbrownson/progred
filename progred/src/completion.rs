@@ -32,7 +32,7 @@ pub(crate) fn commit(
             on_commit.as_ref(),
         )
     {
-        let (root, scope) = (selection.root().clone(), selection.scope().clone());
+        let root = selection.root().clone();
         if prepared.document_changed {
             model.doc = prepared.document;
             model.history.record(before);
@@ -44,7 +44,6 @@ pub(crate) fn commit(
                 libraries,
             },
             &root,
-            scope,
             &prepared.path,
             &mut view.annotations,
             &mut model.selection,
@@ -58,7 +57,7 @@ pub(crate) fn commit(
 pub(crate) struct Prepared {
     pub document: std::rc::Rc<gid::Document>,
     pub document_changed: bool,
-    pub path: gid::Path,
+    pub path: crate::occurrence::Path,
     pub effects: crate::site::PendingChanges,
 }
 
@@ -95,30 +94,22 @@ pub(crate) fn prepare(
         }
         Stage::Label => {
             let label = value.as_cell()?;
-            path.push(gid::Step::Key(label));
-            Some(
-                if selection
-                    .scope()
-                    .view(*sources)
-                    .resolve_path(&path)
-                    .is_some()
-                {
-                    false
-                } else {
-                    let changed = definition.is_some();
-                    if let Some(value) = definition {
-                        std::rc::Rc::make_mut(&mut document)
-                            .cells
-                            .set_value(label, value);
-                    }
-                    changed
-                },
-            )
+            path.push(crate::occurrence::Step::Key(label));
+            Some(if crate::occurrence::read(sources, &path).is_some() {
+                false
+            } else {
+                let changed = definition.is_some();
+                if let Some(value) = definition {
+                    std::rc::Rc::make_mut(&mut document)
+                        .cells
+                        .set_value(label, value);
+                }
+                changed
+            })
         }
         Stage::Edge => None,
     }?;
     let annotation = annotations.at(&path).cloned();
-    let selection_scope = selection.scope();
     let selection = Some((selection.path().to_vec(), selection.payload()));
     let mut effects = crate::site::PendingChanges {
         annotation,
@@ -128,10 +119,12 @@ pub(crate) fn prepare(
     };
     if let Some(function) = on_commit {
         function(
-            &selection_scope.view(Sources {
-                doc: &document,
-                libraries: sources.libraries,
-            }),
+            &crate::editing::Read {
+                sources: Sources {
+                    doc: &document,
+                    libraries: sources.libraries,
+                },
+            },
             &path,
             &mut effects,
         )

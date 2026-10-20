@@ -65,8 +65,12 @@ impl OrbitProfile {
             .path
             .iter()
             .cloned()
-            .chain([Step::Key(libraries::presentation::vocabulary::RESULT)])
-            .collect();
+            .map(crate::occurrence::Step::from)
+            .chain([
+                crate::occurrence::Step::Key(libraries::presentation::vocabulary::RESULT),
+                crate::occurrence::Step::Computed,
+            ])
+            .collect::<crate::occurrence::Path>();
         let mut editor = crate::editor::new_editor(
             crate::display::widget::style::Theme::Light.palette(),
             crate::modifiers::native(),
@@ -101,7 +105,11 @@ impl OrbitProfile {
             for (position, key) in sections {
                 editor.session().set_folded(
                     &root,
-                    &[Step::Key(outline), Step::Element(position), Step::Key(key)],
+                    &crate::occurrence::of(&[
+                        Step::Key(outline),
+                        Step::Element(position),
+                        Step::Key(key),
+                    ]),
                     false,
                     Some(true),
                 );

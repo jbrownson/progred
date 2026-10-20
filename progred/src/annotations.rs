@@ -4,7 +4,8 @@
 //! uses typed paths; the editor library's path module exposes their GID
 //! representation.
 
-use gid::{CellId, Step, Value};
+use crate::occurrence::Step;
+use gid::{CellId, Value};
 use std::collections::HashMap;
 use std::rc::Rc;
 

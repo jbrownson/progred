@@ -28,12 +28,11 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
     let rect = |path: &[Step]| bench.landmarks.landmark(path).unwrap().rect;
     let coordinate_rect = rect(&coordinate);
     let number_rect = rect(&number);
-    assert!(
-        !bench
-            .landmarks
+    assert!(!bench.landmarks.iter().any(|d| {
+        d.path
             .iter()
-            .any(|d| d.path.iter().any(|s| matches!(s, Step::Follow(_))))
-    );
+            .any(|s| matches!(s, crate::occurrence::Step::Follow(_)))
+    }));
     for (point, path) in [
         (coordinate_rect.center(), coordinate.to_vec()),
         (number_rect.center(), number.clone()),

@@ -5,7 +5,7 @@ use cam::paths::{Cursor, InvalidPath};
 
 /// The pane's occurrence at `path`, where the tree program's work is kept.
 fn site(root: &crate::display::widget::view::Root, path: &[gid::Step]) -> crate::editing::Site {
-    crate::editing::Site::new(root.clone(), std::rc::Rc::from(path), Default::default())
+    crate::editing::Site::new(root.clone(), crate::occurrence::of(path).into())
 }
 
 struct ViewportEnv<'a> {

@@ -40,8 +40,7 @@ fn runner() -> EditorRunner {
 fn at(runner: &EditorRunner, path: Vec<Step>) -> Rc<Interaction> {
     let site = crate::editing::Site::new(
         runner.editor.model.workspace.document_root().clone(),
-        Rc::from(path),
-        Default::default(),
+        crate::occurrence::of(&path).into(),
     );
     Interaction::at(&runner.editor.computations, &site)
 }

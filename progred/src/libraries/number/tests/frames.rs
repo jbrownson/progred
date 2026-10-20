@@ -83,7 +83,9 @@ fn numeric_scrubbing_includes_the_representation_but_not_the_name() {
             };
             assert_eq!(
                 driver.hover_at(point),
-                Some(Hovered::Tree(Hover::Value(Rc::from(path.clone())))),
+                Some(Hovered::Tree(Hover::Value(
+                    crate::occurrence::of(&path).into()
+                ))),
                 "{contact}"
             );
             if pick {
@@ -120,8 +122,7 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
         assert!(!plain.landmarks.landmark(&path).is_some());
         world.model.selection = Some(pending_value(
             &crate::test_root(),
-            Default::default(),
-            path.to_vec(),
+            crate::occurrence::of(&path),
         ));
         assert!(editing_frame(&mut world).completion.is_some());
         world.model.selection = None;
@@ -144,12 +145,11 @@ fn numeric_operation_labels_preserve_function_hover_and_selection() {
         };
         let (bench, _) = place(&doc, None, 900.0);
         let head = bench.landmarks.landmark(&function_path).unwrap();
-        assert!(
-            !bench
-                .landmarks
+        assert!(!bench.landmarks.iter().any(|d| {
+            d.path
                 .iter()
-                .any(|d| d.path.iter().any(|s| matches!(s, Step::Follow(_))))
-        );
+                .any(|s| matches!(s, crate::occurrence::Step::Follow(_)))
+        }));
         for x in [head.rect.x0 + 0.5, head.rect.x1 - 0.5] {
             let (hovered, _) = place_with(BenchFrame {
                 pointer: Some(Point::new(x, head.rect.center().y)),

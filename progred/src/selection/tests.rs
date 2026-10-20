@@ -25,13 +25,8 @@ fn replacing_query_text_settles_completion_state_before_the_next_edit() {
             f64::value(30.0),
         ),
     ]);
-    let mut selected = Selection::from_payload(
-        &crate::test_root(),
-        &src(&doc, &libraries),
-        Default::default(),
-        vec![],
-        payload,
-    );
+    let mut selected =
+        Selection::from_payload(&crate::test_root(), &src(&doc, &libraries), vec![], payload);
     assert_eq!(selected.choice(), 0);
     assert_eq!(selected.completion_scroll(), 0.0);
     selected.edit_query(|line| {
@@ -53,17 +48,35 @@ fn a_shadowing_document_definition_stays_editable() {
         root: Some(cell.into()),
         cells: Cells::new(),
     });
-    assert!(pending_edge(&root, &Scope::default().view(src(&doc, &lib)), vec![]).is_none());
+    assert!(
+        pending_edge(
+            &root,
+            &Read {
+                sources: src(&doc, &lib)
+            },
+            vec![]
+        )
+        .is_none()
+    );
 
     Rc::make_mut(&mut doc)
         .cells
         .set_value(cell, Value::record([]));
-    let pending = pending_edge(&root, &Scope::default().view(src(&doc, &lib)), vec![]).unwrap();
+    let pending = pending_edge(
+        &root,
+        &Read {
+            sources: src(&doc, &lib),
+        },
+        vec![],
+    )
+    .unwrap();
     assert_eq!(pending.path(), &[Step::Follow(gid::Resolution::Document)]);
     assert!(
         pending_edge(
             &root,
-            &Scope::default().view(src(&doc, &lib)),
+            &Read {
+                sources: src(&doc, &lib)
+            },
             vec![Step::Follow(gid::Resolution::Library(CellId::from_u128(1)))],
         )
         .is_none()
@@ -72,7 +85,15 @@ fn a_shadowing_document_definition_stays_editable() {
     Rc::make_mut(&mut doc)
         .cells
         .set_value(cell, Value::list([]));
-    let pending = pending_into(&root, &Scope::default().view(src(&doc, &lib)), &[], true).unwrap();
+    let pending = pending_into(
+        &root,
+        &Read {
+            sources: src(&doc, &lib),
+        },
+        &[],
+        true,
+    )
+    .unwrap();
     assert_eq!(
         pending.path().first(),
         Some(&Step::Follow(gid::Resolution::Document))
@@ -106,8 +127,9 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         ),
     ]);
     Rc::make_mut(&mut doc).root = doc.root.clone();
-    let scope = Scope::default();
-    let sources = scope.view(src(&doc, &lib));
+    let sources = Read {
+        sources: src(&doc, &lib),
+    };
 
     // A link to a record cell pends its field under Follow; an
     // inline record pends at its own path.
@@ -116,12 +138,12 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     let inline = pending_edge(
         &crate::test_root(),
         &sources,
-        vec![Step::Follow(gid::Resolution::Document), key("at")],
+        vec![Step::Follow(gid::Resolution::Document), key("at").into()],
     )
     .unwrap();
     assert_eq!(
         inline.path(),
-        &[Step::Follow(gid::Resolution::Document), key("at")]
+        &[Step::Follow(gid::Resolution::Document), key("at").into()]
     );
 
     // Lists, external cells, and bare cells decline fields. Text
@@ -131,7 +153,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_edge(
             &crate::test_root(),
             &sources,
-            vec![Step::Follow(gid::Resolution::Document), key("tags")]
+            vec![Step::Follow(gid::Resolution::Document), key("tags").into()]
         )
         .is_none()
     );
@@ -139,7 +161,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_edge(
             &crate::test_root(),
             &sources,
-            vec![Step::Follow(gid::Resolution::Document), key("s")]
+            vec![Step::Follow(gid::Resolution::Document), key("s").into()]
         )
         .is_some()
     );
@@ -147,7 +169,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_edge(
             &crate::test_root(),
             &sources,
-            vec![Step::Follow(gid::Resolution::Document), key("lib")]
+            vec![Step::Follow(gid::Resolution::Document), key("lib").into()]
         )
         .is_none()
     );
@@ -155,7 +177,10 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_edge(
             &crate::test_root(),
             &sources,
-            vec![Step::Follow(gid::Resolution::Document), key("material")]
+            vec![
+                Step::Follow(gid::Resolution::Document),
+                key("material").into()
+            ]
         )
         .is_none()
     );
@@ -165,14 +190,17 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     let filling = pending_follow(
         &crate::test_root(),
         &sources,
-        &[Step::Follow(gid::Resolution::Document), key("material")],
+        &[
+            Step::Follow(gid::Resolution::Document),
+            key("material").into(),
+        ],
     )
     .unwrap();
     assert_eq!(
         filling.path(),
         &[
             Step::Follow(gid::Resolution::Document),
-            key("material"),
+            key("material").into(),
             Step::Follow(gid::Resolution::Document)
         ]
     );
@@ -180,7 +208,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_follow(
             &crate::test_root(),
             &sources,
-            &[Step::Follow(gid::Resolution::Document), key("lib")]
+            &[Step::Follow(gid::Resolution::Document), key("lib").into()]
         )
         .is_none()
     );
@@ -188,7 +216,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_follow(
             &crate::test_root(),
             &sources,
-            &[Step::Follow(gid::Resolution::Document), key("at")]
+            &[Step::Follow(gid::Resolution::Document), key("at").into()]
         )
         .is_none()
     );
@@ -197,7 +225,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     let into = pending_into(
         &crate::test_root(),
         &sources,
-        &[Step::Follow(gid::Resolution::Document), key("tags")],
+        &[Step::Follow(gid::Resolution::Document), key("tags").into()],
         true,
     )
     .unwrap();
@@ -211,7 +239,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_insert(
             &crate::test_root(),
             &sources,
-            &[Step::Follow(gid::Resolution::Document), key("tags")],
+            &[Step::Follow(gid::Resolution::Document), key("tags").into()],
             false
         )
         .is_some()
@@ -220,7 +248,10 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_insert(
             &crate::test_root(),
             &sources,
-            &[Step::Follow(gid::Resolution::Document), key("material")],
+            &[
+                Step::Follow(gid::Resolution::Document),
+                key("material").into()
+            ],
             false
         )
         .is_some()
@@ -229,7 +260,7 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
         pending_insert(
             &crate::test_root(),
             &sources,
-            &[Step::Follow(gid::Resolution::Document), key("s")],
+            &[Step::Follow(gid::Resolution::Document), key("s").into()],
             false
         )
         .is_some()
@@ -276,7 +307,7 @@ fn selecting_an_empty_value_slot_pends() {
     // A writable valueless cell's Follow slot is already
     // authoring: selecting it (the rendered placeholder) pends.
     assert_eq!(
-        make_selection(vec![Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
+        make_selection(vec![gid::Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
         crate::selection::Stage::Pending
     );
     // Valued, it selects normally.
@@ -284,13 +315,13 @@ fn selecting_an_empty_value_slot_pends() {
         .cells
         .set_value(bare, crate::libraries::text::value("v"));
     assert_eq!(
-        make_selection(vec![Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
+        make_selection(vec![gid::Step::Follow(gid::Resolution::Document)]).stage(&src(&doc, &lib)),
         crate::selection::Stage::Edge
     );
     // An EXTERNAL cell has an ordinary value, so its Follow slot
     // selects normally and remains unwritable.
     Rc::make_mut(&mut doc).root = Some(Value::from(lib_cell));
-    let external = make_selection(vec![Step::Follow(gid::Resolution::Library(
+    let external = make_selection(vec![gid::Step::Follow(gid::Resolution::Library(
         CellId::from_u128(1),
     ))]);
     assert_eq!(
@@ -308,12 +339,7 @@ fn selecting_an_empty_value_slot_pends() {
 
 #[test]
 fn the_pending_payload_is_derived_from_the_live_editor() {
-    let mut pending = crate::selection::pending_with_query(
-        &crate::test_root(),
-        Default::default(),
-        Vec::new(),
-        "",
-    );
+    let mut pending = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
     pending.set_completion_view(24.0, 2);
     pending.edit_query(|line| line.handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string())));
     assert_eq!(pending.choice(), 0);
@@ -331,11 +357,11 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
     let document = gid::Document::default();
     let empty = crate::library::Libraries::default();
     let stack = crate::stack::load();
-    let site = vec![gid::Step::Key(gid::new_cell_id())];
+    let site = vec![Step::Key(gid::new_cell_id())];
     let child = vec![gid::Step::Element(
         gid::position::between(None, None).unwrap(),
     )];
-    let destination: Vec<_> = site.iter().chain(&child).cloned().collect();
+    let destination = crate::occurrence::below(&site, &child);
     for payload in [
         payload::edge(),
         ::grap::absent::value(crate::libraries::editor::selection::vocabulary::NO_SELECTION),
@@ -351,10 +377,12 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
             };
             let mut native = initial();
             assert!(at(&child, payload.clone())(
-                &crate::editing::Scope::default().view(crate::sources::Sources {
-                    doc: &document,
-                    libraries: &empty
-                }),
+                &crate::editing::Read {
+                    sources: crate::sources::Sources {
+                        doc: &document,
+                        libraries: &empty
+                    }
+                },
                 &site,
                 &mut native,
             ));
@@ -363,10 +391,12 @@ fn native_selection_needs_no_evaluator_and_agrees_with_grap() {
                 crate::libraries::editor::selection::tests::grap_at(&child, payload.clone()),
                 [],
             )(
-                &crate::editing::Scope::default().view(crate::sources::Sources {
-                    doc: &document,
-                    libraries: &stack.libraries
-                }),
+                &crate::editing::Read {
+                    sources: crate::sources::Sources {
+                        doc: &document,
+                        libraries: &stack.libraries
+                    }
+                },
                 &site,
                 &mut interpreted,
             ));

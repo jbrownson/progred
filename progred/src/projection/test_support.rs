@@ -32,12 +32,25 @@ pub(crate) fn at_root<W: 'static, H: 'static, R>(
     value: Option<&grap::RuntimeValue>,
     run: impl FnOnce(&mut crate::display::widget::Context<'_, '_, W, H>) -> R,
 ) -> R {
+    at_path(cx, text, project, &[], value, run)
+}
+
+/// [`at_root`] at `path`, where a computed one, `[Step::Computed]`, is
+/// read-only.
+pub(crate) fn at_path<W: 'static, H: 'static, R>(
+    cx: &Cx<'_>,
+    text: &mut TextCtx<'_>,
+    project: &dyn crate::display::widget::project::Project<W, H>,
+    path: &[crate::occurrence::Step],
+    value: Option<&grap::RuntimeValue>,
+    run: impl FnOnce(&mut crate::display::widget::Context<'_, '_, W, H>) -> R,
+) -> R {
     run(&mut crate::display::widget::Context {
         text,
         project,
         toolkit: &Occurrence {
             cx,
-            path: &[],
+            path,
             ancestors: &super::Ancestry::default(),
         },
         value,
@@ -53,7 +66,6 @@ pub(crate) fn offered(
     world.model.selection = Some(Selection::from_payload(
         selection.root(),
         &world.sources(),
-        selection.scope().clone(),
         selection.path().to_vec(),
         selection.payload(),
     ));
@@ -250,7 +262,7 @@ impl BenchContext {
         // Test-only phase timings; normal frames contain no timers.
         let start = std::time::Instant::now();
         let root_path = root;
-        let root = sources.resolve_path(root_path);
+        let root = crate::occurrence::read(&sources, root_path);
         #[cfg(feature = "layout-profile")]
         let profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
         let graph = prepare_project(
@@ -262,7 +274,6 @@ impl BenchContext {
                 sources,
                 root,
                 root_path,
-                detached: false,
                 selection,
                 source_selection: selection,
                 annotations,

@@ -281,12 +281,11 @@ fn closing_the_picker_removes_only_its_selection_state() {
 
 #[test]
 fn a_read_only_swatch_selects_its_color() {
-    use crate::libraries::presentation::vocabulary::RESULT;
     let color = value(Color::from_rgb8(0x50, 0x96, 0xdc));
     let mut driver =
         crate::driver::Driver::of(Value::record([(::grap::vocabulary::EVALUATE, color)]));
     // The evaluated result is computed, so it's read-only.
-    let result = vec![gid::Step::Key(RESULT)];
+    let result = crate::test_examples::result_path(&[]);
     let rect = driver.rect(&result);
     driver.click_at(kurbo::Point::new(rect.x0 + 7.0, rect.center().y));
     assert_eq!(driver.selection(), result);
@@ -339,7 +338,7 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
         driver.picker_entries().is_none(),
         "picker replaces completion"
     );
-    driver.select(&[]);
+    driver.select::<Step>(&[]);
     assert!(unchanged(&driver), "leaving does not insert the seed");
     open(&mut driver);
     driver.press(NamedKey::Escape);
@@ -350,7 +349,7 @@ fn new_color_completion_opens_without_editing_and_commits_at_the_missing_locatio
     );
 
     // Drag across the color plane the picker draws.
-    driver.select(&[]);
+    driver.select::<Step>(&[]);
     open(&mut driver);
     let plane = crate::display::test_support::painted(&driver.painted().0)
         .find_map(|command| match command {

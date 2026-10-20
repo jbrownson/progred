@@ -1,12 +1,13 @@
-//! Selection and collapse. Selection paths name projected occurrences; their
-//! conject locates document data for mutations.
+//! Selection and collapse. Selection paths name projected occurrences, and
+//! say where the data a mutation writes is.
 
 use crate::display::widget::view::Root;
-use crate::editing::{Read, Scope};
+use crate::editing::Read;
 use crate::location::Location;
+use crate::occurrence::{Path, Step};
 use crate::sources::Sources;
 use ::grap::text;
-use gid::{Path, Position, Resolution, Step, Value, position};
+use gid::{Position, Resolution, Value, position};
 use puri::edit::LineEditState;
 use std::rc::Rc;
 
@@ -33,7 +34,6 @@ pub struct Selection {
     /// Where: the value's path for edge and pending stages, the
     /// parent record's for a label stage.
     path: Path,
-    scope: Scope,
     payload: Value,
     editor: Option<Editor>,
     /// Where a picker opened from a key was opened, for stepping back to.
@@ -55,21 +55,15 @@ pub enum Stage {
 }
 
 impl Selection {
-    /// Reify a payload at a host-owned path, read through `scope`: the
-    /// mutation boundary Grap capabilities use after decoding the path.
+    /// Reify a payload at a host-owned path: the mutation boundary Grap
+    /// capabilities use after decoding the path.
     /// Editor fields are decoded once into their live owner, then removed
     /// from the stored payload.
-    pub(crate) fn from_payload(
-        root: &Root,
-        sources: &Sources,
-        scope: Scope,
-        path: Path,
-        payload: Value,
-    ) -> Self {
+    pub(crate) fn from_payload(root: &Root, sources: &Sources, path: Path, payload: Value) -> Self {
         let mut selection = match stage_of(&payload) {
-            Stage::Pending | Stage::Label => query_selection(root, scope, path, payload),
+            Stage::Pending | Stage::Label => query_selection(root, path, payload),
             Stage::Edge => {
-                let read = scope.view(*sources);
+                let read = Read { sources: *sources };
                 let mounted = payload::editor_text(&payload)
                     .filter(|_| read.writable(&path))
                     .map(|text| mount(&payload, text, read.resolve_path(&path).is_none()));
@@ -80,7 +74,6 @@ impl Selection {
                 Self {
                     root: root.clone(),
                     path,
-                    scope,
                     payload,
                     editor,
                     origin: None,
@@ -91,11 +84,10 @@ impl Selection {
         selection
     }
 
-    pub(crate) fn edge(root: &Root, scope: Scope, path: Path) -> Self {
+    pub(crate) fn edge(root: &Root, path: Path) -> Self {
         Self {
             root: root.clone(),
             path,
-            scope,
             payload: payload::edge(),
             editor: None,
             origin: None,
@@ -106,17 +98,11 @@ impl Selection {
         &self.path
     }
 
-    pub(crate) fn scope(&self) -> &Scope {
-        &self.scope
-    }
-
-    /// This selection selected again, read through `scope`: its line's
-    /// caret moves to the end.
-    pub(crate) fn reselected(mut self, scope: Scope) -> Self {
+    /// This selection selected again: its line's caret moves to the end.
+    pub(crate) fn reselected(mut self) -> Self {
         if let Some(line) = self.edit_mut() {
             line.cursor_to_end();
         }
-        self.scope = scope;
         self
     }
 
@@ -129,17 +115,17 @@ impl Selection {
         self
     }
 
-    /// Where the selected data is stored, as this selection's scope names it.
-    pub(crate) fn location(&self) -> Option<Location<'_>> {
-        self.scope.location(&self.path)
+    /// Where the selected data is, as its path says.
+    pub(crate) fn location(&self) -> Option<Location<'static>> {
+        crate::occurrence::location(&self.path)
     }
 
     pub(crate) fn value<'a>(&self, sources: &Sources<'a>) -> Option<&'a Value> {
-        self.scope.view(*sources).resolve_path(&self.path)
+        crate::occurrence::read(sources, &self.path)
     }
 
     pub(crate) fn writable(&self, sources: &Sources<'_>) -> bool {
-        self.scope.view(*sources).writable(&self.path)
+        crate::occurrence::writable(sources, &self.path)
     }
 
     pub fn root(&self) -> &Root {
@@ -316,24 +302,23 @@ fn mount(payload: &Value, text: &str, query: bool) -> (Value, Editor) {
 
 /// A value-stage pending: the location named by `path` does not
 /// exist, and its value is being authored.
-pub(crate) fn pending_value(root: &Root, scope: Scope, path: Path) -> Selection {
-    pending_with_query(root, scope, path, "")
+pub(crate) fn pending_value(root: &Root, path: Path) -> Selection {
+    pending_with_query(root, path, "")
 }
 
 /// A value pending with `seed` already typed as its query, as typing over a
 /// selected value opens one.
-pub(crate) fn pending_with_query(root: &Root, scope: Scope, path: Path, seed: &str) -> Selection {
-    query_selection(root, scope, path, payload::pending(seed))
+pub(crate) fn pending_with_query(root: &Root, path: Path, seed: &str) -> Selection {
+    query_selection(root, path, payload::pending(seed))
 }
 
 /// Decode an incoming pending selection. The caret defaults to the
 /// end of the query when no offset was supplied.
-fn query_selection(root: &Root, scope: Scope, path: Path, payload: Value) -> Selection {
+fn query_selection(root: &Root, path: Path, payload: Value) -> Selection {
     let (payload, editor) = mount(&payload, payload::query(&payload).unwrap_or(""), true);
     Selection {
         root: root.clone(),
         path,
-        scope,
         payload,
         editor: Some(editor),
         origin: None,
@@ -341,7 +326,7 @@ fn query_selection(root: &Root, scope: Scope, path: Path, payload: Value) -> Sel
 }
 
 /// A new field on a writable record, following a cell if needed.
-pub(crate) fn pending_edge(root: &Root, read: &Read, parent: Path) -> Option<Selection> {
+pub(crate) fn pending_edge(root: &Root, read: &Read<'_>, parent: Path) -> Option<Selection> {
     let value = read.resolve_path(&parent)?;
     let parent = match value {
         Value::Record(_) => parent,
@@ -355,29 +340,24 @@ pub(crate) fn pending_edge(root: &Root, read: &Read, parent: Path) -> Option<Sel
         Value::Blob(_) | Value::List(_) => return None,
     };
     read.writable(&parent).then_some(())?;
-    Some(query_selection(
-        root,
-        read.scope.clone(),
-        parent,
-        payload::label(""),
-    ))
+    Some(query_selection(root, parent, payload::label("")))
 }
 
 /// A bare cell's value being authored: the within-gesture's meaning
 /// on a referenced identity with no value yet.
-pub(crate) fn pending_follow(root: &Root, read: &Read, path: &[Step]) -> Option<Selection> {
+pub(crate) fn pending_follow(root: &Root, read: &Read<'_>, path: &[Step]) -> Option<Selection> {
     let cell = read.resolve_path(path)?.as_cell()?;
     read.sources.resolve(cell).is_none().then_some(())?;
     let mut followed = path.to_vec();
     followed.push(Step::Follow(Resolution::Document));
     read.writable(&followed).then_some(())?;
-    Some(pending_value(root, read.scope.clone(), followed))
+    Some(pending_value(root, followed))
 }
 
 /// A pending sibling next to the element at `path` (which must sit at
 /// an element step), minted between it and its neighbor. The list
 /// projection's gesture.
-fn pending_beside(root: &Root, read: &Read, path: &[Step], after: bool) -> Option<Selection> {
+fn pending_beside(root: &Root, read: &Read<'_>, path: &[Step], after: bool) -> Option<Selection> {
     let (parent_path, position) = match path {
         [parent_path @ .., Step::Element(position)] => Some((parent_path, position)),
         _ => None,
@@ -396,7 +376,7 @@ fn pending_beside(root: &Root, read: &Read, path: &[Step], after: bool) -> Optio
     };
     let mut fresh_path = parent_path.to_vec();
     fresh_path.push(Step::Element(fresh));
-    Some(pending_value(root, read.scope.clone(), fresh_path))
+    Some(pending_value(root, fresh_path))
 }
 
 /// A pending element inside the list at `path` — inline, or a link's
@@ -406,7 +386,7 @@ fn pending_beside(root: &Root, read: &Read, path: &[Step], after: bool) -> Optio
 /// [`pending_edge`].
 pub(crate) fn pending_into(
     root: &Root,
-    read: &Read,
+    read: &Read<'_>,
     path: &[Step],
     end: bool,
 ) -> Option<Selection> {
@@ -431,23 +411,27 @@ pub(crate) fn pending_into(
     };
     let mut fresh_path = list_path;
     fresh_path.push(Step::Element(fresh));
-    Some(pending_value(root, read.scope.clone(), fresh_path))
+    Some(pending_value(root, fresh_path))
 }
 
 /// Plain Enter: a new peer BESIDE the selection — continue the
 /// enumeration you are in. An element pends a sibling (before with
-/// shift); a field value pends a new field on its parent; the root
-/// has nothing beside it and falls within — a field on a record, an
+/// shift); a field value pends a new field on its parent; the root, and
+/// where a jump or computed value starts, has nothing beside it and falls
+/// within — a field on a record, an
 /// appended element on a list. A cell's whole value is drawn where its
 /// reference is, so it continues the reference's enumeration.
 pub(crate) fn pending_enter(
     root: &Root,
-    read: &Read,
+    read: &Read<'_>,
     path: &[Step],
     before: bool,
 ) -> Option<Selection> {
     match path {
         [reference @ .., Step::Follow(_)] => pending_enter(root, read, reference, before),
+        // Where a jump or a computed value starts, nothing drawn is beside
+        // it, as at the root.
+        [.., Step::Jump(_) | Step::Computed] => pending_insert(root, read, path, before),
         _ => pending_beside(root, read, path, !before)
             .or_else(|| {
                 path.split_last()
@@ -464,7 +448,7 @@ pub(crate) fn pending_enter(
 /// prepend. Atoms other than links have no within and decline.
 pub(crate) fn pending_insert(
     root: &Root,
-    read: &Read,
+    read: &Read<'_>,
     path: &[Step],
     front: bool,
 ) -> Option<Selection> {
@@ -482,7 +466,7 @@ pub fn pending_root(root: &Root, sources: &Sources) -> Option<Selection> {
     sources
         .root()
         .is_none()
-        .then(|| pending_value(root, Scope::default(), Vec::new()))
+        .then(|| pending_value(root, Vec::new()))
 }
 
 /// The value a pending query resolves to: a leading quote forces
@@ -501,16 +485,16 @@ pub fn resolve_query(text: &str) -> Value {
 }
 
 /// After a commit, select `path` below the committing site, with `payload`.
-pub fn at(path: &[Step], payload: Value) -> crate::site::Continuation {
+pub fn at(path: &[gid::Step], payload: Value) -> crate::site::Continuation {
     let path = path.to_vec();
     Rc::new(move |_, site, staged| {
-        staged.select(site.iter().chain(&path).cloned().collect(), payload.clone());
+        staged.select(crate::occurrence::below(site, &path), payload.clone());
         true
     })
 }
 
 /// After a commit, open a pending at `path` below the committing site.
-pub fn pending_at(path: &[Step]) -> crate::site::Continuation {
+pub fn pending_at(path: &[gid::Step]) -> crate::site::Continuation {
     at(path, payload::empty_pending())
 }
 

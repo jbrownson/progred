@@ -1,7 +1,7 @@
 use super::*;
 use crate::display::widget::source::SourceTrace;
 use crate::hover::Hover;
-use crate::libraries::{controls, presentation};
+use crate::libraries::controls;
 use kurbo::Point;
 use puri::hover::Claim;
 use ui_events::pointer::{PointerEvent, PointerState, PointerUpdate};
@@ -61,10 +61,7 @@ fn forest_slider_profile_loop() {
             .document
             .annotations
             .set_field(
-                &[
-                    Step::Key(names["second"]),
-                    Step::Key(presentation::vocabulary::RESULT),
-                ],
+                &crate::test_examples::result_path(&[gid::Step::Key(names["second"])]),
                 controls::vocabulary::STATE,
                 Some(crate::libraries::f64::value((index % 101) as f64 / 100.0)),
             );

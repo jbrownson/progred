@@ -20,7 +20,7 @@ fn editor(root: Value) -> crate::Editor {
 fn typing_an_operator_after_a_number_makes_it_the_left_operand() {
     let typed = |root: Value, typed: &str| {
         let mut driver = Driver::of(root);
-        driver.select(&[]);
+        driver.select::<Step>(&[]);
         driver.type_text(typed);
         driver
     };
@@ -78,7 +78,7 @@ fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
         assert!(!driver.keystroke(Key::Named(NamedKey::Enter), modifiers));
         assert_eq!(
             (driver.selection(), driver.stage()),
-            (path, Some(Stage::Edge))
+            (crate::occurrence::of(&path), Some(Stage::Edge))
         );
     }
     assert_eq!(driver.value(&[]), before);
@@ -89,7 +89,7 @@ fn a_numbers_other_fields_follow_it_but_no_key_adds_one() {
 fn enter_adds_no_field_within_a_number_unless_its_view_shows_a_record() {
     let enter = |editor: crate::Editor, command: bool| {
         let mut driver = Driver::new(editor, Driver::VIEWPORT);
-        driver.select(&[]);
+        driver.select::<Step>(&[]);
         let modifiers = if command {
             crate::test_support::command()
         } else {

@@ -203,15 +203,15 @@ the `Session` the host lends at dispatch, and call ordinary
 [editing helpers](../progred/src/editing.rs). There is no per-widget
 dictionary of editor callbacks. A read-only line installs no editing handlers.
 Puri's text editor remains independent of these document operations.
-A site carries an [editing scope](../progred/src/editing/scope.rs):
-`site.open(session)` opens an `Edit` over that session, reading and writing
-through the scope. Opening it neither allocates nor copies the editor. The scope
-interprets locations through conjects, a jump's location or a computed value's
-none, not arbitrary replacements of every editor operation; the normal
-projection uses its allocation-free identity case.
+A site is a view and an [occurrence path](../progred/src/occurrence.rs), which
+says where its data is: `site.open(session)` opens an
+[`Edit`](../progred/src/editing/edit.rs) over that session, reading and writing
+where the path resolves. Opening it neither allocates nor copies the editor. A
+path's jump and computed steps are the only reinterpretations, not arbitrary
+replacements of every editor operation.
 Selection and annotations remain local to the occurrence, while document reads
-and mutations resolve through the same conject. Document-editing shell commands
-use the scope retained by the selection too. Copy and fold are instead supplied
+and mutations resolve through the same path. Document-editing shell commands
+resolve the selection's path too. Copy and fold are instead supplied
 by the current projection, using its displayed value and its own fold default
 without requiring a document source. A detached occurrence has no document source;
 read-only behavior follows from that rather than a widget-specific write veto.
@@ -269,7 +269,8 @@ consumer's layout composition, not to a Puri widget's return type.
 
 `descend`, `at`, and `jump` build ordinary preparation functions using an
 explicit [projection scope](../progred/src/display/widget/project.rs). The app
-supplies source lookup, cycle detection, conject, and the selected current and
+supplies source lookup, cycle detection, the paths' jump and computed steps,
+and the selected current and
 descendant partials. They run during preparation, interleaved with measurement
 and before choices resolve, so a descendant several alternatives share prepares
 once in the frame; the next frame starts a fresh builder. Grap's stored layout

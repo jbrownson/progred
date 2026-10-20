@@ -8,7 +8,7 @@ use ui_events::keyboard::Key;
 
 /// A list of text and a list in a window at `zoom`, the inner list selected;
 /// its path.
-fn selecting_a_list(zoom: f64) -> (Driver, Path) {
+fn selecting_a_list(zoom: f64) -> (Driver, gid::Path) {
     let mut editor = crate::editor_of(Value::list([
         text::value("first"),
         Value::list([text::value("inner"), text::value("list")]),
@@ -80,8 +80,8 @@ fn a_picture_holds_only_what_is_in_view() {
         )),
         Size::new(400.0, 120.0),
     );
-    driver.select(&[]);
-    let rect = driver.rect(&[]);
+    driver.select::<Step>(&[]);
+    let rect = driver.rect::<Step>(&[]);
     assert!(command(&mut driver, "c"));
     let mut region = None;
     driver.picture_copy(|picture| {

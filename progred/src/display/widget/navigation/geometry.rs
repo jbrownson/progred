@@ -7,8 +7,8 @@ use crate::display::Host;
 use crate::display::widget::frame::ViewRegion;
 use crate::display::widget::view::Root;
 use crate::model::Model;
+use crate::occurrence::Step;
 use crate::selection::Selection;
-use gid::Step;
 use kurbo::{Rect, Vec2};
 use puri::handler::NavigationDirection;
 

@@ -2,7 +2,7 @@
 //! few checks of what they draw.
 
 use super::*;
-use crate::editing::Scope;
+use crate::editing::Read;
 use crate::libraries::{f64, name};
 use crate::projection::test_support::make_projected_selection;
 use crate::sample::sample_document;
@@ -54,7 +54,11 @@ fn svg_bench_renders_numeric_type_labels() {
         cells,
     };
     render(&doc, None, 400.0, "numeric_type_labels.svg");
-    let selection = make_projected_selection(&doc, &core_libraries(), vec![key("radius")]);
+    let selection = make_projected_selection(
+        &doc,
+        &core_libraries(),
+        crate::occurrence::of(&[key("radius")]),
+    );
     render(
         &doc,
         Some(&selection),
@@ -131,11 +135,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     // The engaged twin: same slot, same rect, selection blue.
     let (_, engaged) = render(
         &empty,
-        Some(&pending_value(
-            &crate::test_root(),
-            Default::default(),
-            Vec::new(),
-        )),
+        Some(&pending_value(&crate::test_root(), Vec::new())),
         320.0,
         "raw_placeholder_engaged.svg",
     );
@@ -157,7 +157,6 @@ fn svg_bench_renders_the_placeholder_notation() {
         &empty,
         Some(&crate::selection::pending_with_query(
             &crate::test_root(),
-            Default::default(),
             Vec::new(),
             "\"asdf\"",
         )),
@@ -171,7 +170,6 @@ fn svg_bench_renders_the_placeholder_notation() {
         },
         Some(&crate::selection::Selection::edge(
             &crate::test_root(),
-            Default::default(),
             Vec::new(),
         )),
         320.0,
@@ -192,7 +190,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         root: Some(crate::libraries::text::value("")),
         cells: Cells::new(),
     };
-    let sel = Selection::edge(&crate::test_root(), Default::default(), Vec::new());
+    let sel = Selection::edge(&crate::test_root(), Vec::new());
     let (_, string) = render(
         &empty_string,
         Some(&sel),
@@ -240,11 +238,13 @@ fn svg_bench_renders_a_pending_edge() {
     let library = crate::stack::load().libraries;
     let edge = pending_edge(
         &crate::test_root(),
-        &Scope::default().view(Sources {
-            doc: &doc,
-            libraries: &library,
-        }),
-        vec![Step::Key(crate::test_values::label("shape"))],
+        &Read {
+            sources: Sources {
+                doc: &doc,
+                libraries: &library,
+            },
+        },
+        crate::occurrence::of(&[Step::Key(crate::test_values::label("shape"))]),
     )
     .unwrap();
     assert_eq!(
@@ -261,10 +261,12 @@ fn svg_bench_renders_a_pending_edge() {
     let typing = typed(
         pending_edge(
             &crate::test_root(),
-            &Scope::default().view(Sources {
-                doc: &doc,
-                libraries: &library,
-            }),
+            &Read {
+                sources: Sources {
+                    doc: &doc,
+                    libraries: &library,
+                },
+            },
             Vec::new(),
         )
         .unwrap(),

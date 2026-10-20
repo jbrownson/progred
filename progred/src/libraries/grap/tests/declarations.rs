@@ -145,9 +145,9 @@ fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
         // Unrelated metadata does not disqualify the wrapper projection.
         assert!(
             !driver
-                .drawn_under(&[])
+                .drawn_under::<Step>(&[])
                 .iter()
-                .any(|(path, _)| path.last() == Some(&Step::Key(metadata)))
+                .any(|(path, _)| path.last() == Some(&crate::occurrence::Step::Key(metadata)))
         );
         driver.select(path);
         driver.type_text(typed);
@@ -302,7 +302,8 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
         });
         assert!(matches!(hovered.hit,
             Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == binder_path));
-        let mut selected = make_projected_editing_selection(&doc, &libraries, name_path.clone());
+        let mut selected =
+            make_projected_editing_selection(&doc, &libraries, crate::occurrence::of(&name_path));
         assert_eq!(selected.edit().unwrap().text(), "size");
         selected.edit_mut().unwrap().set_text("width");
         assert!(write_text(&mut doc, &libraries, &mut selected));
@@ -354,8 +355,10 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
     world.model.workspace.document.shown = crate::workspace::Shown::ALL;
     let pending = pending_edge(
         &crate::test_root(),
-        &crate::editing::Scope::default().view(src(&doc, &libraries)),
-        definition.clone(),
+        &crate::editing::Read {
+            sources: src(&doc, &libraries),
+        },
+        crate::occurrence::of(&definition),
     )
     .unwrap();
     world.model.selection = Some(pending);
@@ -374,31 +377,28 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
             cells,
         };
         let sources = src(&doc, &libraries);
-        let scope = crate::editing::Scope::default();
-        let list_path = &binder_path[..1];
-        let pending =
-            pending_into(&crate::test_root(), &scope.view(sources), list_path, true).unwrap();
+        let read = crate::editing::Read { sources };
+        let list_path = crate::occurrence::of(&binder_path[..1]);
+        let pending = pending_into(&crate::test_root(), &read, &list_path, true).unwrap();
         let missing_path = pending.path().to_vec();
-        assert!(sources.resolve_path(&missing_path).is_none());
+        assert!(crate::occurrence::read(&sources, &missing_path).is_none());
         let mut world = crate::test_editor(doc.clone());
         world.model.selection = Some(pending);
         let frame = editing_frame(&mut world);
         assert!(frame.completion.is_some());
         assert!(frame.landmarks.landmark(&missing_path).is_some());
         assert!(
-            src(&world.model.doc, &libraries)
-                .resolve_path(&missing_path)
-                .is_none()
+            crate::occurrence::read(&src(&world.model.doc, &libraries), &missing_path).is_none()
         );
 
         // A new field in a compact lambda, match, or let must not disappear.
-        world.model.selection = pending_edge(&crate::test_root(), &scope.view(sources), Vec::new());
+        world.model.selection = pending_edge(&crate::test_root(), &read, Vec::new());
         assert!(editing_frame(&mut world).completion.is_some());
         if binder_path.len() > 2 {
             world.model.selection = pending_edge(
                 &crate::test_root(),
-                &scope.view(sources),
-                binder_path[..2].to_vec(),
+                &read,
+                crate::occurrence::of(&binder_path[..2]),
             );
             assert!(editing_frame(&mut world).completion.is_some());
         }
@@ -542,7 +542,8 @@ fn recursive_patterns_keep_text_and_number_facets() {
             .iter()
             .cloned()
             .chain([Step::Element(position.clone())])
-            .collect::<Path>();
+            .map(crate::occurrence::Step::from)
+            .collect::<Vec<_>>();
         assert!(bench.landmarks.landmark(&path).is_some());
         assert!(
             !bench
@@ -641,7 +642,9 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
         world.model.workspace.document.shown = crate::workspace::Shown::ALL;
         world.model.selection = pending_edge(
             &crate::test_root(),
-            &crate::editing::Scope::default().view(world.sources()),
+            &crate::editing::Read {
+                sources: world.sources(),
+            },
             Vec::new(),
         );
         assert!(editing_frame(&mut world).completion.is_some());
@@ -672,7 +675,9 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = pending_edge(
         &crate::test_root(),
-        &crate::editing::Scope::default().view(src(&doc, &libraries)),
+        &crate::editing::Read {
+            sources: src(&doc, &libraries),
+        },
         Vec::new(),
     );
     assert!(editing_frame(&mut world).completion.is_some());
@@ -703,8 +708,7 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(crate::selection::pending_value(
         &crate::test_root(),
-        Default::default(),
-        vec![Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT)],
+        crate::occurrence::of(&[Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT)]),
     ));
     let frame = editing_frame(&mut world);
     assert!(frame.completion.is_some());
@@ -739,7 +743,9 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
         let mut world = crate::test_editor(doc.clone());
         world.model.selection = pending_edge(
             &crate::test_root(),
-            &crate::editing::Scope::default().view(src(&doc, &libraries)),
+            &crate::editing::Read {
+                sources: src(&doc, &libraries),
+            },
             Vec::new(),
         );
         assert!(editing_frame(&mut world).completion.is_some());

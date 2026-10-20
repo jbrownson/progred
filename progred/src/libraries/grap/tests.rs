@@ -584,7 +584,7 @@ fn a_call_argument_label_targets_its_argument() {
     assert_eq!(
         crate::libraries::test_widgets::claim(&head[0]),
         Some(puri::hover::Claim::Direct(crate::frame::Hovered::Tree(
-            crate::hover::Hover::Label(std::rc::Rc::from([Step::Key(argument)]))
+            crate::hover::Hover::Label(std::rc::Rc::from([crate::occurrence::Step::Key(argument)]))
         )))
     );
     assert!(matches!(child.as_ref(), Recorded::Before { .. }));
@@ -1116,7 +1116,7 @@ fn built_in_call_completion_opens_its_first_argument() {
 
 #[test]
 fn grap_results_take_no_typing() {
-    use crate::libraries::{absent, f64, name, presentation, text};
+    use crate::libraries::{absent, f64, name, text};
     let (doc, names) = crate::gid_text::parse(include_str!("../../../fixtures/grap.gid")).unwrap();
     let mut editor = crate::test_editor_with_stack(
         doc,
@@ -1127,10 +1127,9 @@ fn grap_results_take_no_typing() {
         &[names["first"], names["second"], names["third"]],
     );
     let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
-    driver.select(&[
-        Step::Key(names["second"]),
-        Step::Key(presentation::vocabulary::RESULT),
-    ]);
+    driver.select(&crate::test_examples::result_path(&[Step::Key(
+        names["second"],
+    )]));
     assert!(
         driver
             .editor()

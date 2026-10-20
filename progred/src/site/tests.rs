@@ -8,7 +8,7 @@ use gid::Document;
 fn evaluate(
     function: &Value,
     arguments: impl IntoIterator<Item = (gid::CellId, Value)>,
-    path: &[gid::Step],
+    path: &[Step],
     annotation: Option<Value>,
     selection: Option<(Path, Value)>,
     sources: &Sources<'_>,
@@ -301,7 +301,7 @@ fn selection_effect_moves_to_a_full_path_and_local_reads_observe_the_move() {
         doc: &doc,
         libraries: &stack.libraries,
     };
-    let site_path = vec![gid::Step::Key(gid::new_cell_id())];
+    let site_path = vec![Step::Key(gid::new_cell_id())];
     let target = vec![
         gid::Step::Key(gid::new_cell_id()),
         gid::Step::Follow(gid::Resolution::Library(gid::new_cell_id())),
@@ -329,7 +329,10 @@ fn selection_effect_moves_to_a_full_path_and_local_reads_observe_the_move() {
         100,
     )
     .unwrap();
-    assert_eq!(staged.selection, Some((target, payload)));
+    assert_eq!(
+        staged.selection,
+        Some((crate::occurrence::of(&target), payload))
+    );
     assert!(staged.selection_changed && staged.annotation_changed);
     assert_eq!(staged.annotation, None);
 
@@ -356,7 +359,7 @@ fn clearing_another_location_does_not_clear_the_selection() {
         libraries: &stack.libraries,
     };
     let selected = Some((
-        vec![gid::Step::Key(gid::new_cell_id())],
+        vec![Step::Key(gid::new_cell_id())],
         crate::selection::payload::edge(),
     ));
     let handler = sequence([

@@ -4,7 +4,7 @@ Projections declare selectable stops by occurrence path. While the
 chosen layout alternative is placed, the collector folds those stops into
 temporary line summaries. No coordinates, distances, or measured-height
 thresholds choose arrow destinations; Tab's order (below) comes from painted
-rectangles. Selection paths, conjects, and editing capabilities are unchanged.
+rectangles. Selection paths and editing capabilities are unchanged.
 
 ## Structure
 

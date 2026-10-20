@@ -3,6 +3,7 @@
 use crate::driver::Driver;
 use crate::libraries::{editor::workspace, presentation, text};
 use crate::location::Location;
+use crate::occurrence;
 use crate::selection::Stage;
 use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 use ui_events::keyboard::NamedKey;
@@ -28,19 +29,16 @@ fn rendered_in_a_pane(program: CellId, render: Value, cells: Cells) -> Driver {
 }
 
 /// The pane's result, and `rest` within it.
-fn pane_result(driver: &Driver, rest: &[Step]) -> Vec<Step> {
-    driver.element(
+fn pane_result(driver: &Driver, rest: &[occurrence::Step]) -> occurrence::Path {
+    let pane = driver.element(
         &[
             Step::Key(workspace::vocabulary::PANES),
             Step::Key(workspace::vocabulary::LEFT),
         ],
         0,
-        &[
-            [Step::Key(presentation::vocabulary::RESULT)].as_slice(),
-            rest,
-        ]
-        .concat(),
-    )
+        &[],
+    );
+    [crate::test_examples::result_path(&pane).as_slice(), rest].concat()
 }
 
 #[test]
@@ -50,8 +48,12 @@ fn a_missing_cell_named_in_an_error_is_defined_from_the_error() {
     let hole = pane_result(
         &driver,
         &[
-            Step::Key(crate::libraries::absent::vocabulary::CELL),
-            Step::Follow(gid::Resolution::Document),
+            occurrence::Step::Key(crate::libraries::absent::vocabulary::CELL),
+            occurrence::Step::jump(Location::in_cell(
+                program,
+                gid::Resolution::Document,
+                Vec::new(),
+            )),
         ],
     );
     driver.click(&hole);
@@ -88,7 +90,14 @@ fn a_quoted_reference_in_a_result_edits_its_cell() {
         [(::grap::vocabulary::EXPRESSION, quoted.into())],
     );
     let mut driver = rendered_in_a_pane(program, render, cells);
-    let definition = pane_result(&driver, &[Step::Follow(gid::Resolution::Document)]);
+    let definition = pane_result(
+        &driver,
+        &[occurrence::Step::jump(Location::in_cell(
+            quoted,
+            gid::Resolution::Document,
+            Vec::new(),
+        ))],
+    );
     driver.double_click(&definition);
     driver.type_text("after");
     assert_eq!(

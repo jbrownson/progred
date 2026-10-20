@@ -4,7 +4,8 @@ use crate::display::test_support::primary_press;
 use crate::display::widget::view::Root;
 use crate::libraries::f64;
 use crate::libraries::test_widgets::{drag_frame, gesture_place, hover};
-use gid::{Document, Path, Step};
+use crate::occurrence::{Path, Step};
+use gid::Document;
 use kurbo::Point;
 use puri::handler::test_support::DispatchShorthands;
 use ui_events::keyboard::Modifiers;
@@ -50,8 +51,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
                     Rc::new(move |session| {
                         select_log.borrow_mut().push("select");
                         if accepts {
-                            crate::editing::Scope::default()
-                                .open(session.reborrow())
+                            crate::editing::Edit::new(session.reborrow())
                                 .select(&crate::test_root(), &[]);
                         }
                         accepts
@@ -274,18 +274,14 @@ fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
     let mut model = model(f64::value(0.0));
     let original = model.model.doc.clone();
     let root = model.model.workspace.document_root().clone();
-    model.model.selection = Some(crate::selection::Selection::edge(
-        &root,
-        Default::default(),
-        vec![],
-    ));
+    model.model.selection = Some(crate::selection::Selection::edge(&root, vec![]));
     let mut gesture = point(
         Rect::new(10.0, 20.0, 110.0, 120.0),
         Rc::new(|event| PointUpdate {
             value: Value::list([f64::value(event.x), f64::value(event.y)]),
             selection: Some(crate::selection::payload::edge()),
         }),
-        crate::editing::Site::new(root.clone(), Rc::from([]), Default::default()).edit_run(),
+        crate::editing::Site::new(root.clone(), Rc::from([])).edit_run(),
     );
     assert!(gesture.advance(&mut model.session(), &[Point::new(30.0, 40.0)]));
     assert_eq!(

@@ -1,11 +1,12 @@
-//! One projected occurrence as a place to act: the view it's drawn in, its
-//! path there, and the scope that reads that path. Widgets act on their place
+//! One projected occurrence as a place to act: the view it's drawn in and its
+//! path there, which says where its data is. Widgets act on their place
 //! through it, without carrying the view or the path themselves.
 
-use super::{Edit, Scope, Session};
+use super::{Edit, Session};
 use crate::display::widget::view::Root;
 use crate::hover::Hover;
-use gid::{Step, Value};
+use crate::occurrence::Step;
+use gid::Value;
 use puri::edit::LineEditState;
 use std::rc::Rc;
 
@@ -16,20 +17,18 @@ mod tests;
 pub(crate) struct Site {
     root: Root,
     path: Rc<[Step]>,
-    scope: Scope,
 }
 
 impl Site {
-    pub(crate) fn new(root: Root, path: Rc<[Step]>, scope: Scope) -> Self {
-        Self { root, path, scope }
+    pub(crate) fn new(root: Root, path: Rc<[Step]>) -> Self {
+        Self { root, path }
     }
 
-    /// The occurrence `steps` below this one, read through the same scope.
-    pub(crate) fn below(&self, steps: &[Step]) -> Self {
+    /// The occurrence a document path's `steps` below this one.
+    pub(crate) fn below(&self, steps: &[gid::Step]) -> Self {
         Self {
             root: self.root.clone(),
-            path: self.path.iter().chain(steps).cloned().collect(),
-            scope: self.scope.clone(),
+            path: crate::occurrence::below(&self.path, steps).into(),
         }
     }
 
@@ -40,8 +39,8 @@ impl Site {
 
     /// Where this occurrence is stored, if anywhere: what a jump to it
     /// draws.
-    pub(crate) fn location(&self) -> Option<crate::location::Location<'_>> {
-        self.scope.location(&self.path)
+    pub(crate) fn location(&self) -> Option<crate::location::Location<'static>> {
+        crate::occurrence::location(&self.path)
     }
 
     /// What hovering this occurrence shows.
@@ -78,7 +77,7 @@ impl Site {
     pub(crate) fn open<'s>(&'s self, session: &'s mut Session<'_>) -> SiteEdit<'s> {
         SiteEdit {
             site: self,
-            edit: self.scope.open(session.reborrow()),
+            edit: Edit::new(session.reborrow()),
         }
     }
 }
@@ -146,10 +145,10 @@ impl SiteEdit<'_> {
 
     /// Leaves the value `steps` below this occurrence pending, for the
     /// picker to fill.
-    pub(crate) fn pend(&mut self, steps: &[Step]) {
+    pub(crate) fn pend(&mut self, steps: &[gid::Step]) {
         self.edit.pend(
             &self.site.root,
-            self.site.path.iter().chain(steps).cloned().collect(),
+            crate::occurrence::below(&self.site.path, steps),
         );
     }
 

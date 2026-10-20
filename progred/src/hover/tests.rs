@@ -2,7 +2,7 @@ use super::*;
 use crate::display::widget::offers::Entry;
 use crate::location::Location;
 use crate::sources::Sources;
-use gid::{CellId, Cells, Document, Value, new_cell_id};
+use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 
 #[test]
 fn detached_drawing_has_no_input_source_but_still_traces_called_cells() {

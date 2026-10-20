@@ -18,7 +18,7 @@ fn cam_mesh_roundtrip_profile() {
             .path
             .clone();
         let controls = result_path(&path);
-        let camera = result_path(&controls);
+        let camera = [controls.clone(), result_path(&[])].concat();
         editor.model.workspace.left.panes[0]
             .view
             .annotations

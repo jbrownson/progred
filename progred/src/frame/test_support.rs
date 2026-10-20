@@ -45,7 +45,6 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
             sources,
             root: shown.root.as_deref(),
             root_path: &shown.root_path,
-            detached: shown.detached,
             selection,
             source_selection: selection,
             annotations: &view.annotations,
@@ -119,7 +118,7 @@ pub(crate) struct ProfileView {
     /// Logical points; the projection and clip receive physical pixels.
     pub(crate) size: kurbo::Size,
     pub(crate) scale: f64,
-    pub(crate) root: Option<gid::Path>,
+    pub(crate) root: Option<crate::occurrence::Path>,
 }
 
 impl ProfileView {
@@ -140,10 +139,14 @@ impl ProfileView {
             self.scale,
         );
         let view = crate::workspace::View {
-            root: self.root.clone().map_or_else(
-                crate::display::widget::view::Root::document,
-                crate::display::widget::view::Root::pane,
-            ),
+            root: self
+                .root
+                .as_deref()
+                .and_then(crate::occurrence::document)
+                .map_or_else(
+                    crate::display::widget::view::Root::document,
+                    crate::display::widget::view::Root::pane,
+                ),
             shown: crate::workspace::Shown::ALL,
             annotations: Annotations::default(),
             scroll: kurbo::Vec2::ZERO,
@@ -163,7 +166,7 @@ impl ProfileView {
             self.root.is_none() || shown.viewport,
             "profile target must be a viewport declaration"
         );
-        let (root, projection) = (shown.root_path.into_owned(), shown.projection.into_owned());
+        let (root, projection) = (shown.root_path, shown.projection.into_owned());
         self.root = self.root.map(|_| root);
         context.stack.projection = projection;
         (self, context)

@@ -17,9 +17,10 @@ use crate::display::widget::style::{
 use crate::frame::{Attribution, HoverPass, Hovered};
 use crate::hover::Hover;
 use crate::location::{Location, Start};
+use crate::occurrence::{Path, Step};
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
-use gid::{CellId, Path, Step, Value};
+use gid::{CellId, Value};
 use kurbo::{Affine, RoundedRect};
 use measured::Measured;
 use measured::choices::{ChoiceBuild, ChoiceGraph, ChoiceLayout, resolve_choices};
@@ -106,7 +107,6 @@ pub(crate) struct Cx<'a> {
     pub(crate) completions: Option<&'a crate::display::CompletionProvider>,
     /// The reading context: the document read over its library.
     pub(crate) sources: Sources<'a>,
-    pub(crate) edits: crate::editing::Scope,
     /// Whether the name library labels cells here; field order follows.
     pub(crate) names: bool,
     pub(crate) annotations: &'a Annotations,
@@ -126,12 +126,12 @@ struct Occurrence<'a> {
 }
 
 impl Occurrence<'_> {
-    fn below(&self, steps: &[Step]) -> Path {
-        self.path.iter().chain(steps).cloned().collect()
+    fn below(&self, steps: &[gid::Step]) -> Path {
+        crate::occurrence::below(self.path, steps)
     }
 
     /// Where what Grap evaluates `steps` below this occurrence comes from.
-    fn origin(&self, steps: &[Step]) -> Option<grap::SourceOrigin> {
+    fn origin(&self, steps: &[gid::Step]) -> Option<grap::SourceOrigin> {
         crate::display::Toolkit::trace_below(self, steps).map(crate::hover::to_grap)
     }
 }
@@ -142,7 +142,7 @@ impl crate::display::Viewing for Occurrence<'_> {
     }
 
     fn writable(&self) -> bool {
-        self.cx.edits.view(self.cx.sources).writable(self.path)
+        crate::occurrence::writable(&self.cx.sources, self.path)
     }
 
     fn host(&self) -> &dyn grap::Host {
@@ -153,11 +153,11 @@ impl crate::display::Viewing for Occurrence<'_> {
         self.cx.computations
     }
 
-    fn state_below(&self, steps: &[Step]) -> Option<&Value> {
+    fn state_below(&self, steps: &[gid::Step]) -> Option<&Value> {
         self.cx.annotations.at(&self.below(steps))
     }
 
-    fn selected_below(&self, steps: &[Step]) -> bool {
+    fn selected_below(&self, steps: &[gid::Step]) -> bool {
         let below = self.below(steps);
         self.cx
             .selection
@@ -184,10 +184,6 @@ impl crate::display::Toolkit for Occurrence<'_> {
         self.cx.view
     }
 
-    fn scope(&self) -> &crate::editing::Scope {
-        &self.cx.edits
-    }
-
     fn site(&self) -> crate::editing::Site {
         self.cx.site(Rc::from(self.path))
     }
@@ -200,8 +196,8 @@ impl crate::display::Toolkit for Occurrence<'_> {
         self.cx.sources
     }
 
-    fn location(&self) -> Option<Location<'_>> {
-        self.cx.edits.location(self.path)
+    fn location(&self) -> Option<Location<'static>> {
+        crate::occurrence::location(self.path)
     }
 
     fn focused(&self) -> bool {
@@ -232,10 +228,8 @@ impl crate::display::Toolkit for Occurrence<'_> {
         self.cx.selected_trace.as_ref()
     }
 
-    fn trace_below(&self, steps: &[Step]) -> Option<SourceTrace> {
-        self.cx
-            .edits
-            .location(&self.below(steps))
+    fn trace_below(&self, steps: &[gid::Step]) -> Option<SourceTrace> {
+        crate::occurrence::location(&self.below(steps))
             .map(|location| SourceTrace::from_location(&self.cx.sources, &location))
     }
 }
@@ -259,7 +253,7 @@ impl crate::display::Env for Occurrence<'_> {
         &self,
         expression: &grap::RuntimeValue,
         fuel: usize,
-        steps: &[Step],
+        steps: &[gid::Step],
     ) -> grap::RuntimeValue {
         grap::evaluate_runtime_at(expression, self.origin(steps), &self.cx.sources, fuel).result
     }
@@ -267,7 +261,7 @@ impl crate::display::Env for Occurrence<'_> {
         &self,
         expression: &grap::RuntimeValue,
         fuel: usize,
-        steps: &[Step],
+        steps: &[gid::Step],
     ) -> grap::RuntimeValue {
         self.cx.computations.evaluate_runtime(
             self.cx.view,
@@ -368,14 +362,14 @@ struct ProjectionScope<'a, 's> {
 }
 
 impl ProjectionScope<'_, '_> {
-    /// Adds GID steps to the occurrence and resolves through its conject.
-    /// Current and descendant projections are independent replacements.
-    /// Missing locations use the standard empty picker, without a value.
+    /// Adds GID steps to the occurrence, reading what's there. Current and
+    /// descendant projections are independent replacements. Missing
+    /// locations use the standard empty picker, without a value.
     fn descend_path(
         &self,
         tcx: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
-        steps: &[Step],
+        steps: &[gid::Step],
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
@@ -383,42 +377,34 @@ impl ProjectionScope<'_, '_> {
         let mut path = self.path.to_vec();
         let mut ancestors = self.ancestors.clone();
         let mut value = self.value.cloned();
-        let mut edits = None;
         for step in steps {
             let followed = match step {
-                Step::Follow(source) => value
+                gid::Step::Follow(source) => value
                     .as_ref()
                     .and_then(grap::RuntimeValue::as_cell)
                     .map(|cell| (cell, *source)),
-                Step::Key(_) | Step::Element(_) => None,
+                gid::Step::Key(_) | gid::Step::Element(_) => None,
             };
-            path.push(step.clone());
+            path.push(match followed {
+                // A cell inside a computed value has no stored route to it, so
+                // following it jumps to its definition, which starts a
+                // location again.
+                Some((cell, source)) if crate::occurrence::computed(&path) => {
+                    Step::jump(Location::in_cell(cell, source, Vec::new()))
+                }
+                _ => step.into(),
+            });
             if let Some((cell, source)) = followed {
                 ancestors.cells.insert(cell);
                 ancestors.enclosing = Some((cell, source, path.len()));
-                // Following a cell starts a location at its definition, whatever
-                // the route here, computed values included.
-                edits = Some(edits.as_ref().unwrap_or(&cx.edits).in_cell(
-                    path.clone(),
-                    cell,
-                    source,
-                ));
             }
-            let scope = edits.as_ref().unwrap_or(&cx.edits);
-            value = match (!scope.descends()).then(|| scope.location(&path)).flatten() {
-                Some(location) => cx.sources.read(&location).map(grap::RuntimeValue::from),
-                None => value.as_ref().and_then(|value| {
-                    child::of(value, step, |cell, source| cx.sources.value(cell, source))
-                }),
-            };
+            value = value.as_ref().and_then(|value| {
+                child::of(value, step, |cell, source| cx.sources.value(cell, source))
+            });
         }
-        let scoped = edits.map(|edits| Cx {
-            edits,
-            ..cx.clone()
-        });
         prepare_value(
             ProjectionScope {
-                cx: scoped.as_ref().unwrap_or(cx),
+                cx,
                 path: &path,
                 ancestors: &ancestors,
                 value: value.as_ref(),
@@ -437,7 +423,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         &self,
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
-        steps: &[Step],
+        steps: &[gid::Step],
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
@@ -448,7 +434,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         &self,
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
-        step: Step,
+        step: gid::Step,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         // Raw, with every library off: no names and no library's offers.
         let cx = Cx {
@@ -469,25 +455,21 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         &self,
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
-        steps: Vec<Step>,
+        steps: Vec<gid::Step>,
         document: Location<'static>,
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-        let path: Vec<_> = self.path.iter().cloned().chain(steps).collect();
-        let cx = Cx {
-            edits: self.cx.edits.located(path.clone(), document),
-            ..self.cx.clone()
-        };
+        let cx = self.cx;
         let value = cx
-            .edits
-            .view(cx.sources)
-            .resolve_path(&path)
+            .sources
+            .read(&document)
             .cloned()
             .map(grap::RuntimeValue::from);
         let mut ancestry = self.ancestors.clone();
         // Following the same source through jumps must not bypass cycle checks.
-        if let Some(location) = cx.edits.location(&path) {
+        {
+            let location = &document;
             ancestry.cells.extend(
                 match location.start {
                     Start::Cell { cell, .. } => Some(cell),
@@ -499,7 +481,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
                         .path
                         .iter()
                         .enumerate()
-                        .filter(|(_, step)| matches!(step, Step::Follow(_)))
+                        .filter(|(_, step)| matches!(step, gid::Step::Follow(_)))
                         .filter_map(|(i, _)| {
                             cx.sources
                                 .read_from(location.start, &location.path[..i])
@@ -508,9 +490,13 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
                 ),
             );
         }
+        let path = crate::occurrence::below(self.path, &steps)
+            .into_iter()
+            .chain([Step::jump(document)])
+            .collect::<Path>();
         prepare_value(
             ProjectionScope {
-                cx: &cx,
+                cx,
                 path: &path,
                 ancestors: &ancestry,
                 value: value.as_ref(),
@@ -526,19 +512,16 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         &self,
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
-        steps: Vec<Step>,
+        steps: Vec<gid::Step>,
         value: grap::RuntimeValue,
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-        let path: Vec<_> = self.path.iter().cloned().chain(steps).collect();
-        let cx = Cx {
-            edits: self.cx.edits.detached(path.clone()),
-            ..self.cx.clone()
-        };
+        let mut path = crate::occurrence::below(self.path, &steps);
+        path.push(Step::Computed);
         prepare_value(
             ProjectionScope {
-                cx: &cx,
+                cx: self.cx,
                 path: &path,
                 ancestors: &Ancestry {
                     ground: self.ancestors.ground,
@@ -567,7 +550,7 @@ fn tree_hovered(hover: &Attribution) -> Option<&Hover> {
 impl Cx<'_> {
     /// The occurrence at `path` in this view, as a place to act.
     pub(crate) fn site(&self, path: SharedPath) -> crate::editing::Site {
-        crate::editing::Site::new(self.view.clone(), path, self.edits.clone())
+        crate::editing::Site::new(self.view.clone(), path)
     }
 
     /// The display name at this projection; with the name library off,
@@ -621,8 +604,8 @@ impl Cx<'_> {
 
 /// The explicit-state boundary: everything a projection pass reads.
 /// `width` is the space the projection may fill. `root` and
-/// `root_path` let an editor pane begin at a value occurrence
-/// while retaining ordinary document-relative interaction paths.
+/// `root_path` let an editor pane begin at a value occurrence: the path says
+/// where its data is, as any occurrence's does, a computed one included.
 pub struct ProjectDescription<'a> {
     pub computations: &'a crate::computations::Computations,
     pub focused: bool,
@@ -631,9 +614,6 @@ pub struct ProjectDescription<'a> {
     pub sources: Sources<'a>,
     pub root: Option<&'a Value>,
     pub root_path: &'a [Step],
-    /// Whether `root` is computed for the view rather than read from the
-    /// document at `root_path`, so it has no place to edit.
-    pub detached: bool,
     /// Selection belonging to this editable view.
     pub selection: Option<&'a Selection>,
     /// Selection from any view, used only to link generated output
@@ -666,7 +646,6 @@ fn prepare_project(
         sources,
         root,
         root_path,
-        detached,
         selection,
         source_selection,
         annotations,
@@ -675,31 +654,27 @@ fn prepare_project(
         width: _,
         projection,
     } = description;
-    // A view reached through a cell starts its locations at the last one it
-    // follows, as following that cell in the view would.
-    let followed = Location::root(root_path)
-        .stored(&sources)
-        .filter(|_| !detached)
+    // A view reached through a cell is inside that cell's definition, as
+    // following the cell in the view would be.
+    let followed = crate::occurrence::location(root_path)
+        .and_then(|location| {
+            location
+                .stored(&sources)
+                .map(crate::location::Location::into_owned)
+        })
         .and_then(|stored| match stored.start {
-            Start::Cell { cell, resolution } => {
-                Some((cell, resolution, root_path.len() - stored.path.len()))
-            }
+            Start::Cell { cell, resolution } => root_path
+                .len()
+                .checked_sub(stored.path.len())
+                .map(|start| (cell, resolution, start)),
             Start::Root => None,
         });
-    let edits = if detached {
-        crate::editing::Scope::default().detached(root_path.to_vec())
-    } else {
-        followed.map_or_else(Default::default, |(cell, source, start)| {
-            crate::editing::Scope::default().in_cell(root_path[..start].to_vec(), cell, source)
-        })
-    };
     let cx = Cx {
         computations,
         focused,
         view,
         completions,
         sources,
-        edits,
         names,
         annotations,
         styles,
@@ -843,7 +818,7 @@ fn prepare_value(
     } = scope;
     // A picker over a value draws its hole instead.
     let value = scope.value.filter(|_| !cx.pending_at(path));
-    let source = cx.edits.location(path);
+    let source = crate::occurrence::location(path);
     let ground = ground(cx, source.as_ref(), value);
     let changed_ground = (ground != ancestors.ground).then_some(ground);
     let changed_ancestors = changed_ground.map(|ground| Ancestry {
@@ -905,8 +880,13 @@ fn prepare_value(
             let landmark_path: SharedPath = Rc::from(path);
             // What this projection shares with others of the same location;
             // the frame marks those sharing the selected or hovered one's.
+            // Where the path past the nearest followed cell, or from the root,
+            // is the data's own, it says what's shared without reading it.
+            let descends = path
+                .get(ancestors.enclosing.map_or(0, |(_, _, start)| start)..)
+                .is_some_and(crate::occurrence::is_data);
             let secondary = value.and_then(|value| {
-                Some(if cx.edits.descends() {
+                Some(if descends {
                     Secondary::from_context(
                         landmark_path.clone(),
                         value.as_cell(),
@@ -935,7 +915,6 @@ fn prepare_value(
                     crate::display::widget::navigation::selecting(cx.site(landmark_path.clone())),
                 )
             });
-            let edits = cx.edits.clone();
             ChoiceLayout::map(inner, move |inner| {
                 let placed = crate::display::widget::navigation::landmark(
                     highlighted(
@@ -948,7 +927,6 @@ fn prepare_value(
                     ),
                     landmark_path.clone(),
                     select,
-                    edits.clone(),
                     secondary,
                     selected,
                 );
@@ -1005,6 +983,7 @@ fn value_layout(
         Some(crate::display::Pending::Field)
     } else {
         cx.pending_child_of(path)
+            .and_then(|step| step.data())
             .map(crate::display::Pending::Child)
     };
     let state = cx.annotations.at(path);

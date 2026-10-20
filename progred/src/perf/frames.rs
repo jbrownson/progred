@@ -4,12 +4,13 @@ use crate::annotations::Annotations;
 use crate::command::Example;
 use crate::frame::Hovered;
 use crate::frame::test_support::ProfileView;
+use crate::occurrence::Step;
 use crate::perf::{distribution, iterations};
 use crate::projection::Projection;
 use crate::projection::test_support::{Bench, BenchContext, FrameTimes};
 use crate::selection::Selection;
 use crate::sources::Sources;
-use gid::{Document, Step, Value};
+use gid::{Document, Value};
 use peniko::{Brush, ImageData};
 use puri::draw::{DrawCmd, DrawList};
 use std::rc::Rc;
@@ -99,7 +100,7 @@ fn iop_tree_profile_loop() {
     let view = ProfileView {
         size: kurbo::Size::new(500.0, 500.0),
         scale: 1.0,
-        root: Some(first_viewport(&doc)),
+        root: Some(crate::occurrence::of(&first_viewport(&doc))),
     };
     let (view, mut context) = view.prepare(&doc);
     profile(
@@ -156,7 +157,6 @@ fn color_picker_frame() -> impl FnMut() -> Bench {
             doc: &doc,
             libraries: &context.stack.libraries,
         },
-        Default::default(),
         Vec::new(),
         payload,
     );
@@ -280,9 +280,10 @@ fn orbit(path: &[Step], frame: usize) -> Annotations {
     let path: Vec<_> = path
         .iter()
         .cloned()
-        .chain([Step::Key(
-            crate::libraries::presentation::vocabulary::RESULT,
-        )])
+        .chain([
+            Step::Key(crate::libraries::presentation::vocabulary::RESULT),
+            Step::Computed,
+        ])
         .collect();
     camera_at(&path, frame)
 }
@@ -311,7 +312,7 @@ fn fidget_orbit_profile(name: &str, source: &str) {
     let view = ProfileView {
         size: kurbo::Size::new(400.0, 600.0),
         scale: 2.0,
-        root: Some(path.clone()),
+        root: Some(crate::occurrence::of(&path)),
     };
     let camera_path = Rc::new(std::cell::RefCell::new(None));
     let observed = camera_path.clone();
@@ -412,7 +413,7 @@ fn cam_controls_profile_loop() {
     let view = ProfileView {
         size: kurbo::Size::new(400.0, 600.0),
         scale: 2.0,
-        root: Some(first_viewport(&doc)),
+        root: Some(crate::occurrence::of(&first_viewport(&doc))),
     };
     // Keep viewport, memo, controls, and view-call evaluation intact. Only the
     // final 3D projection is replaced, avoiding the headless CPU raster fallback.
@@ -451,7 +452,7 @@ fn profile_viewport_uses_size_scale_and_camera_state() {
     let view = ProfileView {
         size: kurbo::Size::new(24.0, 32.0),
         scale: 2.0,
-        root: Some(path.clone()),
+        root: Some(crate::occurrence::of(&path)),
     };
     let (view, mut context) = view.prepare(&doc);
     let resolved = view.root.as_deref().unwrap();

@@ -3,9 +3,10 @@
 
 use crate::display::widget::view::Root;
 use crate::history;
+use crate::occurrence::Step;
 use crate::selection;
 use crate::workspace;
-use gid::{Document, Path, Step};
+use gid::Document;
 use std::rc::Rc;
 
 pub(crate) struct Model {
@@ -20,7 +21,7 @@ pub(crate) struct Model {
 
 pub(crate) struct Snapshot {
     doc: Rc<Document>,
-    selection: Option<(Root, Path, crate::editing::Scope)>,
+    selection: Option<(Root, crate::occurrence::Path)>,
     folds: workspace::Folds,
 }
 
@@ -61,13 +62,9 @@ impl Model {
         Snapshot {
             doc: self.doc.clone(),
             selection: self.selection.as_ref().and_then(|selection| {
-                selection.history_path().map(|path| {
-                    (
-                        selection.root().clone(),
-                        path.to_vec(),
-                        selection.scope().clone(),
-                    )
-                })
+                selection
+                    .history_path()
+                    .map(|path| (selection.root().clone(), path.to_vec()))
             }),
             folds: self.workspace.folds(),
         }
@@ -87,7 +84,7 @@ impl Model {
             self.workspace.restore_folds(restored.folds);
             self.selection = restored
                 .selection
-                .map(|(root, path, scope)| selection::Selection::edge(&root, scope, path));
+                .map(|(root, path)| selection::Selection::edge(&root, path));
             true
         } else {
             false

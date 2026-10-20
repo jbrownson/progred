@@ -362,7 +362,7 @@ pub trait Env {
     }
 
     /// Where the value being projected occurs.
-    fn occurrence(&self) -> &[Step] {
+    fn occurrence(&self) -> &[crate::occurrence::Step] {
         &[]
     }
 }

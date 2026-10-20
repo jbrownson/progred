@@ -184,7 +184,7 @@ fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
     editor.model.workspace.document.shown = crate::workspace::Shown::RAW;
     crate::annotations::set_folded(
         &mut editor.model.workspace.document.annotations,
-        &[Step::Key(workspace::vocabulary::PANES)],
+        &[crate::occurrence::Step::Key(workspace::vocabulary::PANES)],
         false,
         false,
     );

@@ -41,6 +41,7 @@ mod modifiers;
 #[cfg(target_os = "macos")]
 mod native_menu;
 mod navigate;
+mod occurrence;
 #[cfg(feature = "cam-profile")]
 pub mod orbit_profile;
 #[cfg(test)]

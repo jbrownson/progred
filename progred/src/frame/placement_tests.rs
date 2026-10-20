@@ -233,7 +233,6 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
         if picking {
             world.model.selection = Some(crate::selection::pending_value(
                 world.model.workspace.document_root(),
-                Default::default(),
                 vec![],
             ));
         }
@@ -745,12 +744,11 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     );
     let popup = widget::navigation::landmark(
         popup,
-        std::rc::Rc::from([gid::Step::Follow(gid::Resolution::Document)]),
+        std::rc::Rc::from([crate::occurrence::Step::Follow(gid::Resolution::Document)]),
         std::rc::Rc::new(|count, _| {
             *count += 10;
             true
         }),
-        Default::default(),
         None,
         false,
     );
@@ -905,7 +903,6 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
         let mut pointer = DispatchContext::new(None, Some(hovered));
         pointer.landmarks = std::rc::Rc::from([crate::display::widget::navigation::Landmark {
             root: Some(editor.model.workspace.document_root().clone()),
-            scope: Default::default(),
             path: std::rc::Rc::from([]),
             rect: placement.rect,
             select: std::rc::Rc::new({

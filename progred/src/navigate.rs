@@ -4,8 +4,8 @@
 
 use crate::display::widget::navigation::{Geometry, Landmark, advance};
 use crate::display::widget::view::Root;
+use crate::occurrence::{Path, Step};
 use crate::selection::Selection;
-use gid::{Path, Step};
 use puri::handler::NavigationDirection;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -82,13 +82,12 @@ pub(crate) fn initial_navigation(
     let target = root_target(landmarks, root)?;
     let root = root.clone();
     let path = target.path.clone();
-    let scope = target.scope.clone();
     Some(puri::handler::Handler::from_function(
         move |editor: &mut crate::Editor, event, _| {
             if matches!(event, puri::handler::Event::Navigate(_))
                 && editor.model.selection.is_none()
             {
-                scope.open(editor.session()).select(&root, &path);
+                crate::editing::Edit::new(editor.session()).select(&root, &path);
                 puri::handler::EventOutcome::accept()
             } else {
                 puri::handler::EventOutcome::decline(event)

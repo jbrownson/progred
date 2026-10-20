@@ -2,9 +2,10 @@
 //! Reads observe staged writes; a declined handler commits neither.
 
 use crate::display::widget::view::Root;
+use crate::occurrence::{Path, Step};
 use crate::selection::Selection;
 use crate::sources::Sources;
-use gid::{Path, Value};
+use gid::Value;
 use grap::absent;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -40,8 +41,7 @@ pub struct PendingChanges {
     pub selection_changed: bool,
 }
 
-pub type Continuation =
-    Rc<dyn Fn(&crate::editing::Read<'_, '_>, &[gid::Step], &mut PendingChanges) -> bool>;
+pub type Continuation = Rc<dyn Fn(&crate::editing::Read<'_>, &[Step], &mut PendingChanges) -> bool>;
 
 impl PendingChanges {
     pub fn select(&mut self, path: Path, payload: Value) {
@@ -62,7 +62,7 @@ impl PendingChanges {
 pub fn grap(
     function: impl Into<grap::RuntimeValue>,
     arguments: impl IntoIterator<Item = (gid::CellId, Value)> + Clone,
-) -> impl Fn(&crate::editing::Read<'_, '_>, &[gid::Step], &mut PendingChanges) -> bool {
+) -> impl Fn(&crate::editing::Read<'_>, &[Step], &mut PendingChanges) -> bool {
     let function = function.into();
     handler(move |sources, path, annotation, selection| {
         evaluate_with(path, annotation, selection, |overlay| {
@@ -80,11 +80,11 @@ pub fn grap(
 fn handler(
     evaluate: impl Fn(
         &Sources<'_>,
-        &[gid::Step],
+        &[Step],
         Option<Value>,
         Option<(Path, Value)>,
     ) -> Option<PendingChanges>,
-) -> impl Fn(&crate::editing::Read<'_, '_>, &[gid::Step], &mut PendingChanges) -> bool {
+) -> impl Fn(&crate::editing::Read<'_>, &[Step], &mut PendingChanges) -> bool {
     move |sources, path, staged| match evaluate(
         &sources.sources,
         path,
@@ -115,7 +115,6 @@ const EVENT_FUNCTIONS: [gid::CellId; 5] = [
 /// committing any pending annotation or selection change.
 pub(crate) fn apply_scoped_event(
     session: &mut crate::editing::Session<'_>,
-    scope: crate::editing::Scope,
     root: Root,
     path: Path,
     function: grap::RuntimeValue,
@@ -140,7 +139,9 @@ pub(crate) fn apply_scoped_event(
         selection_changed: false,
     };
     let handled = grap(function, [(event::vocabulary::EVENT, event)])(
-        &scope.view(session.sources()),
+        &crate::editing::Read {
+            sources: session.sources(),
+        },
         &path,
         &mut staged,
     );
@@ -153,7 +154,6 @@ pub(crate) fn apply_scoped_event(
                 libraries: session.libraries,
             },
             &root,
-            scope,
             &path,
             &mut view.annotations,
             &mut model.selection,
@@ -168,8 +168,7 @@ pub(crate) fn install_scoped(
     staged: PendingChanges,
     sources: &Sources,
     root: &Root,
-    scope: crate::editing::Scope,
-    path: &[gid::Step],
+    path: &[Step],
     annotations: &mut crate::annotations::Annotations,
     selection: &mut Option<Selection>,
 ) {
@@ -180,12 +179,9 @@ pub(crate) fn install_scoped(
         match staged.selection {
             Some((path, payload)) => {
                 let recorded = selection.as_ref().is_some_and(|selection| {
-                    selection.root() == root
-                        && selection.path() == path
-                        && selection.scope().same_location(&scope, sources, &path)
-                        && selection.recorded()
+                    selection.root() == root && selection.path() == path && selection.recorded()
                 });
-                let mut next = Selection::from_payload(root, sources, scope, path, payload);
+                let mut next = Selection::from_payload(root, sources, path, payload);
                 next.set_recorded(recorded);
                 *selection = Some(next);
             }
@@ -201,7 +197,7 @@ pub(crate) fn install_scoped(
 }
 
 fn evaluate_with(
-    path: &[gid::Step],
+    path: &[Step],
     annotation: Option<Value>,
     selection: Option<(Path, Value)>,
     apply: impl FnOnce(&grap::ForeignOverlay<'_>) -> grap::Evaluation,
@@ -230,11 +226,11 @@ fn event_foreign(
     context: &mut grap::Context,
     call: &grap::Expression,
     environment: &grap::Environment,
-    path: &[gid::Step],
+    path: &[Step],
     staged: &RefCell<PendingChanges>,
 ) -> Result<Value, grap::Halt> {
     match function {
-        vocabulary::PATH => Ok(grap::path::value(path)),
+        vocabulary::PATH => Ok(crate::occurrence::value(path)),
         vocabulary::GET => Ok(staged
             .borrow()
             .annotation
@@ -286,7 +282,7 @@ fn set_selection(
         return Ok(context.missing_argument(vocabulary::SELECTION_PATH));
     };
     let encoded = context.eval_to_value(expression, environment)?;
-    let Some(path) = grap::path::read(&encoded) else {
+    let Some(path) = crate::occurrence::from_value(&encoded) else {
         return Ok(absent::with_detail(
             grap::path::vocabulary::INVALID_PATH,
             vocabulary::VALUE,

@@ -327,14 +327,11 @@ impl crate::display::Viewing for NoSite<'_> {
 }
 
 impl crate::display::Toolkit for NoSite<'_> {
-    fn path(&self) -> &[Step] {
+    fn path(&self) -> &[crate::occurrence::Step] {
         self.0.path()
     }
     fn view(&self) -> &widget::view::Root {
         self.0.view()
-    }
-    fn scope(&self) -> &crate::editing::Scope {
-        self.0.scope()
     }
     fn site(&self) -> crate::editing::Site {
         panic!("unexpected request for the occurrence's site")
@@ -345,7 +342,7 @@ impl crate::display::Toolkit for NoSite<'_> {
     fn sources(&self) -> crate::sources::Sources<'_> {
         self.0.sources()
     }
-    fn location(&self) -> Option<crate::location::Location<'_>> {
+    fn location(&self) -> Option<crate::location::Location<'static>> {
         self.0.location()
     }
     fn focused(&self) -> bool {
@@ -467,7 +464,6 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
     let computations = crate::computations::Computations::from_sources(sources);
     let cx = crate::projection::Cx {
         focused: true,
-        edits: Default::default(),
         computations: &computations,
         view: &root,
         completions: None,
@@ -588,12 +584,17 @@ pub fn painted(
 
 /// Look up a frame's selectable stops by where they lead.
 pub trait Landmarks<World> {
-    /// The stop drawn at `path`.
-    fn landmark(&self, path: &[gid::Step]) -> Option<&widget::navigation::Landmark<World>>;
+    /// The stop drawn at `path`, named by occurrence or document steps.
+    fn landmark<S>(&self, path: &[S]) -> Option<&widget::navigation::Landmark<World>>
+    where
+        crate::occurrence::Step: PartialEq<S>;
 }
 
 impl<World> Landmarks<World> for [widget::navigation::Landmark<World>] {
-    fn landmark(&self, path: &[gid::Step]) -> Option<&widget::navigation::Landmark<World>> {
+    fn landmark<S>(&self, path: &[S]) -> Option<&widget::navigation::Landmark<World>>
+    where
+        crate::occurrence::Step: PartialEq<S>,
+    {
         self.iter().find(|landmark| landmark.path.as_ref() == path)
     }
 }

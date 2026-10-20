@@ -3,7 +3,7 @@
 
 use crate::display::widget::offers::Offers;
 use crate::display::widget::source::{Secondary, SourceTrace};
-use gid::Step;
+use crate::occurrence::Step;
 use std::rc::Rc;
 
 /// What the pointer rests on: the address a later editor action will

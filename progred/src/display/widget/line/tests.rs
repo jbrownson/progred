@@ -5,12 +5,13 @@ fn read_only_line_needs_no_selection_or_editing_capabilities() {
     crate::display::test_support::with_empty_view::<crate::Editor, crate::frame::Hovered, _>(
         &crate::display::test_support::NoProject,
         |cx, text, project| {
-            let cx = crate::projection::Cx {
-                edits: cx.edits.detached(vec![]),
-                ..cx.clone()
-            };
-            let measured =
-                crate::projection::test_support::at_root(&cx, text, project, None, |context| {
+            let measured = crate::projection::test_support::at_path(
+                cx,
+                text,
+                project,
+                &[crate::occurrence::Step::Computed],
+                None,
+                |context| {
                     view(
                         context,
                         LineEdit {
@@ -21,7 +22,8 @@ fn read_only_line_needs_no_selection_or_editing_capabilities() {
                             family: TextFamily::default(),
                         },
                     )
-                });
+                },
+            );
             let placement = Placement::root(measured.extent.rect_at(Point::ZERO));
             let output =
                 crate::display::widget::frame::place(measured, placement, &Default::default());

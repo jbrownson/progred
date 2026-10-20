@@ -5,12 +5,13 @@ use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::frame::test_support::{editing_frame, settle};
 use crate::hover::Hover;
-use crate::libraries::presentation::vocabulary::{OUTLINE, RESULT};
+use crate::libraries::presentation::vocabulary::OUTLINE;
 use crate::libraries::{f64, name};
 use crate::location::Location;
+use crate::occurrence;
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_value};
-use gid::{Cells, Document, Path, new_cell_id};
+use gid::{Cells, Document, new_cell_id};
 use kurbo::{Point, Rect};
 use peniko::Brush;
 use puri::draw::{DrawCmd, Shape};
@@ -39,14 +40,17 @@ fn document() -> (Document, CellId, CellId, CellId) {
     )
 }
 
-fn stop<'a>(
+fn stop<'a, S>(
     frame: &'a crate::projection::test_support::HoverOutput<crate::Editor>,
-    path: &[Step],
-) -> &'a Landmark<crate::Editor> {
+    path: &[S],
+) -> &'a Landmark<crate::Editor>
+where
+    occurrence::Step: PartialEq<S>,
+{
     frame.landmarks.landmark(path).expect("outline occurrence")
 }
 
-fn entry_paths(value: &Value, parent: &[Step], key: CellId) -> Vec<Path> {
+fn entry_paths(value: &Value, parent: &[occurrence::Step], key: CellId) -> Vec<occurrence::Path> {
     value
         .as_record()
         .unwrap()
@@ -56,30 +60,44 @@ fn entry_paths(value: &Value, parent: &[Step], key: CellId) -> Vec<Path> {
         .unwrap()
         .iter()
         .filter(|(_, v)| v.as_cell() == Some(key))
-        .map(|(p, _)| {
-            parent
-                .iter()
-                .cloned()
-                .chain([Step::Key(OUTLINE), Step::Element(p.clone())])
-                .collect()
-        })
+        .map(|(p, _)| occurrence::below(parent, &[Step::Key(OUTLINE), Step::Element(p.clone())]))
         .collect()
 }
 
-fn entry(world: &crate::Editor, parent: &[Step], key: CellId) -> Path {
-    entry_paths(world.sources().resolve_path(parent).unwrap(), parent, key).remove(0)
+fn entry(world: &crate::Editor, parent: &[Step], key: CellId) -> occurrence::Path {
+    entry_paths(
+        world.sources().resolve_path(parent).unwrap(),
+        &occurrence::of(parent),
+        key,
+    )
+    .remove(0)
 }
 
-fn body(entry: &[Step], key: CellId) -> Path {
-    entry.iter().cloned().chain([Step::Key(key)]).collect()
+/// Where the section at `entry`, showing the field `key`, keeps whether it's
+/// folded: in the outline, where its body's jump to the field starts.
+fn section(entry: &[occurrence::Step], key: CellId) -> occurrence::Path {
+    occurrence::below(entry, &[Step::Key(key)])
 }
 
-fn hidden(world: &crate::Editor, path: &[Step]) -> bool {
+/// Where the body of the section at `entry` is drawn: jumped to the
+/// outline's field `key` where it's stored, or computed with the outline.
+fn body(entry: &[occurrence::Step], key: CellId) -> occurrence::Path {
+    let (outline, _) = entry.split_last_chunk::<2>().expect("an outline entry");
+    section(entry, key)
+        .into_iter()
+        .chain([
+            occurrence::location(&occurrence::below(outline, &[Step::Key(key)]))
+                .map_or(occurrence::Step::Computed, occurrence::Step::jump),
+        ])
+        .collect()
+}
+
+fn hidden(world: &crate::Editor, path: &[occurrence::Step]) -> bool {
     crate::annotations::folded(world.model.workspace.document.annotations.at(path), false)
 }
 
 /// Click `path` at `point`, where the pointer lands on it.
-fn click(driver: &mut Driver, point: Point, path: &[Step]) {
+fn click(driver: &mut Driver, point: Point, path: &[occurrence::Step]) {
     assert_eq!(
         driver.hover_at(point),
         Some(Hovered::Tree(Hover::Value(Rc::from(path))))
@@ -92,13 +110,13 @@ fn click(driver: &mut Driver, point: Point, path: &[Step]) {
 fn click_label(driver: &mut Driver, point: Point, path: &[Step]) {
     assert_eq!(
         driver.hover_at(point),
-        Some(Hovered::Tree(Hover::Label(Rc::from(path))))
+        Some(Hovered::Tree(Hover::Label(occurrence::of(path).into())))
     );
     driver.click_at(point);
 }
 
 /// Click the heading at `path` near its top-left corner.
-fn click_heading(driver: &mut Driver, path: &[Step]) {
+fn click_heading(driver: &mut Driver, path: &[occurrence::Step]) {
     let rect = driver.rect(path);
     click(driver, Point::new(rect.x0 + 4.0, rect.y0 + 4.0), path);
 }
@@ -131,11 +149,10 @@ fn cam_outline_draws_as_the_main_value_with_the_panes_out_of_sight() {
     for (position, value) in entries {
         world.session().set_folded(
             &crate::test_root(),
-            &[
-                &outline[..],
-                &[Step::Element(position), Step::Key(value.as_cell().unwrap())],
-            ]
-            .concat(),
+            &section(
+                &occurrence::of(&[&outline[..], &[Step::Element(position)]].concat()),
+                value.as_cell().unwrap(),
+            ),
             false,
             Some(true),
         );
@@ -163,7 +180,7 @@ fn cam_outline_draws_as_the_main_value_with_the_panes_out_of_sight() {
             .iter()
             .any(|landmark| {
                 landmark.root.as_ref() == Some(&crate::test_root())
-                    && landmark.path.first() == Some(&Step::Key(PANES))
+                    && landmark.path.first() == Some(&occurrence::Step::Key(PANES))
             })
     );
 }
@@ -182,6 +199,8 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         let editor = crate::test_editor(doc.clone());
         let a_heading = entry(&editor, &[], a);
         let b_heading = entry(&editor, &[], b);
+        let a_section = section(&a_heading, a);
+        let b_section = section(&b_heading, b);
         let a_body = body(&a_heading, a);
         let b_body = body(&b_heading, b);
         let items = editor
@@ -191,26 +210,20 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
             .as_list()
             .unwrap()
             .keys()
-            .map(|position| {
-                a_body
-                    .iter()
-                    .cloned()
-                    .chain([Step::Element(position.clone())])
-                    .collect::<Path>()
-            })
+            .map(|position| occurrence::below(&a_body, &[Step::Element(position.clone())]))
             .collect::<Vec<_>>();
         // The document with B's body folded or not, and A's open.
         let driver = |b_folded| {
             let mut editor = crate::test_editor(doc.clone());
             let root = editor.model.workspace.document_root().clone();
-            for (path, folded) in [(&a_body, false), (&b_body, b_folded)] {
+            for (path, folded) in [(&a_section, false), (&b_section, b_folded)] {
                 editor
                     .session()
                     .set_folded(&root, path, false, Some(folded));
             }
             Driver::new(editor, kurbo::Size::new(700.0, 600.0))
         };
-        let arrow = |driver: &mut Driver, key, path: &Path| {
+        let arrow = |driver: &mut Driver, key, path: &occurrence::Path| {
             driver.press(key);
             assert_eq!(driver.selection(), *path);
         };
@@ -219,7 +232,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         // Up from the first heading returns to the outermost whole value.
         for (direction, path) in [
             (NamedKey::ArrowDown, vec![]),
-            (NamedKey::ArrowRight, vec![Step::Key(OUTLINE)]),
+            (NamedKey::ArrowRight, vec![occurrence::Step::Key(OUTLINE)]),
             (NamedKey::ArrowLeft, vec![]),
             (NamedKey::ArrowDown, b_heading.clone()),
             (NamedKey::ArrowUp, vec![]),
@@ -236,7 +249,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         ];
         expected.extend(items);
         if with_extras {
-            expected.push(vec![Step::Key(extra)]);
+            expected.push(vec![occurrence::Step::Key(extra)]);
         }
         for path in &expected {
             arrow(&mut open, NamedKey::ArrowDown, path);
@@ -252,7 +265,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         for path in [vec![], b_heading, a_heading] {
             arrow(&mut folded, NamedKey::ArrowDown, &path);
         }
-        assert!(hidden(folded.editor(), &b_body));
+        assert!(hidden(folded.editor(), &b_section));
     }
 }
 
@@ -264,7 +277,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     };
     fields.remove(&extra);
     let mut driver = Driver::new(crate::test_editor(doc.clone()), Driver::VIEWPORT);
-    let root_rect = driver.rect(&[]);
+    let root_rect = driver.rect::<Step>(&[]);
     let list_rect = driver.rect(&[Step::Key(OUTLINE)]);
     assert_eq!(
         root_rect.x0, list_rect.x0,
@@ -294,7 +307,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     let mut renamed = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     assert_eq!(renamed.rect(&[Step::Key(OUTLINE)]), list_rect);
     click_label(&mut renamed, label_point, &[Step::Key(OUTLINE)]);
-    renamed.select(&[]);
+    renamed.select::<Step>(&[]);
 
     // Removing the outline field exposes the remaining data structurally.
     renamed.select(&[Step::Key(OUTLINE)]);
@@ -320,19 +333,20 @@ fn outline_library_tint_stops_at_the_heading() {
     ]));
     let heading_path = entry(&world, &[], key);
     let body_path = body(&heading_path, key);
-    world
-        .session()
-        .set_folded(&crate::test_root(), &body_path, false, Some(false));
+    world.session().set_folded(
+        &crate::test_root(),
+        &section(&heading_path, key),
+        false,
+        Some(false),
+    );
     let f = editing_frame(&mut world);
     let heading_rect = stop(&f, &heading_path).rect;
     let body_rect = stop(&f, &body_path).rect;
     assert!(heading_rect.y1 < body_rect.y0);
-    assert!(
-        stop(&f, &body_path)
-            .scope
-            .view(world.sources())
-            .writable(&body_path)
-    );
+    assert!(occurrence::writable(
+        &world.sources(),
+        &stop(&f, &body_path).path
+    ));
 
     fn tints(commands: &[DrawCmd]) -> Vec<Rect> {
         crate::display::test_support::painted(commands)
@@ -370,7 +384,7 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     assert!(driver.rect(&b_path).y0 < driver.rect(&a_path).y0);
     assert!(driver.rect(&a_path).y1 < driver.rect(&[Step::Key(extra)]).y0);
     assert_eq!(
-        driver.landmark(&b_path).unwrap().scope.location(&b_path),
+        occurrence::location(&driver.landmark(&b_path).unwrap().path),
         Some(Location::root(vec![Step::Key(b)]))
     );
     driver.select(&b_path);
@@ -391,20 +405,21 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
     };
     fields.insert(OUTLINE, Value::list([a.into(), a.into(), b.into()]));
     let entries = entry_paths(doc.root.as_ref().unwrap(), &[], a);
+    let sections = entries.iter().map(|p| section(p, a)).collect::<Vec<_>>();
     let bodies = entries.iter().map(|p| body(p, a)).collect::<Vec<_>>();
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let before = driver.editor().model.doc.clone();
     click_heading(&mut driver, &entries[0]);
-    assert!(hidden(driver.editor(), &bodies[0]));
-    assert!(!hidden(driver.editor(), &bodies[1]));
+    assert!(hidden(driver.editor(), &sections[0]));
+    assert!(!hidden(driver.editor(), &sections[1]));
     assert!(!driver.drawn(&bodies[0]));
     assert!(driver.drawn(&bodies[1]));
     assert!(Rc::ptr_eq(&before, &driver.editor().model.doc));
     assert!(!driver.editor().model.dirty());
     assert!(driver.undo());
-    assert!(!hidden(driver.editor(), &bodies[0]));
+    assert!(!hidden(driver.editor(), &sections[0]));
     assert!(driver.redo());
-    assert!(hidden(driver.editor(), &bodies[0]));
+    assert!(hidden(driver.editor(), &sections[0]));
     click_heading(&mut driver, &entries[0]);
 
     driver.select(&bodies[1]);
@@ -412,12 +427,10 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
     assert!(driver.paste(&replacement));
     for path in &bodies {
         assert_eq!(
-            driver
-                .landmark(path)
-                .unwrap()
-                .scope
-                .view(driver.editor().sources())
-                .resolve_path(path),
+            occurrence::read(
+                &driver.editor().sources(),
+                &driver.landmark(path).unwrap().path
+            ),
             Some(&replacement)
         );
     }
@@ -429,8 +442,13 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
 fn computed_outline_keeps_independent_read_only_occurrences() {
     let (mut doc, a, _, _) = document();
     let value = doc.root.take().unwrap();
-    let e = entry_paths(&value, &[Step::Key(RESULT)], a).remove(0);
-    let source_entry = entry_paths(&value, &[Step::Key(grap::vocabulary::EVALUATE)], a).remove(0);
+    let e = entry_paths(&value, &crate::test_examples::result_path(&[]), a).remove(0);
+    let source_entry = entry_paths(
+        &value,
+        &occurrence::of(&[Step::Key(grap::vocabulary::EVALUATE)]),
+        a,
+    )
+    .remove(0);
     let result_body = body(&e, a);
     let source_body = body(&source_entry, a);
     let expected = value.as_record().unwrap().get(&a).unwrap().clone();
@@ -438,13 +456,7 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let before = driver.editor().model.doc.clone();
     let positions: Vec<_> = expected.as_list().unwrap().keys().cloned().collect();
-    let element = |position| {
-        result_body
-            .iter()
-            .cloned()
-            .chain([Step::Element(position)])
-            .collect::<Path>()
-    };
+    let element = |position| occurrence::below(&result_body, &[Step::Element(position)]);
     let first = driver.rect(&element(positions[0].clone()));
     let second = driver.rect(&element(positions[1].clone()));
     let missing =
@@ -489,7 +501,7 @@ fn outline_column_gaps_open_pending_before_between_and_after_items() {
         let positions: Vec<_> = entries
             .iter()
             .map(|path| match path.last().unwrap() {
-                Step::Element(position) => position.clone(),
+                occurrence::Step::Element(position) => position.clone(),
                 _ => unreachable!(),
             })
             .collect();
@@ -498,7 +510,7 @@ fn outline_column_gaps_open_pending_before_between_and_after_items() {
             positions.get(index),
         )
         .unwrap();
-        let path = vec![Step::Key(OUTLINE), Step::Element(inserted.clone())];
+        let path = occurrence::of(&[Step::Key(OUTLINE), Step::Element(inserted.clone())]);
         let list = driver.rect(&[Step::Key(OUTLINE)]);
         let top = index
             .checked_sub(1)
@@ -529,16 +541,10 @@ fn outline_column_gaps_open_pending_before_between_and_after_items() {
 fn outline_body_column_gap_inserts_through_its_jump() {
     let (doc, a, _, _) = document();
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
-    let section = body(&entry(driver.editor(), &[], a), a);
+    let body_path = body(&entry(driver.editor(), &[], a), a);
     let positions = driver.positions(&[Step::Key(a)]);
     let inserted = gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap();
-    let element = |position| {
-        section
-            .iter()
-            .cloned()
-            .chain([Step::Element(position)])
-            .collect::<Path>()
-    };
+    let element = |position| occurrence::below(&body_path, &[Step::Element(position)]);
     let path = element(inserted.clone());
     let first = driver.rect(&element(positions[0].clone()));
     let second = driver.rect(&element(positions[1].clone()));
@@ -581,11 +587,10 @@ fn outline_preserves_pending_insertions_in_both_lists() {
     let (doc, a, _, _) = document();
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let e = entry(driver.editor(), &[], a);
-    let item = [
-        body(&e, a),
-        vec![Step::Element(driver.positions(&[Step::Key(a)])[0].clone())],
-    ]
-    .concat();
+    let item = occurrence::below(
+        &body(&e, a),
+        &[Step::Element(driver.positions(&[Step::Key(a)])[0].clone())],
+    );
     for target in [item, e] {
         driver.select(&target);
         driver.press(NamedKey::Enter);
@@ -610,8 +615,7 @@ fn outline_headings_delete_and_pick_references_not_bodies() {
     let e = entry(&editor, &[], a);
     editor.model.selection = Some(pending_value(
         &crate::test_root(),
-        Default::default(),
-        vec![Step::Key(extra)],
+        occurrence::of(&[Step::Key(extra)]),
     ));
     let mut driver = Driver::new(editor, Driver::VIEWPORT);
     // The command key, on either platform, picks the heading's reference.
@@ -619,11 +623,11 @@ fn outline_headings_delete_and_pick_references_not_bodies() {
     click_heading(&mut driver, &e);
     driver.hold(ModifiersState::empty());
     assert_eq!(driver.value(&[Step::Key(extra)]), Value::Cell(a));
-    assert!(!hidden(driver.editor(), &body(&e, a)));
+    assert!(!hidden(driver.editor(), &section(&e, a)));
     click_heading(&mut driver, &e);
     let before = driver.value(&[Step::Key(a)]);
     driver.press(NamedKey::Delete);
-    assert!(driver.editor().sources().resolve_path(&e).is_none());
+    assert!(occurrence::read(&driver.editor().sources(), &e).is_none());
     assert_eq!(driver.value(&[Step::Key(a)]), before);
     assert!(driver.drawn(&[Step::Key(a)]));
 }
@@ -640,10 +644,7 @@ fn nested_outline_composes_jumps_and_cell_follows() {
     ]));
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     let outer = body(&entry(driver.editor(), &[], parent), parent);
-    let followed: Path = outer
-        .into_iter()
-        .chain([Step::Follow(gid::Resolution::Document)])
-        .collect();
+    let followed = occurrence::below(&outer, &[Step::Follow(gid::Resolution::Document)]);
     let inner = driver.value(&[Step::Key(parent), Step::Follow(gid::Resolution::Document)]);
     let e = entry_paths(&inner, &followed, a).remove(0);
     driver.select(&body(&e, a));
@@ -672,7 +673,9 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     let mut world = driver.runner.editor;
     world.model.selection = pending_edge(
         &crate::test_root(),
-        &crate::editing::Scope::default().view(world.sources()),
+        &crate::editing::Read {
+            sources: world.sources(),
+        },
         Vec::new(),
     );
     assert!(editing_frame(&mut world).completion.is_some());

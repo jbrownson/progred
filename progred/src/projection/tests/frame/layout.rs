@@ -17,7 +17,7 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
     };
     let closure = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], Value::record([]))),
-        Some(::grap::SourceOrigin::Stored(vec![Step::Key(
+        Some(::grap::SourceOrigin::Stored(vec![gid::Step::Key(
             gid::new_cell_id(),
         )])),
         &sources,
@@ -99,7 +99,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
             d::test_support::record_partial(|_| None),
         ]);
         Some(d::at_with_projection(
-            [Step::Key(result)],
+            [gid::Step::Key(result)],
             value.clone(),
             Some(children.clone()),
             Some(children),
@@ -109,8 +109,13 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
     world.stack.projection = projection;
     let frame = editing_frame(&mut world);
     assert_eq!(visits.get(), 1);
-    let path = vec![Step::Key(result), Step::Key(field), Step::Element(position)];
-    assert!(frame.landmarks.landmark(&path.as_slice()).is_some());
+    let path = [
+        Step::Key(result),
+        Step::Computed,
+        Step::Key(field),
+        Step::Element(position),
+    ];
+    assert!(frame.landmarks.landmark(&path).is_some());
 }
 
 #[test]
@@ -393,7 +398,7 @@ fn decorative_and_pending_slots_share_the_active_query_frame() {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let selected = pending_value(&crate::test_root(), Default::default(), Vec::new());
+    let selected = pending_value(&crate::test_root(), Vec::new());
     for (scale, size) in [(1.0, 14.0), (1.0, 22.0), (2.0, 14.0), (2.0, 22.0)] {
         context.styles = crate::display::widget::style::editor(
             crate::display::widget::style::Theme::Light.palette(),
@@ -450,7 +455,6 @@ fn cell_parentheses_leave_a_gap_beside_empty_frames() {
     };
     let selected = pending_value(
         &crate::test_root(),
-        Default::default(),
         vec![Step::Follow(gid::Resolution::Document)],
     );
     let mut context = BenchContext::new();
@@ -527,7 +531,7 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         gid::Resolution::Document,
         gid::Resolution::Library(name::ID),
     ] {
-        let selected = Selection::edge(&crate::test_root(), Default::default(), path(0, source));
+        let selected = Selection::edge(&crate::test_root(), path(0, source));
         let (bench, _) = place(&doc, Some(&selected), 900.0);
         let target = bench
             .landmarks
@@ -587,7 +591,7 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         ]
     });
     let mut context = BenchContext::new();
-    let selected = Selection::edge(&crate::test_root(), Default::default(), paths[0].clone());
+    let selected = Selection::edge(&crate::test_root(), paths[0].clone());
     let blue = |alpha| {
         Brush::from(
             crate::display::widget::style::Theme::Light
@@ -677,11 +681,11 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
 #[test]
 fn sample_text_line_claims_its_own_hover() {
     let doc = sample_document();
-    let path = vec![
+    let path = crate::occurrence::of(&[
         key("style"),
-        Step::Follow(gid::Resolution::Document),
+        gid::Step::Follow(gid::Resolution::Document),
         key("color"),
-    ];
+    ]);
     let (bench, _) = place(&doc, None, 900.0);
     let rect = bench
         .landmarks
@@ -812,7 +816,7 @@ fn list_navigation_follows_the_selected_layout_alternative() {
     ]);
     let paths: Vec<_> = positions(&list)
         .into_iter()
-        .map(|position| vec![Step::Element(position)])
+        .map(|position| vec![gid::Step::Element(position)])
         .collect();
     let doc = Document {
         root: Some(list),
@@ -886,8 +890,7 @@ fn placement_claims_the_hover_innermost_last() {
         .landmarks
         .iter()
         .find(|landmark| {
-            sources
-                .resolve_path(&landmark.path)
+            crate::occurrence::read(&sources, &landmark.path)
                 .is_some_and(|value| text::read(value).is_some())
                 && !matches!(landmark.path.last(), Some(Step::Key(label)) if *label == name::vocabulary::NAME)
         })
@@ -1004,7 +1007,7 @@ fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Landmark<World>, Land
     let mut found: Vec<&Landmark<World>> = bench
         .landmarks
         .iter()
-        .filter(|landmark| landmark.path.len() == 2 && landmark.path.first() == Some(&key(field)))
+        .filter(|landmark| matches!(landmark.path.as_ref(), [first, _] if *first == key(field)))
         .collect();
     found.sort_by(|a, b| {
         let (a, b) = if by_y {
@@ -1121,7 +1124,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
             assert_eq!(visits.get(), count, "alternatives share projected children");
             let mut driver = Driver::new(world, Driver::VIEWPORT);
             let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
-            let rect = driver.rect(&[]);
+            let rect = driver.rect::<Step>(&[]);
             let point = (0..rect.width().ceil() as usize)
                 .map(|x| Point::new(rect.x0 + x as f64 + 0.5, rect.center().y))
                 .find(|point| driver.hover_at(*point).as_ref() == Some(&target))
@@ -1132,7 +1135,10 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
             assert_eq!(driver.selection(), path);
             assert!(driver.picker_entries().is_some());
             assert!(driver.paste(&f64::value(9.0)));
-            assert_eq!(driver.value(&path), f64::value(9.0));
+            assert_eq!(
+                driver.value(&[gid::Step::Element(position)]),
+                f64::value(9.0)
+            );
         }
     }
 }
@@ -1203,7 +1209,6 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     let pending = world.model.selection.as_ref().unwrap().path().to_vec();
     world.model.selection = Some(crate::selection::pending_with_query(
         &crate::test_root(),
-        Default::default(),
         pending.clone(),
         "x",
     ));
@@ -1281,7 +1286,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
             items[1].y0 > items[0].y1,
             "the standard list chose its vertical alternative"
         );
-        let list = driver.rect(&[]);
+        let list = driver.rect::<Step>(&[]);
         let top = boundary.checked_sub(1).map_or(list.y0, |i| items[i].y1);
         let bottom = items.get(boundary).map_or(list.y1, |r| r.y0);
         let point = Point::new(items[0].center().x, (top + bottom) / 2.0);
@@ -1319,7 +1324,10 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
             }
         }
         assert!(driver.paste(&f64::value(9.0)));
-        assert_eq!(driver.value(&path), f64::value(9.0));
+        assert_eq!(
+            driver.value(&[gid::Step::Element(inserted.clone())]),
+            f64::value(9.0)
+        );
     }
 }
 

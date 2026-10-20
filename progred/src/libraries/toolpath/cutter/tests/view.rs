@@ -27,12 +27,11 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
             }),
             crate::driver::Driver::VIEWPORT,
         );
-        let mut selected = vec![Step::Key(owner)];
-        if evaluated {
-            selected.push(Step::Key(
-                crate::libraries::presentation::vocabulary::RESULT,
-            ));
-        }
+        let selected = if evaluated {
+            crate::test_examples::result_path(&[Step::Key(owner)])
+        } else {
+            crate::occurrence::of(&[Step::Key(owner)])
+        };
         let profile = driver.rect(&selected);
         // Inside the 110 × 180 profile, clear of both its text and delimiters.
         let pointer = Point::new(profile.x0 + 55.0, profile.y0 + 90.0);

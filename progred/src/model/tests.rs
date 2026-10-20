@@ -46,8 +46,7 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
     let pane_root = model.workspace.left.panes[0].view.root.clone();
     model.selection = Some(selection::pending_with_query(
         &pane_root,
-        Default::default(),
-        pane_path,
+        crate::occurrence::of(&pane_path),
         "old query",
     ));
     model
@@ -92,8 +91,11 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
     assert_eq!(model.workspace.right_width, fresh.right_width);
 }
 
-fn select(model: &mut Model, root: &Root, path: Path) {
-    model.selection = Some(selection::Selection::edge(root, Default::default(), path));
+fn select(model: &mut Model, root: &Root, path: &[gid::Step]) {
+    model.selection = Some(selection::Selection::edge(
+        root,
+        crate::occurrence::of(path),
+    ));
 }
 
 #[test]
@@ -152,7 +154,7 @@ fn branching_before_at_and_after_save_cannot_confuse_the_saved_identity() {
 fn folds_undo_independently_of_document_edits_and_never_dirty_the_document() {
     let mut model = model();
     let root = model.workspace.document_root().clone();
-    select(&mut model, &root, vec![]);
+    select(&mut model, &root, &[]);
     assert!(!model.set_folded(&root, &[], false, Some(false)));
     assert!(!model.history.can_undo());
     edit(&mut model, 2);
@@ -203,8 +205,8 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
         .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
     let first_root = model.workspace.left.panes[0].view.root.clone();
     let second_root = model.workspace.left.panes[1].view.root.clone();
-    select(&mut model, &first_root, first.1.clone());
-    assert!(model.set_folded(&first_root, &first.1, false, None));
+    select(&mut model, &first_root, &first.1);
+    assert!(model.set_folded(&first_root, &crate::occurrence::of(&first.1), false, None));
     assert!(!model.dirty());
     let before = model.snapshot();
     assert!(crate::location::delete_edge(
@@ -216,7 +218,7 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
     model
         .workspace
         .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
-    select(&mut model, &second_root, second.1);
+    select(&mut model, &second_root, &second.1);
     assert!(model.workspace.view(&first_root).is_none());
     assert!(model.step_history(true));
     assert_eq!(model.selection.as_ref().unwrap().root(), &first_root);
@@ -226,7 +228,7 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
             .view(&first_root)
             .unwrap()
             .annotations
-            .at(&first.1),
+            .at(&crate::occurrence::of(&first.1)),
         false
     ));
     assert!(!model.dirty());
@@ -237,7 +239,7 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
             .view(&first_root)
             .unwrap()
             .annotations
-            .at(&first.1),
+            .at(&crate::occurrence::of(&first.1)),
         false
     ));
     assert!(model.workspace.view(&second_root).is_some());
@@ -290,7 +292,10 @@ fn undo_does_not_restore_scroll_projection_or_unrelated_annotations() {
 #[test]
 fn rejected_writes_do_not_detach_the_saved_snapshot() {
     let mut model = model();
-    let bad_path = [Step::Key(gid::new_cell_id()), Step::Key(gid::new_cell_id())];
+    let bad_path = [
+        gid::Step::Key(gid::new_cell_id()),
+        gid::Step::Key(gid::new_cell_id()),
+    ];
     assert!(!crate::location::set_value(
         &mut model.doc,
         &Libraries::default(),
@@ -325,7 +330,7 @@ fn cell_writes_preserve_the_saved_document_without_needing_a_history_record() {
     assert!(crate::location::set_value(
         &mut model.doc,
         &Libraries::default(),
-        &crate::location::Location::root(&[Step::Follow(gid::Resolution::Document)]),
+        &crate::location::Location::root(&[gid::Step::Follow(gid::Resolution::Document)]),
         Value::from(vec![2])
     ));
     assert!(model.dirty());
@@ -339,14 +344,14 @@ fn cell_writes_preserve_the_saved_document_without_needing_a_history_record() {
 fn saving_and_folding_break_typing_runs() {
     use crate::libraries::text;
     let field = gid::new_cell_id();
-    let path = vec![Step::Key(field)];
+    let path = vec![gid::Step::Key(field)];
     let libraries = crate::stack::load().libraries;
     let mut model = Model::new(Document {
         root: Some(Value::record([(field, text::value("a"))])),
         cells: Cells::new(),
     });
     let root = model.workspace.document_root().clone();
-    let mut typing = selection::Selection::edge(&root, Default::default(), path.clone());
+    let mut typing = selection::Selection::edge(&root, crate::occurrence::of(&path));
     typing.edit_line_mut("a");
     model.selection = Some(typing);
     let type_text = |model: &mut Model, text| {

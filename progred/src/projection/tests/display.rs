@@ -1,6 +1,7 @@
 use super::*;
 use crate::projection::Layout;
 use crate::projection::test_support::ProjectionInput;
+use gid::Step;
 
 #[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {
@@ -336,7 +337,6 @@ fn partials_receive_selection_and_annotations_positionally() {
     let selected = glyphs(
         Some(crate::selection::Selection::edge(
             &crate::test_root(),
-            Default::default(),
             Vec::new(),
         )),
         Annotations::default(),
@@ -371,7 +371,7 @@ fn a_projection_defined_as_data_realizes() {
     let mut editor = crate::editor_of(Value::from(vec![7u8]));
     editor.stack.projection = Projection::new([crate::display::partial(probe)]);
     let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
-    assert!(driver.rect(&[]).width() > 0.0);
-    driver.click(&[]);
+    assert!(driver.rect::<Step>(&[]).width() > 0.0);
+    driver.click::<Step>(&[]);
     assert!(driver.selection().is_empty());
 }

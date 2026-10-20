@@ -24,11 +24,7 @@ pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
 /// An empty document's editor, its missing root a pending hole.
 fn pending_root() -> Editor {
     let mut world = crate::test_editor(gid::Document::default());
-    world.model.selection = Some(crate::selection::pending_value(
-        &crate::test_root(),
-        Default::default(),
-        vec![],
-    ));
+    world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
     world
 }
 
@@ -75,7 +71,6 @@ pub fn point_update(
     let mut world = crate::test_editor(gid::Document::default());
     world.model.selection = Some(crate::selection::Selection::edge(
         &crate::test_root(),
-        Default::default(),
         vec![],
     ));
     assert!(output.handler.unwrap().dispatch_pointer_down(
@@ -159,18 +154,17 @@ pub fn assert_delimiter(
     assert_eq!(transform, wanted_transform);
 }
 
+/// What hovering the value drawn at the document path `path` shows.
 pub fn hover(path: Vec<gid::Step>) -> Hovered {
-    Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from(path)))
+    Hovered::Tree(crate::hover::Hover::Value(
+        crate::occurrence::of(&path).into(),
+    ))
 }
 
-/// A projection test's occurrence: the root of the test view, read with no
-/// scope, so a site below it hovers and selects the steps it's given.
+/// A projection test's occurrence: the root of the test view, so a site
+/// below it hovers and selects the steps it's given.
 pub fn test_site() -> crate::editing::Site {
-    crate::editing::Site::new(
-        crate::test_root(),
-        std::rc::Rc::from([]),
-        Default::default(),
-    )
+    crate::editing::Site::new(crate::test_root(), std::rc::Rc::from([]))
 }
 
 /// `value` projected writably at scale 1 through `env`, with no default
@@ -243,15 +237,12 @@ pub fn gesture_place(
     crate::display::test_support::with_empty_view(
         &crate::display::test_support::NoProject,
         |cx, text, project| {
-            let cx = crate::projection::Cx {
-                edits: if readonly {
-                    cx.edits.detached(vec![])
-                } else {
-                    cx.edits.clone()
-                },
-                ..cx.clone()
+            let path: &[crate::occurrence::Step] = if readonly {
+                &[crate::occurrence::Step::Computed]
+            } else {
+                &[]
             };
-            crate::projection::test_support::at_root(&cx, text, project, None, |context| {
+            crate::projection::test_support::at_path(cx, text, project, path, None, |context| {
                 before(context)
             })
         },

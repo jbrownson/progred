@@ -2,6 +2,7 @@
 use super::*;
 use crate::libraries::{f64, fidget, grap::control};
 use ::grap::vocabulary::{BODY, EVALUATE, EXPRESSION, FFI, FUNCTION, PARAMS, VALUE};
+use gid::{Path, Step};
 use puri::handler::NavigationDirection;
 
 struct Fixture {

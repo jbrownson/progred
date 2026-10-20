@@ -1,6 +1,7 @@
 use super::*;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::source::Secondary;
+use crate::occurrence::Step as Occurs;
 use crate::test_support::key_down;
 use gid::{CellId, Cells, Document, Step, Value};
 use puri::handler::test_support::DispatchShorthands;
@@ -59,26 +60,24 @@ fn the_document_view_reports_content_that_does_not_depend_on_its_height() {
 
 #[test]
 fn source_hover_conjects_the_occurrence_in_its_own_view() {
-    let field = gid::new_cell_id();
-    let occurrence: Rc<[Step]> = Rc::from([Step::Key(gid::new_cell_id())]);
+    let (field, key) = (gid::new_cell_id(), gid::new_cell_id());
     let mut editor = crate::editor_of(Value::record([(
         field,
         crate::libraries::text::value("shared"),
     )]));
     let root = editor.model.workspace.document_root().clone();
     let source = vec![Step::Key(field)];
-    let scope = crate::editing::Scope::default().located(
-        occurrence.to_vec(),
-        crate::location::Location::root(source.clone()),
-    );
+    let occurrence: Rc<[Occurs]> = Rc::from([
+        Occurs::Key(key),
+        Occurs::jump(crate::location::Location::root(source.clone())),
+    ]);
     // What the projection draws a conjected occurrence sharing.
-    let secondary = Secondary::Stored(Rc::from(source.as_slice()));
+    let secondary = Secondary::Stored(crate::occurrence::of(&source).into());
     let mut landmarks = [crate::display::widget::navigation::Landmark::<Editor> {
         path: occurrence.clone(),
         root: Some(root.clone()),
         rect: Rect::new(0.0, 0.0, 10.0, 10.0),
         select: Rc::new(|_, _| true),
-        scope,
         secondary: Some(secondary.clone()),
         selected: false,
         tab_stop: false,
@@ -112,7 +111,6 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         child,
         occurrence.clone(),
         Rc::new(|_, _| true),
-        landmarks[0].scope.clone(),
         Some(secondary.clone()),
         false,
     );
@@ -128,25 +126,20 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         *observed.borrow(),
         Some((Some(expected.clone()), Some(secondary)))
     );
-    // A detached occurrence must not acquire provenance even when its
+    // A computed occurrence must not acquire provenance even when its
     // spelling also names real document data.
     Rc::make_mut(&mut editor.model.doc).root = Some(Value::record([
         (field, crate::libraries::text::value("shared")),
-        (
-            match occurrence[0] {
-                Step::Key(key) => key,
-                _ => unreachable!(),
-            },
-            crate::libraries::text::value("coincidence"),
-        ),
+        (key, crate::libraries::text::value("coincidence")),
     ]));
-    landmarks[0].scope = crate::editing::Scope::default().detached(occurrence.to_vec());
+    let computed: Rc<[Occurs]> = Rc::from([Occurs::Key(key), Occurs::Computed]);
+    landmarks[0].path = computed.clone();
     let resolved = attribute(
         &editor.sources(),
         &landmarks,
         Some(&root),
         None,
-        hover,
+        Some(Hovered::Tree(hover::Hover::Value(computed))),
         false,
     );
     assert!(resolved.hovered_trace.is_none());
@@ -515,7 +508,7 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
         .keys()
         .rev()
         .take(2)
-        .map(|position| vec![Step::Element(position.clone())])
+        .map(|position| vec![Occurs::Element(position.clone())])
         .collect();
     let [path, previous] = paths.as_slice() else {
         panic!("expected two list items");
@@ -531,9 +524,7 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
         .rect;
     let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
-    crate::editing::Scope::default()
-        .open(runner.editor.session())
-        .select(&root, previous);
+    crate::editing::Edit::new(runner.editor.session()).select(&root, previous);
     runner.refresh_frame(1.0, viewport);
     let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
@@ -565,7 +556,6 @@ fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
         .to_vec();
     runner.editor.model.selection = Some(crate::selection::Selection::edge(
         runner.editor.model.workspace.document_root(),
-        Default::default(),
         path,
     ));
 
@@ -592,9 +582,7 @@ fn selection_changes_do_not_implicitly_request_reveal() {
         .to_vec();
     runner.update_frame(1.0, viewport, |editor, _, _| {
         let root = editor.model.workspace.document_root().clone();
-        crate::editing::Scope::default()
-            .open(editor.session())
-            .select(&root, &path);
+        crate::editing::Edit::new(editor.session()).select(&root, &path);
         true
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
@@ -602,7 +590,6 @@ fn selection_changes_do_not_implicitly_request_reveal() {
     runner.update_frame(1.0, viewport, |editor, _, _| {
         editor.model.selection = Some(crate::selection::pending_value(
             editor.model.workspace.document_root(),
-            Default::default(),
             path,
         ));
         true
@@ -610,7 +597,7 @@ fn selection_changes_do_not_implicitly_request_reveal() {
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
 }
 
-fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> gid::Path {
+fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> crate::occurrence::Path {
     let target = runner
         .frame
         .dispatch
@@ -619,9 +606,7 @@ fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> gid::Path {
         .find(|target| target.rect.y0 > viewport.height)
         .unwrap();
     let path = target.path.to_vec();
-    crate::editing::Scope::default()
-        .open(runner.editor.session())
-        .select(target.root.as_ref().unwrap(), &path);
+    crate::editing::Edit::new(runner.editor.session()).select(target.root.as_ref().unwrap(), &path);
     path
 }
 
@@ -637,7 +622,6 @@ fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
         if key == NamedKey::Backspace {
             runner.editor.model.selection = Some(crate::selection::pending_value(
                 runner.editor.model.workspace.document_root(),
-                Default::default(),
                 path.clone(),
             ));
         }
@@ -840,8 +824,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
         Rc::make_mut(&mut editor.model.doc).root = Some(content);
         editor.model.selection = Some(crate::selection::Selection::edge(
             editor.model.workspace.document_root(),
-            Default::default(),
-            path.clone(),
+            crate::occurrence::of(&path),
         ));
         dispatch.geometry(1.0).reveal_selection(&mut editor.model);
         true
@@ -907,9 +890,8 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
             |(resolution, rect)| crate::display::widget::navigation::Landmark::<
                 Option<gid::Resolution>,
             > {
-                scope: Default::default(),
                 root: Some(root.clone()),
-                path: Rc::from([Step::Follow(resolution), Step::Key(call)]),
+                path: Rc::from([Occurs::Follow(resolution), Occurs::Key(call)]),
                 rect,
                 select: Rc::new(move |selected, _| {
                     *selected = Some(resolution);
@@ -995,7 +977,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     model.workspace.document.shown = workspace::Shown::AllBut(vec![crate::libraries::editor::ID]);
     crate::annotations::set_folded(
         &mut model.workspace.document.annotations,
-        &[Step::Key(workspace::vocabulary::PANES)],
+        &[Occurs::Key(workspace::vocabulary::PANES)],
         false,
         false,
     );
@@ -1673,9 +1655,9 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
         crate::driver::Driver::new(crate::test_editor(doc), crate::driver::Driver::VIEWPORT);
     let drawn = |driver: &crate::driver::Driver, key| {
         driver
-            .drawn_under(&[])
+            .drawn_under::<Step>(&[])
             .into_iter()
-            .find(|(path, _)| path.last() == Some(&Step::Key(key)))
+            .find(|(path, _)| path.last() == Some(&Occurs::Key(key)))
             .expect("drawn")
     };
     // The document's program field, and the pane's result naming it missing.
@@ -1686,7 +1668,7 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
     assert!(
         missing
             .0
-            .starts_with(&[Step::Key(workspace::vocabulary::PANES)])
+            .starts_with(&[Occurs::Key(workspace::vocabulary::PANES)])
     );
     let marked = |driver: &crate::driver::Driver, alpha, other: Rect| {
         let brush = Brush::from(style::Theme::Light.palette().accent.with_alpha(alpha));

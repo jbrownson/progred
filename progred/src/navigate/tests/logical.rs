@@ -56,9 +56,8 @@ fn logical_example_custom_columns_interleave_lines_and_keep_editable_sources() {
     // Running a custom Grap layout did not turn the displayed data into a copy.
     world.model.selection = Some(make_selection(field("a")));
     assert!(step(&mut world, NavigationDirection::Right));
-    let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(
-        selection.scope().location(selection.path()),
+        world.model.selection.as_ref().unwrap().location(),
         Some(Location::root(field("d")))
     );
     let mut driver = Driver::new(world, Driver::VIEWPORT);
@@ -297,13 +296,20 @@ fn logical_navigation_retains_jump_editing_targets() {
         cells,
     });
     let heading = vec![Step::Key(OUTLINE), Step::Element(entries[0].clone())];
-    let body: Path = heading.iter().cloned().chain([Step::Key(field)]).collect();
+    // The body is drawn below its heading, jumped to the field it shows.
+    let body = crate::occurrence::of(&heading)
+        .into_iter()
+        .chain([
+            crate::occurrence::Step::Key(field),
+            crate::occurrence::Step::jump(Location::root(vec![Step::Key(field)])),
+        ])
+        .collect::<crate::occurrence::Path>();
     world.model.selection = Some(make_selection(heading));
     assert!(step(&mut world, NavigationDirection::Down));
     let selection = world.model.selection.as_ref().unwrap();
     assert_eq!(selection.path(), body);
     assert_eq!(
-        selection.scope().location(selection.path()),
+        selection.location(),
         Some(Location::root(vec![Step::Key(field)]))
     );
 }
@@ -312,19 +318,16 @@ fn logical_navigation_retains_jump_editing_targets() {
 fn logical_computed_children_remain_readonly_and_text_handles_keys_first() {
     let root = Value::record([(::grap::vocabulary::EVALUATE, text::value("computed"))]);
     let source = vec![Step::Key(::grap::vocabulary::EVALUATE)];
-    let result = vec![Step::Key(
-        crate::libraries::presentation::vocabulary::RESULT,
-    )];
     let mut world = crate::editor_of(root);
     world.model.selection = Some(make_selection(source.clone()));
     assert!(step(&mut world, NavigationDirection::Right));
     let selection = world.model.selection.as_ref().unwrap();
-    assert_eq!(selection.path(), result);
-    assert!(selection.scope().location(selection.path()).is_none());
+    assert_eq!(selection.path(), crate::test_examples::result_path(&[]));
+    assert!(selection.location().is_none());
 
     let document = world.model.doc.clone();
     let mut driver = Driver::new(world, Driver::VIEWPORT);
-    driver.select(&[]);
+    driver.select::<Step>(&[]);
     for offset in [0, 1] {
         driver.press(NamedKey::ArrowRight);
         assert_eq!(driver.selection(), source);

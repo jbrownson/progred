@@ -178,14 +178,21 @@ fn declared_panes_reconcile_without_losing_view_state() {
         path: vec![Step::Key(CellId::from_u128(2))],
     };
     let mut workspace = Workspace::default();
-    let panes_path = [Step::Key(vocabulary::PANES)];
+    let panes_path = [crate::occurrence::Step::Key(vocabulary::PANES)];
     workspace.sync_declared(&[one.clone(), two.clone()]);
     assert!(crate::annotations::folded(
         workspace.document.annotations.at(&panes_path),
         false
     ));
-    assert!(workspace.document.annotations.at(&one.path).is_none());
-    assert!(workspace.document.annotations.at(&two.path).is_none());
+    for declaration in [&one, &two] {
+        assert!(
+            workspace
+                .document
+                .annotations
+                .at(&crate::occurrence::of(&declaration.path))
+                .is_none()
+        );
+    }
     crate::annotations::set_folded(
         &mut workspace.document.annotations,
         &panes_path,
@@ -347,7 +354,7 @@ fn opening_a_pane_on_a_bare_root_wraps_it_and_keeps_its_folds() {
     });
     crate::annotations::set_folded(
         &mut world.model.workspace.document.annotations,
-        &[Step::Key(outer)],
+        &[crate::occurrence::Step::Key(outer)],
         false,
         true,
     );
@@ -418,12 +425,11 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
     let first = cell_positions(&world, cell)[0].clone();
     world.model.selection = Some(crate::selection::Selection::edge(
         &crate::test_root(),
-        crate::editing::Scope::default(),
-        vec![
+        crate::occurrence::of(&[
             Step::Key(label),
             Step::Follow(gid::Resolution::Document),
             Step::Element(first.clone()),
-        ],
+        ]),
     ));
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver
@@ -562,12 +568,17 @@ fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
     driver.select(&place);
     assert!(writable(&driver));
     // With the list gone too, nothing can be written there, and the pane
-    // says which place it can't find.
+    // says which place it can't find, a value computed in its place.
     remove(
         &mut driver,
         &[Step::Key(vocabulary::MAIN), Step::Key(outer)],
     );
-    driver.select(&place);
+    driver.select(
+        &crate::occurrence::of(&place)
+            .into_iter()
+            .chain([crate::occurrence::Step::Computed])
+            .collect::<Vec<_>>(),
+    );
     assert!(!writable(&driver));
     driver.keystroke(
         ui_events::keyboard::Key::Character("c".into()),
@@ -653,6 +664,6 @@ fn a_root_of_only_the_workspace_fields_draws_an_empty_main() {
     assert!(driver.drawn(&[Step::Key(vocabulary::MAIN)]));
     // The record around it is drawn as nothing of its own, so it can't be
     // selected.
-    assert!(!driver.drawn(&[]));
+    assert!(!driver.drawn::<Step>(&[]));
     assert!(!driver.drawn(&[Step::Key(vocabulary::PANES)]));
 }

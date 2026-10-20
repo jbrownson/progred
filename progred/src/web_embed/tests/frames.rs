@@ -24,10 +24,10 @@ fn stop<'a>(
 /// The keys of the slots drawn at the document's top, in order.
 fn top_slots(driver: &Driver) -> Vec<CellId> {
     driver
-        .drawn_under(&[])
+        .drawn_under::<Step>(&[])
         .into_iter()
         .filter_map(|(path, _)| match path.as_ref() {
-            [Step::Key(key)] => Some(*key),
+            [crate::occurrence::Step::Key(key)] => Some(*key),
             _ => None,
         })
         .collect()
@@ -236,7 +236,7 @@ fn tutorial_slots_fall_back_to_the_ordinary_picker_when_the_root_is_deleted() {
     let mut driver = Driver::new(editor, Driver::VIEWPORT);
     assert!(top_slots(&driver).is_empty());
     assert!(driver.editor().model.doc.root.is_none());
-    driver.select(&[]);
+    driver.select::<Step>(&[]);
     assert!(driver.picker_entries().is_some());
     assert!(driver.paste(&Value::record([])));
     assert_eq!(top_slots(&driver), slots);
@@ -295,7 +295,7 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
         frame
             .landmarks
             .iter()
-            .any(|d| d.path.len() > path.len() && d.path.starts_with(path))
+            .any(|d| d.path.len() > path.len() && d.path.starts_with(&crate::occurrence::of(path)))
     };
     for slot in ["first", "second"] {
         let callee = [
@@ -332,10 +332,9 @@ fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
     ];
     assert!(frame.landmarks.landmark(&callee).is_some());
     assert!(
-        !frame
-            .landmarks
-            .iter()
-            .any(|d| d.path.len() > callee.len() && d.path.starts_with(&callee)),
+        !frame.landmarks.iter().any(|d| {
+            d.path.len() > callee.len() && d.path.starts_with(&crate::occurrence::of(&callee))
+        }),
         "the call shows (scale), not scale's whole definition"
     );
 }

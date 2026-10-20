@@ -135,9 +135,7 @@ pub(crate) fn source_landmark<'a, World>(
 ) -> Option<&'a super::navigation::Landmark<World>> {
     landmarks.iter().find(|landmark| {
         landmark.root.is_some()
-            && landmark
-                .scope
-                .location(&landmark.path)
+            && crate::occurrence::location(&landmark.path)
                 .is_some_and(|location| SourceTrace::from_location(sources, &location) == *source)
     })
 }

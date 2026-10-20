@@ -1,8 +1,12 @@
 use super::*;
 use crate::sample::{PLANET_VIEW, planets};
+use gid::Step;
 
-fn drawn(world: &mut crate::Editor, path: &[Step]) -> bool {
-    editing_frame(world).landmarks.landmark(&path).is_some()
+fn drawn<S>(world: &mut crate::Editor, path: &[S]) -> bool
+where
+    crate::occurrence::Step: PartialEq<S>,
+{
+    editing_frame(world).landmarks.landmark(path).is_some()
 }
 
 #[test]
@@ -50,11 +54,10 @@ fn a_view_that_draws_its_own_value_ends() {
     let (mut world, names) = planets("value");
     assert!(drawn(
         &mut world,
-        &[
-            Step::Key(names["mars"]),
-            Step::Key(crate::libraries::presentation::vocabulary::RESULT),
-            Step::Key(names["moons"]),
-        ]
+        &crate::occurrence::below(
+            &crate::test_examples::result_path(&[Step::Key(names["mars"])]),
+            &[Step::Key(names["moons"])],
+        )
     ));
 }
 

@@ -2,8 +2,9 @@
 
 use crate::driver::Driver;
 use crate::libraries::{name, text};
+use crate::occurrence::Step;
 use crate::selection::Stage;
-use gid::{Cells, Document, Step, Value, new_cell_id};
+use gid::{Cells, Document, Value, new_cell_id};
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 
 #[test]

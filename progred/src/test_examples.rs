@@ -2,7 +2,7 @@
 //! canaries, and the example editors that captures, canaries and lesson tests
 //! share.
 
-use gid::{CellId, Path, Step, Value};
+use gid::{CellId, Step, Value};
 
 pub const SPHERES: &str = include_str!("../../examples/fidget.gid");
 pub const TORUS: &str = include_str!("../../examples/fidget-torus.gid");
@@ -38,12 +38,15 @@ pub fn cam_editor(mode: CellId) -> crate::Editor {
 }
 
 /// Computed content owns annotations below the declaration that produced it.
-pub fn result_path(path: &[Step]) -> Path {
-    path.iter()
-        .cloned()
-        .chain([Step::Key(
-            crate::libraries::presentation::vocabulary::RESULT,
-        )])
+/// Where a pane declared at `path` draws its result: computed, beneath the
+/// presentation's result step.
+pub fn result_path(path: &[Step]) -> crate::occurrence::Path {
+    crate::occurrence::of(path)
+        .into_iter()
+        .chain([
+            crate::occurrence::Step::Key(crate::libraries::presentation::vocabulary::RESULT),
+            crate::occurrence::Step::Computed,
+        ])
         .collect()
 }
 

@@ -6,7 +6,7 @@ use crate::frame::Hovered;
 use crate::libraries::f64;
 use crate::test_examples::website_growing_forest_editor;
 use crate::test_support::{completion_entries_with, library_offers};
-use gid::{CellId, Step, Value};
+use gid::{CellId, Value};
 use kurbo::Point;
 use peniko::Color;
 use puri::draw::DrawCmd;
@@ -26,7 +26,7 @@ fn website_forest_hover_finds_the_available_call() {
         .landmarks
         .iter()
         .find_map(|landmark| {
-            let location = landmark.scope.location(&landmark.path)?;
+            let location = crate::occurrence::location(&landmark.path)?;
             let value = sources.read(&location)?;
             (value
                 .as_record()?
@@ -96,8 +96,9 @@ fn website_growing_forest_controls_and_edits_change_the_drawing() {
             .annotations
             .set_field(
                 &[
-                    Step::Key(names["second"]),
-                    Step::Key(presentation::vocabulary::RESULT),
+                    crate::occurrence::Step::Key(names["second"]),
+                    crate::occurrence::Step::Key(presentation::vocabulary::RESULT),
+                    crate::occurrence::Step::Computed,
                 ],
                 controls::vocabulary::STATE,
                 Some(f64::value(growth)),
@@ -285,8 +286,9 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
             .annotations
             .set_field(
                 &[
-                    Step::Key(names["second"]),
-                    Step::Key(presentation::vocabulary::RESULT),
+                    crate::occurrence::Step::Key(names["second"]),
+                    crate::occurrence::Step::Key(presentation::vocabulary::RESULT),
+                    crate::occurrence::Step::Computed,
                 ],
                 controls::vocabulary::STATE,
                 Some(f64::value(time)),
@@ -417,8 +419,9 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
         .annotations
         .set_field(
             &[
-                Step::Key(names["second"]),
-                Step::Key(presentation::vocabulary::RESULT),
+                crate::occurrence::Step::Key(names["second"]),
+                crate::occurrence::Step::Key(presentation::vocabulary::RESULT),
+                crate::occurrence::Step::Computed,
             ],
             controls::vocabulary::STATE,
             Some(Value::record([(
