@@ -100,10 +100,10 @@ reveals the selection it lands on. With no selection, a root navigation handler
 selects the document view's outermost drawn occurrence. Landmarks also serve
 pointer and source selection and the explicit Select All command.
 
-Every projected occurrence gets a landmark unless its projection's result says
-it isn't one (`Projected::landmark`): an occurrence that draws nothing of its
-own, only what it contains, such as the editor library's workspace record drawn
-as its main value. Selection and navigation pass straight to what's inside, and
+Every projected occurrence gets a landmark unless its projection marks it
+`transparent`: one that draws nothing of its own, only what it contains, such
+as the editor library's workspace record drawn as its main value. It has no
+landmark, so selection and navigation pass straight to what's inside, and
 nothing selects the record itself.
 
 Tab moves to the next tab stop, a place to fill in, and Shift+Tab to the one

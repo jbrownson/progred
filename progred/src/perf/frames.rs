@@ -317,7 +317,7 @@ fn fidget_orbit_profile(name: &str, source: &str) {
     let observed = camera_path.clone();
     let mut context = BenchContext::new();
     context.stack.projection = Projection::new([
-        crate::display::partial(move |input| -> Option<crate::projection::Layout> {
+        crate::display::partial(move |input| {
             use crate::libraries::{fidget::vocabulary as f, toolpath::vocabulary as t};
             let fields = input.value?.as_record()?;
             if observed.borrow().is_none()

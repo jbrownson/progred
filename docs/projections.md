@@ -135,11 +135,8 @@ scale, writeability, local selection/annotation data, pending state, and a
 lazily built `Site` for its occurrence. Its `default_projection` is one composed
 partial function, passed explicitly through recursion rather than buried in
 display context. A
-partial returns a `Projected`: a `Layout<World, Hover>` program that calls the
-layout builder with box operations, Puri leaves, and opaque widget/preparation
-functions, and whether its occurrence is a
-[landmark](navigation.md) of its own. A layout alone converts to one that is,
-the usual case; `partial` and `runtime_partial` accept either.
+partial returns a `Layout<World, Hover>` program that calls the layout builder
+with box operations, Puri leaves, and opaque widget/preparation functions.
 `Layout` is a reusable program over the object-safe `Builder` interface, not an
 enum. The production builder prepares one choice graph; after alternative
 selection that graph invokes placement callbacks directly. `Measured` is only an

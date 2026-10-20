@@ -162,7 +162,7 @@ fn incomplete_malformed_and_conflicting_forms_still_decline() {
     let complete = unary(SIN, number(1.0));
     assert!(
         field(&ProjectionInput {
-            default_projection: crate::display::declining(),
+            default_projection: crate::display::runtime_partial(|_| None),
             pending: Some(Pending::Field),
             ..projection_input(&Names, &complete)
         })
@@ -208,9 +208,8 @@ fn arithmetic_calls_read_infix_and_named_ones_stay_calls() {
         (library.projection.as_ref().unwrap())(
             &projection_input(&Names, &call).with_value(Some(&runtime)),
         )
-        .is_some_and(|projected| {
-            let Recorded::Alternatives(options) = projected.layout.record().content().clone()
-            else {
+        .is_some_and(|layout| {
+            let Recorded::Alternatives(options) = layout.record().content().clone() else {
                 return false;
             };
             let Recorded::Row { children, .. } = options[0].content() else {

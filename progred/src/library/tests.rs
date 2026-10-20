@@ -97,7 +97,7 @@ fn library_definitions_and_projections_compose_in_order() {
             .iter()
             .map(|(_, projection)| {
                 projection(&projection_input(&NoEval, &(&value).into()))
-                    .and_then(|projected| match projected.layout.record() {
+                    .and_then(|layout| match layout.record() {
                         Recorded::Leaf(Leaf::Text { text, .. }) => Some(text),
                         _ => None,
                     })
@@ -207,7 +207,7 @@ fn replacing_a_library_replaces_every_contribution_in_place() {
             [],
             ForeignFunctions::default(),
         )
-        .with_projection(std::rc::Rc::new(|_| panic!("replaced projection")))
+        .with_projection(crate::display::partial(|_| panic!("replaced projection")))
         .with_completions(|_| panic!("replaced completion provider"));
     let replacement_projection = crate::display::partial(left_projection);
     let right_projection = crate::display::partial(right_projection);

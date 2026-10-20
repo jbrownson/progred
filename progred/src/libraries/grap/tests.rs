@@ -227,8 +227,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
                 ..
             } = &inspect(
                 &(projection(&projection_input(&env, &env.0).with_value(Some(&(&env.0).into())))
-                    .unwrap()
-                    .layout),
+                    .unwrap()),
             )
             else {
                 panic!("the compact definition descends to its actual name");

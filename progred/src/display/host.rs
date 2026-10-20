@@ -23,5 +23,3 @@ pub type ProjectionInput<'a, W, V = gid::Value> =
     super::ProjectionInput<'a, W, <W as Host>::Hover, V>;
 /// A partial projection over `W`, hovered as `W` is.
 pub type Partial<W> = super::Partial<W, <W as Host>::Hover>;
-/// What a projection over `W` draws its occurrence as.
-pub type Projected<W> = super::Projected<W, <W as Host>::Hover>;

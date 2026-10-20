@@ -398,40 +398,23 @@ pub struct ProjectionInput<'a, World, Hover, V = Value> {
     pub(crate) occurrence: &'a dyn Fn() -> crate::editing::Site,
 }
 
-/// What a projection draws its occurrence as. A layout alone is the usual
-/// result: the occurrence is a landmark of its own.
-pub struct Projected<World, Hover> {
-    pub layout: Layout<World, Hover>,
-    /// Whether the occurrence is a landmark: what selection, Select All and
-    /// keyboard navigation reach. A projection that draws only what's inside,
-    /// with nothing of its own, leaves it off, so they pass straight through.
-    pub landmark: bool,
-}
-
-impl<World, Hover> From<Layout<World, Hover>> for Projected<World, Hover> {
-    fn from(layout: Layout<World, Hover>) -> Self {
-        Self {
-            layout,
-            landmark: true,
-        }
-    }
-}
-
 /// A partial borrows the shared projection input. Ordered composition
 /// can therefore try declining projections without cloning interaction
 /// targets that only the successful projection retains.
 pub type Partial<World, Hover> = Rc<
     dyn for<'a, 'input> Fn(
         &'input ProjectionInput<'a, World, Hover, grap::RuntimeValue>,
-    ) -> Option<Projected<World, Hover>>,
+    ) -> Option<Layout<World, Hover>>,
 >;
 
-pub fn partial<World, Hover, P: Into<Projected<World, Hover>>>(
-    projection: impl for<'a, 'input> Fn(&'input ProjectionInput<'a, World, Hover>) -> Option<P>
+pub fn partial<World, Hover>(
+    projection: impl for<'a, 'input> Fn(
+        &'input ProjectionInput<'a, World, Hover>,
+    ) -> Option<Layout<World, Hover>>
     + 'static,
 ) -> Partial<World, Hover> {
     Rc::new(move |input| {
-        projection(&input.with_value(input.value.map(grap::RuntimeValue::as_value))).map(Into::into)
+        projection(&input.with_value(input.value.map(grap::RuntimeValue::as_value)))
     })
 }
 
@@ -460,18 +443,13 @@ impl<'a, World, Hover, V> ProjectionInput<'a, World, Hover, V> {
     }
 }
 
-pub fn runtime_partial<World, Hover, P: Into<Projected<World, Hover>>>(
+pub fn runtime_partial<World, Hover>(
     projection: impl for<'a, 'input> Fn(
         &'input ProjectionInput<'a, World, Hover, grap::RuntimeValue>,
-    ) -> Option<P>
+    ) -> Option<Layout<World, Hover>>
     + 'static,
 ) -> Partial<World, Hover> {
-    Rc::new(move |input| projection(input).map(Into::into))
-}
-
-/// A partial that draws nothing, leaving every value to what follows it.
-pub fn declining<World, Hover>() -> Partial<World, Hover> {
-    Rc::new(|_| None)
+    Rc::new(projection)
 }
 
 /// First successful partial wins. An empty composition always declines.
@@ -480,9 +458,9 @@ pub fn compose_partials<World: 'static, Hover: 'static>(
 ) -> Partial<World, Hover> {
     let partials: Vec<_> = partials.into_iter().collect();
     match partials.as_slice() {
-        [] => declining(),
+        [] => runtime_partial(|_| None),
         [only] => only.clone(),
-        _ => Rc::new(move |input| partials.iter().find_map(|projection| projection(input))),
+        _ => runtime_partial(move |input| partials.iter().find_map(|projection| projection(input))),
     }
 }
 
@@ -528,7 +506,7 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, pickable};
-pub use widget::navigation::{group, stop};
+pub use widget::navigation::{group, stop, transparent};
 
 /// `child`, which hovers `site` and selects it when activated.
 pub(crate) fn activatable<W: Host>(

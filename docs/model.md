@@ -486,9 +486,9 @@ record convention:
 ```
 
 The editor library draws a workspace record as its `main` value alone, so the
-workspace's own fields stay out of sight. Its projection says the record is no
-[landmark](navigation.md) of its own, so nothing selects it, and selection and
-navigation reach only what's inside. Plain and
+workspace's own fields stay out of sight. The record draws
+[transparently](navigation.md): it has no landmark of its own, so nothing
+selects it, and selection and navigation reach only what's inside. Plain and
 Raw leave the editor library off and show the whole record, as does turning the
 editor library off in the Projections menu. A root without `main` draws whole,
 as any other document does; one holding only the workspace's fields, as after

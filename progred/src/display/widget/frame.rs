@@ -125,6 +125,12 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         self.output.tab_stop = Some(path);
     }
 
+    /// Marks this occurrence as drawing nothing of its own, only what it
+    /// contains, so it has no landmark to select or reach.
+    pub fn transparent(&mut self, path: std::rc::Rc<[gid::Step]>) {
+        self.output.transparent = Some(path);
+    }
+
     pub fn completion(&mut self) -> &mut Option<Offers<C>> {
         &mut self.output.completion
     }
@@ -548,6 +554,10 @@ pub struct HoverOutput<C, Hover> {
     /// visits. The nearest enclosing landmark consumes it, as it does an
     /// arrival override.
     pub tab_stop: Option<std::rc::Rc<[gid::Step]>>,
+    /// A projection marks its occurrence as drawing nothing of its own,
+    /// leaving it without a landmark. The nearest enclosing landmark
+    /// consumes it, as it does an arrival override.
+    pub transparent: Option<std::rc::Rc<[gid::Step]>>,
     pub completion: Option<Offers<C>>,
     /// The focused text editor's caret, for platform text composition.
     pub input_area: Option<Rect>,
@@ -576,6 +586,7 @@ impl<C: 'static, Hover: 'static> Default for HoverOutput<C, Hover> {
             view_regions: Vec::new(),
             landmark_select: None,
             tab_stop: None,
+            transparent: None,
             completion: None,
             input_area: None,
             after_hover: AfterHover::default(),
@@ -603,6 +614,7 @@ impl<C: 'static, Hover: 'static> HoverOutput<C, Hover> {
         append(&mut self.view_regions, above.view_regions);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
         self.tab_stop = above.tab_stop.or(self.tab_stop);
+        self.transparent = above.transparent.or(self.transparent);
         self.completion = above.completion.or(self.completion);
         self.input_area = above.input_area.or(self.input_area);
         self.after_hover.append(above.after_hover);

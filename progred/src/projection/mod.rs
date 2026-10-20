@@ -36,7 +36,6 @@ use std::rc::Rc;
 /// [`crate::display::host`].
 pub(crate) type Layout = crate::display::host::Layout<crate::Editor>;
 pub(crate) type Partial = crate::display::host::Partial<crate::Editor>;
-pub(crate) type Projected = crate::display::host::Projected<crate::Editor>;
 
 type SharedPath = Rc<[Step]>;
 
@@ -51,7 +50,7 @@ pub struct Projection {
 impl Default for Projection {
     fn default() -> Self {
         Self {
-            partial: crate::display::declining(),
+            partial: crate::display::runtime_partial(|_| None),
             entry: None,
         }
     }
@@ -90,7 +89,7 @@ impl Projection {
     fn apply(
         &self,
         input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered, grap::RuntimeValue>,
-    ) -> Option<Projected> {
+    ) -> Option<Layout> {
         self.entry
             .as_ref()
             .and_then(|entry| entry(input))
@@ -457,7 +456,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             completions: None,
             ..self.cx.clone()
         };
-        let nothing = crate::display::declining();
+        let nothing = crate::display::partial(|_| None);
         ProjectionScope { cx: &cx, ..*self }.descend_path(
             text,
             build,
@@ -878,7 +877,7 @@ fn prepare_value(
                 &picker,
             ))
         }
-        Some(Projected { layout, landmark }) => {
+        Some(layout) => {
             let inner = prepare(
                 &ProjectionScope {
                     projection: child_projection,
@@ -925,28 +924,21 @@ fn prepare_value(
             });
             let edits = cx.edits.clone();
             ChoiceLayout::map(inner, move |inner| {
-                let placed = highlighted(
-                    palette,
-                    selected,
-                    scale,
-                    landmark_path.clone(),
-                    secondary.clone(),
-                    inner,
-                );
-                // One whose projection draws nothing of its own has no
-                // landmark, leaving selection and navigation to what's inside.
-                let placed = if landmark {
-                    crate::display::widget::navigation::landmark(
-                        placed,
-                        landmark_path.clone(),
-                        select,
-                        edits.clone(),
-                        secondary,
+                let placed = crate::display::widget::navigation::landmark(
+                    highlighted(
+                        palette,
                         selected,
-                    )
-                } else {
-                    placed
-                };
+                        scale,
+                        landmark_path.clone(),
+                        secondary.clone(),
+                        inner,
+                    ),
+                    landmark_path.clone(),
+                    select,
+                    edits.clone(),
+                    secondary,
+                    selected,
+                );
                 let placed = match selected_value {
                     Some(value) => {
                         bind_selection(placed, root, landmark_path.clone(), value, scale)
@@ -982,7 +974,7 @@ fn value_layout(
     current_projection: Option<&Partial>,
     default_projection: &Partial,
     source: Option<&Location>,
-) -> Option<Projected> {
+) -> Option<Layout> {
     let ProjectionScope {
         cx,
         projection,
@@ -1023,7 +1015,7 @@ fn value_layout(
         Some(current) => current(&input),
         None => projection.apply(&input),
     }
-    .or_else(|| crate::display::raw::view(&input).map(Projected::from))
+    .or_else(|| crate::display::raw::view(&input))
 }
 
 /// Every projected value's Pick backstop: pick the value into an open

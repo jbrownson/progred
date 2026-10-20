@@ -30,7 +30,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     let observe = displayed.clone();
     context.stack.projection = Projection {
         partial: crate::display::compose_partials([
-            crate::display::partial(move |input| -> Option<crate::projection::Layout> {
+            crate::display::partial(move |input| {
                 observe.borrow_mut().push(input.value?.clone());
                 None
             }),

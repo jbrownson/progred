@@ -277,8 +277,7 @@ fn every_numeric_operator_reads_infix() {
             &NoEval,
             &RuntimeValue::from(&call),
         ))
-        .expect("a call projects")
-        .layout;
+        .expect("a call projects");
         let Some(children) = infix_children(&layout) else {
             return false;
         };
