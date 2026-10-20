@@ -1,5 +1,6 @@
-//! Headless rendering and readback, for pixel tests and for screenshots
-//! taken without a window, as progred's control session takes them.
+//! Headless rendering and readback, for pixel tests and for pictures taken
+//! offscreen: progred's control session's screenshots, and the pictures its
+//! structural copies carry.
 
 use crate::compositor::{self, Compositor, Resources, SplitCanvas};
 use crate::mesh::Renderer;

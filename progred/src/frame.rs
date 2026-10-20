@@ -245,6 +245,7 @@ pub(crate) struct FrameResources<'a> {
     text_cache: &'a mut puri::text::TextCache,
 }
 
+#[derive(Default)]
 struct PointerInput<'a> {
     position: Option<Point>,
     previous: Option<(Option<&'a Root>, &'a Hovered)>,
@@ -403,6 +404,33 @@ impl Editor {
     ) -> Frame {
         self.sync_views();
         self.computations.frame_time.set(web_time::Instant::now());
+        let pointer = PointerInput {
+            position: self.pointer,
+            previous: previous
+                .as_ref()
+                .map(|(root, hover)| (root.as_ref(), hover)),
+            pressed: self.pressed,
+            link_sources: self.command_modifier.pressed(&self.modifiers),
+        };
+        self.frame_with(scale, viewport, pointer)
+    }
+
+    /// The frame as it draws with nothing selected and no pointer over it,
+    /// as a picture of part of it shows.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) fn unmarked_frame(&mut self, scale: f64, viewport: Size) -> Frame {
+        let selection = self.model.selection.take();
+        // A held button stays as it is: the computations read it.
+        let pointer = PointerInput {
+            pressed: self.pressed,
+            ..PointerInput::default()
+        };
+        let frame = self.frame_with(scale, viewport, pointer);
+        self.model.selection = selection;
+        frame
+    }
+
+    fn frame_with(&mut self, scale: f64, viewport: Size, pointer: PointerInput<'_>) -> Frame {
         prepare_frame(
             FrameDescription {
                 palette: self.palette,
@@ -423,14 +451,7 @@ impl Editor {
                 layouts: &mut self.layout_cx,
                 text_cache: &mut self.text_cache,
             },
-            PointerInput {
-                position: self.pointer,
-                previous: previous
-                    .as_ref()
-                    .map(|(root, hover)| (root.as_ref(), hover)),
-                pressed: self.pressed,
-                link_sources: self.command_modifier.pressed(&self.modifiers),
-            },
+            pointer,
         )
     }
 }

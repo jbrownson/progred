@@ -18,7 +18,7 @@ use gid::{CellId, Document};
 use kurbo::{Point, Size, Vec2};
 use puri::draw::DrawList;
 use puri_vello::capture::Gpu;
-use puri_vello::compositor::{Compositor, Resources, SplitCanvas};
+use puri_vello::compositor::{Compositor, Resources};
 use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, PermissionsExt};
@@ -197,25 +197,17 @@ impl Capture {
     }
 
     fn picture(&mut self, painted: &DrawList, paper: peniko::Color) -> Result<Vec<u8>, String> {
-        let mut canvas = SplitCanvas::default();
-        puri::draw::replay(painted, &mut canvas);
-        let output = self
-            .compositor
-            .render(
-                &self.gpu.device,
-                &self.gpu.queue,
-                &canvas.finish(),
-                &mut self.resources,
-                &self.target,
-                paper,
-            )
-            .map_err(|error| error.to_string())?;
-        crate::libraries::png::encode(
-            WINDOW.width as u32,
-            WINDOW.height as u32,
-            &self.gpu.read(&output.texture),
+        crate::picture::Picture {
+            drawing: painted.clone(),
+            paper,
+            region: WINDOW.to_rect(),
+        }
+        .png(
+            &self.gpu,
+            &mut self.compositor,
+            &mut self.resources,
+            &self.target,
         )
-        .map_err(|error| error.to_string())
     }
 }
 

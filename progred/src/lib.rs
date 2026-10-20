@@ -45,6 +45,8 @@ mod navigate;
 pub mod orbit_profile;
 #[cfg(test)]
 mod perf;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+mod picture;
 #[cfg(not(target_arch = "wasm32"))]
 mod platform;
 mod projection;

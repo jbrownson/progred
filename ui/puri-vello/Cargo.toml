@@ -6,7 +6,8 @@ license.workspace = true
 
 [features]
 # Headless rendering and readback, for pixel tests here and in dependent
-# crates and for progred's control session.
+# crates, and for progred's pictures of what it draws: those its structural
+# copies carry and its control session's screenshots.
 capture = ["dep:pollster"]
 
 [dependencies]

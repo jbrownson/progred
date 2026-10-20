@@ -143,6 +143,15 @@ handlers take precedence (for example, copying a text selection). Structural
 cut copies that same value, then attempts deletion through the selection's
 conject; a source-less value can be copied but not deleted.
 
+On macOS and Linux a structural copy also puts a PNG picture of the copied
+occurrence on the system clipboard, after the private format and before the
+plain text, so apps that take images paste what was drawn. Once the key is
+handled, the shell builds the window's frame again with nothing selected and
+no pointer over it, composites it offscreen on the window's GPU, and crops it
+to the occurrence's landmark, at the window's scale and only as far as it's in
+view; see [`picture.rs`](../progred/src/picture.rs). A cut carries no picture,
+since its occurrence is gone by then.
+
 Ordinary selection does not initialize editing state. Its role is derived from
 the current location: a writable missing value uses the pending picker, while
 an existing value is selected normally. An explicit pending or label payload

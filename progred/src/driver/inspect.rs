@@ -138,13 +138,30 @@ impl<P> Driver<P> {
         self.runner.editor.text_clipboard.structure()
     }
 
+    /// Puts beside the last copy the picture the shell puts there once the
+    /// copy's key is handled, `render` making its PNG.
+    pub(crate) fn picture_copy(
+        &mut self,
+        render: impl FnOnce(&crate::picture::Picture) -> Result<Vec<u8>, String>,
+    ) {
+        self.runner
+            .editor
+            .picture_copy(self.scale(), self.viewport, render);
+    }
+
+    /// The picture the last copy put on the clipboard, as a PNG.
+    pub(crate) fn copied_picture(&self) -> Option<&[u8]> {
+        let crate::clipboard::Clipboard::Own { picture, .. } = &self.editor().text_clipboard;
+        picture.as_deref()
+    }
+
     /// Copy `value` from elsewhere and paste it with the command key's V;
     /// whether the editor took it.
     pub(crate) fn paste(&mut self, value: &Value) -> bool {
         self.runner
             .editor
             .text_clipboard
-            .copy(value.to_string(), Some(value));
+            .copy(value.to_string(), Some(value), None);
         self.keystroke(Key::Character("v".into()), self.command())
     }
 

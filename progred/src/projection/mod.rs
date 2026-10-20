@@ -785,7 +785,10 @@ fn bind_selection(
                         && selection.stage(&editor.sources()) == Stage::Edge
                 })
                 && if copy || cut {
-                    editor.copy_value(value.as_value()) && {
+                    // A cut's occurrence is gone before a picture of it
+                    // could be drawn.
+                    let drawn = (!cut).then(|| (&root, path.as_ref()));
+                    editor.copy_value(value.as_value(), drawn) && {
                         if cut {
                             editor.delete_selected_edge(input.geometry(scale));
                         }

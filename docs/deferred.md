@@ -187,10 +187,16 @@ list survives a reload. Left for later:
   CRDTs such as Fugue avoid.
 - **What other apps paste.** A structural copy writes its saved text form,
   positions included, both under the private clipboard format and as plain
-  text, so other apps get structure spelled with cell IDs. A readable form
-  would serve them better: an image of what's drawn beside the text, or a
-  text rendering of it, which the layout's boxes, shapes and native widgets
-  make lossy.
+  text, and on the desktop a PNG picture of what's drawn beside them, so apps
+  that take images get a readable form while text editors get structure
+  spelled with cell IDs. A text rendering would serve those better, though the
+  layout's boxes, shapes and native widgets make it lossy. The picture has
+  gaps: a cut carries none, its occurrence being gone before the picture is
+  drawn; it shows only the part of the occurrence in view; and it's at the
+  window's scale, so it grows with zoom and on a Retina display. A resolution
+  in the PNG could give its size in points, but `clipboard-rs` re-encodes the
+  image it writes, dropping it, so the bytes would have to go under the
+  platform's PNG type directly.
 
 ## Native GID storage
 

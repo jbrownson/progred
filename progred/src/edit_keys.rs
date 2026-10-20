@@ -99,10 +99,23 @@ impl Editor {
 
     /// Copies the supplied projected value — SHALLOW: a link is its identity
     /// alone, no cell values travel; the value carries its own inline
-    /// structure.
-    pub(crate) fn copy_value(&mut self, value: &Value) -> bool {
+    /// structure. A structural copy of what's `drawn` at a path in a view
+    /// also asks for a picture of it, which the shell puts beside the copy
+    /// once the key is handled.
+    pub(crate) fn copy_value(&mut self, value: &Value, drawn: Option<(&Root, &[Step])>) -> bool {
         let (text, structural) = crate::clipboard::spelling(value);
-        self.text_clipboard.copy(text, structural.then_some(value))
+        let copied = self
+            .text_clipboard
+            .copy(text, structural.then_some(value), None);
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        {
+            self.unpictured = drawn
+                .filter(|_| copied && structural)
+                .map(|drawn| crate::picture::Copied::new(value, drawn));
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let _ = drawn;
+        copied
     }
 
     /// Cmd+V while a pending is open and the clipboard CARRIES

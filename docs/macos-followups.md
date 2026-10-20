@@ -11,6 +11,12 @@ empty.
   `commands.rs` into `clipboard.rs`, behind a clipboard chosen at run time.
   Copy and paste a value and a text range in the app, and paste into another
   app.
+- **A copy's picture.** A structural copy now also puts a PNG of what's drawn
+  on the pasteboard, between the private format and the text, rendered on the
+  window's GPU and written once the key is handled (`picture.rs`, `app.rs`'s
+  `picture_copy`). Copy a list or a record, including one with a 3D preview,
+  and paste it into an app that takes images, such as Notes or a chat, and
+  into a plain-text editor; check the picture's size on a Retina display.
 - **The 18–19 October cleanup's macOS-only code.** It was checked with
   `--target aarch64-apple-darwin` but not run: `native_menu.rs`, whose
   `Menu::new` takes the app's stack's projections and whose View menu's pane

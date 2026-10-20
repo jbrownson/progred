@@ -603,6 +603,8 @@ impl App {
                 if redraw {
                     window.request_redraw();
                 }
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
+                self.picture_copy(index, scale, viewport);
             }
 
             match event {
@@ -884,6 +886,31 @@ impl App {
             AfterDiscard::Open => crate::web::pick_document(self.proxy.clone()),
             #[cfg(target_arch = "wasm32")]
             AfterDiscard::Quit => event_loop.exit(),
+        }
+    }
+
+    /// Puts beside a structural copy just made in window `index` a picture
+    /// of what it copied, drawn on the window's GPU with resources of its
+    /// own, so the window's frames keep theirs.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn picture_copy(&mut self, index: usize, scale: f64, viewport: Size) {
+        let editor = &mut self.editors[index].editor;
+        if let RenderState::Active { surface, .. } = &editor.state
+            && let Some(compositor) = self.renderers[surface.dev_id].as_mut()
+        {
+            let device = &self.context.devices[surface.dev_id];
+            editor.picture_copy(scale, viewport, |picture| {
+                let gpu = puri_vello::capture::Gpu {
+                    device: device.device.clone(),
+                    queue: device.queue.clone(),
+                };
+                picture.png(
+                    &gpu,
+                    compositor,
+                    &mut Resources::default(),
+                    &gpu.texture(viewport.width as u32, viewport.height as u32),
+                )
+            });
         }
     }
 

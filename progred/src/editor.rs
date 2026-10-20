@@ -117,6 +117,10 @@ pub(crate) struct Editor {
     pub(crate) font_cx: FontContext,
     pub(crate) layout_cx: LayoutContext<Brush>,
     pub(crate) text_clipboard: Clipboard,
+    /// The last structural copy, until the shell puts a picture of it
+    /// beside it.
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) unpictured: Option<crate::picture::Copied>,
     pub(crate) text_cache: puri::text::TextCache,
     pub(crate) stack: stack::Stack,
     pub(crate) model: Model,
@@ -333,6 +337,8 @@ pub(crate) fn new_editor(
         text_clipboard: Clipboard::System,
         #[cfg(any(test, target_arch = "wasm32"))]
         text_clipboard: Clipboard::default(),
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        unpictured: None,
         stack,
         model: Model::new(doc),
         doc_path,
@@ -884,6 +890,8 @@ impl Editor {
             font_cx: _,
             layout_cx: _,
             text_clipboard: _,
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            unpictured,
             text_cache: _,
             stack: _,
             model,
@@ -903,6 +911,10 @@ impl Editor {
         #[cfg(target_os = "macos")]
         let changed_path = *doc_path != path;
         *pending_discard = None;
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        {
+            *unpictured = None;
+        }
         computations.reset();
         *timers = timers::Timers::default();
         *pressed = false;

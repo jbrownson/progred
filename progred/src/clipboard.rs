@@ -14,6 +14,8 @@ pub(crate) enum Clipboard {
         text: Option<String>,
         /// The value a structural copy carries beside its text.
         structure: Option<Value>,
+        /// The picture of it a structural copy carries, as a PNG.
+        picture: Option<Vec<u8>>,
     },
 }
 
@@ -23,23 +25,32 @@ impl Default for Clipboard {
         Self::Own {
             text: None,
             structure: None,
+            picture: None,
         }
     }
 }
 
 impl Clipboard {
-    /// Holds `text`, and `structure` beside it when the copy is structural;
-    /// whether the copy took.
-    pub(crate) fn copy(&mut self, text: String, structure: Option<&Value>) -> bool {
+    /// Holds `text`, and `structure` beside it when the copy is structural,
+    /// with a `picture` of it as a PNG when there is one; whether the copy
+    /// took.
+    pub(crate) fn copy(
+        &mut self,
+        text: String,
+        structure: Option<&Value>,
+        picture: Option<Vec<u8>>,
+    ) -> bool {
         match self {
             #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-            Self::System => system::copy(text, structure.is_some()),
+            Self::System => system::copy(text, structure.is_some(), picture),
             Self::Own {
                 text: held,
                 structure: carried,
+                picture: shown,
             } => {
                 *held = Some(text);
                 *carried = structure.cloned();
+                *shown = picture;
                 true
             }
         }
@@ -65,7 +76,7 @@ impl TextClipboard for Clipboard {
     }
 
     fn set_text(&mut self, text: &str) {
-        self.copy(text.to_string(), None);
+        self.copy(text.to_string(), None, None);
     }
 
     fn holds_structure(&mut self) -> bool {
@@ -88,6 +99,8 @@ impl TextClipboard for Clipboard {
 /// them, and they ARE: the shell writes that spelling under the private
 /// clipboard format too, whose presence is what says "structure" — never
 /// the text's shape, so text that happens to spell a document stays text.
+/// On the desktop a picture of what was copied joins them, as
+/// [`crate::picture`] says.
 pub(crate) fn spelling(value: &Value) -> (String, bool) {
     match (text::read(value), value.as_blob()) {
         (Some(text), _) => (format!("\"{text}\""), false),
@@ -113,7 +126,10 @@ fn from_structure(bytes: &[u8]) -> Option<Value> {
 
 #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
 mod system {
-    use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext, ContentFormat};
+    use clipboard_rs::common::RustImage;
+    use clipboard_rs::{
+        Clipboard, ClipboardContent, ClipboardContext, ContentFormat, RustImageData,
+    };
     use gid::Value;
 
     /// The pasteboard type structural copies ride under, beside their
@@ -127,16 +143,29 @@ mod system {
             .and_then(|cb| cb.get_text().ok())
     }
 
-    pub(super) fn copy(text: String, structural: bool) -> bool {
+    pub(super) fn copy(text: String, structural: bool, picture: Option<Vec<u8>>) -> bool {
         ClipboardContext::new()
             .and_then(|cb| {
                 if structural {
-                    // Both representations: the private format says
-                    // "structure", the text reads anywhere.
-                    cb.set(vec![
-                        ClipboardContent::Other(FORMAT.to_string(), text.clone().into_bytes()),
-                        ClipboardContent::Text(text),
-                    ])
+                    // Every representation, richest first, as apps pick the
+                    // first they can read: the private format says
+                    // "structure", the picture shows what was copied to an
+                    // app that takes one, and the text reads anywhere.
+                    cb.set(
+                        [
+                            Some(ClipboardContent::Other(
+                                FORMAT.to_string(),
+                                text.clone().into_bytes(),
+                            )),
+                            picture
+                                .and_then(|png| RustImageData::from_bytes(&png).ok())
+                                .map(ClipboardContent::Image),
+                            Some(ClipboardContent::Text(text)),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect(),
+                    )
                 } else {
                     cb.set_text(text)
                 }

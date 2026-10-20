@@ -141,15 +141,17 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
   `handler_dispatch_profile` checks the cost of dispatching through unrelated
   handlers.
 - **GPU tests** need a real adapter: `make test-gpu` runs the compositor and
-  mesh renderer tests and Fidget's GPU raster and mesh tests. The build sandbox
-  provides no GPU, so [`tools/test_binaries.py`](../tools/test_binaries.py)
-  builds the tests through the wrapper and runs the executables outside it; it
-  takes `cargo test` arguments, then test arguments after `--`. On Linux
-  without a GPU, Mesa's lavapipe driver works. `puri-vello`'s `capture`
-  module, behind its `capture` feature, holds the headless rendering and
-  readback helpers, including `mesh_images`, which renders each mesh and
-  reads it back as an image: the baseline direct mesh composition is measured
-  against.
+  mesh renderer tests, Fidget's GPU raster and mesh tests, and those of the
+  pictures progred reads back: a control session's screenshots and a copy's
+  picture. The build sandbox provides no GPU, so
+  [`tools/test_binaries.py`](../tools/test_binaries.py) builds the tests
+  through the wrapper and runs the executables outside it; it takes
+  `cargo test` arguments, then test arguments after `--`. On Linux without a
+  GPU, Mesa's lavapipe driver works. `puri-vello`'s `capture` module, behind
+  its `capture` feature, holds the headless rendering and readback helpers,
+  including `mesh_images`, which renders each mesh and reads it back as an
+  image: the baseline direct mesh composition is measured against. Progred's
+  desktop builds use it for those pictures too.
 - **Browser presentation** has its own pixel test: `make test-web-gpu` builds the
   GPU probe, then drives the installed Chrome headlessly through the
   `playwright-core` pinned in `tools/package.json`, on WebGPU and on the

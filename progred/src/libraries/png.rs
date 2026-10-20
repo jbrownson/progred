@@ -35,7 +35,7 @@ pub fn value(bytes: Vec<u8>) -> Value {
 }
 
 /// Eight-bit straight-alpha RGBA pixels as a PNG.
-#[cfg(any(test, feature = "control"))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn encode(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, png::EncodingError> {
     let mut bytes = Vec::new();
     let mut encoder = png::Encoder::new(&mut bytes, width, height);
