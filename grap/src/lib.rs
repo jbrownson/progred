@@ -1054,6 +1054,10 @@ fn thunk(
 struct CallPlan {
     params: Rc<[CellId]>,
     arguments: Rc<[Option<Expression>]>,
+    /// The parameters' indices in `table`, the callee environment's, so a
+    /// call binds them without looking each one up.
+    table: CellIndices,
+    indices: Rc<[CellIndex]>,
 }
 
 struct PreparedCallTarget {
@@ -2219,43 +2223,60 @@ impl<'a> Context<'a> {
         calling_environment: &Environment,
         plan: &RefCell<Option<CallPlan>>,
     ) -> Result<RuntimeValue, Halt> {
-        let arguments_plan = plan.borrow().as_ref().and_then(|cached| {
-            Rc::ptr_eq(&cached.params, &closure.params).then(|| cached.arguments.clone())
+        let cached = plan.borrow().as_ref().and_then(|cached| {
+            (Rc::ptr_eq(&cached.params, &closure.params)
+                && Rc::ptr_eq(&cached.table, &closure.environment.indices))
+            .then(|| (cached.arguments.clone(), cached.indices.clone()))
         });
-        let arguments_plan = match arguments_plan {
-            Some(arguments) => arguments,
+        let (arguments_plan, indices) = match cached {
+            Some(cached) => cached,
             None => {
                 let arguments: Rc<[Option<Expression>]> = closure
                     .params
                     .iter()
                     .map(|&parameter| self.field(call, parameter))
                     .collect();
+                let table = closure.environment.indices.clone();
+                let indices: Rc<[CellIndex]> = closure
+                    .params
+                    .iter()
+                    .map(|&parameter| binding_index(&table, parameter))
+                    .collect();
                 *plan.borrow_mut() = Some(CallPlan {
                     params: closure.params.clone(),
                     arguments: arguments.clone(),
+                    table,
+                    indices: indices.clone(),
                 });
-                arguments
+                (arguments, indices)
             }
         };
         // A missing argument binds its parameter to its absence, which
         // answers wherever the body uses it, so a body that doesn't still
         // has its value.
-        let arguments = closure.params.iter().zip(arguments_plan.iter()).try_fold(
-            Vec::with_capacity(closure.params.len()),
-            |mut arguments, (&parameter, argument)| {
-                arguments.push((
-                    parameter,
-                    match argument {
-                        Some(expression) => self.eval(expression.clone(), calling_environment)?,
-                        None => self.missing_runtime_argument(parameter),
-                    },
-                ));
-                Ok::<_, Halt>(arguments)
-            },
-        )?;
+        let arguments = closure
+            .params
+            .iter()
+            .zip(arguments_plan.iter())
+            .zip(indices.iter())
+            .try_fold(
+                Vec::with_capacity(closure.params.len()),
+                |mut arguments, ((&parameter, argument), &index)| {
+                    arguments.push((
+                        index,
+                        match argument {
+                            Some(expression) => {
+                                self.eval(expression.clone(), calling_environment)?
+                            }
+                            None => self.missing_runtime_argument(parameter),
+                        },
+                    ));
+                    Ok::<_, Halt>(arguments)
+                },
+            )?;
         self.eval(
             closure.body,
-            &closure.environment.extended_runtime(arguments),
+            &closure.environment.extended_indexed(arguments),
         )
     }
 
