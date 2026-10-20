@@ -499,9 +499,18 @@ on a root without them makes the root the `main` value of a new workspace
 record, moving the document view's folds with it, and starting points that open
 a pane begin that way.
 
-The pane lists determine side and order; entries are ordinary values. Deleting a
-pane's root removes that list element. Opening and moving panes edit these
-lists, so they save and undo with the document. A malformed pane container or
+The pane lists determine side and order; entries are ordinary values. An entry
+can name a [location](#data-and-resolution) as data: `{steps: [...]}` from the
+document's root, or `{in: cell, follow: source, steps: [...]}` inside a cell's
+definition, with the steps and source in the path convention's encoding. While
+its pane shows the editor library, the pane draws and edits that place, so it
+stays in sync with the document; Plain and Raw show the entry itself. Open
+Value on Left and Right open the selection's place, starting at its nearest
+cell, so a cell is a location with no steps; a computed value has no place and
+opens as a copy. Deleting a value pane's root removes that list element. A
+location pane's root is the place it shows, so deleting it deletes that content;
+closing the pane means deleting its entry in Plain or Raw for now. Opening and
+moving panes edit these lists, so they save and undo with the document. A malformed pane container or
 nonrecord root is not overwritten to make the operation possible.
 
 Pane identity, the libraries shown, folds, scroll, and requested size are session

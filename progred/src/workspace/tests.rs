@@ -368,13 +368,121 @@ fn opening_a_pane_on_a_bare_root_wraps_it_and_keeps_its_folds() {
         crate::test_support::value_at(&opened, &[Step::Key(vocabulary::MAIN)]),
         Some(&root)
     );
-    assert_eq!(declarations(Some(&opened)).len(), 1);
+    let main = |steps: &[Step]| [&[Step::Key(vocabulary::MAIN)][..], steps].concat();
+    // The pane shows the selected place, which the wrapping moved under
+    // `main`, rather than a copy of it.
+    let panes = declarations(Some(&opened));
+    assert_eq!(panes.len(), 1);
+    assert_eq!(
+        crate::test_support::value_at(&opened, &panes[0].path),
+        Some(&crate::location::value(&crate::location::Location::root(
+            main(&[Step::Key(outer)])
+        )))
+    );
     // The document view draws the same value, now at `main`, folded as it
     // was, and none of the workspace's own fields.
-    let main = |steps: &[Step]| [&[Step::Key(vocabulary::MAIN)][..], steps].concat();
-    assert!(driver.drawn(&main(&[Step::Key(outer)])));
-    assert!(!driver.drawn(&main(&[Step::Key(outer), Step::Key(inner)])));
+    let in_document = |path: &[Step]| {
+        driver
+            .runner
+            .frame
+            .dispatch
+            .landmarks
+            .iter()
+            .any(|landmark| {
+                landmark.root.as_ref() == Some(&crate::test_root())
+                    && landmark.path.as_ref() == path
+            })
+    };
+    assert!(in_document(&main(&[Step::Key(outer)])));
+    assert!(!in_document(&main(&[Step::Key(outer), Step::Key(inner)])));
     assert!(!driver.drawn(&[Step::Key(vocabulary::PANES)]));
+}
+
+#[test]
+fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
+    use crate::driver::Driver;
+    use crate::location::{Location, Start};
+    let [label, cell] = [CellId::from_u128(1), CellId::from_u128(2)];
+    let mut cells = Cells::new();
+    cells.set_value(
+        cell,
+        Value::list([
+            crate::libraries::f64::value(1.0),
+            crate::libraries::f64::value(2.0),
+        ]),
+    );
+    let mut world = crate::test_editor(gid::Document {
+        root: Some(Value::record([(label, cell.into())])),
+        cells,
+    });
+    let first = cell_positions(&world, cell)[0].clone();
+    world.model.selection = Some(crate::selection::Selection::edge(
+        &crate::test_root(),
+        crate::editing::Scope::default(),
+        vec![
+            Step::Key(label),
+            Step::Follow(gid::Resolution::Document),
+            Step::Element(first.clone()),
+        ],
+    ));
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    driver
+        .runner
+        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+            editor.run_doc_command(
+                crate::command::DocCommand::OpenPane(Side::Left),
+                dispatch.geometry(1.0),
+            );
+            true
+        });
+    driver.present();
+    let opened = driver.editor().model.doc.root.clone().unwrap();
+    let declaration = declarations(Some(&opened)).remove(0).path;
+    let entry = crate::test_support::value_at(&opened, &declaration).unwrap();
+    // Anchored at the nearest cell: the steps start inside its definition.
+    let place = crate::location::read(entry).unwrap();
+    assert_eq!(
+        place.start,
+        Start::Cell {
+            cell,
+            resolution: gid::Resolution::Document
+        }
+    );
+    assert_eq!(place.path.as_ref(), [Step::Element(first.clone())]);
+    // The pane draws the place through its entry's own cell, and an edit
+    // there lands in the cell, which the document view reads.
+    let shown = location_path(entry, &declaration).unwrap();
+    assert!(driver.drawn(&shown));
+    let editor = &mut driver.runner.editor;
+    assert!(crate::location::set_value(
+        &mut editor.model.doc,
+        &editor.stack.libraries,
+        &Location::root(shown),
+        crate::libraries::f64::value(5.0),
+    ));
+    // Opening the pane wrapped the bare root under `main`.
+    assert_eq!(
+        editor.sources().resolve_path(&[
+            Step::Key(vocabulary::MAIN),
+            Step::Key(label),
+            Step::Follow(gid::Resolution::Document),
+            Step::Element(first),
+        ]),
+        Some(&crate::libraries::f64::value(5.0))
+    );
+}
+
+fn cell_positions(world: &crate::Editor, cell: CellId) -> Vec<gid::Position> {
+    world
+        .model
+        .doc
+        .cells
+        .value(cell)
+        .and_then(Value::as_list)
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect()
 }
 
 #[test]

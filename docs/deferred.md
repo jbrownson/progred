@@ -370,12 +370,12 @@ is wrapped only once something adds a workspace field, such as opening a pane.
 Starting points that open a pane and the examples use this shape. What's left,
 discussed in October 2026:
 
-- **Panes that show a document path,** not only a value, so something can sit
-  in a pane without being moved into a cell. Paths are already data
-  (`grap::path`), and list positions are saved, so a pane's path survives a
-  reload.
-- **A "show panes" command** opening the panes declaration in a pane, once panes
-  can show a path.
+- **Closing a location pane.** A pane can show a location, the place Open
+  Value opened, but its root is that place, so deleting it deletes the content.
+  Closing one takes deleting its entry in Plain or Raw; a Close Pane command
+  would say what's meant.
+- **A "show panes" command.** A location pane at `{steps: [panes]}` already
+  shows the panes declaration; nothing picks or names one yet.
 - **Recursion.** A pane showing a workspace record already draws its main value;
   drawing that workspace's own panes too suggests making the pane layout a
   projection.

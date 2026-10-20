@@ -196,6 +196,26 @@ pub fn main_path(root: Option<&Value>) -> Option<Path> {
     .then(|| vec![Step::Key(vocabulary::MAIN)])
 }
 
+/// The path a pane declared at `declaration` draws when its entry is a
+/// location: the place itself, reached from the root for a location there,
+/// or through the entry's own `in` cell for one inside a cell's definition,
+/// so the pane edits that place and stays in sync with it.
+pub fn location_path(entry: &Value, declaration: &[Step]) -> Option<Path> {
+    let location = crate::location::read(entry)?;
+    Some(match location.start {
+        crate::location::Start::Root => location.path.into_owned(),
+        crate::location::Start::Cell { resolution, .. } => declaration
+            .iter()
+            .cloned()
+            .chain([
+                Step::Key(crate::location::vocabulary::IN),
+                Step::Follow(resolution),
+            ])
+            .chain(location.path.iter().cloned())
+            .collect(),
+    })
+}
+
 /// Read pane declarations only from the document root. No recursive
 /// search means an identical record deeper in user data stays data.
 pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {

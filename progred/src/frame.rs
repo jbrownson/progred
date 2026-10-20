@@ -634,13 +634,32 @@ fn view_content<'a>(
             projection: view_projection(stack, view, false),
             viewport: false,
         },
-        (Target::Pane { path }, None) => ViewContent {
-            root_path: Cow::Borrowed(path),
-            root: sources.resolve_path(path),
-            projection: view_projection(stack, view, true),
-            viewport: false,
-        },
+        (Target::Pane { path }, None) => {
+            let root_path = pane_path(sources, view, path);
+            ViewContent {
+                root: sources.resolve_path(&root_path),
+                root_path: Cow::Owned(root_path),
+                projection: view_projection(stack, view, true),
+                viewport: false,
+            }
+        }
     }
+}
+
+/// What a pane declared at `declaration` draws: the place its entry names,
+/// while it shows the editor library, which interprets locations, and the
+/// entry itself otherwise.
+fn pane_path(
+    sources: sources::Sources<'_>,
+    view: &workspace::View,
+    declaration: &[gid::Step],
+) -> Vec<gid::Step> {
+    view.shown
+        .shows(crate::libraries::editor::ID)
+        .then(|| sources.resolve_path(declaration))
+        .flatten()
+        .and_then(|entry| workspace::location_path(entry, declaration))
+        .unwrap_or_else(|| declaration.to_vec())
 }
 
 /// Whether `view` labels cells with their names: only with the name library

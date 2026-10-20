@@ -512,14 +512,35 @@ impl Editor {
         }
     }
 
+    /// Opens the selection in a pane on `side`: the place it's stored,
+    /// anchored at its nearest cell, so the pane shows and edits that place,
+    /// or for a computed value, which has no place, a copy of it.
     fn open_selected_in_pane(&mut self, side: workspace::Side) {
         let next = self.model.selection.as_ref().and_then(|selection| {
-            let value = selection.value(&self.sources())?.clone();
+            let sources = self.sources();
             let (root, wrapped) = workspace::workspace_root(self.model.doc.root.as_ref()?);
-            let (root, path) = workspace::append(&root, side, value)?;
-            Some((root, path, wrapped))
+            let place = selection.location().and_then(|location| {
+                location
+                    .stored(&sources)
+                    .map(crate::location::Location::into_owned)
+            });
+            let entry = match place {
+                Some(mut place) => {
+                    // Wrapping moves every path from the root under `main`.
+                    if wrapped && place.start == crate::location::Start::Root {
+                        place.path = std::iter::once(gid::Step::Key(workspace::vocabulary::MAIN))
+                            .chain(place.path.iter().cloned())
+                            .collect();
+                    }
+                    crate::location::value(&place)
+                }
+                None => selection.value(&sources)?.clone(),
+            };
+            let (root, path) = workspace::append(&root, side, entry.clone())?;
+            let shown = workspace::location_path(&entry, &path).unwrap_or_else(|| path.clone());
+            Some((root, path, shown, wrapped))
         });
-        if let Some((value, path, wrapped)) = next {
+        if let Some((value, _, shown, wrapped)) = next {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);
             self.model.history.record(before);
@@ -534,7 +555,7 @@ impl Editor {
                 .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
             // The value opens as its column's last pane.
             self.model.selection = self.model.workspace.column(side).panes.last().map(|pane| {
-                selection::Selection::edge(&pane.view.root, crate::editing::Scope::default(), path)
+                selection::Selection::edge(&pane.view.root, crate::editing::Scope::default(), shown)
             });
             self.refresh_title();
         }
@@ -547,7 +568,13 @@ impl Editor {
                 .as_ref()
                 .and_then(|selection| match selection.root().target() {
                     Target::Pane { path } => {
-                        let suffix = selection.path().strip_prefix(path.as_slice())?.to_vec();
+                        // A pane showing a place from the root keeps its
+                        // selection's path; one under the declaration moves
+                        // with it.
+                        let suffix = selection
+                            .path()
+                            .strip_prefix(path.as_slice())
+                            .map(<[_]>::to_vec);
                         let (value, path) =
                             workspace::move_value(self.model.doc.root.as_ref()?, path, direction)?;
                         Some((value, path, suffix, selection.root().clone()))
@@ -564,7 +591,11 @@ impl Editor {
                 view.annotations = Default::default();
             }
             if let Some(selection) = self.model.selection.as_mut() {
-                selection.relocate(next_root, path.into_iter().chain(suffix).collect());
+                let path = match suffix {
+                    Some(suffix) => path.into_iter().chain(suffix).collect(),
+                    None => selection.path().to_vec(),
+                };
+                selection.relocate(next_root, path);
             }
             self.model
                 .workspace

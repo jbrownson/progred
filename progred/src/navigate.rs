@@ -2,8 +2,8 @@
 //! selection lands when what it was on goes away. They act through the
 //! installed frame's [`Geometry`].
 
-use crate::display::widget::navigation::{Geometry, Landmark, advance, landmark_at};
-use crate::display::widget::view::{Root, Target};
+use crate::display::widget::navigation::{Geometry, Landmark, advance};
+use crate::display::widget::view::Root;
 use crate::selection::Selection;
 use gid::{Path, Step};
 use puri::handler::NavigationDirection;
@@ -110,19 +110,16 @@ pub fn select_all<'a, World>(
     .flatten()
 }
 
-/// What's drawn at the root of `root`'s view: the document view's outermost
-/// value, which is the workspace's main value where the root declares one.
+/// What's drawn at the root of `root`'s view: its outermost value, such as a
+/// workspace's main value, or the place a pane shows.
 fn root_target<'a, World>(
     landmarks: &'a [Landmark<World>],
     root: &Root,
 ) -> Option<&'a Landmark<World>> {
-    match root.target() {
-        Target::Pane { path } => landmark_at(landmarks, Some(root), path),
-        Target::Document => landmarks
-            .iter()
-            .filter(|landmark| landmark.root.as_ref() == Some(root))
-            .min_by_key(|landmark| landmark.path.len()),
-    }
+    landmarks
+        .iter()
+        .filter(|landmark| landmark.root.as_ref() == Some(root))
+        .min_by_key(|landmark| landmark.path.len())
 }
 
 /// The stop after the drawn `path`: its next sibling, else the one after its
