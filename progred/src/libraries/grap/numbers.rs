@@ -120,6 +120,23 @@ pub(super) fn contribution<W: Host>() -> (Vec<(CellId, String)>, ForeignFunction
     (names, functions, projection)
 }
 
+/// The representation, by name, that `cell` is an operation of. Grap has an
+/// operator of each spelling for each representation, so this, not the
+/// library, tells their offers apart.
+pub(super) fn representation_of(cell: CellId) -> Option<&'static str> {
+    thread_local! {
+        static REPRESENTATIONS: std::collections::HashMap<CellId, &'static str> = [
+            (f64_arithmetic().representation.name, f64_parts()),
+            (f32_arithmetic().representation.name, f32_parts()),
+            (u64_arithmetic().representation.name, u64_parts()),
+        ]
+        .into_iter()
+        .flat_map(|(name, parts)| parts.calls.into_iter().map(move |cell| (cell, name)))
+        .collect();
+    }
+    REPRESENTATIONS.with(|representations| representations.get(&cell).copied())
+}
+
 fn f64_arithmetic() -> Arithmetic<::core::primitive::f64> {
     Arithmetic {
         representation: f64_library::representation(),

@@ -578,19 +578,24 @@ fn new_program() -> Completion {
     .with_detail(ID)
 }
 
-/// Where a call offer's function comes from: the document, or a library by name.
+/// Where a call offer's function comes from: the document, or a library by
+/// name, except that a number operation names its representation.
 fn call_detail(
     request: &crate::display::CompletionRequest<'_>,
+    function: CellId,
     resolution: gid::Resolution,
 ) -> String {
     match resolution {
         gid::Resolution::Document => "call".to_owned(),
         gid::Resolution::Library(library) => format!(
             "call · {}",
-            crate::identity::name_or_short_id(
-                (request.resolve)(library).and_then(|definition| name::read(definition.value)),
-                library,
-            )
+            match numbers::representation_of(function) {
+                Some(representation) => representation.to_owned(),
+                None => crate::identity::name_or_short_id(
+                    (request.resolve)(library).and_then(|definition| name::read(definition.value)),
+                    library,
+                ),
+            }
         ),
     }
 }
@@ -609,7 +614,7 @@ fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Comp
                     || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
                 .then(|| {
                     let offer = call_completion(cell.into(), cell, request.resolve)
-                        .with_detail(call_detail(request, definition.resolution));
+                        .with_detail(call_detail(request, cell, definition.resolution));
                     (
                         matches!(definition.resolution, gid::Resolution::Library(_)),
                         name,

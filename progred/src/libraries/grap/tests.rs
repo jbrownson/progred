@@ -1087,10 +1087,22 @@ fn built_in_call_completion_opens_its_first_argument() {
         None,
         Some(&everything),
     );
+    let details: Vec<_> = entries
+        .iter()
+        .filter(|entry| entry.display == "+")
+        .filter_map(|entry| entry.detail.as_deref())
+        .collect();
+    for representation in ["f64", "f32", "u64"] {
+        assert!(
+            details.contains(&format!("call · {representation}").as_str()),
+            "each + names its representation, not Grap: {details:?}"
+        );
+    }
+    assert!(!details.contains(&"call · grap"));
     let call = entries
         .iter()
-        .find(|entry| entry.detail.as_deref() == Some("call · grap"))
-        .expect("+ is offered as Grap's call");
+        .find(|entry| entry.detail.as_deref() == Some("call · f64"))
+        .expect("+ is offered as f64's call");
     let result = activated(call);
     assert_eq!(result.value, Some(::grap::call(SUM.into(), [])));
     let (selected, payload) = result.selected.unwrap();
