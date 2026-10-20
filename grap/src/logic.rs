@@ -18,14 +18,19 @@ pub fn read(value: &Value) -> Option<bool> {
 }
 
 pub fn read_record(fields: &Record) -> Option<bool> {
-    match fields.get(&BOOL)?.as_cell()? {
-        TRUE => Some(true),
-        FALSE => Some(false),
-        _ => None,
-    }
+    decode(fields.get(&BOOL)?)
 }
 
 /// The `bool` field holding `value`.
 pub(crate) fn encode(value: bool) -> Value {
     Value::from(if value { TRUE } else { FALSE })
+}
+
+/// The boolean a `bool` field holds.
+pub(crate) fn decode(field: &Value) -> Option<bool> {
+    match field.as_cell()? {
+        TRUE => Some(true),
+        FALSE => Some(false),
+        _ => None,
+    }
 }

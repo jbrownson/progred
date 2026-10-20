@@ -1,5 +1,6 @@
 //! f64 numbers: eight little-endian bytes under the f64 tag, drawn as their
-//! spelling. Their arithmetic is Grap's numbers library's.
+//! spelling. Grap holds them natively, with their encoding, and their arithmetic
+//! is Grap's numbers library's.
 
 use crate::display::Host;
 use crate::libraries::{Library, name, number};

@@ -20,6 +20,8 @@ pub(crate) struct Unboxed {
 #[derive(Clone)]
 pub(crate) enum Native {
     F64(f64),
+    F32(f32),
+    U64(u64),
     Text(Rc<str>),
     Bool(bool),
 }
@@ -29,16 +31,32 @@ impl Native {
     /// unboxes as its number; a reader of its text finds it in the source
     /// record.
     fn recognize(fields: &Record) -> Option<Self> {
-        crate::f64::read_record(fields)
-            .map(Self::F64)
-            .or_else(|| crate::text::read_record(fields).map(|text| Self::Text(text.into())))
-            .or_else(|| crate::logic::read_record(fields).map(Self::Bool))
+        // One pass over the fields rather than a lookup per convention, in
+        // order of preference: f64, f32 and u64, then text, then a boolean.
+        fields
+            .iter()
+            .filter_map(|(label, value)| {
+                Some(match *label {
+                    crate::f64::F64 => (0, Self::F64(crate::f64::decode(value.as_blob()?)?)),
+                    crate::f32::F32 => (1, Self::F32(crate::f32::decode(value.as_blob()?)?)),
+                    crate::u64::U64 => (2, Self::U64(crate::u64::decode(value.as_blob()?)?)),
+                    crate::text::UTF8 => {
+                        (3, Self::Text(crate::text::decode(value.as_blob()?)?.into()))
+                    }
+                    crate::logic::BOOL => (4, Self::Bool(crate::logic::decode(value)?)),
+                    _ => return None,
+                })
+            })
+            .min_by_key(|(rank, _)| *rank)
+            .map(|(_, native)| native)
     }
 
     /// The label of the field holding the value in its record form.
     fn label(&self) -> CellId {
         match self {
             Self::F64(_) => crate::f64::F64,
+            Self::F32(_) => crate::f32::F32,
+            Self::U64(_) => crate::u64::U64,
             Self::Text(_) => crate::text::UTF8,
             Self::Bool(_) => crate::logic::BOOL,
         }
@@ -48,6 +66,8 @@ impl Native {
     fn encoded(&self) -> Value {
         match self {
             Self::F64(number) => crate::f64::encode(*number),
+            Self::F32(number) => crate::f32::encode(*number),
+            Self::U64(number) => crate::u64::encode(*number),
             Self::Text(text) => crate::text::encode(text.as_ref()),
             Self::Bool(value) => crate::logic::encode(*value),
         }
@@ -61,6 +81,8 @@ impl Native {
     fn same(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::F64(a), Self::F64(b)) => a.to_bits() == b.to_bits(),
+            (Self::F32(a), Self::F32(b)) => a.to_bits() == b.to_bits(),
+            (Self::U64(a), Self::U64(b)) => a == b,
             (Self::Text(a), Self::Text(b)) => Rc::ptr_eq(a, b) || a == b,
             (Self::Bool(a), Self::Bool(b)) => a == b,
             _ => false,

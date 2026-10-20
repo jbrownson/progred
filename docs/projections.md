@@ -702,8 +702,8 @@ raw expressions, in the calling environment or an explicitly derived one. The
 environment becomes a GID record only when Rust explicitly hands it to Grap.
 A library can instead register one of Grap's primitives (`grap::primitive`),
 an operation the evaluator runs natively, with the library's own labels and
-decline reasons: f64's arithmetic, comparisons and one-operand functions are
-registered this way. A call that resolves to a primitive runs it directly
+decline reasons: every number type's arithmetic, comparisons and one-operand
+functions are registered this way. A call that resolves to a primitive runs it directly
 rather than through the foreign-call machinery; resolution, shadowing, fuel
 and effects are as for any other foreign call.
 Semantic failure is an ordinary absent value; the host `Result` only propagates
@@ -857,11 +857,12 @@ Drawing-source origins are separate from failures.
 
 ## Equivalent host representations
 
-The runtime can carry unboxed f64 numbers and text, and containers with runtime
-children. Numbers and text stay unboxed through calls, containers, and
-environments until a generic boundary asks for `Value`. Their encoders and
-decoders live with the runtime carrier and are re-exported by the f64 and text
-libraries, which still own their functions, projections, and absences. They
+The runtime can carry unboxed f64, f32 and u64 numbers, booleans and text, and
+containers with runtime children. These stay unboxed through calls,
+containers, and environments until a generic boundary asks for `Value`, and a
+literal is lowered to its unboxed form once. Their encoders and decoders live
+with the runtime carrier and are re-exported by the number, logic and text
+libraries, which still own their names, projections, and absences. They
 accelerate ordinary conventions without adding numeric or string syntax or new
 GID primitives. A new privileged convention adds a native form to the runtime's
 unboxed values, which answer every record question as their records would.

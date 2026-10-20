@@ -1,6 +1,6 @@
 //! Grap's arithmetic over the number representations: each one's operations
-//! as foreign functions, f64's as primitives Grap runs natively, read infix
-//! or as calls headed by the tagged operator, and typed after a number; the argument labels of binary and
+//! as primitives Grap runs natively, read infix or as calls headed by the
+//! tagged operator, and typed after a number; the argument labels of binary and
 //! unary operations, which list concatenation takes too; and conversions
 //! between them. The numbers themselves belong to f64, f32 and u64, which know
 //! nothing of Grap.
@@ -10,8 +10,9 @@ use crate::libraries::number::{Representation, Scrubbable};
 use crate::libraries::representation::{Precedence, calls, infix_display};
 use crate::libraries::u64 as u64_library;
 use crate::libraries::{f32 as f32_library, f64 as f64_library};
+use ::grap::primitive::{Binary, Number, Primitive, Unary};
 use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
 use gid::{CellId, Value};
 use puri::handler::HasHandler;
@@ -124,37 +125,6 @@ fn f64_arithmetic() -> Arithmetic<::core::primitive::f64> {
         representation: f64_library::representation(),
         left_not: f64::LEFT_NOT_F64,
         right_not: f64::RIGHT_NOT_F64,
-        eval: |context, expression, environment| context.eval_f64_or_value(expression, environment),
-        primitive: f64_primitive,
-    }
-}
-
-/// f64's operations, which Grap runs natively.
-fn f64_primitive(
-    operation: Operation<::core::primitive::f64>,
-    arithmetic: &Arithmetic<::core::primitive::f64>,
-) -> Option<::grap::primitive::Primitive> {
-    use ::grap::primitive::{Binary, Primitive, Unary};
-    let binary = |operation| Primitive::Binary {
-        operation,
-        left: vocabulary::LEFT,
-        right: vocabulary::RIGHT,
-        left_not: arithmetic.left_not,
-        right_not: arithmetic.right_not,
-    };
-    let unary = |operation, operand_not| Primitive::Unary {
-        operation,
-        operand: vocabulary::OPERAND,
-        operand_not,
-    };
-    match operation {
-        Operation::Arithmetic(apply) => Some(binary(Binary::Arithmetic(apply))),
-        Operation::Comparison(apply) => Some(binary(Binary::Comparison(apply))),
-        Operation::Unary(apply, operand_not) => Some(unary(Unary::Arithmetic(apply), operand_not)),
-        Operation::Predicate(apply, operand_not) => {
-            Some(unary(Unary::Predicate(apply), operand_not))
-        }
-        Operation::Checked(..) => None,
     }
 }
 
@@ -163,11 +133,6 @@ fn f32_arithmetic() -> Arithmetic<::core::primitive::f32> {
         representation: f32_library::representation(),
         left_not: f32::LEFT_NOT_F32,
         right_not: f32::RIGHT_NOT_F32,
-        eval: |context, expression, environment| {
-            let value = context.eval(expression, environment)?;
-            Ok(f32_library::read_runtime(&value).ok_or(value))
-        },
-        primitive: |_, _| None,
     }
 }
 
@@ -176,11 +141,6 @@ fn u64_arithmetic() -> Arithmetic<::core::primitive::u64> {
         representation: u64_library::representation(),
         left_not: u64::LEFT_NOT_U64,
         right_not: u64::RIGHT_NOT_U64,
-        eval: |context, expression, environment| {
-            let value = context.eval(expression, environment)?;
-            Ok(u64_library::read_runtime(&value).ok_or(value))
-        },
-        primitive: |_, _| None,
     }
 }
 
@@ -324,17 +284,13 @@ fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence>
     }
 }
 
-/// Grap's arithmetic over one representation: how an operand is evaluated
-/// as it, with any accelerated path, answering with the value itself when it
-/// isn't one, and why a binary operation declines.
+/// Grap's arithmetic over one representation, whose operations Grap runs
+/// natively, and why a binary operation declines.
 #[derive(Clone, Copy)]
 struct Arithmetic<N> {
     representation: Representation<N>,
     left_not: CellId,
     right_not: CellId,
-    eval: fn(&mut Context, Expression, &Environment) -> Result<Result<N, RuntimeValue>, Halt>,
-    /// The operation as one Grap runs natively, if it has one.
-    primitive: fn(Operation<N>, &Self) -> Option<::grap::primitive::Primitive>,
 }
 
 #[derive(Clone, Copy)]
@@ -386,7 +342,7 @@ impl Parts {
     }
 }
 
-impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
+impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
     fn parts(
         self,
         operations: impl IntoIterator<Item = (CellId, &'static str, Operation<N>)>,
@@ -416,88 +372,28 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
         )
     }
 
+    /// `operation` as the primitive Grap runs.
     fn operation(self, operation: Operation<N>) -> ForeignFunction {
-        if let Some(primitive) = (self.primitive)(operation, &self) {
-            return primitive.function();
-        }
-        let runtime = self.representation.runtime;
+        let binary = |operation| Primitive::Binary {
+            operation: N::binary(operation),
+            left: vocabulary::LEFT,
+            right: vocabulary::RIGHT,
+            left_not: self.left_not,
+            right_not: self.right_not,
+        };
+        let unary = |operation, operand_not| Primitive::Unary {
+            operation: N::unary(operation),
+            operand: vocabulary::OPERAND,
+            operand_not,
+        };
         match operation {
-            Operation::Arithmetic(apply) => {
-                self.binary(move |left, right| runtime(apply(left, right)))
-            }
-            Operation::Checked(apply, failure) => self.binary(move |left, right| {
-                apply(left, right)
-                    .map(runtime)
-                    .unwrap_or_else(|| ::grap::absent::value(failure).into())
-            }),
-            Operation::Comparison(apply) => {
-                self.binary(move |left, right| RuntimeValue::bool(apply(left, right)))
-            }
-            Operation::Unary(apply, operand_not) => {
-                self.unary(operand_not, move |operand| runtime(apply(operand)))
-            }
-            Operation::Predicate(apply, operand_not) => self.unary(operand_not, move |operand| {
-                RuntimeValue::bool(apply(operand))
-            }),
+            Operation::Arithmetic(apply) => binary(Binary::Arithmetic(apply)),
+            Operation::Checked(apply, failure) => binary(Binary::Checked(apply, failure)),
+            Operation::Comparison(apply) => binary(Binary::Comparison(apply)),
+            Operation::Unary(apply, operand_not) => unary(Unary::Arithmetic(apply), operand_not),
+            Operation::Predicate(apply, operand_not) => unary(Unary::Predicate(apply), operand_not),
         }
-    }
-
-    fn unary(
-        self,
-        operand_not: CellId,
-        operation: impl Fn(N) -> RuntimeValue + 'static,
-    ) -> ForeignFunction {
-        let operation = Rc::new(operation);
-        ForeignFunction::staged(move |context, call| {
-            match context.field(call, vocabulary::OPERAND) {
-                Some(operand) => {
-                    let operation = operation.clone();
-                    Rc::new(move |context, environment| {
-                        Ok(match (self.eval)(context, operand.clone(), environment)? {
-                            Ok(operand) => operation(operand),
-                            Err(operand) => ::grap::primitive::declined(operand, operand_not),
-                        })
-                    })
-                }
-                None => {
-                    Rc::new(|context, _| Ok(context.missing_runtime_argument(vocabulary::OPERAND)))
-                }
-            }
-        })
-        .parameters([vocabulary::OPERAND])
-        .tracked()
-    }
-
-    /// Each call site finds its operand expressions once; its stage only
-    /// evaluates them.
-    fn binary(self, operation: impl Fn(N, N) -> RuntimeValue + 'static) -> ForeignFunction {
-        let operation = Rc::new(operation);
-        ForeignFunction::staged(move |context, call| {
-            let missing = |cell| -> Stage {
-                Rc::new(move |context, _| Ok(context.missing_runtime_argument(cell)))
-            };
-            match (
-                context.field(call, vocabulary::LEFT),
-                context.field(call, vocabulary::RIGHT),
-            ) {
-                (Some(left), Some(right)) => {
-                    let operation = operation.clone();
-                    Rc::new(move |context, environment| {
-                        let left = (self.eval)(context, left.clone(), environment)?;
-                        let right = (self.eval)(context, right.clone(), environment)?;
-                        Ok(match (left, right) {
-                            (Ok(left), Ok(right)) => operation(left, right),
-                            (Err(left), _) => ::grap::primitive::declined(left, self.left_not),
-                            (_, Err(right)) => ::grap::primitive::declined(right, self.right_not),
-                        })
-                    })
-                }
-                (None, _) => missing(vocabulary::LEFT),
-                (_, None) => missing(vocabulary::RIGHT),
-            }
-        })
-        .parameters([vocabulary::LEFT, vocabulary::RIGHT])
-        .tracked()
+        .function()
     }
 }
 

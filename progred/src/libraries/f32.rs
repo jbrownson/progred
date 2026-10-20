@@ -1,31 +1,20 @@
 //! f32 numbers, for libraries whose host boundary is single precision: four
-//! little-endian bytes under the f32 tag, drawn as their spelling. Their
-//! arithmetic is Grap's numbers library's.
+//! little-endian bytes under the f32 tag, drawn as their spelling. Grap holds
+//! them natively, with their encoding, and their arithmetic is Grap's numbers
+//! library's.
 
 use crate::display::Host;
 use crate::libraries::{Library, number};
 use ::grap::RuntimeValue;
-use gid::{CellId, Value};
+use gid::CellId;
 
 pub const ID: CellId = CellId::from_u128(0xf8daecede6e48de724408cfb0e3090f8);
 
 pub mod vocabulary {
-    use gid::CellId;
-
-    pub const F32: CellId = CellId::from_u128(0x64810cfeb0631ca8875e282d1ad4af79);
+    pub use ::grap::f32::F32;
 }
 
-pub fn value(number: f32) -> Value {
-    number::le_value(vocabulary::F32, number.to_le_bytes())
-}
-
-pub fn read(value: &Value) -> Option<f32> {
-    number::le_bytes(value, vocabulary::F32).map(f32::from_le_bytes)
-}
-
-pub(crate) fn read_runtime(value: &RuntimeValue) -> Option<f32> {
-    number::le_runtime_bytes(value, vocabulary::F32).map(f32::from_le_bytes)
-}
+pub use ::grap::f32::{read, value};
 
 impl number::Scrubbable for f32 {
     fn magnitude(self) -> f64 {
@@ -59,8 +48,8 @@ pub(crate) fn representation() -> number::Representation<f32> {
         name: "f32",
         tag: vocabulary::F32,
         encode: value,
-        runtime: |number| value(number).into(),
-        read: read_runtime,
+        runtime: RuntimeValue::f32,
+        read: RuntimeValue::as_f32,
     }
 }
 

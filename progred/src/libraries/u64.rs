@@ -1,30 +1,19 @@
 //! u64 numbers: eight little-endian bytes under the u64 tag, drawn as their
-//! spelling. Their arithmetic is Grap's numbers library's.
+//! spelling. Grap holds them natively, with their encoding, and their arithmetic
+//! is Grap's numbers library's.
 
 use crate::display::Host;
 use crate::libraries::{Library, number};
 use ::grap::RuntimeValue;
-use gid::{CellId, Value};
+use gid::CellId;
 
 pub const ID: CellId = CellId::from_u128(0xb7212cd0aed055a7a2fbe4036b7f3e51);
 
 pub mod vocabulary {
-    use gid::CellId;
-
-    pub const U64: CellId = CellId::from_u128(0xfc77282178c2fa31b80aed2b8b6f7888);
+    pub use ::grap::u64::U64;
 }
 
-pub fn value(value: u64) -> Value {
-    number::le_value(vocabulary::U64, value.to_le_bytes())
-}
-
-pub fn read(value: &Value) -> Option<u64> {
-    number::le_bytes(value, vocabulary::U64).map(u64::from_le_bytes)
-}
-
-pub(crate) fn read_runtime(value: &RuntimeValue) -> Option<u64> {
-    number::le_runtime_bytes(value, vocabulary::U64).map(u64::from_le_bytes)
-}
+pub use ::grap::u64::{read, value};
 
 impl number::Scrubbable for u64 {
     fn magnitude(self) -> f64 {
@@ -58,8 +47,8 @@ pub(crate) fn representation() -> number::Representation<u64> {
         name: "u64",
         tag: vocabulary::U64,
         encode: value,
-        runtime: |number| value(number).into(),
-        read: read_runtime,
+        runtime: RuntimeValue::u64,
+        read: RuntimeValue::as_u64,
     }
 }
 

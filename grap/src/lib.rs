@@ -16,6 +16,7 @@ mod effect_tests;
 mod runtime_tests;
 
 pub mod absent;
+pub mod f32;
 pub mod f64;
 pub mod logic;
 pub mod path;
@@ -23,6 +24,7 @@ pub mod primitive;
 mod reify;
 pub mod source;
 pub mod text;
+pub mod u64;
 mod unboxed;
 pub mod vocabulary;
 
@@ -366,6 +368,48 @@ impl RuntimeValue {
         Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::Bool(value))))
     }
 
+    pub fn f32(number: f32) -> Self {
+        Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::F32(number))))
+    }
+
+    pub fn u64(number: u64) -> Self {
+        Self::new(RuntimeValueKind::Unboxed(Unboxed::new(Native::U64(number))))
+    }
+
+    /// The f32 this value holds under the f32 convention.
+    pub fn as_f32(&self) -> Option<f32> {
+        match &self.0 {
+            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
+                Native::F32(number) => Some(*number),
+                _ => crate::f32::read_record(unboxed.original()?),
+            },
+            RuntimeValueKind::Data(value) => crate::f32::read(value),
+            RuntimeValueKind::Record(fields) => runtime_field(fields, crate::f32::F32)?
+                .as_blob()
+                .and_then(crate::f32::decode),
+            RuntimeValueKind::List(_)
+            | RuntimeValueKind::Foreign(_)
+            | RuntimeValueKind::Closure(_) => None,
+        }
+    }
+
+    /// The u64 this value holds under the u64 convention.
+    pub fn as_u64(&self) -> Option<u64> {
+        match &self.0 {
+            RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
+                Native::U64(number) => Some(*number),
+                _ => crate::u64::read_record(unboxed.original()?),
+            },
+            RuntimeValueKind::Data(value) => crate::u64::read(value),
+            RuntimeValueKind::Record(fields) => runtime_field(fields, crate::u64::U64)?
+                .as_blob()
+                .and_then(crate::u64::decode),
+            RuntimeValueKind::List(_)
+            | RuntimeValueKind::Foreign(_)
+            | RuntimeValueKind::Closure(_) => None,
+        }
+    }
+
     pub fn record(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> Self {
         Self::new(RuntimeValueKind::Record(gid::sorted_entries(fields).into()))
     }
@@ -378,7 +422,7 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
                 Native::F64(number) => Some(*number),
-                Native::Text(_) | Native::Bool(_) => crate::f64::read_record(unboxed.original()?),
+                _ => crate::f64::read_record(unboxed.original()?),
             },
             RuntimeValueKind::Data(value) => crate::f64::read(value),
             RuntimeValueKind::Record(fields) => runtime_field(fields, crate::f64::F64)?
@@ -396,7 +440,7 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
                 Native::Text(text) => Some(text.as_ref()),
-                Native::F64(_) | Native::Bool(_) => crate::text::read_record(unboxed.original()?),
+                _ => crate::text::read_record(unboxed.original()?),
             },
             RuntimeValueKind::Data(value) => crate::text::read(value),
             RuntimeValueKind::Record(fields) => runtime_field(fields, crate::text::UTF8)?
@@ -2363,7 +2407,7 @@ fn native_f64(value: &RuntimeValue) -> Option<f64> {
     match &value.0 {
         RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
             Native::F64(number) => Some(*number),
-            Native::Text(_) | Native::Bool(_) => None,
+            _ => None,
         },
         _ => None,
     }

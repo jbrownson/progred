@@ -1,4 +1,5 @@
 use super::*;
+use gid::Value;
 use gid::new_cell_id;
 
 #[test]
