@@ -2,6 +2,7 @@ use super::*;
 use crate::display::recording::{Recordable, Recorded};
 
 use crate::display::test_support::{NoEval, ProjectionCall, inspect};
+use crate::libraries::name;
 use crate::libraries::test_widgets::projection_input;
 use gid::new_cell_id;
 use std::sync::atomic::{AtomicUsize, Ordering};

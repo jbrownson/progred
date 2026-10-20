@@ -10,7 +10,7 @@ fn selected_libraries_supply_only_their_own_definitions() {
     );
     assert!(stack.libraries.resolve(f64::vocabulary::F64).is_some());
     assert!(stack.libraries.resolve(f32::vocabulary::F32).is_none());
-    for id in [fidget::ID, toolpath::ID, control::ID, grap_library::ID] {
+    for id in [fidget::ID, toolpath::ID, grap_library::ID] {
         assert!(stack.libraries.resolve(id).is_none());
     }
 }

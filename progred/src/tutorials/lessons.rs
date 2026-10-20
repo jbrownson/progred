@@ -180,7 +180,7 @@ fn website_growing_forest_insert(
     names: &crate::gid_text::Binders,
     expression: &Value,
 ) {
-    use crate::libraries::control::vocabulary::{ALL, EXPRESSIONS};
+    use crate::libraries::grap::control::vocabulary::{ALL, EXPRESSIONS};
     fn insert(source: &Value, clouds: &Value) -> Value {
         match source {
             Value::Record(fields)
@@ -324,8 +324,8 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
 /// running the lesson's implicit refinement inline would double their time.
 fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
-        absent, color, control, controls, conversion, f32, f64, fidget, geometry, grap, layout,
-        list, logic, name, presentation, text, toolpath, tree, u64,
+        absent, color, controls, conversion, f32, f64, fidget, geometry, grap, layout, list, logic,
+        name, presentation, text, toolpath, tree, u64,
     };
     let (doc, fields) = crate::gid_text::parse(
         &include_str!(concat!(
@@ -345,7 +345,6 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
             text::ID,
             absent::ID,
             color::ID,
-            control::ID,
             grap::ID,
             f64::ID,
             layout::ID,

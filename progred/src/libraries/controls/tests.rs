@@ -32,7 +32,7 @@ use crate::display::test_support::{
     ResolveForDispatch, with_context, with_empty_view, with_sources, with_view,
 };
 use crate::display::widget::project::Project;
-use crate::libraries::control::vocabulary as c;
+use crate::libraries::grap::control::vocabulary as c;
 use crate::libraries::test_widgets::{project_runtime, projection_input};
 use kurbo::Affine;
 use measured::choices::{ChoiceBuild, resolve_choices};

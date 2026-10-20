@@ -1,6 +1,8 @@
 //! Grap vocabulary and source projections, including named value wrappers.
 //! The live `evaluate` projection is separate from evaluator syntax: a host
-//! that never loads it never gives that field evaluation behavior.
+//! that never loads it never gives that field evaluation behavior. Grap's
+//! evaluation control is in [`control`], and its arithmetic over the number
+//! representations in [`numbers`].
 
 use crate::computations::memo;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
@@ -18,6 +20,7 @@ use crate::display::{group, group_hug};
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
+pub mod control;
 pub mod numbers;
 mod suggestions;
 
@@ -459,6 +462,7 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
+    let (control_names, control_functions, control) = control::contribution();
     let (number_names, number_functions, numbers) = numbers::contribution();
     name::named_library(
         ID,
@@ -501,19 +505,21 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::absent::INVALID_ENVIRONMENT, "invalid environment"),
         ]
         .into_iter()
+        .chain(control_names)
         .chain(
             number_names
                 .iter()
                 .map(|(cell, name)| (*cell, name.as_str())),
         ),
-        functions().merge(number_functions),
+        functions().merge(control_functions).merge(number_functions),
     )
     .with_projection(
         // Calls, lambdas, and value wrappers follow evaluator precedence,
         // but ordinary partial failures still try the next projection.
-        // Arithmetic reads as itself before calls in general, and a number
-        // takes its operators as typing.
+        // Control and arithmetic read as themselves before calls in
+        // general, and a number takes its operators as typing.
         crate::display::compose_partials([
+            control,
             numbers,
             crate::display::runtime_partial(evaluate_display),
             crate::display::fold::folding(crate::display::runtime_partial(call_display)),

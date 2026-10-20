@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{control::vocabulary as c, f64};
+use crate::libraries::{f64, grap::control::vocabulary as c};
 use crate::library::Definitions;
 use crate::test_values::call;
 use ::grap::vocabulary as g;

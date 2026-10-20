@@ -1,14 +1,12 @@
-//! Grap evaluation control supplied by Rust functions. `match`
+//! Grap's evaluation control, supplied by Rust functions. `match`
 //! selects one case through structural matching, `let` and `where`
 //! extend an environment through sequential bindings, `do` evaluates
 //! expressions until the first absent, `all` retains every result, and
 //! `quote` constructs data while evaluating explicit unquotes.
 
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
-use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
 
-pub const ID: CellId = CellId::from_u128(0xec17915df2d42377574dc90f22500fe2);
 use crate::display::{
     RecordField, activatable, alternatives, col, descend_local, dim, record_heads, row, shared,
 };
@@ -873,50 +871,45 @@ fn expression_list_display<W: Host>(
     )))
 }
 
-pub fn library<W: Host>() -> Library<W> {
-    name::named_library(
-        ID,
-        "control",
-        [
-            (vocabulary::MATCH, "match"),
-            (vocabulary::VALUE, "value"),
-            (vocabulary::CASES, "cases"),
-            (vocabulary::PATTERN, "pattern"),
-            (vocabulary::BIND, "bind"),
-            (vocabulary::QUOTE, "quote"),
-            (vocabulary::UNQUOTE, "unquote"),
-            (vocabulary::LET, "let"),
-            (vocabulary::WHERE, "where"),
-            (vocabulary::BINDINGS, "bindings"),
-            (vocabulary::DO, "do"),
-            (vocabulary::ALL, "all"),
-            (vocabulary::EXPRESSIONS, "expressions"),
-            (vocabulary::INVALID_CASES, "invalid cases"),
-            (vocabulary::INVALID_CASE, "invalid case"),
-            (vocabulary::INVALID_BINDER, "invalid binder"),
-            (vocabulary::INVALID_BINDINGS, "invalid bindings"),
-            (vocabulary::INVALID_BINDING, "invalid binding"),
-            (vocabulary::INVALID_EXPRESSIONS, "invalid expressions"),
-            (vocabulary::PATTERN_MISMATCH, "pattern mismatch"),
-            (
-                vocabulary::MISSING_FINAL_EXPRESSION,
-                "missing final expression",
-            ),
-        ],
-        functions(),
-    )
-    .with_projection(crate::display::fold::folding(
-        crate::display::compose_partials([
-            crate::display::runtime_partial(match_display),
-            crate::display::runtime_partial(bindings_display),
-            crate::display::runtime_partial(do_display),
-            crate::display::runtime_partial(|input| {
-                expression_list_display(input, vocabulary::ALL)
-            }),
-            crate::display::runtime_partial(quote_display),
-            crate::display::runtime_partial(unquote_display),
-        ]),
-    ))
+/// What control adds to the Grap library: the names of its cells, its
+/// functions, and its projection, which goes before Grap's calls'.
+pub(super) fn contribution<W: Host>() -> (Vec<(CellId, &'static str)>, ForeignFunctions, Partial<W>)
+{
+    let names = vec![
+        (vocabulary::MATCH, "match"),
+        (vocabulary::VALUE, "value"),
+        (vocabulary::CASES, "cases"),
+        (vocabulary::PATTERN, "pattern"),
+        (vocabulary::BIND, "bind"),
+        (vocabulary::QUOTE, "quote"),
+        (vocabulary::UNQUOTE, "unquote"),
+        (vocabulary::LET, "let"),
+        (vocabulary::WHERE, "where"),
+        (vocabulary::BINDINGS, "bindings"),
+        (vocabulary::DO, "do"),
+        (vocabulary::ALL, "all"),
+        (vocabulary::EXPRESSIONS, "expressions"),
+        (vocabulary::INVALID_CASES, "invalid cases"),
+        (vocabulary::INVALID_CASE, "invalid case"),
+        (vocabulary::INVALID_BINDER, "invalid binder"),
+        (vocabulary::INVALID_BINDINGS, "invalid bindings"),
+        (vocabulary::INVALID_BINDING, "invalid binding"),
+        (vocabulary::INVALID_EXPRESSIONS, "invalid expressions"),
+        (vocabulary::PATTERN_MISMATCH, "pattern mismatch"),
+        (
+            vocabulary::MISSING_FINAL_EXPRESSION,
+            "missing final expression",
+        ),
+    ];
+    let projection = crate::display::fold::folding(crate::display::compose_partials([
+        crate::display::runtime_partial(match_display),
+        crate::display::runtime_partial(bindings_display),
+        crate::display::runtime_partial(do_display),
+        crate::display::runtime_partial(|input| expression_list_display(input, vocabulary::ALL)),
+        crate::display::runtime_partial(quote_display),
+        crate::display::runtime_partial(unquote_display),
+    ]));
+    (names, functions(), projection)
 }
 
 #[cfg(test)]

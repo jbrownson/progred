@@ -72,7 +72,7 @@ fn calling_again_repeats_and_only_the_successor_advances() {
 
 #[test]
 fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
-    use crate::libraries::control::{self, vocabulary as c};
+    use crate::libraries::grap::control::vocabulary as c;
     use ::grap::vocabulary::EXPRESSION;
     let captured = gid::new_cell_id();
     let unquote = |value| Value::record([(c::UNQUOTE, value)]);
@@ -90,8 +90,9 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
             ])),
         ),
     );
-    let control = crate::test_support::foreign_functions(&control::library::<crate::Editor>());
-    let functions = functions().merge(control);
+    let grap =
+        crate::test_support::foreign_functions(&crate::libraries::grap::library::<crate::Editor>());
+    let functions = functions().merge(grap);
     for value in [f64::value(42.0), ::grap::absent::value(INVALID)] {
         let sequence = ::grap::call(producer.clone(), [(captured, value.clone())]);
         let result = crate::test_support::test_evaluate(

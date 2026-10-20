@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::{CompletionRequest, CompletionScope};
-use crate::libraries::{completion::select, control::vocabulary as control};
+use crate::libraries::{completion::select, grap::control::vocabulary as control};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 

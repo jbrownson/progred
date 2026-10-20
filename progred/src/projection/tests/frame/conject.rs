@@ -120,7 +120,7 @@ fn evaluated_results_have_independent_read_only_selection_copy_and_folds() {
 
 #[test]
 fn nested_result_evaluations_use_their_own_allowance() {
-    use crate::libraries::{control, layout, presentation};
+    use crate::libraries::{grap::control, layout, presentation};
     use presentation::vocabulary::{RENDER, RESULT};
     let value = Value::list([f64::value(42.0)]);
     let expression = grap::call(

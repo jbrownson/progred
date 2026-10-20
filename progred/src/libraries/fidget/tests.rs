@@ -13,7 +13,9 @@ fn evaluate(expression: &Value) -> Value {
         expression,
         |cell| library.definitions.value(cell).cloned(),
         &crate::test_support::foreign_functions(&library).merge(
-            crate::test_support::foreign_functions(&control::library::<crate::Editor>()),
+            crate::test_support::foreign_functions(
+                &crate::libraries::grap::library::<crate::Editor>(),
+            ),
         ),
         200,
     )

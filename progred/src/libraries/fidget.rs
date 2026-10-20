@@ -3,7 +3,7 @@
 //! the host representation.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, color, control, f32, name, presentation, representation};
+use crate::libraries::{Library, color, f32, grap::control, name, presentation, representation};
 #[cfg(not(target_arch = "wasm32"))]
 use fidget_engine::wgpu::{
     Gpu, RenderShape,

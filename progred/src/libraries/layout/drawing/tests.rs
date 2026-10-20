@@ -10,7 +10,7 @@ use kurbo::Point;
 
 #[test]
 fn declining_after_drawing_discards_the_whole_recording() {
-    use crate::libraries::{control, f64};
+    use crate::libraries::{f64, grap::control};
     use vocabulary as draw;
     let sequence = |values| {
         grap::call(

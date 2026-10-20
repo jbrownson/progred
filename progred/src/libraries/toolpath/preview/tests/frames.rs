@@ -4,7 +4,7 @@ use gid::{CellId, Cells, Document, Value};
 use puri::draw::DrawCmd;
 #[test]
 fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
-    use crate::libraries::{color, control, f32, fidget, presentation, toolpath};
+    use crate::libraries::{color, f32, fidget, grap::control, presentation, toolpath};
     use toolpath::vocabulary as t;
     let point = |function: CellId, x| {
         grap::call(

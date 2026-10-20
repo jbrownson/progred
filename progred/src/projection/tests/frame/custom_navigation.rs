@@ -1,6 +1,6 @@
 //! Custom forms obey the same placed navigation policy as structural containers.
 use super::*;
-use crate::libraries::{control, f64, fidget};
+use crate::libraries::{f64, fidget, grap::control};
 use ::grap::vocabulary::{BODY, EVALUATE, EXPRESSION, FFI, FUNCTION, PARAMS, VALUE};
 use puri::handler::NavigationDirection;
 

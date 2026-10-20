@@ -84,7 +84,7 @@ fn a_quoted_reference_in_a_result_edits_its_cell() {
     let mut cells = Cells::new();
     cells.set_value(quoted, text::value("before"));
     let render = ::grap::call(
-        crate::libraries::control::vocabulary::QUOTE.into(),
+        crate::libraries::grap::control::vocabulary::QUOTE.into(),
         [(::grap::vocabulary::EXPRESSION, quoted.into())],
     );
     let mut driver = rendered_in_a_pane(program, render, cells);

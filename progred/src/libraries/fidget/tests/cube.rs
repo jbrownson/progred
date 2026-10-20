@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{control, f32, fidget};
+use crate::libraries::{f32, fidget, grap::control};
 use crate::test_support::{core_libraries, src};
 use gid::Step;
 

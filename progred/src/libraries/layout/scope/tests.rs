@@ -1,7 +1,7 @@
 use super::*;
 use crate::display::recording::{Recordable, Recorded};
 use crate::libraries::absent;
-use crate::libraries::control::vocabulary as control;
+use crate::libraries::grap::control::vocabulary as control;
 use crate::projection::Layout;
 use crate::test_values::call;
 
@@ -22,10 +22,9 @@ fn site() -> crate::editing::Site {
 
 #[test]
 fn layout_results_and_nested_absent_details_keep_native_callbacks() {
-    let control = crate::libraries::control::library::<crate::Editor>();
+    let grap = crate::libraries::grap::library::<crate::Editor>();
     let host = crate::test_support::TestHost(|cell| {
-        control
-            .definitions
+        grap.definitions
             .get(cell)
             .cloned()
             .map(|definition| (gid::Resolution::Document, definition))
@@ -91,7 +90,7 @@ fn text(value: &str) -> Value {
 
 fn evaluate(program: &Value, fuel: usize) -> (Evaluation, Option<Layout>) {
     let libraries = [
-        crate::libraries::control::library::<crate::Editor>(),
+        crate::libraries::grap::library::<crate::Editor>(),
         super::super::library::<crate::Editor>(),
     ];
     let host = crate::test_support::TestHost(|cell| {

@@ -1,6 +1,6 @@
 use super::*;
 use crate::annotations::Annotations;
-use crate::libraries::{control, fidget, presentation, text};
+use crate::libraries::{fidget, grap::control, presentation, text};
 use crate::selection::{Stage, pending_edge};
 use crate::test_support::{
     core_libraries, inserted_value, projected_completion_entries, root_completions, src,

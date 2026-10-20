@@ -2,7 +2,7 @@
 
 use crate::frame::Hovered;
 use crate::libraries::{
-    absent, color, control, controls, conversion, declared, f32, f64, fidget, geometry,
+    absent, color, controls, conversion, declared, f32, f64, fidget, geometry,
     grap as grap_library, layout, list, logic, name, png, presentation, random, selection,
     sequence, site, text, toolpath, tree, u64, workspace,
 };
@@ -171,7 +171,6 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (png::ID, png::library),
     (absent::ID, absent::library),
     (color::ID, color::library),
-    (control::ID, control::library),
     (controls::ID, controls::library),
     (tree::ID, tree::library),
     (conversion::ID, conversion::library),

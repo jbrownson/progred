@@ -231,9 +231,7 @@ fn website_libraries_image() {
 #[test]
 #[ignore = "regenerates the website's link preview image"]
 fn website_preview_image() {
-    use crate::libraries::{
-        absent, color, control, controls, f64, grap, layout, presentation, sequence,
-    };
+    use crate::libraries::{absent, color, controls, f64, grap, layout, presentation, sequence};
     let (doc, fields) = crate::gid_text::parse(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../website/public/lessons/growing-forest.gid"
@@ -242,7 +240,6 @@ fn website_preview_image() {
     let forest = [
         absent::ID,
         color::ID,
-        control::ID,
         f64::ID,
         grap::ID,
         layout::ID,

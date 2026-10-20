@@ -4,14 +4,13 @@
 //! evaluator reproduces every tuple. Expectations are hand-derived
 //! from the naive evaluation shape, never copied from a run.
 
-use crate::libraries::{control, f32, f64, list};
+use crate::libraries::{f32, f64, grap::control, list};
 use ::grap;
 use ::grap::ForeignFunctions;
 use gid::{CellId, Value, new_cell_id};
 
 fn functions() -> ForeignFunctions {
     ForeignFunctions::merge_all([
-        crate::test_support::foreign_functions(&control::library::<crate::Editor>()),
         crate::test_support::foreign_functions(&crate::libraries::grap::library::<crate::Editor>()),
         crate::test_support::foreign_functions(&list::library::<crate::Editor>()),
     ])

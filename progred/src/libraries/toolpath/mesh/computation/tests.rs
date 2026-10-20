@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::control;
+use crate::libraries::grap::control;
 use crate::library::Definitions;
 use gid::{Document, Value, new_cell_id};
 use std::cell::Cell;

@@ -1,6 +1,6 @@
 use super::super::vocabulary::*;
 use super::*;
-use crate::libraries::{control, f64};
+use crate::libraries::{f64, grap::control};
 use cam::paths::{Cursor, InvalidPath};
 
 /// The pane's occurrence at `path`, where the tree program's work is kept.

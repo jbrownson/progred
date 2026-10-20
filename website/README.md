@@ -113,7 +113,7 @@ panes. Trunks extend before the canopy expands, with deterministic variation
 and staggered growth across trees. There is no animation clock, worker job,
 or demo-specific runtime: the control value directly drives each drawing.
 The scene explicitly sequences separate sky, ground, sun, and forest calls using
-the control library's `all`. It evaluates each expression in order and retains
+Grap's `all`. It evaluates each expression in order and retains
 all results, including absents, so an incomplete inserted call does not suppress
 later drawing. Inside `forest`, `for each` consumes a streaming `range` and the
 forest calculates each tree's position and size. Fractional counts round up only

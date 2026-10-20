@@ -1,6 +1,6 @@
 use super::super::playback;
 use super::*;
-use crate::libraries::{control, f32, f64, layout};
+use crate::libraries::{f32, f64, grap::control, layout};
 use crate::library::Definitions;
 use gid::{Document, Value, new_cell_id};
 use incremental::background::{Executor, Job};

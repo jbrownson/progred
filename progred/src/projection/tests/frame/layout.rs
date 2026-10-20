@@ -702,20 +702,20 @@ fn sample_text_line_claims_its_own_hover() {
 fn control_forms_fold_as_their_projection_chooses() {
     let arm = Value::record([
         (
-            crate::libraries::control::vocabulary::PATTERN,
+            crate::libraries::grap::control::vocabulary::PATTERN,
             Value::from(vec![1]),
         ),
         (grap::vocabulary::EXPRESSION, Value::from(vec![2])),
     ]);
     let match_expression = grap::call(
-        Value::from(crate::libraries::control::vocabulary::MATCH),
+        Value::from(crate::libraries::grap::control::vocabulary::MATCH),
         [
             (
-                crate::libraries::control::vocabulary::VALUE,
+                crate::libraries::grap::control::vocabulary::VALUE,
                 Value::from(vec![1]),
             ),
             (
-                crate::libraries::control::vocabulary::CASES,
+                crate::libraries::grap::control::vocabulary::CASES,
                 Value::list([arm]),
             ),
         ],

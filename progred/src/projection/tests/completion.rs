@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::CompletionKind;
-use crate::libraries::control;
+use crate::libraries::grap::control;
 use crate::test_support::{activate_projected, inserted_value, projected_completion_entries};
 use gid::Resolution;
 

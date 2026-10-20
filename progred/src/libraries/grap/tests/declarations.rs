@@ -5,7 +5,7 @@ use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::frame::test_support::editing_frame;
 use crate::hover::Hover;
-use crate::libraries::control::vocabulary as control;
+use crate::libraries::grap::control::vocabulary as control;
 use crate::libraries::{f64, text};
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_into};

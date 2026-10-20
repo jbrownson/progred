@@ -1,4 +1,4 @@
-use crate::libraries::{Library, control, f32, f64, name, png, text, u64};
+use crate::libraries::{Library, f32, f64, grap::control, name, png, text, u64};
 use gid::CellId;
 
 #[test]
@@ -42,7 +42,7 @@ fn each_library_names_its_vocabulary() {
         (name::library(), &[(name::vocabulary::NAME, "name")]),
         (text::library(), &[(text::vocabulary::UTF8, "utf8")]),
         (
-            control::library(),
+            crate::libraries::grap::library(),
             &[
                 (control::vocabulary::QUOTE, "quote"),
                 (control::vocabulary::UNQUOTE, "unquote"),

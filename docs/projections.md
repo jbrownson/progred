@@ -15,9 +15,10 @@ window, or file services.
 Progred's [libraries module](../progred/src/libraries/mod.rs) contains
 conceptual libraries as modules alongside their editor-facing widgets, each a
 contribution through the [library interface](../progred/src/library.rs): names,
-text, f64, control, Grap, geometry, presentation, layout, and other domains. The
+text, f64, Grap, geometry, presentation, layout, and other domains. The
 built-in `libraries::grap` module owns Grap's self-description, the `evaluate`
-Rust function, and Grap's projection; geometry and CAD concepts remain separate
+Rust function, its evaluation control and arithmetic, and Grap's projection;
+geometry and CAD concepts remain separate
 libraries. Nothing in this representation requires Rust FFIs, which leaves room
 for [editor-authored libraries](deferred.md#editor-authored-libraries). A
 `Library` carries definitions and one partial projection. A library with several
@@ -720,7 +721,7 @@ all such loops is not a contract of the fuel mechanism.
 
 ## Control functions and absents
 
-The control library's `all {expressions: [...]}` evaluates independent expressions
+Grap's `all {expressions: [...]}` evaluates independent expressions
 in the calling environment, in order, and returns the list of results, including
 absents. An empty `all` returns `[]`.
 Ordinary absents do not suppress later expressions or roll back earlier effects;
@@ -773,7 +774,7 @@ evaluator fuel limits. An empty range is a callable that immediately finishes.
 Grap-authored producers can use the same record/callable protocol; there is no
 new evaluator syntax, hidden stream handle, or precomputed list of indices.
 
-The [control library](../progred/src/libraries/control.rs) supplies structural matching
+Grap's [control module](../progred/src/libraries/grap/control.rs) supplies structural matching
 and quote/unquote as ordinary Rust functions using that evaluator interface.
 `match` evaluates its subject once, then tries ordered cases. Record patterns
 are open; list patterns are exact and ordered; `{bind: cell}` captures a value.
@@ -805,7 +806,7 @@ Raw still exposes them. Active field insertion falls back to the full record/cal
 display. These markers
 are display notation only, not new evaluator or text-bridge syntax.
 
-The control library likewise projects a `match` call with a subject and a
+Grap likewise projects a `match` call with a subject and a
 case list as ordered `pattern → expression` cases, and projects `{bind: cell}`
 distinctly within patterns. Each arrow targets its expression the way a field
 head targets its value. A malformed call declines to the general Grap-call or
