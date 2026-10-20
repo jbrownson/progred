@@ -17,6 +17,9 @@ pub enum Hover {
     Value(Rc<[Step]>),
     /// Activate here toggles this path's collapse.
     Toggle(Rc<[Step]>),
+    /// The label of the field at this path. Activate here selects the field;
+    /// pick picks the label, not the field's value.
+    Label(Rc<[Step]>),
     /// A generated widget or drawing linked to its source expression.
     Source(SourceTrace),
     /// A drawing's dynamic call ancestry; the UI chooses the innermost
@@ -152,7 +155,7 @@ pub(crate) fn hover_secondary<C>(
         Hover::Source(source) => Some(Secondary::from_trace(source)),
         Hover::Calls(_) => None, // Needs the available projection; resolved by frame attribution.
         Hover::Entry(index) => completion?.entries.get(*index)?.source.map(Secondary::Cell),
-        Hover::Toggle(_) => None,
+        Hover::Toggle(_) | Hover::Label(_) => None,
     }
 }
 

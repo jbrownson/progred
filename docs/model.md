@@ -297,7 +297,7 @@ libraries read the query as, such as a number, then text, or for a field the
 name library's new label named as typed, and bytes typed in GID's own `0x`
 spelling. It offers no existing cells. An existing cell
 is reused by pointing at it (Cmd+click) or pasting it; typing makes something
-new. The hole at a document's root starts the document: it leads with what the
+new. Cmd+clicking a field's label points at the label, not the field's value. The hole at a document's root starts the document: it leads with what the
 libraries switched on there start one as, such as a Grap program or a Fidget
 scene, then offers Raw's. The Raw view switches every library off, so its holes
 offer only GID's own kinds: the constructors and `0x` bytes. A picker can also take keys that choose an offer at once

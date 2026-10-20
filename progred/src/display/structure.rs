@@ -251,11 +251,8 @@ pub(crate) fn record_label<W: Host>(
 ) -> Layout<W> {
     let site = input.site().below(&[Step::Key(key)]);
     let head = row(0.0, [field_label(input.env, key), dim(":")]);
-    if input.value.is_some_and(|value| value.contains_field(key)) {
-        activatable(head, &site)
-    } else {
-        pickable(head, W::Hover::from(site.hover()), Value::from(key))
-    }
+    let present = input.value.is_some_and(|value| value.contains_field(key));
+    crate::display::field_label_at(head, &site, key, present)
 }
 
 /// The fields a projection leaves undrawn, and one being added, as a

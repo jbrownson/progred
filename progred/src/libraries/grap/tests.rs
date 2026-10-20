@@ -544,7 +544,7 @@ fn a_call_projects_its_function_cell_shallowly() {
 }
 
 #[test]
-fn a_call_argument_label_targets_its_value() {
+fn a_call_argument_label_targets_its_argument() {
     let function = new_cell_id();
     let argument = new_cell_id();
     let call = ::grap::call(Value::from(function), [(argument, Value::from(vec![1]))]);
@@ -583,9 +583,9 @@ fn a_call_argument_label_targets_its_value() {
     };
     assert_eq!(
         crate::libraries::test_widgets::claim(&head[0]),
-        Some(puri::hover::Claim::Direct(
-            crate::libraries::test_widgets::hover(vec![Step::Key(argument)])
-        ))
+        Some(puri::hover::Claim::Direct(crate::frame::Hovered::Tree(
+            crate::hover::Hover::Label(std::rc::Rc::from([Step::Key(argument)]))
+        )))
     );
     assert!(matches!(child.as_ref(), Recorded::Before { .. }));
 }

@@ -285,7 +285,12 @@ pub(crate) fn call_with_function<W: Host>(
     let argument = |field| {
         let site = input.site().below(&[Step::Key(field)]);
         RecordField {
-            label: activatable(field_label(input.env, field), &site),
+            label: crate::display::field_label_at(
+                field_label(input.env, field),
+                &site,
+                field,
+                true,
+            ),
             value: expression_path([Step::Key(field)], &input.default_projection),
         }
     };

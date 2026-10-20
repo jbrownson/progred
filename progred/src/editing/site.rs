@@ -49,6 +49,11 @@ impl Site {
         Hover::Value(self.path.clone())
     }
 
+    /// What hovering the label of the field this occurrence is shows.
+    pub(crate) fn label_hover(&self) -> Hover {
+        Hover::Label(self.path.clone())
+    }
+
     /// What hovering what opens this occurrence's fold shows.
     pub(crate) fn toggle_hover(&self) -> Hover {
         Hover::Toggle(self.path.clone())

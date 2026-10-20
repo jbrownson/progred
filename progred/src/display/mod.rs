@@ -471,6 +471,23 @@ pub(crate) fn activatable<W: Host>(
     on_hover(on_activate(child, target.clone(), select), target)
 }
 
+/// `child` drawn as the label `key` of the field at `site`. It hovers apart
+/// from the field's value, so a Cmd+click picks the label, not the value; a
+/// click selects the field if `select`.
+pub(crate) fn field_label_at<W: Host>(
+    child: host::Layout<W>,
+    site: &crate::editing::Site,
+    key: CellId,
+    select: bool,
+) -> host::Layout<W> {
+    let target = W::Hover::from(site.label_hover());
+    let select = select.then(|| widget::navigation::selecting(site.clone()));
+    on_hover(
+        widget::interaction::activate_or_pick(child, target.clone(), select, Value::from(key)),
+        target,
+    )
+}
+
 /// `child` drawn for the whole `value` at `site`: a navigation stop that a
 /// click selects and a Cmd+click picks.
 pub(crate) fn selectable_value<W: Host>(

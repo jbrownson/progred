@@ -87,6 +87,16 @@ fn click(driver: &mut Driver, point: Point, path: &[Step]) {
     driver.click_at(point);
 }
 
+/// Click the label of the field at `path` at `point`, where the pointer
+/// lands on it.
+fn click_label(driver: &mut Driver, point: Point, path: &[Step]) {
+    assert_eq!(
+        driver.hover_at(point),
+        Some(Hovered::Tree(Hover::Label(Rc::from(path))))
+    );
+    driver.click_at(point);
+}
+
 /// Click the heading at `path` near its top-left corner.
 fn click_heading(driver: &mut Driver, path: &[Step]) {
     let rect = driver.rect(path);
@@ -267,7 +277,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
         "the record includes the field label outside the list"
     );
     let label_point = Point::new(root_rect.x0 + 4.0, root_rect.y0 + 4.0);
-    click(&mut driver, label_point, &[Step::Key(OUTLINE)]);
+    click_label(&mut driver, label_point, &[Step::Key(OUTLINE)]);
     assert_eq!(driver.selection(), [Step::Key(OUTLINE)]);
     assert!(driver.rect(&[Step::Key(OUTLINE)]).y0 > root_rect.y0);
 
@@ -284,7 +294,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     );
     let mut renamed = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     assert_eq!(renamed.rect(&[Step::Key(OUTLINE)]), list_rect);
-    click(&mut renamed, label_point, &[Step::Key(OUTLINE)]);
+    click_label(&mut renamed, label_point, &[Step::Key(OUTLINE)]);
     renamed.select(&[]);
 
     // Removing the outline field exposes the remaining data structurally.

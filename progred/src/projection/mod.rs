@@ -742,7 +742,8 @@ fn highlighted(
                 secondary_highlight(palette, scale, cv, outline, true);
             } else if matches!(
                 tree_hovered(hover),
-                Some(Hover::Value(hovered)) if hovered.as_ref() == path.as_ref()
+                Some(Hover::Value(hovered) | Hover::Label(hovered))
+                    if hovered.as_ref() == path.as_ref()
             ) {
                 hover_highlight(palette, scale, cv, outline);
             } else if shares(&hover.hovered_secondary) {

@@ -924,7 +924,7 @@ fn placement_claims_the_hover_innermost_last() {
 }
 
 #[test]
-fn hovering_a_field_label_targets_its_value() {
+fn hovering_a_field_label_targets_its_field() {
     let key = crate::test_values::label("title");
     let doc = Document {
         root: Some(Value::record([(key, text::value("hi"))])),
@@ -947,7 +947,7 @@ fn hovering_a_field_label_targets_its_value() {
         });
         if matches!(
             &bench.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
+            Some(Claim::Direct(Hovered::Tree(Hover::Label(path))))
                 if path.last() == Some(&Step::Key(key))
         ) {
             found = Some(bench);
@@ -1401,7 +1401,7 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
     });
     assert!(matches!(
         &label.hit,
-        Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
+        Some(Claim::Direct(Hovered::Tree(Hover::Label(path))))
             if path.as_ref() == upper.path.as_ref()
     ));
     let gap_y = (upper.rect.y1 + lower.rect.y0) / 2.0;
