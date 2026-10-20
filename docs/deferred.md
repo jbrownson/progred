@@ -181,12 +181,14 @@ like, maybe even iconic ones, so nothing should build in how a name projects,
 only which field holds it. Searching by name then asks how closely a name
 matches a string, rather than getting a single string from the name.
 
-Today the name library reads a name as one string (`name::of`). Display asks for
-that string twice: its `Env` gives a record's field labels and their order (none
-in Raw's view, which shows ids), and its `Toolkit` gives the picker the text of
-an offer that names a cell, which the query filters and ranks. A field label drawn by
-projecting its name, and a match query in place of the picker's filter, would
-replace both.
+A first step is in: a name is text or a formatted name, a list of parts, each
+text, a cell spelled as that cell's name, or `{subscript: part}`, and
+`name::of` reads either as a `display::Name`. Field labels, references and the
+picker's rows all draw it, and the number operators use it for their
+representation subscript. Its spelling, the parts' text joined, still sorts
+names and is what the picker's query filters and ranks; a match query in
+place of that filter, and names projected rather than read, remain. The `.gid`
+printer still binds only plain-text names, and only plain names have an editor.
 
 ## Completion ranking
 

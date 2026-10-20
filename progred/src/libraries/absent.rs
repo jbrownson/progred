@@ -26,12 +26,12 @@ pub mod vocabulary {
 /// failed alternative's causes, all on red.
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let reason = input.value?.absent_reason()?;
-    let name = crate::identity::name_or_short_id(input.env.name(reason), reason);
+    let name = match input.env.name(reason) {
+        Some(name) => crate::display::named(&name, crate::display::Face::Ink),
+        None => crate::display::faced(crate::identity::short_id(reason), crate::display::Face::Ink),
+    };
     let site = input.site();
-    let head = crate::display::stop(crate::display::activatable(
-        crate::display::faced(name, crate::display::Face::Ink),
-        &site,
-    ));
+    let head = crate::display::stop(crate::display::activatable(name, &site));
     Some(crate::display::ground(
         crate::display::padding(
             (4.0, 1.0, 4.0, 1.0).into(),

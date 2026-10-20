@@ -68,6 +68,7 @@ pub fn card<C: 'static, H: Clone + PartialEq + From<Hover> + 'static>(
     let scale = styles.scale;
     let widget_entries = entries.iter().map(|entry| puri_widgets::completion::Entry {
         display: &entry.display,
+        subscripts: &entry.subscripts,
         detail: entry.detail.as_deref(),
         matches: &entry.matches,
         style: face_style(styles, entry.face),

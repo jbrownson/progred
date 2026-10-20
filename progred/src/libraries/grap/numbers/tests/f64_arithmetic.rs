@@ -9,11 +9,7 @@ use ::grap::RuntimeValue;
 use gid::CellId;
 
 fn binary_display(input: &ProjectionInput<'_, RuntimeValue>) -> Option<Layout> {
-    crate::libraries::representation::infix_display(
-        vocabulary::F64,
-        &super::super::f64_parts().infix,
-        input,
-    )
+    crate::libraries::representation::infix_display(&super::super::f64_parts().infix, input)
 }
 
 /// Binary notation's one-line form; the other wraps after the left operand.

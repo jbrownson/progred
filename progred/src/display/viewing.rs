@@ -61,7 +61,7 @@ pub(crate) trait Toolkit: Viewing {
     /// What the loaded libraries offer holes.
     fn completions(&self) -> Option<&crate::display::CompletionProvider>;
     /// `cell`'s name as the document names it, Raw's view or not.
-    fn name(&self, cell: gid::CellId) -> Option<&str>;
+    fn name(&self, cell: gid::CellId) -> Option<crate::display::Name<'_>>;
     /// The selected structural source, however it's projected.
     fn selected_trace(&self) -> Option<&SourceTrace>;
     /// Where `steps` below here is stored, as a source trace.

@@ -1,15 +1,16 @@
 //! Grap's arithmetic over the number representations: each one's operations
-//! as primitives Grap runs natively, read infix or as calls headed by the
-//! tagged operator, and typed after a number; the argument labels of binary and
-//! unary operations, which list concatenation takes too; and conversions
-//! between them. The numbers themselves belong to f64, f32 and u64, which know
-//! nothing of Grap.
+//! as primitives Grap runs natively, named with their representation's tag
+//! as a subscript, read infix, and typed after a number; the argument labels
+//! of binary and unary operations, which list concatenation takes too; and
+//! conversions between them. The numbers themselves belong to f64, f32 and
+//! u64, which know nothing of Grap.
 
 use crate::display::host::{Host, Layout, Partial};
 use crate::libraries::number::{Representation, Scrubbable};
-use crate::libraries::representation::{Precedence, calls, infix_display};
+use crate::libraries::representation::{Precedence, infix_display};
 use crate::libraries::u64 as u64_library;
 use crate::libraries::{f32 as f32_library, f64 as f64_library};
+use crate::libraries::{name, text};
 use ::grap::primitive::{Binary, Number, Primitive, Unary};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
@@ -91,14 +92,14 @@ pub mod u64 {
 
 /// What arithmetic adds to the Grap library: the names of its cells, its
 /// functions, and its projection, which goes before Grap's calls'.
-pub(super) fn contribution<W: Host>() -> (Vec<(CellId, String)>, ForeignFunctions, Partial<W>) {
+pub(super) fn contribution<W: Host>() -> (Vec<(CellId, Value)>, ForeignFunctions, Partial<W>) {
     let mut parts = [f64_parts(), f32_parts(), u64_parts()];
     let names = [
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
         (vocabulary::OPERAND, "operand"),
     ]
-    .map(|(cell, name)| (cell, name.to_owned()))
+    .map(|(cell, name)| (cell, text::value(name)))
     .into_iter()
     .chain(
         parts
@@ -120,21 +121,10 @@ pub(super) fn contribution<W: Host>() -> (Vec<(CellId, String)>, ForeignFunction
     (names, functions, projection)
 }
 
-/// The representation, by name, that `cell` is an operation of. Grap has an
-/// operator of each spelling for each representation, so this, not the
-/// library, tells their offers apart.
-pub(super) fn representation_of(cell: CellId) -> Option<&'static str> {
-    thread_local! {
-        static REPRESENTATIONS: std::collections::HashMap<CellId, &'static str> = [
-            (f64_arithmetic().representation.name, f64_parts()),
-            (f32_arithmetic().representation.name, f32_parts()),
-            (u64_arithmetic().representation.name, u64_parts()),
-        ]
-        .into_iter()
-        .flat_map(|(name, parts)| parts.calls.into_iter().map(move |cell| (cell, name)))
-        .collect();
-    }
-    REPRESENTATIONS.with(|representations| representations.get(&cell).copied())
+/// An operation's name: its spelling, then its representation's `tag` as a
+/// subscript, telling apart the operators each representation has.
+fn operation_name(spelling: &str, tag: CellId) -> Value {
+    name::formatted([text::value(spelling), name::subscript(tag.into())])
 }
 
 fn f64_arithmetic() -> Arithmetic<::core::primitive::f64> {
@@ -201,9 +191,12 @@ fn f64_parts() -> Parts {
             (f64::END_NOT_F64, "end is not f64"),
             (f64::AMOUNT_NOT_F64, "amount is not f64"),
         ]
-        .map(|(cell, name)| (cell, name.to_owned())),
+        .map(|(cell, name)| (cell, text::value(name))),
     );
-    parts.calls.push(f64::LERP);
+    parts.names.push((
+        f64::LERP,
+        operation_name("lerp", f64_library::vocabulary::F64),
+    ));
     parts
 }
 
@@ -259,7 +252,7 @@ fn f32_parts() -> Parts {
             (f32::F32_FROM_F64, "f32 from f64"),
             (f32::INVALID_F32_INPUT, "invalid f32 input"),
         ]
-        .map(|(cell, name)| (cell, name.to_owned())),
+        .map(|(cell, name)| (cell, text::value(name))),
     );
     parts
 }
@@ -286,7 +279,7 @@ fn u64_parts() -> Parts {
             (u64::OVERFLOW, "u64 overflow"),
             (u64::DIVISION_BY_ZERO, "division by zero"),
         ]
-        .map(|(cell, name)| (cell, name.to_owned())),
+        .map(|(cell, name)| (cell, text::value(name))),
     );
     parts
 }
@@ -322,12 +315,11 @@ enum Operation<N> {
     Predicate(fn(N) -> bool, CellId),
 }
 
-/// One representation's operations: their names, functions, and projected
-/// call forms.
+/// One representation's operations: their names, functions, and infix
+/// forms.
 struct Parts {
-    names: Vec<(CellId, String)>,
+    names: Vec<(CellId, Value)>,
     functions: ForeignFunctions,
-    calls: Vec<CellId>,
     /// The calls that read infix, and how tightly each binds.
     infix: Vec<(CellId, Precedence)>,
     /// The infix operators by spelling, for typing after a number.
@@ -335,18 +327,16 @@ struct Parts {
 }
 
 impl Parts {
-    /// The calls drawn infix or headed by the tagged operator, and a number
-    /// that takes its operators as typing.
+    /// The calls drawn infix, and a number that takes its operators as
+    /// typing.
     fn projection<W: Host, N: Scrubbable + std::str::FromStr>(
         self,
         arithmetic: Arithmetic<N>,
     ) -> Partial<W> {
-        let tag = arithmetic.representation.tag;
         let infix: Rc<[(CellId, Precedence)]> = self.infix.into();
         let symbols: Rc<[(&'static str, CellId)]> = self.symbols.into();
         crate::display::compose_partials([
-            crate::display::runtime_partial(move |input| infix_display(tag, &infix, input)),
-            calls(tag, self.calls),
+            crate::display::runtime_partial(move |input| infix_display(&infix, input)),
             crate::display::runtime_partial(move |input| {
                 let layout = arithmetic.representation.display(input)?;
                 Some(if input.writable && input.selection.is_some() {
@@ -365,14 +355,14 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
         operations: impl IntoIterator<Item = (CellId, &'static str, Operation<N>)>,
     ) -> Parts {
         let name = self.representation.name;
+        let tag = self.representation.tag;
         operations.into_iter().fold(
             Parts {
                 names: vec![
-                    (self.left_not, format!("left is not {name}")),
-                    (self.right_not, format!("right is not {name}")),
+                    (self.left_not, text::value(format!("left is not {name}"))),
+                    (self.right_not, text::value(format!("right is not {name}"))),
                 ],
                 functions: ForeignFunctions::default(),
-                calls: Vec::new(),
                 infix: Vec::new(),
                 symbols: Vec::new(),
             },
@@ -381,9 +371,8 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
                     parts.infix.push((cell, precedence));
                     parts.symbols.push((spelling, cell));
                 }
-                parts.names.push((cell, spelling.to_owned()));
+                parts.names.push((cell, operation_name(spelling, tag)));
                 parts.functions = parts.functions.register(cell, self.operation(operation));
-                parts.calls.push(cell);
                 parts
             },
         )

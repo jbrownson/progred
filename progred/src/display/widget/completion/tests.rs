@@ -31,6 +31,7 @@ fn paint<C: 'static>(placed: HoverOutput<C, Hovered>) -> DrawList {
 fn a_completion_without_an_edit_still_consumes_its_activation() {
     let entries = [Entry {
         display: "no edit".into(),
+        subscripts: Vec::new(),
         detail: None,
         matches: vec![],
         face: Face::Label,
@@ -68,6 +69,7 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
         let mut tcx = fonts.text(scale);
         let entries = [Entry {
             display: "entry".into(),
+            subscripts: Vec::new(),
             detail: None,
             matches: Vec::new(),
             face: Face::Name,
@@ -136,6 +138,7 @@ fn completion_details_share_the_cards_right_edge() {
         ]
         .map(|(display, detail)| Entry {
             display: display.into(),
+            subscripts: Vec::new(),
             detail: Some(detail.into()),
             matches: Vec::new(),
             face: Face::Name,
@@ -173,10 +176,48 @@ fn completion_details_share_the_cards_right_edge() {
 }
 
 #[test]
+fn a_rows_subscript_is_smaller_and_dim_where_its_name_has_one() {
+    let mut fonts = Fonts::new();
+    let styles = editor(Theme::Light.palette(), 1.0);
+    let mut tcx = fonts.text(1.0);
+    let entries = [Entry {
+        display: "+f64".into(),
+        subscripts: vec![1..4],
+        detail: None,
+        matches: vec![0..1],
+        face: Face::Name,
+        source: None,
+        activate: Rc::new(|_: &mut ()| {}),
+    }];
+    let layout = card::<(), Hovered>(
+        &mut tcx,
+        &styles,
+        &entries,
+        State::default(),
+        |_| Some(0.0),
+        |_, _| {},
+    );
+    let placement = Placement::root(layout.extent.rect_at(Point::ZERO));
+    let drawn = paint(place(layout, placement, &Default::default()));
+    let runs = painted(&drawn.0)
+        .filter_map(|command| match command {
+            DrawCmd::GlyphRun(run) => Some((run.size, run.brush.clone(), run.glyphs.len())),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let [(plus, _, 1), (tag, ref brush, 3)] = runs[..] else {
+        panic!("{runs:?}")
+    };
+    assert!(tag < plus, "the subscript is smaller");
+    assert_eq!(*brush, styles.detail.brush, "and dim");
+}
+
+#[test]
 fn completion_rows_claim_their_entries_and_the_card_occludes() {
     let entries = vec![
         Entry {
             display: "\"x\"".to_string(),
+            subscripts: Vec::new(),
             detail: None,
             matches: Vec::new(),
             face: Face::String,
@@ -185,6 +226,7 @@ fn completion_rows_claim_their_entries_and_the_card_occludes() {
         },
         Entry {
             display: "new list".to_string(),
+            subscripts: Vec::new(),
             detail: None,
             matches: Vec::new(),
             face: Face::Dim,
@@ -237,6 +279,7 @@ fn completion_viewport_scrolls_without_losing_keyboard_reveal() {
     let entries: Vec<_> = (0..20)
         .map(|index| Entry {
             display: format!("entry {index}"),
+            subscripts: Vec::new(),
             detail: None,
             matches: Vec::new(),
             face: Face::Dim,
@@ -374,6 +417,7 @@ fn a_card_placed_shorter_scrolls_what_it_cannot_show() {
     let entries: Vec<_> = (0..20)
         .map(|index| Entry {
             display: format!("entry {index}"),
+            subscripts: Vec::new(),
             detail: None,
             matches: Vec::new(),
             face: Face::Dim,
@@ -442,6 +486,7 @@ fn completion_has_one_choice_shared_by_mouse_and_keyboard_navigation() {
     let entries = (0..3)
         .map(|index| Entry {
             display: format!("entry {index}"),
+            subscripts: Vec::new(),
             detail: None,
             matches: Vec::new(),
             face: Face::Name,
@@ -593,6 +638,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
 
     let entries = [Entry {
         display: "new list".into(),
+        subscripts: Vec::new(),
         detail: None,
         matches: Vec::new(),
         face: Face::Dim,
@@ -645,6 +691,7 @@ fn completion_rows_activate_their_own_action_by_keyboard_or_pointer() {
         entries[0].clone(),
         Entry {
             display: "new record".into(),
+            subscripts: Vec::new(),
             activate: Rc::new(|world: &mut World| {
                 world.committed = Some(Value::record([]));
             }),

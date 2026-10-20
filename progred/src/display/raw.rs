@@ -107,7 +107,7 @@ fn cell_view<W: Host>(
     };
     let value = definition.value.clone();
     let name = match input.env.name(cell) {
-        Some(name) => crate::display::faced(name, Face::Name),
+        Some(name) => crate::display::named(&name, Face::Name),
         None => crate::display::faced(crate::identity::short_id(cell), Face::Id),
     };
     foldable(

@@ -224,7 +224,7 @@ impl crate::display::Toolkit for Occurrence<'_> {
         self.cx.completions
     }
 
-    fn name(&self, cell: CellId) -> Option<&str> {
+    fn name(&self, cell: CellId) -> Option<crate::display::Name<'_>> {
         crate::libraries::name::of(&self.cx.sources, cell)
     }
 
@@ -299,7 +299,7 @@ impl crate::display::Env for Occurrence<'_> {
     }
 
     /// Unlike [`crate::display::Toolkit::name`], Raw's view names nothing.
-    fn name(&self, cell: CellId) -> Option<&str> {
+    fn name(&self, cell: CellId) -> Option<crate::display::Name<'_>> {
         self.cx.name(cell)
     }
 
@@ -572,7 +572,7 @@ impl Cx<'_> {
 
     /// The display name at this projection; with the name library off,
     /// labels fall back to the short id.
-    fn name(&self, cell: CellId) -> Option<&str> {
+    fn name(&self, cell: CellId) -> Option<crate::display::Name<'_>> {
         self.names
             .then(|| crate::libraries::name::of(&self.sources, cell))
             .flatten()

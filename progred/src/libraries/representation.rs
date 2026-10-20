@@ -1,16 +1,15 @@
 //! What a representation's projections share, whether it is a number type or
-//! fidget's fields: its tag after a value or operator, operators drawn infix
-//! or as calls headed by the tagged operator, and how tightly infix binds.
+//! fidget's fields: its tag after a value, operators drawn infix, and how
+//! tightly infix binds. An operator's own name carries its tag.
 
 use crate::display::Pending;
 use crate::display::group;
-use crate::display::host::{Host, Layout, Partial, ProjectionInput};
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{Delim, Face, alternatives, col, row, selectable_bracket, shared, subscript};
 use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
 use ::grap::RuntimeValue;
 use ::grap::vocabulary::FUNCTION;
 use gid::{CellId, Step};
-use std::rc::Rc;
 
 /// `content` followed by the representation's name as a subscript.
 pub(crate) fn tagged<W: Host, V>(
@@ -23,19 +22,14 @@ pub(crate) fn tagged<W: Host, V>(
         [
             content,
             subscript(
-                crate::identity::name_or_short_id(input.env.name(representation), representation),
+                crate::identity::name_or_short_id(
+                    input.env.name(representation).map(|name| name.spelling()),
+                    representation,
+                ),
                 Face::Dim,
             ),
         ],
     )
-}
-
-pub(crate) fn operation<W: Host>(representation: CellId) -> Partial<W> {
-    crate::display::runtime_partial(move |input| {
-        crate::libraries::grap::shallow_cell_with(input, |label| {
-            tagged(input, label, representation)
-        })
-    })
 }
 
 /// How tightly an infix operator binds.
@@ -67,7 +61,6 @@ impl Precedence {
 /// operator is chosen: a missing operand is an empty slot, and other fields,
 /// including one being added, follow in a record.
 pub(crate) fn infix_display<W: Host>(
-    representation: CellId,
     operators: &[(CellId, Precedence)],
     input: &ProjectionInput<'_, W, RuntimeValue>,
 ) -> Option<Layout<W>> {
@@ -86,11 +79,7 @@ pub(crate) fn infix_display<W: Host>(
     let fields = input.value?;
     let precedence = binds(fields)?;
     let layout = infix(
-        crate::display::descend_local(
-            [Step::Key(FUNCTION)],
-            operation(representation),
-            &input.default_projection,
-        ),
+        crate::libraries::grap::shallow_path([Step::Key(FUNCTION)], &input.default_projection),
         |field| {
             (
                 crate::libraries::grap::expression_path(
@@ -132,18 +121,4 @@ pub(crate) fn infix<W: Host>(
         row(6.0, [left.clone(), operator.clone(), right.clone()]),
         col(0, 2.0, [left, row(6.0, [operator, right])]),
     ])
-}
-
-/// Calls of `operations`, headed by the operator with its tag.
-pub(crate) fn calls<W: Host>(
-    representation: CellId,
-    operations: impl Into<Rc<[CellId]>>,
-) -> Partial<W> {
-    let operations = operations.into();
-    let function_projection = operation(representation);
-    crate::display::runtime_partial(move |input| {
-        let function = input.value?.field(FUNCTION)?.as_cell()?;
-        operations.contains(&function).then_some(())?;
-        crate::libraries::grap::call_with_function(input, Some(function_projection.clone()))
-    })
 }

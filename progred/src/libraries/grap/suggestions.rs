@@ -67,7 +67,7 @@ fn quote(request: &CompletionRequest<'_>) -> Option<Completion> {
     let source = (request.resolve)(control::QUOTE)?.resolution;
     Some(
         super::call_completion(control::QUOTE.into(), control::QUOTE, request.resolve)
-            .with_detail(super::call_detail(request, control::QUOTE, source))
+            .with_detail(super::call_detail(request, source))
             .with_aliases(["\""]),
     )
 }

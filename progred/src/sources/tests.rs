@@ -183,7 +183,10 @@ fn values_are_resolved_by_their_stable_sources() {
             .and_then(name::read),
         Some("mine")
     );
-    assert_eq!(crate::libraries::name::of(&sources, cell), Some("mine"));
+    assert_eq!(
+        crate::libraries::name::of(&sources, cell),
+        Some(crate::display::Name::Plain("mine"))
+    );
     assert_eq!(
         sources
             .value(cell, &Resolution::Document)
@@ -217,7 +220,7 @@ fn plural_lookup_keeps_document_first_and_names_library_origins() {
     );
     assert_eq!(
         crate::libraries::name::of(&sources, library_id),
-        Some("test")
+        Some(crate::display::Name::Plain("test"))
     );
 }
 

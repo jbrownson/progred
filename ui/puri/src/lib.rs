@@ -24,5 +24,5 @@ pub mod timer;
 pub use draw::{Canvas, DrawCmd, DrawList, Shape};
 pub use kurbo::{Affine, Circle, Line, Point, Rect, RoundedRect, Stroke};
 pub use peniko::{Brush, Color, ColorStop, Gradient};
-pub use text::{Text, TextCtx, TextMetrics, TextStyle, text};
+pub use text::{Script, Text, TextCtx, TextMetrics, TextStyle, scripted_text, text};
 pub use uig::Placement;

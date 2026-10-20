@@ -213,7 +213,7 @@ fn ordered_keys<W: Host>(
 /// Named fields first, by name, then the others by id.
 pub(crate) fn field_order(env: &dyn Env, left: &CellId, right: &CellId) -> Ordering {
     match (env.name(*left), env.name(*right)) {
-        (Some(a), Some(b)) => a.cmp(b).then(left.cmp(right)),
+        (Some(a), Some(b)) => a.spelling().cmp(&b.spelling()).then(left.cmp(right)),
         (Some(_), None) => Ordering::Less,
         (None, Some(_)) => Ordering::Greater,
         (None, None) => left.cmp(right),
@@ -223,7 +223,7 @@ pub(crate) fn field_order(env: &dyn Env, left: &CellId, right: &CellId) -> Order
 /// A field's name, or its short id where it has none.
 pub(crate) fn field_label<W: Host>(env: &dyn Env, key: CellId) -> Layout<W> {
     match env.name(key) {
-        Some(name) => faced(name, Face::Label),
+        Some(name) => crate::display::named(&name, Face::Label),
         None => faced(crate::identity::short_id(key), Face::Id),
     }
 }

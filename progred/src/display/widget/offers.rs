@@ -7,6 +7,8 @@ use std::{ops::Range, rc::Rc};
 
 pub struct Entry<C> {
     pub display: String,
+    /// Where in `display` its subscripts are.
+    pub subscripts: Vec<Range<usize>>,
     pub detail: Option<String>,
     pub matches: Vec<Range<usize>>,
     pub face: Face,
@@ -18,6 +20,7 @@ impl<C> Clone for Entry<C> {
     fn clone(&self) -> Self {
         Self {
             display: self.display.clone(),
+            subscripts: self.subscripts.clone(),
             detail: self.detail.clone(),
             matches: self.matches.clone(),
             face: self.face,
@@ -67,7 +70,7 @@ pub(crate) fn rank<W: Host>(
             })
             .map(|offer| (text(request, &offer.display), offer))
             .collect(),
-        |(display, _)| display,
+        |((display, _), _)| display,
         |(_, completion)| &completion.aliases,
         request.query,
     )
@@ -106,16 +109,17 @@ pub(crate) fn entry<W: Host>(request: &CompletionRequest<'_>, offer: Completion)
     listed(request, text(request, &offer.display), offer)
 }
 
-/// `offer` listed as `display`.
+/// `offer` listed as `display`, subscripted where its name is.
 fn listed<W: Host>(
     request: &CompletionRequest<'_>,
-    display: String,
+    (display, subscripts): (String, Vec<Range<usize>>),
     offer: Completion,
 ) -> Entry<W> {
     let activate = offer.activate;
     Entry {
         display,
-        detail: offer.detail.as_ref().map(|detail| text(request, detail)),
+        subscripts,
+        detail: offer.detail.as_ref().map(|detail| text(request, detail).0),
         matches: Vec::new(),
         face: offer.face,
         source: offer.preview.as_ref().and_then(Value::as_cell),
@@ -123,10 +127,14 @@ fn listed<W: Host>(
     }
 }
 
-fn text(request: &CompletionRequest<'_>, text: &CompletionText) -> String {
+/// `text` spelled, and where in that its subscripts are.
+fn text(request: &CompletionRequest<'_>, text: &CompletionText) -> (String, Vec<Range<usize>>) {
     match text {
-        CompletionText::Literal(text) => text.clone(),
-        CompletionText::Name(cell) => name_or_short_id((request.name)(*cell), *cell),
+        CompletionText::Literal(text) => (text.clone(), Vec::new()),
+        CompletionText::Name(cell) => match (request.name)(*cell) {
+            Some(name) => (name.spelling().into_owned(), name.subscripts()),
+            None => (name_or_short_id(None::<&str>, *cell), Vec::new()),
+        },
     }
 }
 

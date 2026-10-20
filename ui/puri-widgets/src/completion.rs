@@ -8,6 +8,8 @@ use std::ops::Range;
 
 pub struct Entry<'a> {
     pub display: &'a str,
+    /// Where in `display` its subscripts are.
+    pub subscripts: &'a [Range<usize>],
     pub detail: Option<&'a str>,
     pub matches: &'a [Range<usize>],
     pub style: &'a TextStyle,
@@ -120,27 +122,46 @@ impl Row {
     }
 }
 
-fn highlighted(tcx: &mut TextCtx, text: &str, matches: &[Range<usize>], style: &TextStyle) -> Line {
-    if matches.is_empty() {
+/// `text` in `style`, bold where it `matches` and, where it's one of its
+/// `subscripts`, a subscript in `dim`'s brush.
+fn highlighted(
+    tcx: &mut TextCtx,
+    text: &str,
+    matches: &[Range<usize>],
+    subscripts: &[Range<usize>],
+    style: &TextStyle,
+    dim: &TextStyle,
+) -> Line {
+    if matches.is_empty() && subscripts.is_empty() {
         return Line::one(puri::text(tcx, text, style));
     }
-    let bold = TextStyle {
-        weight: Some(700.0),
-        ..style.clone()
-    };
-    let mut segments = Vec::new();
-    let mut at = 0;
-    for span in matches {
-        if span.start > at {
-            segments.push(puri::text(tcx, &text[at..span.start], style));
-        }
-        segments.push(puri::text(tcx, &text[span.clone()], &bold));
-        at = span.end;
-    }
-    if at < text.len() {
-        segments.push(puri::text(tcx, &text[at..], style));
-    }
-    Line::from_segments(segments)
+    let mut cuts: Vec<usize> = matches
+        .iter()
+        .chain(subscripts)
+        .flat_map(|span| [span.start, span.end])
+        .chain([0, text.len()])
+        .collect();
+    cuts.sort_unstable();
+    cuts.dedup();
+    let within = |spans: &[Range<usize>], at| spans.iter().any(|span| span.contains(&at));
+    Line::from_segments(
+        cuts.windows(2)
+            .map(|cut| {
+                let subscript = within(subscripts, cut[0]);
+                let style = TextStyle {
+                    weight: within(matches, cut[0]).then_some(700.0).or(style.weight),
+                    brush: if subscript { &dim.brush } else { &style.brush }.clone(),
+                    ..style.clone()
+                };
+                let script = if subscript {
+                    puri::Script::Subscript
+                } else {
+                    puri::Script::Normal
+                };
+                puri::scripted_text(tcx, &text[cut[0]..cut[1]], &style, script)
+            })
+            .collect(),
+    )
 }
 
 /// A row for each of `entries`, all as wide as the widest.
@@ -152,7 +173,14 @@ pub fn rows<'a>(
     let mut rows = entries
         .into_iter()
         .map(|entry| {
-            let display = highlighted(tcx, entry.display, entry.matches, entry.style);
+            let display = highlighted(
+                tcx,
+                entry.display,
+                entry.matches,
+                entry.subscripts,
+                entry.style,
+                style.detail,
+            );
             let detail = entry
                 .detail
                 .map(|detail| Line::one(puri::text(tcx, detail, style.detail)));

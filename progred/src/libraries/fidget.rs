@@ -1116,7 +1116,7 @@ pub fn library<W: Host>() -> Library<W> {
         .into_iter()
         .filter_map(|(cell, symbol)| Some((cell, representation::Precedence::of_symbol(symbol)?)))
         .collect();
-    name::named_library(
+    name::library_named(
         ID,
         "fidget",
         [
@@ -1158,18 +1158,30 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::ZOOM, "zoom"),
         ]
         .into_iter()
-        .chain(ARITHMETIC)
-        .chain([
-            (vocabulary::INVALID_FIELD, "invalid field"),
-            (vocabulary::INVALID_SCENE, "invalid scene"),
-            (vocabulary::INVALID_COLOR, "invalid opaque color"),
-            (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
-            (vocabulary::INVALID_SIZE, "invalid preview size"),
+        .map(|(cell, spelling)| (cell, crate::libraries::text::value(spelling)))
+        .chain(ARITHMETIC.map(|(cell, spelling)| {
             (
-                vocabulary::INVALID_MESH_DEPTH,
-                "mesh depth must be from 1 to 8",
-            ),
-        ]),
+                cell,
+                name::formatted([
+                    crate::libraries::text::value(spelling),
+                    name::subscript(vocabulary::FIDGET.into()),
+                ]),
+            )
+        }))
+        .chain(
+            [
+                (vocabulary::INVALID_FIELD, "invalid field"),
+                (vocabulary::INVALID_SCENE, "invalid scene"),
+                (vocabulary::INVALID_COLOR, "invalid opaque color"),
+                (vocabulary::INVALID_BOUNDS, "invalid preview bounds"),
+                (vocabulary::INVALID_SIZE, "invalid preview size"),
+                (
+                    vocabulary::INVALID_MESH_DEPTH,
+                    "mesh depth must be from 1 to 8",
+                ),
+            ]
+            .map(|(cell, spelling)| (cell, crate::libraries::text::value(spelling))),
+        ),
         functions(),
     )
     .with_values(
@@ -1200,9 +1212,7 @@ pub fn library<W: Host>() -> Library<W> {
         ]),
     )
     .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(move |input| {
-            representation::infix_display(vocabulary::FIDGET, &infix, input)
-        }),
+        crate::display::runtime_partial(move |input| representation::infix_display(&infix, input)),
         crate::display::runtime_partial(projection::field),
         crate::display::runtime_partial(move |input| display(input, &renderer)),
         crate::display::runtime_partial(mesh::display),

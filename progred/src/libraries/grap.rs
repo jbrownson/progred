@@ -62,7 +62,7 @@ pub(crate) fn shallow_cell_with<W: Host>(
     let name = input.env.name(cell)?;
     let site = input.site();
     Some(crate::display::stop(activatable(
-        decorate(faced(name, Face::Name)),
+        decorate(crate::display::named(&name, Face::Name)),
         &site,
     )))
 }
@@ -469,7 +469,7 @@ fn functions() -> ForeignFunctions {
 pub fn library<W: Host>() -> Library<W> {
     let (control_names, control_functions, control) = control::contribution();
     let (number_names, number_functions, numbers) = numbers::contribution();
-    name::named_library(
+    name::library_named(
         ID,
         "grap",
         [
@@ -511,11 +511,8 @@ pub fn library<W: Host>() -> Library<W> {
         ]
         .into_iter()
         .chain(control_names)
-        .chain(
-            number_names
-                .iter()
-                .map(|(cell, name)| (*cell, name.as_str())),
-        ),
+        .map(|(cell, name)| (cell, crate::libraries::text::value(name)))
+        .chain(number_names),
         functions().merge(control_functions).merge(number_functions),
     )
     .with_projection(
@@ -578,24 +575,19 @@ fn new_program() -> Completion {
     .with_detail(ID)
 }
 
-/// Where a call offer's function comes from: the document, or a library by
-/// name, except that a number operation names its representation.
+/// Where a call offer's function comes from: the document, or a library by name.
 fn call_detail(
     request: &crate::display::CompletionRequest<'_>,
-    function: CellId,
     resolution: gid::Resolution,
 ) -> String {
     match resolution {
         gid::Resolution::Document => "call".to_owned(),
         gid::Resolution::Library(library) => format!(
             "call · {}",
-            match numbers::representation_of(function) {
-                Some(representation) => representation.to_owned(),
-                None => crate::identity::name_or_short_id(
-                    (request.resolve)(library).and_then(|definition| name::read(definition.value)),
-                    library,
-                ),
-            }
+            crate::identity::name_or_short_id(
+                (request.resolve)(library).and_then(|definition| name::read(definition.value)),
+                library,
+            )
         ),
     }
 }
@@ -609,12 +601,16 @@ fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Comp
             .into_iter()
             .filter_map(|cell| {
                 let definition = (request.resolve)(cell)?;
-                let name = name::read(definition.value)?;
+                let name = name::of_cell(
+                    &|cell| (request.resolve)(cell).map(|definition| definition.value),
+                    cell,
+                )?
+                .spelling();
                 (definition.native
                     || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
                 .then(|| {
                     let offer = call_completion(cell.into(), cell, request.resolve)
-                        .with_detail(call_detail(request, cell, definition.resolution));
+                        .with_detail(call_detail(request, definition.resolution));
                     (
                         matches!(definition.resolution, gid::Resolution::Library(_)),
                         name,
@@ -623,7 +619,9 @@ fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Comp
                 })
             })
             .collect();
-        offers.sort_by_cached_key(|(external, name, _)| (*external, name.to_lowercase(), *name));
+        offers.sort_by_cached_key(|(external, name, _)| {
+            (*external, name.to_lowercase(), name.clone())
+        });
         offers.into_iter().map(|(_, _, offer)| offer).collect()
     }
 }

@@ -363,7 +363,7 @@ impl crate::display::Toolkit for NoSite<'_> {
     fn completions(&self) -> Option<&crate::display::CompletionProvider> {
         self.0.completions()
     }
-    fn name(&self, cell: CellId) -> Option<&str> {
+    fn name(&self, cell: CellId) -> Option<crate::display::Name<'_>> {
         self.0.name(cell)
     }
     fn selected_trace(&self) -> Option<&widget::source::SourceTrace> {

@@ -370,6 +370,7 @@ pub(crate) fn test_entry(
 ) -> Entry<CompletionResult> {
     Entry {
         display: entry.display,
+        subscripts: entry.subscripts,
         detail: entry.detail,
         matches: entry.matches,
         face: entry.face,

@@ -10,18 +10,14 @@ fn each_library_names_its_vocabulary() {
         (
             crate::libraries::grap::library(),
             &[
-                (crate::libraries::grap::numbers::f32::SUM, "+"),
-                (crate::libraries::grap::numbers::f32::EQUAL, "=="),
                 (
                     crate::libraries::grap::numbers::f32::LEFT_NOT_F32,
                     "left is not f32",
                 ),
-                (crate::libraries::grap::numbers::u64::SUM, "+"),
                 (
                     crate::libraries::grap::numbers::u64::OVERFLOW,
                     "u64 overflow",
                 ),
-                (crate::libraries::grap::numbers::f64::SUM, "+"),
                 (
                     crate::libraries::grap::numbers::f64::LEFT_NOT_F64,
                     "left is not f64",
@@ -67,5 +63,32 @@ fn each_library_names_its_vocabulary() {
                 "{cell}"
             );
         }
+    }
+}
+
+#[test]
+fn a_number_operator_names_its_representation_as_a_subscript() {
+    use crate::display::Name;
+    use crate::libraries::grap::numbers;
+    use puri::text::Script::{Normal, Subscript};
+    let document = gid::Document::default();
+    let libraries = crate::test_support::core_libraries();
+    let sources = crate::test_support::src(&document, &libraries);
+    for (operator, spelling, representation) in [
+        (numbers::f64::SUM, "+", "f64"),
+        (numbers::f32::EQUAL, "==", "f32"),
+        (numbers::u64::SUM, "+", "u64"),
+        (numbers::f64::LERP, "lerp", "f64"),
+    ] {
+        assert_eq!(
+            name::of(&sources, operator),
+            Some(Name::Formatted(
+                [
+                    (spelling.to_owned(), Normal),
+                    (representation.to_owned(), Subscript)
+                ]
+                .into()
+            ))
+        );
     }
 }

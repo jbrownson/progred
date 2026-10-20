@@ -10,6 +10,6 @@ pub fn short_id(id: CellId) -> String {
 }
 
 /// A cell's `name`, or its short id where it has none.
-pub fn name_or_short_id(name: Option<&str>, id: CellId) -> String {
-    name.map_or_else(|| short_id(id), str::to_owned)
+pub fn name_or_short_id(name: Option<impl AsRef<str>>, id: CellId) -> String {
+    name.map_or_else(|| short_id(id), |name| name.as_ref().to_owned())
 }

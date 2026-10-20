@@ -115,6 +115,53 @@ impl From<CellId> for CompletionText {
     }
 }
 
+/// A cell's name: plain text, or a formatted name's runs, each plain or a
+/// subscript, with any cell it names spelled as that cell's name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Name<'a> {
+    Plain(&'a str),
+    Formatted(Rc<[(String, puri::text::Script)]>),
+}
+
+impl<'a> Name<'a> {
+    /// The name as one string: what's typed matches it, and names sort by it.
+    pub fn spelling(&self) -> std::borrow::Cow<'a, str> {
+        match self {
+            Self::Plain(text) => (*text).into(),
+            Self::Formatted(runs) => runs.iter().map(|(text, _)| text.as_str()).collect(),
+        }
+    }
+
+    /// Where in its [spelling](Self::spelling) the name's subscripts are.
+    pub fn subscripts(&self) -> Vec<std::ops::Range<usize>> {
+        let Self::Formatted(runs) = self else {
+            return Vec::new();
+        };
+        let mut at = 0;
+        runs.iter()
+            .filter_map(|(text, script)| {
+                let range = at..at + text.len();
+                at = range.end;
+                (*script == puri::text::Script::Subscript).then_some(range)
+            })
+            .collect()
+    }
+}
+
+/// `name` drawn in `face`, its subscripts small and dim.
+pub fn named<World: 'static, Hover: 'static>(name: &Name<'_>, face: Face) -> Layout<World, Hover> {
+    match name {
+        Name::Plain(text) => faced(*text, face),
+        Name::Formatted(runs) => row(
+            2.0,
+            runs.iter().map(|(text, script)| match script {
+                puri::text::Script::Normal => faced(text.as_str(), face),
+                puri::text::Script::Subscript => subscript(text.as_str(), Face::Dim),
+            }),
+        ),
+    }
+}
+
 impl Completion {
     pub fn new(
         display: impl Into<CompletionText>,
@@ -180,7 +227,7 @@ pub struct CompletionRequest<'a> {
     pub cells: &'a dyn Fn() -> Vec<CellId>,
     /// A cell's name as the document names it, for offers named by their
     /// cell. Raw's offers are named too, though Raw shows values' ids.
-    pub name: &'a dyn Fn(CellId) -> Option<&'a str>,
+    pub name: &'a dyn Fn(CellId) -> Option<Name<'a>>,
     /// The loaded libraries' offers, for holes that list some of them, as
     /// Raw's list their readings of what's typed.
     pub libraries: Option<&'a CompletionProvider>,
@@ -300,7 +347,7 @@ pub trait Env {
     ) -> grap::RuntimeValue;
 
     /// The selected definition's conventional human name.
-    fn name(&self, _cell: CellId) -> Option<&str> {
+    fn name(&self, _cell: CellId) -> Option<Name<'_>> {
         None
     }
 

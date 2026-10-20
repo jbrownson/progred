@@ -58,8 +58,8 @@ impl Env for Names {
         panic!("source projection must not evaluate")
     }
 
-    fn name(&self, _: CellId) -> Option<&str> {
-        Some("renamed operator")
+    fn name(&self, _: CellId) -> Option<crate::display::Name<'_>> {
+        Some(crate::display::Name::Plain("renamed operator"))
     }
 }
 

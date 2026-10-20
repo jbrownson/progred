@@ -281,10 +281,13 @@ An active missing argument stays in its declared position rather than gaining a
 second trailing row. This is a raw definition lookup, not evaluation of the
 callable: a native function named by its cell uses the `params` its description
 lists, and computed callables and `{ffi: cell}` references use the ordinary order.
-Numeric libraries decorate their math calls' function references with the same
-representation subscript used by literals. Both names come from definitions;
-the decorated label still selects the call's `function` field. A comparison's
-subscript identifies its operand representation, not its boolean result.
+A number operation's name carries the same representation subscript used by
+literals: it is a formatted name, `["+", {subscript: <the f64 cell>}]`, so a
+call's function reference and the picker's offer both draw it from the
+definition, and renaming f64 renames the subscript. The label still selects
+the call's `function` field. A comparison's subscript identifies its operand
+representation, not its boolean result. Fidget's arithmetic is named the same
+way, with fidget's tag.
 Numeric facets explicitly include an optional stored name beside the number,
 separated by spacing rather than binding or record-field punctuation. The shared
 name decorator descends to the real `name` field with an unquoted text editor;
