@@ -128,6 +128,17 @@ variables and 76 are computed expressions, so `unquote` stays common in either
 design. Independently of the semantics, the picker could offer in-scope variables
 inside a template and insert them as holes.
 
+## Lexical parameter lookup
+
+A call binds a missing argument to the missing-argument absent, so a body
+that doesn't use that parameter still answers, and one that does reads the
+absent there. That covers parameters a call leaves out, but not a parameter
+reference with no binding at all, such as one in a body evaluated outside its
+call: a reference the environment doesn't bind falls back to the cell's
+definition, which for a parameter is its name record. Resolving parameters
+lexically, by the lambda that declares them, would make such a reference an
+absent of its own rather than the parameter's name.
+
 ## Address lifetime
 
 Paths and source traces already preserve definition source. A future identity

@@ -2103,17 +2103,16 @@ impl<'a> Context<'a> {
     }
 
     /// Host calls bind argument values as a call expression binds its
-    /// evaluated arguments: one step each, and a `function` parameter
-    /// receives the callee itself.
+    /// evaluated arguments: one step each, with a `function` parameter
+    /// receiving the callee itself. A missing argument binds its absence
+    /// without a step.
     fn call_closure(
         &mut self,
         closure: Closure,
         callable: &RuntimeValue,
         arguments: &[(CellId, RuntimeValue)],
     ) -> Result<RuntimeValue, Halt> {
-        // Binding stops at a missing argument, whose absence answers the
-        // call, or at a halt.
-        match closure.params.iter().try_fold(
+        let bound = closure.params.iter().try_fold(
             Vec::with_capacity(closure.params.len()),
             |mut bound, &parameter| {
                 let value = if parameter == vocabulary::FUNCTION {
@@ -2124,19 +2123,20 @@ impl<'a> Context<'a> {
                         .find(|(cell, _)| *cell == parameter)
                         .map(|(_, value)| unbox(value.clone()))
                 };
-                match value {
-                    Some(value) => {
-                        self.burn().map_err(Err)?;
-                        bound.push((parameter, value));
-                        Ok(bound)
-                    }
-                    None => Err(Ok(self.missing_runtime_argument(parameter))),
-                }
+                bound.push((
+                    parameter,
+                    match value {
+                        Some(value) => {
+                            self.burn()?;
+                            value
+                        }
+                        None => self.missing_runtime_argument(parameter),
+                    },
+                ));
+                Ok::<_, Halt>(bound)
             },
-        ) {
-            Ok(bound) => self.eval(closure.body, &closure.environment.extended_runtime(bound)),
-            Err(answer) => answer,
-        }
+        )?;
+        self.eval(closure.body, &closure.environment.extended_runtime(bound))
     }
 
     fn try_apply_callable(
@@ -2203,27 +2203,26 @@ impl<'a> Context<'a> {
                 arguments
             }
         };
-        // Binding stops at a missing argument, whose absence answers the
-        // call, or at a halt.
-        match closure.params.iter().zip(arguments_plan.iter()).try_fold(
+        // A missing argument binds its parameter to its absence, which
+        // answers wherever the body uses it, so a body that doesn't still
+        // has its value.
+        let arguments = closure.params.iter().zip(arguments_plan.iter()).try_fold(
             Vec::with_capacity(closure.params.len()),
-            |mut arguments, (&parameter, argument)| match argument {
-                Some(expression) => {
-                    let value = self
-                        .eval(expression.clone(), calling_environment)
-                        .map_err(Err)?;
-                    arguments.push((parameter, value));
-                    Ok(arguments)
-                }
-                None => Err(Ok(self.missing_runtime_argument(parameter))),
+            |mut arguments, (&parameter, argument)| {
+                arguments.push((
+                    parameter,
+                    match argument {
+                        Some(expression) => self.eval(expression.clone(), calling_environment)?,
+                        None => self.missing_runtime_argument(parameter),
+                    },
+                ));
+                Ok::<_, Halt>(arguments)
             },
-        ) {
-            Ok(arguments) => self.eval(
-                closure.body,
-                &closure.environment.extended_runtime(arguments),
-            ),
-            Err(answer) => answer,
-        }
+        )?;
+        self.eval(
+            closure.body,
+            &closure.environment.extended_runtime(arguments),
+        )
     }
 
     fn runtime_closure(&mut self, value: &RuntimeValue) -> Option<Closure> {

@@ -1339,6 +1339,34 @@ fn a_single_value_definition_retains_its_resolution() {
 }
 
 #[test]
+fn a_missing_argument_answers_only_where_the_body_uses_it() {
+    let (used, unused) = (new_cell_id(), new_cell_id());
+    let given = blob("given");
+    let foreign = ForeignFunctions::default();
+    let call_with_used =
+        |body: CellId| call(lambda([used, unused], body.into()), [(used, given.clone())]);
+    assert_eq!(
+        evaluate(&call_with_used(used), |_| None, &foreign, 20).result,
+        given
+    );
+    assert_eq!(
+        apply(
+            &lambda([used, unused], used.into()),
+            [(used, given.clone())],
+            |_| None,
+            &foreign,
+            20
+        )
+        .result,
+        given
+    );
+    assert_eq!(
+        evaluate(&call_with_used(unused), |_| None, &foreign, 20).result,
+        absent::with_detail(absent::MISSING_ARGUMENT, absent::CELL, unused.into())
+    );
+}
+
+#[test]
 fn apply_classifies_missing_arguments_and_uncallable_targets() {
     let parameter = new_cell_id();
     let missing = apply(

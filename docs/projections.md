@@ -620,7 +620,9 @@ Grap recognizes these shapes through its vocabulary cells:
 Evaluating an untagged `{params, body}` lambda captures its lexical environment
 in a callable value; materialized, it is `{closure: {params, body, environment}}`
 with the environment as an ordinary GID record. Grap-defined calls are strict,
-evaluating every declared argument before the body. Effects are explicit
+evaluating every declared argument before the body. A missing argument binds
+its parameter to the missing-argument absent, which answers only where the
+body uses it. Effects are explicit
 foreign calls and scoped capabilities, as in event handlers. Argument
 labels are cell identities, so reusing a library parameter cell is meaningful;
 its display name does not participate in binding. The ordered parameter list
