@@ -771,7 +771,12 @@ The payload is compared by identity, never evaluated or compared by its name.
 Its `require` function takes a `condition`, returning `{}` for true, a
 condition-not-met absent for false, or a not-boolean absent for another value.
 An absent condition propagates unchanged. This is an ordinary guard used in
-`do`, not evaluator syntax or a configurable bind mechanism.
+`do`, not evaluator syntax or a configurable bind mechanism. `require all
+{<label>: <condition>…}` checks every condition rather than stopping at the
+first, as a function's arguments are checked together: it returns `{}` when
+all are true, and otherwise "condition not met" carrying each that isn't under
+its label, whether false, another value, or an absent such as a missing
+argument. Every field but `function` is a condition.
 
 The list library's `iterate` finishes only when a step returns
 `{absent: iteration-finished}`, and then returns the previous state. An
