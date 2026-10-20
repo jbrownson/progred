@@ -3,7 +3,7 @@
 //! their application-level evaluation behavior.
 
 use crate::gid_text::{Binders, parse};
-use crate::libraries::{f64, geometry};
+use crate::libraries::f64;
 use gid::{Document, Value};
 
 fn evaluated_expression(value: &Value) -> &Value {
@@ -44,8 +44,15 @@ fn the_sample_contains_a_projectable_grap_computation() {
         roof.get(&crate::test_values::label("profile"))
             .expect("profile call"),
     );
-    let evaluation = evaluate(&doc, profile);
-    assert_eq!(evaluation.result, geometry::value(40.0));
+    assert_eq!(evaluate(&doc, profile).result, f64::value(40.0));
+}
+
+/// The demo's circle of `radius`, as its `circle` function makes it.
+fn circle(binders: &Binders, radius: ::core::primitive::f64) -> Value {
+    Value::record([(
+        binders["circle"],
+        Value::record([(binders["radius"], f64::value(radius))]),
+    )])
 }
 
 fn demo_fixture() -> (Document, Binders) {
@@ -73,7 +80,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         ("nested_result", f64::value(70.0)),
         ("evaluate_result", f64::value(7.0)),
         ("graph_function_result", f64::value(34.0)),
-        ("circle_result", geometry::value(34.0)),
+        ("circle_result", circle(&binders, 34.0)),
         ("match_result", f64::value(3.0)),
         ("quoted_match_result", f64::value(3.0)),
         ("metadata_call", f64::value(7.0)),
@@ -137,7 +144,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             evaluated_expression(demo_entry(&doc, &binders, "circle_result")),
         )
         .result,
-        geometry::value(54.0)
+        circle(&binders, 54.0)
     );
     assert_eq!(
         evaluate(

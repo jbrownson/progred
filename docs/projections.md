@@ -15,11 +15,10 @@ window, or file services.
 Progred's [libraries module](../progred/src/libraries/mod.rs) contains
 conceptual libraries as modules alongside their editor-facing widgets, each a
 contribution through the [library interface](../progred/src/library.rs): names,
-text, f64, Grap, geometry, presentation, layout, and other domains. The
-built-in `libraries::grap` module owns Grap's self-description, the `evaluate`
-Rust function, its evaluation control and arithmetic, and Grap's projection;
-geometry and CAD concepts remain separate
-libraries. Nothing in this representation requires Rust FFIs, which leaves room
+text, f64, Grap, presentation, layout, and other domains. The built-in
+`libraries::grap` module owns Grap's self-description, the `evaluate` Rust
+function, its evaluation control and arithmetic, and Grap's projection; CAD
+concepts remain separate libraries. Nothing in this representation requires Rust FFIs, which leaves room
 for [editor-authored libraries](deferred.md#editor-authored-libraries). A
 `Library` carries definitions and one partial projection. A library with several
 forms composes them with

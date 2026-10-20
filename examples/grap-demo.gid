@@ -6,7 +6,7 @@
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "cases": a9aadcb44755963498c743fa114f0f00,
-    "circle": eba2ca3d6a0fba957bd96bfb138c7a5b,
+    "circle": d5b1987b1c5d06e6cd92a93dc031e5fb,
     "circle_result": d3c65193be0a6f2a79d7d159252bab8d,
     "contains_call": 32994f52e9af60be47619b6f15366ac7,
     "demo": 91af60b2a8d1d93fe4de7551004fe50c,
@@ -40,7 +40,7 @@
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "quote_generator": b4d0601d7c58b203646a3bf8e7d5681d,
     "quoted_match_result": c1f6c6ab6c929a0a0dcf08cf6ce9aab6,
-    "radius": e2321b78d65f87918c64b7875408051a,
+    "radius": c56b7e320d753ea059eb5d7eacb49f10,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "scale": ccba1404490345dcf33d8a19ddaa5bd1,
     "scale_and_add": b952167aa1bbf114a8586a966591b373,
@@ -57,6 +57,22 @@
   "cells": {
     metadata_call: {
       name: "call with metadata",
+    },
+    circle: {
+      name: "circle",
+      params: [
+        radius,
+      ],
+      body: {
+        function: quote,
+        expression: {
+          circle: {
+            radius: {
+              unquote: radius,
+            },
+          },
+        },
+      },
     },
     circle_result: {
       name: "circle result",
@@ -134,6 +150,9 @@
     },
     quoted_match_result: {
       name: "quoted match result",
+    },
+    radius: {
+      name: "radius",
     },
     scale: {
       name: "scale",

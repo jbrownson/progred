@@ -13,7 +13,6 @@
     "cases": a9aadcb44755963498c743fa114f0f00,
     "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
     "children": e10b73d5482f96ca7d3852c0f16b49ea,
-    "circle": eba2ca3d6a0fba957bd96bfb138c7a5b,
     "col": 64bad273f94f32f9957b99a6e4d14d39,
     "color": 897fc1c794c08a0506590276aa72a3d7,
     "commands": b3604c47bef05aa4c7ef0b2d5794da14,
@@ -62,7 +61,6 @@
     "primary": 09f73c1a02464b762ae34adc9ec17baa,
     "profile": 3624cc3724556440847e7da953d398fc,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
-    "radius": e2321b78d65f87918c64b7875408051a,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "roof": 06068f483e95e24492a0835caa2751cb,
     "rounded_rect": b07684708c0d04b7dfd66b9ec7ecf35b,
@@ -290,16 +288,13 @@
       style: _321ee,
       profile: {
         evaluate: {
-          function: circle,
-          radius: {
-            right: {
-              f64: 0x0000000000002040,
-            },
-            function: multiply,
-            left: {
-              amount: pitch_value,
-              function: double,
-            },
+          right: {
+            f64: 0x0000000000002040,
+          },
+          function: multiply,
+          left: {
+            amount: pitch_value,
+            function: double,
           },
         },
       },

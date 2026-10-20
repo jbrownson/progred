@@ -15,7 +15,6 @@ pub mod declared;
 pub mod f32;
 pub mod f64;
 pub mod fidget;
-pub mod geometry;
 pub mod grap;
 pub mod layout;
 pub mod list;
