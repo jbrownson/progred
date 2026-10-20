@@ -42,21 +42,6 @@ pub fn stop<W: 'static, H: 'static>(
     )
 }
 
-/// The occurrence `child` draws in place of, as drawing nothing of its own:
-/// it has no landmark, so selection and keyboard navigation pass straight to
-/// what `child` contains.
-pub fn transparent<W: 'static, H: 'static>(
-    child: crate::display::Layout<W, H>,
-) -> crate::display::Layout<W, H> {
-    super::before(
-        child,
-        Rc::new(|context| {
-            let path: Rc<[Step]> = Rc::from(context.path());
-            Box::new(move |output, _| output.transparent(path))
-        }),
-    )
-}
-
 pub fn group<W: 'static, H: 'static>(
     child: crate::display::Layout<W, H>,
 ) -> crate::display::Layout<W, H> {
@@ -159,22 +144,16 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     }
                     None => false,
                 };
-                let transparent = output.transparent.take().is_some_and(|at| {
-                    debug_assert!(at == path, "transparency at another occurrence");
-                    at == path
+                output.landmarks.push(Landmark {
+                    root: None,
+                    path,
+                    rect: placement.rect,
+                    select,
+                    scope,
+                    secondary,
+                    selected,
+                    tab_stop,
                 });
-                if !transparent {
-                    output.landmarks.push(Landmark {
-                        root: None,
-                        path,
-                        rect: placement.rect,
-                        select,
-                        scope,
-                        secondary,
-                        selected,
-                        tab_stop,
-                    });
-                }
                 output
             },
         );

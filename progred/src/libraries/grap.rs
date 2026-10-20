@@ -5,7 +5,7 @@
 //! representations in [`numbers`].
 
 use crate::computations::memo;
-use crate::display::host::{Host, Layout, Partial, ProjectionInput};
+use crate::display::host::{Host, Layout, Partial, Projected, ProjectionInput};
 use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
 
@@ -26,14 +26,17 @@ mod suggestions;
 
 pub(crate) fn expression<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-) -> Option<Layout<W>> {
+) -> Option<Projected<W>> {
     match input.value {
-        Some(_) => shallow_cell(input),
+        Some(_) => shallow_cell(input).map(Projected::from),
         None => (input.default_projection)(input).or_else(|| {
-            Some(picker(Picker::new(
-                CompletionKind::Value,
-                ranked(std::rc::Rc::new(suggestions::offers)),
-            )))
+            Some(
+                picker(Picker::new(
+                    CompletionKind::Value,
+                    ranked(std::rc::Rc::new(suggestions::offers)),
+                ))
+                .into(),
+            )
         }),
     }
 }

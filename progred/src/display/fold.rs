@@ -147,6 +147,6 @@ fn key(command: puri::keyboard::CommandModifier, event: &KeyboardEvent) -> Optio
 /// starting open.
 pub fn folding<W: Host>(partial: Partial<W>) -> Partial<W> {
     crate::display::runtime_partial(move |input| {
-        partial(input).map(|open| foldable(Delim::Brace, None, |_| false, open))
+        partial(input).map(|open| foldable(Delim::Brace, None, |_| false, open.layout))
     })
 }

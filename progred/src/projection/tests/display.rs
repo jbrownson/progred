@@ -130,10 +130,11 @@ fn pane_entry_still_follows_cells_but_stops_at_the_first_non_cell() {
     });
     let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
     let calls = seen.clone();
-    let projection = Projection::default().with_entry(crate::display::partial(move |input| {
-        calls.borrow_mut().push(input.value?.clone());
-        None
-    }));
+    let projection =
+        Projection::default().with_entry(crate::display::partial(move |input| -> Option<Layout> {
+            calls.borrow_mut().push(input.value?.clone());
+            None
+        }));
     world.stack.projection = projection;
     editing_frame(&mut world);
     assert_eq!(*seen.borrow(), [Value::Cell(cell), definition]);
@@ -151,7 +152,7 @@ fn descents_replace_current_and_default_projections_independently() {
         let seen = Rc::new(std::cell::RefCell::new(Vec::new()));
         let current_seen = seen.clone();
         let current = partial(
-            move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
+            move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| -> Option<Layout> {
                 current_seen
                     .borrow_mut()
                     .push(("current", input.value?.clone()));

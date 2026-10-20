@@ -178,7 +178,7 @@ pub fn test_site() -> crate::editing::Site {
 pub fn projection_input<'a, V>(env: &'a dyn Env, value: &'a V) -> ProjectionInput<'a, V> {
     ProjectionInput {
         env,
-        default_projection: crate::display::runtime_partial(|_| None),
+        default_projection: crate::display::declining(),
         value: Some(value),
         scale_factor: 1.0,
         writable: true,
@@ -191,12 +191,12 @@ pub fn projection_input<'a, V>(env: &'a dyn Env, value: &'a V) -> ProjectionInpu
 
 /// `projection` of `input`'s value read as a runtime value, as the projection
 /// runtime hands values to projections.
-pub fn project_runtime(
-    projection: impl FnOnce(&ProjectionInput<'_, grap::RuntimeValue>) -> Option<Layout>,
+pub fn project_runtime<P: Into<crate::display::host::Projected<Editor>>>(
+    projection: impl FnOnce(&ProjectionInput<'_, grap::RuntimeValue>) -> Option<P>,
     input: &ProjectionInput<'_>,
 ) -> Option<Layout> {
     let value = input.value.map(grap::RuntimeValue::from);
-    projection(&input.with_value(value.as_ref()))
+    projection(&input.with_value(value.as_ref())).map(|projected| projected.into().layout)
 }
 
 pub fn picked(layout: &impl Recordable<Editor, Hovered>) -> Option<gid::Value> {

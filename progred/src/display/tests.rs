@@ -42,7 +42,7 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
 
 fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {
     projection(&ProjectionInput {
-        default_projection: partial(|_| None),
+        default_projection: declining(),
         env: &NoEval,
         value: Some(&Value::record([]).into()),
         scale_factor: 1.0,
@@ -52,6 +52,7 @@ fn run_partial(projection: &Partial<(), ()>) -> Option<Layout<(), ()>> {
         state: None,
         occurrence: &|| panic!("unexpected site lookup"),
     })
+    .map(|projected| projected.layout)
 }
 
 #[test]
@@ -80,7 +81,7 @@ fn partial_composition_preserves_order_and_stops_at_success() {
     let first = projection(1, false);
     let second = projection(2, false);
     let third = projection(3, true);
-    let unreachable = partial(|_| panic!("later partial must not run"));
+    let unreachable: Partial<(), ()> = Rc::new(|_| panic!("later partial must not run"));
     for combined in [
         compose_partials([
             first.clone(),
@@ -107,8 +108,8 @@ fn all_declining_partials_leave_fallback_to_the_caller() {
 
 #[test]
 fn recorder_preserves_local_and_descendant_projection_inputs() {
-    let local = partial::<(), ()>(|_| None);
-    let default = partial::<(), ()>(|_| None);
+    let local = declining::<(), ()>();
+    let default = declining::<(), ()>();
     let step = Step::Key(gid::new_cell_id());
     for layout in [
         descend([step.clone()], Some(local.clone()), Some(default.clone())),
