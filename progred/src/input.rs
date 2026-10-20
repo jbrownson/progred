@@ -92,6 +92,18 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
     }
 }
 
+/// `event` with its pixels magnified by the editor's `zoom`, as the display
+/// is, so a swipe scrolls as much content at any zoom. Lines and pages are
+/// already in content units.
+fn zoomed(event: &PointerScrollEvent, zoom: f64) -> PointerScrollEvent {
+    let mut event = event.clone();
+    if let ScrollDelta::PixelDelta(delta) = &mut event.delta {
+        delta.x *= zoom;
+        delta.y *= zoom;
+    }
+    event
+}
+
 fn window_pointer(position: Point, size: Size) -> Option<Point> {
     Rect::from_origin_size(Point::ZERO, size)
         .contains(position)
@@ -290,7 +302,7 @@ impl EditorRunner {
                 if let Some(pending) = queue(
                     &mut self.pending_scroll,
                     PendingScroll {
-                        events: vec![event.clone()],
+                        events: vec![zoomed(event, self.editor.zoom)],
                         scale,
                         viewport,
                     },

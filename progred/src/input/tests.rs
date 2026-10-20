@@ -1093,3 +1093,25 @@ fn outside_drag_positions_do_not_become_hover_positions() {
         assert_eq!(window_pointer(point, size), None);
     }
 }
+
+#[test]
+fn a_swipe_scrolls_as_much_content_at_any_zoom() {
+    let lines = gid::Value::list((0..100).map(|line| {
+        text::value(format!(
+            "line {line} of a list long enough that each sits on its own row"
+        ))
+    }));
+    for zoom in [1.0, 2.0] {
+        let mut driver = crate::driver::Driver::of(lines.clone());
+        driver.runner.editor.zoom = zoom;
+        driver.present();
+        let line = driver.element(&[], 5, &[]);
+        let before = driver.rect(&line).y0;
+        driver.swipe_at(Point::new(100.0, 100.0), kurbo::Vec2::new(0.0, -40.0));
+        let moved = before - driver.rect(&line).y0;
+        assert!(
+            (moved - 40.0 * zoom).abs() < 1e-6,
+            "at {zoom}x a 40 pixel swipe moves the content {moved} pixels"
+        );
+    }
+}

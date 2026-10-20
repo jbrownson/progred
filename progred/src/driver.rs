@@ -78,6 +78,20 @@ impl<P> Driver<P> {
         });
     }
 
+    /// A trackpad swipe of `pixels` with the pointer at `point`: positive
+    /// `y` scrolls up, positive `x` left.
+    #[cfg(test)]
+    pub(crate) fn swipe_at(&mut self, point: Point, pixels: Vec2) {
+        self.move_to(point);
+        self.window_event(WindowEvent::MouseWheel {
+            device_id: DeviceId::dummy(),
+            delta: MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(
+                pixels.x, pixels.y,
+            )),
+            phase: TouchPhase::Moved,
+        });
+    }
+
     pub(crate) fn present(&mut self) {
         for _ in 0..8 {
             self.runner

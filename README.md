@@ -154,7 +154,8 @@ or F10 opens it from the keyboard.
   labels show identities instead of names.
 - **Zoom In**, **Zoom Out**, and **Actual Size** in the View menu
   (Command-+, Command-−, Command-0) scale everything in the window, as the
-  browser's zoom does on the web.
+  browser's zoom does on the web. Scrolling scales too, so a swipe moves as
+  much of the document at any zoom.
 
 Examples replace the current document after the desktop's unsaved-changes
 confirmation. New Document does the same; New Window opens another window.
