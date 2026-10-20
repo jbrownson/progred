@@ -107,7 +107,7 @@ fn section_tags_are_explicit_exclusive_and_open_to_metadata() {
     for section in [
         Value::record([]),
         Value::record([(CUTTING, shape.clone()), (NON_CUTTING, shape)]),
-        Value::record([(CUTTING, crate::libraries::logic::value(true))]),
+        Value::record([(CUTTING, ::grap::logic::value(true))]),
     ] {
         assert!(read_section(section).is_none());
     }
@@ -167,7 +167,7 @@ fn arcs_use_named_bend_tags_and_reject_ambiguous_segments() {
                 (CONVEX_ARC, f64::value(0.1)),
                 (AXIAL, f64::value(0.1)),
             ]),
-            Value::record([(tag, crate::libraries::logic::value(false))]),
+            Value::record([(tag, ::grap::logic::value(false))]),
         ] {
             assert!(read_segment(start, segment).is_none());
         }

@@ -32,7 +32,6 @@ fn infix_children(layout: &Layout) -> Option<Vec<Recorded<crate::Editor, crate::
     )
 }
 use crate::display::recording::{Recordable, Recorded};
-use crate::libraries::logic;
 use ::grap::vocabulary::FUNCTION;
 
 use crate::display::test_support::{NoEval, ProjectionCall, inspect, unshared};
@@ -126,7 +125,7 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
                 crate::libraries::grap::numbers::f64::IS_FINITE,
                 value(input)
             )),
-            logic::value(input.is_finite()),
+            ::grap::logic::value(input.is_finite()),
         );
     }
     for function in [

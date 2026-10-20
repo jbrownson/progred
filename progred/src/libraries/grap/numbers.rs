@@ -9,7 +9,7 @@ use crate::display::host::{Host, Layout, Partial};
 use crate::libraries::number::{Representation, Scrubbable};
 use crate::libraries::representation::{Precedence, calls, infix_display};
 use crate::libraries::u64 as u64_library;
-use crate::libraries::{f32 as f32_library, f64 as f64_library, logic};
+use crate::libraries::{f32 as f32_library, f64 as f64_library};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
@@ -394,13 +394,13 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
                     .unwrap_or_else(|| ::grap::absent::value(failure).into())
             }),
             Operation::Comparison(apply) => {
-                self.binary(move |left, right| logic::value(apply(left, right)).into())
+                self.binary(move |left, right| RuntimeValue::bool(apply(left, right)))
             }
             Operation::Unary(apply, operand_not) => {
                 self.unary(operand_not, move |operand| runtime(apply(operand)))
             }
             Operation::Predicate(apply, operand_not) => self.unary(operand_not, move |operand| {
-                logic::value(apply(operand)).into()
+                RuntimeValue::bool(apply(operand))
             }),
         }
     }

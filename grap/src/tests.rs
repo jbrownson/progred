@@ -1393,3 +1393,17 @@ fn apply_classifies_missing_arguments_and_uncallable_targets() {
         absent::with_detail(absent::NOT_CALLABLE, absent::VALUE, blob("not a function"))
     );
 }
+
+#[test]
+fn a_native_boolean_answers_as_its_record() {
+    for value in [true, false] {
+        let native = RuntimeValue::bool(value);
+        assert_eq!(native.to_value(), logic::value(value));
+        assert_eq!(native.record_len(), Some(1));
+        assert_eq!(
+            native.field(logic::BOOL).and_then(|field| field.as_cell()),
+            Some(if value { logic::TRUE } else { logic::FALSE })
+        );
+        assert_eq!(logic::read(&native.into_value()), Some(value));
+    }
+}

@@ -21,6 +21,7 @@ pub(crate) struct Unboxed {
 pub(crate) enum Native {
     F64(f64),
     Text(Rc<str>),
+    Bool(bool),
 }
 
 impl Native {
@@ -31,6 +32,7 @@ impl Native {
         crate::f64::read_record(fields)
             .map(Self::F64)
             .or_else(|| crate::text::read_record(fields).map(|text| Self::Text(text.into())))
+            .or_else(|| crate::logic::read_record(fields).map(Self::Bool))
     }
 
     /// The label of the field holding the value in its record form.
@@ -38,6 +40,7 @@ impl Native {
         match self {
             Self::F64(_) => crate::f64::F64,
             Self::Text(_) => crate::text::UTF8,
+            Self::Bool(_) => crate::logic::BOOL,
         }
     }
 
@@ -46,6 +49,7 @@ impl Native {
         match self {
             Self::F64(number) => crate::f64::encode(*number),
             Self::Text(text) => crate::text::encode(text.as_ref()),
+            Self::Bool(value) => crate::logic::encode(*value),
         }
     }
 
@@ -58,6 +62,7 @@ impl Native {
         match (self, other) {
             (Self::F64(a), Self::F64(b)) => a.to_bits() == b.to_bits(),
             (Self::Text(a), Self::Text(b)) => Rc::ptr_eq(a, b) || a == b,
+            (Self::Bool(a), Self::Bool(b)) => a == b,
             _ => false,
         }
     }

@@ -591,7 +591,10 @@ fn matches_pattern(
                 Ok(false)
             }
         }
-        Value::Cell(_) | Value::Blob(_) => Ok(value.to_value() == *pattern),
+        // Only plain data can equal an atom, so these compare it directly
+        // rather than converting the value back into GID.
+        Value::Cell(cell) => Ok(value.as_cell() == Some(*cell)),
+        Value::Blob(_) => Ok(value.as_blob() == pattern.as_blob()),
     }
 }
 

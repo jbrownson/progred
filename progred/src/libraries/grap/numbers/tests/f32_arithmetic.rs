@@ -1,7 +1,6 @@
 //! f32's arithmetic in Grap.
 
 use crate::libraries::f32::*;
-use crate::libraries::logic;
 use crate::test_support::evaluate_with;
 use crate::test_values::binary_call;
 use gid::Value;
@@ -53,7 +52,7 @@ fn comparisons_are_logic_values() {
                 value(2.0)
             )
         ),
-        logic::value(true)
+        ::grap::logic::value(true)
     );
     assert_eq!(
         evaluate_with(
@@ -64,7 +63,7 @@ fn comparisons_are_logic_values() {
                 value(1.0)
             )
         ),
-        logic::value(false)
+        ::grap::logic::value(false)
     );
     assert_eq!(
         evaluate_with(
@@ -75,7 +74,7 @@ fn comparisons_are_logic_values() {
                 value(2.0)
             )
         ),
-        logic::value(true)
+        ::grap::logic::value(true)
     );
     assert_eq!(
         evaluate_with(
@@ -86,7 +85,7 @@ fn comparisons_are_logic_values() {
                 value(2.5)
             )
         ),
-        logic::value(false)
+        ::grap::logic::value(false)
     );
 }
 

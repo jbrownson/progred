@@ -1,6 +1,5 @@
 //! u64's arithmetic in Grap.
 
-use crate::libraries::logic;
 use crate::libraries::u64::*;
 use crate::test_support::evaluate_with;
 use crate::test_values::binary_call;
@@ -100,7 +99,7 @@ fn comparisons_are_logic_values() {
                 value(2)
             )
         ),
-        logic::value(true)
+        ::grap::logic::value(true)
     );
     assert_eq!(
         evaluate_with(
@@ -111,7 +110,7 @@ fn comparisons_are_logic_values() {
                 value(2)
             )
         ),
-        logic::value(false)
+        ::grap::logic::value(false)
     );
     assert_eq!(
         evaluate_with(
@@ -122,7 +121,7 @@ fn comparisons_are_logic_values() {
                 value(2)
             )
         ),
-        logic::value(true)
+        ::grap::logic::value(true)
     );
 }
 
