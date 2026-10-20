@@ -142,8 +142,10 @@ browser or proxy that drops those headers), `load.mjs` loads a second build
 from `web/pkg-fallback` instead. It has no workers: Rayon runs on the page's
 thread, and the editor's `Computations` have no background tasks, so the three
 3D toolpath previews draw a note in their box rather than freeze the page.
-Everything else behaves the same. Both builds need WebAssembly SIMD, and
-neither runs from a `file://` URL.
+Everything else behaves the same. `threads=0` in the editor's URL loads the
+fallback on an isolated page too, to try it where the site is served with the
+headers. Both builds need WebAssembly SIMD, and neither runs from a `file://`
+URL.
 
 One-time build prerequisites:
 

@@ -120,7 +120,9 @@
           if (!response.ok) throw new Error(`Could not load the example (${response.status})`);
           source = await response.text();
         }
-        const threaded = globalThis.crossOriginIsolated === true;
+        const threads = params.has("threads") ? Number(params.get("threads")) : undefined;
+        // threads=0 runs the fallback build, as a page without isolation does.
+        const threaded = globalThis.crossOriginIsolated === true && threads !== 0;
         let url;
         ({ wasm, url } = await loadEditor(threaded));
         const example = params.get("example");
@@ -130,12 +132,13 @@
           if (source === undefined) throw new Error(`There's no example named ${example}`);
         }
         if (threaded) {
-          await startWorker(wasm, url, wasm.computation_finished, fail,
-            params.has("threads") ? Number(params.get("threads")) : undefined);
+          await startWorker(wasm, url, wasm.computation_finished, fail, threads);
         }
         const renderer = await wasm.prepare_renderer(canvas);
         console.info(`Progred presentation: ${renderer}; `
-          + (threaded ? `${wasm.worker_threads()} render workers` : "no render workers (the page isn't cross-origin isolated)"));
+          + (threaded ? `${wasm.worker_threads()} render workers`
+            : globalThis.crossOriginIsolated === true ? "no render workers (threads=0)"
+            : "no render workers (the page isn't cross-origin isolated)"));
         const channel = params.get("observe");
         const onChange = channel === null ? undefined : (state) => {
           window.parent.postMessage({ type: "progred:change", channel, state: JSON.parse(state) }, location.origin);

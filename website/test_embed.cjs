@@ -106,6 +106,11 @@ test("a page without cross-origin isolation starts the fallback build without wo
   assert.equal(loading.style.display, "none");
 });
 
+test("threads=0 starts the fallback build even on an isolated page", async () => {
+  const { calls } = await start("?threads=0");
+  assert.deepEqual(calls, [["init", "pkg-fallback"], ["editor", undefined, true, undefined, undefined, undefined, false, "light"]]);
+});
+
 test("embedded pointer modifiers reach WASM before the first click", async () => {
   const { canvas, modifierChanges } = await start("?menu=hidden&wheel=page");
   const move = new Event("pointermove", { cancelable: true });
