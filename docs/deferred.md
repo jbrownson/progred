@@ -185,7 +185,12 @@ list survives a reload. Left for later:
   per-replica tiebreaker, which positions' open-ended bytes allow without a
   format change. Concurrent runs at one spot can interleave, which newer list
   CRDTs such as Fugue avoid.
-- The clipboard's JSON form still keeps only the order.
+- **The clipboard's plain text.** A structural copy rides the private
+  clipboard format as its saved text form, positions included, so pasting
+  over itself keeps paths into its lists. The plain text written beside it,
+  which other apps paste, is still Value JSON, keeping only the order. A
+  readable text rendering would serve them better: what the projections
+  draw, read off as text, rather than structure spelled with cell IDs.
 
 ## Native GID storage
 

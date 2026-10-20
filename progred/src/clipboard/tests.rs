@@ -27,9 +27,9 @@ fn clipboard_spellings_round_trip() {
         Value::record([(cell, Value::from(vec![0x00_u8]))]),
     ];
     for value in structures {
-        let (text, structural) = spelling(&value);
+        let (_, structural) = spelling(&value);
         assert!(structural);
-        assert_eq!(from_structure(text.as_bytes()), Some(value));
+        assert_eq!(from_structure(&structure_bytes(&value)), Some(value));
     }
     // Atoms read in other apps; alien text pastes sensibly — and
     // TEXT IS NEVER STRUCTURE: characters that happen to spell
@@ -45,4 +45,23 @@ fn clipboard_spellings_round_trip() {
         resolve_query(&spelled),
         crate::libraries::text::value(&spelled)
     );
+}
+
+#[test]
+fn structure_keeps_list_positions() {
+    let (document, _) =
+        crate::gid_text::parse(r#"{"root": [0x40: 0x01, 0x40ff: [0x80: 0x02]]}"#).unwrap();
+    let list = document.root.unwrap();
+    let pasted = from_structure(&structure_bytes(&list)).unwrap();
+    let positions = |value: &Value| -> Vec<Vec<u8>> {
+        value
+            .as_list()
+            .unwrap()
+            .keys()
+            .map(|position| position.as_bytes().to_vec())
+            .collect()
+    };
+    assert_eq!(positions(&pasted), [vec![0x40], vec![0x40, 0xff]]);
+    let inner = |value: &Value| value.as_list().unwrap().values().nth(1).unwrap().clone();
+    assert_eq!(positions(&inner(&pasted)), [vec![0x80]]);
 }

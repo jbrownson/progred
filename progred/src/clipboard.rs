@@ -33,7 +33,7 @@ impl Clipboard {
     pub(crate) fn copy(&mut self, text: String, structure: Option<&Value>) -> bool {
         match self {
             #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
-            Self::System => system::copy(text, structure.is_some()),
+            Self::System => system::copy(text, structure.map(structure_bytes)),
             Self::Own {
                 text: held,
                 structure: carried,
@@ -84,7 +84,7 @@ impl TextClipboard for Clipboard {
 /// and blobs spell as the query language — quoted text and `0x` hex —
 /// and are not structure: their text is their faithful form. Links,
 /// lists, and records spell as Value JSON and ARE: the shell writes
-/// that spelling under the private clipboard format too, whose
+/// their saved form under the private clipboard format too, whose
 /// presence is what says "structure" — never the text's shape, so
 /// text that happens to spell Value JSON stays text.
 pub(crate) fn spelling(value: &Value) -> (String, bool) {
@@ -98,10 +98,25 @@ pub(crate) fn spelling(value: &Value) -> (String, bool) {
     }
 }
 
+/// The private clipboard format's bytes for `value`: the saved text form
+/// of a document holding only it, so a paste keeps its list positions, and
+/// the paths into them, as saving does.
+#[cfg(any(test, target_os = "macos", target_os = "linux"))]
+fn structure_bytes(value: &Value) -> Vec<u8> {
+    let document = gid::Document {
+        root: Some(value.clone()),
+        cells: gid::Cells::new(),
+    };
+    crate::gid_text::print(&document, &Default::default()).into_bytes()
+}
+
 /// The value the private clipboard format's bytes denote.
 #[cfg(any(test, target_os = "macos", target_os = "linux"))]
 fn from_structure(bytes: &[u8]) -> Option<Value> {
-    serde_json::from_slice(bytes).ok()
+    crate::gid_text::parse(std::str::from_utf8(bytes).ok()?)
+        .ok()?
+        .0
+        .root
 }
 
 #[cfg(all(not(test), any(target_os = "macos", target_os = "linux")))]
@@ -120,19 +135,16 @@ mod system {
             .and_then(|cb| cb.get_text().ok())
     }
 
-    pub(super) fn copy(text: String, structural: bool) -> bool {
+    pub(super) fn copy(text: String, structure: Option<Vec<u8>>) -> bool {
         ClipboardContext::new()
-            .and_then(|cb| {
-                if structural {
-                    // Both representations: the private format says
-                    // "structure", the text reads anywhere.
-                    cb.set(vec![
-                        ClipboardContent::Other(FORMAT.to_string(), text.clone().into_bytes()),
-                        ClipboardContent::Text(text),
-                    ])
-                } else {
-                    cb.set_text(text)
-                }
+            .and_then(|cb| match structure {
+                // Both representations: the private format says
+                // "structure", the text reads anywhere.
+                Some(bytes) => cb.set(vec![
+                    ClipboardContent::Other(FORMAT.to_string(), bytes),
+                    ClipboardContent::Text(text),
+                ]),
+                None => cb.set_text(text),
             })
             .is_ok()
     }
