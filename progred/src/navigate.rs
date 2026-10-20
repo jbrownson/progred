@@ -110,16 +110,19 @@ pub fn select_all<'a, World>(
     .flatten()
 }
 
-/// What's drawn at the root of `root`'s view.
+/// What's drawn at the root of `root`'s view: the document view's outermost
+/// value, which is the workspace's main value where the root declares one.
 fn root_target<'a, World>(
     landmarks: &'a [Landmark<World>],
     root: &Root,
 ) -> Option<&'a Landmark<World>> {
-    let path = match root.target() {
-        Target::Pane { path } => path.as_slice(),
-        Target::Document => &[],
-    };
-    landmark_at(landmarks, Some(root), path)
+    match root.target() {
+        Target::Pane { path } => landmark_at(landmarks, Some(root), path),
+        Target::Document => landmarks
+            .iter()
+            .filter(|landmark| landmark.root.as_ref() == Some(root))
+            .min_by_key(|landmark| landmark.path.len()),
+    }
 }
 
 /// The stop after the drawn `path`: its next sibling, else the one after its

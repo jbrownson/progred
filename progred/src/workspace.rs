@@ -1,8 +1,8 @@
 //! Editor-owned views over one document. The document stays in the
 //! center; panes form independently sized columns on either side.
-//! A root convention may declare pane membership, side, order, and a
-//! presentation function; view mode, annotations, scroll, and live
-//! sizing remain process state.
+//! A root convention may declare the main value the document view shows,
+//! pane membership, side, order, and a presentation function; view mode,
+//! annotations, scroll, and live sizing remain process state.
 
 use crate::annotations::Annotations;
 use crate::display::widget::view::{Root, Target};
@@ -15,6 +15,9 @@ use kurbo::{Rect, Size, Vec2};
 pub mod vocabulary {
     use gid::CellId;
 
+    /// The value the document view shows in place of the whole root, so the
+    /// workspace's own fields stay out of sight.
+    pub const MAIN: CellId = CellId::from_u128(0xf146d8a1d3174d9ab6136b4334768a2f);
     pub const PANES: CellId = CellId::from_u128(0xf30d400a4321a4d44d1628a8adc5a84d);
     pub const LEFT: CellId = CellId::from_u128(0xdc3a1b9a7fb4bc348760160e3b365bca);
     pub const RIGHT: CellId = CellId::from_u128(0xf13a5c1c4471c00178575a0e876768f8);
@@ -183,6 +186,16 @@ pub struct Declaration {
     pub path: Path,
 }
 
+/// The path to `root`'s main value: where it declares one, or would, holding
+/// only a workspace's own fields, as after the value it had was deleted.
+pub fn main_path(root: Option<&Value>) -> Option<Path> {
+    let fields = root?.as_record()?;
+    let workspace = |key: &CellId| [vocabulary::PANES, vocabulary::LIBRARIES].contains(key);
+    (fields.get(&vocabulary::MAIN).is_some()
+        || fields.get(&vocabulary::PANES).is_some() && fields.iter().all(|(key, _)| workspace(key)))
+    .then(|| vec![Step::Key(vocabulary::MAIN)])
+}
+
 /// Read pane declarations only from the document root. No recursive
 /// search means an identical record deeper in user data stays data.
 pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
@@ -257,18 +270,36 @@ fn pane_path(side: Side, position: gid::Position) -> Path {
     ]
 }
 
+/// `root` as a record to add the workspace's fields to: as it is if it
+/// already has them, and otherwise wrapped as a new workspace's main value,
+/// which moves every path into it under `main`. Whether it was wrapped.
+pub fn workspace_root(root: &Value) -> (Value, bool) {
+    match root.as_record() {
+        Some(fields)
+            if fields.get(&vocabulary::PANES).is_some()
+                || fields.get(&vocabulary::MAIN).is_some() =>
+        {
+            (root.clone(), false)
+        }
+        _ => (Value::record([(vocabulary::MAIN, root.clone())]), true),
+    }
+}
+
 pub fn can_open(root: Option<&Value>) -> bool {
-    root.and_then(Value::as_record).is_some_and(|fields| {
-        fields.get(&vocabulary::PANES).is_none_or(|panes| {
-            panes.as_record().is_some_and(|panes| {
-                [vocabulary::LEFT, vocabulary::RIGHT].iter().all(|side| {
-                    panes
-                        .get(side)
-                        .is_none_or(|value| value.as_list().is_some())
+    let root = root.map(|root| workspace_root(root).0);
+    root.as_ref()
+        .and_then(Value::as_record)
+        .is_some_and(|fields| {
+            fields.get(&vocabulary::PANES).is_none_or(|panes| {
+                panes.as_record().is_some_and(|panes| {
+                    [vocabulary::LEFT, vocabulary::RIGHT].iter().all(|side| {
+                        panes
+                            .get(side)
+                            .is_none_or(|value| value.as_list().is_some())
+                    })
                 })
             })
         })
-    })
 }
 
 pub fn append(root: &Value, side: Side, value: Value) -> Option<(Value, Path)> {

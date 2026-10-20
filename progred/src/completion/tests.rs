@@ -119,10 +119,8 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
         let world = crate::libraries::test_widgets::activate_completion(offer);
         let document = &world.model.doc;
         let inserted = document.root.clone().unwrap();
-        let cell = inserted
-            .as_record()
-            .unwrap()
-            .get(&field)
+        let main = crate::workspace::vocabulary::MAIN;
+        let cell = crate::test_support::value_at(&inserted, &[Step::Key(main), Step::Key(field)])
             .and_then(Value::as_cell)
             .unwrap();
         assert!(document.cells.value(cell).is_none());
@@ -148,7 +146,11 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
         let selected = world.model.selection.as_ref().unwrap();
         assert_eq!(
             selected.path(),
-            [Step::Key(field), Step::Follow(Resolution::Document)]
+            [
+                Step::Key(main),
+                Step::Key(field),
+                Step::Follow(Resolution::Document)
+            ]
         );
         assert_eq!(
             selected.stage(&src(document, &stack.libraries)),
@@ -213,6 +215,7 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
         world.model.selection.as_ref().unwrap().path(),
         [
             Step::Key(field),
+            Step::Key(crate::workspace::vocabulary::MAIN),
             Step::Key(crate::libraries::grap::vocabulary::GRAP),
             Step::Follow(Resolution::Document),
         ]

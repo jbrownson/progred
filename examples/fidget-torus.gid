@@ -5,6 +5,7 @@
     "ffi": 912adb7252d689659b6de9eeeb827658,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "main": f146d8a1d3174d9ab6136b4334768a2f,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
@@ -81,9 +82,11 @@
     },
   },
   "root": {
-    fidget: [
-      torus,
-    ],
+    main: {
+      fidget: [
+        torus,
+      ],
+    },
     panes: {
       pane_left: [
         {

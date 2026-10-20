@@ -142,15 +142,29 @@ fn panes_are_values_and_their_edits_are_document_edits() {
 }
 
 #[test]
-fn opening_panes_preserves_malformed_containers_and_nonrecord_roots() {
+fn opening_a_pane_wraps_a_bare_root_and_preserves_malformed_containers() {
     let value = Value::from(b"data".to_vec());
+    let malformed = Value::record([(vocabulary::PANES, value.clone())]);
+    assert!(!can_open(Some(&malformed)));
+    assert!(append(&malformed, Side::Left, value.clone()).is_none());
+    // A root without the workspace's fields becomes a new workspace's main
+    // value, and stays one: the next pane opens beside the first.
     for root in [
         value.clone(),
-        Value::record([(vocabulary::PANES, value.clone())]),
+        Value::record([(CellId::from_u128(1), value.clone())]),
     ] {
-        assert!(!can_open(Some(&root)));
-        assert!(append(&root, Side::Left, value.clone()).is_none());
+        assert!(can_open(Some(&root)));
+        let (workspace, wrapped) = workspace_root(&root);
+        assert!(wrapped);
+        let (opened, path) = append(&workspace, Side::Left, value.clone()).unwrap();
+        assert_eq!(
+            crate::test_support::value_at(&opened, &[Step::Key(vocabulary::MAIN)]),
+            Some(&root)
+        );
+        assert_eq!(crate::test_support::value_at(&opened, &path), Some(&value));
+        assert_eq!(workspace_root(&opened), (opened.clone(), false));
     }
+    assert!(!can_open(None));
 }
 
 #[test]
@@ -282,4 +296,101 @@ fn only_the_root_declares_libraries() {
         libraries: &world.stack.libraries,
     };
     assert!(crate::workspace::libraries(&nested_sources).is_empty());
+}
+
+#[test]
+fn the_document_view_starts_at_a_workspace_roots_main_value() {
+    let panes = Value::record([(
+        vocabulary::PANES,
+        Value::record([(vocabulary::LEFT, Value::list([]))]),
+    )]);
+    let main = vec![Step::Key(vocabulary::MAIN)];
+    let with = |fields: &[(CellId, Value)]| {
+        Value::record(
+            panes
+                .as_record()
+                .unwrap()
+                .iter()
+                .map(|(key, value)| (*key, value.clone()))
+                .chain(fields.iter().cloned()),
+        )
+    };
+    let data = Value::record([]);
+    assert_eq!(
+        main_path(Some(&with(&[(vocabulary::MAIN, data.clone())]))),
+        Some(main.clone())
+    );
+    // Only the workspace's own fields: its main value was deleted.
+    assert_eq!(main_path(Some(&panes)), Some(main.clone()));
+    assert_eq!(
+        main_path(Some(&with(&[(vocabulary::LIBRARIES, Value::list([]))]))),
+        Some(main)
+    );
+    // Any other root draws whole.
+    assert_eq!(
+        main_path(Some(&with(&[(gid::new_cell_id(), data.clone())]))),
+        None
+    );
+    assert_eq!(main_path(Some(&data)), None);
+    assert_eq!(main_path(Some(&Value::list([]))), None);
+    assert_eq!(main_path(None), None);
+}
+
+#[test]
+fn opening_a_pane_on_a_bare_root_wraps_it_and_keeps_its_folds() {
+    use crate::driver::Driver;
+    let [outer, inner] = [CellId::from_u128(1), CellId::from_u128(2)];
+    let root = Value::record([(outer, Value::record([(inner, Value::list([]))]))]);
+    let mut world = crate::test_editor(gid::Document {
+        root: Some(root.clone()),
+        cells: Cells::new(),
+    });
+    crate::annotations::set_folded(
+        &mut world.model.workspace.document.annotations,
+        &[Step::Key(outer)],
+        false,
+        true,
+    );
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    driver.select(&[Step::Key(outer)]);
+    driver
+        .runner
+        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+            editor.run_doc_command(
+                crate::command::DocCommand::OpenPane(Side::Left),
+                dispatch.geometry(1.0),
+            );
+            true
+        });
+    driver.present();
+    let opened = driver.editor().model.doc.root.clone().unwrap();
+    assert_eq!(
+        crate::test_support::value_at(&opened, &[Step::Key(vocabulary::MAIN)]),
+        Some(&root)
+    );
+    assert_eq!(declarations(Some(&opened)).len(), 1);
+    // The document view draws the same value, now at `main`, folded as it
+    // was, and none of the workspace's own fields.
+    let main = |steps: &[Step]| [&[Step::Key(vocabulary::MAIN)][..], steps].concat();
+    assert!(driver.drawn(&main(&[Step::Key(outer)])));
+    assert!(!driver.drawn(&main(&[Step::Key(outer), Step::Key(inner)])));
+    assert!(!driver.drawn(&[Step::Key(vocabulary::PANES)]));
+}
+
+#[test]
+fn a_root_of_only_the_workspace_fields_draws_an_empty_main() {
+    use crate::driver::Driver;
+    let (root, _) = append(&Value::record([]), Side::Left, Value::list([])).unwrap();
+    let driver = Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(root),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    assert!(driver.drawn(&[Step::Key(vocabulary::MAIN)]));
+    // The record around it is drawn as nothing of its own, so it can't be
+    // selected.
+    assert!(!driver.drawn(&[]));
+    assert!(!driver.drawn(&[Step::Key(vocabulary::PANES)]));
 }

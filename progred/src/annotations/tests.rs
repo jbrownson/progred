@@ -35,3 +35,21 @@ fn absent_overrides_fall_to_the_cycle_default() {
         false
     ));
 }
+
+#[test]
+fn annotations_move_under_a_prefix_with_their_values() {
+    let (field, value) = (CellId::from_u128(1), Value::record([]));
+    let [outer, inner] = [CellId::from_u128(2), CellId::from_u128(3)];
+    let mut annotations = Annotations::default();
+    annotations.set_field(&[], field, Some(value.clone()));
+    annotations.set_field(&[Step::Key(inner)], field, Some(value.clone()));
+    let moved = annotations.under(&[Step::Key(outer)]);
+    let record = Value::record([(field, value)]);
+    assert_eq!(moved.at(&[Step::Key(outer)]), Some(&record));
+    assert_eq!(
+        moved.at(&[Step::Key(outer), Step::Key(inner)]),
+        Some(&record)
+    );
+    assert_eq!(moved.at(&[]), None);
+    assert_eq!(moved.at(&[Step::Key(inner)]), None);
+}

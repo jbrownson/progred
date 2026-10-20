@@ -499,8 +499,13 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
             .doc
             .root
             .as_ref()
-            .and_then(Value::as_record)
-            .and_then(|fields| fields.get(&fidget::vocabulary::FIDGET))
+            .and_then(|root| crate::test_support::value_at(
+                root,
+                &[
+                    Step::Key(crate::workspace::vocabulary::MAIN),
+                    Step::Key(fidget::vocabulary::FIDGET)
+                ]
+            ))
             .and_then(Value::as_cell)
             .is_some()
     );
@@ -575,6 +580,8 @@ fn root_completions_do_not_leak_into_nested_pending_values() {
     let template = |value: Option<Value>| {
         value
             .as_ref()
+            .and_then(Value::as_record)
+            .and_then(|fields| fields.get(&crate::workspace::vocabulary::MAIN))
             .and_then(Value::as_record)
             .is_some_and(|fields| {
                 fields.contains_key(&crate::libraries::grap::vocabulary::GRAP)

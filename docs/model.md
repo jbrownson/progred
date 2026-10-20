@@ -482,10 +482,24 @@ Enter must not then fall through to inserting the raw query.
 record convention:
 
 ```text
-{panes: {left: [...values...], right: [...values...]}, ...}
+{main: value, panes: {left: [...values...], right: [...values...]}, ...}
 ```
 
-The lists determine side and order; entries are ordinary values. Deleting a
+The editor library draws a workspace record as its `main` value alone, so the
+workspace's own fields stay out of sight. The record draws
+[transparently](navigation.md): it has no landmark of its own, so nothing
+selects it, and selection and navigation reach only what's inside. Plain and
+Raw leave the editor library off and show the whole record, as does turning the
+editor library off in the Projections menu. A root without `main` draws whole,
+as any other document does; one holding only the workspace's fields, as after
+its main value was deleted, draws an empty `main`. A pane showing a workspace
+record draws its main value the same way. A document
+needs the wrapping only once something adds a workspace field: opening a pane
+on a root without them makes the root the `main` value of a new workspace
+record, moving the document view's folds with it, and starting points that open
+a pane begin that way.
+
+The pane lists determine side and order; entries are ordinary values. Deleting a
 pane's root removes that list element. Opening and moving panes edit these
 lists, so they save and undo with the document. A malformed pane container or
 nonrecord root is not overwritten to make the operation possible.

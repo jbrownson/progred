@@ -33,15 +33,19 @@ pub fn generated(
     insertion(display, None, create, on_commit)
 }
 
-/// Starts an empty document: `key` names a new cell, the left pane shows
-/// what `pane` makes of it, and the cell's definition is picked next.
+/// Starts an empty document: its main value's `key` names a new cell, the
+/// left pane shows what `pane` makes of it, and the cell's definition is
+/// picked next.
 pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Completion {
     generated(
         key,
         move || {
             let cell = gid::new_cell_id();
             Value::record([
-                (key, cell.into()),
+                (
+                    crate::libraries::editor::workspace::vocabulary::MAIN,
+                    Value::record([(key, cell.into())]),
+                ),
                 (
                     crate::libraries::editor::workspace::vocabulary::PANES,
                     Value::record([(
@@ -52,6 +56,7 @@ pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Complet
             ])
         },
         Some(crate::selection::pending_at(&[
+            Step::Key(crate::libraries::editor::workspace::vocabulary::MAIN),
             Step::Key(key),
             Step::Follow(Resolution::Document),
         ])),

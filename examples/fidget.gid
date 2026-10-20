@@ -9,6 +9,7 @@
     "field": 66bad5269b830181b840cf23a391b10e,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "main": f146d8a1d3174d9ab6136b4334768a2f,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
@@ -82,9 +83,11 @@
     },
   },
   "root": {
-    fidget: [
-      ring,
-    ],
+    main: {
+      fidget: [
+        ring,
+      ],
+    },
     panes: {
       pane_left: [
         {

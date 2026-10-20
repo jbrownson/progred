@@ -515,12 +515,20 @@ impl Editor {
     fn open_selected_in_pane(&mut self, side: workspace::Side) {
         let next = self.model.selection.as_ref().and_then(|selection| {
             let value = selection.value(&self.sources())?.clone();
-            workspace::append(self.model.doc.root.as_ref()?, side, value)
+            let (root, wrapped) = workspace::workspace_root(self.model.doc.root.as_ref()?);
+            let (root, path) = workspace::append(&root, side, value)?;
+            Some((root, path, wrapped))
         });
-        if let Some((value, path)) = next {
+        if let Some((value, path, wrapped)) = next {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);
             self.model.history.record(before);
+            if wrapped {
+                let document = &mut self.model.workspace.document;
+                document.annotations = document
+                    .annotations
+                    .under(&[gid::Step::Key(workspace::vocabulary::MAIN)]);
+            }
             self.model
                 .workspace
                 .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));

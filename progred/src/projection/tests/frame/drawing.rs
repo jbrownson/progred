@@ -16,16 +16,15 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
         ),
         cells: Cells::new(),
     };
-    let cell = doc
-        .root
-        .as_ref()
-        .unwrap()
-        .as_record()
-        .unwrap()
-        .get(&crate::libraries::grap::vocabulary::GRAP)
-        .unwrap()
-        .as_cell()
-        .unwrap();
+    let cell = crate::test_support::value_at(
+        doc.root.as_ref().unwrap(),
+        &[
+            gid::Step::Key(crate::workspace::vocabulary::MAIN),
+            gid::Step::Key(crate::libraries::grap::vocabulary::GRAP),
+        ],
+    )
+    .and_then(gid::Value::as_cell)
+    .unwrap();
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let displayed = Rc::new(std::cell::RefCell::new(Vec::new()));
     let observe = displayed.clone();

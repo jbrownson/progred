@@ -26,6 +26,7 @@
     "half_size": f6e416437259d6867c11eced7923bf1c,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "main": f146d8a1d3174d9ab6136b4334768a2f,
     "max": 7082a82b3fd6dbc575aa5c85adfacc76,
     "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
     "max_y": c9e7268eb34af7bea225df94841c1c27,
@@ -338,9 +339,11 @@
     },
   },
   "root": {
-    fidget: [
-      cube,
-    ],
+    main: {
+      fidget: [
+        cube,
+      ],
+    },
     panes: {
       pane_left: [
         {

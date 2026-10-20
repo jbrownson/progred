@@ -97,8 +97,14 @@ picker handlers can claim it. Only an arrow nothing claims reaches the editor's
 structural keys, the frame's lowest-priority handler. That handler lowers it to
 `Event::Navigate(direction)`, dispatches it through the whole frame handler, and
 reveals the selection it lands on. With no selection, a root navigation handler
-selects the document's root occurrence. Landmarks also serve pointer and source
-selection and the explicit Select All command.
+selects the document view's outermost drawn occurrence. Landmarks also serve
+pointer and source selection and the explicit Select All command.
+
+Every projected occurrence gets a landmark unless its projection marks it
+`transparent`: one that draws nothing of its own, only what it contains, such
+as the editor library's workspace record drawn as its main value. It has no
+landmark, so selection and navigation pass straight to what's inside, and
+nothing selects the record itself.
 
 Tab moves to the next tab stop, a place to fill in, and Shift+Tab to the one
 before, in reading order within the selection's view: line by line, where a

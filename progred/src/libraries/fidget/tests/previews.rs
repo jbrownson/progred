@@ -17,16 +17,15 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
         ),
         cells: Cells::new(),
     };
-    let cell = doc
-        .root
-        .as_ref()
-        .unwrap()
-        .as_record()
-        .unwrap()
-        .get(&fidget::vocabulary::FIDGET)
-        .unwrap()
-        .as_cell()
-        .unwrap();
+    let cell = crate::test_support::value_at(
+        doc.root.as_ref().unwrap(),
+        &[
+            gid::Step::Key(crate::workspace::vocabulary::MAIN),
+            gid::Step::Key(fidget::vocabulary::FIDGET),
+        ],
+    )
+    .and_then(gid::Value::as_cell)
+    .unwrap();
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     context.stack.projection = crate::projection::viewport::projection(
         &context.stack.projection,

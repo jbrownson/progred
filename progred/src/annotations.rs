@@ -26,6 +26,18 @@ impl Annotations {
         self.values.get(path)
     }
 
+    /// The same annotations, each at its path under `prefix`.
+    pub fn under(&self, prefix: &[Step]) -> Self {
+        Self {
+            values: Rc::new(
+                self.values
+                    .iter()
+                    .map(|(path, value)| ([prefix, path].concat(), value.clone()))
+                    .collect(),
+            ),
+        }
+    }
+
     /// Replace or clear the whole value at a path. Empty records prune.
     pub fn set(&mut self, path: &[Step], value: Option<Value>) {
         match value {

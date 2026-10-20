@@ -8,6 +8,7 @@
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "gyroid": 6824d83b85a76ffceb8f676e18f922c2,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "main": f146d8a1d3174d9ab6136b4334768a2f,
     "max": 7082a82b3fd6dbc575aa5c85adfacc76,
     "multiply": d2b341855e79890fc79bb562b109fcaf,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
@@ -211,9 +212,11 @@
     },
   },
   "root": {
-    fidget: [
-      gyroid,
-    ],
+    main: {
+      fidget: [
+        gyroid,
+      ],
+    },
     panes: {
       pane_left: [
         {

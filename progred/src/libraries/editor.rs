@@ -45,6 +45,7 @@ pub fn library<W: Host>() -> Library<W> {
             (path::vocabulary::LIBRARY, "library"),
             (path::vocabulary::INDEXABLE, "indexable"),
             (path::vocabulary::INVALID_PATH, "invalid path"),
+            (workspace::vocabulary::MAIN, "main"),
             (workspace::vocabulary::PANES, "panes"),
             (workspace::vocabulary::LEFT, "left"),
             (workspace::vocabulary::RIGHT, "right"),
@@ -53,4 +54,5 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         ::grap::ForeignFunctions::default(),
     )
+    .with_projection(crate::display::partial(workspace::display))
 }

@@ -104,56 +104,56 @@ fn click_heading(driver: &mut Driver, path: &[Step]) {
 }
 
 #[test]
-fn cam_outline_leaves_panes_in_the_collapsed_extras() {
+fn cam_outline_draws_as_the_main_value_with_the_panes_out_of_sight() {
+    use crate::libraries::editor::workspace::vocabulary::{MAIN, PANES};
     let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    let panes = crate::libraries::editor::workspace::vocabulary::PANES;
-    assert!(entry_paths(doc.root.as_ref().unwrap(), &[], panes).is_empty());
+    let main = [Step::Key(MAIN)];
+    assert!(
+        crate::test_support::value_at(doc.root.as_ref().unwrap(), &main)
+            .and_then(Value::as_record)
+            .is_some_and(|fields| fields.get(&OUTLINE).is_some() && fields.get(&PANES).is_none())
+    );
     assert!(!crate::workspace::declarations(doc.root.as_ref()).is_empty());
     let mut world = crate::test_editor(doc);
+    let outline = [Step::Key(MAIN), Step::Key(OUTLINE)];
     let entries = world
         .sources()
-        .resolve_path(&[Step::Key(OUTLINE)])
+        .resolve_path(&outline)
         .unwrap()
         .as_list()
         .unwrap()
         .clone();
-    let first_heading = vec![
-        Step::Key(OUTLINE),
-        Step::Element(entries.keys().next().unwrap().clone()),
-    ];
+    let first_heading = [
+        &outline[..],
+        &[Step::Element(entries.keys().next().unwrap().clone())],
+    ]
+    .concat();
     for (position, value) in entries {
         world.session().set_folded(
             &crate::test_root(),
             &[
-                Step::Key(OUTLINE),
-                Step::Element(position),
-                Step::Key(value.as_cell().unwrap()),
-            ],
+                &outline[..],
+                &[Step::Element(position), Step::Key(value.as_cell().unwrap())],
+            ]
+            .concat(),
             false,
             Some(true),
         );
     }
-    let path = [Step::Key(panes)];
-    assert!(hidden(&world, &path));
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     for (from, key, to) in [
-        (vec![], NamedKey::ArrowRight, vec![Step::Key(OUTLINE)]),
-        (vec![], NamedKey::ArrowDown, first_heading.clone()),
-        (
-            vec![Step::Key(OUTLINE)],
-            NamedKey::ArrowDown,
-            first_heading.clone(),
-        ),
-        (first_heading, NamedKey::ArrowUp, vec![]),
-        (vec![Step::Key(OUTLINE)], NamedKey::ArrowLeft, vec![]),
+        (main.to_vec(), NamedKey::ArrowRight, outline.to_vec()),
+        (main.to_vec(), NamedKey::ArrowDown, first_heading.clone()),
+        (outline.to_vec(), NamedKey::ArrowDown, first_heading.clone()),
+        (first_heading, NamedKey::ArrowUp, main.to_vec()),
+        (outline.to_vec(), NamedKey::ArrowLeft, main.to_vec()),
     ] {
         driver.select(&from);
         driver.press(key);
         assert_eq!(driver.selection(), to);
     }
-    // The document draws the collapsed panes field but nothing inside it;
-    // the panes it declares draw their own views.
-    assert!(driver.drawn(&path));
+    // The document view draws none of the workspace's own fields; the panes
+    // it declares draw their own views.
     assert!(
         !driver
             .runner
@@ -163,8 +163,7 @@ fn cam_outline_leaves_panes_in_the_collapsed_extras() {
             .iter()
             .any(|landmark| {
                 landmark.root.as_ref() == Some(&crate::test_root())
-                    && landmark.path.starts_with(&path)
-                    && landmark.path.len() > path.len()
+                    && landmark.path.first() == Some(&Step::Key(PANES))
             })
     );
 }

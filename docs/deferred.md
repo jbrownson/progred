@@ -357,22 +357,19 @@ REPL; see [Notebook and REPL](#notebook-and-repl).
 ## Workspace documents
 
 A document whose root has a `panes` field is a workspace, and the editor
-should swallow it: show its panes, and draw only the main value in the
-document view rather than the whole record. Discussed in October 2026, not yet
-decided or started:
+swallows it: it shows the panes, and the document view draws only the root's
+`main` value ([the model](model.md#panes)). Plain and Raw, or turning the
+editor library off, show the whole record. Starting points and the examples use
+this shape. What's left, discussed in October 2026:
 
-- **The root's shape.** `{<main>: value, panes: {left, right}, libraries}`.
-  "primary" was rejected as the main field's name; `center` and `main` are the
-  candidates. The `panes` structure could go either way; keep `libraries` as it
-  is for now. Other roots stay valid documents.
-- **Editing it by hand.** The Plain view shows the record with names. A "show
-  panes" command could open the panes declaration in a pane.
-- **Panes that show a document path,** not only a computed value.
+- **Panes that show a document path,** not only a value, so something can sit
+  in a pane without being moved into a cell. Paths are already data
+  (`grap::path`); a step into a list element records a position that lasts only
+  the session, so a saved pane path should go through fields and cells.
+- **A "show panes" command** opening the panes declaration in a pane, once panes
+  can show a path.
 - **Recursion.** A workspace in a pane of a workspace, which suggests making the
   pane layout a projection.
-
-A suggested order: the root shape with the editor hiding the panes, converting
-the examples; then path panes; then recursion.
 
 ## Code size and structure
 

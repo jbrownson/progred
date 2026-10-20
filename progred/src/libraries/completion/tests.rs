@@ -96,9 +96,17 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
         .unwrap();
         let first = activated(&entry).value.unwrap();
         let second = activated(&entry.clone()).value.unwrap();
-        assert_ne!(
-            first.as_record().unwrap().get(&field),
-            second.as_record().unwrap().get(&field)
-        );
+        let cell = |root: &Value| {
+            crate::test_support::value_at(
+                root,
+                &[
+                    Step::Key(crate::workspace::vocabulary::MAIN),
+                    Step::Key(field),
+                ],
+            )
+            .cloned()
+            .unwrap()
+        };
+        assert_ne!(cell(&first), cell(&second));
     }
 }
