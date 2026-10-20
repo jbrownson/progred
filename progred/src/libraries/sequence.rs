@@ -49,17 +49,12 @@ fn exact(number: f64) -> bool {
     number >= 0.0 && number.fract() == 0.0 && number <= 9_007_199_254_740_992.0
 }
 
-fn range(
-    context: &mut Context,
-    call: &Expression,
-    env: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    let count: Result<(::core::primitive::f64,), _> = context.arguments(call, [COUNT], env)?;
-    Ok(match count {
-        Ok((count,)) if exact(count) => range_tail(context, count, 0.0),
-        Ok(_) => invalid(),
-        Err(unusable) => unusable,
-    })
+fn range(context: &mut Context, (count,): (::core::primitive::f64,)) -> RuntimeValue {
+    if exact(count) {
+        range_tail(context, count, 0.0)
+    } else {
+        invalid()
+    }
 }
 
 fn range_tail(context: &mut Context, count: f64, index: f64) -> RuntimeValue {
@@ -72,25 +67,18 @@ fn range_tail(context: &mut Context, count: f64, index: f64) -> RuntimeValue {
 
 fn range_step(
     context: &mut Context,
-    call: &Expression,
-    env: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    use ::core::primitive::f64 as N;
-    let arguments: Result<(N, N), _> = context.arguments(call, [COUNT, INDEX], env)?;
-    Ok(match arguments {
-        Ok((count, index)) if exact(count) && exact(index) && index <= count => {
-            if index == count {
-                RuntimeValue::record([])
-            } else {
-                RuntimeValue::record([
-                    (ITEM, RuntimeValue::f64(index)),
-                    (NEXT, range_tail(context, count, index + 1.0)),
-                ])
-            }
-        }
-        Ok(_) => invalid(),
-        Err(unusable) => unusable,
-    })
+    (count, index): (::core::primitive::f64, ::core::primitive::f64),
+) -> RuntimeValue {
+    if !(exact(count) && exact(index) && index <= count) {
+        invalid()
+    } else if index == count {
+        RuntimeValue::record([])
+    } else {
+        RuntimeValue::record([
+            (ITEM, RuntimeValue::f64(index)),
+            (NEXT, range_tail(context, count, index + 1.0)),
+        ])
+    }
 }
 
 fn consume(
@@ -149,13 +137,11 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             RANGE,
-            ForeignFunction::new(range).parameters([COUNT]).tracked(),
+            ForeignFunction::with_arguments([COUNT], range).tracked(),
         )
         .register(
             RANGE_STEP,
-            ForeignFunction::new(range_step)
-                .parameters([COUNT, INDEX])
-                .tracked(),
+            ForeignFunction::with_arguments([COUNT, INDEX], range_step).tracked(),
         )
         .register(
             FOR_EACH,

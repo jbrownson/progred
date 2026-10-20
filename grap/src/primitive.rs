@@ -146,7 +146,10 @@ impl Primitive {
                 left,
                 right,
             } => {
-                let operands = [(*left, operands[0].clone()), (*right, operands[1].clone())];
+                let operands = [
+                    (*left, operands[0].as_ref()),
+                    (*right, operands[1].as_ref()),
+                ];
                 match operation {
                     BinaryOperation::F64(operation) => {
                         binary(operation, context, operands, environment)
@@ -160,7 +163,7 @@ impl Primitive {
                 }
             }
             Self::Unary { operation, operand } => {
-                let operand = [(*operand, operands[0].clone())];
+                let operand = [(*operand, operands[0].as_ref())];
                 match operation {
                     UnaryOperation::F64(operation) => {
                         unary(operation, context, operand, environment)
@@ -180,7 +183,7 @@ impl Primitive {
 fn binary<N: Number>(
     operation: &Binary<N>,
     context: &mut Context,
-    operands: [(CellId, Option<Expression>); 2],
+    operands: [(CellId, Option<&Expression>); 2],
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     Ok(match <(N, N)>::parse(context, operands, environment)? {
@@ -198,7 +201,7 @@ fn binary<N: Number>(
 fn unary<N: Number>(
     operation: &Unary<N>,
     context: &mut Context,
-    operand: [(CellId, Option<Expression>); 1],
+    operand: [(CellId, Option<&Expression>); 1],
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     Ok(match <(N,)>::parse(context, operand, environment)? {

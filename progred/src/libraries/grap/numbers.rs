@@ -11,11 +11,9 @@ use crate::libraries::representation::{Precedence, infix_display};
 use crate::libraries::u64 as u64_library;
 use crate::libraries::{f32 as f32_library, f64 as f64_library};
 use crate::libraries::{name, text};
-use ::grap::arguments::{Parse, Signature};
+use ::grap::arguments::Parse;
 use ::grap::primitive::{Binary, Number, Primitive, Unary};
-use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
-};
+use ::grap::{Context, ForeignFunction, ForeignFunctions, RuntimeValue};
 use gid::{CellId, Value};
 use puri::handler::HasHandler;
 use std::rc::Rc;
@@ -161,9 +159,7 @@ fn f64_parts() -> Parts {
     ]);
     parts.functions = parts.functions.register(
         f64::LERP,
-        ForeignFunction::new(lerp)
-            .parameters([f64::START, f64::END, f64::AMOUNT])
-            .tracked(),
+        ForeignFunction::with_arguments([f64::START, f64::END, f64::AMOUNT], lerp).tracked(),
     );
     parts.names.extend(
         [
@@ -182,17 +178,14 @@ fn f64_parts() -> Parts {
 }
 
 fn lerp(
-    context: &mut Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    use ::core::primitive::f64 as N;
-    let arguments: Result<(N, N, N), _> =
-        context.arguments(call, [f64::START, f64::END, f64::AMOUNT], environment)?;
-    Ok(match arguments {
-        Ok((start, end, amount)) => RuntimeValue::f64(start + (end - start) * amount),
-        Err(invalid) => invalid,
-    })
+    _: &mut Context,
+    (start, end, amount): (
+        ::core::primitive::f64,
+        ::core::primitive::f64,
+        ::core::primitive::f64,
+    ),
+) -> RuntimeValue {
+    RuntimeValue::f64(start + (end - start) * amount)
 }
 
 fn f32_parts() -> Parts {
@@ -360,17 +353,9 @@ fn conversion<From: Parse + 'static, N: 'static>(
     runtime: fn(N) -> RuntimeValue,
     convert: fn(From) -> N,
 ) -> ForeignFunction {
-    ForeignFunction::staged(move |context, call| {
-        let operand = context.field(call, vocabulary::OPERAND);
-        Rc::new(move |context, environment| {
-            let operand = [(vocabulary::OPERAND, operand.clone())];
-            Ok(match <(From,)>::parse(context, operand, environment)? {
-                Ok((number,)) => runtime(convert(number)),
-                Err(invalid) => invalid,
-            })
-        })
+    ForeignFunction::with_arguments([vocabulary::OPERAND], move |_, (number,): (From,)| {
+        runtime(convert(number))
     })
-    .parameters([vocabulary::OPERAND])
     .tracked()
 }
 

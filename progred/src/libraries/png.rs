@@ -151,17 +151,12 @@ impl Parse for Png {
 }
 
 fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction {
-    ForeignFunction::from_value(move |context, call, environment| {
-        let image: Result<(Png,), _> = context.arguments(call, [vocabulary::IMAGE], environment)?;
-        Ok(match image {
-            Ok((image,)) => size(image.bytes()).map_or_else(
-                || ::grap::absent::value(vocabulary::INVALID_PNG),
-                |size| crate::libraries::f64::value(f64::from(pick(size))),
-            ),
-            Err(invalid) => invalid.into_value(),
-        })
+    ForeignFunction::with_arguments([vocabulary::IMAGE], move |_, (image,): (Png,)| {
+        size(image.bytes()).map_or_else(
+            || ::grap::absent::value(vocabulary::INVALID_PNG),
+            |size| crate::libraries::f64::value(f64::from(pick(size))),
+        )
     })
-    .parameters([vocabulary::IMAGE])
     .tracked()
 }
 

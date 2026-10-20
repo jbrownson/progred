@@ -21,20 +21,17 @@ pub mod vocabulary {
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::REQUIRE,
-        ForeignFunction::from_value(|context, call, environment| {
-            Ok(
-                match context.arguments(call, [vocabulary::CONDITION], environment)? {
-                    Ok((true,)) => Value::record([]),
-                    Ok((false,)) => ::grap::absent::with_detail(
-                        vocabulary::CONDITION_NOT_MET,
-                        vocabulary::CONDITION,
-                        ::grap::logic::value(false),
-                    ),
-                    Err(invalid) => invalid.into_value(),
-                },
-            )
+        ForeignFunction::with_arguments([vocabulary::CONDITION], |_, (condition,): (bool,)| {
+            if condition {
+                Value::record([])
+            } else {
+                ::grap::absent::with_detail(
+                    vocabulary::CONDITION_NOT_MET,
+                    vocabulary::CONDITION,
+                    ::grap::logic::value(false),
+                )
+            }
         })
-        .parameters([vocabulary::CONDITION])
         .tracked(),
     )
 }

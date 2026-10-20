@@ -3,18 +3,18 @@
 //! when every one parses; otherwise its result is "invalid arguments",
 //! carrying under its label why each that didn't couldn't: a missing
 //! argument, its type's reason ("not f64", carrying the value), or the absent
-//! it already was, passed on unchanged as the cause.
+//! it already was, passed on unchanged as the cause. Like a primitive's, the
+//! arguments are found once per call site rather than on every call.
 //!
 //! ```ignore
-//! let (start, end): (f64, f64) =
-//!     match context.arguments(call, [START, END], environment)? {
-//!         Ok(arguments) => arguments,
-//!         Err(invalid) => return Ok(invalid),
-//!     };
+//! ForeignFunction::with_arguments([START, END], |_, (start, end): (f64, f64)| {
+//!     RuntimeValue::f64(end - start)
+//! })
 //! ```
 
-use crate::{Context, Environment, Expression, Halt, RuntimeValue, absent};
+use crate::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent};
 use gid::CellId;
+use std::rc::Rc;
 
 /// A Rust type an argument parses into.
 pub trait Parse: Sized {
@@ -51,21 +51,39 @@ pub trait Signature<const N: usize>: Sized {
     /// "invalid arguments" carrying why each that didn't parse couldn't.
     fn parse(
         context: &mut Context,
-        arguments: [(CellId, Option<Expression>); N],
+        arguments: [(CellId, Option<&Expression>); N],
         environment: &Environment,
     ) -> Result<Result<Self, RuntimeValue>, Halt>;
 }
 
-impl Context<'_> {
-    /// [`Signature::parse`] of the arguments `call` gives under `labels`.
-    pub fn arguments<S: Signature<N>, const N: usize>(
-        &mut self,
-        call: &Expression,
+impl ForeignFunction {
+    /// A function of the arguments under `labels`, which it declares as its
+    /// parameters, parsed as `S`: `body` runs only when they all parse, and
+    /// otherwise the call is "invalid arguments". A call site finds its
+    /// arguments once, when the call is first prepared.
+    pub fn with_arguments<S, R, const N: usize>(
         labels: [CellId; N],
-        environment: &Environment,
-    ) -> Result<Result<S, RuntimeValue>, Halt> {
-        let arguments = labels.map(|label| (label, self.field(call, label)));
-        S::parse(self, arguments, environment)
+        body: impl Fn(&mut Context, S) -> R + 'static,
+    ) -> Self
+    where
+        S: Signature<N> + 'static,
+        R: Into<RuntimeValue>,
+    {
+        let body = Rc::new(body);
+        Self::staged(move |context, call| {
+            let arguments = labels.map(|label| (label, context.field(call, label)));
+            let body = body.clone();
+            Rc::new(move |context, environment| {
+                let arguments = arguments
+                    .each_ref()
+                    .map(|(label, expression)| (*label, expression.as_ref()));
+                Ok(match S::parse(context, arguments, environment)? {
+                    Ok(values) => body(context, values).into(),
+                    Err(invalid) => invalid,
+                })
+            })
+        })
+        .parameters(labels)
     }
 }
 
@@ -73,11 +91,11 @@ impl Context<'_> {
 fn argument<T: Parse>(
     context: &mut Context,
     label: CellId,
-    expression: Option<Expression>,
+    expression: Option<&Expression>,
     environment: &Environment,
 ) -> Result<Result<T, RuntimeValue>, Halt> {
     match expression {
-        Some(expression) => T::eval(context, expression, environment),
+        Some(expression) => T::eval(context, expression.clone(), environment),
         None => Ok(Err(context.missing_runtime_argument(label))),
     }
 }
@@ -102,7 +120,7 @@ macro_rules! signature {
             #[inline]
             fn parse(
                 context: &mut Context,
-                [$(($label, $value)),+]: [(CellId, Option<Expression>); $count],
+                [$(($label, $value)),+]: [(CellId, Option<&Expression>); $count],
                 environment: &Environment,
             ) -> Result<Result<Self, RuntimeValue>, Halt> {
                 // Only each argument's value stays live, so the values that

@@ -38,24 +38,20 @@ fn evaluated(
 fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::BETWEEN,
-        ForeignFunction::new(move |context, call, environment| {
-            let bounds: Result<(::core::primitive::f64, ::core::primitive::f64), _> =
-                context.arguments(call, [vocabulary::MIN, vocabulary::MAX], environment)?;
-            Ok(match bounds {
-                Ok((min, max)) => {
-                    let next = state
-                        .get()
-                        .wrapping_mul(6_364_136_223_846_793_005)
-                        .wrapping_add(1_442_695_040_888_963_407);
-                    context.effect(|| {
-                        state.set(next);
-                        let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
-                        RuntimeValue::f64(min + (max - min) * unit)
-                    })
-                }
-                Err(invalid) => invalid,
-            })
-        }),
+        ForeignFunction::with_arguments(
+            [vocabulary::MIN, vocabulary::MAX],
+            move |context, (min, max): (::core::primitive::f64, ::core::primitive::f64)| {
+                let next = state
+                    .get()
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                context.effect(|| {
+                    state.set(next);
+                    let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
+                    RuntimeValue::f64(min + (max - min) * unit)
+                })
+            },
+        ),
     )
 }
 

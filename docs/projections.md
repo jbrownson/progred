@@ -710,11 +710,12 @@ registered this way. A call that resolves to a primitive runs it directly
 rather than through the foreign-call machinery; resolution, shadowing, fuel
 and effects are as for any other foreign call.
 Semantic failure is an ordinary absent value; the host `Result` only propagates
-evaluator halts such as exhausted fuel. A function written in Rust reads its
-arguments through `grap::arguments`: each is found under its label, evaluated,
-and parsed into the Rust type the function works with (`Parse`), and the
-function runs only when every one parses. Otherwise it returns "invalid
-arguments", carrying under each label why that argument couldn't be used: a
+evaluator halts such as exhausted fuel. A function written in Rust declares
+its arguments with `ForeignFunction::with_arguments`: each is found under its
+label once per call site, as a primitive's operands are, then evaluated on each
+call and parsed into the Rust type the function works with (`Parse`), and the
+function's body runs only when every one parses. Otherwise the call returns
+"invalid arguments", carrying under each label why that argument couldn't be used: a
 missing argument, its type's reason carrying the value, or the absent it
 already was, passed on unchanged as the cause. Each type owns its reason, so a
 function taking several types reports each correctly, and a library's own

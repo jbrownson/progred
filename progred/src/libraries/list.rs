@@ -93,81 +93,55 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::PREPEND,
-            ForeignFunction::new(|context, call, environment| {
-                let arguments: Result<(List, RuntimeValue), _> =
-                    context.arguments(call, [vocabulary::LIST, vocabulary::ITEM], environment)?;
-                Ok(match arguments {
-                    Ok((list, item)) => {
-                        RuntimeValue::list(std::iter::once(item).chain(list.values()))
-                    }
-                    Err(invalid) => invalid,
-                })
-            })
-            .parameters([vocabulary::LIST, vocabulary::ITEM])
+            ForeignFunction::with_arguments(
+                [vocabulary::LIST, vocabulary::ITEM],
+                |_, (list, item): (List, RuntimeValue)| {
+                    RuntimeValue::list(std::iter::once(item).chain(list.values()))
+                },
+            )
             .tracked(),
         )
         .register(
             vocabulary::CONCAT,
-            ForeignFunction::new(|context, call, environment| {
-                use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
-                let arguments: Result<(List, List), _> =
-                    context.arguments(call, [LEFT, RIGHT], environment)?;
-                Ok(match arguments {
-                    Ok((left, right)) => RuntimeValue::list(left.values().chain(right.values())),
-                    Err(invalid) => invalid,
-                })
-            })
-            .parameters([
-                crate::libraries::grap::numbers::vocabulary::LEFT,
-                crate::libraries::grap::numbers::vocabulary::RIGHT,
-            ])
+            ForeignFunction::with_arguments(
+                [
+                    crate::libraries::grap::numbers::vocabulary::LEFT,
+                    crate::libraries::grap::numbers::vocabulary::RIGHT,
+                ],
+                |_, (left, right): (List, List)| {
+                    RuntimeValue::list(left.values().chain(right.values()))
+                },
+            )
             .tracked(),
         )
         .register(
             vocabulary::LENGTH,
-            ForeignFunction::new(|context, call, environment| {
-                let arguments: Result<(List,), _> =
-                    context.arguments(call, [vocabulary::LIST], environment)?;
-                Ok(match arguments {
-                    Ok((list,)) => RuntimeValue::f64(list.len() as f64),
-                    Err(invalid) => invalid,
-                })
+            ForeignFunction::with_arguments([vocabulary::LIST], |_, (list,): (List,)| {
+                RuntimeValue::f64(list.len() as f64)
             })
-            .parameters([vocabulary::LIST])
             .tracked(),
         )
         .register(
             vocabulary::AT,
-            ForeignFunction::new(|context, call, environment| {
-                let arguments: Result<(List, ::core::primitive::f64), _> =
-                    context.arguments(call, [vocabulary::LIST, vocabulary::INDEX], environment)?;
-                Ok(match arguments {
-                    Ok((list, index)) => ::grap::f64::to_usize(index)
+            ForeignFunction::with_arguments(
+                [vocabulary::LIST, vocabulary::INDEX],
+                |_, (list, index): (List, ::core::primitive::f64)| {
+                    ::grap::f64::to_usize(index)
                         .and_then(|index| list.0.list_get(index))
-                        .unwrap_or_else(out_of_bounds),
-                    Err(invalid) => invalid,
-                })
-            })
-            .parameters([vocabulary::LIST, vocabulary::INDEX])
+                        .unwrap_or_else(out_of_bounds)
+                },
+            )
             .tracked(),
         )
         .register(
             vocabulary::TAIL,
-            ForeignFunction::new(|context, call, environment| {
-                let arguments: Result<(List,), _> =
-                    context.arguments(call, [vocabulary::LIST], environment)?;
-                Ok(match arguments {
-                    Ok((list,)) => {
-                        let mut values = list.values();
-                        match values.next() {
-                            Some(_) => RuntimeValue::list(values),
-                            None => out_of_bounds(),
-                        }
-                    }
-                    Err(invalid) => invalid,
-                })
+            ForeignFunction::with_arguments([vocabulary::LIST], |_, (list,): (List,)| {
+                let mut values = list.values();
+                match values.next() {
+                    Some(_) => RuntimeValue::list(values),
+                    None => out_of_bounds(),
+                }
             })
-            .parameters([vocabulary::LIST])
             .tracked(),
         )
         .register(

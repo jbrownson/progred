@@ -225,28 +225,17 @@ fn bound_arguments(
 }
 
 fn unary_function(marker: CellId) -> ForeignFunction {
-    ForeignFunction::from_value(move |context, call, environment| {
-        Ok(
-            match context.arguments(call, [vocabulary::OPERAND], environment)? {
-                Ok((operand,)) => unary(marker, operand),
-                Err(invalid) => invalid.into_value(),
-            },
-        )
+    ForeignFunction::with_arguments([vocabulary::OPERAND], move |_, (operand,): (Value,)| {
+        unary(marker, operand)
     })
-    .parameters([vocabulary::OPERAND])
     .tracked()
 }
 
 fn binary_function(marker: CellId) -> ForeignFunction {
-    ForeignFunction::from_value(move |context, call, environment| {
-        Ok(
-            match context.arguments(call, [vocabulary::LEFT, vocabulary::RIGHT], environment)? {
-                Ok((left, right)) => binary(marker, left, right),
-                Err(invalid) => invalid.into_value(),
-            },
-        )
-    })
-    .parameters([vocabulary::LEFT, vocabulary::RIGHT])
+    ForeignFunction::with_arguments(
+        [vocabulary::LEFT, vocabulary::RIGHT],
+        move |_, (left, right): (Value, Value)| binary(marker, left, right),
+    )
     .tracked()
 }
 
