@@ -276,6 +276,38 @@ Directions this surfaced:
   perhaps in sections the reader can tell apart, or with the editor's built-in
   offers marked as wanted or not by the projection's offers.
 
+Where offers come from, as of 20 October 2026, with the owner's view of each:
+
+- **Starting points** (`CompletionScope::Start`): what a document starts as,
+  Grap's new program and Fidget's new scene, for an empty root's hole. These
+  stay a category of their own: they are how a document gets into a custom
+  projection, whose holes then offer its own. They may not need to be
+  root-only; that's undecided.
+- **Typed readings** (`Literal`): what's typed, read as one of a library's
+  values, such as `12` as a number, `"hi"` as text, or a new field's label named
+  as typed. Raw's holes ask every shown library for them. The owner doesn't
+  want this as a category of its own: any offer could instead be contingent on
+  what's typed.
+- **Offers for anywhere** (`Everything`): color's new color, and Grap's new
+  lambda and calls by name. Only Grap's slots ask for them, and new color is
+  the only answer from outside Grap, so dropping the category would leave
+  color no way into a Grap slot. The owner considers the category the wrong
+  answer to a real problem, and would rather leave it as it is than patch it,
+  to be rethought here.
+- **A projection's own**: Raw's new cell, list and record; Grap's bindings in
+  scope and quote and unquote. Grap knowing control's binding forms and quote is
+  fine: they are Grap's macros, which don't follow the parameter lists offers
+  are otherwise computed from. Declaring such forms instead of coding them can
+  come later.
+
+Paste is the same question from another side. It reads text outside the
+providers (`selection::resolve_query`, and `clipboard.rs` spelling text), so
+pasting `12` makes text where typing it offers numbers, and paste makes text
+with the text library off. Typed readings, paste and the text file format all
+spell values as text; the owner would like them to share code with the
+serialization text bridge, with special encodings for core types such as
+strings and numbers.
+
 ## Starting points
 
 A document's empty root offers the libraries' starting points, then Raw's
