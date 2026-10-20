@@ -256,8 +256,12 @@ chosen commit is pushed to a `website-live` branch on GitHub:
 2. Name the Worker **progred** (matching `wrangler.jsonc`).
 3. Set the production branch to **website-live**, root directory to **website**,
    build command to **npm run build**, and deploy command to **npm run stage**.
-4. Leave non-production branch builds disabled. Cloudflare installs the locked
-   npm dependencies and supplies `CI=true` and deployment authentication.
+   The deploy command runs for `website-live`, and this one stages a version
+   rather than deploying it, as described below.
+4. Leave non-production branch builds disabled, so the wizard's preview command
+   (the non-production branch deploy command) never runs; its default is fine.
+   Cloudflare installs the locked npm dependencies and supplies `CI=true` and
+   deployment authentication.
 5. Deploy the first version from **Deployments** and check the generated HTTPS
    `workers.dev` address. Then add `prog.red` as a custom domain; DNS setup is a
    separate step, not part of the build.
