@@ -1498,6 +1498,7 @@ fn workspace_description<'a>(
             redo: false,
             open_pane: false,
             close_pane: false,
+            show_panes: false,
             move_up: false,
             move_down: false,
             move_left: false,

@@ -34,7 +34,7 @@ fn the_native_tree_lists_every_command_once() {
     let commands = commands(&definition);
     assert_eq!(
         commands.len(),
-        25 + Example::ALL.len() + stack.switchable().count()
+        26 + Example::ALL.len() + stack.switchable().count()
     );
     for (index, command) in commands.iter().enumerate() {
         assert!(commands[index + 1..].iter().all(|other| command != other));

@@ -510,7 +510,10 @@ cell, so a cell is a location with no steps; a computed value has no place and
 opens as a copy. A place that's only empty, as after its value was deleted,
 draws as any empty place does, ready to write; one that can't be reached, as
 after its container was deleted, draws a read-only `place not found` absent
-carrying the location. Close Pane removes the selected pane's entry. Deleting a value
+carrying the location. Show Panes opens a location pane on the panes
+declaration, `{steps: [panes]}`, or selects the one already open, so the panes
+can be edited as data while they show. Close Pane removes the selected pane's
+entry. Deleting a value
 pane's root does too, but a location pane's root is the place it shows, so
 deleting it deletes that content. Opening, closing and moving panes edit these
 lists, so they save and undo with the document. A malformed pane container or

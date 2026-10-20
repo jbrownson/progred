@@ -497,6 +497,7 @@ impl Editor {
                     .is_some(),
             close_pane: selected_root
                 .is_some_and(|root| matches!(root.target(), Target::Pane { .. })),
+            show_panes: workspace::can_open(self.model.doc.root.as_ref()),
             move_up: selected_root
                 .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Up)),
             move_down: selected_root
@@ -518,15 +519,15 @@ impl Editor {
     /// anchored at its nearest cell, so the pane shows and edits that place,
     /// or for a computed value, which has no place, a copy of it.
     fn open_selected_in_pane(&mut self, side: workspace::Side) {
-        let next = self.model.selection.as_ref().and_then(|selection| {
-            let sources = self.sources();
-            let (root, wrapped) = workspace::workspace_root(self.model.doc.root.as_ref()?);
+        self.open_pane(side, |editor, wrapped| {
+            let selection = editor.model.selection.as_ref()?;
+            let sources = editor.sources();
             let place = selection.location().and_then(|location| {
                 location
                     .stored(&sources)
                     .map(crate::location::Location::into_owned)
             });
-            let entry = match place {
+            Some(match place {
                 Some(mut place) => {
                     // Wrapping moves every path from the root under `main`.
                     if wrapped && place.start == crate::location::Start::Root {
@@ -537,12 +538,57 @@ impl Editor {
                     crate::location::value(&place)
                 }
                 None => selection.value(&sources)?.clone(),
-            };
-            let (root, path) = workspace::append(&root, side, entry.clone())?;
-            let shown = workspace::location_path(&entry, &path).unwrap_or_else(|| path.clone());
-            Some((root, path, shown, wrapped))
+            })
         });
-        if let Some((value, _, shown, wrapped)) = next {
+    }
+
+    /// Shows the workspace's panes declaration in a pane on the right, as a
+    /// location, so editing it there edits the panes; selects the pane
+    /// already showing it, if one does.
+    fn show_panes(&mut self) {
+        let entry = crate::location::value(&crate::location::Location::root(vec![gid::Step::Key(
+            workspace::vocabulary::PANES,
+        )]));
+        let sources = self.sources();
+        let existing = [workspace::Side::Left, workspace::Side::Right]
+            .into_iter()
+            .flat_map(|side| self.model.workspace.column(side).panes.iter())
+            .find_map(|pane| match pane.view.root.target() {
+                Target::Pane { path } if sources.resolve_path(path) == Some(&entry) => Some((
+                    pane.view.root.clone(),
+                    workspace::location_path(&entry, path)?,
+                )),
+                _ => None,
+            });
+        match existing {
+            Some((root, shown)) => {
+                self.model.selection = Some(selection::Selection::edge(
+                    &root,
+                    crate::editing::Scope::default(),
+                    shown,
+                ));
+            }
+            None => self.open_pane(workspace::Side::Right, |_, _| Some(entry)),
+        }
+    }
+
+    /// Opens what `entry` gives as the last pane on `side` and selects what
+    /// it shows. A bare root is wrapped in a workspace first; `entry` learns
+    /// whether it was, since wrapping moves every path from the root under
+    /// `main`.
+    fn open_pane(
+        &mut self,
+        side: workspace::Side,
+        entry: impl FnOnce(&Self, bool) -> Option<gid::Value>,
+    ) {
+        let next = self.model.doc.root.as_ref().and_then(|root| {
+            let (root, wrapped) = workspace::workspace_root(root);
+            let entry = entry(self, wrapped)?;
+            let (root, path) = workspace::append(&root, side, entry.clone())?;
+            let shown = workspace::location_path(&entry, &path).unwrap_or(path);
+            Some((root, shown, wrapped))
+        });
+        if let Some((value, shown, wrapped)) = next {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);
             self.model.history.record(before);
@@ -669,6 +715,7 @@ impl Editor {
             DocCommand::Redo => self.step_history(false, geometry),
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
             DocCommand::ClosePane => self.close_selected_pane(),
+            DocCommand::ShowPanes => self.show_panes(),
             DocCommand::MovePane(direction) => self.move_selected_pane(direction),
             DocCommand::Preset(preset) => {
                 let selected = self.selected_view();

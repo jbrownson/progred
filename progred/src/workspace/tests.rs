@@ -581,6 +581,51 @@ fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
     );
 }
 
+#[test]
+fn show_panes_opens_the_panes_declaration_once() {
+    use crate::command::DocCommand;
+    use crate::driver::Driver;
+    let mut driver = Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(Value::record([(CellId::from_u128(1), Value::list([]))])),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    let show = |driver: &mut Driver| {
+        driver
+            .runner
+            .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+                editor.run_doc_command(DocCommand::ShowPanes, dispatch.geometry(1.0));
+                true
+            });
+        driver.present();
+    };
+    let panes = [Step::Key(vocabulary::PANES)];
+    show(&mut driver);
+    let root = driver.editor().model.doc.root.clone().unwrap();
+    let declared = declarations(Some(&root));
+    assert_eq!(declared.len(), 1);
+    assert_eq!(declared[0].side, Side::Right);
+    assert_eq!(
+        crate::test_support::value_at(&root, &declared[0].path),
+        Some(&crate::location::value(&crate::location::Location::root(
+            panes.to_vec()
+        )))
+    );
+    // The pane draws the declaration, its own entry included, and selects it.
+    assert!(driver.drawn(&panes));
+    assert_eq!(driver.selection(), panes);
+    // Showing them again selects that pane rather than opening another.
+    driver.select(&[Step::Key(vocabulary::MAIN)]);
+    show(&mut driver);
+    assert_eq!(
+        declarations(driver.editor().model.doc.root.as_ref()).len(),
+        1
+    );
+    assert_eq!(driver.selection(), panes);
+}
+
 fn cell_positions(world: &crate::Editor, cell: CellId) -> Vec<gid::Position> {
     world
         .model
