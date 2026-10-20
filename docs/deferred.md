@@ -989,6 +989,14 @@ code. Its values cross as bytes, which needs the binary GID encoding above, so
 code calling native functions in a tight loop pays for each call. Python is
 the heaviest to embed.
 
+On 20 October 2026 a recursive fib(30) took 8 ms in V8 with its JIT, 76 ms in
+V8 without it, 86 ms in native QuickJS, 148 ms in QuickJS compiled to wasm, 548
+ms in Boa and about 1.6 s in Grap, whose calls carry fuel, call records for
+click-to-source and environments keyed by cell. QuickJS ran about 560
+instructions a call to Grap's 4,600. That favors QuickJS as the one engine for
+every platform: small, interruptible, sharing the host's memory, and fast
+enough.
+
 Open questions: whether code is stored as source text, which engines take, or
 as structure; and how JavaScript sees records keyed by cells, since
 `shape.radius` needs names, which the libraries' name records could supply.

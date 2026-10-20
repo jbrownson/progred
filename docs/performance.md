@@ -34,6 +34,13 @@ Two habits keep this cheap:
   before and after, such as `--editor` for an editor change, without recording
   them. Most changes need no run.
 
+Some canaries read their documents and pages from the checkout when they run,
+not when they're built: the forest canary loads `website/public/tutorial.html`
+and its lessons from disk. A binary built at an earlier commit must run with
+that commit checked out, or it measures the current page with old code; on 20
+October 2026 such a run showed a 42% regression that was only a page listing a
+library the old code didn't have.
+
 It builds the progred library tests with the `perf` profile, the release build
 made incremental, and runs each canary serially. After a function-body edit
 it rebuilds in about 16 s on a 4-core VM, where a release build took two to four
