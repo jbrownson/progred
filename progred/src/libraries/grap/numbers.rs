@@ -1,6 +1,6 @@
 //! Grap's arithmetic over the number representations: each one's operations
-//! as foreign functions, read infix or as calls headed by the tagged
-//! operator, and typed after a number; the argument labels of binary and
+//! as foreign functions, f64's as primitives Grap runs natively, read infix
+//! or as calls headed by the tagged operator, and typed after a number; the argument labels of binary and
 //! unary operations, which list concatenation takes too; and conversions
 //! between them. The numbers themselves belong to f64, f32 and u64, which know
 //! nothing of Grap.
@@ -125,6 +125,36 @@ fn f64_arithmetic() -> Arithmetic<::core::primitive::f64> {
         left_not: f64::LEFT_NOT_F64,
         right_not: f64::RIGHT_NOT_F64,
         eval: |context, expression, environment| context.eval_f64_or_value(expression, environment),
+        primitive: f64_primitive,
+    }
+}
+
+/// f64's operations, which Grap runs natively.
+fn f64_primitive(
+    operation: Operation<::core::primitive::f64>,
+    arithmetic: &Arithmetic<::core::primitive::f64>,
+) -> Option<::grap::primitive::Primitive> {
+    use ::grap::primitive::{Binary, Primitive, Unary};
+    let binary = |operation| Primitive::Binary {
+        operation,
+        left: vocabulary::LEFT,
+        right: vocabulary::RIGHT,
+        left_not: arithmetic.left_not,
+        right_not: arithmetic.right_not,
+    };
+    let unary = |operation, operand_not| Primitive::Unary {
+        operation,
+        operand: vocabulary::OPERAND,
+        operand_not,
+    };
+    match operation {
+        Operation::Arithmetic(apply) => Some(binary(Binary::Arithmetic(apply))),
+        Operation::Comparison(apply) => Some(binary(Binary::Comparison(apply))),
+        Operation::Unary(apply, operand_not) => Some(unary(Unary::Arithmetic(apply), operand_not)),
+        Operation::Predicate(apply, operand_not) => {
+            Some(unary(Unary::Predicate(apply), operand_not))
+        }
+        Operation::Checked(..) => None,
     }
 }
 
@@ -137,6 +167,7 @@ fn f32_arithmetic() -> Arithmetic<::core::primitive::f32> {
             let value = context.eval(expression, environment)?;
             Ok(f32_library::read_runtime(&value).ok_or(value))
         },
+        primitive: |_, _| None,
     }
 }
 
@@ -149,6 +180,7 @@ fn u64_arithmetic() -> Arithmetic<::core::primitive::u64> {
             let value = context.eval(expression, environment)?;
             Ok(u64_library::read_runtime(&value).ok_or(value))
         },
+        primitive: |_, _| None,
     }
 }
 
@@ -217,9 +249,9 @@ fn lerp(
     let amount = context.eval_f64_or_value(amount, environment)?;
     Ok(match (start, end, amount) {
         (Ok(start), Ok(end), Ok(amount)) => RuntimeValue::f64(start + (end - start) * amount),
-        (Err(start), _, _) => declined(start, f64::START_NOT_F64),
-        (_, Err(end), _) => declined(end, f64::END_NOT_F64),
-        (_, _, Err(amount)) => declined(amount, f64::AMOUNT_NOT_F64),
+        (Err(start), _, _) => ::grap::primitive::declined(start, f64::START_NOT_F64),
+        (_, Err(end), _) => ::grap::primitive::declined(end, f64::END_NOT_F64),
+        (_, _, Err(amount)) => ::grap::primitive::declined(amount, f64::AMOUNT_NOT_F64),
     })
 }
 
@@ -301,6 +333,8 @@ struct Arithmetic<N> {
     left_not: CellId,
     right_not: CellId,
     eval: fn(&mut Context, Expression, &Environment) -> Result<Result<N, RuntimeValue>, Halt>,
+    /// The operation as one Grap runs natively, if it has one.
+    primitive: fn(Operation<N>, &Self) -> Option<::grap::primitive::Primitive>,
 }
 
 #[derive(Clone, Copy)]
@@ -383,6 +417,9 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
     }
 
     fn operation(self, operation: Operation<N>) -> ForeignFunction {
+        if let Some(primitive) = (self.primitive)(operation, &self) {
+            return primitive.function();
+        }
         let runtime = self.representation.runtime;
         match operation {
             Operation::Arithmetic(apply) => {
@@ -418,7 +455,7 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
                     Rc::new(move |context, environment| {
                         Ok(match (self.eval)(context, operand.clone(), environment)? {
                             Ok(operand) => operation(operand),
-                            Err(operand) => declined(operand, operand_not),
+                            Err(operand) => ::grap::primitive::declined(operand, operand_not),
                         })
                     })
                 }
@@ -450,8 +487,8 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
                         let right = (self.eval)(context, right.clone(), environment)?;
                         Ok(match (left, right) {
                             (Ok(left), Ok(right)) => operation(left, right),
-                            (Err(left), _) => declined(left, self.left_not),
-                            (_, Err(right)) => declined(right, self.right_not),
+                            (Err(left), _) => ::grap::primitive::declined(left, self.left_not),
+                            (_, Err(right)) => ::grap::primitive::declined(right, self.right_not),
                         })
                     })
                 }
@@ -462,13 +499,6 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
         .parameters([vocabulary::LEFT, vocabulary::RIGHT])
         .tracked()
     }
-}
-
-/// Why an operation declines for an operand that isn't its number: it's
-/// `not` one, carrying the operand, so an absent operand's own reason shows
-/// beneath it as the cause.
-fn declined(operand: RuntimeValue, not: CellId) -> RuntimeValue {
-    ::grap::absent::caused_by(not, ::grap::absent::VALUE, operand.into_value()).into()
 }
 
 /// To a number made by `runtime` from another, whose operand `convert`

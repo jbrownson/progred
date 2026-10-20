@@ -700,6 +700,12 @@ Rust foreign functions receive raw call fields, the calling environment, and
 a live evaluation context. They may inspect, return, forward, or evaluate those
 raw expressions, in the calling environment or an explicitly derived one. The
 environment becomes a GID record only when Rust explicitly hands it to Grap.
+A library can instead register one of Grap's primitives (`grap::primitive`),
+an operation the evaluator runs natively, with the library's own labels and
+decline reasons: f64's arithmetic, comparisons and one-operand functions are
+registered this way. A call that resolves to a primitive runs it directly
+rather than through the foreign-call machinery; resolution, shadowing, fuel
+and effects are as for any other foreign call.
 Semantic failure is an ordinary absent value; the host `Result` only propagates
 evaluator halts such as exhausted fuel. A function that can't use a value
 declines with its own reason and carries the value, whatever it is, so an

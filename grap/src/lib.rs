@@ -19,6 +19,7 @@ pub mod absent;
 pub mod f64;
 pub mod logic;
 pub mod path;
+pub mod primitive;
 mod reify;
 pub mod source;
 pub mod text;
@@ -129,6 +130,9 @@ pub struct ForeignFunction {
     implementation: ForeignImplementation,
     tracked: bool,
     parameters: Option<Rc<[CellId]>>,
+    /// The operation this function runs, when the evaluator can run it
+    /// directly.
+    primitive: Option<primitive::Primitive>,
 }
 
 /// One host definition. Native implementations retain their ordinary
@@ -196,6 +200,7 @@ impl ForeignFunction {
                 },
             )),
             parameters: None,
+            primitive: None,
         }
     }
 
@@ -206,6 +211,7 @@ impl ForeignFunction {
             tracked: false,
             implementation: ForeignImplementation::Direct(Rc::new(call)),
             parameters: None,
+            primitive: None,
         }
     }
 
@@ -221,6 +227,7 @@ impl ForeignFunction {
             tracked: false,
             implementation: ForeignImplementation::Staged(Rc::new(prepare)),
             parameters: None,
+            primitive: None,
         }
     }
 
@@ -236,6 +243,11 @@ impl ForeignFunction {
     /// defaults stay undeclared.
     pub fn parameters(mut self, parameters: impl IntoIterator<Item = CellId>) -> Self {
         self.parameters = Some(parameters.into_iter().collect());
+        self
+    }
+
+    fn as_primitive(mut self, primitive: primitive::Primitive) -> Self {
+        self.primitive = Some(primitive);
         self
     }
 }
@@ -1073,6 +1085,8 @@ struct PreparedCallTarget {
 
 enum PreparedCallTargetKind {
     Foreign(ForeignFunction),
+    /// A primitive with this call site's operands, run directly.
+    Primitive(primitive::Primitive, primitive::Operands),
     Value(Expression),
     Missing,
 }
@@ -1654,7 +1668,15 @@ impl<'a> Context<'a> {
             None => {
                 let kind = match self.host.resolve(cell) {
                     Some((_, Definition::Foreign(definition))) => {
-                        PreparedCallTargetKind::Foreign(definition.implementation.clone())
+                        match definition.implementation.primitive {
+                            Some(primitive) => PreparedCallTargetKind::Primitive(
+                                primitive,
+                                primitive.operands(self, call),
+                            ),
+                            None => {
+                                PreparedCallTargetKind::Foreign(definition.implementation.clone())
+                            }
+                        }
                     }
                     Some((resolution, Definition::Value(value))) => {
                         PreparedCallTargetKind::Value(self.lowered_cell(cell, resolution, &value))
@@ -1694,6 +1716,9 @@ impl<'a> Context<'a> {
                         )
                         .unwrap_or_else(|| Ok(not_callable(&callable)))
                 }
+            }
+            PreparedCallTargetKind::Primitive(primitive, operands) => {
+                primitive.run(context, operands, environment)
             }
             PreparedCallTargetKind::Missing => Ok(missing_cell(cell)),
         })
