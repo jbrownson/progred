@@ -174,12 +174,12 @@
   "root": {
     main: {
       fidget: [
-        tanglecube,
+        0x80: tanglecube,
       ],
     },
     panes: {
       pane_left: [
-        {
+        0x80: {
           viewport: {
             ffi: preview_3d,
           },

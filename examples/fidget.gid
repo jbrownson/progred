@@ -31,7 +31,7 @@
       function: quote,
       expression: {
         scene: [
-          {
+          0x55: {
             field: {
               unquote: {
                 right: {
@@ -59,7 +59,7 @@
               rgb: 0x5096dc,
             },
           },
-          {
+          0xaa: {
             field: {
               unquote: {
                 field: {
@@ -85,12 +85,12 @@
   "root": {
     main: {
       fidget: [
-        ring,
+        0x80: ring,
       ],
     },
     panes: {
       pane_left: [
-        {
+        0x80: {
           viewport: {
             ffi: preview_3d,
           },

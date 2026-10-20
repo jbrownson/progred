@@ -64,8 +64,12 @@ The value grammar is close to Raw's:
 - `{label: value, …}` — a record. A label is always a cell identity,
   written as a bare cell-id literal or binder (the label IS a link). Quoted labels
   are invalid. Duplicate cell identities in one record are an error.
-- `[value, …]` — a list. Element positions are session identity,
-  minted at load, stripped at save, never written.
+- `[position: value, …]` — a list, each element with its position, a
+  blob literal: `[0x55: a, 0xaa: b]`. Positions are the elements'
+  identity and their order, so they must increase without repeats. A
+  list may leave them all out, `[value, …]`, as one written by hand, and
+  gets evenly spread positions; the printer always writes them. A blob
+  element is told apart from a position by the colon a position has.
 - Quoted text convention values and blobs as above.
 - A bare token in value position is a reference — a link to that
   cell.

@@ -84,12 +84,12 @@
   "root": {
     main: {
       fidget: [
-        torus,
+        0x80: torus,
       ],
     },
     panes: {
       pane_left: [
-        {
+        0x80: {
           viewport: {
             ffi: preview_3d,
           },

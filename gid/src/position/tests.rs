@@ -35,14 +35,14 @@ fn between_is_ordered_and_dense() {
 }
 
 #[test]
-fn appends_and_prepends_grow_about_a_bit_per_insert() {
+fn appends_and_prepends_grow_about_a_byte_per_255_inserts() {
     let mut last = between(None, None).unwrap();
     for _ in 0..2000 {
         let next = between(Some(&last), None).unwrap();
         assert!(last < next);
         last = next;
     }
-    assert!(last.0.len() <= 2000 / 8 + 2);
+    assert!(last.0.len() <= 2000 / 255 + 2);
 
     let mut first = between(None, None).unwrap();
     for _ in 0..2000 {
@@ -50,7 +50,22 @@ fn appends_and_prepends_grow_about_a_bit_per_insert() {
         assert!(previous < first);
         first = previous;
     }
-    assert!(first.0.len() <= 2000 / 8 + 2);
+    assert!(first.0.len() <= 2000 / 255 + 2);
+}
+
+#[test]
+fn appending_after_a_deep_position_steps_at_its_first_digit_with_room() {
+    let deep = Position::from_bytes(vec![0x40, 0x12, 0x34]).unwrap();
+    assert_eq!(between(Some(&deep), None).unwrap().0.as_ref(), [0x41]);
+    let full = Position::from_bytes(vec![0xFF, 0xFF]).unwrap();
+    assert_eq!(
+        between(Some(&full), None).unwrap().0.as_ref(),
+        [0xFF, 0xFF, 0x01]
+    );
+    let low = Position::from_bytes(vec![0x00, 0x01]).unwrap();
+    let below = between(None, Some(&low)).unwrap();
+    assert_eq!(below.0.as_ref(), [0x00, 0x00, 0xFF]);
+    assert!(below < low);
 }
 
 #[test]

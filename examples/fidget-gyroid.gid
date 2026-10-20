@@ -214,12 +214,12 @@
   "root": {
     main: {
       fidget: [
-        gyroid,
+        0x80: gyroid,
       ],
     },
     panes: {
       pane_left: [
-        {
+        0x80: {
           viewport: {
             ffi: preview_3d,
           },

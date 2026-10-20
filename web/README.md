@@ -105,7 +105,7 @@ selected data is stored, if anywhere, and `stage` is `"value"`, `"pending"`, or
 `"label"`. A `source` is `{path}` from the document's root, or
 `{cell, library, path}` within a cell's definition, `library` naming the library
 defining it or null for the document's own. Paths use the existing path-library GID encoding; list positions
-have session lifetime. This reports structural selection, not text caret/ranges.
+are saved with the document. This reports structural selection, not text caret/ranges.
 
 `observe=<channel>` connects that callback to same-origin parent messages:
 `{type: "progred:change", channel, state}`. Only explicitly observed embeds

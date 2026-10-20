@@ -171,15 +171,21 @@ context; neither a path nor a cell-relative trace is a global address.
 Keep occurrence identity, cell identity, definition source, and view identity
 distinct while answering those questions.
 
-## Saving list positions
+## List positions
 
-List elements have fractional positions, minted when a document loads and
-dropped when it saves, so a position means nothing outside its session. A page
-or a script can't name the second call in a list by path across a reload, which
-is why the tutorial's checks compare selected values instead. Saving the
-positions fixes that, and a CRDT would need them anyway. Reading could still
-accept a plain `[1, 2, 3]` and mint positions for it, while saving always writes
-them, even if the text gets noisier.
+List positions are saved with a document (October 2026), so a path through a
+list survives a reload. Left for later:
+
+- **Normalizing.** Positions only grow: appends and prepends a byte per 255,
+  inserts into one gap about a bit each. A manual command could spread a list's
+  positions evenly again, invalidating saved paths into that list, and the
+  editor could suggest it for an unusually long one.
+- **Concurrent edits.** Minting is deterministic, so two people inserting into
+  the same gap at once would mint the same position; a CRDT would append a
+  per-replica tiebreaker, which positions' open-ended bytes allow without a
+  format change. Concurrent runs at one spot can interleave, which newer list
+  CRDTs such as Fugue avoid.
+- The clipboard's JSON form still keeps only the order.
 
 ## Native GID storage
 
@@ -366,8 +372,8 @@ discussed in October 2026:
 
 - **Panes that show a document path,** not only a value, so something can sit
   in a pane without being moved into a cell. Paths are already data
-  (`grap::path`); a step into a list element records a position that lasts only
-  the session, so a saved pane path should go through fields and cells.
+  (`grap::path`), and list positions are saved, so a pane's path survives a
+  reload.
 - **A "show panes" command** opening the panes declaration in a pane, once panes
   can show a path.
 - **Recursion.** A pane showing a workspace record already draws its main value;
@@ -1332,9 +1338,8 @@ fields and leave it out.
 ### Multiplayer editing
 
 Several people editing one document at once, perhaps with CRDTs. Cells are
-already keyed by identity, and list elements already have fractional positions,
-the kind of identifiers sequence CRDTs use. Those positions are session-only
-today, minted at load and dropped at save; see saving list positions above.
+already keyed by identity, and list elements have saved fractional positions,
+the kind of identifiers sequence CRDTs use; see list positions above.
 
 ### A common thread
 

@@ -50,8 +50,8 @@ records, lists, and blobs: a path is a list of `{key: cell}`,
 `{element: {indexable: blob}}`, and `{follow: document}` or
 `{follow: {library: cell}}` steps, and decoding checks each step and the
 canonical list-position bytes. This is a library convention, not another GID atom.
-Runtime list positions still have session lifetime; serializing a path as data
-does not make its element addresses survive a document reload.
+List positions are saved with the document, so a path serialized as data,
+element addresses included, survives a reload.
 
 ## Text bridge
 

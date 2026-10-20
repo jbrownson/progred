@@ -126,8 +126,8 @@ impl<'a> IntoIterator for &'a Record {
     }
 }
 
-/// An ordered sequence whose session-local positions give projected
-/// elements stable identities. Like records, lists are contiguous and
+/// An ordered sequence whose positions, saved with the document, give
+/// its elements stable identities. Like records, lists are contiguous and
 /// copy-on-write; positions affect navigation but not value equality.
 #[derive(Debug, Clone, Default)]
 pub struct List(Arc<Vec<(Position, Value)>>);
@@ -230,10 +230,9 @@ impl<'a> IntoIterator for &'a List {
 
 /// A value: anything sayable — pure structure, no identity of its
 /// own. Cycles are unrepresentable here; they exist only by a cell's
-/// value linking back through `Value::Cell`. Positions are session-only
-/// element identity — minted at load and insert, stripped at save —
-/// and the hand-written Eq/Hash below IGNORE them: two occurrences of
-/// `[2, 3]` are the same value.
+/// value linking back through `Value::Cell`. Positions are element
+/// identity, saved with the document, and the hand-written Eq/Hash
+/// below IGNORE them: two occurrences of `[2, 3]` are the same value.
 #[derive(Debug, Clone)]
 pub enum Value {
     Cell(CellId),

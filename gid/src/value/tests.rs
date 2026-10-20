@@ -155,7 +155,8 @@ fn values_round_trip_through_json() {
         let parsed: Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, value, "{json}");
         // Save → load → save is a fixed point even though minted
-        // positions differ: only the order is the data.
+        // positions differ: this form, the clipboard's, keeps only the
+        // order.
         assert_eq!(serde_json::to_string(&parsed).unwrap(), json);
     }
     assert_eq!(

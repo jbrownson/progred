@@ -204,8 +204,8 @@ impl Parser<'_> {
             }
             Some('[') => {
                 self.rest = &self.rest[1..];
-                let elements = self.separated(']', Self::value)?;
-                Ok(Value::list(elements))
+                let elements = self.separated(']', |p| Ok((p.position()?, p.value()?)))?;
+                list(elements)
             }
             Some('0') if self.rest.as_bytes().get(1) == Some(&b'x') => {
                 Ok(Value::from(self.blob()?))
@@ -215,6 +215,26 @@ impl Parser<'_> {
                 Ok(Value::from(self.resolve(token)))
             }
         }
+    }
+
+    /// An element's `0x…:` position, when it gives one: a blob literal
+    /// followed by a colon, which a blob element never is.
+    fn position(&mut self) -> Result<Option<gid::Position>, String> {
+        self.skip_space();
+        let Some(digits) = self.rest.strip_prefix("0x") else {
+            return Ok(None);
+        };
+        let end = digits
+            .find(|c: char| !c.is_ascii_hexdigit())
+            .unwrap_or(digits.len());
+        if !digits[end..].trim_start().starts_with(':') {
+            return Ok(None);
+        }
+        let bytes = self.blob()?;
+        self.eat(':')?;
+        gid::Position::from_bytes(bytes)
+            .map(Some)
+            .ok_or_else(|| "a list position is nonempty and ends in a nonzero byte".to_string())
     }
 
     fn label(&mut self) -> Result<CellId, String> {
@@ -295,6 +315,30 @@ impl Parser<'_> {
         })?;
         Ok(Document { root, cells })
     }
+}
+
+/// A list from its elements, each with the position the file gave it or
+/// none. Positions, when given, are its order; a list without them, as
+/// written by hand or before positions were saved, gets fresh ones.
+fn list(elements: Vec<(Option<gid::Position>, Value)>) -> Result<Value, String> {
+    if elements.iter().all(|(position, _)| position.is_none()) {
+        return Ok(Value::list(elements.into_iter().map(|(_, value)| value)));
+    }
+    let elements = elements
+        .into_iter()
+        .map(|(position, value)| Some((position?, value)))
+        .collect::<Option<Vec<_>>>()
+        .ok_or("a list gives positions for some elements but not all")?;
+    if !elements.windows(2).all(|pair| pair[0].0 < pair[1].0) {
+        return Err("a list's positions must increase, without repeats".to_string());
+    }
+    Ok(Value::List(elements.into_iter().fold(
+        gid::List::new(),
+        |mut list, (position, value)| {
+            list.insert(position, value);
+            list
+        },
+    )))
 }
 
 /// The canonical printer — deterministic from (document, binders).
@@ -483,18 +527,15 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
             let _ = write!(out, "{}", quoted(text));
         }
         None => match value {
-            Value::Blob(bytes) => {
-                out.push_str("0x");
-                for byte in bytes.iter() {
-                    let _ = write!(out, "{byte:02x}");
-                }
-            }
+            Value::Blob(bytes) => print_bytes(out, bytes),
             Value::Cell(cell) => out.push_str(&identity(spell, *cell)),
             Value::List(elements) if elements.is_empty() => out.push_str("[]"),
             Value::List(elements) => {
                 out.push_str("[\n");
-                for element in elements.values() {
+                for (position, element) in elements.iter() {
                     out.push_str(&indent);
+                    print_bytes(out, position.as_bytes());
+                    out.push_str(": ");
                     print_value(out, element, spell, level + 1);
                     out.push_str(",\n");
                 }
@@ -515,6 +556,13 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
                 out.push('}');
             }
         },
+    }
+}
+
+fn print_bytes(out: &mut String, bytes: &[u8]) {
+    out.push_str("0x");
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
     }
 }
 

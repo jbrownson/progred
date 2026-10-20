@@ -171,25 +171,25 @@
           },
         },
         bindings: [
-          {
+          0x17: {
             value: {
               f32: 0x0000803f,
             },
             bind: size,
           },
-          {
+          0x2e: {
             value: {
               f32: 0xcdcccc3d,
             },
             bind: chamfer,
           },
-          {
+          0x45: {
             value: {
               f32: 0x0000003f,
             },
             bind: control_depth,
           },
-          {
+          0x5d: {
             value: {
               right: {
                 f32: 0x00000040,
@@ -199,7 +199,7 @@
             },
             bind: half_size,
           },
-          {
+          0x74: {
             value: {
               right: chamfer,
               function: f32_subtract,
@@ -207,7 +207,7 @@
             },
             bind: half_face,
           },
-          {
+          0x8b: {
             value: {
               right: {
                 f32: 0x00008040,
@@ -217,7 +217,7 @@
             },
             bind: center_depth,
           },
-          {
+          0xa2: {
             value: {
               right: chamfer,
               function: f32_subtract,
@@ -225,10 +225,10 @@
             },
             bind: edge_limit,
           },
-          {
+          0xba: {
             value: {
               params: [
-                coordinate,
+                0x80: coordinate,
               ],
               body: {
                 right: {
@@ -253,12 +253,12 @@
             },
             bind: shoulder,
           },
-          {
+          0xd1: {
             value: {
               params: [
-                normal,
-                u,
-                v,
+                0x40: normal,
+                0x80: u,
+                0xc0: v,
               ],
               body: {
                 right: {
@@ -289,11 +289,11 @@
             },
             bind: face_pair,
           },
-          {
+          0xe8: {
             value: {
               params: [
-                u,
-                v,
+                0x55: u,
+                0xaa: v,
               ],
               body: {
                 right: edge_limit,
@@ -341,17 +341,17 @@
   "root": {
     main: {
       fidget: [
-        cube,
+        0x80: cube,
       ],
     },
     panes: {
       pane_left: [
-        {
+        0x80: {
           viewport: {
             params: [
-              projection_value,
-              width,
-              height,
+              0x40: projection_value,
+              0x80: width,
+              0xc0: height,
             ],
             body: {
               min_z: {
@@ -365,7 +365,7 @@
                 function: quote,
                 expression: {
                   scene: [
-                    {
+                    0x80: {
                       field: {
                         unquote: {
                           function: projection_value,

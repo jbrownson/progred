@@ -61,7 +61,7 @@
     circle: {
       name: "circle",
       params: [
-        radius,
+        0x80: radius,
       ],
       body: {
         function: quote,
@@ -113,12 +113,12 @@
     make_cases: {
       name: "make cases",
       params: [
-        generated_value,
+        0x80: generated_value,
       ],
       body: {
         function: quote,
         expression: [
-          {
+          0x80: {
             pattern: "subject",
             expression: {
               unquote: generated_value,
@@ -160,9 +160,9 @@
     scale_and_add: {
       name: "scale and add",
       params: [
-        x_parameter,
-        y_parameter,
-        scale_parameter,
+        0x40: x_parameter,
+        0x80: y_parameter,
+        0xc0: scale_parameter,
       ],
       body: {
         right: y_parameter,
@@ -204,19 +204,19 @@
     },
   },
   "root": [
-    {
+    0x0c: {
       demo: "Edit the inputs; normal view shows {evaluate: expression → result}, while Raw shows the stored expression.",
     },
-    {
+    0x19: {
       input_a: a_value,
     },
-    {
+    0x26: {
       input_b: b_value,
     },
-    {
+    0x33: {
       scale: scale_value,
     },
-    {
+    0x40: {
       add_result: {
         evaluate: {
           right: b_value,
@@ -225,7 +225,7 @@
         },
       },
     },
-    {
+    0x4c: {
       nested_result: {
         evaluate: {
           right: scale_value,
@@ -238,7 +238,7 @@
         },
       },
     },
-    {
+    0x59: {
       evaluate_result: {
         evaluate: {
           function: evaluate,
@@ -251,21 +251,21 @@
         },
       },
     },
-    {
+    0x66: {
       lambda: scale_and_add,
     },
-    {
+    0x73: {
       quote_generator: make_cases,
     },
-    {
+    0x80: {
       graph_expression: scale_and_add_expression,
     },
-    {
+    0x8c: {
       graph_function_result: {
         evaluate: scale_and_add_expression,
       },
     },
-    {
+    0x99: {
       circle_result: {
         evaluate: {
           function: circle,
@@ -278,7 +278,7 @@
         },
       },
     },
-    {
+    0xa6: {
       match_result: {
         evaluate: {
           value: {
@@ -287,7 +287,7 @@
           },
           function: match,
           cases: [
-            {
+            0x80: {
               pattern: {
                 circle: {
                   radius: {
@@ -301,7 +301,7 @@
         },
       },
     },
-    {
+    0xb3: {
       quoted_match_result: {
         evaluate: {
           value: "subject",
@@ -313,7 +313,7 @@
         },
       },
     },
-    {
+    0xc0: {
       metadata_call: {
         evaluate: {
           right: b_value,
@@ -323,7 +323,7 @@
         },
       },
     },
-    {
+    0xcc: {
       inert_data: {
         evaluate: {
           contains_call: {
@@ -335,7 +335,7 @@
         },
       },
     },
-    {
+    0xd9: {
       type_absent: {
         evaluate: {
           right: b_value,
@@ -344,7 +344,7 @@
         },
       },
     },
-    {
+    0xe6: {
       missing_argument: {
         evaluate: {
           function: sum,
@@ -352,7 +352,7 @@
         },
       },
     },
-    {
+    0xf3: {
       not_callable: {
         evaluate: {
           function: a_value,

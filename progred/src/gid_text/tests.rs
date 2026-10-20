@@ -192,3 +192,61 @@ fn the_empty_document_is_the_empty_record() {
     assert!(doc.cells.cells().next().is_none());
     assert_eq!(print(&doc, &binders), "{\n}\n");
 }
+
+/// The positions of the root list's elements, as bytes.
+fn root_positions(text: &str) -> Vec<Vec<u8>> {
+    let (doc, _) = parse_ok(text);
+    doc.root
+        .unwrap()
+        .as_list()
+        .unwrap()
+        .keys()
+        .map(|position| position.as_bytes().to_vec())
+        .collect()
+}
+
+#[test]
+fn list_positions_save_and_load_as_they_were() {
+    let (doc, binders) = parse_ok(r#"{"root": [0x40: 0x01, 0x40ff: 0x02, 0x41: [0x80: 0x03]]}"#);
+    let printed = print(&doc, &binders);
+    assert!(printed.contains("0x40: 0x01"));
+    assert!(printed.contains("0x40ff: 0x02"));
+    assert_eq!(
+        root_positions(&printed),
+        [vec![0x40], vec![0x40, 0xff], vec![0x41]]
+    );
+    let (again, binders_again) = parse_ok(&printed);
+    assert_eq!(print(&again, &binders_again), printed);
+}
+
+#[test]
+fn lists_without_positions_still_load_and_get_fresh_ones() {
+    // Blob elements aren't positions: no colon follows them.
+    let positions = root_positions(r#"{"root": [0x01, 0x02, 0x03]}"#);
+    assert_eq!(positions.len(), 3);
+    assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
+    let (doc, _) = parse_ok(r#"{"root": [0x01, 0x02]}"#);
+    assert_eq!(
+        doc.root,
+        Some(Value::list([
+            Value::from(vec![0x01]),
+            Value::from(vec![0x02])
+        ]))
+    );
+}
+
+#[test]
+fn list_positions_must_be_given_for_every_element_in_increasing_order() {
+    for (text, error) in [
+        (
+            r#"{"root": [0x40: 0x01, 0x02]}"#,
+            "some elements but not all",
+        ),
+        (r#"{"root": [0x40: 0x01, 0x40: 0x02]}"#, "must increase"),
+        (r#"{"root": [0x41: 0x01, 0x40: 0x02]}"#, "must increase"),
+        (r#"{"root": [0x4000: 0x01]}"#, "ends in a nonzero byte"),
+    ] {
+        let message = parse(text).err().expect("rejected");
+        assert!(message.contains(error), "{text}: {message}");
+    }
+}

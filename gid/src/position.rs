@@ -1,13 +1,16 @@
-//! Session-only element identity for GID list values. A position is a
-//! byte string read as the binary fraction `0.b₁b₂…`, so trailing
-//! zero bits are value-neutral and plain lexicographic comparison —
-//! the derived ordering — is the dense order. Canonical form:
-//! nonempty, final byte nonzero; construction owns it. `between`
-//! always exists, so relabeling is never required; identifiers grow
-//! roughly a bit per adversarial same-gap insert, the immutable-label
-//! side of the order-maintenance trade. Positions are minted at load
-//! and insert and stripped from list storage at save. Libraries may
-//! encode their bytes in ordinary values to describe session paths.
+//! Element identity for GID list values, saved with a document, so a
+//! path through a list survives a reload. A position is a byte string
+//! read as the binary fraction `0.b₁b₂…`, so trailing zero bits are
+//! value-neutral and plain lexicographic comparison — the derived
+//! ordering — is the dense order. Canonical form: nonempty, final byte
+//! nonzero; construction owns it. `between` always exists, so
+//! relabeling is never required: appends and prepends step by one at
+//! the first digit with room, growing a byte per 255, and inserts
+//! between two elements bisect, growing about a bit per insert into the
+//! same gap, the immutable-label side of the order-maintenance trade.
+//! A list that has none, such as one written by hand, gets evenly
+//! spread ones. Libraries may encode their bytes in ordinary values to
+//! describe paths.
 
 use std::sync::Arc;
 
@@ -35,6 +38,8 @@ impl Position {
 pub fn between(low: Option<&Position>, high: Option<&Position>) -> Option<Position> {
     match (low, high) {
         (Some(low), Some(high)) if low >= high => None,
+        (Some(low), None) => Position::from_bytes(after(low.as_bytes())),
+        (None, Some(high)) => Position::from_bytes(before(high.as_bytes())),
         _ => Position::from_bytes(between_bytes(
             low.map(Position::as_bytes).unwrap_or(&[]),
             high.map(Position::as_bytes),
@@ -42,9 +47,44 @@ pub fn between(low: Option<&Position>, high: Option<&Position>) -> Option<Positi
     }
 }
 
+/// A position after `low` with nothing beyond it: `low` stepped up by one
+/// at its first digit with room, so appends take 255 steps at a depth before
+/// growing a byte.
+fn after(low: &[u8]) -> Vec<u8> {
+    match low.iter().position(|digit| *digit < 0xFF) {
+        Some(i) => {
+            let mut out = low[..=i].to_vec();
+            out[i] += 1;
+            out
+        }
+        None => [low, &[0x01]].concat(),
+    }
+}
+
+/// A position before `high` with nothing below it: `high` stepped down by
+/// one at its first digit with room, so prepends take 255 steps at a depth
+/// before growing a byte. A `high` of only zero and one digits has no room
+/// above zero; just below its first one is the canonical `…00 FF`.
+fn before(high: &[u8]) -> Vec<u8> {
+    match high.iter().position(|digit| *digit > 1) {
+        Some(i) => {
+            let mut out = high[..=i].to_vec();
+            out[i] -= 1;
+            out
+        }
+        None => {
+            let one = high
+                .iter()
+                .position(|digit| *digit == 1)
+                .expect("a canonical position ends in a nonzero digit");
+            [&high[..one], &[0x00, 0xFF]].concat()
+        }
+    }
+}
+
 /// `n` canonical positions in increasing order, spread evenly across
-/// the unit interval — minted for a loaded sequence, whose file keeps
-/// only the order. Payloads stay near log₂₅₆ n bytes with balanced
+/// the unit interval — minted for a sequence that has none yet, such
+/// as a list written without them. Payloads stay near log₂₅₆ n bytes with balanced
 /// gaps for the session's `between`s.
 pub fn spread(n: usize) -> Vec<Position> {
     // k bytes give 256^k slots; twice the need keeps every gap ≥ 2,

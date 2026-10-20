@@ -126,7 +126,7 @@
         function: quote,
         expression: {
           scene: [
-            {
+            0x55: {
               field: {
                 unquote: {
                   right: {
@@ -154,7 +154,7 @@
                 rgb: 0x5096dc,
               },
             },
-            {
+            0xaa: {
               field: {
                 unquote: {
                   field: {
@@ -267,25 +267,25 @@
           },
         },
         bindings: [
-          {
+          0x17: {
             value: {
               f32: 0x0000803f,
             },
             bind: size,
           },
-          {
+          0x2e: {
             value: {
               f32: 0xcdcccc3d,
             },
             bind: chamfer,
           },
-          {
+          0x45: {
             value: {
               f32: 0x0000003f,
             },
             bind: control_depth,
           },
-          {
+          0x5d: {
             value: {
               right: {
                 f32: 0x00000040,
@@ -295,7 +295,7 @@
             },
             bind: half_size,
           },
-          {
+          0x74: {
             value: {
               right: chamfer,
               function: f32_subtract,
@@ -303,7 +303,7 @@
             },
             bind: half_face,
           },
-          {
+          0x8b: {
             value: {
               right: {
                 f32: 0x00008040,
@@ -313,7 +313,7 @@
             },
             bind: center_depth,
           },
-          {
+          0xa2: {
             value: {
               right: chamfer,
               function: f32_subtract,
@@ -321,10 +321,10 @@
             },
             bind: edge_limit,
           },
-          {
+          0xba: {
             value: {
               params: [
-                coordinate,
+                0x80: coordinate,
               ],
               body: {
                 right: {
@@ -349,12 +349,12 @@
             },
             bind: shoulder,
           },
-          {
+          0xd1: {
             value: {
               params: [
-                normal,
-                u,
-                v,
+                0x40: normal,
+                0x80: u,
+                0xc0: v,
               ],
               body: {
                 right: {
@@ -385,11 +385,11 @@
             },
             bind: face_pair,
           },
-          {
+          0xe8: {
             value: {
               params: [
-                u,
-                v,
+                0x55: u,
+                0xaa: v,
               ],
               body: {
                 right: edge_limit,
@@ -418,13 +418,13 @@
     figure_layout: {
       name: "figure layout",
       params: [
-        picture,
-        part,
+        0x55: picture,
+        0xaa: part,
       ],
       body: {
         expressions: [
-          picture,
-          {
+          0x55: picture,
+          0xaa: {
             child: {
               baseline: {
                 f64: 0x000000000000f03f,
@@ -435,16 +435,16 @@
               },
               children: {
                 expressions: [
-                  {
+                  0x55: {
                     steps: [
-                      {
+                      0x80: {
                         key: result,
                       },
                     ],
                     function: at,
                     at_value: picture,
                   },
-                  {
+                  0xaa: {
                     step: part,
                     function: descend,
                   },
@@ -461,7 +461,7 @@
     figure_view: {
       name: "figure view",
       params: [
-        projection_value,
+        0x80: projection_value,
       ],
       body: {
         function: where,
@@ -478,7 +478,7 @@
           },
         },
         bindings: [
-          {
+          0x80: {
             value: projection_value,
             pattern: {
               figure: {
@@ -691,7 +691,7 @@
     mesh_view: {
       name: "mesh view",
       params: [
-        projection_value,
+        0x80: projection_value,
       ],
       body: {
         function: where,
@@ -708,7 +708,7 @@
           },
         },
         bindings: [
-          {
+          0x80: {
             value: projection_value,
             pattern: {
               mesh: {
@@ -722,7 +722,7 @@
     meshed: {
       name: "meshed",
       params: [
-        projection_value,
+        0x80: projection_value,
       ],
       body: {
         min_z: {
@@ -736,7 +736,7 @@
           function: quote,
           expression: {
             scene: [
-              {
+              0x80: {
                 field: {
                   unquote: projection_value,
                 },
@@ -776,7 +776,7 @@
     rendered: {
       name: "rendered",
       params: [
-        projection_value,
+        0x80: projection_value,
       ],
       body: {
         function: preview_3d,
@@ -1008,42 +1008,42 @@
   },
   "root": {
     figures: [
-      {
+      0x2a: {
         figure: ring,
       },
-      {
+      0x55: {
         figure: torus,
       },
-      {
+      0x80: {
         figure: tanglecube,
       },
-      {
+      0xaa: {
         figure: gyroid,
       },
-      {
+      0xd5: {
         mesh: cube,
       },
     ],
     libraries: [
-      {
+      0x55: {
         name: "figure",
         projection: figure_view,
         keys: [
-          figure,
+          0x80: figure,
         ],
         functions: [
-          figure_layout,
-          rendered,
+          0x55: figure_layout,
+          0xaa: rendered,
         ],
       },
-      {
+      0xaa: {
         name: "mesh figure",
         projection: mesh_view,
         keys: [
-          mesh,
+          0x80: mesh,
         ],
         functions: [
-          meshed,
+          0x80: meshed,
         ],
       },
     ],

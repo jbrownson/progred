@@ -278,11 +278,11 @@
           body: {
             function: tree_group,
             children: [
-              {
+              0x55: {
                 function: cube_chamfers,
                 orientation: top,
               },
-              {
+              0xaa: {
                 function: cube_chamfers,
                 orientation: right_face,
               },
@@ -298,8 +298,8 @@
       body: {
         function: tree_group,
         children: [
-          [
-            {
+          0x55: [
+            0x2a: {
               function: tooled_groups,
               program: {
                 params: [],
@@ -322,7 +322,7 @@
               },
               tool: ball_tool,
             },
-            {
+            0x55: {
               function: tooled_groups,
               program: {
                 params: [],
@@ -345,7 +345,7 @@
               },
               tool: ball_tool,
             },
-            {
+            0x80: {
               function: tooled_groups,
               program: {
                 params: [],
@@ -368,7 +368,7 @@
               },
               tool: ball_tool,
             },
-            {
+            0xaa: {
               function: tooled_groups,
               program: {
                 params: [],
@@ -391,7 +391,7 @@
               },
               tool: ball_tool,
             },
-            {
+            0xd5: {
               function: tooled_groups,
               program: {
                 params: [],
@@ -415,7 +415,7 @@
               tool: ball_tool,
             },
           ],
-          {
+          0xaa: {
             function: op1_chamfers,
           },
         ],
@@ -464,8 +464,8 @@
       body: {
         function: tree_group,
         children: [
-          [
-            {
+          0x55: [
+            0x80: {
               function: tooled_groups,
               program: {
                 params: [],
@@ -489,7 +489,7 @@
               tool: ball_tool,
             },
           ],
-          {
+          0xaa: {
             function: op2_chamfers,
           },
         ],
@@ -510,10 +510,10 @@
       body: {
         function: tree_group,
         children: [
-          {
+          0x55: {
             function: op1_groups,
           },
-          {
+          0xaa: {
             function: op2_groups,
           },
         ],
@@ -524,10 +524,10 @@
       params: [],
       body: {
         expressions: [
-          {
+          0x55: {
             function: op1,
           },
-          {
+          0xaa: {
             function: op2,
           },
         ],
@@ -558,9 +558,9 @@
     back_face: {
       name: "back face",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -578,10 +578,10 @@
     ball_center: {
       name: "ball center",
       params: [
-        x,
-        y,
-        z,
-        normal,
+        0x33: x,
+        0x66: y,
+        0x99: z,
+        0xcc: normal,
       ],
       body: {
         function: where,
@@ -628,7 +628,7 @@
           },
         },
         bindings: [
-          {
+          0x40: {
             subject: {
               right: {
                 f64: 0x0000000000000040,
@@ -638,7 +638,7 @@
             },
             bind: ball_radius,
           },
-          {
+          0x80: {
             subject: {
               function: normal,
               y: y,
@@ -657,7 +657,7 @@
               },
             },
           },
-          {
+          0xc0: {
             subject: {
               right: nz,
               function: hypot,
@@ -678,12 +678,12 @@
     ball_tip: {
       name: "ball tip",
       params: [
-        x,
-        y,
-        z,
-        normal,
-        orientation,
-        tool_axis,
+        0x24: x,
+        0x49: y,
+        0x6d: z,
+        0x92: normal,
+        0xb6: orientation,
+        0xdb: tool_axis,
       ],
       body: {
         function: where,
@@ -718,7 +718,7 @@
           },
         },
         bindings: [
-          {
+          0x33: {
             subject: {
               normal: normal,
               function: ball_center,
@@ -738,7 +738,7 @@
               },
             },
           },
-          {
+          0x66: {
             subject: {
               function: orientation,
               y: y,
@@ -757,7 +757,7 @@
               },
             },
           },
-          {
+          0x99: {
             subject: tool_axis,
             pattern: {
               y: {
@@ -771,7 +771,7 @@
               },
             },
           },
-          {
+          0xcc: {
             subject: {
               right: {
                 f64: 0x0000000000000040,
@@ -826,9 +826,9 @@
     bottom_face: {
       name: "bottom face",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -874,12 +874,12 @@
     contour_chamfer: {
       name: "contour chamfer",
       params: [
-        cutter_diameter,
-        contact_height,
+        0x55: cutter_diameter,
+        0xaa: contact_height,
       ],
       body: {
         params: [
-          strip,
+          0x80: strip,
         ],
         body: {
           function: tree_leaf,
@@ -920,7 +920,7 @@
                     },
                   },
                   bindings: [
-                    {
+                    0x80: {
                       subject: strip,
                       pattern: {
                         normal: {
@@ -962,15 +962,15 @@
     crosshatch: {
       name: "crosshatch",
       params: [
-        face,
-        orientation,
-        setup_up,
-        compensation,
+        0x33: face,
+        0x66: orientation,
+        0x99: setup_up,
+        0xcc: compensation,
       ],
       body: {
         function: tree_group,
         children: [
-          {
+          0x55: {
             compensation: compensation,
             function: crossing_passes,
             setup_up: setup_up,
@@ -980,7 +980,7 @@
             orientation: orientation,
             face: face,
           },
-          {
+          0xaa: {
             compensation: compensation,
             function: crossing_passes,
             setup_up: setup_up,
@@ -996,11 +996,11 @@
     crossing_passes: {
       name: "crossing passes",
       params: [
-        orientation,
-        slope,
-        setup_up,
-        face,
-        compensation,
+        0x2a: orientation,
+        0x55: slope,
+        0x80: setup_up,
+        0xaa: face,
+        0xd5: compensation,
       ],
       body: {
         function: where,
@@ -1021,9 +1021,9 @@
                   function: mapped_groups,
                   mapping: {
                     params: [
-                      x,
-                      y,
-                      z,
+                      0x40: x,
+                      0x80: y,
+                      0xc0: z,
                     ],
                     body: {
                       function: point,
@@ -1077,7 +1077,7 @@
           },
         },
         bindings: [
-          {
+          0x55: {
             subject: {
               function: pull_direction,
               setup_up: setup_up,
@@ -1086,7 +1086,7 @@
             },
             bind: direction,
           },
-          {
+          0xaa: {
             subject: {
               direction: direction,
               function: cut_axis,
@@ -1101,25 +1101,25 @@
     crosswise_chamfer: {
       name: "crosswise chamfer",
       params: [
-        stepover,
-        cutter_diameter,
+        0x55: stepover,
+        0xaa: cutter_diameter,
       ],
       body: {
         params: [
-          strip,
+          0x80: strip,
         ],
         body: {
           function: where,
           expression: {
             expressions: [
-              {
+              0x55: {
                 function: require,
                 condition: {
                   operand: width,
                   function: is_finite,
                 },
               },
-              {
+              0xaa: {
                 stepover: stepover,
                 length: length,
                 function: parallel_strokes,
@@ -1153,8 +1153,8 @@
                   },
                   stroke: {
                     params: [
-                      start,
-                      end,
+                      0x55: start,
+                      0xaa: end,
                     ],
                     body: {
                       end: end,
@@ -1169,7 +1169,7 @@
             function: do,
           },
           bindings: [
-            {
+            0x80: {
               subject: strip,
               pattern: {
                 normal: {
@@ -1196,7 +1196,7 @@
     cube_chamfers: {
       name: "cube chamfers",
       params: [
-        orientation,
+        0x80: orientation,
       ],
       body: {
         function: where,
@@ -1218,11 +1218,11 @@
           },
         },
         bindings: [
-          {
+          0x55: {
             subject: chamfer_pass,
             bind: cut_strip,
           },
-          {
+          0xaa: {
             subject: {
               function: cube,
             },
@@ -1247,22 +1247,22 @@
     diagonal_groups: {
       name: "diagonal line groups",
       params: [
-        rows,
-        spacing,
-        tool_axis,
-        feed_direction,
-        row_direction,
+        0x2a: rows,
+        0x55: spacing,
+        0x80: tool_axis,
+        0xaa: feed_direction,
+        0xd5: row_direction,
       ],
       body: {
         expressions: [
-          {
+          0x24: {
             function: require,
             condition: {
               operand: rows,
               function: is_finite,
             },
           },
-          {
+          0x49: {
             function: require,
             condition: {
               right: {
@@ -1273,7 +1273,7 @@
               left: rows,
             },
           },
-          {
+          0x6d: {
             function: require,
             condition: {
               right: rows,
@@ -1283,14 +1283,14 @@
               },
             },
           },
-          {
+          0x92: {
             function: require,
             condition: {
               operand: spacing,
               function: is_finite,
             },
           },
-          {
+          0xb6: {
             function: require,
             condition: {
               right: spacing,
@@ -1300,7 +1300,7 @@
               },
             },
           },
-          {
+          0xdb: {
             function: tree_group,
             children: {
               initial: {
@@ -1308,7 +1308,7 @@
               },
               step: {
                 params: [
-                  state,
+                  0x80: state,
                 ],
                 body: {
                   subject: {
@@ -1318,7 +1318,7 @@
                   },
                   function: match,
                   cases: [
-                    {
+                    0x55: {
                       pattern: {
                         bool: true,
                       },
@@ -1326,13 +1326,13 @@
                         absent: done,
                       },
                     },
-                    {
+                    0xaa: {
                       pattern: {
                         bool: false,
                       },
                       expression: {
                         expressions: [
-                          {
+                          0x55: {
                             function: tree_leaf,
                             value: {
                               function: quote,
@@ -1396,7 +1396,7 @@
                               },
                             },
                           },
-                          {
+                          0xaa: {
                             right: {
                               f64: 0x000000000000f03f,
                             },
@@ -1420,11 +1420,11 @@
     diagonals: {
       name: "diagonal passes",
       params: [
-        rows,
-        spacing,
-        tool_axis,
-        feed_direction,
-        row_direction,
+        0x2a: rows,
+        0x55: spacing,
+        0x80: tool_axis,
+        0xaa: feed_direction,
+        0xd5: row_direction,
       ],
       body: {
         function: sequence_paths,
@@ -1447,8 +1447,8 @@
     dot: {
       name: "dot product",
       params: [
-        left,
-        right,
+        0x55: left,
+        0xaa: right,
       ],
       body: {
         function: where,
@@ -1474,7 +1474,7 @@
           },
         },
         bindings: [
-          {
+          0x55: {
             subject: left,
             pattern: {
               y: {
@@ -1488,7 +1488,7 @@
               },
             },
           },
-          {
+          0xaa: {
             subject: right,
             pattern: {
               y: {
@@ -1520,20 +1520,20 @@
     evenly_spaced: {
       name: "evenly spaced",
       params: [
-        length,
-        stepover,
-        action,
+        0x40: length,
+        0x80: stepover,
+        0xc0: action,
       ],
       body: {
         expressions: [
-          {
+          0x2a: {
             function: require,
             condition: {
               operand: length,
               function: is_finite,
             },
           },
-          {
+          0x55: {
             function: require,
             condition: {
               right: length,
@@ -1543,14 +1543,14 @@
               },
             },
           },
-          {
+          0x80: {
             function: require,
             condition: {
               operand: stepover,
               function: is_finite,
             },
           },
-          {
+          0xaa: {
             function: require,
             condition: {
               right: stepover,
@@ -1560,18 +1560,18 @@
               },
             },
           },
-          {
+          0xd5: {
             function: where,
             expression: {
               expressions: [
-                {
+                0x55: {
                   function: require,
                   condition: {
                     operand: segments,
                     function: is_finite,
                   },
                 },
-                {
+                0xaa: {
                   function: tree_group,
                   children: {
                     initial: {
@@ -1579,7 +1579,7 @@
                     },
                     step: {
                       params: [
-                        state,
+                        0x80: state,
                       ],
                       body: {
                         subject: {
@@ -1589,7 +1589,7 @@
                         },
                         function: match,
                         cases: [
-                          {
+                          0x55: {
                             pattern: {
                               bool: true,
                             },
@@ -1597,13 +1597,13 @@
                               absent: done,
                             },
                           },
-                          {
+                          0xaa: {
                             pattern: {
                               bool: false,
                             },
                             expression: {
                               expressions: [
-                                {
+                                0x55: {
                                   function: tree_leaf,
                                   value: {
                                     function: quote,
@@ -1633,7 +1633,7 @@
                                     },
                                   },
                                 },
-                                {
+                                0xaa: {
                                   right: {
                                     f64: 0x000000000000f03f,
                                   },
@@ -1654,7 +1654,7 @@
               function: do,
             },
             bindings: [
-              {
+              0x80: {
                 subject: {
                   right: {
                     operand: {
@@ -1680,14 +1680,14 @@
     extend_stroke: {
       name: "extend straight stroke",
       params: [
-        start_extension,
-        end_extension,
-        stroke,
+        0x40: start_extension,
+        0x80: end_extension,
+        0xc0: stroke,
       ],
       body: {
         params: [
-          start,
-          end,
+          0x55: start,
+          0xaa: end,
         ],
         body: {
           function: where,
@@ -1719,7 +1719,7 @@
             function: stroke,
           },
           bindings: [
-            {
+            0x80: {
               subject: {
                 function: unit_vector,
                 vector: {
@@ -1746,21 +1746,21 @@
     face_paths: {
       name: "face passes",
       params: [
-        orientation,
-        setup_up,
+        0x55: orientation,
+        0xaa: setup_up,
       ],
       body: {
         function: where,
         expression: {
           compensation: {
             params: [
-              tool_axis,
+              0x80: tool_axis,
             ],
             body: {
               params: [
-                x,
-                y,
-                z,
+                0x40: x,
+                0x80: y,
+                0xc0: z,
               ],
               body: {
                 normal: normal,
@@ -1779,7 +1779,7 @@
           face: face,
         },
         bindings: [
-          {
+          0x80: {
             subject: {
               function: cube,
             },
@@ -1812,9 +1812,9 @@
             normal: {
               unquote: {
                 params: [
-                  x,
-                  y,
-                  z,
+                  0x40: x,
+                  0x80: y,
+                  0xc0: z,
                 ],
                 body: {
                   function: where,
@@ -1827,7 +1827,7 @@
                     },
                   },
                   bindings: [
-                    {
+                    0x33: {
                       subject: {
                         right: {
                           right: half_face,
@@ -1845,7 +1845,7 @@
                       },
                       bind: u,
                     },
-                    {
+                    0x66: {
                       subject: {
                         right: {
                           right: half_face,
@@ -1863,7 +1863,7 @@
                       },
                       bind: v,
                     },
-                    {
+                    0x99: {
                       subject: {
                         right: {
                           right: {
@@ -1907,7 +1907,7 @@
                       },
                       bind: nx,
                     },
-                    {
+                    0xcc: {
                       subject: {
                         right: {
                           right: {
@@ -2039,38 +2039,38 @@
                     },
                   },
                   bindings: [
-                    {
+                    0x20: {
                       subject: {
                         operand: half_size,
                         function: to_f32,
                       },
                       bind: half_size,
                     },
-                    {
+                    0x40: {
                       subject: {
                         operand: half_face,
                         function: to_f32,
                       },
                       bind: half_face,
                     },
-                    {
+                    0x60: {
                       subject: {
                         operand: center_depth,
                         function: to_f32,
                       },
                       bind: center_depth,
                     },
-                    {
+                    0x80: {
                       subject: {
                         operand: edge_limit,
                         function: to_f32,
                       },
                       bind: edge_limit,
                     },
-                    {
+                    0xa0: {
                       subject: {
                         params: [
-                          coordinate,
+                          0x80: coordinate,
                         ],
                         body: {
                           right: {
@@ -2095,12 +2095,12 @@
                       },
                       bind: shoulder,
                     },
-                    {
+                    0xc0: {
                       subject: {
                         params: [
-                          normal,
-                          u,
-                          v,
+                          0x40: normal,
+                          0x80: u,
+                          0xc0: v,
                         ],
                         body: {
                           right: {
@@ -2131,11 +2131,11 @@
                       },
                       bind: face_pair,
                     },
-                    {
+                    0xe0: {
                       subject: {
                         params: [
-                          u,
-                          v,
+                          0x55: u,
+                          0xaa: v,
                         ],
                         body: {
                           right: edge_limit,
@@ -2204,7 +2204,7 @@
               curve: {
                 unquote: {
                   params: [
-                    t,
+                    0x80: t,
                   ],
                   body: {
                     function: point,
@@ -2305,9 +2305,9 @@
             face: {
               unquote: {
                 params: [
-                  x,
-                  y,
-                  z,
+                  0x40: x,
+                  0x80: y,
+                  0xc0: z,
                 ],
                 body: {
                   function: point,
@@ -2390,25 +2390,25 @@
           },
         },
         bindings: [
-          {
+          0x20: {
             subject: {
               f64: 0x000000000000f03f,
             },
             bind: size,
           },
-          {
+          0x40: {
             subject: {
               f64: 0x9a9999999999b93f,
             },
             bind: chamfer,
           },
-          {
+          0x60: {
             subject: {
               f64: 0x000000000000e03f,
             },
             bind: control_depth,
           },
-          {
+          0x80: {
             subject: {
               right: {
                 f64: 0x0000000000000040,
@@ -2418,7 +2418,7 @@
             },
             bind: half_size,
           },
-          {
+          0xa0: {
             subject: {
               right: chamfer,
               function: subtract,
@@ -2426,7 +2426,7 @@
             },
             bind: half_face,
           },
-          {
+          0xc0: {
             subject: {
               right: {
                 f64: 0x0000000000001040,
@@ -2436,7 +2436,7 @@
             },
             bind: center_depth,
           },
-          {
+          0xe0: {
             subject: {
               right: chamfer,
               function: subtract,
@@ -2450,27 +2450,27 @@
     chamfer_ring: {
       name: "four rotated copies",
       params: [
-        program,
+        0x80: program,
       ],
       body: {
         function: tree_group,
         children: [
-          {
+          0x33: {
             function: rotated_groups,
             orientation: top,
             program: program,
           },
-          {
+          0x66: {
             function: rotated_groups,
             orientation: quarter_turn,
             program: program,
           },
-          {
+          0x99: {
             function: rotated_groups,
             orientation: half_turn,
             program: program,
           },
-          {
+          0xcc: {
             function: rotated_groups,
             orientation: three_quarter_turn,
             program: program,
@@ -2484,9 +2484,9 @@
     front_face: {
       name: "front face",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -2510,9 +2510,9 @@
     half_turn: {
       name: "half turn Z",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -2539,9 +2539,9 @@
     left_face: {
       name: "left face",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -2562,13 +2562,13 @@
     mapped_groups: {
       name: "map path groups",
       params: [
-        mapping,
-        program,
+        0x55: mapping,
+        0xaa: program,
       ],
       body: {
         tree_mapping: {
           params: [
-            value,
+            0x80: value,
           ],
           body: {
             function: quote,
@@ -2624,11 +2624,11 @@
     parallel_strokes: {
       name: "parallel strokes",
       params: [
-        curve,
-        length,
-        offset,
-        stepover,
-        stroke,
+        0x2a: curve,
+        0x55: length,
+        0x80: offset,
+        0xaa: stepover,
+        0xd5: stroke,
       ],
       body: {
         stepover: stepover,
@@ -2636,7 +2636,7 @@
         function: evenly_spaced,
         action: {
           params: [
-            t,
+            0x80: t,
           ],
           body: {
             function: where,
@@ -2660,7 +2660,7 @@
               function: stroke,
             },
             bindings: [
-              {
+              0x80: {
                 subject: {
                   function: curve,
                   t: t,
@@ -2675,8 +2675,8 @@
     point_sum: {
       name: "point sum",
       params: [
-        left,
-        right,
+        0x55: left,
+        0xaa: right,
       ],
       body: {
         function: where,
@@ -2699,7 +2699,7 @@
           },
         },
         bindings: [
-          {
+          0x55: {
             subject: left,
             pattern: {
               y: {
@@ -2713,7 +2713,7 @@
               },
             },
           },
-          {
+          0xaa: {
             subject: right,
             pattern: {
               y: {
@@ -2739,9 +2739,9 @@
     pull_direction: {
       name: "pull direction",
       params: [
-        orientation,
-        slope,
-        setup_up,
+        0x40: orientation,
+        0x80: slope,
+        0xc0: setup_up,
       ],
       body: {
         subject: {
@@ -2766,7 +2766,7 @@
         },
         function: match,
         cases: [
-          {
+          0x55: {
             pattern: {
               bool: true,
             },
@@ -2774,7 +2774,7 @@
               f64: 0x000000000000f0bf,
             },
           },
-          {
+          0xaa: {
             pattern: {
               bool: false,
             },
@@ -2791,9 +2791,9 @@
     quarter_turn: {
       name: "quarter turn Z",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -2811,9 +2811,9 @@
     right_face: {
       name: "right face",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -2831,13 +2831,13 @@
     rotated_groups: {
       name: "rotate path groups",
       params: [
-        orientation,
-        program,
+        0x55: orientation,
+        0xaa: program,
       ],
       body: {
         tree_mapping: {
           params: [
-            value,
+            0x80: value,
           ],
           body: {
             function: quote,
@@ -2870,8 +2870,8 @@
     rotate_paths: {
       name: "rotate paths",
       params: [
-        orientation,
-        program,
+        0x55: orientation,
+        0xaa: program,
       ],
       body: {
         function: map_points,
@@ -2894,16 +2894,16 @@
     sample_pass: {
       name: "sample pass",
       params: [
-        intercept,
-        spacing,
-        tool_axis,
-        feed_direction,
+        0x33: intercept,
+        0x66: spacing,
+        0x99: tool_axis,
+        0xcc: feed_direction,
       ],
       body: {
         function: let,
         expression: {
           expressions: [
-            {
+            0x55: {
               function: start_at,
               y: {
                 end: v1,
@@ -2946,13 +2946,13 @@
                 f64: 0x0000000000000000,
               },
             },
-            {
+            0xaa: {
               initial: {
                 f64: 0x000000000000f03f,
               },
               step: {
                 params: [
-                  state,
+                  0x80: state,
                 ],
                 body: {
                   subject: {
@@ -2962,7 +2962,7 @@
                   },
                   function: match,
                   cases: [
-                    {
+                    0x55: {
                       pattern: {
                         bool: true,
                       },
@@ -2970,13 +2970,13 @@
                         absent: done,
                       },
                     },
-                    {
+                    0xaa: {
                       pattern: {
                         bool: false,
                       },
                       expression: {
                         expressions: [
-                          {
+                          0x55: {
                             function: let,
                             expression: {
                               function: line_to,
@@ -2997,7 +2997,7 @@
                               },
                             },
                             bindings: [
-                              {
+                              0x80: {
                                 subject: {
                                   right: {
                                     right: {
@@ -3027,7 +3027,7 @@
                               },
                             ],
                           },
-                          {
+                          0xaa: {
                             right: {
                               f64: 0x000000000000f03f,
                             },
@@ -3047,7 +3047,7 @@
           function: do,
         },
         bindings: [
-          {
+          0x2a: {
             subject: {
               right: {
                 f64: 0x000000000000f03f,
@@ -3063,7 +3063,7 @@
             },
             bind: u0,
           },
-          {
+          0x55: {
             subject: {
               right: intercept,
               function: subtract,
@@ -3071,7 +3071,7 @@
             },
             bind: v0,
           },
-          {
+          0x80: {
             subject: {
               right: {
                 f64: 0x000000000000f03f,
@@ -3093,7 +3093,7 @@
             },
             bind: v1,
           },
-          {
+          0xaa: {
             subject: {
               right: intercept,
               function: sum,
@@ -3101,7 +3101,7 @@
             },
             bind: u1,
           },
-          {
+          0xd5: {
             subject: {
               right: {
                 operand: {
@@ -3136,8 +3136,8 @@
     scaled_point: {
       name: "scaled vector",
       params: [
-        vector,
-        factor,
+        0x55: vector,
+        0xaa: factor,
       ],
       body: {
         function: where,
@@ -3160,7 +3160,7 @@
           },
         },
         bindings: [
-          {
+          0x80: {
             subject: vector,
             pattern: {
               y: {
@@ -3211,10 +3211,10 @@
     square_side_offset: {
       name: "square side contact offset",
       params: [
-        cutter_diameter,
-        contact_height,
-        normal,
-        tool_axis,
+        0x33: cutter_diameter,
+        0x66: contact_height,
+        0x99: normal,
+        0xcc: tool_axis,
       ],
       body: {
         right: {
@@ -3248,9 +3248,9 @@
         function: quote,
         expression: {
           tool: [
-            {
+            0x55: {
               cutting: [
-                {
+                0x55: {
                   profile_radius: {
                     unquote: {
                       right: {
@@ -3261,16 +3261,16 @@
                     },
                   },
                 },
-                {
+                0xaa: {
                   axial: {
                     unquote: cutting_length,
                   },
                 },
               ],
             },
-            {
+            0xaa: {
               non_cutting: [
-                {
+                0x40: {
                   profile_radius: {
                     f64: 0x000000000000b83f,
                   },
@@ -3278,12 +3278,12 @@
                     f64: 0x666666666666d63f,
                   },
                 },
-                {
+                0x80: {
                   profile_radius: {
                     f64: 0x000000000000c03f,
                   },
                 },
-                {
+                0xc0: {
                   axial: {
                     f64: 0x333333333333e33f,
                   },
@@ -3307,13 +3307,13 @@
     line: {
       name: "straight cut",
       params: [
-        start,
-        end,
-        tool_axis,
+        0x40: start,
+        0x80: end,
+        0xc0: tool_axis,
       ],
       body: {
         expressions: [
-          {
+          0x55: {
             function: where,
             expression: {
               function: start_at,
@@ -3323,7 +3323,7 @@
               z: z,
             },
             bindings: [
-              {
+              0x80: {
                 subject: start,
                 pattern: {
                   y: {
@@ -3339,7 +3339,7 @@
               },
             ],
           },
-          {
+          0xaa: {
             function: where,
             expression: {
               function: line_to,
@@ -3348,7 +3348,7 @@
               z: z,
             },
             bindings: [
-              {
+              0x80: {
                 subject: end,
                 pattern: {
                   y: {
@@ -3377,9 +3377,9 @@
     three_quarter_turn: {
       name: "three-quarter turn Z",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -3404,20 +3404,20 @@
     cut_axis: {
       name: "tilted axis",
       params: [
-        orientation,
-        slope,
-        direction,
+        0x40: orientation,
+        0x80: slope,
+        0xc0: direction,
       ],
       body: {
         expressions: [
-          {
+          0x55: {
             function: require,
             condition: {
               operand: tilt,
               function: is_finite,
             },
           },
-          {
+          0xaa: {
             function: where,
             expression: {
               function: orientation,
@@ -3471,7 +3471,7 @@
               },
             },
             bindings: [
-              {
+              0x80: {
                 subject: {
                   right: {
                     right: {
@@ -3498,13 +3498,13 @@
     tooled_groups: {
       name: "tool for path groups",
       params: [
-        tool,
-        program,
+        0x55: tool,
+        0xaa: program,
       ],
       body: {
         tree_mapping: {
           params: [
-            value,
+            0x80: value,
           ],
           body: {
             function: quote,
@@ -3539,9 +3539,9 @@
     top: {
       name: "top",
       params: [
-        x,
-        y,
-        z,
+        0x40: x,
+        0x80: y,
+        0xc0: z,
       ],
       body: {
         function: point,
@@ -3556,13 +3556,13 @@
     translated_points: {
       name: "translated points",
       params: [
-        offset,
+        0x80: offset,
       ],
       body: {
         params: [
-          x,
-          y,
-          z,
+          0x40: x,
+          0x80: y,
+          0xc0: z,
         ],
         body: {
           right: offset,
@@ -3588,7 +3588,7 @@
     unit_vector: {
       name: "unit vector",
       params: [
-        vector,
+        0x80: vector,
       ],
       body: {
         function: where,
@@ -3612,7 +3612,7 @@
           },
         },
         bindings: [
-          {
+          0x80: {
             subject: vector,
             pattern: {
               y: {
@@ -3645,91 +3645,91 @@
   "root": {
     main: {
       settings_section: [
-        tilt,
-        tool_diameter,
-        square_diameter,
-        cutting_length,
-        chamfer_stepover,
+        0x2a: tilt,
+        0x55: tool_diameter,
+        0x80: square_diameter,
+        0xaa: cutting_length,
+        0xd5: chamfer_stepover,
       ],
       tools_section: [
-        ball_tool,
-        {
+        0x33: ball_tool,
+        0x66: {
           evaluate: ball_tool,
         },
-        square_tool,
-        {
+        0x99: square_tool,
+        0xcc: {
           evaluate: square_tool,
         },
       ],
       geometry_section: [
-        cube,
+        0x80: cube,
       ],
       operations_section: [
-        program_tree,
-        op1_groups,
-        op2_groups,
-        preview_operations,
-        op1,
-        op2,
-        op1_chamfers,
-        op2_chamfers,
+        0x1c: program_tree,
+        0x38: op1_groups,
+        0x55: op2_groups,
+        0x71: preview_operations,
+        0x8e: op1,
+        0xaa: op2,
+        0xc7: op1_chamfers,
+        0xe3: op2_chamfers,
       ],
       helpers_section: [
-        evenly_spaced,
-        parallel_strokes,
-        extend_stroke,
-        line,
-        square_side_offset,
-        rotate_paths,
-        translated_points,
-        point_sum,
-        scaled_point,
-        unit_vector,
-        mapped_groups,
-        rotated_groups,
-        tooled_groups,
+        0x12: evenly_spaced,
+        0x24: parallel_strokes,
+        0x36: extend_stroke,
+        0x49: line,
+        0x5b: square_side_offset,
+        0x6d: rotate_paths,
+        0x80: translated_points,
+        0x92: point_sum,
+        0xa4: scaled_point,
+        0xb6: unit_vector,
+        0xc9: mapped_groups,
+        0xdb: rotated_groups,
+        0xed: tooled_groups,
       ],
       strategies_section: [
-        diagonal_groups,
-        diagonals,
-        sample_pass,
-        crosshatch,
-        ball_center,
-        ball_path,
-        face_paths,
-        ball_tip,
-        chamfer_pass,
-        contour_pass,
-        cube_chamfers,
-        chamfer_ring,
-        contour_chamfer,
-        crosswise_chamfer,
+        0x11: diagonal_groups,
+        0x22: diagonals,
+        0x33: sample_pass,
+        0x44: crosshatch,
+        0x55: ball_center,
+        0x66: ball_path,
+        0x77: face_paths,
+        0x88: ball_tip,
+        0x99: chamfer_pass,
+        0xaa: contour_pass,
+        0xbb: cube_chamfers,
+        0xcc: chamfer_ring,
+        0xdd: contour_chamfer,
+        0xee: crosswise_chamfer,
       ],
       outline: [
-        settings_section,
-        geometry_section,
-        tools_section,
-        operations_section,
-        strategies_section,
-        helpers_section,
+        0x24: settings_section,
+        0x49: geometry_section,
+        0x6d: tools_section,
+        0x92: operations_section,
+        0xb6: strategies_section,
+        0xdb: helpers_section,
       ],
     },
     panes: {
       pane_left: [
-        {
+        0x80: {
           viewport: {
             params: [
-              value,
-              width,
-              height,
+              0x40: value,
+              0x80: width,
+              0xc0: height,
             ],
             body: {
               view: {
                 params: [
-                  value,
-                  width,
-                  height,
-                  parameters,
+                  0x33: value,
+                  0x66: width,
+                  0x99: height,
+                  0xcc: parameters,
                 ],
                 body: {
                   function: where,
@@ -3738,7 +3738,7 @@
                       subject: preview_mode,
                       function: match,
                       cases: [
-                        {
+                        0x55: {
                           pattern: model,
                           expression: {
                             function: quote,
@@ -3761,7 +3761,7 @@
                             },
                           },
                         },
-                        {
+                        0xaa: {
                           pattern: stock,
                           expression: {
                             function: quote,
@@ -3805,7 +3805,7 @@
                       function: quote,
                       expression: {
                         scene: [
-                          {
+                          0x80: {
                             field: {
                               unquote: {
                                 function: where,
@@ -3813,7 +3813,7 @@
                                   function: field,
                                 },
                                 bindings: [
-                                  {
+                                  0x80: {
                                     subject: {
                                       function: cube,
                                     },
@@ -3856,7 +3856,7 @@
                     },
                   },
                   bindings: [
-                    {
+                    0x33: {
                       subject: parameters,
                       pattern: {
                         playback: {
@@ -3875,7 +3875,7 @@
                         },
                       },
                     },
-                    {
+                    0x66: {
                       subject: {
                         f64: 0xfca9f1d24d62303f,
                       },
@@ -3883,7 +3883,7 @@
                         bind: profile_tolerance,
                       },
                     },
-                    {
+                    0x99: {
                       subject: {
                         y: {
                           f64: 0x000000000000e0bf,
@@ -3899,7 +3899,7 @@
                         bind: stock_min,
                       },
                     },
-                    {
+                    0xcc: {
                       subject: {
                         y: {
                           f64: 0x000000000000e03f,
@@ -3936,7 +3936,7 @@
                     },
                   },
                   bindings: [
-                    {
+                    0x55: {
                       subject: {
                         control_initial: {
                           function: quote,
@@ -3948,11 +3948,11 @@
                         },
                         function: radio,
                         control_options: [
-                          {
+                          0x55: {
                             name: "Model",
                             value: model,
                           },
-                          {
+                          0xaa: {
                             name: "Stock",
                             value: stock,
                           },
@@ -3962,7 +3962,7 @@
                         bind: preview_mode,
                       },
                     },
-                    {
+                    0xaa: {
                       subject: {
                         fuel: {
                           f64: 0x00000000804f1241,
