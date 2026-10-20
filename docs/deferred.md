@@ -351,16 +351,18 @@ offers. There should be one for every direction a person might want to go, each
 landing on something that works. Today's two, Grap's new program and Fidget's
 new scene, each lead somewhere awkward; Grap's opens with a missing-cell error
 in its pane until the program is written (that error's hole does take the
-program now). Grap's might better start a journal, a notebook in the style of a
-REPL; see [Notebook and REPL](#notebook-and-repl).
+program now). A Grap notebook in the style of a REPL should be a starting point
+of its own beside Grap's; see [Notebook and REPL](#notebook-and-repl).
 
 ## Workspace documents
 
 A document whose root has a `panes` field is a workspace, and the editor
-swallows it: it shows the panes, and the document view draws only the root's
-`main` value ([the model](model.md#panes)). Plain and Raw, or turning the
-editor library off, show the whole record. Starting points and the examples use
-this shape. What's left, discussed in October 2026:
+swallows it: it shows the panes, and the editor library draws the workspace
+record transparently as its `main` value ([the model](model.md#panes)). Plain
+and Raw, or turning the editor library off, show the whole record. A document
+is wrapped only once something adds a workspace field, such as opening a pane.
+Starting points that open a pane and the examples use this shape. What's left,
+discussed in October 2026:
 
 - **Panes that show a document path,** not only a value, so something can sit
   in a pane without being moved into a cell. Paths are already data
@@ -368,8 +370,60 @@ this shape. What's left, discussed in October 2026:
   the session, so a saved pane path should go through fields and cells.
 - **A "show panes" command** opening the panes declaration in a pane, once panes
   can show a path.
-- **Recursion.** A workspace in a pane of a workspace, which suggests making the
-  pane layout a projection.
+- **Recursion.** A pane showing a workspace record already draws its main value;
+  drawing that workspace's own panes too suggests making the pane layout a
+  projection.
+- **Tabs or splits.** A main value holding several things, such as a Grap
+  program and a Fidget scene, could draw as tabs or splits. That's a projection
+  of a record of several things, wherever one appears, not part of the
+  workspace convention.
+
+## Islands in the document
+
+Deleting a value unlinks it, but cells it referred to stay in the cell table
+and are saved, so documents collect cells nothing can reach. Nothing collects
+or shows them; only a test keeps the checked-in examples clean. Thoughts from
+October 2026, to try iteratively:
+
+- **Collect unreachable cells,** first at save, so a saved file never holds one.
+  Undo already restores a deletion, since its snapshots hold the cell table.
+- **Copying carries the cells a value refers to,** so a cut value still pastes
+  whole later, and pasting into another document works. That makes collecting
+  at delete time safe too.
+- A panel listing islands would mostly be a recovery tool, which undo covers.
+- A cell that's still reachable but drawn nowhere is a different case, as when a
+  notebook entry other entries use is deleted from the notebook. Following a
+  reference still reaches it; see in use whether its uses should look
+  different.
+
+## Line breaking
+
+Each container offers a one-line form and a stacked one, and the first whose
+natural width fits wins, so on a wide window nearly everything goes on one line,
+a small root document included. Raised in October 2026 and deferred until there
+are more examples. Reasons something might stack even when it fits:
+
+- Several things rather than parts of one: a document's top level, definitions,
+  `do` steps, `match` cases and bindings read down; a call's arguments or a
+  point's `x` and `y` read across.
+- More than one compound child, many labelled fields, or nearness to the root.
+- Reading measure: a one-line form should fit about 70–80 characters' worth, not
+  the window. Wadler and Leijen's pretty printers call this the ribbon.
+- Stability: rules from structure don't flip while typing; width rules do.
+- Manual control as an option, stored like folds. Making Enter imply stacking
+  would stack everything built by hand, since Enter is the only key that adds
+  fields; an explicit toggle is safer.
+
+A research pass found the website already works around it: the tutorial embed
+forces a lesson's root into a column (`web_embed.rs`), the growth lesson's "click
+between the last two tree lines" holds only because its embed is narrow, and
+`navigation.gid` asks the reader to narrow the window. On a laptop-width window
+the IoP tree's scene body, the forest's drawing steps and a `where` in
+`libraries.gid` sit on one line. The rules it proposed need one engine
+primitive, a hard break, which keeps any enclosing layout from taking its
+one-line form (Prettier's `breakParent`). More stacking also means more labels
+over indented values; avoiding that staircase needs a form that keeps a
+multi-line last item beside its head, which the engine can't express yet.
 
 ## Code size and structure
 
@@ -1032,13 +1086,21 @@ Fidget took 25%.
 
 A Grap notebook in the style of Jupyter, but reactive like Pluto, marimo and
 Observable: changing a cell recomputes the cells that use it, so there is no
-hidden state from running cells out of order. Much of it exists already.
-`{evaluate: expression}` shows an expression and its result together, results
-project through the normal projections (pictures, tool previews, 3D views), and
-observed evaluation tracks the cell definitions an evaluation reads. A notebook
-is then mostly a projection of a list of named `evaluate` cells, with
-ergonomics: a new cell on Enter, later cells referring to earlier ones by name,
-and progress and cancellation for long computations.
+hidden state from running cells out of order. Much of it exists already:
+results project through the normal projections (pictures, tool previews, 3D
+views), and observed evaluation tracks the cell definitions an evaluation reads.
+A notebook is then mostly a projection of a list of entry cells, each drawn as
+its expression and its result, with ergonomics: a new entry on Enter, and
+progress and cancellation for long computations. It's a starting point of its
+own, beside Grap's.
+
+- Entries are cells, and one refers to another the standard ways: Cmd-clicking
+  it into a slot, copy and paste, or naming it and referring to it by name. No
+  automatic names. The picker doesn't yet offer named cells that aren't
+  functions, a gap to note rather than fix first.
+- The notebook knows what it is, so an entry is its expression alone, with no
+  wrapper. `{evaluate: expression}` is a poor design as it stands: a reference
+  to one gets the record, not its result.
 
 - A REPL pane evaluates in the scope of the selection. After Cmd-clicking an
   output, the call that drew it supplies the bindings, as a debugger console
