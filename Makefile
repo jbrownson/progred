@@ -13,7 +13,7 @@ NATIVE_RUN_TARGET := unsupported-native-platform
 NATIVE_CARGO = $(error native Progred is not supported on $(UNAME_S))
 endif
 
-.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev control run-web build-web build-website images fetch check build test test-vendor test-gpu test-web-gpu perf audit outdated sandbox-app
+.PHONY: help run run-macos run-linux install-linux unsupported-native-platform dev control run-web build-web build-website images fetch check build test test-vendor test-gpu test-web-gpu perf sweep audit outdated sandbox-app
 
 help:
 	@echo "Development:"
@@ -29,10 +29,12 @@ help:
 	@echo "  make check        Type-check the workspace, profiling code included"
 	@echo "  make build        Build the workspace"
 	@echo "  make test         Test the workspace, except the vendored Fidget packages"
+	@echo "                    (ARGS='NAME' runs only the tests whose names contain NAME)"
 	@echo "  make test-vendor  Test the vendored Fidget packages"
 	@echo "  make test-gpu     Run the tests that need a GPU"
 	@echo "  make test-web-gpu Test the browser presentation in the installed Chrome (macOS)"
 	@echo "  make perf         Run the performance canaries and compare with the log"
+	@echo "  make sweep        Delete development build outputs no check or test uses"
 	@echo "  make audit        Check the Cargo and npm lockfiles for security advisories"
 	@echo "  make outdated     List newer Cargo and npm releases"
 	@echo
@@ -83,8 +85,10 @@ fetch:
 	$(NATIVE_CARGO) fetch
 
 # All targets and the profiling features, which nothing else compiles.
+CHECK := check --workspace --all-targets --features progred/cam-profile,progred/control,progred/layout-profile
+
 check:
-	$(NATIVE_CARGO) check --workspace --all-targets --features progred/cam-profile,progred/control,progred/layout-profile
+	$(NATIVE_CARGO) $(CHECK)
 
 build:
 	$(NATIVE_CARGO) build --workspace
@@ -93,9 +97,14 @@ VENDORED := fidget-core fidget-raster fidget-wgpu
 
 # Unit and integration tests. Cargo's default selection would also build the
 # examples, which `make check` compiles, and run doc tests, of which there are
-# none, both needing progred compiled a second time as a plain library.
+# none, both needing progred compiled a second time as a plain library. ARGS
+# filters by test name, reusing this build: selecting one package instead, as
+# `-p progred` does, resolves dependencies' features differently and builds
+# much of the graph again beside it.
+TEST := test --workspace --tests $(VENDORED:%=--exclude %)
+
 test:
-	$(NATIVE_CARGO) test --workspace --tests $(VENDORED:%=--exclude %)
+	$(NATIVE_CARGO) $(TEST) $(if $(ARGS),-- $(ARGS))
 
 # Upstream's tests of the vendored packages, optimized as vendor/README.md
 # advises. Run them after changing a patch or upgrading Fidget. The binaries
@@ -111,6 +120,12 @@ test-gpu:
 
 perf:
 	@python3 -B tools/perf.py $(ARGS)
+
+# Cargo keeps every earlier build's outputs. This keeps what `make check` and
+# `make test` use, building what they lack, and deletes the rest of the
+# development profile; see tools/sweep.py.
+sweep:
+	@python3 -B tools/sweep.py $(NATIVE_CARGO) -- $(CHECK) -- $(TEST) --no-run
 
 # Every lockfile against its advisory database, reporting all before failing.
 audit:

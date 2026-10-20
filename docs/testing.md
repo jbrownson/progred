@@ -11,15 +11,20 @@ optimize every crate except progred, which stays quick to rebuild, so tests
 spend little time in Fidget, Vello, text shaping, Grap, or Puri; once built,
 `make test` takes about 40 s on a 4-core Linux VM. Progred's tests lay out text
 with the bundled Noto fonts, so layout is the same on every machine; a few of
-Puri's still use system fonts. While iterating, run a subset by passing Cargo's
-usual arguments through `./tools/sandbox-cargo test` on macOS or
-`./tools/linux-cargo test` on Linux, for example
-`./tools/linux-cargo test -p progred --lib tutorials`, and leave `make test` for
-before pushing. Each feature set and profile keeps its own build of progred, and
-the builds pile up; they can fill a small disk (16 GB on one cloud session).
-`./tools/linux-cargo clean -p progred` removes them and leaves the
-optimized dependencies in place. Nothing here needs a window; the owner does the
-visual testing.
+Puri's still use system fonts. While iterating, run the tests whose names
+contain a filter, as in `make test ARGS='tutorials'`, and leave the full run for
+before pushing. The filter reuses the full run's build, where selecting one
+package, as `-p progred` does, resolves dependencies' features differently and
+builds much of the graph again beside it (1.3 GB here). Cargo never removes an
+earlier build's outputs: after a dependency upgrade, a compiler update or a
+changed setting, every crate rebuilds under new names beside the old ones, and
+they pile up (16 GB on one cloud session after nine days, against 3–4 GB for a
+fresh `make check` and `make test`). `make sweep` keeps what those two use and
+deletes the rest of the development build; other profiles, such as `make
+perf`'s, are left alone. Progred builds with line tables only, like its
+dependencies, which halved its test binary and cut its incremental cache to a
+third; see the root `Cargo.toml` for stepping through a crate in a debugger. Nothing here needs a window; the owner does the visual
+testing.
 
 ## Layers
 

@@ -48,10 +48,11 @@ superseded notes to `docs/history/`.
   don't bundle housekeeping with feature work. Before pushing, run
   `cargo fmt --all -- --check` and `make test`. When pushing to a session
   branch, add commits as work proceeds and rewrite its history only when asked.
-- While iterating, build and run only the tests that cover the change, such as
-  `test -p progred --lib <filter>` through the wrapper; a test build checks the
-  code too, so don't run a separate `check` first. Leave `make test` for before
-  pushing.
+- While iterating, run only the tests that cover the change, with
+  `make test ARGS='<filter>'`, which reuses the full run's build; selecting a
+  package with `-p` builds much of the graph again. A test build checks the code
+  too, so don't run a separate `check` first. Leave the full `make test` for
+  before pushing.
 - Use subagents freely; token use isn't a concern, the main session's context
   is. Survey the code with one before a change that spans many files, run
   independent investigations in parallel, and keep the main session for

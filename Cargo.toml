@@ -53,15 +53,17 @@ web-sys = "0.3"
 # Fidget, Vello, and text shaping, in Grap, and in Puri's drawing. Optimizing
 # everything but progred cut `make test` from 239 s to 31 s on a 4-core VM,
 # while progred, the crate most often edited, stays unoptimized so it rebuilds
-# quickly. Line tables keep the optimized frames in backtraces. To step through
-# one, override it, as in `--config 'profile.dev.package.grap.opt-level=0'`.
+# quickly. Line tables keep every frame in backtraces; full debug info, which
+# a debugger needs for local variables, made progred's builds several times
+# larger and nothing used it. To step through a crate, override both, as in
+# `--config 'profile.dev.package.grap.opt-level=0' --config
+# 'profile.dev.package.grap.debug=true'`.
 [profile.dev]
 opt-level = 2
 debug = "line-tables-only"
 
 [profile.dev.package.progred]
 opt-level = 0
-debug = true
 
 # What `make perf` measures: the release build, but incremental, so a run after
 # an edit recompiles what changed instead of all of progred, which took two to
