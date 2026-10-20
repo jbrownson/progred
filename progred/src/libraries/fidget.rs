@@ -226,10 +226,12 @@ fn bound_arguments(
 
 fn unary_function(marker: CellId) -> ForeignFunction {
     ForeignFunction::from_value(move |context, call, environment| {
-        let Some(operand) = evaluated(context, call, environment, vocabulary::OPERAND)? else {
-            return Ok(context.missing_argument(vocabulary::OPERAND));
-        };
-        Ok(unary(marker, operand))
+        Ok(
+            match context.arguments(call, [vocabulary::OPERAND], environment)? {
+                Ok((operand,)) => unary(marker, operand),
+                Err(invalid) => invalid.into_value(),
+            },
+        )
     })
     .parameters([vocabulary::OPERAND])
     .tracked()
@@ -237,13 +239,12 @@ fn unary_function(marker: CellId) -> ForeignFunction {
 
 fn binary_function(marker: CellId) -> ForeignFunction {
     ForeignFunction::from_value(move |context, call, environment| {
-        let Some(left) = evaluated(context, call, environment, vocabulary::LEFT)? else {
-            return Ok(context.missing_argument(vocabulary::LEFT));
-        };
-        let Some(right) = evaluated(context, call, environment, vocabulary::RIGHT)? else {
-            return Ok(context.missing_argument(vocabulary::RIGHT));
-        };
-        Ok(binary(marker, left, right))
+        Ok(
+            match context.arguments(call, [vocabulary::LEFT, vocabulary::RIGHT], environment)? {
+                Ok((left, right)) => binary(marker, left, right),
+                Err(invalid) => invalid.into_value(),
+            },
+        )
     })
     .parameters([vocabulary::LEFT, vocabulary::RIGHT])
     .tracked()

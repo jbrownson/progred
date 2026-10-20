@@ -1,5 +1,5 @@
 use super::*;
-use ::grap::logic::value;
+use ::grap::logic::{read, value};
 
 #[test]
 fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
@@ -38,7 +38,7 @@ fn booleans_are_open_inert_values_not_evaluated_cell_descriptions() {
 }
 
 #[test]
-fn require_accepts_true_rejects_false_and_preserves_absents() {
+fn require_accepts_true_rejects_false_and_carries_absents() {
     let failure =
         ::grap::absent::with_detail(gid::new_cell_id(), vocabulary::CONDITION, Value::record([]));
     for (condition, expected) in [
@@ -53,13 +53,16 @@ fn require_accepts_true_rejects_false_and_preserves_absents() {
         ),
         (
             Value::record([]),
-            ::grap::absent::with_detail(
-                vocabulary::NOT_BOOL,
+            crate::test_values::invalid_arguments([(
                 vocabulary::CONDITION,
-                Value::record([]),
-            ),
+                crate::test_values::not(vocabulary::NOT_BOOL, Value::record([])),
+            )]),
         ),
-        (failure.clone(), failure),
+        // A condition that's already absent is why require couldn't use it.
+        (
+            failure.clone(),
+            crate::test_values::invalid_arguments([(vocabulary::CONDITION, failure)]),
+        ),
     ] {
         let expression = ::grap::call(
             vocabulary::REQUIRE.into(),
@@ -76,7 +79,10 @@ fn require_accepts_true_rejects_false_and_preserves_absents() {
         20,
     );
     assert_eq!(
-        ::grap::absent::reason(&missing.result),
-        Some(::grap::absent::MISSING_ARGUMENT)
+        missing.result,
+        crate::test_values::invalid_arguments([(
+            vocabulary::CONDITION,
+            crate::test_values::missing(vocabulary::CONDITION),
+        )])
     );
 }

@@ -8,6 +8,8 @@ use gid::{CellId, Record, Value};
 pub const BOOL: CellId = CellId::from_u128(0xb2d13b64336a9e808133d0c7d5e4981e);
 pub const TRUE: CellId = CellId::from_u128(0x04831f9b704935059231eb111770e62e);
 pub const FALSE: CellId = CellId::from_u128(0x8fcc0a2e5f26c72efd9e917a28919801);
+/// Why a value isn't a boolean, carrying it.
+pub const NOT_BOOL: CellId = CellId::from_u128(0x0f168ae21a023bdd711339e3aa949f9a);
 
 pub fn value(value: bool) -> Value {
     Value::record([(BOOL, encode(value))])

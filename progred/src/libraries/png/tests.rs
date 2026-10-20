@@ -118,7 +118,10 @@ fn width_and_height_read_the_header() {
             vocabulary::WIDTH,
             [(vocabulary::IMAGE, Value::from(vec![1]))]
         ),
-        ::grap::absent::value(vocabulary::NOT_PNG)
+        crate::test_values::invalid_arguments([(
+            vocabulary::IMAGE,
+            crate::test_values::not(vocabulary::NOT_PNG, Value::from(vec![1]))
+        )])
     );
     assert_eq!(
         call(

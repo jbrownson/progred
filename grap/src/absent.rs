@@ -13,6 +13,9 @@ pub const NO_ALTERNATIVE: CellId = CellId::from_u128(0x3bf0543fa73a0cee9036317cd
 pub const EFFECTFUL_DECLINE: CellId = CellId::from_u128(0xdc2651b863aa8aaf2df25ccb0c1fef03);
 pub const DECLINED: CellId = CellId::from_u128(0x1cab38a2c8cffe5c077adc29f74c2ddf);
 pub const CAUSES: CellId = CellId::from_u128(0x2f34365ec4dce76324f482c08afe6aba);
+/// Why a function couldn't use its arguments, carrying why each it couldn't
+/// use under its label.
+pub const INVALID_ARGUMENTS: CellId = CellId::from_u128(0xaeb37f359ed1437cbc1adee0a05ac60f);
 
 pub const CELL: CellId = CellId::from_u128(0x7ba69298ef92cf954456784b66e86032);
 pub const VALUE: CellId = CellId::from_u128(0xcfeaf191b71e06afef86c27ee43eb936);
@@ -43,13 +46,6 @@ pub fn decline() -> Value {
 /// such as a sum over a list, keeps its root causes and first uses without
 /// growing a layer per element.
 pub const CHAIN_LIMIT: usize = 8;
-
-/// An absent for `reason`, carrying under `field` the value it couldn't use,
-/// absent or not. An absent value whose chain has reached [`CHAIN_LIMIT`]
-/// passes on unchanged instead.
-pub fn caused_by(reason: CellId, field: CellId, detail: Value) -> Value {
-    caused_by_all(reason, [(field, detail)])
-}
 
 /// An absent for `reason`, carrying each value it couldn't use, absent or
 /// not, under its field: its causes are those that are absent, so absents

@@ -12,40 +12,27 @@ pub const ID: gid::CellId = gid::CellId::from_u128(0xf76a2ef341541a5c955fc23094e
 pub mod vocabulary {
     use gid::CellId;
 
-    pub use ::grap::logic::{BOOL, FALSE, TRUE};
+    pub use ::grap::logic::{BOOL, FALSE, NOT_BOOL, TRUE};
     pub const REQUIRE: CellId = CellId::from_u128(0xcadca87ed76939f9c1ba3bb94495ad06);
     pub const CONDITION: CellId = CellId::from_u128(0x91c786935eb5794b005582b8e7941bc2);
-    pub const NOT_BOOL: CellId = CellId::from_u128(0x0f168ae21a023bdd711339e3aa949f9a);
     pub const CONDITION_NOT_MET: CellId = CellId::from_u128(0x1d6c6b09f182a3a036e19eb06cdf1ffc);
 }
-
-pub use ::grap::logic::read;
 
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::REQUIRE,
         ForeignFunction::from_value(|context, call, environment| {
-            let Some(condition) = context.field(call, vocabulary::CONDITION) else {
-                return Ok(context.missing_argument(vocabulary::CONDITION));
-            };
-            let value = context.eval_to_value(condition, environment)?;
-            Ok(if ::grap::absent::is_absent(&value) {
-                value
-            } else {
-                match read(&value) {
-                    Some(true) => Value::record([]),
-                    Some(false) => ::grap::absent::with_detail(
+            Ok(
+                match context.arguments(call, [vocabulary::CONDITION], environment)? {
+                    Ok((true,)) => Value::record([]),
+                    Ok((false,)) => ::grap::absent::with_detail(
                         vocabulary::CONDITION_NOT_MET,
                         vocabulary::CONDITION,
-                        value,
+                        ::grap::logic::value(false),
                     ),
-                    None => ::grap::absent::with_detail(
-                        vocabulary::NOT_BOOL,
-                        vocabulary::CONDITION,
-                        value,
-                    ),
-                }
-            })
+                    Err(invalid) => invalid.into_value(),
+                },
+            )
         })
         .parameters([vocabulary::CONDITION])
         .tracked(),

@@ -704,25 +704,30 @@ a live evaluation context. They may inspect, return, forward, or evaluate those
 raw expressions, in the calling environment or an explicitly derived one. The
 environment becomes a GID record only when Rust explicitly hands it to Grap.
 A library can instead register one of Grap's primitives (`grap::primitive`),
-an operation the evaluator runs natively, with the library's own labels and
-decline reasons: every number type's arithmetic, comparisons and one-operand
-functions are registered this way. A call that resolves to a primitive runs it directly
+an operation the evaluator runs natively, with the library's own labels:
+every number type's arithmetic, comparisons and one-operand functions are
+registered this way. A call that resolves to a primitive runs it directly
 rather than through the foreign-call machinery; resolution, shadowing, fuel
 and effects are as for any other foreign call.
 Semantic failure is an ordinary absent value; the host `Result` only propagates
-evaluator halts such as exhausted fuel. A function that can't use its
-arguments declines with its own reason and carries each it couldn't use under
-its label, whatever it held, so an absent argument's reason shows beneath as a
-cause, as exceptions chain. The `grap::declined::all` combinator does this:
-given a reason and each argument's label and value or what it held instead, it
-returns the values or that absent, so a function written in Rust declares what
-its arguments must be in one expression; `checked`, below, is its Grap
-counterpart. The number operators use the combinator: `*` with neither operand
-is "not f64", carrying "missing argument" under both `left` and `right`, and `"three" + 4` carries `"three"` under `left`. An
-absent's causes are the absents among its fields, so they make a tree; a check
-for a particular reason looks at its leaves (`grap::absent::root_causes`). An
-absent used twice, as in `x * x`, is carried once, and one whose longest chain
-of causes is already `CHAIN_LIMIT` long passes on unchanged, so a loop that
+evaluator halts such as exhausted fuel. A function written in Rust reads its
+arguments through `grap::arguments`: each is found under its label, evaluated,
+and parsed into the Rust type the function works with (`Parse`), and the
+function runs only when every one parses. Otherwise it returns "invalid
+arguments", carrying under each label why that argument couldn't be used: a
+missing argument, its type's reason carrying the value, or the absent it
+already was, passed on unchanged as the cause. Each type owns its reason, so a
+function taking several types reports each correctly, and a library's own
+type, such as a list or a PNG, carries its own reason. So `*` with neither
+operand is "invalid arguments" carrying "missing argument" under both `left`
+and `right`, and `"three" + 4` carries "not f64", with `"three"`, under
+`left`. The failure is reported in the terms of the function that failed,
+which needed only its own arguments; it can't say what a caller meant by them.
+An absent's causes are the absents among its fields, so they make a tree; a
+check for a particular reason looks at its leaves
+(`grap::absent::root_causes`). The same absent twice, as in `x * x`, or the
+same wrong value on both sides, is carried once, and an absent whose longest
+chain of causes is already `CHAIN_LIMIT` long passes on unchanged, so a loop that
 keeps using one doesn't grow it a layer per pass. Control functions can
 evaluate only the chosen branch. Blobs, lists, and unrecognized records
 are inert: the evaluator does not search ordinary containers for expressions.
@@ -755,16 +760,6 @@ returns a non-absent unchanged. Only an absent result evaluates `default`, in th
 same calling environment. It does not validate the value's type or undo effects;
 actual evaluator halts still halt rather than invoking the fallback.
 
-The absent library's `checked {reason, arguments: {<label>: <expression>…}}`
-is Grap's counterpart of `grap::declined::all`. It evaluates each of
-`arguments`' fields in the calling environment, in record order (by cell
-identity, not as drawn), and returns their values as a record when none is
-absent. Otherwise it returns an absent for `reason`, carrying each absent
-under its label, so a check that returns its value or an absent naming what's
-wrong with it reports every argument that failed at once. A `reason` that
-isn't a cell, or `arguments` that aren't a record, make it "invalid check",
-carrying each.
-
 The absent library draws an absent as its reason's name followed by any other
 fields, such as a failed alternative's `causes`, all on a red wash; each cause
 is washed in turn inside it. An unnamed reason shows its short cell identity.
@@ -778,10 +773,10 @@ returns a pattern-mismatch absent.
 
 The logic library uses open `{bool: true-cell}` / `{bool: false-cell}` records.
 The payload is compared by identity, never evaluated or compared by its name.
-Its `require` function takes a `condition`, returning `{}` for true, a
-condition-not-met absent for false, or a not-boolean absent for another value.
-An absent condition propagates unchanged. This is an ordinary guard used in
-`do`, not evaluator syntax or a configurable bind mechanism.
+Its `require` function takes a `condition`, returning `{}` for true and a
+condition-not-met absent for false; a condition that isn't a boolean, or is
+absent, makes it "invalid arguments" as for any function. This is an ordinary
+guard used in `do`, not evaluator syntax or a configurable bind mechanism.
 
 The list library's `iterate` finishes only when a step returns
 `{absent: iteration-finished}`, and then returns the previous state. An

@@ -43,6 +43,33 @@ pub fn binary_call(function: CellId, left: Value, right: Value) -> Value {
     call(function, [(LEFT, left), (RIGHT, right)])
 }
 
+/// A function's arguments it couldn't use: "invalid arguments", carrying why
+/// under each label.
+pub fn invalid_arguments(why: impl IntoIterator<Item = (CellId, Value)>) -> Value {
+    Value::record(
+        [(
+            ::grap::absent::ABSENT,
+            ::grap::absent::INVALID_ARGUMENTS.into(),
+        )]
+        .into_iter()
+        .chain(why),
+    )
+}
+
+/// Why `value` isn't a type: its `reason`, carrying it.
+pub fn not(reason: CellId, value: Value) -> Value {
+    ::grap::absent::with_detail(reason, ::grap::absent::VALUE, value)
+}
+
+/// A missing argument's absent, naming its label.
+pub fn missing(label: CellId) -> Value {
+    ::grap::absent::with_detail(
+        ::grap::absent::MISSING_ARGUMENT,
+        ::grap::absent::CELL,
+        label.into(),
+    )
+}
+
 /// A call of each numeric representation's operations, beside the
 /// representation and the function called: binary ones on f64, f32 and u64,
 /// and f64's unary sine.

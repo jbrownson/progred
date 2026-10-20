@@ -21,7 +21,6 @@ pub mod vocabulary {
     pub const SEED: CellId = CellId::from_u128(0x208c3026e79e44fdbe405992c6cdea79);
     pub const OUTSIDE_SCOPE: CellId = CellId::from_u128(0x7b590515407fafa2d520ed1bd0fc6b18);
     pub const INVALID_SEED: CellId = CellId::from_u128(0xc188207adaefeee3f95d567476bd2d16);
-    pub const INVALID_BOUNDS: CellId = CellId::from_u128(0xdd466492d252f6c5100386cb7d6d9f63);
 }
 
 fn evaluated(
@@ -40,31 +39,22 @@ fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::BETWEEN,
         ForeignFunction::new(move |context, call, environment| {
-            let Some(min) = context.field(call, vocabulary::MIN) else {
-                return Ok(context.missing_runtime_argument(vocabulary::MIN));
-            };
-            let Some(max) = context.field(call, vocabulary::MAX) else {
-                return Ok(context.missing_runtime_argument(vocabulary::MAX));
-            };
-            Ok(
-                match (
-                    context.eval_f64(min, environment)?,
-                    context.eval_f64(max, environment)?,
-                ) {
-                    (Some(min), Some(max)) => {
-                        let next = state
-                            .get()
-                            .wrapping_mul(6_364_136_223_846_793_005)
-                            .wrapping_add(1_442_695_040_888_963_407);
-                        context.effect(|| {
-                            state.set(next);
-                            let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
-                            RuntimeValue::f64(min + (max - min) * unit)
-                        })
-                    }
-                    _ => ::grap::absent::value(vocabulary::INVALID_BOUNDS).into(),
-                },
-            )
+            let bounds: Result<(::core::primitive::f64, ::core::primitive::f64), _> =
+                context.arguments(call, [vocabulary::MIN, vocabulary::MAX], environment)?;
+            Ok(match bounds {
+                Ok((min, max)) => {
+                    let next = state
+                        .get()
+                        .wrapping_mul(6_364_136_223_846_793_005)
+                        .wrapping_add(1_442_695_040_888_963_407);
+                    context.effect(|| {
+                        state.set(next);
+                        let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
+                        RuntimeValue::f64(min + (max - min) * unit)
+                    })
+                }
+                Err(invalid) => invalid,
+            })
         }),
     )
 }
@@ -113,7 +103,6 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::SEED, "seed"),
             (vocabulary::OUTSIDE_SCOPE, "random outside scope"),
             (vocabulary::INVALID_SEED, "invalid random seed"),
-            (vocabulary::INVALID_BOUNDS, "invalid random bounds"),
         ],
         functions(),
     )

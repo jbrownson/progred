@@ -5,6 +5,8 @@
 use gid::{CellId, Record, Value};
 
 pub const U64: CellId = CellId::from_u128(0xfc77282178c2fa31b80aed2b8b6f7888);
+/// Why a value isn't a u64, carrying it.
+pub const NOT_U64: CellId = CellId::from_u128(0xae77a805a7ce41dbac03b292d2685918);
 
 pub fn value(number: u64) -> Value {
     Value::record([(U64, encode(number))])

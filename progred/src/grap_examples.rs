@@ -103,11 +103,13 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             evaluated_expression(demo_entry(&doc, &binders, "type_absent")),
         )
         .result,
-        ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f64::NOT_F64,
+        crate::test_values::invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::LEFT,
-            crate::libraries::text::value("three"),
-        )
+            crate::test_values::not(
+                crate::libraries::grap::numbers::f64::NOT_F64,
+                crate::libraries::text::value("three"),
+            ),
+        )])
     );
     // A missing argument is what the + couldn't use.
     for (label, reason) in [

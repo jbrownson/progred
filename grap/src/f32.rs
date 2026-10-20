@@ -5,6 +5,8 @@
 use gid::{CellId, Record, Value};
 
 pub const F32: CellId = CellId::from_u128(0x64810cfeb0631ca8875e282d1ad4af79);
+/// Why a value isn't an f32, carrying it.
+pub const NOT_F32: CellId = CellId::from_u128(0x6a124272d8df415ab944020cd1fd352b);
 
 pub fn value(number: f32) -> Value {
     Value::record([(F32, encode(number))])

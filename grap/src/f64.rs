@@ -7,6 +7,8 @@
 use gid::{CellId, Record, Value};
 
 pub const F64: CellId = CellId::from_u128(0xed11fde03b7c2c1ba2fccc3cdba5d561);
+/// Why a value isn't an f64, carrying it.
+pub const NOT_F64: CellId = CellId::from_u128(0x4aabc44d46a2402dbb9ef64e377632db);
 
 pub fn value(number: f64) -> Value {
     Value::record([(F64, encode(number))])

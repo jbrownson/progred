@@ -2,7 +2,7 @@
 
 use crate::libraries::f32::*;
 use crate::test_support::evaluate_with;
-use crate::test_values::binary_call;
+use crate::test_values::{binary_call, invalid_arguments, not};
 use gid::Value;
 
 #[test]
@@ -100,11 +100,13 @@ fn operands_of_other_representations_decline() {
                 value(3.0)
             )
         ),
-        ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f32::NOT_F32,
+        invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::LEFT,
-            crate::libraries::f64::value(2.0),
-        )
+            not(
+                crate::libraries::grap::numbers::f32::NOT_F32,
+                crate::libraries::f64::value(2.0)
+            ),
+        )])
     );
     assert_eq!(
         evaluate_with(
@@ -115,18 +117,21 @@ fn operands_of_other_representations_decline() {
                 Value::from(b"three".to_vec())
             )
         ),
-        ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f32::NOT_F32,
+        invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::RIGHT,
-            Value::from(b"three".to_vec()),
-        )
+            not(
+                crate::libraries::grap::numbers::f32::NOT_F32,
+                Value::from(b"three".to_vec())
+            ),
+        )])
     );
 }
 
 #[test]
 fn f32_from_f64_rounds_at_the_explicit_numeric_boundary() {
     use crate::libraries::f64;
-    use crate::libraries::grap::numbers::f32::{F32_FROM_F64, INVALID_F32_INPUT};
+    use crate::libraries::grap::numbers::f32::F32_FROM_F64;
+    use crate::libraries::grap::numbers::f64::NOT_F64;
     use crate::libraries::grap::numbers::vocabulary::OPERAND;
     use ::core::primitive::f64 as N;
     let evaluate =
@@ -140,7 +145,7 @@ fn f32_from_f64_rounds_at_the_explicit_numeric_boundary() {
     let invalid = value(1.0);
     assert_eq!(
         convert(invalid.clone()),
-        ::grap::absent::with_detail(INVALID_F32_INPUT, OPERAND, invalid)
+        invalid_arguments([(OPERAND, not(NOT_F64, invalid))])
     );
     assert!(::grap::absent::is_absent(&evaluate(&::grap::call(
         F32_FROM_F64.into(),

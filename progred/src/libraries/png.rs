@@ -3,7 +3,8 @@
 
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, name};
-use ::grap::{ForeignFunction, ForeignFunctions};
+use ::grap::arguments::Parse;
+use ::grap::{ForeignFunction, ForeignFunctions, RuntimeValue};
 use gid::{CellId, Value};
 use kurbo::Size;
 use peniko::ImageData;
@@ -129,17 +130,35 @@ pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
     ))
 }
 
+/// An argument that's a png.
+struct Png(Value);
+
+impl Png {
+    fn bytes(&self) -> &[u8] {
+        read(&self.0).unwrap_or_default()
+    }
+}
+
+impl Parse for Png {
+    fn parse(value: RuntimeValue) -> Result<Self, RuntimeValue> {
+        let png = value.to_value();
+        if read(&png).is_some() {
+            Ok(Self(png))
+        } else {
+            Err(::grap::arguments::not(vocabulary::NOT_PNG, value))
+        }
+    }
+}
+
 fn dimension(pick: fn((u32, u32)) -> u32) -> ForeignFunction {
     ForeignFunction::from_value(move |context, call, environment| {
-        Ok(match context.field(call, vocabulary::IMAGE) {
-            None => context.missing_argument(vocabulary::IMAGE),
-            Some(image) => match read(&context.eval_to_value(image, environment)?) {
-                None => ::grap::absent::value(vocabulary::NOT_PNG),
-                Some(bytes) => size(bytes).map_or_else(
-                    || ::grap::absent::value(vocabulary::INVALID_PNG),
-                    |size| crate::libraries::f64::value(f64::from(pick(size))),
-                ),
-            },
+        let image: Result<(Png,), _> = context.arguments(call, [vocabulary::IMAGE], environment)?;
+        Ok(match image {
+            Ok((image,)) => size(image.bytes()).map_or_else(
+                || ::grap::absent::value(vocabulary::INVALID_PNG),
+                |size| crate::libraries::f64::value(f64::from(pick(size))),
+            ),
+            Err(invalid) => invalid.into_value(),
         })
     })
     .parameters([vocabulary::IMAGE])

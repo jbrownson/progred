@@ -2,7 +2,7 @@
 
 use crate::libraries::u64::*;
 use crate::test_support::evaluate_with;
-use crate::test_values::binary_call;
+use crate::test_values::{binary_call, invalid_arguments, not};
 
 #[test]
 fn rust_supplies_arithmetic_to_grap() {
@@ -136,11 +136,13 @@ fn operands_of_other_representations_decline() {
                 value(3)
             )
         ),
-        ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::u64::NOT_U64,
+        invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::LEFT,
-            crate::libraries::f64::value(2.0),
-        )
+            not(
+                crate::libraries::grap::numbers::u64::NOT_U64,
+                crate::libraries::f64::value(2.0)
+            )
+        )])
     );
     assert_eq!(
         evaluate_with(
@@ -151,10 +153,12 @@ fn operands_of_other_representations_decline() {
                 crate::libraries::f32::value(3.0)
             )
         ),
-        ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::u64::NOT_U64,
+        invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::RIGHT,
-            crate::libraries::f32::value(3.0),
-        )
+            not(
+                crate::libraries::grap::numbers::u64::NOT_U64,
+                crate::libraries::f32::value(3.0)
+            )
+        )])
     );
 }

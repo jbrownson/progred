@@ -148,6 +148,20 @@ environment it was made in, or in a debug mode a whole evaluation trace, so
 an absent shown in the editor leads back to the code that produced it. The
 display for this isn't designed yet.
 
+## Context for an absent from below
+
+A function written in Rust reports the arguments it couldn't use in its own
+terms (see [projections](projections.md)): `area {width: "three"}` reports
+that the `*` inside `area` couldn't use its `left`, not that `area`'s `width`
+was wrong. That's honest, since the function that failed knows only what it
+needed, but it won't always have the useful reason. A higher-level construct
+could add context when something below it fails: wrapping an absent that
+comes out of it with its own reason and what it was given, as exceptions
+chain context. Undecided: whether that happens at every function boundary,
+which costs on the evaluator's hot path and deepens chains, or only where code
+asks for it, and how it meets the chain limit. Related to *Where an absent
+came from*.
+
 ## Address lifetime
 
 Paths and source traces already preserve definition source. A future identity

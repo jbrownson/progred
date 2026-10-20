@@ -253,11 +253,19 @@ fn unfinished() {
         Some(8.0)
     );
 
-    // The call given "three" returns an absent too, its reason from the
-    // x * 2 inside scale.
+    // The call given "three" returns an absent too: the x * 2 inside scale
+    // couldn't use its arguments, because "three" is not an f64.
+    let fourth = result(&unfinished, "fourth");
     assert_eq!(
-        ::grap::absent::reason(&result(&unfinished, "fourth")),
-        Some(crate::libraries::grap::numbers::f64::NOT_F64)
+        ::grap::absent::reason(&fourth),
+        Some(::grap::absent::INVALID_ARGUMENTS)
+    );
+    assert_eq!(
+        ::grap::absent::root_causes(&fourth)
+            .into_iter()
+            .map(::grap::absent::reason)
+            .collect::<Vec<_>>(),
+        [Some(crate::libraries::grap::numbers::f64::NOT_F64)]
     );
     assert!(unfinished.drawn(&[
         unfinished.key("fourth"),

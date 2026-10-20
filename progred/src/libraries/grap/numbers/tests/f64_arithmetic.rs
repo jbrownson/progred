@@ -4,7 +4,7 @@ use crate::libraries::Library;
 use crate::libraries::f64::*;
 use crate::projection::Layout;
 use crate::projection::test_support::ProjectionInput;
-use crate::test_values::binary_call;
+use crate::test_values::{binary_call, invalid_arguments, not};
 use ::grap::RuntimeValue;
 use gid::CellId;
 
@@ -90,11 +90,13 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
         assert!((actual / expected - 1.0).abs() < 1e-14);
         assert_eq!(
             evaluate(binary_call(function, Value::record([]), value(b))),
-            ::grap::absent::with_detail(
-                crate::libraries::grap::numbers::f64::NOT_F64,
+            invalid_arguments([(
                 crate::libraries::grap::numbers::vocabulary::LEFT,
-                Value::record([]),
-            ),
+                not(
+                    crate::libraries::grap::numbers::f64::NOT_F64,
+                    Value::record([])
+                )
+            )]),
         );
     }
     let unary_call = |function: CellId, argument| {
@@ -130,11 +132,13 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
     ] {
         assert_eq!(
             evaluate(unary_call(function, Value::record([]))),
-            ::grap::absent::with_detail(
-                crate::libraries::grap::numbers::f64::NOT_F64,
+            invalid_arguments([(
                 crate::libraries::grap::numbers::vocabulary::OPERAND,
-                Value::record([]),
-            ),
+                not(
+                    crate::libraries::grap::numbers::f64::NOT_F64,
+                    Value::record([])
+                )
+            )]),
         );
         assert!(::grap::absent::is_absent(&evaluate(grap::call(
             function.into(),
@@ -433,19 +437,23 @@ fn type_absences_are_library_values() {
     );
     assert_eq!(
         crate::test_support::test_evaluate(&left, |_| None, &functions(), 10).result,
-        ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f64::NOT_F64,
+        invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::LEFT,
-            Value::from(b"two".to_vec()),
-        )
+            not(
+                crate::libraries::grap::numbers::f64::NOT_F64,
+                Value::from(b"two".to_vec())
+            )
+        )])
     );
     assert_eq!(
         crate::test_support::test_evaluate(&right, |_| None, &functions(), 10).result,
-        ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f64::NOT_F64,
+        invalid_arguments([(
             crate::libraries::grap::numbers::vocabulary::RIGHT,
-            Value::from(b"three".to_vec()),
-        )
+            not(
+                crate::libraries::grap::numbers::f64::NOT_F64,
+                Value::from(b"three".to_vec())
+            )
+        )])
     );
 }
 
@@ -455,37 +463,41 @@ fn every_operand_that_isnt_a_number_is_carried_as_a_cause() {
         f64 as op,
         vocabulary::{LEFT, OPERAND, RIGHT},
     };
+    use crate::test_values::missing;
     use ::grap::absent;
     let evaluate = |expression: &gid::Value| {
         crate::test_support::evaluate_with(&crate::libraries::grap::library(), expression)
-    };
-    let not = |fields: &[(CellId, Value)]| {
-        Value::record(
-            [(absent::ABSENT, Value::from(op::NOT_F64))]
-                .into_iter()
-                .chain(fields.iter().cloned()),
-        )
     };
     let (left, right) = (
         absent::value(gid::new_cell_id()),
         absent::value(gid::new_cell_id()),
     );
     let text = crate::libraries::text::value("one");
+    let not_f64 = |value: &Value| not(op::NOT_F64, value.clone());
     for (l, r, expected) in [
-        // Each operand's problem is carried under its own label.
+        // Each operand's problem is carried under its own label: an absent
+        // as it came, and a value that isn't an f64 as why it isn't.
         (
             left.clone(),
             right.clone(),
-            not(&[(LEFT, left.clone()), (RIGHT, right.clone())]),
+            invalid_arguments([(LEFT, left.clone()), (RIGHT, right.clone())]),
         ),
         (
             text.clone(),
             right.clone(),
-            not(&[(LEFT, text.clone()), (RIGHT, right.clone())]),
+            invalid_arguments([(LEFT, not_f64(&text)), (RIGHT, right.clone())]),
         ),
-        (value(1.0), right.clone(), not(&[(RIGHT, right.clone())])),
+        (
+            value(1.0),
+            right.clone(),
+            invalid_arguments([(RIGHT, right.clone())]),
+        ),
         // The same absent on both sides is carried once.
-        (left.clone(), left.clone(), not(&[(LEFT, left.clone())])),
+        (
+            left.clone(),
+            left.clone(),
+            invalid_arguments([(LEFT, left.clone())]),
+        ),
     ] {
         assert_eq!(evaluate(&binary_call(op::SUM, l, r)), expected);
     }
@@ -496,24 +508,23 @@ fn every_operand_that_isnt_a_number_is_carried_as_a_cause() {
     expected.sort_by_key(|root| absent::reason(root));
     assert_eq!(roots, expected);
     // A missing operand is one of them.
-    let missing = |label| absent::with_detail(absent::MISSING_ARGUMENT, absent::CELL, label);
     assert_eq!(
         evaluate(&crate::test_values::call(op::MULTIPLY, [])),
-        not(&[(LEFT, missing(LEFT.into())), (RIGHT, missing(RIGHT.into()))])
+        invalid_arguments([(LEFT, missing(LEFT)), (RIGHT, missing(RIGHT))])
     );
     assert_eq!(
         evaluate(&crate::test_values::call(
             op::MULTIPLY,
             [(LEFT, text.clone())]
         )),
-        not(&[(LEFT, text.clone()), (RIGHT, missing(RIGHT.into()))])
+        invalid_arguments([(LEFT, not_f64(&text)), (RIGHT, missing(RIGHT))])
     );
     assert_eq!(
         evaluate(&crate::test_values::call(
             op::SIN,
             [(OPERAND, left.clone())]
         )),
-        not(&[(OPERAND, left.clone())])
+        invalid_arguments([(OPERAND, left.clone())])
     );
     // A loop that keeps using an absent stops growing its chain, keeping its
     // root cause.

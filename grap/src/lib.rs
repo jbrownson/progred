@@ -16,7 +16,7 @@ mod effect_tests;
 mod runtime_tests;
 
 pub mod absent;
-pub mod declined;
+pub mod arguments;
 pub mod f32;
 pub mod f64;
 pub mod logic;

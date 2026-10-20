@@ -4,28 +4,23 @@
 //! the general foreign-call machinery. Resolution, shadowing, fuel and effects
 //! are those of any foreign call.
 
-use crate::{
-    Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent, declined,
-};
+use crate::arguments::{Parse, Signature};
+use crate::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent};
 use gid::CellId;
 use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 pub enum Primitive {
-    /// An operation on the numbers under `left` and `right`, declining with
-    /// `not`, and each operand that isn't one, when either isn't.
+    /// An operation on the numbers under `left` and `right`.
     Binary {
         operation: BinaryOperation,
         left: CellId,
         right: CellId,
-        not: CellId,
     },
-    /// An operation on the number under `operand`, declining with `not`
-    /// when it isn't one.
+    /// An operation on the number under `operand`.
     Unary {
         operation: UnaryOperation,
         operand: CellId,
-        not: CellId,
     },
 }
 
@@ -59,15 +54,7 @@ pub enum Unary<N> {
 }
 
 /// A number type Grap holds natively.
-pub trait Number: Copy + 'static {
-    /// `expression`'s value as this number, or the value itself when it
-    /// isn't one.
-    fn eval(
-        context: &mut Context,
-        expression: Expression,
-        environment: &Environment,
-    ) -> Result<Result<Self, RuntimeValue>, Halt>;
-
+pub trait Number: Parse + Copy + 'static {
     fn runtime(self) -> RuntimeValue;
 
     fn binary(operation: Binary<Self>) -> BinaryOperation;
@@ -76,14 +63,6 @@ pub trait Number: Copy + 'static {
 }
 
 impl Number for f64 {
-    fn eval(
-        context: &mut Context,
-        expression: Expression,
-        environment: &Environment,
-    ) -> Result<Result<Self, RuntimeValue>, Halt> {
-        context.eval_f64_or_value(expression, environment)
-    }
-
     fn runtime(self) -> RuntimeValue {
         RuntimeValue::f64(self)
     }
@@ -98,15 +77,6 @@ impl Number for f64 {
 }
 
 impl Number for f32 {
-    fn eval(
-        context: &mut Context,
-        expression: Expression,
-        environment: &Environment,
-    ) -> Result<Result<Self, RuntimeValue>, Halt> {
-        let value = context.eval(expression, environment)?;
-        Ok(value.as_f32().ok_or(value))
-    }
-
     fn runtime(self) -> RuntimeValue {
         RuntimeValue::f32(self)
     }
@@ -121,15 +91,6 @@ impl Number for f32 {
 }
 
 impl Number for u64 {
-    fn eval(
-        context: &mut Context,
-        expression: Expression,
-        environment: &Environment,
-    ) -> Result<Result<Self, RuntimeValue>, Halt> {
-        let value = context.eval(expression, environment)?;
-        Ok(value.as_u64().ok_or(value))
-    }
-
     fn runtime(self) -> RuntimeValue {
         RuntimeValue::u64(self)
     }
@@ -184,36 +145,31 @@ impl Primitive {
                 operation,
                 left,
                 right,
-                not,
             } => {
-                let operands = [(*left, &operands[0]), (*right, &operands[1])];
+                let operands = [(*left, operands[0].clone()), (*right, operands[1].clone())];
                 match operation {
                     BinaryOperation::F64(operation) => {
-                        binary(operation, context, operands, *not, environment)
+                        binary(operation, context, operands, environment)
                     }
                     BinaryOperation::F32(operation) => {
-                        binary(operation, context, operands, *not, environment)
+                        binary(operation, context, operands, environment)
                     }
                     BinaryOperation::U64(operation) => {
-                        binary(operation, context, operands, *not, environment)
+                        binary(operation, context, operands, environment)
                     }
                 }
             }
-            Self::Unary {
-                operation,
-                operand,
-                not,
-            } => {
-                let operand = (*operand, &operands[0]);
+            Self::Unary { operation, operand } => {
+                let operand = [(*operand, operands[0].clone())];
                 match operation {
                     UnaryOperation::F64(operation) => {
-                        unary(operation, context, operand, *not, environment)
+                        unary(operation, context, operand, environment)
                     }
                     UnaryOperation::F32(operation) => {
-                        unary(operation, context, operand, *not, environment)
+                        unary(operation, context, operand, environment)
                     }
                     UnaryOperation::U64(operation) => {
-                        unary(operation, context, operand, *not, environment)
+                        unary(operation, context, operand, environment)
                     }
                 }
             }
@@ -224,53 +180,32 @@ impl Primitive {
 fn binary<N: Number>(
     operation: &Binary<N>,
     context: &mut Context,
-    [(left, left_operand), (right, right_operand)]: [(CellId, &Option<Expression>); 2],
-    not: CellId,
+    operands: [(CellId, Option<Expression>); 2],
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let left_number = number::<N>(context, left, left_operand, environment)?;
-    let right_number = number::<N>(context, right, right_operand, environment)?;
-    Ok(
-        match declined::all(not, ((left, left_number), (right, right_number))) {
-            Ok((left, right)) => match operation {
-                Binary::Arithmetic(apply) => apply(left, right).runtime(),
-                Binary::Checked(apply, failure) => apply(left, right)
-                    .map(N::runtime)
-                    .unwrap_or_else(|| absent::value(*failure).into()),
-                Binary::Comparison(apply) => RuntimeValue::bool(apply(left, right)),
-            },
-            Err(declined) => declined,
+    Ok(match <(N, N)>::parse(context, operands, environment)? {
+        Ok((left, right)) => match operation {
+            Binary::Arithmetic(apply) => apply(left, right).runtime(),
+            Binary::Checked(apply, failure) => apply(left, right)
+                .map(N::runtime)
+                .unwrap_or_else(|| absent::value(*failure).into()),
+            Binary::Comparison(apply) => RuntimeValue::bool(apply(left, right)),
         },
-    )
+        Err(invalid) => invalid,
+    })
 }
 
 fn unary<N: Number>(
     operation: &Unary<N>,
     context: &mut Context,
-    (operand, expression): (CellId, &Option<Expression>),
-    not: CellId,
+    operand: [(CellId, Option<Expression>); 1],
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let value = number::<N>(context, operand, expression, environment)?;
-    Ok(match declined::all(not, ((operand, value),)) {
+    Ok(match <(N,)>::parse(context, operand, environment)? {
         Ok((value,)) => match operation {
             Unary::Arithmetic(apply) => apply(value).runtime(),
             Unary::Predicate(apply) => RuntimeValue::bool(apply(value)),
         },
-        Err(declined) => declined,
+        Err(invalid) => invalid,
     })
-}
-
-/// The number the operand under `label` evaluates to, or what it held
-/// instead: the missing-argument absent where the call has none.
-fn number<N: Number>(
-    context: &mut Context,
-    label: CellId,
-    expression: &Option<Expression>,
-    environment: &Environment,
-) -> Result<Result<N, RuntimeValue>, Halt> {
-    match expression {
-        Some(expression) => N::eval(context, expression.clone(), environment),
-        None => Ok(Err(context.missing_runtime_argument(label))),
-    }
 }

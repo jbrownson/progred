@@ -11,7 +11,7 @@ use crate::libraries::representation::{Precedence, infix_display};
 use crate::libraries::u64 as u64_library;
 use crate::libraries::{f32 as f32_library, f64 as f64_library};
 use crate::libraries::{name, text};
-use ::grap::declined;
+use ::grap::arguments::{Parse, Signature};
 use ::grap::primitive::{Binary, Number, Primitive, Unary};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
@@ -50,8 +50,7 @@ pub mod f64 {
     pub const START: CellId = CellId::from_u128(0x4b4fb6349d2fd798e7aafca85a2deca8);
     pub const END: CellId = CellId::from_u128(0x3a816b0af0160bc77ba1948b122b3f29);
     pub const AMOUNT: CellId = CellId::from_u128(0x55e66fc5eb91699cf12833fb0a15d4b6);
-    /// Why an operation declines, carrying each operand that isn't an f64.
-    pub const NOT_F64: CellId = CellId::from_u128(0x4aabc44d46a2402dbb9ef64e377632db);
+    pub use ::grap::f64::NOT_F64;
 }
 
 /// f32's operations and the reasons they decline.
@@ -64,11 +63,8 @@ pub mod f32 {
     pub const DIVIDE: CellId = CellId::from_u128(0xfbf1ebc4eeeea21f86af583f6ad85e71);
     pub const LESS: CellId = CellId::from_u128(0x3dde12d1f97ccca65c579ae2703bb07a);
     pub const EQUAL: CellId = CellId::from_u128(0xe0637a60944f8dd9afd2fb4c28214dc3);
-    /// Why an operation declines, carrying each operand that isn't an f32.
-    pub const NOT_F32: CellId = CellId::from_u128(0x6a124272d8df415ab944020cd1fd352b);
+    pub use ::grap::f32::NOT_F32;
     pub const F32_FROM_F64: CellId = CellId::from_u128(0x73bd2225d2091ba893a5570e8e9bacff);
-    /// Why a conversion to f32 declines.
-    pub const INVALID_F32_INPUT: CellId = CellId::from_u128(0x722482f3e369634464ae68add98480e6);
 }
 
 /// u64's operations and the reasons they decline.
@@ -81,8 +77,7 @@ pub mod u64 {
     pub const DIVIDE: CellId = CellId::from_u128(0x610171b11dd2d2844119b7f9bc7da17c);
     pub const LESS: CellId = CellId::from_u128(0x425af3c983c925e2eb8becf4389aac58);
     pub const EQUAL: CellId = CellId::from_u128(0xc3931b2321d6c783fee133acaa929738);
-    /// Why an operation declines, carrying each operand that isn't a u64.
-    pub const NOT_U64: CellId = CellId::from_u128(0xae77a805a7ce41dbac03b292d2685918);
+    pub use ::grap::u64::NOT_U64;
     pub const OVERFLOW: CellId = CellId::from_u128(0x184f82a04d9cb7609238b2dd05ad5cd0);
     pub const DIVISION_BY_ZERO: CellId = CellId::from_u128(0x7eef118f55e12f09c8f7324c0fdd765d);
 }
@@ -191,22 +186,13 @@ fn lerp(
     call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let mut number = |label| match context.field(call, label) {
-        Some(expression) => context.eval_f64_or_value(expression, environment),
-        None => Ok(Err(context.missing_runtime_argument(label))),
-    };
-    let start = number(f64::START)?;
-    let end = number(f64::END)?;
-    let amount = number(f64::AMOUNT)?;
-    Ok(
-        match declined::all(
-            f64::NOT_F64,
-            ((f64::START, start), (f64::END, end), (f64::AMOUNT, amount)),
-        ) {
-            Ok((start, end, amount)) => RuntimeValue::f64(start + (end - start) * amount),
-            Err(declined) => declined,
-        },
-    )
+    use ::core::primitive::f64 as N;
+    let arguments: Result<(N, N, N), _> =
+        context.arguments(call, [f64::START, f64::END, f64::AMOUNT], environment)?;
+    Ok(match arguments {
+        Ok((start, end, amount)) => RuntimeValue::f64(start + (end - start) * amount),
+        Err(invalid) => invalid,
+    })
 }
 
 fn f32_parts() -> Parts {
@@ -223,21 +209,12 @@ fn f32_parts() -> Parts {
         f32::F32_FROM_F64,
         conversion(
             f32_library::representation().runtime,
-            f32::INVALID_F32_INPUT,
-            |operand| {
-                operand
-                    .as_f64()
-                    .map(|number| number as ::core::primitive::f32)
-            },
+            |number: ::core::primitive::f64| number as ::core::primitive::f32,
         ),
     );
-    parts.names.extend(
-        [
-            (f32::F32_FROM_F64, "f32 from f64"),
-            (f32::INVALID_F32_INPUT, "invalid f32 input"),
-        ]
-        .map(|(cell, name)| (cell, text::value(name))),
-    );
+    parts
+        .names
+        .push((f32::F32_FROM_F64, text::value("f32 from f64")));
     parts
 }
 
@@ -362,12 +339,10 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
             operation: N::binary(operation),
             left: vocabulary::LEFT,
             right: vocabulary::RIGHT,
-            not: self.not,
         };
         let unary = |operation| Primitive::Unary {
             operation: N::unary(operation),
             operand: vocabulary::OPERAND,
-            not: self.not,
         };
         match operation {
             Operation::Arithmetic(apply) => binary(Binary::Arithmetic(apply)),
@@ -380,31 +355,21 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
     }
 }
 
-/// To a number made by `runtime` from another, whose operand `convert`
-/// reads itself, declining with `invalid_input` and the operand when it
-/// can't.
-fn conversion<N: 'static>(
+/// To a number made by `runtime` from another, its operand, by `convert`.
+fn conversion<From: Parse + 'static, N: 'static>(
     runtime: fn(N) -> RuntimeValue,
-    invalid_input: CellId,
-    convert: fn(&RuntimeValue) -> Option<N>,
+    convert: fn(From) -> N,
 ) -> ForeignFunction {
-    ForeignFunction::staged(
-        move |context, call| match context.field(call, vocabulary::OPERAND) {
-            Some(operand) => Rc::new(move |context, environment| {
-                let operand = context.eval(operand.clone(), environment)?;
-                Ok(match convert(&operand) {
-                    Some(number) => runtime(number),
-                    None => ::grap::absent::caused_by(
-                        invalid_input,
-                        vocabulary::OPERAND,
-                        operand.to_value(),
-                    )
-                    .into(),
-                })
-            }),
-            None => Rc::new(|context, _| Ok(context.missing_runtime_argument(vocabulary::OPERAND))),
-        },
-    )
+    ForeignFunction::staged(move |context, call| {
+        let operand = context.field(call, vocabulary::OPERAND);
+        Rc::new(move |context, environment| {
+            let operand = [(vocabulary::OPERAND, operand.clone())];
+            Ok(match <(From,)>::parse(context, operand, environment)? {
+                Ok((number,)) => runtime(convert(number)),
+                Err(invalid) => invalid,
+            })
+        })
+    })
     .parameters([vocabulary::OPERAND])
     .tracked()
 }

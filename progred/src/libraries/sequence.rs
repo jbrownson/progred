@@ -54,14 +54,11 @@ fn range(
     call: &Expression,
     env: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let count = evaluated(context, call, env, COUNT)?;
-    Ok(if count.absent_reason().is_some() {
-        count
-    } else {
-        match count.as_f64().filter(|count| exact(*count)) {
-            Some(count) => range_tail(context, count, 0.0),
-            None => invalid(),
-        }
+    let count: Result<(::core::primitive::f64,), _> = context.arguments(call, [COUNT], env)?;
+    Ok(match count {
+        Ok((count,)) if exact(count) => range_tail(context, count, 0.0),
+        Ok(_) => invalid(),
+        Err(unusable) => unusable,
     })
 }
 
@@ -78,28 +75,21 @@ fn range_step(
     call: &Expression,
     env: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let count = evaluated(context, call, env, COUNT)?;
-    Ok(if count.absent_reason().is_some() {
-        count
-    } else {
-        let index = evaluated(context, call, env, INDEX)?;
-        if index.absent_reason().is_some() {
-            index
-        } else {
-            match (count.as_f64(), index.as_f64()) {
-                (Some(count), Some(index)) if exact(count) && exact(index) && index <= count => {
-                    if index == count {
-                        RuntimeValue::record([])
-                    } else {
-                        RuntimeValue::record([
-                            (ITEM, RuntimeValue::f64(index)),
-                            (NEXT, range_tail(context, count, index + 1.0)),
-                        ])
-                    }
-                }
-                _ => invalid(),
+    use ::core::primitive::f64 as N;
+    let arguments: Result<(N, N), _> = context.arguments(call, [COUNT, INDEX], env)?;
+    Ok(match arguments {
+        Ok((count, index)) if exact(count) && exact(index) && index <= count => {
+            if index == count {
+                RuntimeValue::record([])
+            } else {
+                RuntimeValue::record([
+                    (ITEM, RuntimeValue::f64(index)),
+                    (NEXT, range_tail(context, count, index + 1.0)),
+                ])
             }
         }
+        Ok(_) => invalid(),
+        Err(unusable) => unusable,
     })
 }
 
