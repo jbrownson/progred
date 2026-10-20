@@ -91,8 +91,8 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
         assert_eq!(
             evaluate(binary_call(function, Value::record([]), value(b))),
             ::grap::absent::with_detail(
-                crate::libraries::grap::numbers::f64::LEFT_NOT_F64,
-                ::grap::absent::VALUE,
+                crate::libraries::grap::numbers::f64::NOT_F64,
+                crate::libraries::grap::numbers::vocabulary::LEFT,
                 Value::record([]),
             ),
         );
@@ -131,8 +131,8 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
         assert_eq!(
             evaluate(unary_call(function, Value::record([]))),
             ::grap::absent::with_detail(
-                crate::libraries::grap::numbers::f64::OPERAND_NOT_F64,
-                ::grap::absent::VALUE,
+                crate::libraries::grap::numbers::f64::NOT_F64,
+                crate::libraries::grap::numbers::vocabulary::OPERAND,
                 Value::record([]),
             ),
         );
@@ -434,62 +434,88 @@ fn type_absences_are_library_values() {
     assert_eq!(
         crate::test_support::test_evaluate(&left, |_| None, &functions(), 10).result,
         ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f64::LEFT_NOT_F64,
-            ::grap::absent::VALUE,
+            crate::libraries::grap::numbers::f64::NOT_F64,
+            crate::libraries::grap::numbers::vocabulary::LEFT,
             Value::from(b"two".to_vec()),
         )
     );
     assert_eq!(
         crate::test_support::test_evaluate(&right, |_| None, &functions(), 10).result,
         ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f64::RIGHT_NOT_F64,
-            ::grap::absent::VALUE,
+            crate::libraries::grap::numbers::f64::NOT_F64,
+            crate::libraries::grap::numbers::vocabulary::RIGHT,
             Value::from(b"three".to_vec()),
         )
     );
 }
 
 #[test]
-fn an_operand_that_isnt_a_number_is_carried_as_the_cause() {
-    use crate::libraries::grap::numbers::{f64 as op, vocabulary::OPERAND};
+fn every_operand_that_isnt_a_number_is_carried_as_a_cause() {
+    use crate::libraries::grap::numbers::{
+        f64 as op,
+        vocabulary::{LEFT, OPERAND, RIGHT},
+    };
     use ::grap::absent;
     let evaluate = |expression: &gid::Value| {
         crate::test_support::evaluate_with(&crate::libraries::grap::library(), expression)
     };
-    let not = |reason, operand| absent::with_detail(reason, absent::VALUE, operand);
+    let not = |fields: &[(CellId, Value)]| {
+        Value::record(
+            [(absent::ABSENT, Value::from(op::NOT_F64))]
+                .into_iter()
+                .chain(fields.iter().cloned()),
+        )
+    };
     let (left, right) = (
         absent::value(gid::new_cell_id()),
         absent::value(gid::new_cell_id()),
     );
     let text = crate::libraries::text::value("one");
     for (l, r, expected) in [
-        // The left operand's problem comes first, whatever the right's is.
+        // Each operand's problem is carried under its own label.
         (
             left.clone(),
             right.clone(),
-            not(op::LEFT_NOT_F64, left.clone()),
+            not(&[(LEFT, left.clone()), (RIGHT, right.clone())]),
         ),
         (
             text.clone(),
             right.clone(),
-            not(op::LEFT_NOT_F64, text.clone()),
+            not(&[(LEFT, text.clone()), (RIGHT, right.clone())]),
         ),
-        (
-            value(1.0),
-            right.clone(),
-            not(op::RIGHT_NOT_F64, right.clone()),
-        ),
+        (value(1.0), right.clone(), not(&[(RIGHT, right.clone())])),
+        // The same absent on both sides is carried once.
+        (left.clone(), left.clone(), not(&[(LEFT, left.clone())])),
     ] {
         assert_eq!(evaluate(&binary_call(op::SUM, l, r)), expected);
     }
+    let both = evaluate(&binary_call(op::SUM, left.clone(), right.clone()));
+    let mut roots = absent::root_causes(&both);
+    roots.sort_by_key(|root| absent::reason(root));
+    let mut expected = [&left, &right];
+    expected.sort_by_key(|root| absent::reason(root));
+    assert_eq!(roots, expected);
+    // A missing operand is one of them.
+    let missing = |label| absent::with_detail(absent::MISSING_ARGUMENT, absent::CELL, label);
+    assert_eq!(
+        evaluate(&crate::test_values::call(op::MULTIPLY, [])),
+        not(&[(LEFT, missing(LEFT.into())), (RIGHT, missing(RIGHT.into()))])
+    );
+    assert_eq!(
+        evaluate(&crate::test_values::call(
+            op::MULTIPLY,
+            [(LEFT, text.clone())]
+        )),
+        not(&[(LEFT, text.clone()), (RIGHT, missing(RIGHT.into()))])
+    );
     assert_eq!(
         evaluate(&crate::test_values::call(
             op::SIN,
             [(OPERAND, left.clone())]
         )),
-        not(op::OPERAND_NOT_F64, left.clone())
+        not(&[(OPERAND, left.clone())])
     );
-    // A loop that keeps using an absent stops growing its chain, keeping the
+    // A loop that keeps using an absent stops growing its chain, keeping its
     // root cause.
     let sum = (0..2 * absent::CHAIN_LIMIT)
         .fold(left.clone(), |sum, _| binary_call(op::SUM, sum, value(1.0)));
@@ -504,5 +530,5 @@ fn an_operand_that_isnt_a_number_is_carried_as_the_cause() {
         )
         .result;
     assert_eq!(absent::chain_length(&result), absent::CHAIN_LIMIT);
-    assert_eq!(absent::root_cause(&result), &left);
+    assert_eq!(absent::root_causes(&result), [&left]);
 }

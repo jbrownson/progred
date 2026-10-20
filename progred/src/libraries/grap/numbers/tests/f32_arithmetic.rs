@@ -101,8 +101,8 @@ fn operands_of_other_representations_decline() {
             )
         ),
         ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f32::LEFT_NOT_F32,
-            ::grap::absent::VALUE,
+            crate::libraries::grap::numbers::f32::NOT_F32,
+            crate::libraries::grap::numbers::vocabulary::LEFT,
             crate::libraries::f64::value(2.0),
         )
     );
@@ -116,8 +116,8 @@ fn operands_of_other_representations_decline() {
             )
         ),
         ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f32::RIGHT_NOT_F32,
-            ::grap::absent::VALUE,
+            crate::libraries::grap::numbers::f32::NOT_F32,
+            crate::libraries::grap::numbers::vocabulary::RIGHT,
             Value::from(b"three".to_vec()),
         )
     );

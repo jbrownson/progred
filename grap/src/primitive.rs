@@ -4,27 +4,28 @@
 //! the general foreign-call machinery. Resolution, shadowing, fuel and effects
 //! are those of any foreign call.
 
-use crate::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent};
+use crate::{
+    Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent, declined,
+};
 use gid::CellId;
 use std::rc::Rc;
 
 #[derive(Clone, Copy)]
 pub enum Primitive {
     /// An operation on the numbers under `left` and `right`, declining with
-    /// `left_not` or `right_not` for an operand that isn't one.
+    /// `not`, and each operand that isn't one, when either isn't.
     Binary {
         operation: BinaryOperation,
         left: CellId,
         right: CellId,
-        left_not: CellId,
-        right_not: CellId,
+        not: CellId,
     },
-    /// An operation on the number under `operand`, declining with
-    /// `operand_not` when it isn't one.
+    /// An operation on the number under `operand`, declining with `not`
+    /// when it isn't one.
     Unary {
         operation: UnaryOperation,
         operand: CellId,
-        operand_not: CellId,
+        not: CellId,
     },
 }
 
@@ -183,44 +184,36 @@ impl Primitive {
                 operation,
                 left,
                 right,
-                left_not,
-                right_not,
+                not,
             } => {
-                let (Some(left_operand), Some(right_operand)) = (&operands[0], &operands[1]) else {
-                    let missing = if operands[0].is_none() { left } else { right };
-                    return Ok(context.missing_runtime_argument(*missing));
-                };
-                let operands = (left_operand.clone(), right_operand.clone());
-                let reasons = (*left_not, *right_not);
+                let operands = [(*left, &operands[0]), (*right, &operands[1])];
                 match operation {
                     BinaryOperation::F64(operation) => {
-                        binary(operation, context, operands, reasons, environment)
+                        binary(operation, context, operands, *not, environment)
                     }
                     BinaryOperation::F32(operation) => {
-                        binary(operation, context, operands, reasons, environment)
+                        binary(operation, context, operands, *not, environment)
                     }
                     BinaryOperation::U64(operation) => {
-                        binary(operation, context, operands, reasons, environment)
+                        binary(operation, context, operands, *not, environment)
                     }
                 }
             }
             Self::Unary {
                 operation,
                 operand,
-                operand_not,
+                not,
             } => {
-                let Some(expression) = operands[0].clone() else {
-                    return Ok(context.missing_runtime_argument(*operand));
-                };
+                let operand = (*operand, &operands[0]);
                 match operation {
                     UnaryOperation::F64(operation) => {
-                        unary(operation, context, expression, *operand_not, environment)
+                        unary(operation, context, operand, *not, environment)
                     }
                     UnaryOperation::F32(operation) => {
-                        unary(operation, context, expression, *operand_not, environment)
+                        unary(operation, context, operand, *not, environment)
                     }
                     UnaryOperation::U64(operation) => {
-                        unary(operation, context, expression, *operand_not, environment)
+                        unary(operation, context, operand, *not, environment)
                     }
                 }
             }
@@ -231,44 +224,53 @@ impl Primitive {
 fn binary<N: Number>(
     operation: &Binary<N>,
     context: &mut Context,
-    (left, right): (Expression, Expression),
-    (left_not, right_not): (CellId, CellId),
+    [(left, left_operand), (right, right_operand)]: [(CellId, &Option<Expression>); 2],
+    not: CellId,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let left = N::eval(context, left, environment)?;
-    let right = N::eval(context, right, environment)?;
-    Ok(match (left, right) {
-        (Ok(left), Ok(right)) => match operation {
-            Binary::Arithmetic(apply) => apply(left, right).runtime(),
-            Binary::Checked(apply, failure) => apply(left, right)
-                .map(N::runtime)
-                .unwrap_or_else(|| absent::value(*failure).into()),
-            Binary::Comparison(apply) => RuntimeValue::bool(apply(left, right)),
+    let left_number = number::<N>(context, left, left_operand, environment)?;
+    let right_number = number::<N>(context, right, right_operand, environment)?;
+    Ok(
+        match declined::all(not, ((left, left_number), (right, right_number))) {
+            Ok((left, right)) => match operation {
+                Binary::Arithmetic(apply) => apply(left, right).runtime(),
+                Binary::Checked(apply, failure) => apply(left, right)
+                    .map(N::runtime)
+                    .unwrap_or_else(|| absent::value(*failure).into()),
+                Binary::Comparison(apply) => RuntimeValue::bool(apply(left, right)),
+            },
+            Err(declined) => declined,
         },
-        (Err(left), _) => declined(left, left_not),
-        (_, Err(right)) => declined(right, right_not),
-    })
+    )
 }
 
 fn unary<N: Number>(
     operation: &Unary<N>,
     context: &mut Context,
-    expression: Expression,
-    operand_not: CellId,
+    (operand, expression): (CellId, &Option<Expression>),
+    not: CellId,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    Ok(match N::eval(context, expression, environment)? {
-        Ok(value) => match operation {
+    let value = number::<N>(context, operand, expression, environment)?;
+    Ok(match declined::all(not, ((operand, value),)) {
+        Ok((value,)) => match operation {
             Unary::Arithmetic(apply) => apply(value).runtime(),
             Unary::Predicate(apply) => RuntimeValue::bool(apply(value)),
         },
-        Err(value) => declined(value, operand_not),
+        Err(declined) => declined,
     })
 }
 
-/// Why an operation declines for an operand that isn't its number: it's
-/// `not` one, carrying the operand, so an absent operand's own reason shows
-/// beneath it as the cause.
-pub fn declined(operand: RuntimeValue, not: CellId) -> RuntimeValue {
-    absent::caused_by(not, absent::VALUE, operand.into_value()).into()
+/// The number the operand under `label` evaluates to, or what it held
+/// instead: the missing-argument absent where the call has none.
+fn number<N: Number>(
+    context: &mut Context,
+    label: CellId,
+    expression: &Option<Expression>,
+    environment: &Environment,
+) -> Result<Result<N, RuntimeValue>, Halt> {
+    match expression {
+        Some(expression) => N::eval(context, expression.clone(), environment),
+        None => Ok(Err(context.missing_runtime_argument(label))),
+    }
 }

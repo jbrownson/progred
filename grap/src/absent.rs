@@ -40,7 +40,7 @@ pub fn decline() -> Value {
 
 /// The longest chain of causes an absent grows: past it, an absent passes on
 /// unchanged instead of gaining another layer, so a loop that keeps using one,
-/// such as a sum over a list, keeps its root cause and first uses without
+/// such as a sum over a list, keeps its root causes and first uses without
 /// growing a layer per element.
 pub const CHAIN_LIMIT: usize = 8;
 
@@ -48,36 +48,58 @@ pub const CHAIN_LIMIT: usize = 8;
 /// absent or not. An absent value whose chain has reached [`CHAIN_LIMIT`]
 /// passes on unchanged instead.
 pub fn caused_by(reason: CellId, field: CellId, detail: Value) -> Value {
-    if chain_length(&detail) >= CHAIN_LIMIT {
-        detail
-    } else {
-        with_detail(reason, field, detail)
+    caused_by_all(reason, [(field, detail)])
+}
+
+/// An absent for `reason`, carrying each value it couldn't use, absent or
+/// not, under its field: its causes are those that are absent, so absents
+/// make a tree. An absent the same as one before it isn't repeated, so a
+/// value used twice doesn't double the tree. Where a chain of causes would
+/// grow past [`CHAIN_LIMIT`], the longest passes on unchanged instead.
+pub fn caused_by_all(reason: CellId, details: impl IntoIterator<Item = (CellId, Value)>) -> Value {
+    let mut fields: Vec<(CellId, Value)> = Vec::new();
+    for (field, detail) in details {
+        if !(is_absent(&detail) && fields.iter().any(|(_, seen)| *seen == detail)) {
+            fields.push((field, detail));
+        }
+    }
+    match fields.iter().max_by_key(|(_, detail)| chain_length(detail)) {
+        Some((_, longest)) if chain_length(longest) >= CHAIN_LIMIT => longest.clone(),
+        _ => Value::record(std::iter::once((ABSENT, Value::from(reason))).chain(fields)),
     }
 }
 
-/// The absent among `value`'s details, which caused it.
-pub fn cause(value: &Value) -> Option<&Value> {
-    is_absent(value).then_some(())?;
-    value
-        .as_record()?
-        .iter()
-        .find(|(field, detail)| *field != ABSENT && is_absent(detail))
+/// The absents among `value`'s details, which caused it.
+pub fn causes(value: &Value) -> impl Iterator<Item = &Value> {
+    is_absent(value)
+        .then(|| value.as_record())
+        .flatten()
+        .into_iter()
+        .flat_map(|fields| fields.iter())
+        .filter(|(field, detail)| *field != ABSENT && is_absent(detail))
         .map(|(_, detail)| detail)
 }
 
-/// The absent at the end of `value`'s chain of causes, the first thing that
-/// went wrong, which a check for a particular reason looks at: `value`
-/// itself when nothing caused it.
-pub fn root_cause(value: &Value) -> &Value {
-    std::iter::successors(Some(value), |value| cause(value))
-        .last()
-        .unwrap_or(value)
+/// The absents at the ends of `value`'s causes, the first things that went
+/// wrong, which a check for a particular reason looks at: `value` itself
+/// when nothing caused it.
+pub fn root_causes(value: &Value) -> Vec<&Value> {
+    let causes: Vec<_> = causes(value).collect();
+    if causes.is_empty() {
+        vec![value]
+    } else {
+        causes.into_iter().flat_map(root_causes).collect()
+    }
 }
 
-/// How many absents `value`'s chain of causes holds: none for a value that
-/// isn't absent.
+/// How many absents the longest chain of `value`'s causes holds: none for a
+/// value that isn't absent.
 pub fn chain_length(value: &Value) -> usize {
-    std::iter::successors(is_absent(value).then_some(value), |value| cause(value)).count()
+    if is_absent(value) {
+        1 + causes(value).map(chain_length).max().unwrap_or(0)
+    } else {
+        0
+    }
 }
 
 pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {

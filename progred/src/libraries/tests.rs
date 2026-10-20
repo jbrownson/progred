@@ -10,22 +10,12 @@ fn each_library_names_its_vocabulary() {
         (
             crate::libraries::grap::library(),
             &[
-                (
-                    crate::libraries::grap::numbers::f32::LEFT_NOT_F32,
-                    "left is not f32",
-                ),
+                (crate::libraries::grap::numbers::f32::NOT_F32, "not f32"),
                 (
                     crate::libraries::grap::numbers::u64::OVERFLOW,
                     "u64 overflow",
                 ),
-                (
-                    crate::libraries::grap::numbers::f64::LEFT_NOT_F64,
-                    "left is not f64",
-                ),
-                (
-                    crate::libraries::grap::numbers::f64::RIGHT_NOT_F64,
-                    "right is not f64",
-                ),
+                (crate::libraries::grap::numbers::f64::NOT_F64, "not f64"),
             ],
         ),
         (

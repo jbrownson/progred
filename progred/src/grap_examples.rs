@@ -104,24 +104,27 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         )
         .result,
         ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::f64::LEFT_NOT_F64,
-            ::grap::absent::VALUE,
+            crate::libraries::grap::numbers::f64::NOT_F64,
+            crate::libraries::grap::numbers::vocabulary::LEFT,
             crate::libraries::text::value("three"),
         )
     );
+    // A missing argument is what the + couldn't use.
     for (label, reason) in [
         ("missing_argument", grap::absent::MISSING_ARGUMENT),
         ("not_callable", grap::absent::NOT_CALLABLE),
     ] {
+        let result = evaluate(
+            &doc,
+            evaluated_expression(demo_entry(&doc, &binders, label)),
+        )
+        .result;
         assert_eq!(
-            ::grap::absent::reason(
-                &evaluate(
-                    &doc,
-                    evaluated_expression(demo_entry(&doc, &binders, label))
-                )
-                .result
-            ),
-            Some(reason)
+            ::grap::absent::root_causes(&result)
+                .into_iter()
+                .map(::grap::absent::reason)
+                .collect::<Vec<_>>(),
+            [Some(reason)]
         );
     }
 

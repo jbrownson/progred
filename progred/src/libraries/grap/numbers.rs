@@ -11,6 +11,7 @@ use crate::libraries::representation::{Precedence, infix_display};
 use crate::libraries::u64 as u64_library;
 use crate::libraries::{f32 as f32_library, f64 as f64_library};
 use crate::libraries::{name, text};
+use ::grap::declined;
 use ::grap::primitive::{Binary, Number, Primitive, Unary};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
@@ -49,12 +50,8 @@ pub mod f64 {
     pub const START: CellId = CellId::from_u128(0x4b4fb6349d2fd798e7aafca85a2deca8);
     pub const END: CellId = CellId::from_u128(0x3a816b0af0160bc77ba1948b122b3f29);
     pub const AMOUNT: CellId = CellId::from_u128(0x55e66fc5eb91699cf12833fb0a15d4b6);
-    pub const LEFT_NOT_F64: CellId = CellId::from_u128(0x50c0d2fd8fe0325a8e0e41f79ce86eff);
-    pub const RIGHT_NOT_F64: CellId = CellId::from_u128(0xcab77cffe8c38745dd8e748ece331409);
-    pub const OPERAND_NOT_F64: CellId = CellId::from_u128(0x9c2a4845e1c67df6dd43ac1116e76441);
-    pub const START_NOT_F64: CellId = CellId::from_u128(0x809d7bba33afaf8a673846f0c44cd2e6);
-    pub const END_NOT_F64: CellId = CellId::from_u128(0x17081dd43c4af46c54408cd125eaf3e2);
-    pub const AMOUNT_NOT_F64: CellId = CellId::from_u128(0xe1977104f3574cd37a99ef9083dde01f);
+    /// Why an operation declines, carrying each operand that isn't an f64.
+    pub const NOT_F64: CellId = CellId::from_u128(0x4aabc44d46a2402dbb9ef64e377632db);
 }
 
 /// f32's operations and the reasons they decline.
@@ -67,8 +64,8 @@ pub mod f32 {
     pub const DIVIDE: CellId = CellId::from_u128(0xfbf1ebc4eeeea21f86af583f6ad85e71);
     pub const LESS: CellId = CellId::from_u128(0x3dde12d1f97ccca65c579ae2703bb07a);
     pub const EQUAL: CellId = CellId::from_u128(0xe0637a60944f8dd9afd2fb4c28214dc3);
-    pub const LEFT_NOT_F32: CellId = CellId::from_u128(0x2f7a7dfd96df51008a563a36e075e50b);
-    pub const RIGHT_NOT_F32: CellId = CellId::from_u128(0xd4a7b035dc57953dca5c1d20cb591d0d);
+    /// Why an operation declines, carrying each operand that isn't an f32.
+    pub const NOT_F32: CellId = CellId::from_u128(0x6a124272d8df415ab944020cd1fd352b);
     pub const F32_FROM_F64: CellId = CellId::from_u128(0x73bd2225d2091ba893a5570e8e9bacff);
     /// Why a conversion to f32 declines.
     pub const INVALID_F32_INPUT: CellId = CellId::from_u128(0x722482f3e369634464ae68add98480e6);
@@ -84,8 +81,8 @@ pub mod u64 {
     pub const DIVIDE: CellId = CellId::from_u128(0x610171b11dd2d2844119b7f9bc7da17c);
     pub const LESS: CellId = CellId::from_u128(0x425af3c983c925e2eb8becf4389aac58);
     pub const EQUAL: CellId = CellId::from_u128(0xc3931b2321d6c783fee133acaa929738);
-    pub const LEFT_NOT_U64: CellId = CellId::from_u128(0x64dd17fd81404f413122ffc00b452e2e);
-    pub const RIGHT_NOT_U64: CellId = CellId::from_u128(0x1a13161cd3a0e5fa71455a277839bd32);
+    /// Why an operation declines, carrying each operand that isn't a u64.
+    pub const NOT_U64: CellId = CellId::from_u128(0xae77a805a7ce41dbac03b292d2685918);
     pub const OVERFLOW: CellId = CellId::from_u128(0x184f82a04d9cb7609238b2dd05ad5cd0);
     pub const DIVISION_BY_ZERO: CellId = CellId::from_u128(0x7eef118f55e12f09c8f7324c0fdd765d);
 }
@@ -130,24 +127,21 @@ fn operation_name(spelling: &str, tag: CellId) -> Value {
 fn f64_arithmetic() -> Arithmetic<::core::primitive::f64> {
     Arithmetic {
         representation: f64_library::representation(),
-        left_not: f64::LEFT_NOT_F64,
-        right_not: f64::RIGHT_NOT_F64,
+        not: f64::NOT_F64,
     }
 }
 
 fn f32_arithmetic() -> Arithmetic<::core::primitive::f32> {
     Arithmetic {
         representation: f32_library::representation(),
-        left_not: f32::LEFT_NOT_F32,
-        right_not: f32::RIGHT_NOT_F32,
+        not: f32::NOT_F32,
     }
 }
 
 fn u64_arithmetic() -> Arithmetic<::core::primitive::u64> {
     Arithmetic {
         representation: u64_library::representation(),
-        left_not: u64::LEFT_NOT_U64,
-        right_not: u64::RIGHT_NOT_U64,
+        not: u64::NOT_U64,
     }
 }
 
@@ -164,15 +158,11 @@ fn f64_parts() -> Parts {
         (f64::HYPOT, "hypot", Arithmetic(N::hypot)),
         (f64::LESS, "<", Comparison(|left, right| left < right)),
         (f64::EQUAL, "==", Comparison(|left, right| left == right)),
-        (f64::SIN, "sin", Unary(N::sin, f64::OPERAND_NOT_F64)),
-        (f64::COS, "cos", Unary(N::cos, f64::OPERAND_NOT_F64)),
-        (f64::FLOOR, "floor", Unary(N::floor, f64::OPERAND_NOT_F64)),
-        (f64::CEIL, "ceil", Unary(N::ceil, f64::OPERAND_NOT_F64)),
-        (
-            f64::IS_FINITE,
-            "is finite",
-            Predicate(N::is_finite, f64::OPERAND_NOT_F64),
-        ),
+        (f64::SIN, "sin", Unary(N::sin)),
+        (f64::COS, "cos", Unary(N::cos)),
+        (f64::FLOOR, "floor", Unary(N::floor)),
+        (f64::CEIL, "ceil", Unary(N::ceil)),
+        (f64::IS_FINITE, "is finite", Predicate(N::is_finite)),
     ]);
     parts.functions = parts.functions.register(
         f64::LERP,
@@ -186,10 +176,6 @@ fn f64_parts() -> Parts {
             (f64::START, "start"),
             (f64::END, "end"),
             (f64::AMOUNT, "amount"),
-            (f64::OPERAND_NOT_F64, "operand is not f64"),
-            (f64::START_NOT_F64, "start is not f64"),
-            (f64::END_NOT_F64, "end is not f64"),
-            (f64::AMOUNT_NOT_F64, "amount is not f64"),
         ]
         .map(|(cell, name)| (cell, text::value(name))),
     );
@@ -205,24 +191,22 @@ fn lerp(
     call: &Expression,
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
-    let Some(start) = context.field(call, f64::START) else {
-        return Ok(context.missing_runtime_argument(f64::START));
+    let mut number = |label| match context.field(call, label) {
+        Some(expression) => context.eval_f64_or_value(expression, environment),
+        None => Ok(Err(context.missing_runtime_argument(label))),
     };
-    let Some(end) = context.field(call, f64::END) else {
-        return Ok(context.missing_runtime_argument(f64::END));
-    };
-    let Some(amount) = context.field(call, f64::AMOUNT) else {
-        return Ok(context.missing_runtime_argument(f64::AMOUNT));
-    };
-    let start = context.eval_f64_or_value(start, environment)?;
-    let end = context.eval_f64_or_value(end, environment)?;
-    let amount = context.eval_f64_or_value(amount, environment)?;
-    Ok(match (start, end, amount) {
-        (Ok(start), Ok(end), Ok(amount)) => RuntimeValue::f64(start + (end - start) * amount),
-        (Err(start), _, _) => ::grap::primitive::declined(start, f64::START_NOT_F64),
-        (_, Err(end), _) => ::grap::primitive::declined(end, f64::END_NOT_F64),
-        (_, _, Err(amount)) => ::grap::primitive::declined(amount, f64::AMOUNT_NOT_F64),
-    })
+    let start = number(f64::START)?;
+    let end = number(f64::END)?;
+    let amount = number(f64::AMOUNT)?;
+    Ok(
+        match declined::all(
+            f64::NOT_F64,
+            ((f64::START, start), (f64::END, end), (f64::AMOUNT, amount)),
+        ) {
+            Ok((start, end, amount)) => RuntimeValue::f64(start + (end - start) * amount),
+            Err(declined) => declined,
+        },
+    )
 }
 
 fn f32_parts() -> Parts {
@@ -295,12 +279,11 @@ fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence>
 }
 
 /// Grap's arithmetic over one representation, whose operations Grap runs
-/// natively, and why a binary operation declines.
+/// natively, and why one declines.
 #[derive(Clone, Copy)]
 struct Arithmetic<N> {
     representation: Representation<N>,
-    left_not: CellId,
-    right_not: CellId,
+    not: CellId,
 }
 
 #[derive(Clone, Copy)]
@@ -309,10 +292,8 @@ enum Operation<N> {
     /// Fails with the given reason instead of producing a result.
     Checked(fn(N, N) -> Option<N>, CellId),
     Comparison(fn(N, N) -> bool),
-    /// Declines with the given reason for an operand that isn't this number.
-    Unary(fn(N) -> N, CellId),
-    /// Declines with the given reason for an operand that isn't this number.
-    Predicate(fn(N) -> bool, CellId),
+    Unary(fn(N) -> N),
+    Predicate(fn(N) -> bool),
 }
 
 /// One representation's operations: their names, functions, and infix
@@ -358,10 +339,7 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
         let tag = self.representation.tag;
         operations.into_iter().fold(
             Parts {
-                names: vec![
-                    (self.left_not, text::value(format!("left is not {name}"))),
-                    (self.right_not, text::value(format!("right is not {name}"))),
-                ],
+                names: vec![(self.not, text::value(format!("not {name}")))],
                 functions: ForeignFunctions::default(),
                 infix: Vec::new(),
                 symbols: Vec::new(),
@@ -384,20 +362,19 @@ impl<N: Scrubbable + std::str::FromStr + Number> Arithmetic<N> {
             operation: N::binary(operation),
             left: vocabulary::LEFT,
             right: vocabulary::RIGHT,
-            left_not: self.left_not,
-            right_not: self.right_not,
+            not: self.not,
         };
-        let unary = |operation, operand_not| Primitive::Unary {
+        let unary = |operation| Primitive::Unary {
             operation: N::unary(operation),
             operand: vocabulary::OPERAND,
-            operand_not,
+            not: self.not,
         };
         match operation {
             Operation::Arithmetic(apply) => binary(Binary::Arithmetic(apply)),
             Operation::Checked(apply, failure) => binary(Binary::Checked(apply, failure)),
             Operation::Comparison(apply) => binary(Binary::Comparison(apply)),
-            Operation::Unary(apply, operand_not) => unary(Unary::Arithmetic(apply), operand_not),
-            Operation::Predicate(apply, operand_not) => unary(Unary::Predicate(apply), operand_not),
+            Operation::Unary(apply) => unary(Unary::Arithmetic(apply)),
+            Operation::Predicate(apply) => unary(Unary::Predicate(apply)),
         }
         .function()
     }

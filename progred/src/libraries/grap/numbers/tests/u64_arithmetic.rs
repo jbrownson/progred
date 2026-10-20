@@ -137,8 +137,8 @@ fn operands_of_other_representations_decline() {
             )
         ),
         ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::u64::LEFT_NOT_U64,
-            ::grap::absent::VALUE,
+            crate::libraries::grap::numbers::u64::NOT_U64,
+            crate::libraries::grap::numbers::vocabulary::LEFT,
             crate::libraries::f64::value(2.0),
         )
     );
@@ -152,8 +152,8 @@ fn operands_of_other_representations_decline() {
             )
         ),
         ::grap::absent::with_detail(
-            crate::libraries::grap::numbers::u64::RIGHT_NOT_U64,
-            ::grap::absent::VALUE,
+            crate::libraries::grap::numbers::u64::NOT_U64,
+            crate::libraries::grap::numbers::vocabulary::RIGHT,
             crate::libraries::f32::value(3.0),
         )
     );

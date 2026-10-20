@@ -710,15 +710,20 @@ functions are registered this way. A call that resolves to a primitive runs it d
 rather than through the foreign-call machinery; resolution, shadowing, fuel
 and effects are as for any other foreign call.
 Semantic failure is an ordinary absent value; the host `Result` only propagates
-evaluator halts such as exhausted fuel. A function that can't use a value
-declines with its own reason and carries the value, whatever it is, so an
-absent value's reason shows beneath as the cause, as exceptions chain: adding
-a missing argument is "left is not f64", caused by "missing argument". A
-check for a particular reason looks at the chain's root cause
-(`grap::absent::root_cause`), and an absent whose chain is already
-`CHAIN_LIMIT` long passes on unchanged, so a loop that keeps using one doesn't
-grow it a layer per pass. Strict arithmetic evaluates all its operands and
-declines for the first, the left, that isn't its number. Control functions can
+evaluator halts such as exhausted fuel. A function that can't use its
+arguments declines with its own reason and carries each it couldn't use under
+its label, whatever it held, so an absent argument's reason shows beneath as a
+cause, as exceptions chain. The `grap::declined::all` combinator does this:
+given a reason and each argument's label and value or what it held instead, it
+returns the values or that absent, so a function written in Rust declares what
+its arguments must be in one expression. The number operators use it: `*`
+with neither operand is "not f64", carrying "missing argument" under both
+`left` and `right`, and `"three" + 4` carries `"three"` under `left`. An
+absent's causes are the absents among its fields, so they make a tree; a check
+for a particular reason looks at its leaves (`grap::absent::root_causes`). An
+absent used twice, as in `x * x`, is carried once, and one whose longest chain
+of causes is already `CHAIN_LIMIT` long passes on unchanged, so a loop that
+keeps using one doesn't grow it a layer per pass. Control functions can
 evaluate only the chosen branch. Blobs, lists, and unrecognized records
 are inert: the evaluator does not search ordinary containers for expressions.
 A function's returned value is not evaluated again.
