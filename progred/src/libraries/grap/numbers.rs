@@ -124,7 +124,7 @@ fn f64_arithmetic() -> Arithmetic<::core::primitive::f64> {
         representation: f64_library::representation(),
         left_not: f64::LEFT_NOT_F64,
         right_not: f64::RIGHT_NOT_F64,
-        eval: |context, expression, environment| context.eval_f64(expression, environment),
+        eval: |context, expression, environment| context.eval_f64_or_value(expression, environment),
     }
 }
 
@@ -134,9 +134,8 @@ fn f32_arithmetic() -> Arithmetic<::core::primitive::f32> {
         left_not: f32::LEFT_NOT_F32,
         right_not: f32::RIGHT_NOT_F32,
         eval: |context, expression, environment| {
-            Ok(f32_library::read_runtime(
-                &context.eval(expression, environment)?,
-            ))
+            let value = context.eval(expression, environment)?;
+            Ok(f32_library::read_runtime(&value).ok_or(value))
         },
     }
 }
@@ -147,9 +146,8 @@ fn u64_arithmetic() -> Arithmetic<::core::primitive::u64> {
         left_not: u64::LEFT_NOT_U64,
         right_not: u64::RIGHT_NOT_U64,
         eval: |context, expression, environment| {
-            Ok(u64_library::read_runtime(
-                &context.eval(expression, environment)?,
-            ))
+            let value = context.eval(expression, environment)?;
+            Ok(u64_library::read_runtime(&value).ok_or(value))
         },
     }
 }
@@ -214,14 +212,14 @@ fn lerp(
     let Some(amount) = context.field(call, f64::AMOUNT) else {
         return Ok(context.missing_runtime_argument(f64::AMOUNT));
     };
-    let start = context.eval_f64(start, environment)?;
-    let end = context.eval_f64(end, environment)?;
-    let amount = context.eval_f64(amount, environment)?;
+    let start = context.eval_f64_or_value(start, environment)?;
+    let end = context.eval_f64_or_value(end, environment)?;
+    let amount = context.eval_f64_or_value(amount, environment)?;
     Ok(match (start, end, amount) {
-        (Some(start), Some(end), Some(amount)) => RuntimeValue::f64(start + (end - start) * amount),
-        (None, _, _) => ::grap::absent::value(f64::START_NOT_F64).into(),
-        (_, None, _) => ::grap::absent::value(f64::END_NOT_F64).into(),
-        (_, _, None) => ::grap::absent::value(f64::AMOUNT_NOT_F64).into(),
+        (Ok(start), Ok(end), Ok(amount)) => RuntimeValue::f64(start + (end - start) * amount),
+        (Err(start), _, _) => declined(start, f64::START_NOT_F64),
+        (_, Err(end), _) => declined(end, f64::END_NOT_F64),
+        (_, _, Err(amount)) => declined(amount, f64::AMOUNT_NOT_F64),
     })
 }
 
@@ -295,13 +293,14 @@ fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence>
 }
 
 /// Grap's arithmetic over one representation: how an operand is evaluated
-/// as it, with any accelerated path, and why a binary operation declines.
+/// as it, with any accelerated path, answering with the value itself when it
+/// isn't one, and why a binary operation declines.
 #[derive(Clone, Copy)]
 struct Arithmetic<N> {
     representation: Representation<N>,
     left_not: CellId,
     right_not: CellId,
-    eval: fn(&mut Context, Expression, &Environment) -> Result<Option<N>, Halt>,
+    eval: fn(&mut Context, Expression, &Environment) -> Result<Result<N, RuntimeValue>, Halt>,
 }
 
 #[derive(Clone, Copy)]
@@ -418,8 +417,8 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
                     let operation = operation.clone();
                     Rc::new(move |context, environment| {
                         Ok(match (self.eval)(context, operand.clone(), environment)? {
-                            Some(operand) => operation(operand),
-                            None => ::grap::absent::value(operand_not).into(),
+                            Ok(operand) => operation(operand),
+                            Err(operand) => declined(operand, operand_not),
                         })
                     })
                 }
@@ -450,9 +449,9 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
                         let left = (self.eval)(context, left.clone(), environment)?;
                         let right = (self.eval)(context, right.clone(), environment)?;
                         Ok(match (left, right) {
-                            (Some(left), Some(right)) => operation(left, right),
-                            (None, _) => ::grap::absent::value(self.left_not).into(),
-                            (_, None) => ::grap::absent::value(self.right_not).into(),
+                            (Ok(left), Ok(right)) => operation(left, right),
+                            (Err(left), _) => declined(left, self.left_not),
+                            (_, Err(right)) => declined(right, self.right_not),
                         })
                     })
                 }
@@ -465,8 +464,19 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
     }
 }
 
+/// Why an operation declines for an operand that isn't its number: an absent
+/// operand is its own reason, passed on unchanged so the original cause shows
+/// through, and anything else is `not` one.
+fn declined(operand: RuntimeValue, not: CellId) -> RuntimeValue {
+    match operand.absent_reason() {
+        Some(_) => operand,
+        None => ::grap::absent::value(not).into(),
+    }
+}
+
 /// To a number made by `runtime` from another, whose operand `convert`
-/// reads itself, declining with `invalid_input` when it can't.
+/// reads itself, declining with `invalid_input` when it can't, or as the
+/// operand itself when that's absent.
 fn conversion<N: 'static>(
     runtime: fn(N) -> RuntimeValue,
     invalid_input: CellId,
@@ -478,6 +488,7 @@ fn conversion<N: 'static>(
                 let operand = context.eval(operand.clone(), environment)?;
                 Ok(match convert(&operand) {
                     Some(number) => runtime(number),
+                    None if operand.absent_reason().is_some() => operand,
                     None => ::grap::absent::with_detail(
                         invalid_input,
                         vocabulary::OPERAND,

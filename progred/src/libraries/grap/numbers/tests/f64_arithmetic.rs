@@ -437,3 +437,44 @@ fn type_absences_are_library_values() {
         ::grap::absent::value(crate::libraries::grap::numbers::f64::RIGHT_NOT_F64)
     );
 }
+
+#[test]
+fn an_absent_operand_answers_unchanged_the_left_one_first() {
+    use crate::libraries::grap::numbers::{f64 as op, vocabulary::OPERAND};
+    use ::grap::absent;
+    let evaluate = |expression: &gid::Value| {
+        crate::test_support::evaluate_with(&crate::libraries::grap::library(), expression)
+    };
+    let (left, right) = (
+        absent::value(gid::new_cell_id()),
+        absent::value(gid::new_cell_id()),
+    );
+    for (l, r, expected) in [
+        (left.clone(), right.clone(), left.clone()),
+        (value(1.0), right.clone(), right.clone()),
+        (left.clone(), value(1.0), left.clone()),
+        // A present operand that isn't a number declines as such, whatever
+        // the other one is.
+        (
+            crate::libraries::text::value("one"),
+            right.clone(),
+            absent::value(op::LEFT_NOT_F64),
+        ),
+    ] {
+        assert_eq!(evaluate(&binary_call(op::SUM, l, r)), expected);
+    }
+    assert_eq!(
+        evaluate(&crate::test_values::call(
+            op::SIN,
+            [(OPERAND, left.clone())]
+        )),
+        left
+    );
+    assert_eq!(
+        evaluate(&crate::test_values::call(
+            crate::libraries::grap::numbers::f32::F32_FROM_F64,
+            [(OPERAND, right.clone())]
+        )),
+        right
+    );
+}

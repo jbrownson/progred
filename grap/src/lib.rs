@@ -1489,25 +1489,27 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<Option<f64>, Halt> {
         self.burn()?;
-        let unboxed = match &expression.0.form {
-            // Data unboxes as a number exactly when it reads as one.
-            Form::Data => crate::f64::read(expression.value()),
-            Form::Cell(cell) => environment
-                .get_runtime(*cell)
-                .and_then(|value| match &value.0 {
-                    RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
-                        Native::F64(number) => Some(*number),
-                        Native::Text(_) => None,
-                    },
-                    _ => None,
-                }),
-            _ => None,
-        };
-        match unboxed {
+        match unboxed_f64(&expression, environment) {
             Some(number) => Ok(Some(number)),
             None => self
                 .eval_burned(expression, environment)
                 .map(|value| value.as_f64()),
+        }
+    }
+
+    /// [`Self::eval_f64`], but answering with the value itself when it isn't
+    /// an f64, for a caller that reports why.
+    pub fn eval_f64_or_value(
+        &mut self,
+        expression: Expression,
+        environment: &Environment,
+    ) -> Result<Result<f64, RuntimeValue>, Halt> {
+        self.burn()?;
+        match unboxed_f64(&expression, environment) {
+            Some(number) => Ok(Ok(number)),
+            None => self
+                .eval_burned(expression, environment)
+                .map(|value| value.as_f64().ok_or(value)),
         }
     }
 
@@ -2260,6 +2262,25 @@ impl<'a> Context<'a> {
             }
             RuntimeValueKind::List(_) | RuntimeValueKind::Foreign(_) => None,
         }
+    }
+}
+
+/// `expression`'s f64 when it's already one without evaluating: data that
+/// reads as a number, or a variable bound to an unboxed one.
+fn unboxed_f64(expression: &Expression, environment: &Environment) -> Option<f64> {
+    match &expression.0.form {
+        // Data unboxes as a number exactly when it reads as one.
+        Form::Data => crate::f64::read(expression.value()),
+        Form::Cell(cell) => environment
+            .get_runtime(*cell)
+            .and_then(|value| match &value.0 {
+                RuntimeValueKind::Unboxed(unboxed) => match unboxed.native() {
+                    Native::F64(number) => Some(*number),
+                    Native::Text(_) => None,
+                },
+                _ => None,
+            }),
+        _ => None,
     }
 }
 
