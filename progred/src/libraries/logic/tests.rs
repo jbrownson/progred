@@ -80,36 +80,3 @@ fn require_accepts_true_rejects_false_and_preserves_absents() {
         Some(::grap::absent::MISSING_ARGUMENT)
     );
 }
-
-#[test]
-fn require_all_checks_every_condition_and_carries_each_unmet_one() {
-    let [positive, finite, given] = std::array::from_fn(|_| gid::new_cell_id());
-    let failure = ::grap::absent::value(gid::new_cell_id());
-    let check = |conditions: Vec<(gid::CellId, Value)>| {
-        let expression = ::grap::call(vocabulary::REQUIRE_ALL.into(), conditions);
-        let result = crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20);
-        assert!(result.completed);
-        result.result
-    };
-    assert_eq!(check(vec![]), Value::record([]));
-    assert_eq!(
-        check(vec![(positive, value(true)), (finite, value(true))]),
-        Value::record([])
-    );
-    assert_eq!(
-        check(vec![
-            (positive, value(false)),
-            (finite, value(true)),
-            (given, failure.clone()),
-        ]),
-        Value::record([
-            (::grap::absent::ABSENT, vocabulary::CONDITION_NOT_MET.into()),
-            (positive, value(false)),
-            (given, failure.clone()),
-        ])
-    );
-    assert_eq!(
-        ::grap::absent::root_causes(&check(vec![(given, failure.clone())])),
-        [&failure]
-    );
-}

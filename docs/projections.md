@@ -716,9 +716,9 @@ its label, whatever it held, so an absent argument's reason shows beneath as a
 cause, as exceptions chain. The `grap::declined::all` combinator does this:
 given a reason and each argument's label and value or what it held instead, it
 returns the values or that absent, so a function written in Rust declares what
-its arguments must be in one expression. The number operators use it: `*`
-with neither operand is "not f64", carrying "missing argument" under both
-`left` and `right`, and `"three" + 4` carries `"three"` under `left`. An
+its arguments must be in one expression; `checked`, below, is its Grap
+counterpart. The number operators use the combinator: `*` with neither operand
+is "not f64", carrying "missing argument" under both `left` and `right`, and `"three" + 4` carries `"three"` under `left`. An
 absent's causes are the absents among its fields, so they make a tree; a check
 for a particular reason looks at its leaves (`grap::absent::root_causes`). An
 absent used twice, as in `x * x`, is carried once, and one whose longest chain
@@ -755,6 +755,16 @@ returns a non-absent unchanged. Only an absent result evaluates `default`, in th
 same calling environment. It does not validate the value's type or undo effects;
 actual evaluator halts still halt rather than invoking the fallback.
 
+The absent library's `checked {reason, arguments: {<label>: <expression>…}}`
+is Grap's counterpart of `grap::declined::all`. It evaluates each of
+`arguments`' fields in the calling environment, in record order (by cell
+identity, not as drawn), and returns their values as a record when none is
+absent. Otherwise it returns an absent for `reason`, carrying each absent
+under its label, so a check that returns its value or an absent naming what's
+wrong with it reports every argument that failed at once. A `reason` that
+isn't a cell, or `arguments` that aren't a record, make it "invalid check",
+carrying each.
+
 The absent library draws an absent as its reason's name followed by any other
 fields, such as a failed alternative's `causes`, all on a red wash; each cause
 is washed in turn inside it. An unnamed reason shows its short cell identity.
@@ -771,12 +781,7 @@ The payload is compared by identity, never evaluated or compared by its name.
 Its `require` function takes a `condition`, returning `{}` for true, a
 condition-not-met absent for false, or a not-boolean absent for another value.
 An absent condition propagates unchanged. This is an ordinary guard used in
-`do`, not evaluator syntax or a configurable bind mechanism. `require all
-{<label>: <condition>…}` checks every condition rather than stopping at the
-first, as a function's arguments are checked together: it returns `{}` when
-all are true, and otherwise "condition not met" carrying each that isn't under
-its label, whether false, another value, or an absent such as a missing
-argument. Every field but `function` is a condition.
+`do`, not evaluator syntax or a configurable bind mechanism.
 
 The list library's `iterate` finishes only when a step returns
 `{absent: iteration-finished}`, and then returns the previous state. An

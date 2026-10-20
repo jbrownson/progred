@@ -183,3 +183,89 @@ fn multiple_causes_form_an_ordered_absence_while_one_remains_itself() {
         Some(&Value::list([first, second])),
     );
 }
+
+fn checked(reason: Value, arguments: Value) -> Value {
+    ::grap::call(
+        vocabulary::CHECKED.into(),
+        [
+            (vocabulary::REASON, reason),
+            (vocabulary::ARGUMENTS, arguments),
+        ],
+    )
+}
+
+fn evaluate(expression: &Value) -> Value {
+    let result = crate::test_support::test_evaluate(expression, |_| None, &functions(), 100);
+    assert!(result.completed);
+    result.result
+}
+
+#[test]
+fn checked_returns_its_arguments_values_or_its_reason_carrying_each_absent() {
+    let reason = new_cell_id();
+    let [width, height, depth] = std::array::from_fn(|_| new_cell_id());
+    let size = crate::libraries::f64::value(3.0);
+    let (first, second) = (
+        ::grap::absent::value(new_cell_id()),
+        ::grap::absent::value(new_cell_id()),
+    );
+    // Each argument is evaluated in the calling environment.
+    assert_eq!(
+        evaluate(&checked(
+            reason.into(),
+            Value::record([
+                (width, or_default(first.clone(), size.clone())),
+                (height, size.clone()),
+            ])
+        )),
+        Value::record([(width, size.clone()), (height, size.clone())])
+    );
+    assert_eq!(
+        evaluate(&checked(reason.into(), Value::record([]))),
+        Value::record([])
+    );
+    // Each absent is carried under its label, and only the absents.
+    assert_eq!(
+        evaluate(&checked(
+            reason.into(),
+            Value::record([
+                (width, first.clone()),
+                (height, size.clone()),
+                (depth, second.clone()),
+            ])
+        )),
+        Value::record([
+            (vocabulary::ABSENT, reason.into()),
+            (width, first),
+            (depth, second),
+        ])
+    );
+}
+
+#[test]
+fn checked_reports_each_of_its_own_arguments_it_cant_use() {
+    let missing = |label: CellId| {
+        ::grap::absent::with_detail(
+            ::grap::absent::MISSING_ARGUMENT,
+            ::grap::absent::CELL,
+            label.into(),
+        )
+    };
+    assert_eq!(
+        evaluate(&::grap::call(vocabulary::CHECKED.into(), [])),
+        Value::record([
+            (vocabulary::ABSENT, vocabulary::INVALID_CHECK.into()),
+            (vocabulary::REASON, missing(vocabulary::REASON)),
+            (vocabulary::ARGUMENTS, missing(vocabulary::ARGUMENTS)),
+        ])
+    );
+    let (not_a_cell, not_a_record) = (Value::from(vec![1]), Value::from(vec![2]));
+    assert_eq!(
+        evaluate(&checked(not_a_cell.clone(), not_a_record.clone())),
+        Value::record([
+            (vocabulary::ABSENT, vocabulary::INVALID_CHECK.into()),
+            (vocabulary::REASON, not_a_cell),
+            (vocabulary::ARGUMENTS, not_a_record),
+        ])
+    );
+}
