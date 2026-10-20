@@ -472,6 +472,48 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
     );
 }
 
+#[test]
+fn closing_a_location_pane_removes_its_entry_and_leaves_its_place() {
+    use crate::command::DocCommand;
+    use crate::driver::Driver;
+    let outer = CellId::from_u128(1);
+    let root = Value::record([(outer, Value::list([]))]);
+    let mut driver = Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(root.clone()),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    let run = |driver: &mut Driver, command: DocCommand| {
+        driver
+            .runner
+            .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+                editor.run_doc_command(command, dispatch.geometry(1.0));
+                true
+            });
+        driver.present();
+    };
+    driver.select(&[Step::Key(outer)]);
+    assert!(!driver.editor().menu_availability().close_pane);
+    // Opening selects the place in its new pane.
+    run(&mut driver, DocCommand::OpenPane(Side::Left));
+    assert!(driver.editor().menu_availability().close_pane);
+    run(&mut driver, DocCommand::ClosePane);
+    let closed = driver.editor().model.doc.root.clone().unwrap();
+    assert!(declarations(Some(&closed)).is_empty());
+    assert_eq!(
+        crate::test_support::value_at(&closed, &[Step::Key(vocabulary::MAIN)]),
+        Some(&root)
+    );
+    assert!(driver.editor().model.selection.is_none());
+    run(&mut driver, DocCommand::Undo);
+    assert_eq!(
+        declarations(driver.editor().model.doc.root.as_ref()).len(),
+        1
+    );
+}
+
 fn cell_positions(world: &crate::Editor, cell: CellId) -> Vec<gid::Position> {
     world
         .model

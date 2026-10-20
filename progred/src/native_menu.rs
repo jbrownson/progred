@@ -141,6 +141,7 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
             vec![
                 Entry::Command(C::Doc(D::OpenPane(Side::Left))),
                 Entry::Command(C::Doc(D::OpenPane(Side::Right))),
+                Entry::Command(C::Doc(D::ClosePane)),
                 Entry::Separator,
                 Entry::Command(C::Doc(D::MovePane(Move::Up))),
                 Entry::Command(C::Doc(D::MovePane(Move::Down))),

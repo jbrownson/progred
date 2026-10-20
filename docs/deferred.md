@@ -370,10 +370,6 @@ is wrapped only once something adds a workspace field, such as opening a pane.
 Starting points that open a pane and the examples use this shape. What's left,
 discussed in October 2026:
 
-- **Closing a location pane.** A pane can show a location, the place Open
-  Value opened, but its root is that place, so deleting it deletes the content.
-  Closing one takes deleting its entry in Plain or Raw; a Close Pane command
-  would say what's meant.
 - **A "show panes" command.** A location pane at `{steps: [panes]}` already
   shows the panes declaration; nothing picks or names one yet.
 - **Recursion.** A pane showing a workspace record already draws its main value;

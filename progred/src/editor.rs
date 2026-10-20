@@ -495,6 +495,8 @@ impl Editor {
                     .as_ref()
                     .and_then(|selection| selection.value(&self.sources()))
                     .is_some(),
+            close_pane: selected_root
+                .is_some_and(|root| matches!(root.target(), Target::Pane { .. })),
             move_up: selected_root
                 .is_some_and(|root| self.model.workspace.can_move(root, workspace::Move::Up)),
             move_down: selected_root
@@ -557,6 +559,31 @@ impl Editor {
             self.model.selection = self.model.workspace.column(side).panes.last().map(|pane| {
                 selection::Selection::edge(&pane.view.root, crate::editing::Scope::default(), shown)
             });
+            self.refresh_title();
+        }
+    }
+
+    /// Closes the selected pane by removing its entry, so a pane showing a
+    /// location leaves that place as it is.
+    fn close_selected_pane(&mut self) {
+        let next =
+            self.model
+                .selection
+                .as_ref()
+                .and_then(|selection| match selection.root().target() {
+                    Target::Pane { path } => {
+                        crate::spine::without(self.model.doc.root.as_ref()?, path)
+                    }
+                    Target::Document => None,
+                });
+        if let Some(value) = next {
+            let before = self.model.snapshot();
+            Rc::make_mut(&mut self.model.doc).root = Some(value);
+            self.model.history.record(before);
+            self.model.selection = None;
+            self.model
+                .workspace
+                .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
             self.refresh_title();
         }
     }
@@ -641,6 +668,7 @@ impl Editor {
             DocCommand::Undo => self.step_history(true, geometry),
             DocCommand::Redo => self.step_history(false, geometry),
             DocCommand::OpenPane(side) => self.open_selected_in_pane(side),
+            DocCommand::ClosePane => self.close_selected_pane(),
             DocCommand::MovePane(direction) => self.move_selected_pane(direction),
             DocCommand::Preset(preset) => {
                 let selected = self.selected_view();

@@ -132,6 +132,8 @@ pub enum DocCommand {
     Redo,
     /// Open the selected value in a pane on that side.
     OpenPane(Side),
+    /// Close the selected pane, leaving what it showed in place.
+    ClosePane,
     /// Move the selected pane.
     MovePane(Move),
     /// Show a preset's libraries in the selected area, or every library if
@@ -316,6 +318,7 @@ pub fn spec(command: Command) -> Spec {
             "Open Value on Right",
             Some(Shortcut::shifted(ShortcutKey::P)),
         ),
+        Command::Doc(DocCommand::ClosePane) => item("Close Pane", None),
         Command::Doc(DocCommand::MovePane(Move::Up)) => item("Move Pane Up", None),
         Command::Doc(DocCommand::MovePane(Move::Down)) => item("Move Pane Down", None),
         Command::Doc(DocCommand::MovePane(Move::Left)) => item("Move Pane Left", None),
@@ -350,6 +353,7 @@ pub struct Availability {
     pub undo: bool,
     pub redo: bool,
     pub open_pane: bool,
+    pub close_pane: bool,
     pub move_up: bool,
     pub move_down: bool,
     pub move_left: bool,
@@ -372,6 +376,7 @@ impl Availability {
             DocCommand::Undo => self.undo,
             DocCommand::Redo => self.redo,
             DocCommand::OpenPane(_) => self.open_pane,
+            DocCommand::ClosePane => self.close_pane,
             DocCommand::MovePane(Move::Up) => self.move_up,
             DocCommand::MovePane(Move::Down) => self.move_down,
             DocCommand::MovePane(Move::Left) => self.move_left,
