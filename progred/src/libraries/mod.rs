@@ -11,7 +11,6 @@ pub mod completion;
 #[cfg(test)]
 mod conformance;
 pub mod controls;
-pub mod conversion;
 pub mod declared;
 pub mod f32;
 pub mod f64;

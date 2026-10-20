@@ -1,8 +1,8 @@
 //! Grap's arithmetic over the number representations: each one's operations
 //! as foreign functions, read infix or as calls headed by the tagged
 //! operator, and typed after a number; the argument labels of binary and
-//! unary operations, which list concatenation takes too; and conversions'
-//! plumbing. The numbers themselves belong to f64, f32 and u64, which know
+//! unary operations, which list concatenation takes too; and conversions
+//! between them. The numbers themselves belong to f64, f32 and u64, which know
 //! nothing of Grap.
 
 use crate::display::host::{Host, Layout, Partial};
@@ -67,6 +67,9 @@ pub mod f32 {
     pub const EQUAL: CellId = CellId::from_u128(0xe0637a60944f8dd9afd2fb4c28214dc3);
     pub const LEFT_NOT_F32: CellId = CellId::from_u128(0x2f7a7dfd96df51008a563a36e075e50b);
     pub const RIGHT_NOT_F32: CellId = CellId::from_u128(0xd4a7b035dc57953dca5c1d20cb591d0d);
+    pub const F32_FROM_F64: CellId = CellId::from_u128(0x73bd2225d2091ba893a5570e8e9bacff);
+    /// Why a conversion to f32 declines.
+    pub const INVALID_F32_INPUT: CellId = CellId::from_u128(0x722482f3e369634464ae68add98480e6);
 }
 
 /// u64's operations and the reasons they decline.
@@ -224,14 +227,34 @@ fn lerp(
 
 fn f32_parts() -> Parts {
     use Operation::{Arithmetic, Comparison};
-    f32_arithmetic().parts([
+    let mut parts = f32_arithmetic().parts([
         (f32::SUM, "+", Arithmetic(|left, right| left + right)),
         (f32::SUBTRACT, "-", Arithmetic(|left, right| left - right)),
         (f32::MULTIPLY, "*", Arithmetic(|left, right| left * right)),
         (f32::DIVIDE, "/", Arithmetic(|left, right| left / right)),
         (f32::LESS, "<", Comparison(|left, right| left < right)),
         (f32::EQUAL, "==", Comparison(|left, right| left == right)),
-    ])
+    ]);
+    parts.functions = parts.functions.register(
+        f32::F32_FROM_F64,
+        conversion(
+            f32_library::representation().runtime,
+            f32::INVALID_F32_INPUT,
+            |operand| {
+                operand
+                    .as_f64()
+                    .map(|number| number as ::core::primitive::f32)
+            },
+        ),
+    );
+    parts.names.extend(
+        [
+            (f32::F32_FROM_F64, "f32 from f64"),
+            (f32::INVALID_F32_INPUT, "invalid f32 input"),
+        ]
+        .map(|(cell, name)| (cell, name.to_owned())),
+    );
+    parts
 }
 
 /// Unsigned arithmetic has no representable overflow or division by
@@ -444,7 +467,7 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
 
 /// To a number made by `runtime` from another, whose operand `convert`
 /// reads itself, declining with `invalid_input` when it can't.
-pub(crate) fn conversion<N: 'static>(
+fn conversion<N: 'static>(
     runtime: fn(N) -> RuntimeValue,
     invalid_input: CellId,
     convert: fn(&RuntimeValue) -> Option<N>,
