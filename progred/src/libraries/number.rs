@@ -1,45 +1,18 @@
-//! What the number representations share: the convention that generates
-//! each one's operations, projections and completions from its own cells;
-//! the argument labels of binary and unary operations, which list
-//! concatenation takes too; and scrub editing.
+//! What the number representations share: how each is stored, read, spelled
+//! and drawn, the typed reading of a number, and scrub editing. Their
+//! arithmetic is Grap's, in [`crate::libraries::grap::numbers`].
 
 use crate::display::activatable;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::representation::{Precedence, calls, infix_display, tagged};
-use crate::libraries::{Library, logic, name};
-use ::grap::{
-    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
-};
+use crate::libraries::representation::tagged;
+use crate::libraries::{Library, name};
+use ::grap::RuntimeValue;
 use gid::{CellId, Value};
-use puri::handler::HasHandler;
 use std::fmt::Display;
 use std::rc::Rc;
 
 pub(crate) mod scrub;
 use scrub::{ScrubEvent, ScrubUpdate, on_scrub};
-
-pub const ID: CellId = CellId::from_u128(0xc46d010325d3a1ec0f2a84dd3a9570ae);
-
-pub mod vocabulary {
-    use gid::CellId;
-
-    pub const LEFT: CellId = CellId::from_u128(0x764f6afe17ba14e81f5ab61204be0bec);
-    pub const RIGHT: CellId = CellId::from_u128(0x4f53ff25390f58472d31a6142644dec2);
-    pub const OPERAND: CellId = CellId::from_u128(0x50a20d15e4ae56be51b882de9d58c676);
-}
-
-pub fn library<W: Host>() -> Library<W> {
-    name::named_library(
-        ID,
-        "number",
-        [
-            (vocabulary::LEFT, "left"),
-            (vocabulary::RIGHT, "right"),
-            (vocabulary::OPERAND, "operand"),
-        ],
-        ForeignFunctions::default(),
-    )
-}
 
 /// `bytes` under `tag`: how f32 and u64 encode a number, little-endian.
 pub(crate) fn le_value<const N: usize>(tag: CellId, bytes: [u8; N]) -> Value {
@@ -63,120 +36,30 @@ const PIXELS_PER_STEP: f64 = 4.0;
 const PIXELS_PER_DECADE: f64 = 24.0;
 const DECADE_STRETCH: f64 = 1.5;
 
-/// Comparisons and the arithmetic symbols read infix; named and one-operand
-/// operations stay calls.
-fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence> {
-    match operation {
-        Operation::Comparison(_) => Some(Precedence::Comparison),
-        Operation::Arithmetic(_) | Operation::Checked(..) => Precedence::of_symbol(spelling),
-        Operation::Unary(..) | Operation::Predicate(..) => None,
-    }
-}
-
-/// One numeric convention's identity and encodings. Each representation
-/// keeps its own cells and operations; this generates the plumbing they
-/// would otherwise each repeat.
+/// One number representation: its name and tag, and how it's encoded,
+/// carried at runtime, and read back.
 #[derive(Clone, Copy)]
-pub(crate) struct Convention<N> {
+pub(crate) struct Representation<N> {
     pub name: &'static str,
     pub tag: CellId,
-    pub left_not: CellId,
-    pub right_not: CellId,
     pub encode: fn(N) -> Value,
     pub runtime: fn(N) -> RuntimeValue,
     pub read: fn(&RuntimeValue) -> Option<N>,
-    /// Evaluate an operand read as this number, with any accelerated path.
-    pub eval: fn(&mut Context, Expression, &Environment) -> Result<Option<N>, Halt>,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) enum Operation<N> {
-    Arithmetic(fn(N, N) -> N),
-    /// Fails with the given reason instead of producing a result.
-    Checked(fn(N, N) -> Option<N>, CellId),
-    Comparison(fn(N, N) -> bool),
-    /// Declines with the given reason for an operand that isn't this number.
-    Unary(fn(N) -> N, CellId),
-    /// Declines with the given reason for an operand that isn't this number.
-    Predicate(fn(N) -> bool, CellId),
-}
-
-/// A convention's operations' names, functions, and projected call forms,
-/// which a representation extends with its own before assembling.
-pub(crate) struct Parts {
-    pub names: Vec<(CellId, &'static str)>,
-    pub functions: ForeignFunctions,
-    pub calls: Vec<CellId>,
-    /// The calls that read infix, and how tightly each binds.
-    pub infix: Vec<(CellId, Precedence)>,
-    /// The infix operators by spelling, for typing after a number.
-    pub symbols: Vec<(&'static str, CellId)>,
-}
-
-impl<N: Scrubbable + std::str::FromStr> Convention<N> {
-    pub fn parts(
-        self,
-        operations: impl IntoIterator<Item = (CellId, &'static str, Operation<N>)>,
-    ) -> Parts {
-        operations.into_iter().fold(
-            Parts {
-                names: Vec::new(),
-                functions: ForeignFunctions::default(),
-                calls: Vec::new(),
-                infix: Vec::new(),
-                symbols: Vec::new(),
-            },
-            |mut parts, (cell, spelling, operation)| {
-                if let Some(precedence) = precedence(spelling, &operation) {
-                    parts.infix.push((cell, precedence));
-                    parts.symbols.push((spelling, cell));
-                }
-                parts.names.push((cell, spelling));
-                parts.functions = parts.functions.register(cell, self.operation(operation));
-                parts.calls.push(cell);
-                parts
-            },
-        )
-    }
-
-    pub fn library<W: Host>(self, id: CellId, parts: Parts) -> Library<W> {
-        let Parts {
-            names,
-            functions,
-            calls: operations,
-            infix,
-            symbols,
-        } = parts;
-        let infix: Rc<[(CellId, Precedence)]> = infix.into();
-        let symbols: Rc<[(&'static str, CellId)]> = symbols.into();
-        let reasons = [
-            (self.left_not, format!("left is not {}", self.name)),
-            (self.right_not, format!("right is not {}", self.name)),
-        ];
+impl<N: Scrubbable + std::str::FromStr> Representation<N> {
+    /// The library of this representation, `id`: its tag's name, its numbers
+    /// drawn, and what's typed read as one.
+    pub fn library<W: Host>(self, id: CellId) -> Library<W> {
         name::named_library(
             id,
             self.name,
-            std::iter::once((self.tag, self.name))
-                .chain(
-                    reasons
-                        .iter()
-                        .map(|(cell, reason)| (*cell, reason.as_str())),
-                )
-                .chain(names),
-            functions,
+            [(self.tag, self.name)],
+            ::grap::ForeignFunctions::default(),
         )
-        .with_projection(crate::display::compose_partials([
-            crate::display::runtime_partial(move |input| infix_display(self.tag, &infix, input)),
-            calls(self.tag, operations),
-            crate::display::runtime_partial(move |input| {
-                let layout = self.display(input)?;
-                Some(if input.writable && input.selection.is_some() {
-                    typed_operators::<_, N>(layout, symbols.clone())
-                } else {
-                    layout
-                })
-            }),
-        ]))
+        .with_projection(crate::display::runtime_partial(move |input| {
+            self.display(input)
+        }))
         .with_completions(move |request| {
             (request.scope == crate::display::CompletionScope::Literal
                 && request.kind == crate::display::CompletionKind::Value)
@@ -245,188 +128,6 @@ impl<N: Scrubbable + std::str::FromStr> Convention<N> {
             })
             .into_iter()
             .collect()
-    }
-
-    fn operation(self, operation: Operation<N>) -> ForeignFunction {
-        match operation {
-            Operation::Arithmetic(apply) => {
-                self.binary(move |left, right| (self.runtime)(apply(left, right)))
-            }
-            Operation::Checked(apply, failure) => self.binary(move |left, right| {
-                apply(left, right)
-                    .map(self.runtime)
-                    .unwrap_or_else(|| ::grap::absent::value(failure).into())
-            }),
-            Operation::Comparison(apply) => {
-                self.binary(move |left, right| logic::value(apply(left, right)).into())
-            }
-            Operation::Unary(apply, operand_not) => {
-                self.unary(operand_not, move |operand| (self.runtime)(apply(operand)))
-            }
-            Operation::Predicate(apply, operand_not) => self.unary(operand_not, move |operand| {
-                logic::value(apply(operand)).into()
-            }),
-        }
-    }
-
-    fn unary(
-        self,
-        operand_not: CellId,
-        operation: impl Fn(N) -> RuntimeValue + 'static,
-    ) -> ForeignFunction {
-        let operation = Rc::new(operation);
-        ForeignFunction::staged(move |context, call| {
-            match context.field(call, vocabulary::OPERAND) {
-                Some(operand) => {
-                    let operation = operation.clone();
-                    Rc::new(move |context, environment| {
-                        Ok(match (self.eval)(context, operand.clone(), environment)? {
-                            Some(operand) => operation(operand),
-                            None => ::grap::absent::value(operand_not).into(),
-                        })
-                    })
-                }
-                None => {
-                    Rc::new(|context, _| Ok(context.missing_runtime_argument(vocabulary::OPERAND)))
-                }
-            }
-        })
-        .parameters([vocabulary::OPERAND])
-        .tracked()
-    }
-
-    /// To this type from another, whose operand it reads itself, declining
-    /// with `invalid_input` when it can't.
-    pub(crate) fn conversion(
-        self,
-        invalid_input: CellId,
-        convert: fn(&RuntimeValue) -> Option<N>,
-    ) -> ForeignFunction {
-        ForeignFunction::staged(move |context, call| {
-            match context.field(call, vocabulary::OPERAND) {
-                Some(operand) => Rc::new(move |context, environment| {
-                    let operand = context.eval(operand.clone(), environment)?;
-                    Ok(match convert(&operand) {
-                        Some(number) => (self.runtime)(number),
-                        None => ::grap::absent::with_detail(
-                            invalid_input,
-                            vocabulary::OPERAND,
-                            operand.to_value(),
-                        )
-                        .into(),
-                    })
-                }),
-                None => {
-                    Rc::new(|context, _| Ok(context.missing_runtime_argument(vocabulary::OPERAND)))
-                }
-            }
-        })
-        .parameters([vocabulary::OPERAND])
-        .tracked()
-    }
-
-    /// Each call site finds its operand expressions once; its stage only
-    /// evaluates them.
-    fn binary(self, operation: impl Fn(N, N) -> RuntimeValue + 'static) -> ForeignFunction {
-        let operation = Rc::new(operation);
-        ForeignFunction::staged(move |context, call| {
-            let missing = |cell| -> Stage {
-                Rc::new(move |context, _| Ok(context.missing_runtime_argument(cell)))
-            };
-            match (
-                context.field(call, vocabulary::LEFT),
-                context.field(call, vocabulary::RIGHT),
-            ) {
-                (Some(left), Some(right)) => {
-                    let operation = operation.clone();
-                    Rc::new(move |context, environment| {
-                        let left = (self.eval)(context, left.clone(), environment)?;
-                        let right = (self.eval)(context, right.clone(), environment)?;
-                        Ok(match (left, right) {
-                            (Some(left), Some(right)) => operation(left, right),
-                            (None, _) => ::grap::absent::value(self.left_not).into(),
-                            (_, None) => ::grap::absent::value(self.right_not).into(),
-                        })
-                    })
-                }
-                (None, _) => missing(vocabulary::LEFT),
-                (_, None) => missing(vocabulary::RIGHT),
-            }
-        })
-        .parameters([vocabulary::LEFT, vocabulary::RIGHT])
-        .tracked()
-    }
-}
-
-/// A selected number takes its type's single-character operators as typing:
-/// one typed at the end of a whole number makes the number its left operand,
-/// with the right operand's picker open. A sign or exponent that doesn't yet
-/// make a number still goes into its text.
-fn typed_operators<W: Host, N: std::str::FromStr + 'static>(
-    child: Layout<W>,
-    symbols: Rc<[(&'static str, CellId)]>,
-) -> Layout<W> {
-    crate::display::widget::after(
-        child,
-        Rc::new(move |context| {
-            let site = context.site();
-            let symbols = symbols.clone();
-            Box::new(move |output, _| {
-                output.handler().on_key(move |world: &mut W, event| {
-                    wrap_typed::<N>(&mut world.session(), event, &site, &symbols)
-                });
-            })
-        }),
-    )
-}
-
-fn wrap_typed<N: std::str::FromStr>(
-    session: &mut crate::editing::Session<'_>,
-    event: &ui_events::keyboard::KeyboardEvent,
-    site: &crate::editing::Site,
-    symbols: &[(&'static str, CellId)],
-) -> bool {
-    typed_operator(event, symbols).is_some_and(|operator| {
-        let mut edit = site.open(session);
-        let wrapped = ends_a_number::<N>(edit.selected())
-            && edit.value().cloned().is_some_and(|left| {
-                edit.replace(::grap::call(
-                    Value::from(operator),
-                    [(vocabulary::LEFT, left)],
-                ))
-            });
-        if wrapped {
-            edit.pend(&[gid::Step::Key(vocabulary::RIGHT)]);
-        }
-        wrapped
-    })
-}
-
-/// The operator among `symbols` that an unmodified keypress types.
-fn typed_operator(
-    event: &ui_events::keyboard::KeyboardEvent,
-    symbols: &[(&'static str, CellId)],
-) -> Option<CellId> {
-    let plain = event.state.is_down() && crate::modifiers::at_most_shift(&event.modifiers);
-    match &event.key {
-        ui_events::keyboard::Key::Character(typed) if plain => symbols
-            .iter()
-            .find(|(spelling, _)| *spelling == typed.as_str())
-            .map(|&(_, operator)| operator),
-        _ => None,
-    }
-}
-
-/// Whether a typed operator follows the whole number: the number is
-/// selected, or its line is being typed with the caret after all of it.
-fn ends_a_number<N: std::str::FromStr>(selected: crate::editing::Selected<'_>) -> bool {
-    match selected {
-        crate::editing::Selected::Elsewhere => false,
-        crate::editing::Selected::Here => true,
-        crate::editing::Selected::Typing(line) => {
-            let (anchor, focus) = line.selection_offsets();
-            anchor == focus && focus == line.text().len() && line.text().trim().parse::<N>().is_ok()
-        }
     }
 }
 

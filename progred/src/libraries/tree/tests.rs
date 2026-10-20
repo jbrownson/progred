@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{control::vocabulary as c, f64, number};
+use crate::libraries::{control::vocabulary as c, f64};
 use crate::library::Definitions;
 use crate::test_values::call;
 use ::grap::vocabulary as g;
@@ -159,8 +159,14 @@ fn leaf_mapping_composes_inside_out_without_changing_origins() {
             call(
                 function,
                 [
-                    (number::vocabulary::LEFT, VALUE.into()),
-                    (number::vocabulary::RIGHT, f64::value(right)),
+                    (
+                        crate::libraries::grap::numbers::vocabulary::LEFT,
+                        VALUE.into(),
+                    ),
+                    (
+                        crate::libraries::grap::numbers::vocabulary::RIGHT,
+                        f64::value(right),
+                    ),
                 ],
             ),
         )
@@ -168,8 +174,11 @@ fn leaf_mapping_composes_inside_out_without_changing_origins() {
     let map = |mapping, children| call(MAP, [(MAPPING, mapping), (CHILDREN, children)]);
     let doc = document(group(Value::list([
         map(
-            arithmetic(f64::vocabulary::MULTIPLY, 2.0),
-            map(arithmetic(f64::vocabulary::SUM, 1.0), leaf(f64::value(2.0))),
+            arithmetic(crate::libraries::grap::numbers::f64::MULTIPLY, 2.0),
+            map(
+                arithmetic(crate::libraries::grap::numbers::f64::SUM, 1.0),
+                leaf(f64::value(2.0)),
+            ),
         ),
         leaf(f64::value(2.0)),
     ])));

@@ -4,7 +4,7 @@
 //! evaluator reproduces every tuple. Expectations are hand-derived
 //! from the naive evaluation shape, never copied from a run.
 
-use crate::libraries::{control, f32, f64, list, number};
+use crate::libraries::{control, f32, f64, list};
 use ::grap;
 use ::grap::ForeignFunctions;
 use gid::{CellId, Value, new_cell_id};
@@ -12,8 +12,7 @@ use gid::{CellId, Value, new_cell_id};
 fn functions() -> ForeignFunctions {
     ForeignFunctions::merge_all([
         crate::test_support::foreign_functions(&control::library::<crate::Editor>()),
-        crate::test_support::foreign_functions(&f32::library::<crate::Editor>()),
-        crate::test_support::foreign_functions(&f64::library::<crate::Editor>()),
+        crate::test_support::foreign_functions(&crate::libraries::grap::library::<crate::Editor>()),
         crate::test_support::foreign_functions(&list::library::<crate::Editor>()),
     ])
 }
@@ -50,8 +49,11 @@ fn a_lambda_call_burns_its_call_function_argument_and_body() {
 #[test]
 fn shadowing_a_foreign_function_burns_like_any_binding() {
     let expression = grap::call(
-        grap::lambda([f64::vocabulary::SUM], Value::from(f64::vocabulary::SUM)),
-        [(f64::vocabulary::SUM, blob("bound"))],
+        grap::lambda(
+            [crate::libraries::grap::numbers::f64::SUM],
+            Value::from(crate::libraries::grap::numbers::f64::SUM),
+        ),
+        [(crate::libraries::grap::numbers::f64::SUM, blob("bound"))],
     );
     let evaluation = evaluate(&expression, 10);
     assert_eq!(evaluation.result, blob("bound"));
@@ -205,7 +207,10 @@ fn callable_record_patterns_are_transparent_to_lowering() {
     let binder = new_cell_id();
     for (subject, field) in [
         (grap::lambda([], blob("body")), grap::vocabulary::CLOSURE),
-        (grap::ffi(f64::vocabulary::SUM), grap::vocabulary::FFI),
+        (
+            grap::ffi(crate::libraries::grap::numbers::f64::SUM),
+            grap::vocabulary::FFI,
+        ),
     ] {
         let evaluated = evaluate(&subject, 100).result;
         let contents = evaluated.as_record().unwrap().get(&field).unwrap().clone();
@@ -315,10 +320,16 @@ fn clause_lists_behind_cells_agree_with_literal_clauses() {
 #[test]
 fn arithmetic_burns_its_call_function_and_operands() {
     let expression = grap::call(
-        Value::from(f64::vocabulary::SUM),
+        Value::from(crate::libraries::grap::numbers::f64::SUM),
         [
-            (number::vocabulary::LEFT, f64::value(1.0)),
-            (number::vocabulary::RIGHT, f64::value(2.0)),
+            (
+                crate::libraries::grap::numbers::vocabulary::LEFT,
+                f64::value(1.0),
+            ),
+            (
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
+                f64::value(2.0),
+            ),
         ],
     );
     let evaluation = evaluate(&expression, 10);
@@ -331,10 +342,16 @@ fn arithmetic_burns_its_call_function_and_operands() {
 #[test]
 fn single_precision_arithmetic_burns_like_f64() {
     let expression = grap::call(
-        Value::from(f32::vocabulary::SUM),
+        Value::from(crate::libraries::grap::numbers::f32::SUM),
         [
-            (number::vocabulary::LEFT, f32::value(1.0)),
-            (number::vocabulary::RIGHT, f32::value(2.0)),
+            (
+                crate::libraries::grap::numbers::vocabulary::LEFT,
+                f32::value(1.0),
+            ),
+            (
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
+                f32::value(2.0),
+            ),
         ],
     );
     let evaluation = evaluate(&expression, 10);

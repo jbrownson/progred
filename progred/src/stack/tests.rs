@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn selected_libraries_supply_only_their_own_definitions() {
-    let ids = [name::ID, text::ID, blob::ID, number::ID, f64::ID];
+    let ids = [name::ID, text::ID, blob::ID, f64::ID];
     let stack = load_selected(&ids).unwrap();
     assert_eq!(
         stack.libraries.iter().map(|(id, _)| id).collect::<Vec<_>>(),

@@ -8,11 +8,11 @@ fn list_operations_are_value_operations() {
         vocabulary::CONCAT,
         [
             (
-                number::vocabulary::LEFT,
+                crate::libraries::grap::numbers::vocabulary::LEFT,
                 Value::list([Value::from(b"a".to_vec())]),
             ),
             (
-                number::vocabulary::RIGHT,
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
                 Value::list([Value::from(b"b".to_vec())]),
             ),
         ],

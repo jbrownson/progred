@@ -325,7 +325,7 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
 fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
     use crate::libraries::{
         absent, blob, color, control, controls, conversion, f32, f64, fidget, geometry, grap,
-        layout, list, logic, name, number, presentation, text, toolpath, tree, u64,
+        layout, list, logic, name, presentation, text, toolpath, tree, u64,
     };
     let (doc, fields) = crate::gid_text::parse(
         &include_str!(concat!(
@@ -347,9 +347,8 @@ fn website_shape_editor() -> (crate::Editor, crate::gid_text::Binders) {
             absent::ID,
             color::ID,
             control::ID,
-            number::ID,
-            f64::ID,
             grap::ID,
+            f64::ID,
             layout::ID,
             f32::ID,
             u64::ID,

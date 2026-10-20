@@ -142,7 +142,7 @@ The row loop uses ordinary list `unfold` to construct one deferred program per
 line. Each line's point loop uses `iterate`, emitting `start at` and `line to`
 without collecting a list of points. Sampling
 policy is document code, not a toolpath FFI. General `min`, `max`, `ceil`,
-`hypot`, and `is finite` operations belong to the f64 library. The example
+`hypot`, and `is finite` operations are Grap's f64 arithmetic. The example
 rejects nonfinite or fractional row counts and nonpositive/nonfinite spacing;
 these checks are a flat sequence of ordinary `require` guards. Loops explicitly
 return the list library's `iteration finished` absent at their endpoint rather

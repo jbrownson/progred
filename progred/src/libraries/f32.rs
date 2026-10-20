@@ -1,6 +1,6 @@
-//! An open f32 convention used by libraries whose host boundary is
-//! single precision. It remains ordinary GID data and ordinary Grap
-//! library behavior.
+//! f32 numbers, for libraries whose host boundary is single precision: four
+//! little-endian bytes under the f32 tag, drawn as their spelling. Their
+//! arithmetic is Grap's numbers library's.
 
 use crate::display::Host;
 use crate::libraries::{Library, number};
@@ -13,14 +13,6 @@ pub mod vocabulary {
     use gid::CellId;
 
     pub const F32: CellId = CellId::from_u128(0x64810cfeb0631ca8875e282d1ad4af79);
-    pub const SUM: CellId = CellId::from_u128(0x257e5967d826e69d28929cf365667ae1);
-    pub const SUBTRACT: CellId = CellId::from_u128(0x5cd7408dab067d8b92c7a1bd9cda7b05);
-    pub const MULTIPLY: CellId = CellId::from_u128(0xd4df1fe63a95cda53c19ad7220054c24);
-    pub const DIVIDE: CellId = CellId::from_u128(0xfbf1ebc4eeeea21f86af583f6ad85e71);
-    pub const LESS: CellId = CellId::from_u128(0x3dde12d1f97ccca65c579ae2703bb07a);
-    pub const EQUAL: CellId = CellId::from_u128(0xe0637a60944f8dd9afd2fb4c28214dc3);
-    pub const LEFT_NOT_F32: CellId = CellId::from_u128(0x2f7a7dfd96df51008a563a36e075e50b);
-    pub const RIGHT_NOT_F32: CellId = CellId::from_u128(0xd4a7b035dc57953dca5c1d20cb591d0d);
 }
 
 pub fn value(number: f32) -> Value {
@@ -31,7 +23,7 @@ pub fn read(value: &Value) -> Option<f32> {
     number::le_bytes(value, vocabulary::F32).map(f32::from_le_bytes)
 }
 
-fn read_runtime(value: &RuntimeValue) -> Option<f32> {
+pub(crate) fn read_runtime(value: &RuntimeValue) -> Option<f32> {
     number::le_runtime_bytes(value, vocabulary::F32).map(f32::from_le_bytes)
 }
 
@@ -62,55 +54,18 @@ impl number::Scrubbable for f32 {
     }
 }
 
-pub(crate) fn convention() -> number::Convention<f32> {
-    number::Convention {
+pub(crate) fn representation() -> number::Representation<f32> {
+    number::Representation {
         name: "f32",
         tag: vocabulary::F32,
-        left_not: vocabulary::LEFT_NOT_F32,
-        right_not: vocabulary::RIGHT_NOT_F32,
         encode: value,
         runtime: |number| value(number).into(),
         read: read_runtime,
-        eval: |context, expression, environment| {
-            Ok(read_runtime(&context.eval(expression, environment)?))
-        },
     }
 }
 
-fn parts() -> number::Parts {
-    use number::Operation::{Arithmetic, Comparison};
-    convention().parts([
-        (vocabulary::SUM, "+", Arithmetic(|left, right| left + right)),
-        (
-            vocabulary::SUBTRACT,
-            "-",
-            Arithmetic(|left, right| left - right),
-        ),
-        (
-            vocabulary::MULTIPLY,
-            "*",
-            Arithmetic(|left, right| left * right),
-        ),
-        (
-            vocabulary::DIVIDE,
-            "/",
-            Arithmetic(|left, right| left / right),
-        ),
-        (
-            vocabulary::LESS,
-            "<",
-            Comparison(|left, right| left < right),
-        ),
-        (
-            vocabulary::EQUAL,
-            "==",
-            Comparison(|left, right| left == right),
-        ),
-    ])
-}
-
 pub fn library<W: Host>() -> Library<W> {
-    convention().library(ID, parts())
+    representation().library(ID)
 }
 
 #[cfg(test)]

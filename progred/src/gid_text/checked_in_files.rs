@@ -86,11 +86,11 @@ fn grap_fixture_shares_an_unnamed_numeric_cell() {
             .as_record()
             .unwrap();
         assert_eq!(
-            call.get(&crate::libraries::number::vocabulary::LEFT),
+            call.get(&crate::libraries::grap::numbers::vocabulary::LEFT),
             Some(&binders["input"].into())
         );
         let argument = call
-            .get(&crate::libraries::number::vocabulary::RIGHT)
+            .get(&crate::libraries::grap::numbers::vocabulary::RIGHT)
             .unwrap();
         assert_eq!(crate::libraries::f64::read(argument), Some(2.0));
         assert_eq!(crate::libraries::name::read(argument), None);
@@ -119,7 +119,7 @@ fn functions_fixture_has_a_parameter_not_a_shared_numeric_input() {
     );
     let body = definition.get(&BODY).unwrap().as_record().unwrap();
     assert_eq!(
-        body.get(&crate::libraries::number::vocabulary::LEFT),
+        body.get(&crate::libraries::grap::numbers::vocabulary::LEFT),
         Some(&names["x"].into())
     );
     let root = doc.root.as_ref().unwrap().as_record().unwrap();

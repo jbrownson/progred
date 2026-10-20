@@ -321,10 +321,16 @@ fn runtime_mapping_profile() {
                         (
                             axis,
                             call(
-                                f64::vocabulary::SUM,
+                                crate::libraries::grap::numbers::f64::SUM,
                                 [
-                                    (number::vocabulary::LEFT, axis.into()),
-                                    (number::vocabulary::RIGHT, offset.into()),
+                                    (
+                                        crate::libraries::grap::numbers::vocabulary::LEFT,
+                                        axis.into(),
+                                    ),
+                                    (
+                                        crate::libraries::grap::numbers::vocabulary::RIGHT,
+                                        offset.into(),
+                                    ),
                                 ],
                             ),
                         )

@@ -18,9 +18,11 @@ pub mod vocabulary {
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::F32_FROM_F64,
-        f32::convention().conversion(vocabulary::INVALID_F32_INPUT, |operand| {
-            operand.as_f64().map(|number| number as f32)
-        }),
+        crate::libraries::grap::numbers::conversion(
+            f32::representation().runtime,
+            vocabulary::INVALID_F32_INPUT,
+            |operand| operand.as_f64().map(|number| number as f32),
+        ),
     )
 }
 

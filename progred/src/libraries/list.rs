@@ -3,7 +3,7 @@
 //! structural matching alone.
 
 use crate::display::Host;
-use crate::libraries::{Library, f64, name, number};
+use crate::libraries::{Library, f64, name};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
 };
@@ -87,20 +87,37 @@ fn functions() -> ForeignFunctions {
         .register(
             vocabulary::CONCAT,
             ForeignFunction::new(|context, call, environment| {
-                let Some(left) = evaluated(context, call, environment, number::vocabulary::LEFT)?
+                let Some(left) = evaluated(
+                    context,
+                    call,
+                    environment,
+                    crate::libraries::grap::numbers::vocabulary::LEFT,
+                )?
                 else {
-                    return Ok(context.missing_runtime_argument(number::vocabulary::LEFT));
+                    return Ok(context.missing_runtime_argument(
+                        crate::libraries::grap::numbers::vocabulary::LEFT,
+                    ));
                 };
-                let Some(right) = evaluated(context, call, environment, number::vocabulary::RIGHT)?
+                let Some(right) = evaluated(
+                    context,
+                    call,
+                    environment,
+                    crate::libraries::grap::numbers::vocabulary::RIGHT,
+                )?
                 else {
-                    return Ok(context.missing_runtime_argument(number::vocabulary::RIGHT));
+                    return Ok(context.missing_runtime_argument(
+                        crate::libraries::grap::numbers::vocabulary::RIGHT,
+                    ));
                 };
                 Ok(match (left.list_values(), right.list_values()) {
                     (Some(left), Some(right)) => RuntimeValue::list(left.chain(right)),
                     _ => not_list(),
                 })
             })
-            .parameters([number::vocabulary::LEFT, number::vocabulary::RIGHT])
+            .parameters([
+                crate::libraries::grap::numbers::vocabulary::LEFT,
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
+            ])
             .tracked(),
         )
         .register(

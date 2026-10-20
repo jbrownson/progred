@@ -12,18 +12,18 @@ fn every_convention_updates_a_missing_location_from_text() {
 fn numeric_completions_offer_only_what_reads_as_a_number() {
     for (complete, zero, representation) in [
         (
-            (|query| crate::libraries::f32::convention().completions(query))
+            (|query| crate::libraries::f32::representation().completions(query))
                 as fn(&str) -> Vec<crate::display::Completion>,
             crate::libraries::f32::value(0.0),
             crate::libraries::f32::vocabulary::F32,
         ),
         (
-            |query| crate::libraries::f64::convention().completions(query),
+            |query| crate::libraries::f64::representation().completions(query),
             crate::libraries::f64::value(0.0),
             crate::libraries::f64::vocabulary::F64,
         ),
         (
-            |query| crate::libraries::u64::convention().completions(query),
+            |query| crate::libraries::u64::representation().completions(query),
             crate::libraries::u64::value(0),
             crate::libraries::u64::vocabulary::U64,
         ),
@@ -175,4 +175,3 @@ fn coarse_precision_grows_horizontal_sensitivity_sublinearly() {
 }
 
 mod frames;
-mod typing;

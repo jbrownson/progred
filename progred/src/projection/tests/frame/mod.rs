@@ -16,7 +16,10 @@ fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
         root: Some(Value::record([
             (words, text::value("hello")),
             (number, f64::value(3.0)),
-            (call, grap::call(new_cell_id().into(), [])),
+            (
+                call,
+                grap::call(crate::libraries::grap::numbers::f64::SUM.into(), []),
+            ),
             (
                 missing,
                 ::grap::absent::value(absent::vocabulary::NO_ALTERNATIVE),
@@ -59,7 +62,10 @@ fn plain_reads_text_numbers_and_absences_but_keeps_calls_records() {
     assert!(words_plain >= "hello".len(), "{words_plain}");
     assert!(words_plain < words_raw, "{words_plain} < {words_raw}");
     assert!(number_plain < number_raw, "{number_plain} < {number_raw}");
-    assert!(function_plain, "a call stays a record");
+    assert!(
+        function_plain,
+        "a call, arithmetic included, stays a record"
+    );
     // Plain reads an absent value as its reason; Raw draws the reason's field.
     assert!(!reason_plain, "Plain draws the reason as the value itself");
     assert!(reason_raw, "Raw draws the reason as a field");

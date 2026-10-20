@@ -41,11 +41,11 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     };
     let arguments = [
         (
-            crate::libraries::number::vocabulary::LEFT,
+            crate::libraries::grap::numbers::vocabulary::LEFT,
             crate::libraries::f32::value(7.0),
         ),
         (
-            crate::libraries::number::vocabulary::RIGHT,
+            crate::libraries::grap::numbers::vocabulary::RIGHT,
             crate::libraries::f32::value(2.0),
         ),
     ];
@@ -55,7 +55,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     )]);
     for (function, result) in [
         (
-            crate::libraries::f32::vocabulary::SUBTRACT,
+            crate::libraries::grap::numbers::f32::SUBTRACT,
             crate::libraries::f32::value(5.0),
         ),
         (fidget::vocabulary::DIFFERENCE, shape),

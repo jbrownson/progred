@@ -18,6 +18,7 @@ use crate::display::{group, group_hug};
 use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
+pub mod numbers;
 mod suggestions;
 
 pub(crate) fn expression<W: Host>(
@@ -458,6 +459,7 @@ fn functions() -> ForeignFunctions {
 }
 
 pub fn library<W: Host>() -> Library<W> {
+    let (number_names, number_functions, numbers) = numbers::contribution();
     name::named_library(
         ID,
         "grap",
@@ -497,13 +499,22 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::absent::NOT_CALLABLE, "not callable"),
             (::grap::absent::MISSING_ARGUMENT, "missing argument"),
             (::grap::absent::INVALID_ENVIRONMENT, "invalid environment"),
-        ],
-        functions(),
+        ]
+        .into_iter()
+        .chain(
+            number_names
+                .iter()
+                .map(|(cell, name)| (*cell, name.as_str())),
+        ),
+        functions().merge(number_functions),
     )
     .with_projection(
         // Calls, lambdas, and value wrappers follow evaluator precedence,
         // but ordinary partial failures still try the next projection.
+        // Arithmetic reads as itself before calls in general, and a number
+        // takes its operators as typing.
         crate::display::compose_partials([
+            numbers,
             crate::display::runtime_partial(evaluate_display),
             crate::display::fold::folding(crate::display::runtime_partial(call_display)),
             crate::display::runtime_partial(lambda_display),

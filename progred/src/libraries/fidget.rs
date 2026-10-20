@@ -52,7 +52,7 @@ const MAX_ZOOM: f32 = 20.0;
 pub mod vocabulary {
     use gid::CellId;
 
-    pub use crate::libraries::number::vocabulary::{LEFT, OPERAND, RIGHT};
+    pub use crate::libraries::grap::numbers::vocabulary::{LEFT, OPERAND, RIGHT};
     pub const FIDGET: CellId = CellId::from_u128(0x5653d5cc6cf43eb2291f9943c29eeab4);
     pub const AXIS: CellId = CellId::from_u128(0xfb2b3baa73025ae4b7b2aa97d65d1643);
     pub const X: CellId = CellId::from_u128(0x0192bad40c32c951e2237679084528bc);

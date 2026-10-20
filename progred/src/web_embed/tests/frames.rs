@@ -56,14 +56,8 @@ fn empty_slots_make_values_through_the_picker() {
     let (doc, names) = crate::gid_text::parse(EMPTY_SLOTS).unwrap();
     let mut editor = crate::test_editor_with_stack(
         doc,
-        crate::stack::load_selected(&[
-            name::ID,
-            text::ID,
-            crate::libraries::blob::ID,
-            crate::libraries::number::ID,
-            f64::ID,
-        ])
-        .unwrap(),
+        crate::stack::load_selected(&[name::ID, text::ID, crate::libraries::blob::ID, f64::ID])
+            .unwrap(),
     );
     set_tutorial_slots(
         &mut editor,
@@ -260,7 +254,7 @@ fn tutorial_stack(libraries: &[CellId], slots: &str) -> crate::stack::Stack {
 
 #[test]
 fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
-    use crate::libraries::{absent, blob, grap as grap_library, number};
+    use crate::libraries::{absent, blob, grap as grap_library};
     use ::grap::vocabulary::FUNCTION;
     let (doc, names) = crate::gid_text::parse(
         r#"{
@@ -294,9 +288,8 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
                 text::ID,
                 blob::ID,
                 absent::ID,
-                number::ID,
-                f64::ID,
                 grap_library::ID,
+                f64::ID,
             ],
             &format!(
                 "{}:plain,{}:raw,{}",
@@ -332,14 +325,14 @@ fn tutorial_plain_and_base_slots_show_a_call_without_its_callee() {
 
 #[test]
 fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
-    use crate::libraries::{blob, number};
+    use crate::libraries::blob;
     use ::grap::vocabulary::FUNCTION;
     let (doc, names) =
         crate::gid_text::parse(include_str!("../../../fixtures/functions.gid")).unwrap();
     let mut world = crate::test_editor_with_stack(
         doc,
         tutorial_stack(
-            &[name::ID, text::ID, blob::ID, number::ID, f64::ID],
+            &[name::ID, text::ID, blob::ID, f64::ID],
             &names["second"].to_string(),
         ),
     );
@@ -361,13 +354,13 @@ fn a_tutorial_slot_without_grap_shows_a_call_by_its_functions_name() {
 
 #[test]
 fn swapping_libraries_keeps_the_document_and_selection() {
-    use crate::libraries::{blob, number};
+    use crate::libraries::blob;
     let (doc, names) = crate::gid_text::parse(include_str!("../../../fixtures/model.gid")).unwrap();
     let slots = names["first"].to_string();
     let mut driver = Driver::new(
         crate::test_editor_with_stack(
             doc,
-            tutorial_stack(&[name::ID, text::ID, blob::ID, number::ID, f64::ID], &slots),
+            tutorial_stack(&[name::ID, text::ID, blob::ID, f64::ID], &slots),
         ),
         kurbo::Size::new(620.0, 400.0),
     );

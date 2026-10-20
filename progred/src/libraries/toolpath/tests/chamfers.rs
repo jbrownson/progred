@@ -68,16 +68,25 @@ fn configured_recipes_work_on_an_independent_planar_strip() {
                 (
                     X,
                     call(
-                        f64::vocabulary::SUBTRACT,
+                        crate::libraries::grap::numbers::f64::SUBTRACT,
                         [
-                            (number::vocabulary::LEFT, f64::value(10.0)),
                             (
-                                number::vocabulary::RIGHT,
+                                crate::libraries::grap::numbers::vocabulary::LEFT,
+                                f64::value(10.0),
+                            ),
+                            (
+                                crate::libraries::grap::numbers::vocabulary::RIGHT,
                                 call(
-                                    f64::vocabulary::MULTIPLY,
+                                    crate::libraries::grap::numbers::f64::MULTIPLY,
                                     [
-                                        (number::vocabulary::LEFT, f64::value(4.0)),
-                                        (number::vocabulary::RIGHT, names["t"].into()),
+                                        (
+                                            crate::libraries::grap::numbers::vocabulary::LEFT,
+                                            f64::value(4.0),
+                                        ),
+                                        (
+                                            crate::libraries::grap::numbers::vocabulary::RIGHT,
+                                            names["t"].into(),
+                                        ),
                                     ],
                                 ),
                             ),

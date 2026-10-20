@@ -510,7 +510,7 @@ outside platform dispatch.
 An active projection gesture exposes `advance` and `finish`. The shell finishes
 it on release, cancellation, replacement, history restoration, or a successful
 save. Its implementation owns any finalization; the frame pipeline has no
-number-specific presentation channel. The number library's scrub widget keeps
+number-specific presentation channel. The number types' scrub widget keeps
 precision-aware spelling in the selected line editor during the gesture and
 clears that editor on finish, leaving other selection payload fields intact.
 Value-changing gestures use a concrete edit run holding the target and undo

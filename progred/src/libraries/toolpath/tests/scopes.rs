@@ -153,10 +153,13 @@ fn point_mapping_preserves_tool_scopes() {
 fn axis_mapping_composes_inside_out_and_is_independent_of_translation() {
     let negate = |value| {
         call(
-            f64::vocabulary::SUBTRACT,
+            crate::libraries::grap::numbers::f64::SUBTRACT,
             [
-                (number::vocabulary::LEFT, f64::value(0.0)),
-                (number::vocabulary::RIGHT, value),
+                (
+                    crate::libraries::grap::numbers::vocabulary::LEFT,
+                    f64::value(0.0),
+                ),
+                (crate::libraries::grap::numbers::vocabulary::RIGHT, value),
             ],
         )
     };
@@ -176,10 +179,16 @@ fn axis_mapping_composes_inside_out_and_is_independent_of_translation() {
                 (
                     key,
                     call(
-                        f64::vocabulary::SUM,
+                        crate::libraries::grap::numbers::f64::SUM,
                         [
-                            (number::vocabulary::LEFT, key.into()),
-                            (number::vocabulary::RIGHT, f64::value(5.0)),
+                            (
+                                crate::libraries::grap::numbers::vocabulary::LEFT,
+                                key.into(),
+                            ),
+                            (
+                                crate::libraries::grap::numbers::vocabulary::RIGHT,
+                                f64::value(5.0),
+                            ),
                         ],
                     ),
                 )

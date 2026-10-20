@@ -3,29 +3,33 @@ use gid::CellId;
 
 #[test]
 fn each_library_names_its_vocabulary() {
-    let libraries: [(Library<crate::Editor>, &[(CellId, &str)]); 7] = [
+    let libraries: [(Library<crate::Editor>, &[(CellId, &str)]); 8] = [
+        (f32::library(), &[(f32::vocabulary::F32, "f32")]),
+        (u64::library(), &[(u64::vocabulary::U64, "u64")]),
+        (f64::library(), &[(f64::vocabulary::F64, "f64")]),
         (
-            f32::library(),
+            crate::libraries::grap::library(),
             &[
-                (f32::vocabulary::SUM, "+"),
-                (f32::vocabulary::EQUAL, "=="),
-                (f32::vocabulary::LEFT_NOT_F32, "left is not f32"),
-            ],
-        ),
-        (
-            u64::library(),
-            &[
-                (u64::vocabulary::SUM, "+"),
-                (u64::vocabulary::OVERFLOW, "u64 overflow"),
-            ],
-        ),
-        (
-            f64::library(),
-            &[
-                (f64::vocabulary::F64, "f64"),
-                (f64::vocabulary::SUM, "+"),
-                (f64::vocabulary::LEFT_NOT_F64, "left is not f64"),
-                (f64::vocabulary::RIGHT_NOT_F64, "right is not f64"),
+                (crate::libraries::grap::numbers::f32::SUM, "+"),
+                (crate::libraries::grap::numbers::f32::EQUAL, "=="),
+                (
+                    crate::libraries::grap::numbers::f32::LEFT_NOT_F32,
+                    "left is not f32",
+                ),
+                (crate::libraries::grap::numbers::u64::SUM, "+"),
+                (
+                    crate::libraries::grap::numbers::u64::OVERFLOW,
+                    "u64 overflow",
+                ),
+                (crate::libraries::grap::numbers::f64::SUM, "+"),
+                (
+                    crate::libraries::grap::numbers::f64::LEFT_NOT_F64,
+                    "left is not f64",
+                ),
+                (
+                    crate::libraries::grap::numbers::f64::RIGHT_NOT_F64,
+                    "right is not f64",
+                ),
             ],
         ),
         (

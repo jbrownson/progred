@@ -30,7 +30,7 @@ visual testing.
   and [`frame/test_support.rs`](../progred/src/frame/test_support.rs)
   builds whole headless frames from an editor state and inspects their draw
   lists, hover, and handlers. A library's frame tests sit beside the library,
-  as the number library's do in `libraries/number/tests/frames.rs`.
+  as the number types' do in `libraries/number/tests/frames.rs`.
   [`projection/tests`](../progred/src/projection/tests/mod.rs) keeps the
   engine's own tests, such as the phase-ordering ones: placement doesn't run
   hover, hover doesn't paint or dispatch, paint sees the final target, and

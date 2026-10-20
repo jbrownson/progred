@@ -1,5 +1,5 @@
 use super::{cutter::Tool, *};
-use crate::libraries::{absent, control, number};
+use crate::libraries::{absent, control};
 use crate::test_values::call;
 use ::grap::Evaluation;
 use cam::paths::*;
@@ -434,8 +434,11 @@ fn grap_mapping_is_scoped_and_applies_in_composition_order() {
         call(
             function,
             [
-                (number::vocabulary::LEFT, X.into()),
-                (number::vocabulary::RIGHT, f64::value(rhs)),
+                (crate::libraries::grap::numbers::vocabulary::LEFT, X.into()),
+                (
+                    crate::libraries::grap::numbers::vocabulary::RIGHT,
+                    f64::value(rhs),
+                ),
             ],
         )
     };
@@ -457,9 +460,12 @@ fn grap_mapping_is_scoped_and_applies_in_composition_order() {
     let start = point_call(START_AT, [1.0, 0.0, 0.0]);
     let expression = sequence(vec![
         map(
-            mapping(arithmetic(f64::vocabulary::SUM, 10.0)),
+            mapping(arithmetic(crate::libraries::grap::numbers::f64::SUM, 10.0)),
             map(
-                mapping(arithmetic(f64::vocabulary::MULTIPLY, 2.0)),
+                mapping(arithmetic(
+                    crate::libraries::grap::numbers::f64::MULTIPLY,
+                    2.0,
+                )),
                 start.clone(),
             ),
         ),

@@ -257,7 +257,7 @@ fn unfinished() {
     // x * 2 inside scale.
     assert_eq!(
         ::grap::absent::reason(&result(&unfinished, "fourth")),
-        Some(crate::libraries::f64::vocabulary::LEFT_NOT_F64)
+        Some(crate::libraries::grap::numbers::f64::LEFT_NOT_F64)
     );
     assert!(unfinished.drawn(&[
         unfinished.key("fourth"),

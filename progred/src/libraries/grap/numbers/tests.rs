@@ -1,7 +1,12 @@
-//! Typing and Enter at a number, as a person would.
+//! Typing and Enter at a number, as a person would, and each number's
+//! arithmetic.
+
+mod f32_arithmetic;
+mod f64_arithmetic;
+mod u64_arithmetic;
 
 use crate::driver::Driver;
-use crate::libraries::number::vocabulary::{LEFT, RIGHT};
+use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
 use crate::libraries::{f64, text, u64};
 use crate::selection::Stage;
 use gid::{Cells, Document, Step, Value, new_cell_id};
@@ -20,9 +25,21 @@ fn typing_an_operator_after_a_number_makes_it_the_left_operand() {
         driver
     };
     for (number, operator, symbol) in [
-        (f64::value(2.0), f64::vocabulary::MULTIPLY, "*"),
-        (f64::value(2.0), f64::vocabulary::SUBTRACT, "-"),
-        (u64::value(6), u64::vocabulary::DIVIDE, "/"),
+        (
+            f64::value(2.0),
+            crate::libraries::grap::numbers::f64::MULTIPLY,
+            "*",
+        ),
+        (
+            f64::value(2.0),
+            crate::libraries::grap::numbers::f64::SUBTRACT,
+            "-",
+        ),
+        (
+            u64::value(6),
+            crate::libraries::grap::numbers::u64::DIVIDE,
+            "/",
+        ),
     ] {
         let driver = typed(number.clone(), symbol);
         assert_eq!(

@@ -1,6 +1,6 @@
 //! Custom forms obey the same placed navigation policy as structural containers.
 use super::*;
-use crate::libraries::{control, f64, fidget, number};
+use crate::libraries::{control, f64, fidget};
 use ::grap::vocabulary::{BODY, EVALUATE, EXPRESSION, FFI, FUNCTION, PARAMS, VALUE};
 use puri::handler::NavigationDirection;
 
@@ -79,19 +79,22 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
         (
             "arithmetic",
             ::grap::call(
-                f64::vocabulary::SUM.into(),
+                crate::libraries::grap::numbers::f64::SUM.into(),
                 [
-                    (number::vocabulary::LEFT, number()),
-                    (number::vocabulary::RIGHT, number()),
+                    (crate::libraries::grap::numbers::vocabulary::LEFT, number()),
+                    (crate::libraries::grap::numbers::vocabulary::RIGHT, number()),
                 ],
             ),
-            vec![Step::Key(number::vocabulary::LEFT)],
+            vec![Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT)],
         ),
         (
             "call",
             ::grap::call(
-                f64::vocabulary::SIN.into(),
-                [(number::vocabulary::OPERAND, number())],
+                crate::libraries::grap::numbers::f64::SIN.into(),
+                [(
+                    crate::libraries::grap::numbers::vocabulary::OPERAND,
+                    number(),
+                )],
             ),
             vec![Step::Key(FUNCTION)],
         ),
@@ -127,7 +130,7 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
         ),
         (
             "ffi",
-            Value::record([(FFI, f64::vocabulary::SIN.into())]),
+            Value::record([(FFI, crate::libraries::grap::numbers::f64::SIN.into())]),
             vec![Step::Key(FFI)],
         ),
         (
@@ -307,13 +310,18 @@ fn call_function_and_arguments_are_one_form_in_both_presentations() {
     for (width, forward, backward) in [(1500.0, Right, Left), (90.0, Down, Up)] {
         let mut f = Fixture::new(
             ::grap::call(
-                f64::vocabulary::SIN.into(),
-                [(number::vocabulary::OPERAND, f64::value(3.0))],
+                crate::libraries::grap::numbers::f64::SIN.into(),
+                [(
+                    crate::libraries::grap::numbers::vocabulary::OPERAND,
+                    f64::value(3.0),
+                )],
             ),
             Cells::new(),
         );
         let function = f.child([Step::Key(FUNCTION)]);
-        let argument = f.child([Step::Key(number::vocabulary::OPERAND)]);
+        let argument = f.child([Step::Key(
+            crate::libraries::grap::numbers::vocabulary::OPERAND,
+        )]);
         for (from, direction, to) in [
             (f.whole.clone(), forward, function.clone()),
             (function.clone(), forward, argument.clone()),

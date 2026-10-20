@@ -1,0 +1,546 @@
+//! Grap's arithmetic over the number representations: each one's operations
+//! as foreign functions, read infix or as calls headed by the tagged
+//! operator, and typed after a number; the argument labels of binary and
+//! unary operations, which list concatenation takes too; and conversions'
+//! plumbing. The numbers themselves belong to f64, f32 and u64, which know
+//! nothing of Grap.
+
+use crate::display::host::{Host, Layout, Partial};
+use crate::libraries::number::{Representation, Scrubbable};
+use crate::libraries::representation::{Precedence, calls, infix_display};
+use crate::libraries::u64 as u64_library;
+use crate::libraries::{f32 as f32_library, f64 as f64_library, logic};
+use ::grap::{
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
+};
+use gid::{CellId, Value};
+use puri::handler::HasHandler;
+use std::rc::Rc;
+
+pub mod vocabulary {
+    use gid::CellId;
+
+    pub const LEFT: CellId = CellId::from_u128(0x764f6afe17ba14e81f5ab61204be0bec);
+    pub const RIGHT: CellId = CellId::from_u128(0x4f53ff25390f58472d31a6142644dec2);
+    pub const OPERAND: CellId = CellId::from_u128(0x50a20d15e4ae56be51b882de9d58c676);
+}
+
+/// f64's operations and the reasons they decline.
+pub mod f64 {
+    use gid::CellId;
+
+    pub const SUM: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
+    pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
+    pub const SUBTRACT: CellId = CellId::from_u128(0x08d1ebc7fd4ce62efec9671f73e9b645);
+    pub const DIVIDE: CellId = CellId::from_u128(0xb08dd4c44eeea43ab3c7593ddeedd742);
+    pub const SIN: CellId = CellId::from_u128(0x9f62e0f56d92be74f6ae36378d889262);
+    pub const COS: CellId = CellId::from_u128(0xfb05b6c9b1565ca4add3732e8ddbe2b4);
+    pub const LESS: CellId = CellId::from_u128(0xed44dbf5b4cdf5c952e1ef00f219b655);
+    pub const EQUAL: CellId = CellId::from_u128(0x22ab9aa3e7ce4f4f79a7039e1cc23773);
+    pub const FLOOR: CellId = CellId::from_u128(0xd007814c5f6a6c38b025605b399473d4);
+    pub const MIN: CellId = CellId::from_u128(0x6daed3f67cff3da30767201e5a895f1a);
+    pub const MAX: CellId = CellId::from_u128(0x9dfc13c9c7e059da42ea74ef63897ce6);
+    pub const CEIL: CellId = CellId::from_u128(0xe1ddb3a620b61117d3873c163f603488);
+    pub const HYPOT: CellId = CellId::from_u128(0xfe79fe9c7be4542249fdf604ddf5f5ea);
+    pub const IS_FINITE: CellId = CellId::from_u128(0x1ff1fcec05b669eba2314ad52fe8e8f1);
+    pub const LERP: CellId = CellId::from_u128(0x432ad7a31ef129e353e251419e690ca1);
+    pub const START: CellId = CellId::from_u128(0x4b4fb6349d2fd798e7aafca85a2deca8);
+    pub const END: CellId = CellId::from_u128(0x3a816b0af0160bc77ba1948b122b3f29);
+    pub const AMOUNT: CellId = CellId::from_u128(0x55e66fc5eb91699cf12833fb0a15d4b6);
+    pub const LEFT_NOT_F64: CellId = CellId::from_u128(0x50c0d2fd8fe0325a8e0e41f79ce86eff);
+    pub const RIGHT_NOT_F64: CellId = CellId::from_u128(0xcab77cffe8c38745dd8e748ece331409);
+    pub const OPERAND_NOT_F64: CellId = CellId::from_u128(0x9c2a4845e1c67df6dd43ac1116e76441);
+    pub const START_NOT_F64: CellId = CellId::from_u128(0x809d7bba33afaf8a673846f0c44cd2e6);
+    pub const END_NOT_F64: CellId = CellId::from_u128(0x17081dd43c4af46c54408cd125eaf3e2);
+    pub const AMOUNT_NOT_F64: CellId = CellId::from_u128(0xe1977104f3574cd37a99ef9083dde01f);
+}
+
+/// f32's operations and the reasons they decline.
+pub mod f32 {
+    use gid::CellId;
+
+    pub const SUM: CellId = CellId::from_u128(0x257e5967d826e69d28929cf365667ae1);
+    pub const SUBTRACT: CellId = CellId::from_u128(0x5cd7408dab067d8b92c7a1bd9cda7b05);
+    pub const MULTIPLY: CellId = CellId::from_u128(0xd4df1fe63a95cda53c19ad7220054c24);
+    pub const DIVIDE: CellId = CellId::from_u128(0xfbf1ebc4eeeea21f86af583f6ad85e71);
+    pub const LESS: CellId = CellId::from_u128(0x3dde12d1f97ccca65c579ae2703bb07a);
+    pub const EQUAL: CellId = CellId::from_u128(0xe0637a60944f8dd9afd2fb4c28214dc3);
+    pub const LEFT_NOT_F32: CellId = CellId::from_u128(0x2f7a7dfd96df51008a563a36e075e50b);
+    pub const RIGHT_NOT_F32: CellId = CellId::from_u128(0xd4a7b035dc57953dca5c1d20cb591d0d);
+}
+
+/// u64's operations and the reasons they decline.
+pub mod u64 {
+    use gid::CellId;
+
+    pub const SUM: CellId = CellId::from_u128(0x2b63a57fb5065d7ae992241b3018fcb5);
+    pub const SUBTRACT: CellId = CellId::from_u128(0x74203a2808e4216a6eff871dd39ab313);
+    pub const MULTIPLY: CellId = CellId::from_u128(0xeb9073084d92e0ecb2253ff70a27c03e);
+    pub const DIVIDE: CellId = CellId::from_u128(0x610171b11dd2d2844119b7f9bc7da17c);
+    pub const LESS: CellId = CellId::from_u128(0x425af3c983c925e2eb8becf4389aac58);
+    pub const EQUAL: CellId = CellId::from_u128(0xc3931b2321d6c783fee133acaa929738);
+    pub const LEFT_NOT_U64: CellId = CellId::from_u128(0x64dd17fd81404f413122ffc00b452e2e);
+    pub const RIGHT_NOT_U64: CellId = CellId::from_u128(0x1a13161cd3a0e5fa71455a277839bd32);
+    pub const OVERFLOW: CellId = CellId::from_u128(0x184f82a04d9cb7609238b2dd05ad5cd0);
+    pub const DIVISION_BY_ZERO: CellId = CellId::from_u128(0x7eef118f55e12f09c8f7324c0fdd765d);
+}
+
+/// What arithmetic adds to the Grap library: the names of its cells, its
+/// functions, and its projection, which goes before Grap's calls'.
+pub(super) fn contribution<W: Host>() -> (Vec<(CellId, String)>, ForeignFunctions, Partial<W>) {
+    let mut parts = [f64_parts(), f32_parts(), u64_parts()];
+    let names = [
+        (vocabulary::LEFT, "left"),
+        (vocabulary::RIGHT, "right"),
+        (vocabulary::OPERAND, "operand"),
+    ]
+    .map(|(cell, name)| (cell, name.to_owned()))
+    .into_iter()
+    .chain(
+        parts
+            .iter_mut()
+            .flat_map(|parts| std::mem::take(&mut parts.names)),
+    )
+    .collect();
+    let functions = ForeignFunctions::merge_all(
+        parts
+            .iter_mut()
+            .map(|parts| std::mem::take(&mut parts.functions)),
+    );
+    let [f64, f32, u64] = parts;
+    let projection = crate::display::compose_partials([
+        f64.projection(f64_arithmetic()),
+        f32.projection(f32_arithmetic()),
+        u64.projection(u64_arithmetic()),
+    ]);
+    (names, functions, projection)
+}
+
+fn f64_arithmetic() -> Arithmetic<::core::primitive::f64> {
+    Arithmetic {
+        representation: f64_library::representation(),
+        left_not: f64::LEFT_NOT_F64,
+        right_not: f64::RIGHT_NOT_F64,
+        eval: |context, expression, environment| context.eval_f64(expression, environment),
+    }
+}
+
+fn f32_arithmetic() -> Arithmetic<::core::primitive::f32> {
+    Arithmetic {
+        representation: f32_library::representation(),
+        left_not: f32::LEFT_NOT_F32,
+        right_not: f32::RIGHT_NOT_F32,
+        eval: |context, expression, environment| {
+            Ok(f32_library::read_runtime(
+                &context.eval(expression, environment)?,
+            ))
+        },
+    }
+}
+
+fn u64_arithmetic() -> Arithmetic<::core::primitive::u64> {
+    Arithmetic {
+        representation: u64_library::representation(),
+        left_not: u64::LEFT_NOT_U64,
+        right_not: u64::RIGHT_NOT_U64,
+        eval: |context, expression, environment| {
+            Ok(u64_library::read_runtime(
+                &context.eval(expression, environment)?,
+            ))
+        },
+    }
+}
+
+fn f64_parts() -> Parts {
+    use ::core::primitive::f64 as N;
+    use Operation::{Arithmetic, Comparison, Predicate, Unary};
+    let mut parts = f64_arithmetic().parts([
+        (f64::SUM, "+", Arithmetic(|left, right| left + right)),
+        (f64::MULTIPLY, "*", Arithmetic(|left, right| left * right)),
+        (f64::SUBTRACT, "-", Arithmetic(|left, right| left - right)),
+        (f64::DIVIDE, "/", Arithmetic(|left, right| left / right)),
+        (f64::MIN, "min", Arithmetic(N::min)),
+        (f64::MAX, "max", Arithmetic(N::max)),
+        (f64::HYPOT, "hypot", Arithmetic(N::hypot)),
+        (f64::LESS, "<", Comparison(|left, right| left < right)),
+        (f64::EQUAL, "==", Comparison(|left, right| left == right)),
+        (f64::SIN, "sin", Unary(N::sin, f64::OPERAND_NOT_F64)),
+        (f64::COS, "cos", Unary(N::cos, f64::OPERAND_NOT_F64)),
+        (f64::FLOOR, "floor", Unary(N::floor, f64::OPERAND_NOT_F64)),
+        (f64::CEIL, "ceil", Unary(N::ceil, f64::OPERAND_NOT_F64)),
+        (
+            f64::IS_FINITE,
+            "is finite",
+            Predicate(N::is_finite, f64::OPERAND_NOT_F64),
+        ),
+    ]);
+    parts.functions = parts.functions.register(
+        f64::LERP,
+        ForeignFunction::new(lerp)
+            .parameters([f64::START, f64::END, f64::AMOUNT])
+            .tracked(),
+    );
+    parts.names.extend(
+        [
+            (f64::LERP, "lerp"),
+            (f64::START, "start"),
+            (f64::END, "end"),
+            (f64::AMOUNT, "amount"),
+            (f64::OPERAND_NOT_F64, "operand is not f64"),
+            (f64::START_NOT_F64, "start is not f64"),
+            (f64::END_NOT_F64, "end is not f64"),
+            (f64::AMOUNT_NOT_F64, "amount is not f64"),
+        ]
+        .map(|(cell, name)| (cell, name.to_owned())),
+    );
+    parts.calls.push(f64::LERP);
+    parts
+}
+
+fn lerp(
+    context: &mut Context,
+    call: &Expression,
+    environment: &Environment,
+) -> Result<RuntimeValue, Halt> {
+    let Some(start) = context.field(call, f64::START) else {
+        return Ok(context.missing_runtime_argument(f64::START));
+    };
+    let Some(end) = context.field(call, f64::END) else {
+        return Ok(context.missing_runtime_argument(f64::END));
+    };
+    let Some(amount) = context.field(call, f64::AMOUNT) else {
+        return Ok(context.missing_runtime_argument(f64::AMOUNT));
+    };
+    let start = context.eval_f64(start, environment)?;
+    let end = context.eval_f64(end, environment)?;
+    let amount = context.eval_f64(amount, environment)?;
+    Ok(match (start, end, amount) {
+        (Some(start), Some(end), Some(amount)) => RuntimeValue::f64(start + (end - start) * amount),
+        (None, _, _) => ::grap::absent::value(f64::START_NOT_F64).into(),
+        (_, None, _) => ::grap::absent::value(f64::END_NOT_F64).into(),
+        (_, _, None) => ::grap::absent::value(f64::AMOUNT_NOT_F64).into(),
+    })
+}
+
+fn f32_parts() -> Parts {
+    use Operation::{Arithmetic, Comparison};
+    f32_arithmetic().parts([
+        (f32::SUM, "+", Arithmetic(|left, right| left + right)),
+        (f32::SUBTRACT, "-", Arithmetic(|left, right| left - right)),
+        (f32::MULTIPLY, "*", Arithmetic(|left, right| left * right)),
+        (f32::DIVIDE, "/", Arithmetic(|left, right| left / right)),
+        (f32::LESS, "<", Comparison(|left, right| left < right)),
+        (f32::EQUAL, "==", Comparison(|left, right| left == right)),
+    ])
+}
+
+/// Unsigned arithmetic has no representable overflow or division by
+/// zero, so those outcomes are absents rather than wrapped bits.
+fn u64_parts() -> Parts {
+    use ::core::primitive::u64 as N;
+    use Operation::{Checked, Comparison};
+    let mut parts = u64_arithmetic().parts([
+        (u64::SUM, "+", Checked(N::checked_add, u64::OVERFLOW)),
+        (u64::SUBTRACT, "-", Checked(N::checked_sub, u64::OVERFLOW)),
+        (u64::MULTIPLY, "*", Checked(N::checked_mul, u64::OVERFLOW)),
+        (
+            u64::DIVIDE,
+            "/",
+            Checked(N::checked_div, u64::DIVISION_BY_ZERO),
+        ),
+        (u64::LESS, "<", Comparison(|left, right| left < right)),
+        (u64::EQUAL, "==", Comparison(|left, right| left == right)),
+    ]);
+    parts.names.extend(
+        [
+            (u64::OVERFLOW, "u64 overflow"),
+            (u64::DIVISION_BY_ZERO, "division by zero"),
+        ]
+        .map(|(cell, name)| (cell, name.to_owned())),
+    );
+    parts
+}
+
+/// Comparisons and the arithmetic symbols read infix; named and one-operand
+/// operations stay calls.
+fn precedence<N>(spelling: &str, operation: &Operation<N>) -> Option<Precedence> {
+    match operation {
+        Operation::Comparison(_) => Some(Precedence::Comparison),
+        Operation::Arithmetic(_) | Operation::Checked(..) => Precedence::of_symbol(spelling),
+        Operation::Unary(..) | Operation::Predicate(..) => None,
+    }
+}
+
+/// Grap's arithmetic over one representation: how an operand is evaluated
+/// as it, with any accelerated path, and why a binary operation declines.
+#[derive(Clone, Copy)]
+struct Arithmetic<N> {
+    representation: Representation<N>,
+    left_not: CellId,
+    right_not: CellId,
+    eval: fn(&mut Context, Expression, &Environment) -> Result<Option<N>, Halt>,
+}
+
+#[derive(Clone, Copy)]
+enum Operation<N> {
+    Arithmetic(fn(N, N) -> N),
+    /// Fails with the given reason instead of producing a result.
+    Checked(fn(N, N) -> Option<N>, CellId),
+    Comparison(fn(N, N) -> bool),
+    /// Declines with the given reason for an operand that isn't this number.
+    Unary(fn(N) -> N, CellId),
+    /// Declines with the given reason for an operand that isn't this number.
+    Predicate(fn(N) -> bool, CellId),
+}
+
+/// One representation's operations: their names, functions, and projected
+/// call forms.
+struct Parts {
+    names: Vec<(CellId, String)>,
+    functions: ForeignFunctions,
+    calls: Vec<CellId>,
+    /// The calls that read infix, and how tightly each binds.
+    infix: Vec<(CellId, Precedence)>,
+    /// The infix operators by spelling, for typing after a number.
+    symbols: Vec<(&'static str, CellId)>,
+}
+
+impl Parts {
+    /// The calls drawn infix or headed by the tagged operator, and a number
+    /// that takes its operators as typing.
+    fn projection<W: Host, N: Scrubbable + std::str::FromStr>(
+        self,
+        arithmetic: Arithmetic<N>,
+    ) -> Partial<W> {
+        let tag = arithmetic.representation.tag;
+        let infix: Rc<[(CellId, Precedence)]> = self.infix.into();
+        let symbols: Rc<[(&'static str, CellId)]> = self.symbols.into();
+        crate::display::compose_partials([
+            crate::display::runtime_partial(move |input| infix_display(tag, &infix, input)),
+            calls(tag, self.calls),
+            crate::display::runtime_partial(move |input| {
+                let layout = arithmetic.representation.display(input)?;
+                Some(if input.writable && input.selection.is_some() {
+                    typed_operators::<_, N>(layout, symbols.clone())
+                } else {
+                    layout
+                })
+            }),
+        ])
+    }
+}
+
+impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
+    fn parts(
+        self,
+        operations: impl IntoIterator<Item = (CellId, &'static str, Operation<N>)>,
+    ) -> Parts {
+        let name = self.representation.name;
+        operations.into_iter().fold(
+            Parts {
+                names: vec![
+                    (self.left_not, format!("left is not {name}")),
+                    (self.right_not, format!("right is not {name}")),
+                ],
+                functions: ForeignFunctions::default(),
+                calls: Vec::new(),
+                infix: Vec::new(),
+                symbols: Vec::new(),
+            },
+            |mut parts, (cell, spelling, operation)| {
+                if let Some(precedence) = precedence(spelling, &operation) {
+                    parts.infix.push((cell, precedence));
+                    parts.symbols.push((spelling, cell));
+                }
+                parts.names.push((cell, spelling.to_owned()));
+                parts.functions = parts.functions.register(cell, self.operation(operation));
+                parts.calls.push(cell);
+                parts
+            },
+        )
+    }
+
+    fn operation(self, operation: Operation<N>) -> ForeignFunction {
+        let runtime = self.representation.runtime;
+        match operation {
+            Operation::Arithmetic(apply) => {
+                self.binary(move |left, right| runtime(apply(left, right)))
+            }
+            Operation::Checked(apply, failure) => self.binary(move |left, right| {
+                apply(left, right)
+                    .map(runtime)
+                    .unwrap_or_else(|| ::grap::absent::value(failure).into())
+            }),
+            Operation::Comparison(apply) => {
+                self.binary(move |left, right| logic::value(apply(left, right)).into())
+            }
+            Operation::Unary(apply, operand_not) => {
+                self.unary(operand_not, move |operand| runtime(apply(operand)))
+            }
+            Operation::Predicate(apply, operand_not) => self.unary(operand_not, move |operand| {
+                logic::value(apply(operand)).into()
+            }),
+        }
+    }
+
+    fn unary(
+        self,
+        operand_not: CellId,
+        operation: impl Fn(N) -> RuntimeValue + 'static,
+    ) -> ForeignFunction {
+        let operation = Rc::new(operation);
+        ForeignFunction::staged(move |context, call| {
+            match context.field(call, vocabulary::OPERAND) {
+                Some(operand) => {
+                    let operation = operation.clone();
+                    Rc::new(move |context, environment| {
+                        Ok(match (self.eval)(context, operand.clone(), environment)? {
+                            Some(operand) => operation(operand),
+                            None => ::grap::absent::value(operand_not).into(),
+                        })
+                    })
+                }
+                None => {
+                    Rc::new(|context, _| Ok(context.missing_runtime_argument(vocabulary::OPERAND)))
+                }
+            }
+        })
+        .parameters([vocabulary::OPERAND])
+        .tracked()
+    }
+
+    /// Each call site finds its operand expressions once; its stage only
+    /// evaluates them.
+    fn binary(self, operation: impl Fn(N, N) -> RuntimeValue + 'static) -> ForeignFunction {
+        let operation = Rc::new(operation);
+        ForeignFunction::staged(move |context, call| {
+            let missing = |cell| -> Stage {
+                Rc::new(move |context, _| Ok(context.missing_runtime_argument(cell)))
+            };
+            match (
+                context.field(call, vocabulary::LEFT),
+                context.field(call, vocabulary::RIGHT),
+            ) {
+                (Some(left), Some(right)) => {
+                    let operation = operation.clone();
+                    Rc::new(move |context, environment| {
+                        let left = (self.eval)(context, left.clone(), environment)?;
+                        let right = (self.eval)(context, right.clone(), environment)?;
+                        Ok(match (left, right) {
+                            (Some(left), Some(right)) => operation(left, right),
+                            (None, _) => ::grap::absent::value(self.left_not).into(),
+                            (_, None) => ::grap::absent::value(self.right_not).into(),
+                        })
+                    })
+                }
+                (None, _) => missing(vocabulary::LEFT),
+                (_, None) => missing(vocabulary::RIGHT),
+            }
+        })
+        .parameters([vocabulary::LEFT, vocabulary::RIGHT])
+        .tracked()
+    }
+}
+
+/// To a number made by `runtime` from another, whose operand `convert`
+/// reads itself, declining with `invalid_input` when it can't.
+pub(crate) fn conversion<N: 'static>(
+    runtime: fn(N) -> RuntimeValue,
+    invalid_input: CellId,
+    convert: fn(&RuntimeValue) -> Option<N>,
+) -> ForeignFunction {
+    ForeignFunction::staged(
+        move |context, call| match context.field(call, vocabulary::OPERAND) {
+            Some(operand) => Rc::new(move |context, environment| {
+                let operand = context.eval(operand.clone(), environment)?;
+                Ok(match convert(&operand) {
+                    Some(number) => runtime(number),
+                    None => ::grap::absent::with_detail(
+                        invalid_input,
+                        vocabulary::OPERAND,
+                        operand.to_value(),
+                    )
+                    .into(),
+                })
+            }),
+            None => Rc::new(|context, _| Ok(context.missing_runtime_argument(vocabulary::OPERAND))),
+        },
+    )
+    .parameters([vocabulary::OPERAND])
+    .tracked()
+}
+
+/// A selected number takes its type's single-character operators as typing:
+/// one typed at the end of a whole number makes the number its left operand,
+/// with the right operand's picker open. A sign or exponent that doesn't yet
+/// make a number still goes into its text.
+fn typed_operators<W: Host, N: std::str::FromStr + 'static>(
+    child: Layout<W>,
+    symbols: Rc<[(&'static str, CellId)]>,
+) -> Layout<W> {
+    crate::display::widget::after(
+        child,
+        Rc::new(move |context| {
+            let site = context.site();
+            let symbols = symbols.clone();
+            Box::new(move |output, _| {
+                output.handler().on_key(move |world: &mut W, event| {
+                    wrap_typed::<N>(&mut world.session(), event, &site, &symbols)
+                });
+            })
+        }),
+    )
+}
+
+fn wrap_typed<N: std::str::FromStr>(
+    session: &mut crate::editing::Session<'_>,
+    event: &ui_events::keyboard::KeyboardEvent,
+    site: &crate::editing::Site,
+    symbols: &[(&'static str, CellId)],
+) -> bool {
+    typed_operator(event, symbols).is_some_and(|operator| {
+        let mut edit = site.open(session);
+        let wrapped = ends_a_number::<N>(edit.selected())
+            && edit.value().cloned().is_some_and(|left| {
+                edit.replace(::grap::call(
+                    Value::from(operator),
+                    [(vocabulary::LEFT, left)],
+                ))
+            });
+        if wrapped {
+            edit.pend(&[gid::Step::Key(vocabulary::RIGHT)]);
+        }
+        wrapped
+    })
+}
+
+/// The operator among `symbols` that an unmodified keypress types.
+fn typed_operator(
+    event: &ui_events::keyboard::KeyboardEvent,
+    symbols: &[(&'static str, CellId)],
+) -> Option<CellId> {
+    let plain = event.state.is_down() && crate::modifiers::at_most_shift(&event.modifiers);
+    match &event.key {
+        ui_events::keyboard::Key::Character(typed) if plain => symbols
+            .iter()
+            .find(|(spelling, _)| *spelling == typed.as_str())
+            .map(|&(_, operator)| operator),
+        _ => None,
+    }
+}
+
+/// Whether a typed operator follows the whole number: the number is
+/// selected, or its line is being typed with the caret after all of it.
+fn ends_a_number<N: std::str::FromStr>(selected: crate::editing::Selected<'_>) -> bool {
+    match selected {
+        crate::editing::Selected::Elsewhere => false,
+        crate::editing::Selected::Here => true,
+        crate::editing::Selected::Typing(line) => {
+            let (anchor, focus) = line.selection_offsets();
+            anchor == focus && focus == line.text().len() && line.text().trim().parse::<N>().is_ok()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

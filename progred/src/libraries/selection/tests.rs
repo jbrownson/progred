@@ -20,11 +20,11 @@ pub(crate) fn grap_at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
                                 crate::libraries::list::vocabulary::CONCAT.into(),
                                 [
                                     (
-                                        crate::libraries::number::vocabulary::LEFT,
+                                        crate::libraries::grap::numbers::vocabulary::LEFT,
                                         call(crate::libraries::site::vocabulary::PATH.into(), []),
                                     ),
                                     (
-                                        crate::libraries::number::vocabulary::RIGHT,
+                                        crate::libraries::grap::numbers::vocabulary::RIGHT,
                                         crate::libraries::path::value(path),
                                     ),
                                 ],

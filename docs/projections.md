@@ -107,8 +107,8 @@ declines only at a missing location, draws a cell as its definition between
 parentheses, and shows labels as short ids. Raw and Plain are sets of
 libraries an area shows, as any other set is: Raw shows none, and Plain shows
 the name, text, bytes, absent and number libraries, so those read as
-themselves and the rest as Raw draws it. A number library draws its own
-operators, so Plain shows arithmetic as `1 + 2` while other calls stay records.
+themselves and the rest as Raw draws it. Arithmetic is Grap's, not the number
+libraries', so in Plain it stays the call records it is.
 One list in stack.rs defines Plain for the editor and the tutorial page alike.
 The Projections menu leads with All, Plain and Raw, then a checkbox for each
 library an area can switch off, one bringing a projection or offers; a set
@@ -326,7 +326,12 @@ parameters. These are source projections only, independent of the opt-in
 rendered viewport.
 
 Grap calls of arithmetic and comparison, a number type's or Fidget's, read
-infix as well, the operator tagged with its representation. They do from the
+infix as well, the operator tagged with its representation. f64, f32 and u64
+are only numbers: how each is stored, read, spelled and drawn. Their
+operations, the Rust functions that run them and the infix drawing are the
+Grap library's ([`grap/numbers.rs`](../progred/src/libraries/grap/numbers.rs)),
+which loads before them so that a number it draws takes its operators as
+typing. They do from the
 moment the operator is chosen: a missing operand is an empty slot whose picker
 opens in place, and other fields, including one being added, follow in a
 record. A line too narrow for the expression wraps before its operator.

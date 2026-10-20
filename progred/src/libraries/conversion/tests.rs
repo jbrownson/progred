@@ -1,5 +1,5 @@
 use super::*;
-use crate::libraries::{f64, number};
+use crate::libraries::f64;
 use gid::Value;
 
 #[test]
@@ -10,7 +10,10 @@ fn f32_from_f64_rounds_at_the_explicit_numeric_boundary() {
     let convert = |operand| {
         evaluate(&::grap::call(
             vocabulary::F32_FROM_F64.into(),
-            [(number::vocabulary::OPERAND, operand)],
+            [(
+                crate::libraries::grap::numbers::vocabulary::OPERAND,
+                operand,
+            )],
         ))
     };
     for number in [
@@ -34,7 +37,7 @@ fn f32_from_f64_rounds_at_the_explicit_numeric_boundary() {
         convert(invalid.clone()),
         ::grap::absent::with_detail(
             vocabulary::INVALID_F32_INPUT,
-            number::vocabulary::OPERAND,
+            crate::libraries::grap::numbers::vocabulary::OPERAND,
             invalid,
         )
     );

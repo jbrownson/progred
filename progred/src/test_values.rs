@@ -39,7 +39,7 @@ pub fn call(function: CellId, fields: impl IntoIterator<Item = (CellId, Value)>)
 
 /// A call of the binary numeric operation `function` on `left` and `right`.
 pub fn binary_call(function: CellId, left: Value, right: Value) -> Value {
-    use crate::libraries::number::vocabulary::{LEFT, RIGHT};
+    use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
     call(function, [(LEFT, left), (RIGHT, right)])
 }
 
@@ -47,11 +47,23 @@ pub fn binary_call(function: CellId, left: Value, right: Value) -> Value {
 /// representation and the function called: binary ones on f64, f32 and u64,
 /// and f64's unary sine.
 pub fn numeric_calls() -> Vec<(CellId, CellId, Value)> {
-    use crate::libraries::{f32, f64, number, u64};
+    use crate::libraries::{f32, f64, u64};
     [
-        (f64::vocabulary::F64, f64::vocabulary::SUM, f64::value(1.0)),
-        (f32::vocabulary::F32, f32::vocabulary::SUM, f32::value(2.0)),
-        (u64::vocabulary::U64, u64::vocabulary::LESS, u64::value(3)),
+        (
+            f64::vocabulary::F64,
+            crate::libraries::grap::numbers::f64::SUM,
+            f64::value(1.0),
+        ),
+        (
+            f32::vocabulary::F32,
+            crate::libraries::grap::numbers::f32::SUM,
+            f32::value(2.0),
+        ),
+        (
+            u64::vocabulary::U64,
+            crate::libraries::grap::numbers::u64::LESS,
+            u64::value(3),
+        ),
     ]
     .into_iter()
     .map(|(representation, function, value)| {
@@ -63,10 +75,13 @@ pub fn numeric_calls() -> Vec<(CellId, CellId, Value)> {
     })
     .chain([(
         f64::vocabulary::F64,
-        f64::vocabulary::SIN,
+        crate::libraries::grap::numbers::f64::SIN,
         ::grap::call(
-            f64::vocabulary::SIN.into(),
-            [(number::vocabulary::OPERAND, f64::value(0.5))],
+            crate::libraries::grap::numbers::f64::SIN.into(),
+            [(
+                crate::libraries::grap::numbers::vocabulary::OPERAND,
+                f64::value(0.5),
+            )],
         ),
     )])
     .collect()

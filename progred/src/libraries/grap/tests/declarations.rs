@@ -6,7 +6,7 @@ use crate::frame::Hovered;
 use crate::frame::test_support::editing_frame;
 use crate::hover::Hover;
 use crate::libraries::control::vocabulary as control;
-use crate::libraries::{f64, number, text};
+use crate::libraries::{f64, text};
 use crate::projection::test_support::*;
 use crate::selection::{pending_edge, pending_into};
 use gid::Path;
@@ -42,13 +42,19 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
             (grap::call(cell.into(), []), vec![Step::Key(FUNCTION)], true),
             (
                 grap::call(
-                    f64::vocabulary::SUM.into(),
+                    crate::libraries::grap::numbers::f64::SUM.into(),
                     [
-                        (number::vocabulary::LEFT, cell.into()),
-                        (number::vocabulary::RIGHT, f64::value(2.0)),
+                        (
+                            crate::libraries::grap::numbers::vocabulary::LEFT,
+                            cell.into(),
+                        ),
+                        (
+                            crate::libraries::grap::numbers::vocabulary::RIGHT,
+                            f64::value(2.0),
+                        ),
                     ],
                 ),
-                vec![Step::Key(number::vocabulary::LEFT)],
+                vec![Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT)],
                 true,
             ),
         ] {
@@ -76,10 +82,16 @@ fn expression_cells_are_shallow_only_with_a_valid_name() {
 fn unnamed_expression_cells_edit_the_shared_definition() {
     let cell = new_cell_id();
     let expression = grap::call(
-        f64::vocabulary::SUM.into(),
+        crate::libraries::grap::numbers::f64::SUM.into(),
         [
-            (number::vocabulary::LEFT, cell.into()),
-            (number::vocabulary::RIGHT, cell.into()),
+            (
+                crate::libraries::grap::numbers::vocabulary::LEFT,
+                cell.into(),
+            ),
+            (
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
+                cell.into(),
+            ),
         ],
     );
     let mut cells = Cells::new();
@@ -92,7 +104,7 @@ fn unnamed_expression_cells_edit_the_shared_definition() {
         Driver::VIEWPORT,
     );
     driver.select(&[
-        Step::Key(number::vocabulary::LEFT),
+        Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT),
         Step::Follow(gid::Resolution::Document),
     ]);
     driver.type_text("4");
@@ -640,10 +652,16 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
 fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     let extra = new_cell_id();
     let sum = grap::call(
-        f64::vocabulary::SUM.into(),
+        crate::libraries::grap::numbers::f64::SUM.into(),
         [
-            (number::vocabulary::LEFT, f64::value(1.0)),
-            (number::vocabulary::RIGHT, f64::value(2.0)),
+            (
+                crate::libraries::grap::numbers::vocabulary::LEFT,
+                f64::value(1.0),
+            ),
+            (
+                crate::libraries::grap::numbers::vocabulary::RIGHT,
+                f64::value(2.0),
+            ),
         ],
     );
     let libraries = core_libraries();
@@ -677,20 +695,25 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     // the first one's picker open.
     let doc = Document {
         cells: Cells::new(),
-        root: Some(grap::call(f64::vocabulary::SUM.into(), [])),
+        root: Some(grap::call(
+            crate::libraries::grap::numbers::f64::SUM.into(),
+            [],
+        )),
     };
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = Some(crate::selection::pending_value(
         &crate::test_root(),
         Default::default(),
-        vec![Step::Key(number::vocabulary::LEFT)],
+        vec![Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT)],
     ));
     let frame = editing_frame(&mut world);
     assert!(frame.completion.is_some());
     assert!(
         frame
             .landmarks
-            .landmark(&[Step::Key(number::vocabulary::RIGHT)])
+            .landmark(&[Step::Key(
+                crate::libraries::grap::numbers::vocabulary::RIGHT
+            )])
             .is_some()
     );
 }

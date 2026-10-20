@@ -96,7 +96,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             evaluated_expression(demo_entry(&doc, &binders, "type_absent")),
         )
         .result,
-        ::grap::absent::value(f64::vocabulary::LEFT_NOT_F64)
+        ::grap::absent::value(crate::libraries::grap::numbers::f64::LEFT_NOT_F64)
     );
     for (label, reason) in [
         ("missing_argument", grap::absent::MISSING_ARGUMENT),

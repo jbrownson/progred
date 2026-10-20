@@ -3,7 +3,7 @@
 use crate::frame::Hovered;
 use crate::libraries::{
     absent, blob, color, control, controls, conversion, declared, f32, f64, fidget, geometry,
-    grap as grap_library, layout, list, logic, name, number, png, presentation, random, selection,
+    grap as grap_library, layout, list, logic, name, png, presentation, random, selection,
     sequence, site, text, toolpath, tree, u64, workspace,
 };
 use crate::library::{Libraries, Library};
@@ -183,14 +183,14 @@ const BUILT_INS: &[(gid::CellId, BuildLibrary)] = &[
     (control::ID, control::library),
     (controls::ID, controls::library),
     (tree::ID, tree::library),
-    (number::ID, number::library),
-    (f32::ID, f32::library),
-    (f64::ID, f64::library),
-    (u64::ID, u64::library),
     (conversion::ID, conversion::library),
     (fidget::ID, fidget::library),
     (toolpath::ID, toolpath::library),
     (grap_library::ID, grap_library::library),
+    // After Grap, which draws a number taking its operators as typing.
+    (f32::ID, f32::library),
+    (f64::ID, f64::library),
+    (u64::ID, u64::library),
     (logic::ID, logic::library),
     (list::ID, list::library),
     (sequence::ID, sequence::library),
