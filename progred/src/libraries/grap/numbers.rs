@@ -464,19 +464,16 @@ impl<N: Scrubbable + std::str::FromStr> Arithmetic<N> {
     }
 }
 
-/// Why an operation declines for an operand that isn't its number: an absent
-/// operand is its own reason, passed on unchanged so the original cause shows
-/// through, and anything else is `not` one.
+/// Why an operation declines for an operand that isn't its number: it's
+/// `not` one, carrying the operand, so an absent operand's own reason shows
+/// beneath it as the cause.
 fn declined(operand: RuntimeValue, not: CellId) -> RuntimeValue {
-    match operand.absent_reason() {
-        Some(_) => operand,
-        None => ::grap::absent::value(not).into(),
-    }
+    ::grap::absent::caused_by(not, ::grap::absent::VALUE, operand.into_value()).into()
 }
 
 /// To a number made by `runtime` from another, whose operand `convert`
-/// reads itself, declining with `invalid_input` when it can't, or as the
-/// operand itself when that's absent.
+/// reads itself, declining with `invalid_input` and the operand when it
+/// can't.
 fn conversion<N: 'static>(
     runtime: fn(N) -> RuntimeValue,
     invalid_input: CellId,
@@ -488,8 +485,7 @@ fn conversion<N: 'static>(
                 let operand = context.eval(operand.clone(), environment)?;
                 Ok(match convert(&operand) {
                     Some(number) => runtime(number),
-                    None if operand.absent_reason().is_some() => operand,
-                    None => ::grap::absent::with_detail(
+                    None => ::grap::absent::caused_by(
                         invalid_input,
                         vocabulary::OPERAND,
                         operand.to_value(),

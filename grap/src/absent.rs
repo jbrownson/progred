@@ -38,6 +38,48 @@ pub fn decline() -> Value {
     value(DECLINED)
 }
 
+/// The longest chain of causes an absent grows: past it, an absent passes on
+/// unchanged instead of gaining another layer, so a loop that keeps using one,
+/// such as a sum over a list, keeps its root cause and first uses without
+/// growing a layer per element.
+pub const CHAIN_LIMIT: usize = 8;
+
+/// An absent for `reason`, carrying under `field` the value it couldn't use,
+/// absent or not. An absent value whose chain has reached [`CHAIN_LIMIT`]
+/// passes on unchanged instead.
+pub fn caused_by(reason: CellId, field: CellId, detail: Value) -> Value {
+    if chain_length(&detail) >= CHAIN_LIMIT {
+        detail
+    } else {
+        with_detail(reason, field, detail)
+    }
+}
+
+/// The absent among `value`'s details, which caused it.
+pub fn cause(value: &Value) -> Option<&Value> {
+    is_absent(value).then_some(())?;
+    value
+        .as_record()?
+        .iter()
+        .find(|(field, detail)| *field != ABSENT && is_absent(detail))
+        .map(|(_, detail)| detail)
+}
+
+/// The absent at the end of `value`'s chain of causes, the first thing that
+/// went wrong, which a check for a particular reason looks at: `value`
+/// itself when nothing caused it.
+pub fn root_cause(value: &Value) -> &Value {
+    std::iter::successors(Some(value), |value| cause(value))
+        .last()
+        .unwrap_or(value)
+}
+
+/// How many absents `value`'s chain of causes holds: none for a value that
+/// isn't absent.
+pub fn chain_length(value: &Value) -> usize {
+    std::iter::successors(is_absent(value).then_some(value), |value| cause(value)).count()
+}
+
 pub fn from_causes(causes: impl IntoIterator<Item = Value>) -> Value {
     match <[Value; 1]>::try_from(causes.into_iter().collect::<Vec<_>>()) {
         Ok([cause]) => cause,

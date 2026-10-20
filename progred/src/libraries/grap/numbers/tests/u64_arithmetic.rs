@@ -137,7 +137,11 @@ fn operands_of_other_representations_decline() {
                 value(3)
             )
         ),
-        ::grap::absent::value(crate::libraries::grap::numbers::u64::LEFT_NOT_U64)
+        ::grap::absent::with_detail(
+            crate::libraries::grap::numbers::u64::LEFT_NOT_U64,
+            ::grap::absent::VALUE,
+            crate::libraries::f64::value(2.0),
+        )
     );
     assert_eq!(
         evaluate_with(
@@ -148,6 +152,10 @@ fn operands_of_other_representations_decline() {
                 crate::libraries::f32::value(3.0)
             )
         ),
-        ::grap::absent::value(crate::libraries::grap::numbers::u64::RIGHT_NOT_U64)
+        ::grap::absent::with_detail(
+            crate::libraries::grap::numbers::u64::RIGHT_NOT_U64,
+            ::grap::absent::VALUE,
+            crate::libraries::f32::value(3.0),
+        )
     );
 }

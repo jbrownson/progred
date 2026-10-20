@@ -101,7 +101,11 @@ fn operands_of_other_representations_decline() {
                 value(3.0)
             )
         ),
-        ::grap::absent::value(crate::libraries::grap::numbers::f32::LEFT_NOT_F32)
+        ::grap::absent::with_detail(
+            crate::libraries::grap::numbers::f32::LEFT_NOT_F32,
+            ::grap::absent::VALUE,
+            crate::libraries::f64::value(2.0),
+        )
     );
     assert_eq!(
         evaluate_with(
@@ -112,7 +116,11 @@ fn operands_of_other_representations_decline() {
                 Value::from(b"three".to_vec())
             )
         ),
-        ::grap::absent::value(crate::libraries::grap::numbers::f32::RIGHT_NOT_F32)
+        ::grap::absent::with_detail(
+            crate::libraries::grap::numbers::f32::RIGHT_NOT_F32,
+            ::grap::absent::VALUE,
+            Value::from(b"three".to_vec()),
+        )
     );
 }
 

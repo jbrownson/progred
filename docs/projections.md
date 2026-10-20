@@ -701,11 +701,16 @@ a live evaluation context. They may inspect, return, forward, or evaluate those
 raw expressions, in the calling environment or an explicitly derived one. The
 environment becomes a GID record only when Rust explicitly hands it to Grap.
 Semantic failure is an ordinary absent value; the host `Result` only propagates
-evaluator halts such as exhausted fuel. Strict arithmetic evaluates all its
-operands, and an absent operand answers it unchanged, the left one first, as an
-error cell's error passes through a spreadsheet formula; an operand that is
-present but not a number declines it as such. Control functions can evaluate
-only the chosen branch. Blobs, lists, and unrecognized records
+evaluator halts such as exhausted fuel. A function that can't use a value
+declines with its own reason and carries the value, whatever it is, so an
+absent value's reason shows beneath as the cause, as exceptions chain: adding
+a missing argument is "left is not f64", caused by "missing argument". A
+check for a particular reason looks at the chain's root cause
+(`grap::absent::root_cause`), and an absent whose chain is already
+`CHAIN_LIMIT` long passes on unchanged, so a loop that keeps using one doesn't
+grow it a layer per pass. Strict arithmetic evaluates all its operands and
+declines for the first, the left, that isn't its number. Control functions can
+evaluate only the chosen branch. Blobs, lists, and unrecognized records
 are inert: the evaluator does not search ordinary containers for expressions.
 A function's returned value is not evaluated again.
 

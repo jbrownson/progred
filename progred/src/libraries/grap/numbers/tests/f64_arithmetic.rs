@@ -95,7 +95,11 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
         assert!((actual / expected - 1.0).abs() < 1e-14);
         assert_eq!(
             evaluate(binary_call(function, Value::record([]), value(b))),
-            ::grap::absent::value(crate::libraries::grap::numbers::f64::LEFT_NOT_F64),
+            ::grap::absent::with_detail(
+                crate::libraries::grap::numbers::f64::LEFT_NOT_F64,
+                ::grap::absent::VALUE,
+                Value::record([]),
+            ),
         );
     }
     let unary_call = |function: CellId, argument| {
@@ -131,7 +135,11 @@ fn extrema_rounding_and_norm_follow_the_numeric_contract() {
     ] {
         assert_eq!(
             evaluate(unary_call(function, Value::record([]))),
-            ::grap::absent::value(crate::libraries::grap::numbers::f64::OPERAND_NOT_F64),
+            ::grap::absent::with_detail(
+                crate::libraries::grap::numbers::f64::OPERAND_NOT_F64,
+                ::grap::absent::VALUE,
+                Value::record([]),
+            ),
         );
         assert!(::grap::absent::is_absent(&evaluate(grap::call(
             function.into(),
@@ -430,35 +438,51 @@ fn type_absences_are_library_values() {
     );
     assert_eq!(
         crate::test_support::test_evaluate(&left, |_| None, &functions(), 10).result,
-        ::grap::absent::value(crate::libraries::grap::numbers::f64::LEFT_NOT_F64)
+        ::grap::absent::with_detail(
+            crate::libraries::grap::numbers::f64::LEFT_NOT_F64,
+            ::grap::absent::VALUE,
+            Value::from(b"two".to_vec()),
+        )
     );
     assert_eq!(
         crate::test_support::test_evaluate(&right, |_| None, &functions(), 10).result,
-        ::grap::absent::value(crate::libraries::grap::numbers::f64::RIGHT_NOT_F64)
+        ::grap::absent::with_detail(
+            crate::libraries::grap::numbers::f64::RIGHT_NOT_F64,
+            ::grap::absent::VALUE,
+            Value::from(b"three".to_vec()),
+        )
     );
 }
 
 #[test]
-fn an_absent_operand_answers_unchanged_the_left_one_first() {
+fn an_operand_that_isnt_a_number_is_carried_as_the_cause() {
     use crate::libraries::grap::numbers::{f64 as op, vocabulary::OPERAND};
     use ::grap::absent;
     let evaluate = |expression: &gid::Value| {
         crate::test_support::evaluate_with(&crate::libraries::grap::library(), expression)
     };
+    let not = |reason, operand| absent::with_detail(reason, absent::VALUE, operand);
     let (left, right) = (
         absent::value(gid::new_cell_id()),
         absent::value(gid::new_cell_id()),
     );
+    let text = crate::libraries::text::value("one");
     for (l, r, expected) in [
-        (left.clone(), right.clone(), left.clone()),
-        (value(1.0), right.clone(), right.clone()),
-        (left.clone(), value(1.0), left.clone()),
-        // A present operand that isn't a number declines as such, whatever
-        // the other one is.
+        // The left operand's problem comes first, whatever the right's is.
         (
-            crate::libraries::text::value("one"),
+            left.clone(),
             right.clone(),
-            absent::value(op::LEFT_NOT_F64),
+            not(op::LEFT_NOT_F64, left.clone()),
+        ),
+        (
+            text.clone(),
+            right.clone(),
+            not(op::LEFT_NOT_F64, text.clone()),
+        ),
+        (
+            value(1.0),
+            right.clone(),
+            not(op::RIGHT_NOT_F64, right.clone()),
         ),
     ] {
         assert_eq!(evaluate(&binary_call(op::SUM, l, r)), expected);
@@ -468,13 +492,22 @@ fn an_absent_operand_answers_unchanged_the_left_one_first() {
             op::SIN,
             [(OPERAND, left.clone())]
         )),
-        left
+        not(op::OPERAND_NOT_F64, left.clone())
     );
-    assert_eq!(
-        evaluate(&crate::test_values::call(
-            crate::libraries::grap::numbers::f32::F32_FROM_F64,
-            [(OPERAND, right.clone())]
-        )),
-        right
-    );
+    // A loop that keeps using an absent stops growing its chain, keeping the
+    // root cause.
+    let sum = (0..2 * absent::CHAIN_LIMIT)
+        .fold(left.clone(), |sum, _| binary_call(op::SUM, sum, value(1.0)));
+    let result =
+        crate::test_support::test_evaluate(
+            &sum,
+            |_| None,
+            &crate::test_support::foreign_functions(&crate::libraries::grap::library::<
+                crate::Editor,
+            >()),
+            1000,
+        )
+        .result;
+    assert_eq!(absent::chain_length(&result), absent::CHAIN_LIMIT);
+    assert_eq!(absent::root_cause(&result), &left);
 }
