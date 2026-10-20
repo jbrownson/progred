@@ -255,11 +255,12 @@ chosen commit is pushed to a `website-live` branch on GitHub:
    `jbrownson/progred`.
 2. Name the Worker **progred** (matching `wrangler.jsonc`).
 3. Set the production branch to **website-live**, root directory to **website**,
-   build command to **npm run build**, and deploy command to **npm run deploy**.
+   build command to **npm run build**, and deploy command to **npm run stage**.
 4. Leave non-production branch builds disabled. Cloudflare installs the locked
    npm dependencies and supplies `CI=true` and deployment authentication.
-5. Check the generated HTTPS `workers.dev` address first. Then add `prog.red`
-   as a custom domain; DNS setup is a separate step, not part of the build.
+5. Deploy the first version from **Deployments** and check the generated HTTPS
+   `workers.dev` address. Then add `prog.red` as a custom domain; DNS setup is a
+   separate step, not part of the build.
 
 Do not connect the development branch as production just to get through the
 wizard: **Settings → Build → Branch control** can select `website-live` if it
@@ -269,44 +270,24 @@ isn't offered during creation. Don't deploy until the production branch is set.
 each with a Redirect Rule (302) to the matching short path, so `_redirects`
 decides what each one opens.
 
-Publishing means advancing `website-live` to a tested commit, not copying files
-or merging a second implementation of the website. An explicit
-`git push origin HEAD:website-live` publishes the current commit (only when
-intentionally requested); commits/pushes to `master` alone don't publish.
-Don't force-push to undo a release: use Cloudflare's deployment rollback for an
-immediate rollback, then fix/revert the source and publish a new commit.
-No credentials belong in this repository.
-
-### Trying a release before it goes live
-
-Pushing a commit to the `website-dev` branch builds it as a test version of the
-`progred` Worker, without making it live:
+Publishing takes two steps. Advancing `website-live` to a commit has Cloudflare
+build it as a new version of the `progred` Worker without making it live:
 
 ```sh
-git push origin HEAD:website-dev
+git push origin HEAD:website-live
 ```
 
-The build log, and the Worker's **Deployments** page, show where it's served:
-`website-dev-progred.<account>.workers.dev` for the latest push, and an address
-of its own for each version. When it looks right, deploy that version from
-**Deployments**, which serves exactly those files on prog.red, then record the
-release by advancing `website-live` to the same commit:
+(only when intentionally requested; pushes to `master` alone build nothing).
+The latest such version is served at `staged-progred.<account>.workers.dev`,
+and each has an address of its own, shown in the build log and on the Worker's
+**Deployments** page. When it looks right, deploy that version from
+**Deployments**, which serves exactly those files on prog.red. The full
+editor's menu bar shows the commit a site was built from. Versions served from
+`workers.dev` aren't counted in Web Analytics, which counts prog.red alone.
 
-```sh
-git push origin website-dev:website-live
-```
-
-That push builds and deploys the same commit again; the build is pinned (the
-Rust nightly, wasm-bindgen and the npm lockfile), so it's the same site, and
-the full editor's menu bar shows which commit is live. Test versions aren't
-counted in Web Analytics, which counts prog.red alone.
-
-One-time setup, in the `progred` Worker's **Settings → Build**:
-
-1. Under **Branch control**, turn on builds for non-production branches and
-   limit them to **website-dev**, so other pushes don't build.
-2. Keep the non-production deploy command at its default,
-   **npx wrangler versions upload**. `wrangler.jsonc` turns preview URLs on.
+To undo a release, deploy an earlier version from **Deployments**; don't
+force-push. Then fix or revert the source and stage a new commit. No
+credentials belong in this repository.
 
 The hosted Linux build and public site were verified on September 21, 2026.
 The generated build directory and npm dependencies are ignored by Git.
