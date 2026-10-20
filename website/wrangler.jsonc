@@ -3,11 +3,9 @@
   "name": "progred",
   "compatibility_date": "2026-09-21",
   "workers_dev": true,
+  "preview_urls": true,
   "assets": {
     "directory": "../target/website",
     "not_found_handling": "404-page"
-  },
-  "env": {
-    "dev": {}
   }
 }

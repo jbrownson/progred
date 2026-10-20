@@ -3,8 +3,7 @@
   "private": true,
   "scripts": {
     "build": "sh build-ci.sh",
-    "deploy": "wrangler deploy --env=\"\"",
-    "deploy:dev": "wrangler deploy --env dev"
+    "deploy": "wrangler deploy"
   },
   "devDependencies": {
     "wrangler": "4.149.0"

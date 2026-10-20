@@ -30,9 +30,9 @@ test("a page on prog.red or a subdomain loads Cloudflare's beacon with the site 
   assert.match(JSON.parse(beacon.dataset.cfBeacon).token, /^[0-9a-f]{32}$/);
 });
 
-test("embedded editors, local previews and dev.prog.red load nothing", () => {
+test("embedded editors, local previews and test versions load nothing", () => {
   assert.deepEqual(run("prog.red", true), []);
-  for (const hostname of ["localhost", "127.0.0.1", "notprog.red", "dev.prog.red"]) {
+  for (const hostname of ["localhost", "127.0.0.1", "notprog.red", "website-dev-progred.example.workers.dev"]) {
     assert.deepEqual(run(hostname, false), []);
   }
 });

@@ -125,8 +125,8 @@ class PackageTests(unittest.TestCase):
         config = json.loads((REPOSITORY / "website/wrangler.jsonc").read_text())
         self.assertEqual(config["assets"]["not_found_handling"], "404-page")
         self.assertNotIn("main", config)
-        # dev.prog.red's Worker inherits everything, so it serves the same site.
-        self.assertEqual(config["env"], {"dev": {}})
+        # Test versions are served before they go live.
+        self.assertTrue(config["preview_urls"])
 
     def test_short_and_retired_paths_lead_to_examples_or_pages(self):
         assemble(self.repository, self.destination)
