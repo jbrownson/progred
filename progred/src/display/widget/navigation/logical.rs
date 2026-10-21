@@ -314,6 +314,9 @@ pub(crate) struct Collector {
     parents: Vec<Accumulator>,
     /// Open whole-value stops; `None` marks one that refined an outer stop.
     containers: Vec<Option<Stop>>,
+    /// The open selected occurrence, and whether a stop of its own has been
+    /// declared inside it yet.
+    selected: Option<(OccurrencePath, bool)>,
 }
 
 impl Collector {
@@ -330,9 +333,39 @@ impl Collector {
     }
 
     pub fn stop(&mut self, path: OccurrencePath, selected: bool) {
+        self.declared(&path);
         if let Some(stop) = self.refine(Stop { path, selected }) {
             self.current.push(Lines::stop(stop));
         }
+    }
+
+    /// Notes a stop declared for the open selected occurrence.
+    fn declared(&mut self, path: &OccurrencePath) {
+        if let Some((selected, declared)) = &mut self.selected
+            && selected == path
+        {
+            *declared = true;
+        }
+    }
+
+    /// Opens the selected occurrence at `path`. Where its projection
+    /// declares no stop of its own, it's a whole-value stop before what's
+    /// drawn inside it, so arrows always leave the selection; where it does,
+    /// that stop stays where the projection put it.
+    pub fn begin_selected(&mut self, path: OccurrencePath) {
+        self.selected = Some((path, false));
+        self.begin(Composition::Row(RowAlignment::Baseline));
+    }
+
+    pub fn end_selected(&mut self) {
+        let lines = self.close();
+        self.current.push(match self.selected.take() {
+            Some((path, false)) => lines.enclosed(Stop {
+                path,
+                selected: true,
+            }),
+            _ => lines,
+        });
     }
 
     pub fn begin(&mut self, composition: Composition) {
@@ -356,6 +389,7 @@ impl Collector {
     }
 
     pub fn begin_container(&mut self, path: OccurrencePath, selected: bool) {
+        self.declared(&path);
         let stop = self.refine(Stop { path, selected });
         self.containers.push(stop);
         self.begin(Composition::Row(RowAlignment::Baseline));

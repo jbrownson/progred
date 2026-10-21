@@ -58,6 +58,14 @@ and the missing contents. A leaf facet can supply its widget-specific selection
 callback at the occurrence of an enclosing whole-value stop without adding a
 stop. Punctuation, padding, and other inert decoration declare no stops or lines.
 
+Whatever a projection declares, the selection is never stranded. A selected
+occurrence whose projection gave it no stop of its own, such as the root an
+arrow selects when nothing is, gets one from its landmark, before what's drawn
+inside it: arrows go into its contents or, with none, to its neighbors. Where
+the projection did declare one, that stop stays where it put it, as a number's
+does after its name. Unselected, such an occurrence adds no stop, so ordinary
+navigation passes no invisible levels.
+
 ## Arrow policy
 
 Left/Right visit adjacent stops in reading order, wrapping between lines. Up/Down
@@ -140,7 +148,9 @@ multiline outline, document-authored side-by-side and offset-baseline columns,
 and content after a block; [examples/README.md](../examples/README.md) says what
 to try. Collector tests in `navigation/logical/tests.rs` drive the collector
 through shapes mirroring the layout traversal; frame tests exercise the same
-policies through real projections and the navigation example document.
+policies through real projections and the navigation example document. A
+sweep selects every occurrence the sample draws and checks some arrow leaves
+it; an ignored one sweeps the larger examples.
 
 Navigation's frame cost shows in `make perf`'s `cam_source_scroll_profile_loop`
 canary; see [performance checks](performance.md). Earlier measurements and

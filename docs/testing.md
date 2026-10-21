@@ -145,6 +145,8 @@ Ignored tests are opt-in: run them with `-- --ignored`, usually with
   [performance checks](performance.md). Puri's
   `handler_dispatch_profile` checks the cost of dispatching through unrelated
   handlers.
+- **Navigation sweeps** select every occurrence the larger examples draw and
+  check some arrow leaves it; the sample's sweep runs with the rest.
 - **GPU tests** need a real adapter: `make test-gpu` runs the compositor and
   mesh renderer tests, Fidget's GPU raster and mesh tests, and those of the
   pictures progred reads back: a control session's screenshots and a copy's

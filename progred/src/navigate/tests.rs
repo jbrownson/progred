@@ -109,6 +109,7 @@ fn command_a_selects_the_current_views_root() {
     }
 }
 
+mod dead_ends;
 mod frames;
 mod logical;
 mod slots;
