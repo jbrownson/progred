@@ -170,100 +170,182 @@ pub fn list_layout_at<W: Host>(
     ))
 }
 
-pub fn record_layout<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    child: impl Fn(CellId) -> Option<Partial<W>>,
-) -> Option<Layout<W>> {
-    Some(record_layout_at(input, input.value?.record_keys()?, child))
+/// How a record's fields read, whether drawn as a whole record
+/// ([`Fields::record`]) or after what a projection draws of the record itself
+/// ([`Fields::form`], [`Fields::after`]): which come first, which show as
+/// slots to fill even where the record lacks them, and how a field's name and
+/// value are drawn. A field being added is drawn among them, where it will
+/// stay.
+pub(crate) struct Fields<W: Host> {
+    leading: Vec<CellId>,
+    slots: Vec<CellId>,
+    child: Rc<dyn Fn(CellId) -> Option<Partial<W>>>,
+    label: Rc<dyn Fn(CellId) -> Option<Layout<W>>>,
+    shown_empty: bool,
 }
 
-pub fn record_layout_at<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    keys: Vec<CellId>,
-    child: impl Fn(CellId) -> Option<Partial<W>>,
-) -> Layout<W> {
-    record_layout_of(input, ordered_keys(input, keys, &[]), child)
-}
-
-/// [`record_layout`], the `leading` fields first, in that order, and the
-/// others after them as usual.
-pub(crate) fn record_layout_led<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    leading: &[CellId],
-    child: impl Fn(CellId) -> Option<Partial<W>>,
-) -> Option<Layout<W>> {
-    Some(record_layout_of(
-        input,
-        ordered_keys(input, input.value?.record_keys()?, leading),
-        child,
-    ))
-}
-
-/// [`record_layout`], a field with no name of its own read, dim, as
-/// `computed` calls it, where it does.
-pub(crate) fn record_layout_calling<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    computed: &std::collections::BTreeMap<CellId, Name<'static>>,
-) -> Option<Layout<W>> {
-    Some(authoring(record_heads(
-        record_keys(input)?.into_iter().map(|key| RecordField {
-            label: record_label_reading(
-                input,
-                key,
-                computed.get(&key).map_or_else(
-                    || field_label(input.env, key),
-                    |name| named(name, Face::Dim),
-                ),
-            ),
-            value: descend([Step::Key(key)], None, None),
-        }),
-        pending_field(input),
-    )))
-}
-
-/// The fields `keys`, in their order, and one being added.
-fn record_layout_of<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    keys: Vec<CellId>,
-    child: impl Fn(CellId) -> Option<Partial<W>>,
-) -> Layout<W> {
-    authoring(record_heads(
-        keys.into_iter()
-            .map(|key| record_field(input, key, child(key))),
-        pending_field(input),
-    ))
-}
-
-pub(crate) fn record_keys<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-) -> Option<Vec<CellId>> {
-    Some(ordered_keys(input, input.value?.record_keys()?, &[]))
-}
-
-/// Display order, including a pending new field: the `leading` fields in
-/// their order, then the others by [`field_order`].
-fn ordered_keys<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    mut keys: Vec<CellId>,
-    leading: &[CellId],
-) -> Vec<CellId> {
-    if let Some(Pending::Child(Step::Key(key))) = &input.pending
-        && !keys.contains(key)
-    {
-        keys.push(*key);
+impl<W: Host> Default for Fields<W> {
+    fn default() -> Self {
+        Self {
+            leading: Vec::new(),
+            slots: Vec::new(),
+            child: Rc::new(|_| None),
+            label: Rc::new(|_| None),
+            shown_empty: false,
+        }
     }
-    let lead = |key: &CellId| {
-        leading
-            .iter()
-            .position(|leader| leader == key)
-            .unwrap_or(leading.len())
-    };
-    keys.sort_by(|left, right| {
-        lead(left)
-            .cmp(&lead(right))
-            .then_with(|| field_order(input.env, left, right))
-    });
-    keys
+}
+
+impl<W: Host> Fields<W> {
+    /// `keys` first, in this order; the others after them by [`field_order`].
+    pub(crate) fn leading(mut self, keys: impl IntoIterator<Item = CellId>) -> Self {
+        self.leading = keys.into_iter().collect();
+        self
+    }
+
+    /// `keys` drawn even where the record lacks them, as slots to fill.
+    pub(crate) fn slots(mut self, keys: impl IntoIterator<Item = CellId>) -> Self {
+        self.slots = keys.into_iter().collect();
+        self
+    }
+
+    /// A field's value drawn by the projection `child` gives for its key,
+    /// where it gives one.
+    pub(crate) fn child(mut self, child: impl Fn(CellId) -> Option<Partial<W>> + 'static) -> Self {
+        self.child = Rc::new(child);
+        self
+    }
+
+    /// A field's name read as `label` gives for its key, where it gives one.
+    pub(crate) fn label(mut self, label: impl Fn(CellId) -> Option<Layout<W>> + 'static) -> Self {
+        self.label = Rc::new(label);
+        self
+    }
+
+    /// The fields after a form's own drawn even when there are none, as a
+    /// call's arguments are.
+    pub(crate) fn shown_empty(mut self) -> Self {
+        self.shown_empty = true;
+        self
+    }
+
+    /// The whole record, its fields between braces.
+    pub(crate) fn record(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    ) -> Option<Layout<W>> {
+        let keys = self.keys(input, |_| false)?;
+        Some(authoring(record_braces(
+            keys.into_iter().map(|key| self.field(input, key)),
+            pending_field(input),
+        )))
+    }
+
+    /// A form drawn from the `queried` fields, the others following it
+    /// ([`Fields::after`]), so the form hides nothing. `draw` is given the
+    /// queried fields' values, in their order, to bind by name. One of the
+    /// queried being added is the form's to draw, or to leave to a plainer
+    /// view.
+    pub(crate) fn form<const N: usize>(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        queried: [CellId; N],
+        draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+    ) -> Option<Layout<W>> {
+        let fields = input.value?;
+        let content = draw(queried.map(|key| fields.field(key)))?;
+        Some(self.after(input, |key| queried.contains(&key), content))
+    }
+
+    /// `content` followed by the fields it doesn't draw, as a call's function
+    /// is by its arguments. Drawn as one piece, the value takes no new field
+    /// from Enter: these views don't offer [`authoring`], which a rawer view
+    /// of it does.
+    pub(crate) fn after(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        drawn: impl Fn(CellId) -> bool,
+        content: Layout<W>,
+    ) -> Layout<W> {
+        match self.rest(input, drawn) {
+            Some(rest) => hug(content, rest, 0.0),
+            None => content,
+        }
+    }
+
+    /// The fields `drawn` doesn't cover between braces, to follow what is
+    /// drawn of the record; `None` where there are none to show.
+    pub(crate) fn rest(
+        self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        drawn: impl Fn(CellId) -> bool,
+    ) -> Option<Layout<W>> {
+        let keys = self.keys(input, drawn)?;
+        let pending = pending_field(input);
+        (self.shown_empty || !keys.is_empty() || pending.is_some())
+            .then(|| record_braces(keys.into_iter().map(|key| self.field(input, key)), pending))
+    }
+
+    /// The keys to draw but those `drawn` covers: the record's, its slots,
+    /// and one being added, in order.
+    fn keys(
+        &self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        drawn: impl Fn(CellId) -> bool,
+    ) -> Option<Vec<CellId>> {
+        let mut keys = input.value?.record_keys()?;
+        let adding = match &input.pending {
+            Some(Pending::Child(Step::Key(key))) => Some(*key),
+            _ => None,
+        };
+        for key in self.slots.iter().copied().chain(adding) {
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        keys.retain(|key| !drawn(*key));
+        let lead = |key: &CellId| {
+            self.leading
+                .iter()
+                .position(|leader| leader == key)
+                .unwrap_or(self.leading.len())
+        };
+        keys.sort_by(|left, right| {
+            lead(left)
+                .cmp(&lead(right))
+                .then_with(|| field_order(input.env, left, right))
+        });
+        Some(keys)
+    }
+
+    fn field(
+        &self,
+        input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+        key: CellId,
+    ) -> RecordField<W, W::Hover> {
+        let name = (self.label)(key).unwrap_or_else(|| field_label(input.env, key));
+        // A missing field's name selects it only where it's a slot to fill.
+        let selects =
+            self.slots.contains(&key) || input.value.is_some_and(|value| value.contains_field(key));
+        RecordField {
+            label: record_label_reading(input, key, name, selects),
+            value: descend(
+                [Step::Key(key)],
+                (self.child)(key)
+                    .map(|child| compose_partials([child, input.default_projection.clone()])),
+                None,
+            ),
+        }
+    }
+}
+
+/// [`Fields::form`], the fields read as usual.
+pub(crate) fn record_form<W: Host, const N: usize>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    queried: [CellId; N],
+    draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+) -> Option<Layout<W>> {
+    Fields::default().form(input, queried, draw)
 }
 
 /// Named fields first, by name, then the others by id.
@@ -284,108 +366,26 @@ pub(crate) fn field_label<W: Host>(env: &dyn Env, key: CellId) -> Layout<W> {
     }
 }
 
-pub(crate) fn record_field<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    key: CellId,
-    child: Option<Partial<W>>,
-) -> RecordField<W, W::Hover> {
-    RecordField {
-        label: record_label(input, key),
-        value: descend(
-            [Step::Key(key)],
-            child.map(|p| compose_partials([p, input.default_projection.clone()])),
-            None,
-        ),
-    }
-}
-
 /// The ordinary field-name presentation and interaction, independent of how
 /// the enclosing record arranges its fields.
 pub(crate) fn record_label<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     key: CellId,
 ) -> Layout<W> {
-    record_label_reading(input, key, field_label(input.env, key))
+    let present = input.value.is_some_and(|value| value.contains_field(key));
+    record_label_reading(input, key, field_label(input.env, key), present)
 }
 
-/// [`record_label`], the field read as `name`.
+/// A field's label read as `name`, which a click on selects the field where
+/// `selects`.
 fn record_label_reading<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     key: CellId,
     name: Layout<W>,
+    selects: bool,
 ) -> Layout<W> {
     let site = input.site().below(&[Step::Key(key)]);
-    let head = row(0.0, [name, dim(":")]);
-    let present = input.value.is_some_and(|value| value.contains_field(key));
-    crate::display::field_label_at(head, &site, key, present)
-}
-
-/// The fields a projection leaves undrawn, and one being added, as a
-/// record fragment to follow what it does draw.
-pub(crate) fn extra_fields<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    drawn: impl Fn(CellId) -> bool,
-) -> Option<Layout<W>> {
-    extra_fields_by(input, drawn, |_| None)
-}
-
-/// [`extra_fields`], a field's value drawn by the projection `child` gives
-/// for its key, where it gives one.
-pub(crate) fn extra_fields_by<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    drawn: impl Fn(CellId) -> bool,
-    child: impl Fn(CellId) -> Option<Partial<W>>,
-) -> Option<Layout<W>> {
-    let fields = record_keys(input)?
-        .into_iter()
-        .filter(|key| !drawn(*key))
-        .map(|key| record_field(input, key, child(key)))
-        .collect::<Vec<_>>();
-    let pending = pending_field(input);
-    (!fields.is_empty() || pending.is_some()).then(|| record_fragment(fields, pending))
-}
-
-/// `content` followed by its [`extra_fields`], as a call's head is by its
-/// arguments. Drawn as one piece, the value takes no new field from Enter:
-/// these views don't offer [`authoring`], which a rawer view of it does.
-pub(crate) fn with_extra_fields<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    drawn: impl Fn(CellId) -> bool,
-    content: Layout<W>,
-) -> Layout<W> {
-    with_extra_fields_by(input, drawn, |_| None, content)
-}
-
-/// [`with_extra_fields`], their values drawn as [`extra_fields_by`] says.
-pub(crate) fn with_extra_fields_by<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    drawn: impl Fn(CellId) -> bool,
-    child: impl Fn(CellId) -> Option<Partial<W>>,
-    content: Layout<W>,
-) -> Layout<W> {
-    match extra_fields_by(input, drawn, child) {
-        Some(extras) => hug(content, extras, 0.0),
-        None => content,
-    }
-}
-
-/// A form drawn from some of a record's fields, the others following it as a
-/// trailing record ([`with_extra_fields`]), so the form hides nothing.
-/// `draw` is given the `queried` fields' values, in their order, to bind by
-/// name. One of the queried being added is the form's to draw, or to leave to
-/// a plainer view.
-pub(crate) fn record_form<W: Host, const N: usize>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    queried: [CellId; N],
-    draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
-) -> Option<Layout<W>> {
-    let fields = input.value?;
-    let content = draw(queried.map(|key| fields.field(key)))?;
-    Some(with_extra_fields(
-        input,
-        |key| queried.contains(&key),
-        content,
-    ))
+    crate::display::field_label_at(row(0.0, [name, dim(":")]), &site, key, selects)
 }
 
 /// Enter's authoring for the container `child` draws: a field or element

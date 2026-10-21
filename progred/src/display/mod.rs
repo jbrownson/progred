@@ -819,55 +819,10 @@ pub struct RecordField<World, Hover> {
     pub value: Layout<World, Hover>,
 }
 
-/// Ordered fields of the enclosing form's own occurrence.
-/// Trailing fields, such as one being authored, follow in both responsive
-/// forms but take no part in sorting the stored fields.
-pub fn record_fragment_with<W: Host, T>(
-    fields: impl IntoIterator<Item = (CellId, T)>,
-    order: impl FnMut(&CellId, &CellId) -> Ordering,
-    field: impl FnMut(CellId, T) -> RecordField<W, W::Hover>,
-    trailing: impl IntoIterator<Item = RecordField<W, W::Hover>>,
-) -> host::Layout<W> {
-    record_fragment(
-        ordered_record_fields(fields, order, field)
-            .chain(trailing)
-            .map(record_colon),
-        [],
-    )
-}
-
-fn ordered_record_fields<W, H, T>(
-    fields: impl IntoIterator<Item = (CellId, T)>,
-    mut order: impl FnMut(&CellId, &CellId) -> Ordering,
-    mut field: impl FnMut(CellId, T) -> RecordField<W, H>,
-) -> impl Iterator<Item = RecordField<W, H>> {
-    let mut fields = fields.into_iter().collect::<Vec<_>>();
-    fields.sort_by(|(left, _), (right, _)| order(left, right));
-    fields
-        .into_iter()
-        .map(move |(key, value)| field(key, value))
-}
-
-fn record_colon<W: 'static, H: 'static>(field: RecordField<W, H>) -> RecordField<W, H> {
-    RecordField {
-        label: row(0.0, [field.label, dim(":")]),
-        value: field.value,
-    }
-}
-
-/// Shared record geometry. Heads already include punctuation and its
-/// interaction target; trailing rows can be incomplete field editors.
-pub fn record_heads<W: Host>(
-    fields: impl IntoIterator<Item = RecordField<W, W::Hover>>,
-    trailing: impl IntoIterator<Item = host::Layout<W>>,
-) -> host::Layout<W> {
-    let [horizontal, vertical] = record_forms(fields, trailing);
-    selectable_bracket(Delim::Brace, alternatives([horizontal, vertical]))
-}
-
-/// A record-shaped fragment of a larger projection, part of its occurrence:
-/// the fields are occurrences of their own, the fragment isn't.
-pub fn record_fragment<W: Host>(
+/// Fields between braces, the record's own or the rest of one a form draws
+/// in part, flat or one to a line. Labels already include their punctuation
+/// and interaction target; trailing rows can be incomplete field editors.
+pub fn record_braces<W: Host>(
     fields: impl IntoIterator<Item = RecordField<W, W::Hover>>,
     trailing: impl IntoIterator<Item = host::Layout<W>>,
 ) -> host::Layout<W> {

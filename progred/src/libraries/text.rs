@@ -44,7 +44,7 @@ pub fn query_spelling(query: &str) -> &str {
 /// being added.
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let text = input.value?.as_text()?;
-    Some(crate::display::structure::with_extra_fields(
+    Some(crate::display::structure::Fields::default().after(
         input,
         |key| key == vocabulary::UTF8,
         crate::display::line_edit(editor_for_text(text)),

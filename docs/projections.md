@@ -268,10 +268,14 @@ The shared `structure::list(Some(child_projection))` combinator explicitly
 applies a partial at each immediate element. Standard lists use the same
 renderer with `None`. Lambda parameters, match cases, let/where bindings, and
 do expressions each supply their element projection this way.
-`structure::record_layout` takes a function from each field identity to an
-optional child partial. Standard records use the same renderer with no field overrides.
-Record layouts, through `record_heads`, and ordered call arguments, through
-`record_fragment`, share `record_forms` geometry.
+A record's fields read through one `structure::Fields` spec: which come first,
+which show as slots to fill even where the record lacks them (a call's
+parameters), how a field's name reads (a closure's unnamed bindings), and a
+partial for a field's value. A field being added is drawn among them, where it
+will stay. The spec draws a whole record (`Fields::record`), or the fields after
+what a projection draws of the record itself (`Fields::form`, `Fields::after`):
+a call's arguments after its function, a form's other fields after the form.
+Standard records use it with nothing set. Both share `record_braces` geometry.
 Patterns establish an explicit binder-projection scope. Ordinary container
 recursion then finds nested binders while text and numeric facets keep their
 normal projections; no duplicate pattern-specific structural walk is needed.

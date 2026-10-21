@@ -585,14 +585,13 @@ fn a_call_argument_label_targets_its_argument() {
     let Recorded::Row { children, .. } = children[0].content() else {
         panic!("argument has a label and value");
     };
-    let Recorded::Row { children: head, .. } = unshared(&children[0]) else {
-        panic!("field head contains its label and colon");
-    };
-    let Recorded::Before { child, .. } = &head[0] else {
+    // The label, its colon included, as a record's field label is.
+    let label = unshared(&children[0]);
+    let Recorded::Before { child, .. } = label else {
         panic!("the label targets its argument");
     };
     assert_eq!(
-        crate::libraries::test_widgets::claim(&head[0]),
+        crate::libraries::test_widgets::claim(label),
         Some(puri::hover::Claim::Direct(crate::frame::Hovered::Tree(
             crate::hover::Hover::Label(crate::occurrence::Trail::from([
                 crate::occurrence::Step::Key(argument)
@@ -1374,3 +1373,15 @@ fn a_new_call_starts_at_its_function_then_takes_its_parameters_as_arguments() {
 
 mod declarations;
 mod parameter_names;
+
+#[test]
+fn a_form_draws_a_field_being_added_among_its_others() {
+    let note = crate::test_values::label("note");
+    let mut world = crate::editor_of(::grap::lambda([], crate::libraries::f64::value(1.0)));
+    world.model.selection = Some(crate::selection::pending_value(crate::occurrence::of(&[
+        Step::Key(note),
+    ])));
+    let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);
+    assert!(driver.drawn(&[Step::Key(note)]));
+    assert!(driver.picker_entries().is_some(), "its slot is open");
+}

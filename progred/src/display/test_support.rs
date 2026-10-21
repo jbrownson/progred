@@ -491,8 +491,12 @@ pub fn text<W: 'static, H: 'static>(text: impl Into<String>) -> crate::display::
 pub fn record_partial<W: crate::display::Host>(
     child: impl Fn(CellId) -> Option<crate::display::host::Partial<W>> + 'static,
 ) -> crate::display::host::Partial<W> {
+    let child = std::rc::Rc::new(child);
     crate::display::runtime_partial(move |input| {
-        crate::display::structure::record_layout(input, &child)
+        let child = child.clone();
+        crate::display::structure::Fields::default()
+            .child(move |key| child(key))
+            .record(input)
     })
 }
 

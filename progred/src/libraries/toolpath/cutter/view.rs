@@ -21,7 +21,7 @@ pub(crate) fn display<W: Host>(
     let value = input.value?;
     value.field(vocabulary::TOOL)?;
     let tool = Tool::read(value.as_value())?;
-    let fields = structure::record_layout(input, |_| None)?;
+    let fields = structure::Fields::default().record(input)?;
     let site = input.site();
     let picture = activatable(picture(&tool)?, &site);
     Some(aligned_row(

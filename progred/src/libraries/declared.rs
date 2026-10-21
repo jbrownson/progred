@@ -87,7 +87,7 @@ fn projection<W: Host>() -> Partial<W> {
                 match layout {
                     // The view chose what to show; only a field being added
                     // follows it.
-                    Some(layout) => Some(crate::display::structure::with_extra_fields(
+                    Some(layout) => Some(crate::display::structure::Fields::default().after(
                         input,
                         |_| true,
                         layout,

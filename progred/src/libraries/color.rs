@@ -374,7 +374,7 @@ fn present<W: Host>(
         swatch
     };
     let spelling = crate::display::line_edit(hex_editor(encoded));
-    Some(crate::display::structure::with_extra_fields(
+    Some(crate::display::structure::Fields::default().after(
         input,
         |key| key == vocabulary::RGB || key == vocabulary::RGBA || key == name::vocabulary::NAME,
         name::with_name(input, centered_row(4.0, [swatch, spelling])),

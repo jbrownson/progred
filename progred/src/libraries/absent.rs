@@ -34,12 +34,9 @@ pub mod vocabulary {
 /// that call, where it is.
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let reason = input.value?.absent_reason()?;
-    let absent = crate::display::structure::with_extra_fields_by(
-        input,
-        |key| key == vocabulary::ABSENT,
-        call_field,
-        head(input, reason),
-    );
+    let absent = crate::display::structure::Fields::default()
+        .child(call_field)
+        .after(input, |key| key == vocabulary::ABSENT, head(input, reason));
     Some(on_red(match callers(input) {
         Some(callers) => crate::display::col(0, 2.0, [absent, callers]),
         None => absent,
@@ -171,21 +168,24 @@ fn missing_argument<W: Host>(
         crate::display::runtime_partial(crate::libraries::name::shallow_cell),
         &input.default_projection,
     );
-    Some(on_red(crate::display::structure::with_extra_fields_by(
-        input,
-        |key| {
-            key == vocabulary::ABSENT
-                || key == vocabulary::CELL
-                || key == vocabulary::CALL && call.is_some()
-        },
-        call_field,
-        crate::display::row(
-            4.0,
-            [head(input, vocabulary::MISSING_ARGUMENT), named]
-                .into_iter()
-                .chain(hole),
-        ),
-    )))
+    Some(on_red(
+        crate::display::structure::Fields::default()
+            .child(call_field)
+            .after(
+                input,
+                |key| {
+                    key == vocabulary::ABSENT
+                        || key == vocabulary::CELL
+                        || key == vocabulary::CALL && call.is_some()
+                },
+                crate::display::row(
+                    4.0,
+                    [head(input, vocabulary::MISSING_ARGUMENT), named]
+                        .into_iter()
+                        .chain(hole),
+                ),
+            ),
+    ))
 }
 
 /// Where Grap says a call is, when it's somewhere a document names.

@@ -21,8 +21,8 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
     let fields = input.value?.as_record()?.clone();
     let value = ::grap::RuntimeValue::from(input.value?.clone());
     let runtime_input = input.with_value(Some(&value));
-    let footer =
-        d::structure::extra_fields(&runtime_input, |key| key == OUTLINE || keys.contains(&key));
+    let footer = d::structure::Fields::default()
+        .rest(&runtime_input, |key| key == OUTLINE || keys.contains(&key));
     let label = d::structure::record_label(&runtime_input, OUTLINE);
     Some(Layout::program(Rc::new(move |context, build| {
         let here = context.site();

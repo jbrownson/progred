@@ -123,7 +123,7 @@ fn shown_size(width: u32, height: u32) -> Size {
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let bytes = input.value?.field(vocabulary::PNG)?;
     let image = decode(bytes.as_blob()?)?;
-    Some(crate::display::structure::with_extra_fields(
+    Some(crate::display::structure::Fields::default().after(
         input,
         |key| key == vocabulary::PNG,
         crate::display::widget::image::image(shown_size(image.width, image.height), image),

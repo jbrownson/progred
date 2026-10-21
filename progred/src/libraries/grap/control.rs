@@ -655,13 +655,15 @@ fn pattern_path<W: Host>(steps: impl AsRef<[Step]> + 'static, default: &Partial<
 /// only that field, but the others still show.
 fn pattern_binder<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     input.value?.field(vocabulary::BIND)?.as_cell()?;
-    crate::display::structure::record_layout(input, |key| {
-        (key == vocabulary::BIND).then(|| {
-            crate::display::runtime_partial(|input| {
-                crate::libraries::grap::declaration_cell(input, None)
+    crate::display::structure::Fields::default()
+        .child(|key| {
+            (key == vocabulary::BIND).then(|| {
+                crate::display::runtime_partial(|input| {
+                    crate::libraries::grap::declaration_cell(input, None)
+                })
             })
         })
-    })
+        .record(input)
 }
 
 fn case_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {

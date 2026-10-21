@@ -92,7 +92,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
         } else {
             line
         };
-        Some(crate::display::structure::with_extra_fields(
+        Some(crate::display::structure::Fields::default().after(
             input,
             |key| key == self.tag || key == name::vocabulary::NAME,
             name::with_name(input, line),

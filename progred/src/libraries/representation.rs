@@ -93,7 +93,7 @@ pub(crate) fn infix_display<W: Host>(
             )
         },
     );
-    Some(crate::display::structure::with_extra_fields(
+    Some(crate::display::structure::Fields::default().after(
         input,
         |key| key == FUNCTION || key == LEFT || key == RIGHT,
         layout,

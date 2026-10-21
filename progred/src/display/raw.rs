@@ -47,7 +47,7 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
         }
         ::grap::Shape::Record(keys) => {
             let empty = keys.is_empty();
-            let open = crate::display::structure::record_layout_at(input, keys, |_| None);
+            let open = crate::display::structure::Fields::default().record(input)?;
             if empty {
                 open
             } else {

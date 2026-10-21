@@ -11,11 +11,11 @@ use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::hug;
-use crate::display::structure::{field_label, field_order, record_form};
+use crate::display::structure::record_form;
 use crate::display::{
-    Completion, CompletionKind, Delim, Face, Name, Pending, Picker, RecordField, ResolvedCell,
-    activatable, alternatives, col, descend_local, dim, faced, indent, picker, ranked,
-    record_fragment_with, row, selectable_bracket, shared,
+    Completion, CompletionKind, Delim, Face, Name, Pending, Picker, ResolvedCell, activatable,
+    alternatives, col, descend_local, dim, faced, indent, picker, ranked, row, selectable_bracket,
+    shared,
 };
 use ::grap::source::vocabulary::BODY_ORIGIN;
 use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE};
@@ -296,9 +296,9 @@ fn program_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     input.value?.field(vocabulary::GRAP)?;
-    crate::display::structure::record_layout(input, |key| {
-        (key == vocabulary::GRAP).then(|| crate::display::runtime_partial(program))
-    })
+    crate::display::structure::Fields::default()
+        .child(|key| (key == vocabulary::GRAP).then(|| crate::display::runtime_partial(program)))
+        .record(input)
 }
 
 /// The program's cell keeps its parentheses; what fills it is an expression.
@@ -409,63 +409,23 @@ pub(crate) fn call_with_function<W: Host>(
         None => (input.pending == Some(Pending::Child(Step::Key(FUNCTION)))).then_some(None)?,
     };
     let parameters = function
-        .and_then(|function| function_parameters(&function, &|cell| input.env.resolve(cell)));
-    let mut parameter_positions = std::collections::BTreeMap::new();
-    for (position, parameter) in parameters.iter().flatten().enumerate() {
-        parameter_positions.entry(*parameter).or_insert(position);
-    }
-    let argument = |field| {
-        let site = input.site().below(&[Step::Key(field)]);
-        RecordField {
-            label: crate::display::field_label_at(
-                field_label(input.env, field),
-                &site,
-                field,
-                true,
-            ),
-            value: expression_path([Step::Key(field)], &input.default_projection),
-        }
-    };
-    let trailing = match &input.pending {
-        Some(Pending::Child(Step::Key(field)))
-            if *field != FUNCTION
-                && !fields.contains_field(*field)
-                && !parameter_positions.contains_key(field) =>
-        {
-            vec![argument(*field)]
-        }
-        _ => Vec::new(),
-    };
+        .and_then(|function| function_parameters(&function, &|cell| input.env.resolve(cell)))
+        .unwrap_or_default();
     let function = descend_local(
         [Step::Key(FUNCTION)],
         function_projection.unwrap_or_else(|| crate::display::runtime_partial(expression)),
         &input.default_projection,
     );
-    let arguments = record_fragment_with(
-        fields
-            .record_keys()?
-            .into_iter()
-            .filter(|field| *field != FUNCTION)
-            .map(|field| (field, ()))
-            .chain(
-                parameter_positions
-                    .keys()
-                    .filter(|field| !fields.contains_field(**field))
-                    .map(|field| (*field, ())),
-            ),
-        |left, right| match (
-            parameter_positions.get(left),
-            parameter_positions.get(right),
-        ) {
-            (Some(left), Some(right)) => left.cmp(right),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => field_order(input.env, left, right),
-        },
-        |field, _| argument(field),
-        trailing,
-    );
-    Some(hug(function, arguments, 0.0))
+    // Its arguments are its function's parameters, in their order, each a
+    // slot until it's given, then any others.
+    Some(
+        crate::display::structure::Fields::default()
+            .leading(parameters.clone())
+            .slots(parameters)
+            .child(|_| Some(crate::display::runtime_partial(expression)))
+            .shown_empty()
+            .after(input, |key| key == FUNCTION, function),
+    )
 }
 
 /// A stored lambda exposes its parameter declarations deeply and
@@ -518,14 +478,13 @@ fn closure_display<W: Host>(
     let fields = input.value?;
     fields.field(LAMBDA)?;
     fields.field(ENVIRONMENT)?;
-    crate::display::structure::record_layout_led(
-        input,
-        &[LAMBDA, ENVIRONMENT, BODY_ORIGIN],
-        |key| match key {
+    crate::display::structure::Fields::default()
+        .leading([LAMBDA, ENVIRONMENT, BODY_ORIGIN])
+        .child(|key| match key {
             ENVIRONMENT => Some(crate::display::runtime_partial(environment)),
             BODY_ORIGIN => Some(crate::display::runtime_partial(|input| {
                 let open = (input.default_projection)(input)
-                    .or_else(|| crate::display::structure::record_layout(input, |_| None))?;
+                    .or_else(|| crate::display::structure::Fields::default().record(input))?;
                 Some(crate::display::fold::foldable(
                     Delim::Brace,
                     None,
@@ -534,8 +493,8 @@ fn closure_display<W: Host>(
                 ))
             })),
             _ => None,
-        },
-    )
+        })
+        .record(input)
 }
 
 /// A closure's environment, its bindings with no name of their own read as
@@ -545,7 +504,13 @@ fn environment<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
     let computed = unnamed_bindings(&bindings, &|cell| {
         input.env.resolve(cell).map(|definition| definition.value)
     });
-    let open = crate::display::structure::record_layout_calling(input, &computed)?;
+    let open = crate::display::structure::Fields::default()
+        .label(move |key| {
+            computed
+                .get(&key)
+                .map(|name| crate::display::named(name, Face::Dim))
+        })
+        .record(input)?;
     Some(match bindings.is_empty() {
         true => open,
         false => crate::display::fold::foldable(Delim::Brace, None, |_| false, open),
