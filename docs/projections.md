@@ -638,8 +638,8 @@ emit the corresponding native layout. `do`, ordinary function calls, and loops
 can produce that sequence; a list of expressions remains inert unless a control
 function evaluates it. A row aligns its children's baselines; given a
 `baseline`, it aligns their tops instead and keeps that child's baseline, as a
-column does. `pad`, `center`, `bracket`, and interaction wrappers take
-a raw `child` expression that must emit exactly one child. `selectable` makes its
+column does. `pad`, `center`, `border`, `bracket`, and interaction wrappers
+take a raw `child` expression that must emit exactly one child. `selectable` makes its
 child select the value being drawn: it claims the hover there, and a click selects
 that value; whatever the child descends into keeps its own target. No buffer borrow is held
 while evaluating a body. Successful operations return the ordinary empty record;
@@ -653,10 +653,12 @@ measurement in Grap. `descend` takes `step`; `descend path` takes
 `steps`; `jump` takes `steps` and `document path`; `at` takes `steps` and `value`.
 All paths use the path convention, with no opaque editor or scope value in Grap.
 The Grap-facing jump provides the standard document-path interpretation.
-`canvas` accepts width/ascent/descent and a drawing-program value;
-it does not construct a list of draw commands. Its optional fuel argument
-configures the later drawing evaluation, as with the stored drawing convention;
-omitting it uses the evaluator's ordinary default, not the layout call's remainder.
+`drawing` accepts width/ascent/descent and a drawing-program value, as the
+stored drawing node does; it does not construct a list of draw commands. Its
+optional fuel argument configures the later drawing evaluation, as the stored
+node's does; omitting it uses the evaluator's ordinary default, not the layout
+call's remainder. Every construct is in both forms under one name: a node of
+the stored form is a function of the same name in a layout program.
 Row/column gap defaults to zero, column baseline to zero, padding sides to zero,
 and text paint to the ink face. Other required inputs are validated. Invalid
 builder calls return absents; containers propagate a failed child computation

@@ -387,3 +387,30 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
         matches!(layout.unwrap().record(), Recorded::Leaf(Leaf::Text { text, .. }) if text == "captured")
     );
 }
+
+#[test]
+fn border_and_drawing_emit_in_a_program_as_their_stored_nodes_decode() {
+    let program = call(
+        COL,
+        [(
+            CHILDREN,
+            sequence([
+                call(BORDER, [(CHILD, text("framed"))]),
+                call(
+                    DRAWING,
+                    [
+                        (WIDTH, f64_convention::value(4.0)),
+                        (DESCENT, f64_convention::value(2.0)),
+                        (PROGRAM, quote(Value::record([]))),
+                    ],
+                ),
+            ]),
+        )],
+    );
+    let (result, layout) = evaluate(&program, 10000);
+    assert!(result.completed);
+    let Recorded::Col { children, .. } = layout.unwrap().record() else {
+        panic!("col")
+    };
+    assert_eq!(children.len(), 2);
+}

@@ -605,3 +605,20 @@ fn junk_falls_through_whole() {
 }
 
 mod programs;
+
+#[test]
+fn center_and_rule_decode_from_data_as_a_program_emits_them() {
+    let value = col(
+        0,
+        0.0,
+        [
+            node(vocabulary::CENTER, text_leaf("1", vocabulary::NAME_FACE)),
+            node(vocabulary::RULE, Value::record([])),
+            node(vocabulary::CENTER, text_leaf("2", vocabulary::NAME_FACE)),
+        ],
+    );
+    let Some(Recorded::Col { children, .. }) = decoded(&value) else {
+        panic!("a fraction's column decodes");
+    };
+    assert_eq!(children.len(), 3);
+}

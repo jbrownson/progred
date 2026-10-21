@@ -61,7 +61,6 @@ pub mod vocabulary {
     pub const SLOT: CellId = CellId::from_u128(0x96e07d2a58c4b1f3f3b18e57d0c2946a);
     /// A line across the width its container offers.
     pub const RULE: CellId = CellId::from_u128(0xf8a0697c10a7a18e750e3fb32a57bcf2);
-    pub const CANVAS: CellId = CellId::from_u128(0xb33eff2d53a88f77c431b7c728a49f0f);
     pub const LAYOUT_PROGRAM: CellId = CellId::from_u128(0x120660d976130c8ba722d26b1a28c975);
     pub const INVALID_PROGRAM: CellId = CellId::from_u128(0xd0f97606bf2fe368cb9645e4bad8b977);
     pub const INVALID_DRAWING: CellId = CellId::from_u128(0x3ff5ffa7414309b0ed4ed3f17ba5d5cd);
@@ -227,11 +226,12 @@ fn baseline_index(baseline: f64, children: usize) -> Option<usize> {
 
 /// The stored form's node markers, in the precedence that settles a record
 /// carrying several.
-const MARKERS: [CellId; 18] = [
+const MARKERS: [CellId; 20] = [
     vocabulary::ROW,
     vocabulary::COL,
     vocabulary::OVERLAY,
     vocabulary::PAD,
+    vocabulary::CENTER,
     vocabulary::BORDER,
     vocabulary::BRACKET,
     vocabulary::ALTERNATIVES,
@@ -242,6 +242,7 @@ const MARKERS: [CellId; 18] = [
     vocabulary::TEXT,
     vocabulary::DRAWING,
     vocabulary::SLOT,
+    vocabulary::RULE,
     vocabulary::SELECTABLE,
     vocabulary::PICKABLE,
     vocabulary::HOVER_BLOCK,
@@ -331,6 +332,7 @@ fn decode_with<W: Host>(
             (number(LEFT)?, number(TOP)?, number(RIGHT)?, number(BOTTOM)?).into(),
             child()?,
         )),
+        CENTER => Some(crate::display::center(decode_with(&content, &place, site)?)),
         BORDER => Some(border(decode_with(&content, &place, site)?)),
         BRACKET => Some(bracket(read_delim(&content.field(DELIM)?)?, child()?)),
         ALTERNATIVES => Some(alternatives(children(&content, &place, site)?)),
@@ -382,6 +384,7 @@ fn decode_with<W: Host>(
             })
         }
         SLOT => Some(slot()),
+        RULE => Some(crate::display::rule()),
         SELECTABLE => Some(activatable(decode_with(&content, &place, site)?, &site())),
         PICKABLE => Some(pickable(
             child()?,
@@ -658,7 +661,6 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::DRAWING, "drawing"),
             (vocabulary::PROGRAM, "program"),
             (vocabulary::SLOT, "slot"),
-            (vocabulary::CANVAS, "canvas"),
             (vocabulary::LAYOUT_PROGRAM, "layout program"),
             (vocabulary::INVALID_PROGRAM, "invalid layout program"),
             (vocabulary::INVALID_DRAWING, "invalid drawing arguments"),

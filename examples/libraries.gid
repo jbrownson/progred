@@ -21,7 +21,7 @@
     "radius": 6423c35e07d7a4ff536127d1f1d8eb53, "paint": cb04728f5e6a1d93a6790238b5f1ce4d,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b, "value": 84d3ba81fd2a52ea37478f4a868106f4,
     "row": 1af52c96e380b7d40c9e1f6a2d5b83e7, "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
-    "children": e10b73d5482f96ca7d3852c0f16b49ea, "canvas": b33eff2d53a88f77c431b7c728a49f0f,
+    "children": e10b73d5482f96ca7d3852c0f16b49ea, "drawing": 6889fa235b002be4c8b106d5f31dafbf,
     "text": 08e64d1f3a92c5b7b7f0d38a165e29c4, "content": 3e6b91d4a25f70c8815d29f6c4a30e7b,
     "descend": 35c7a8e2f10d49b6d2f8016c4b9ea375, "step": 67a2d5e0b93c48f14e28b671d0a5c39f,
     "key": f12dea12c741fe36312750a264f3a235, "col": 9d04b6e1783f2ca5f17d09c4e6a2358b,
@@ -74,7 +74,7 @@
 
     angle_view: {name: "angle view", params: [value], body: {function: selectable, child: {
       function: row, gap: {f64: 0x0000000000001040}, children: {function: do, expressions: [
-        {function: canvas, width: {f64: 0x0000000000003c40}, ascent: {f64: 0x0000000000003440},
+        {function: drawing, width: {f64: 0x0000000000003c40}, ascent: {f64: 0x0000000000003440},
           descent: {f64: 0x0000000000002040},
           program: {function: quote, expression: {function: dial, value: {unquote: value}}}},
         {function: descend, step: {key: degrees}},

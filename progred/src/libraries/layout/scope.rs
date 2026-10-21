@@ -12,6 +12,7 @@ const FUNCTIONS: &[CellId] = &[
     COL,
     PAD,
     CENTER,
+    BORDER,
     OVERLAY,
     ALTERNATIVES,
     BRACKET,
@@ -22,7 +23,7 @@ const FUNCTIONS: &[CellId] = &[
     DESCEND_PATH,
     JUMP,
     AT,
-    CANVAS,
+    DRAWING,
     SELECTABLE,
     HOVER_BLOCK,
     PICKABLE,
@@ -210,6 +211,7 @@ fn operation<W: Host>(
         COL => col(context, call, environment, output),
         PAD => pad(context, call, environment, output),
         CENTER => single_child(context, call, environment, output).map(crate::display::center),
+        BORDER => single_child(context, call, environment, output).map(crate::display::border),
         OVERLAY => children(context, call, environment, output).map(layout_overlay),
         ALTERNATIVES => alternatives(context, call, environment, output),
         BRACKET => bracket(context, call, environment, output),
@@ -220,7 +222,7 @@ fn operation<W: Host>(
         DESCEND_PATH => descend_path(context, call, environment),
         JUMP => jump(context, call, environment),
         AT => at(context, call, environment),
-        CANVAS => canvas(context, call, environment),
+        DRAWING => drawing(context, call, environment),
         SELECTABLE => single_child(context, call, environment, output)
             .map(|child| activatable(child, &site())),
         HOVER_BLOCK => single_child(context, call, environment, output).map(block_hover),
@@ -380,7 +382,7 @@ fn at<W: Host>(
     ))
 }
 
-fn canvas<W: Host>(
+fn drawing<W: Host>(
     context: &mut Context,
     call: &Expression,
     environment: &Environment,
