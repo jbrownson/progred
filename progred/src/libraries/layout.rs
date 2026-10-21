@@ -200,7 +200,10 @@ fn apply_border_projection(
         context.apply_expression(&projection, [(presentation::vocabulary::VALUE, value)])?;
     Ok(::grap::RuntimeValue::record([(
         vocabulary::BORDER,
-        at([Step::Key(presentation::vocabulary::RESULT)], projected),
+        ::grap::RuntimeValue::record([(
+            vocabulary::CHILD,
+            at([Step::Key(presentation::vocabulary::RESULT)], projected),
+        )]),
     )]))
 }
 
@@ -332,8 +335,8 @@ fn decode_with<W: Host>(
             (number(LEFT)?, number(TOP)?, number(RIGHT)?, number(BOTTOM)?).into(),
             child()?,
         )),
-        CENTER => Some(crate::display::center(decode_with(&content, &place, site)?)),
-        BORDER => Some(border(decode_with(&content, &place, site)?)),
+        CENTER => Some(crate::display::center(child()?)),
+        BORDER => Some(border(child()?)),
         BRACKET => Some(bracket(read_delim(&content.field(DELIM)?)?, child()?)),
         ALTERNATIVES => Some(alternatives(children(&content, &place, site)?)),
         DESCEND => Some(descend(
@@ -385,13 +388,13 @@ fn decode_with<W: Host>(
         }
         SLOT => Some(slot()),
         RULE => Some(crate::display::rule()),
-        SELECTABLE => Some(activatable(decode_with(&content, &place, site)?, &site())),
+        SELECTABLE => Some(activatable(child()?, &site())),
         PICKABLE => Some(pickable(
             child()?,
             W::Hover::from(site().hover()),
             content.field(VALUE)?,
         )),
-        HOVER_BLOCK => Some(block_hover(decode_with(&content, &place, site)?)),
+        HOVER_BLOCK => Some(block_hover(child()?)),
         ON_EVENT => Some(on_event(child()?, content.field(HANDLER)?)),
         // A marker MARKERS lists without an arm here declines, as a
         // malformed node does.

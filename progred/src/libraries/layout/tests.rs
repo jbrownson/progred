@@ -202,6 +202,8 @@ fn border_retains_native_callbacks_and_their_call_origins() {
             .result
             .field(vocabulary::BORDER)
             .unwrap()
+            .field(vocabulary::CHILD)
+            .unwrap()
             .field(vocabulary::AT)
             .unwrap()
             .field(vocabulary::VALUE)
@@ -272,6 +274,8 @@ fn border_preserves_expression_facing_foreign_arguments() {
             .result
             .field(vocabulary::BORDER)
             .unwrap()
+            .field(vocabulary::CHILD)
+            .unwrap()
             .field(vocabulary::AT)
             .unwrap()
             .field(vocabulary::VALUE)
@@ -338,6 +342,8 @@ fn border_interprets_captured_projection_syntax_only_when_invoked() {
             result
                 .result
                 .field(vocabulary::BORDER)
+                .unwrap()
+                .field(vocabulary::CHILD)
                 .unwrap()
                 .field(vocabulary::AT)
                 .unwrap()
@@ -612,9 +618,15 @@ fn center_and_rule_decode_from_data_as_a_program_emits_them() {
         0,
         0.0,
         [
-            node(vocabulary::CENTER, text_leaf("1", vocabulary::NAME_FACE)),
+            node(
+                vocabulary::CENTER,
+                Value::record([(vocabulary::CHILD, text_leaf("1", vocabulary::NAME_FACE))]),
+            ),
             node(vocabulary::RULE, Value::record([])),
-            node(vocabulary::CENTER, text_leaf("2", vocabulary::NAME_FACE)),
+            node(
+                vocabulary::CENTER,
+                Value::record([(vocabulary::CHILD, text_leaf("2", vocabulary::NAME_FACE))]),
+            ),
         ],
     );
     let Some(Recorded::Col { children, .. }) = decoded(&value) else {

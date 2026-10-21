@@ -220,7 +220,10 @@ pub fn close() -> Value {
 }
 
 pub fn selectable(child: Value) -> Value {
-    node(vocabulary::SELECTABLE, child)
+    node(
+        vocabulary::SELECTABLE,
+        Value::record([(vocabulary::CHILD, child)]),
+    )
 }
 
 pub fn pick_target(child: Value, value: Value) -> Value {
@@ -231,7 +234,10 @@ pub fn pick_target(child: Value, value: Value) -> Value {
 }
 
 pub fn hover_block(child: Value) -> Value {
-    node(vocabulary::HOVER_BLOCK, child)
+    node(
+        vocabulary::HOVER_BLOCK,
+        Value::record([(vocabulary::CHILD, child)]),
+    )
 }
 
 pub fn on(child: Value, handler: Value) -> Value {
@@ -242,7 +248,10 @@ pub fn on(child: Value, handler: Value) -> Value {
 }
 
 pub fn bordered(child: Value) -> Value {
-    node(vocabulary::BORDER, child)
+    node(
+        vocabulary::BORDER,
+        Value::record([(vocabulary::CHILD, child)]),
+    )
 }
 
 /// Decode a layout value into the display language, attaching the
