@@ -128,6 +128,33 @@ variables and 76 are computed expressions, so `unquote` stays common in either
 design. Independently of the semantics, the picker could offer in-scope variables
 inside a template and insert them as holes.
 
+## Observing evaluation
+
+Grap captures provenance ahead of time, each consumer in its own way: every
+call pushes an active-call frame whether or not anyone asks, a drawing's fills
+each keep a call trace, a closure keeps its body's origin, and an absent about
+a call names where the call is. A single optional observer would replace the
+first two and could answer the rest on demand.
+
+- The evaluator offers an observer its activity at call boundaries: a call
+  entered and left, an effect performed. With none attached it keeps no stack
+  at all; with one, the observer keeps whatever it wants, such as a full stack
+  including frames with no source, and can stop the run once it has its answer.
+  Start with an optional observer on the context, one branch per call, and
+  measure before reaching for a generic no-op one, which would thread its type
+  through compiled code and every foreign function.
+- Where evaluation is pure, provenance comes from replay: run the same
+  evaluation again, with the same fuel, with an observer looking for one
+  thing. Holding Ctrl over a drawing's fill reruns that drawing with an
+  observer counting fills to the hovered one and taking its stack; otherwise
+  nothing is logged. The answer is a computation keyed by the evaluation and
+  the question, so moving within one fill reruns nothing.
+- An absent's stack can be found the same way, shown collapsed and found when
+  it's expanded. Recognizing the absent in a replay needs its result path or
+  its own `call`; whether absents keep `call` once replay exists is open.
+- Effects can't be replayed. Handlers get a debug mode that attaches a
+  logging observer to the real run, with a UI for what it logs to be designed.
+
 ## A missing argument under its own label
 
 `(□ * □)` reads `invalid arguments {left: missing argument left □, …}`: the
