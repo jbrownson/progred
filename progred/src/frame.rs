@@ -330,10 +330,25 @@ fn compute_hover(
         output.landmark_select.is_none(),
         "selection handler escaped its landmark"
     );
-    if description.model.selection.is_none()
+    // A selection on nothing drawn, as when what it was on is gone or a view
+    // doesn't draw its place, leaves arrows as no selection does.
+    let undrawn = description
+        .model
+        .selection
+        .as_ref()
+        .filter(|selection| {
+            selection.stage(&crate::sources::Sources {
+                doc: &description.model.doc,
+                libraries: &description.stack.libraries,
+            }) != crate::selection::Stage::Label
+                && !output.landmarks.iter().any(|landmark| landmark.selected)
+        })
+        .map(|selection| selection.path().to_vec());
+    if (description.model.selection.is_none() || undrawn.is_some())
         && let Some(handler) = navigate::initial_navigation(
             description.model.workspace.document_root(),
             &output.landmarks,
+            undrawn,
         )
     {
         output.handler_mut().stack(handler);

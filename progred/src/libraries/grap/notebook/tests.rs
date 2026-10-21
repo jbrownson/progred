@@ -283,3 +283,21 @@ fn arrows_go_into_a_notebook_from_its_whole_down_to_an_entry_s_expression() {
         );
     }
 }
+
+#[test]
+fn an_arrow_from_a_deleted_entry_s_place_selects_the_notebook() {
+    let entry_cell = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(entry_cell, f64::value(42.0));
+    let mut driver = notebook(&[entry_cell], cells);
+    driver.select(&expression(&driver, 0));
+    driver.press(NamedKey::Enter);
+    // Backspace leaves the new entry's empty expression, then deletes the
+    // entry, its place still selected though the notebook draws none.
+    driver.press(NamedKey::Backspace);
+    driver.press(NamedKey::Backspace);
+    assert_eq!(driver.positions(&[Step::Key(NOTEBOOK)]).len(), 1);
+    assert!(!driver.drawn(&driver.selection()));
+    assert!(driver.keystroke(Key::Named(NamedKey::ArrowDown), Modifiers::empty()));
+    assert_eq!(driver.selection(), occurrence::of(&[]));
+}

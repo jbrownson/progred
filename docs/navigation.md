@@ -64,7 +64,9 @@ arrow selects when nothing is, gets one from its landmark, before what's drawn
 inside it: arrows go into its contents or, with none, to its neighbors. Where
 the projection did declare one, that stop stays where it put it, as a number's
 does after its name. Unselected, such an occurrence adds no stop, so ordinary
-navigation passes no invisible levels.
+navigation passes no invisible levels. A selection on nothing drawn, such as a
+deleted notebook entry's place, which the notebook draws no hole for, leaves
+arrows as no selection does: the first selects the root.
 
 ## Arrow policy
 

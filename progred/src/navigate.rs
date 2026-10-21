@@ -75,16 +75,24 @@ pub(crate) fn tab(
             || !cfg!(target_arch = "wasm32") && editor.model.selection.take().is_some())
 }
 
+/// An arrow with no selection selects the root of `root`'s view. So does one
+/// with the selection still `undrawn`, on nothing this frame draws.
 pub(crate) fn initial_navigation(
     root: &Root,
     landmarks: &[Landmark<crate::Editor>],
+    undrawn: Option<Path>,
 ) -> Option<puri::handler::Handler<crate::Editor, crate::frame::DispatchContext<crate::Editor>>> {
     let target = root_target(landmarks, root)?;
     let path = target.path.clone();
     Some(puri::handler::Handler::from_function(
         move |editor: &mut crate::Editor, event, _| {
             if matches!(event, puri::handler::Event::Navigate(_))
-                && editor.model.selection.is_none()
+                && editor
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(|selection| selection.path())
+                    == undrawn.as_deref()
             {
                 crate::editing::Edit::new(editor.session()).select(&path.to_vec());
                 puri::handler::EventOutcome::accept()
