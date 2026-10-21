@@ -7,19 +7,19 @@ use gid::Path;
 use kurbo::Vec2;
 use measured::Measured;
 use puri::handler::ScrollOutcome;
-use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use ui_events::pointer::PointerScrollEvent;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Target {
     Document,
     Pane { path: Path },
 }
 
-/// A view's transient identity and immutable data root. Equality is
-/// allocation identity: two views of the same value remain distinct.
-#[derive(Clone)]
+/// A view: the document's, or the pane declared at a path. A view is what
+/// it targets, and its occurrences' paths say which that is, so a path is
+/// enough to find its view.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Root(Rc<Target>);
 
 impl Root {
@@ -33,29 +33,6 @@ impl Root {
 
     pub fn target(&self) -> &Target {
         &self.0
-    }
-}
-
-impl PartialEq for Root {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
-}
-
-impl Eq for Root {}
-
-impl Hash for Root {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        Rc::as_ptr(&self.0).hash(state);
-    }
-}
-
-impl std::fmt::Debug for Root {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Root")
-            .field(&(Rc::as_ptr(&self.0) as usize))
-            .field(self.target())
-            .finish()
     }
 }
 

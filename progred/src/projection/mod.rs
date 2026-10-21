@@ -103,7 +103,6 @@ impl Projection {
 pub(crate) struct Cx<'a> {
     pub(crate) computations: &'a crate::computations::Computations,
     pub(crate) focused: bool,
-    pub(crate) view: &'a crate::display::widget::view::Root,
     pub(crate) completions: Option<&'a crate::display::CompletionProvider>,
     /// The reading context: the document read over its library.
     pub(crate) sources: Sources<'a>,
@@ -178,10 +177,6 @@ impl crate::display::Viewing for Occurrence<'_> {
 impl crate::display::Toolkit for Occurrence<'_> {
     fn path(&self) -> &[Step] {
         self.path
-    }
-
-    fn view(&self) -> &crate::display::widget::view::Root {
-        self.cx.view
     }
 
     fn site(&self) -> crate::editing::Site {
@@ -263,13 +258,9 @@ impl crate::display::Env for Occurrence<'_> {
         fuel: usize,
         steps: &[gid::Step],
     ) -> grap::RuntimeValue {
-        self.cx.computations.evaluate_runtime(
-            self.cx.view,
-            self.path,
-            expression,
-            fuel,
-            self.origin(steps),
-        )
+        self.cx
+            .computations
+            .evaluate_runtime(self.path, expression, fuel, self.origin(steps))
     }
     fn apply_runtime_scoped(
         &self,
@@ -289,7 +280,7 @@ impl crate::display::Env for Occurrence<'_> {
     ) -> grap::RuntimeValue {
         self.cx
             .computations
-            .apply_runtime(self.cx.view, self.path, function, arguments, fuel)
+            .apply_runtime(self.path, function, arguments, fuel)
     }
 
     /// Unlike [`crate::display::Toolkit::name`], Raw's view names nothing.
@@ -548,9 +539,9 @@ fn tree_hovered(hover: &Attribution) -> Option<&Hover> {
 }
 
 impl Cx<'_> {
-    /// The occurrence at `path` in this view, as a place to act.
+    /// The occurrence at `path`, as a place to act.
     pub(crate) fn site(&self, path: SharedPath) -> crate::editing::Site {
-        crate::editing::Site::new(self.view.clone(), path)
+        crate::editing::Site::new(path)
     }
 
     /// The display name at this projection; with the name library off,
@@ -609,7 +600,6 @@ impl Cx<'_> {
 pub struct ProjectDescription<'a> {
     pub computations: &'a crate::computations::Computations,
     pub focused: bool,
-    pub view: &'a crate::display::widget::view::Root,
     pub completions: Option<&'a crate::display::CompletionProvider>,
     pub sources: Sources<'a>,
     pub root: Option<&'a Value>,
@@ -641,7 +631,6 @@ fn prepare_project(
     let ProjectDescription {
         computations,
         focused,
-        view,
         completions,
         sources,
         root,
@@ -672,7 +661,6 @@ fn prepare_project(
     let cx = Cx {
         computations,
         focused,
-        view,
         completions,
         sources,
         names,
@@ -743,7 +731,6 @@ fn highlighted(
 /// The occurrence's path identifies the selection and says where it writes.
 fn bind_selection(
     child: Measured<HoverPass<crate::Editor>>,
-    root: crate::display::widget::view::Root,
     path: SharedPath,
     value: grap::RuntimeValue,
     scale: f64,
@@ -755,14 +742,13 @@ fn bind_selection(
             let cut = crate::modifiers::chord(command, event, "x");
             event.state.is_down()
                 && editor.model.selection.as_ref().is_some_and(|selection| {
-                    selection.root() == &root
-                        && selection.path() == path.as_ref()
+                    selection.path() == path.as_ref()
                         && selection.stage(&editor.sources()) == Stage::Edge
                 })
                 && if copy || cut {
                     // A cut's occurrence is gone before a picture of it
                     // could be drawn.
-                    let drawn = (!cut).then(|| (&root, path.as_ref()));
+                    let drawn = (!cut).then(|| path.as_ref());
                     editor.copy_value(value.as_value(), drawn) && {
                         if cut {
                             editor.delete_selected_edge(input.geometry(scale));
@@ -904,7 +890,6 @@ fn prepare_value(
             // claimed above — structural whitespace deselects.
             let selected = cx.selected(path);
             let selected_value = value.filter(|_| selected).cloned();
-            let root = cx.view.clone();
             let scale = cx.styles.scale;
             let palette = cx.styles.palette;
             let select =
@@ -931,9 +916,7 @@ fn prepare_value(
                     selected,
                 );
                 let placed = match selected_value {
-                    Some(value) => {
-                        bind_selection(placed, root, landmark_path.clone(), value, scale)
-                    }
+                    Some(value) => bind_selection(placed, landmark_path.clone(), value, scale),
                     None => placed,
                 };
                 match target {

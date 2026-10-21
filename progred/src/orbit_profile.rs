@@ -101,10 +101,8 @@ impl OrbitProfile {
                 .iter()
                 .map(|(position, value)| (position.clone(), value.as_cell().unwrap()))
                 .collect();
-            let root = editor.model.workspace.document_root().clone();
             for (position, key) in sections {
                 editor.session().set_folded(
-                    &root,
                     &crate::occurrence::of(&[
                         Step::Key(outline),
                         Step::Element(position),

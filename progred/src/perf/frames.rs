@@ -152,7 +152,6 @@ fn color_picker_frame() -> impl FnMut() -> Bench {
     }
     .prepare(&doc);
     let selection = Selection::from_payload(
-        &crate::test_root(),
         &Sources {
             doc: &doc,
             libraries: &context.stack.libraries,

@@ -11,9 +11,8 @@ use std::rc::Rc;
 #[test]
 fn completion_insertion_never_invents_or_overwrites_selection_policy() {
     let libraries = core_libraries();
-    let root = crate::test_root();
     let doc = Document::default();
-    let pending = crate::selection::pending_with_query(&root, vec![], "original query");
+    let pending = crate::selection::pending_with_query(vec![], "original query");
     let old_payload = pending.payload();
     for continuation in [
         None,
@@ -65,13 +64,11 @@ fn completion_insertion_never_invents_or_overwrites_selection_policy() {
 #[test]
 fn label_offer_explicitly_opens_its_missing_value() {
     let libraries = core_libraries();
-    let root = crate::test_root();
     let doc = Document {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
     let pending = pending_edge(
-        &root,
         &crate::editing::Read {
             sources: src(&doc, &libraries),
         },
@@ -182,23 +179,20 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
 #[test]
 fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
     let stack = crate::stack::load();
-    let root = crate::test_root();
     let field = new_cell_id();
     let doc = Document {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let pending =
-        crate::selection::pending_value(&root, crate::occurrence::of(&[Step::Key(field)]));
+    let pending = crate::selection::pending_value(crate::occurrence::of(&[Step::Key(field)]));
     let offer = root_completions(&stack)
         .into_iter()
         .find(|offer| offer.display == crate::libraries::grap::vocabulary::GRAP.into())
         .unwrap();
     let mut world = crate::test_editor(doc.clone());
-    world.model.selection = Some(crate::selection::pending_value(
-        &root,
-        crate::occurrence::of(&[Step::Key(field)]),
-    ));
+    world.model.selection = Some(crate::selection::pending_value(crate::occurrence::of(&[
+        Step::Key(field),
+    ])));
     (offer.activate)(&mut world.session());
     let inserted = world
         .model

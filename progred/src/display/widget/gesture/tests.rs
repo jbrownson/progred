@@ -51,8 +51,7 @@ fn state_drag_press_composes_selection_and_start_in_pointer_order() {
                     Rc::new(move |session| {
                         select_log.borrow_mut().push("select");
                         if accepts {
-                            crate::editing::Edit::new(session.reborrow())
-                                .select(&crate::test_root(), &[]);
+                            crate::editing::Edit::new(session.reborrow()).select(&[]);
                         }
                         accepts
                     }),
@@ -274,14 +273,14 @@ fn point_controls_clamp_unbounded_motion_and_coalesce_their_writes() {
     let mut model = model(f64::value(0.0));
     let original = model.model.doc.clone();
     let root = model.model.workspace.document_root().clone();
-    model.model.selection = Some(crate::selection::Selection::edge(&root, vec![]));
+    model.model.selection = Some(crate::selection::Selection::edge(vec![]));
     let mut gesture = point(
         Rect::new(10.0, 20.0, 110.0, 120.0),
         Rc::new(|event| PointUpdate {
             value: Value::list([f64::value(event.x), f64::value(event.y)]),
             selection: Some(crate::selection::payload::edge()),
         }),
-        crate::editing::Site::new(root.clone(), Rc::from([])).edit_run(),
+        crate::editing::Site::new(Rc::from([])).edit_run(),
     );
     assert!(gesture.advance(&mut model.session(), &[Point::new(30.0, 40.0)]));
     assert_eq!(

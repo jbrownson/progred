@@ -269,7 +269,7 @@ pub(crate) fn src<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a
 
 /// A selection of what's drawn at the document path `path`.
 pub(crate) fn make_selection(path: Path) -> Selection {
-    Selection::edge(&crate::test_root(), crate::occurrence::of(&path))
+    Selection::edge(crate::occurrence::of(&path))
 }
 
 /// The value `spine`'s Key and Element steps reach within `value`; a Follow
@@ -381,11 +381,9 @@ pub(crate) fn test_entry(
                 root: (kind == CompletionKind::Field).then(|| Value::record([])),
                 cells: Cells::new(),
             });
-            let root = world.model.workspace.document_root().clone();
             world.model.selection = Some(match kind {
-                CompletionKind::Value => crate::selection::pending_value(&root, vec![]),
+                CompletionKind::Value => crate::selection::pending_value(vec![]),
                 CompletionKind::Field => pending_edge(
-                    &root,
                     &crate::editing::Read {
                         sources: world.sources(),
                     },
@@ -429,7 +427,6 @@ pub(crate) fn activate_projected(
     let mut editor = crate::test_editor(doc.clone());
     editor.model.workspace.document.root = selection.root().clone();
     editor.model.selection = Some(Selection::from_payload(
-        selection.root(),
         &editor.sources(),
         selection.path().to_vec(),
         selection.payload(),

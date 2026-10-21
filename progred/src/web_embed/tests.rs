@@ -124,10 +124,9 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
     let list = editor.model.doc.root.as_ref().unwrap().as_list().unwrap();
     let positions: Vec<_> = list.keys().cloned().collect();
     let position = gid::position::between(positions.first(), positions.get(1)).unwrap();
-    editor.model.selection = Some(selection::Selection::edge(
-        &editor.model.workspace.document.root,
-        crate::occurrence::of(&[Step::Element(position.clone())]),
-    ));
+    editor.model.selection = Some(selection::Selection::edge(crate::occurrence::of(&[
+        Step::Element(position.clone()),
+    ])));
     let pending: serde_json::Value =
         serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();
     assert_eq!(pending["selection"]["stage"], "pending");
@@ -143,10 +142,7 @@ fn reports_pending_selection_and_committed_value_at_the_same_path() {
         committed["selection"]["value"],
         serde_json::to_value(crate::libraries::text::value("peaches")).unwrap()
     );
-    editor.model.selection = Some(selection::Selection::edge(
-        &editor.model.workspace.document.root,
-        vec![],
-    ));
+    editor.model.selection = Some(selection::Selection::edge(vec![]));
     let whole: serde_json::Value = serde_json::from_str(&changes.sample(&editor).unwrap()).unwrap();
     assert_eq!(whole["selection"]["path"], serde_json::json!({"list": []}));
     assert!(changes.sample(&editor).is_none());

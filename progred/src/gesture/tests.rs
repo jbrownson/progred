@@ -1,6 +1,5 @@
 use super::*;
 use crate::Editor;
-use crate::display::widget::view::Root;
 use crate::libraries::f64;
 use crate::occurrence::{Path, Step};
 use std::rc::Rc;
@@ -13,8 +12,8 @@ fn model(value: Value) -> Editor {
     crate::editor_of(value)
 }
 
-fn scrub(origin: Point, scale: f64, root: Root, path: Path, handler: ScrubHandler) -> Active {
-    let edit = Site::new(root, path.into()).edit_run();
+fn scrub(origin: Point, scale: f64, path: Path, handler: ScrubHandler) -> Active {
+    let edit = Site::new(path.into()).edit_run();
     crate::libraries::number::scrub::scrub(
         Drag::new(origin, scale, DRAG_THRESHOLD),
         handler(),
@@ -26,10 +25,9 @@ fn scrub(origin: Point, scale: f64, root: Root, path: Path, handler: ScrubHandle
 fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
     let mut world = model(f64::value(10.0));
     let original = world.model.doc.clone();
-    let root = world.model.workspace.document_root().clone();
     let other_path = vec![Step::Key(gid::new_cell_id())];
-    world.model.selection = Some(Selection::edge(&root, other_path.clone()));
-    let mut edit = Site::new(root, Rc::from([])).edit_run();
+    world.model.selection = Some(Selection::edge(other_path.clone()));
+    let mut edit = Site::new(Rc::from([])).edit_run();
     assert!(Rc::ptr_eq(&original, &world.model.doc));
     assert!(!edit.write(&mut world.session(), f64::value(10.0)));
     assert!(Rc::ptr_eq(&original, &world.model.doc));
@@ -47,11 +45,9 @@ fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
 #[test]
 fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
     let mut world = model(f64::value(1.0));
-    let root = world.model.workspace.document_root().clone();
     let marker = gid::new_cell_id();
     let payload = Value::record([(marker, Value::from(vec![7]))]);
     world.model.selection = Some(Selection::from_payload(
-        &root,
         &world.sources(),
         vec![],
         payload.clone(),
@@ -60,7 +56,6 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
         scrub(
             Point::ZERO,
             1.0,
-            root.clone(),
             vec![],
             Rc::new(|| {
                 Box::new(|_| ScrubUpdate {
@@ -88,7 +83,7 @@ fn finishing_a_scrub_preserves_other_payload_and_never_retargets_selection() {
     let mut active = gesture();
     active.advance(&mut world.session(), &[Point::new(10.0, 0.0)]);
     let other = vec![Step::Key(gid::new_cell_id())];
-    world.model.selection = Some(Selection::edge(&root, other.clone()));
+    world.model.selection = Some(Selection::edge(other.clone()));
     active.finish(&mut world.session());
     assert_eq!(world.model.selection.as_ref().unwrap().path(), other);
 }
@@ -129,12 +124,10 @@ fn gesture_finalization_runs_before_replacement_and_history_restore() {
 fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
     let mut model = model(f64::value(10.0));
     let original = model.model.doc.clone();
-    let root = model.model.workspace.document_root().clone();
-    model.model.selection = Some(Selection::edge(&root, vec![]));
+    model.model.selection = Some(Selection::edge(vec![]));
     let mut gesture = scrub(
         Point::new(100.0, 200.0),
         2.0,
-        root.clone(),
         vec![],
         Rc::new(|| {
             let mut value = 10.0;
@@ -179,7 +172,6 @@ fn scrubbing_keeps_threshold_distance_precision_and_one_undo_run() {
 #[test]
 fn scrubbing_a_batch_preserves_the_precision_path_and_one_undo_step() {
     let mut model = model(f64::value(0.0));
-    let root = model.model.workspace.document_root().clone();
     let samples = [
         Point::new(10.0, 0.0),
         Point::new(10.0, 10.0),
@@ -190,7 +182,6 @@ fn scrubbing_a_batch_preserves_the_precision_path_and_one_undo_step() {
     let mut gesture = scrub(
         Point::ZERO,
         1.0,
-        root,
         vec![],
         Rc::new(move || {
             let log = log.clone();

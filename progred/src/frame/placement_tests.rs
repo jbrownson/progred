@@ -181,7 +181,7 @@ fn delimiter_interaction_is_opt_in_without_changing_ink_or_extent() {
 #[test]
 fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
     let owner = Root::document();
-    let other = Root::document();
+    let other = Root::pane(vec![gid::Step::Key(gid::new_cell_id())]);
     let measured = in_view(
         native_delimiter(true, 1.0, Extent::default(), puri::delim::Side::Open),
         owner.clone(),
@@ -231,10 +231,7 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
         );
         let mut world = crate::test_editor(gid::Document::default());
         if picking {
-            world.model.selection = Some(crate::selection::pending_value(
-                world.model.workspace.document_root(),
-                vec![],
-            ));
+            world.model.selection = Some(crate::selection::pending_value(vec![]));
         }
         let handled = placed.handler.as_ref().unwrap().dispatch_pointer_down_with(
             &mut world,

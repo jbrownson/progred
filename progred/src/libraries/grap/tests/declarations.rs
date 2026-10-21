@@ -354,7 +354,6 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
     );
     world.model.workspace.document.shown = crate::workspace::Shown::ALL;
     let pending = pending_edge(
-        &crate::test_root(),
         &crate::editing::Read {
             sources: src(&doc, &libraries),
         },
@@ -379,7 +378,7 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
         let sources = src(&doc, &libraries);
         let read = crate::editing::Read { sources };
         let list_path = crate::occurrence::of(&binder_path[..1]);
-        let pending = pending_into(&crate::test_root(), &read, &list_path, true).unwrap();
+        let pending = pending_into(&read, &list_path, true).unwrap();
         let missing_path = pending.path().to_vec();
         assert!(crate::occurrence::read(&sources, &missing_path).is_none());
         let mut world = crate::test_editor(doc.clone());
@@ -392,14 +391,10 @@ fn specialized_lists_keep_missing_entries_and_record_insertions_visible() {
         );
 
         // A new field in a compact lambda, match, or let must not disappear.
-        world.model.selection = pending_edge(&crate::test_root(), &read, Vec::new());
+        world.model.selection = pending_edge(&read, Vec::new());
         assert!(editing_frame(&mut world).completion.is_some());
         if binder_path.len() > 2 {
-            world.model.selection = pending_edge(
-                &crate::test_root(),
-                &read,
-                crate::occurrence::of(&binder_path[..2]),
-            );
+            world.model.selection = pending_edge(&read, crate::occurrence::of(&binder_path[..2]));
             assert!(editing_frame(&mut world).completion.is_some());
         }
     }
@@ -641,7 +636,6 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
         assert!(has_metadata(&editing_frame(&mut world)));
         world.model.workspace.document.shown = crate::workspace::Shown::ALL;
         world.model.selection = pending_edge(
-            &crate::test_root(),
             &crate::editing::Read {
                 sources: world.sources(),
             },
@@ -674,7 +668,6 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
     };
     let mut world = crate::test_editor(doc.clone());
     world.model.selection = pending_edge(
-        &crate::test_root(),
         &crate::editing::Read {
             sources: src(&doc, &libraries),
         },
@@ -706,10 +699,9 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
         )),
     };
     let mut world = crate::test_editor(doc.clone());
-    world.model.selection = Some(crate::selection::pending_value(
-        &crate::test_root(),
-        crate::occurrence::of(&[Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT)]),
-    ));
+    world.model.selection = Some(crate::selection::pending_value(crate::occurrence::of(&[
+        Step::Key(crate::libraries::grap::numbers::vocabulary::LEFT),
+    ])));
     let frame = editing_frame(&mut world);
     assert!(frame.completion.is_some());
     assert!(
@@ -742,7 +734,6 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
         };
         let mut world = crate::test_editor(doc.clone());
         world.model.selection = pending_edge(
-            &crate::test_root(),
             &crate::editing::Read {
                 sources: src(&doc, &libraries),
             },

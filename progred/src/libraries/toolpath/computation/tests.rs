@@ -4,14 +4,13 @@ use crate::libraries::{f64, grap::control};
 use cam::paths::{Cursor, InvalidPath};
 
 /// The pane's occurrence at `path`, where the tree program's work is kept.
-fn site(root: &crate::display::widget::view::Root, path: &[gid::Step]) -> crate::editing::Site {
-    crate::editing::Site::new(root.clone(), crate::occurrence::of(path).into())
+fn site(path: &[gid::Step]) -> crate::editing::Site {
+    crate::editing::Site::new(crate::occurrence::of(path).into())
 }
 
 struct ViewportEnv<'a> {
     sources: crate::sources::Sources<'a>,
     computations: &'a Computations,
-    root: &'a crate::display::widget::view::Root,
 }
 
 impl crate::display::Env for ViewportEnv<'_> {
@@ -58,7 +57,7 @@ impl crate::display::Env for ViewportEnv<'_> {
         fuel: usize,
     ) -> RuntimeValue {
         self.computations
-            .apply_runtime(self.root, &[], function, arguments, fuel)
+            .apply_runtime(&[], function, arguments, fuel)
     }
 }
 
@@ -71,7 +70,6 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
         crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let libraries = crate::stack::load().libraries;
     let computations = Computations::default();
-    let root = crate::display::widget::view::Root::document();
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let program = computations.runtime.input(RuntimeValue::record([]));
     let paths = recording(
@@ -88,7 +86,6 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
         let env = ViewportEnv {
             sources,
             computations: &computations,
-            root: &root,
         };
         let output = presentation::tests::viewport_output(
             sources.resolve_path(&pane.path).unwrap(),
@@ -110,17 +107,12 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
             .get(&presentation::vocabulary::VALUE)
             .unwrap()
             .clone();
-        crate::libraries::tree::prepared(
-            &computations,
-            &site(&root, &pane.path),
-            program.into(),
-            300_000,
-        )
-        .as_ref()
-        .as_ref()
-        .unwrap()
-        .items
-        .clone()
+        crate::libraries::tree::prepared(&computations, &site(&pane.path), program.into(), 300_000)
+            .as_ref()
+            .as_ref()
+            .unwrap()
+            .items
+            .clone()
     };
     let tree = prepare(&doc, 400.0, 750.0);
     program.set_by(tree.clone(), RuntimeValue::same_result);
@@ -172,7 +164,6 @@ fn profile_program_tree_construction() {
     let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
     let declaration = sources.resolve_path(&pane.path).unwrap();
     let computations = crate::computations::Computations::from_sources(sources);
-    let root = crate::display::widget::view::Root::document();
     let samples: Vec<_> = (0..5)
         .map(|trial| {
             let start = Instant::now();
@@ -197,7 +188,7 @@ fn profile_program_tree_construction() {
             let start = Instant::now();
             let memoized = crate::libraries::tree::prepared(
                 &computations,
-                &site(&root, &pane.path),
+                &site(&pane.path),
                 Value::from(names["program_tree"]).into(),
                 300_000,
             );

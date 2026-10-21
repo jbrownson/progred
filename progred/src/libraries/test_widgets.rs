@@ -24,7 +24,7 @@ pub fn activate_completion(offer: &crate::display::Completion) -> Editor {
 /// An empty document's editor, its missing root a pending hole.
 fn pending_root() -> Editor {
     let mut world = crate::test_editor(gid::Document::default());
-    world.model.selection = Some(crate::selection::pending_value(&crate::test_root(), vec![]));
+    world.model.selection = Some(crate::selection::pending_value(vec![]));
     world
 }
 
@@ -69,10 +69,7 @@ pub fn point_update(
     )
     .expect("a point-control wrapper");
     let mut world = crate::test_editor(gid::Document::default());
-    world.model.selection = Some(crate::selection::Selection::edge(
-        &crate::test_root(),
-        vec![],
-    ));
+    world.model.selection = Some(crate::selection::Selection::edge(vec![]));
     assert!(output.handler.unwrap().dispatch_pointer_down(
         &mut world,
         &primary_press(Point::new(50.0, 50.0), Modifiers::empty())
@@ -164,7 +161,7 @@ pub fn hover(path: Vec<gid::Step>) -> Hovered {
 /// A projection test's occurrence: the root of the test view, so a site
 /// below it hovers and selects the steps it's given.
 pub fn test_site() -> crate::editing::Site {
-    crate::editing::Site::new(crate::test_root(), std::rc::Rc::from([]))
+    crate::editing::Site::new(std::rc::Rc::from([]))
 }
 
 /// `value` projected writably at scale 1 through `env`, with no default

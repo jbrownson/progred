@@ -80,14 +80,13 @@ pub(crate) fn initial_navigation(
     landmarks: &[Landmark<crate::Editor>],
 ) -> Option<puri::handler::Handler<crate::Editor, crate::frame::DispatchContext<crate::Editor>>> {
     let target = root_target(landmarks, root)?;
-    let root = root.clone();
     let path = target.path.clone();
     Some(puri::handler::Handler::from_function(
         move |editor: &mut crate::Editor, event, _| {
             if matches!(event, puri::handler::Event::Navigate(_))
                 && editor.model.selection.is_none()
             {
-                crate::editing::Edit::new(editor.session()).select(&root, &path);
+                crate::editing::Edit::new(editor.session()).select(&path);
                 puri::handler::EventOutcome::accept()
             } else {
                 puri::handler::EventOutcome::decline(event)

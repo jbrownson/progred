@@ -330,9 +330,6 @@ impl crate::display::Toolkit for NoSite<'_> {
     fn path(&self) -> &[crate::occurrence::Step] {
         self.0.path()
     }
-    fn view(&self) -> &widget::view::Root {
-        self.0.view()
-    }
     fn site(&self) -> crate::editing::Site {
         panic!("unexpected request for the occurrence's site")
     }
@@ -458,14 +455,12 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
     ) -> R,
 ) -> R {
     let mut fonts = Fonts::new();
-    let root = crate::test_root();
     let annotations = crate::annotations::Annotations::default();
     let styles = widget::style::editor(widget::style::Theme::Light.palette(), 1.0);
     let computations = crate::computations::Computations::from_sources(sources);
     let cx = crate::projection::Cx {
         focused: true,
         computations: &computations,
-        view: &root,
         completions: None,
         sources,
         names: true,

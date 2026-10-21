@@ -743,7 +743,6 @@ fn project_workspace_view(
         projection::ProjectDescription {
             computations,
             focused,
-            view: &view.root,
             completions: Some(&completions),
             sources,
             root: shown.root.as_deref(),

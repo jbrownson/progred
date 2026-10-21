@@ -57,9 +57,12 @@ root and the document's own definitions are writable, including a cell with no
 definition yet; a library's definitions are read-only. A route through a cell
 and a location starting at that cell are the same location.
 
-Selection also names its owning workspace view. Two panes can show the same
-stored path while keeping separate focus, scroll, and folds. A workspace
-`Root` supplies this session identity; it is not a GID cell.
+A selection's path also names the workspace view it's in: a pane's paths
+start with its declaration and a jump ([panes](#panes)), and every other
+path is the document view's. So two panes showing the same stored data keep
+separate focus, scroll, and folds, and a view is what it targets, the
+document or a pane's declaration, which a workspace `Root` names; it is not a
+GID cell.
 
 [`SourceTrace`](../progred/src/display/widget/source.rs) serves source-linked
 widgets, drawing, and highlighting. It is a location in the form it is stored
@@ -608,12 +611,12 @@ too; optimization level is not a distribution feature flag.
 
 [`History`](../progred/src/history.rs) is a generic pair of snapshot stacks;
 recording a new branch clears redo. The editor's snapshot contains its shared
-document, view-qualified selection, and per-view folds. Collapse and expand
-record steps without editing the document. Undo restores fold overrides and
-their view identities, including when a deleted pane returns; it leaves current
+document, the selection's path, and per-view folds. Collapse and expand
+record steps without editing the document. Undo restores fold overrides to
+their views, including when a deleted pane returns; it leaves current
 scroll positions, shown libraries, and unrelated annotations alone in surviving
-views. Selection paths include the owning view rather than borrowing whichever
-pane happens to be selected when Undo is invoked.
+views. The selection's path names its view, so Undo restores it there rather
+than in whichever pane happens to be selected when Undo is invoked.
 
 The editor holds its current and saved documents as `Rc<Document>`. Dirty state
 is pointer inequality, constant-time at any document size. Successful writes use

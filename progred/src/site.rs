@@ -115,11 +115,11 @@ const EVENT_FUNCTIONS: [gid::CellId; 5] = [
 /// committing any pending annotation or selection change.
 pub(crate) fn apply_scoped_event(
     session: &mut crate::editing::Session<'_>,
-    root: Root,
     path: Path,
     function: grap::RuntimeValue,
     event: Value,
 ) -> bool {
+    let root = crate::workspace::view_of(&path);
     let current = session
         .model
         .selection
@@ -181,7 +181,7 @@ pub(crate) fn install_scoped(
                 let recorded = selection.as_ref().is_some_and(|selection| {
                     selection.root() == root && selection.path() == path && selection.recorded()
                 });
-                let mut next = Selection::from_payload(root, sources, path, payload);
+                let mut next = Selection::from_payload(sources, path, payload);
                 next.set_recorded(recorded);
                 *selection = Some(next);
             }

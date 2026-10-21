@@ -53,11 +53,24 @@ fn a_library_toggles_whichever_way_the_area_lists_its_libraries() {
 }
 
 #[test]
-fn roots_are_view_identity_not_cell_identity() {
-    let left = Root::pane(Vec::new());
-    let other = Root::pane(Vec::new());
-    assert_ne!(left, other);
-    assert_eq!(left, left.clone());
+fn a_path_names_the_view_it_is_drawn_in() {
+    let (_, declaration) = append(&Value::record([]), Side::Left, Value::list([])).unwrap();
+    let pane = crate::test_examples::pane_root(&declaration);
+    // A pane's paths start with its declaration and a jump.
+    assert_eq!(view_of(&pane), Root::pane(declaration.clone()));
+    assert_eq!(
+        view_of(&crate::occurrence::below(
+            &pane,
+            &[Step::Key(gid::new_cell_id())]
+        )),
+        Root::pane(declaration.clone())
+    );
+    // The declaration drawn as data is the document view's, as is the root.
+    assert_eq!(
+        view_of(&crate::occurrence::of(&declaration)),
+        Root::document()
+    );
+    assert_eq!(view_of(&[]), Root::document());
 }
 
 #[test]
@@ -423,14 +436,11 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
         cells,
     });
     let first = cell_positions(&world, cell)[0].clone();
-    world.model.selection = Some(crate::selection::Selection::edge(
-        &crate::test_root(),
-        crate::occurrence::of(&[
-            Step::Key(label),
-            Step::Follow(gid::Resolution::Document),
-            Step::Element(first.clone()),
-        ]),
-    ));
+    world.model.selection = Some(crate::selection::Selection::edge(crate::occurrence::of(&[
+        Step::Key(label),
+        Step::Follow(gid::Resolution::Document),
+        Step::Element(first.clone()),
+    ])));
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver
         .runner

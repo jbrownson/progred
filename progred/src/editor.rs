@@ -580,7 +580,7 @@ impl Editor {
             root.target(),
             view.shown.shows(crate::libraries::editor::ID),
         );
-        self.model.selection = Some(selection::Selection::edge(root, path));
+        self.model.selection = Some(selection::Selection::edge(path));
     }
 
     /// Opens what `entry` gives as the last pane on `side` and selects what
@@ -682,7 +682,7 @@ impl Editor {
             let mut shown = workspace::root_path(&self.sources(), next_root.target(), interpreted);
             shown.extend(below);
             if let Some(selection) = self.model.selection.as_mut() {
-                selection.relocate(next_root, shown);
+                selection.relocate(shown);
             }
             self.model
                 .workspace

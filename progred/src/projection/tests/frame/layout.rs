@@ -398,7 +398,7 @@ fn decorative_and_pending_slots_share_the_active_query_frame() {
         root: Some(Value::record([])),
         cells: Cells::new(),
     };
-    let selected = pending_value(&crate::test_root(), Vec::new());
+    let selected = pending_value(Vec::new());
     for (scale, size) in [(1.0, 14.0), (1.0, 22.0), (2.0, 14.0), (2.0, 22.0)] {
         context.styles = crate::display::widget::style::editor(
             crate::display::widget::style::Theme::Light.palette(),
@@ -453,10 +453,7 @@ fn cell_parentheses_leave_a_gap_beside_empty_frames() {
         root: Some(Value::from(new_cell_id())),
         cells: Cells::new(),
     };
-    let selected = pending_value(
-        &crate::test_root(),
-        vec![Step::Follow(gid::Resolution::Document)],
-    );
+    let selected = pending_value(vec![Step::Follow(gid::Resolution::Document)]);
     let mut context = BenchContext::new();
     for scale in [1.0, 2.0] {
         context.styles = crate::display::widget::style::editor(
@@ -531,7 +528,7 @@ fn secondary_marks_only_the_same_definition_in_other_occurrences() {
         gid::Resolution::Document,
         gid::Resolution::Library(name::ID),
     ] {
-        let selected = Selection::edge(&crate::test_root(), path(0, source));
+        let selected = Selection::edge(path(0, source));
         let (bench, _) = place(&doc, Some(&selected), 900.0);
         let target = bench
             .landmarks
@@ -591,7 +588,7 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         ]
     });
     let mut context = BenchContext::new();
-    let selected = Selection::edge(&crate::test_root(), paths[0].clone());
+    let selected = Selection::edge(paths[0].clone());
     let blue = |alpha| {
         Brush::from(
             crate::display::widget::style::Theme::Light
@@ -1207,11 +1204,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         &insertion_between(&paths[1], &paths[2])
     ));
     let pending = world.model.selection.as_ref().unwrap().path().to_vec();
-    world.model.selection = Some(crate::selection::pending_with_query(
-        &crate::test_root(),
-        pending.clone(),
-        "x",
-    ));
+    world.model.selection = Some(crate::selection::pending_with_query(pending.clone(), "x"));
     for (left, right) in [(&paths[1], &pending), (&pending, &paths[2])] {
         let frame = editing_frame(&mut world);
         let point = between(&frame, left, right);

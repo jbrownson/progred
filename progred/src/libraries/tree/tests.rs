@@ -11,9 +11,10 @@ const C: CellId = CellId::from_u128(3);
 
 mod runtime;
 
-/// The occurrence at the top of `root`, where these tests keep their work.
-fn site(root: &crate::display::widget::view::Root) -> crate::editing::Site {
-    crate::editing::Site::new(root.clone(), Rc::from([]))
+/// The occurrence at the top of the document view, where these tests keep
+/// their work.
+fn site() -> crate::editing::Site {
+    crate::editing::Site::new(Rc::from([]))
 }
 
 fn group(children: Value) -> Value {
@@ -271,10 +272,9 @@ fn memo_tracks_definition_reads_absents_and_unrelated_edits() {
     let mut doc = document(group(Value::list([leaf(B.into())])));
     let libraries = crate::stack::load().libraries;
     let computations = crate::computations::Computations::default();
-    let root = crate::display::widget::view::Root::document();
     let demand = |doc: &gid::Document| {
         computations.begin(Rc::new(doc.clone()), libraries.clone());
-        prepared(&computations, &site(&root), Value::from(A).into(), 1000)
+        prepared(&computations, &site(), Value::from(A).into(), 1000)
     };
     let missing = demand(&doc);
     assert!(missing.is_err());
@@ -364,11 +364,10 @@ fn untracked_builders_and_halted_runs_are_not_memoized() {
                 doc: &doc,
                 libraries: &libraries,
             });
-        let root = crate::display::widget::view::Root::document();
-        let first = prepared(&computations, &site(&root), Value::from(A).into(), 100);
+        let first = prepared(&computations, &site(), Value::from(A).into(), 100);
         let before = runs.get();
         assert!(before > 0);
-        let second = prepared(&computations, &site(&root), Value::from(A).into(), 100);
+        let second = prepared(&computations, &site(), Value::from(A).into(), 100);
         assert!(runs.get() > before);
         assert_eq!(first.is_err(), tracked);
         assert_eq!(second.is_err(), tracked);

@@ -148,7 +148,6 @@ impl Picking<'_, '_> {
         {
             Some(current) => {
                 model.selection = Some(selection::Selection::from_payload(
-                    current.root(),
                     &sources,
                     current.path().to_vec(),
                     payload,

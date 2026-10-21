@@ -1,7 +1,7 @@
 //! The editor owns memo roots; libraries compose typed computations in them.
 
 use crate::occurrence::Step;
-use crate::{display::widget::view::Root, library::Libraries, sources::Sources};
+use crate::{library::Libraries, sources::Sources};
 use gid::{Document, Value};
 use grap::Host;
 use incremental::background::{Executor, Tasks};
@@ -26,7 +26,9 @@ pub(crate) struct Computations {
     pub frame_time: Cell<Instant>,
     snapshot: Input<Snapshot>,
     pub definitions: memo::Definitions<Snapshot>,
-    roots: Roots<(Root, Vec<Step>)>,
+    /// Each occurrence's computations, by its path, which also names its
+    /// view.
+    roots: Roots<Vec<Step>>,
 }
 
 impl Default for Computations {
@@ -99,20 +101,18 @@ impl Computations {
         self.roots.begin();
     }
 
-    pub fn at<T: 'static>(&self, view: &Root, path: &[Step], create: impl FnOnce() -> T) -> Rc<T> {
-        self.roots.get((view.clone(), path.to_vec()), create)
+    pub fn at<T: 'static>(&self, path: &[Step], create: impl FnOnce() -> T) -> Rc<T> {
+        self.roots.get(path.to_vec(), create)
     }
 
     pub fn evaluate_runtime(
         &self,
-        view: &Root,
         path: &[Step],
         expression: &grap::RuntimeValue,
         fuel: usize,
         origin: Option<grap::SourceOrigin>,
     ) -> grap::RuntimeValue {
         self.memoized(
-            view,
             path,
             (expression.clone(), origin, fuel),
             |a, b| a.0.same_result(&b.0) && a.1 == b.1 && a.2 == b.2,
@@ -124,14 +124,12 @@ impl Computations {
 
     pub fn apply_runtime(
         &self,
-        view: &Root,
         path: &[Step],
         function: &Value,
         arguments: &[(gid::CellId, Value)],
         fuel: usize,
     ) -> grap::RuntimeValue {
         self.memoized(
-            view,
             path,
             (function.clone(), arguments.to_vec(), fuel),
             PartialEq::eq,
@@ -147,13 +145,12 @@ impl Computations {
         )
     }
 
-    /// `run` over `input`, kept for the occurrence at `path` in `view`: it
+    /// `run` over `input`, kept for the occurrence at `path`: it
     /// runs again only when the input changes, as `same` compares it, or a
     /// definition it resolved does. `run` is a plain function, since the
     /// occurrence's memo keeps the first call's.
     fn memoized<I: Clone + 'static>(
         &self,
-        view: &Root,
         path: &[Step],
         input: I,
         same: fn(&I, &I) -> bool,
@@ -163,7 +160,7 @@ impl Computations {
             input: Input<I>,
             result: incremental::Memo<grap::Evaluation>,
         }
-        let memoized = self.at(view, path, || {
+        let memoized = self.at(path, || {
             let input = self.runtime.input(input.clone());
             let result = self.runtime.memo_by(
                 {

@@ -3,7 +3,6 @@
 //! the text tools a line editor needs. Nothing reachable from it leads to the
 //! window or the menus; the shell shows what changed once dispatch returns.
 
-use crate::display::widget::view::Root;
 use crate::gesture::Active;
 use crate::library::Libraries;
 use crate::model::Model;
@@ -83,18 +82,16 @@ impl Session<'_> {
         }
     }
 
-    /// Opens or closes the fold at `path` in `root`'s view, toggling it
-    /// without `closed`. Fold state belongs to an occurrence: projection
+    /// Opens or closes the fold at `path`, toggling it without `closed`. Fold state belongs to an occurrence: projection
     /// supplies its default, and no document lookup or writable source is
     /// needed to change it. A change ends any drag.
     pub(crate) fn set_folded(
         &mut self,
-        root: &Root,
         path: &[Step],
         default: bool,
         closed: Option<bool>,
     ) -> bool {
-        let changed = self.model.set_folded(root, path, default, closed);
+        let changed = self.model.set_folded(path, default, closed);
         if changed {
             self.finish_gesture();
         }

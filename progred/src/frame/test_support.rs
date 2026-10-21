@@ -40,7 +40,6 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
         projection::ProjectDescription {
             focused: world.focused,
             computations: &world.computations,
-            view: &view.root,
             completions: Some(&completions),
             sources,
             root: shown.root.as_deref(),

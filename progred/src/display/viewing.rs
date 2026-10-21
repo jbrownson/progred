@@ -4,7 +4,6 @@
 //! the sources in full, through [`Toolkit`].
 
 use crate::display::widget::source::SourceTrace;
-use crate::display::widget::view::Root;
 use crate::editing::Site;
 use crate::location::Location;
 use crate::selection::Selection;
@@ -36,10 +35,8 @@ pub trait Viewing {
 /// What the toolkit's own widgets read besides: the theme, the occurrence's
 /// place in its view, and the selection and sources in full.
 pub(crate) trait Toolkit: Viewing {
-    /// This occurrence's path in its view.
+    /// This occurrence's path, which names its view too.
     fn path(&self) -> &[crate::occurrence::Step];
-    /// The view this occurrence is drawn in.
-    fn view(&self) -> &Root;
     /// This occurrence, as a place to act.
     fn site(&self) -> Site;
     /// The theme, at the view's scale.

@@ -38,10 +38,7 @@ fn runner() -> EditorRunner {
 
 /// The interaction of the occurrence at `path` in the document's view.
 fn at(runner: &EditorRunner, path: Vec<Step>) -> Rc<Interaction> {
-    let site = crate::editing::Site::new(
-        runner.editor.model.workspace.document_root().clone(),
-        crate::occurrence::of(&path).into(),
-    );
+    let site = crate::editing::Site::new(crate::occurrence::of(&path).into());
     Interaction::at(&runner.editor.computations, &site)
 }
 

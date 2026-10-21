@@ -232,6 +232,27 @@ pub fn root_path(
     path
 }
 
+/// The view `path` is drawn in. A pane's paths start with its declaration
+/// and the jump to what it shows ([`root_path`]); every other path is the
+/// document view's.
+pub fn view_of(path: &[occurrence::Step]) -> Root {
+    use occurrence::Step::{Element, Jump, Key};
+    match path {
+        [
+            Key(vocabulary::PANES),
+            Key(column),
+            Element(position),
+            Jump(_),
+            ..,
+        ] if [vocabulary::LEFT, vocabulary::RIGHT].contains(column) => Root::pane(vec![
+            Step::Key(vocabulary::PANES),
+            Step::Key(*column),
+            Step::Element(position.clone()),
+        ]),
+        _ => Root::document(),
+    }
+}
+
 /// Read pane declarations only from the document root. No recursive
 /// search means an identical record deeper in user data stays data.
 pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
@@ -475,12 +496,7 @@ impl Workspace {
 
     pub(crate) fn restore_folds(&mut self, saved: Folds) {
         for view in self.views_mut() {
-            if let Some((root, annotations)) = saved
-                .0
-                .iter()
-                .find(|(root, _)| root.target() == view.root.target())
-            {
-                view.root = root.clone();
+            if let Some((_, annotations)) = saved.0.iter().find(|(root, _)| *root == view.root) {
                 view.annotations
                     .restore_field(crate::annotations::FOLD, annotations);
             }
@@ -498,6 +514,15 @@ impl Workspace {
 
     pub fn view_mut(&mut self, root: &Root) -> Option<&mut View> {
         self.views_mut().find(|view| view.root == *root)
+    }
+
+    /// The view `path` is drawn in.
+    pub fn view_at(&self, path: &[occurrence::Step]) -> Option<&View> {
+        self.view(&view_of(path))
+    }
+
+    pub fn view_at_mut(&mut self, path: &[occurrence::Step]) -> Option<&mut View> {
+        self.view_mut(&view_of(path))
     }
 
     pub fn selected_or_document(&self, selected: Option<&Root>) -> &View {

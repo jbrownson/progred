@@ -397,7 +397,7 @@ fn hover_notifications_include_view_ownership_and_are_reset_with_the_document() 
     });
     runner.frame.hover = Some(Hovered::Blocked);
     let first = Root::document();
-    let second = Root::document();
+    let second = Root::pane(vec![Step::Key(gid::new_cell_id())]);
     runner.frame.dispatch.pointer_root = Some(first.clone());
     runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
     runner.notify_hover_changed(1.0, HOVER_VIEWPORT);
@@ -524,7 +524,7 @@ fn keyboard_reveal_shows_the_whole_partly_visible_destination() {
         .rect;
     let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     runner.editor.model.workspace.document.scroll.y = target.rect.center().y - region.y1;
-    crate::editing::Edit::new(runner.editor.session()).select(&root, previous);
+    crate::editing::Edit::new(runner.editor.session()).select(previous);
     runner.refresh_frame(1.0, viewport);
     let target = runner.frame.dispatch.landmarks.landmark(path).unwrap();
     assert!(target.rect.y0 < region.y1 && target.rect.y1 > region.y1);
@@ -554,10 +554,7 @@ fn refreshes_and_unrelated_inputs_do_not_reveal_an_existing_selection() {
         .unwrap()
         .path
         .to_vec();
-    runner.editor.model.selection = Some(crate::selection::Selection::edge(
-        runner.editor.model.workspace.document_root(),
-        path,
-    ));
+    runner.editor.model.selection = Some(crate::selection::Selection::edge(path));
 
     runner.refresh_frame(1.0, viewport);
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
@@ -581,17 +578,13 @@ fn selection_changes_do_not_implicitly_request_reveal() {
         .path
         .to_vec();
     runner.update_frame(1.0, viewport, |editor, _, _| {
-        let root = editor.model.workspace.document_root().clone();
-        crate::editing::Edit::new(editor.session()).select(&root, &path);
+        crate::editing::Edit::new(editor.session()).select(&path);
         true
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
 
     runner.update_frame(1.0, viewport, |editor, _, _| {
-        editor.model.selection = Some(crate::selection::pending_value(
-            editor.model.workspace.document_root(),
-            path,
-        ));
+        editor.model.selection = Some(crate::selection::pending_value(path));
         true
     });
     assert_eq!(runner.editor.model.workspace.document.scroll, Vec2::ZERO);
@@ -606,7 +599,7 @@ fn select_offscreen(runner: &mut EditorRunner, viewport: Size) -> crate::occurre
         .find(|target| target.rect.y0 > viewport.height)
         .unwrap();
     let path = target.path.to_vec();
-    crate::editing::Edit::new(runner.editor.session()).select(target.root.as_ref().unwrap(), &path);
+    crate::editing::Edit::new(runner.editor.session()).select(&path);
     path
 }
 
@@ -620,10 +613,7 @@ fn keyboard_navigation_deletion_and_pending_cancellation_explicitly_reveal() {
         runner.refresh_frame(1.0, viewport);
         let path = select_offscreen(&mut runner, viewport);
         if key == NamedKey::Backspace {
-            runner.editor.model.selection = Some(crate::selection::pending_value(
-                runner.editor.model.workspace.document_root(),
-                path.clone(),
-            ));
+            runner.editor.model.selection = Some(crate::selection::pending_value(path.clone()));
         }
         // Include the selected widget's installed delete handler, not only
         // the shell's structural fallback.
@@ -822,10 +812,9 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
     assert!(!runner.frame.dispatch.landmarks.landmark(&path).is_some());
     runner.update_frame(1.0, viewport, |editor, dispatch, _| {
         Rc::make_mut(&mut editor.model.doc).root = Some(content);
-        editor.model.selection = Some(crate::selection::Selection::edge(
-            editor.model.workspace.document_root(),
-            crate::occurrence::of(&path),
-        ));
+        editor.model.selection = Some(crate::selection::Selection::edge(crate::occurrence::of(
+            &path,
+        )));
         dispatch.geometry(1.0).reveal_selection(&mut editor.model);
         true
     });

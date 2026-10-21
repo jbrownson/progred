@@ -335,10 +335,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     };
     let cold = glyphs(None, Annotations::default());
     let selected = glyphs(
-        Some(crate::selection::Selection::edge(
-            &crate::test_root(),
-            Vec::new(),
-        )),
+        Some(crate::selection::Selection::edge(Vec::new())),
         Annotations::default(),
     );
     let mut marked = Annotations::default();

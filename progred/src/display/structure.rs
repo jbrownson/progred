@@ -293,7 +293,6 @@ pub fn authoring<W: Host>(child: Layout<W>) -> Layout<W> {
     super::widget::around(
         child,
         Rc::new(|context| {
-            let root = context.toolkit.view().clone();
             let path = context.path().to_vec();
             let scale = context.toolkit.styles().scale;
             Box::new(move |child| {
@@ -304,7 +303,6 @@ pub fn authoring<W: Host>(child: Layout<W>) -> Layout<W> {
                             && event.key == Key::Named(NamedKey::Enter)
                             && crate::editing::author_in(
                                 &mut world.session(),
-                                &root,
                                 &path,
                                 command,
                                 input.geometry(scale),

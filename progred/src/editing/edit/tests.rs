@@ -11,22 +11,21 @@ fn jump(source: &[gid::Step]) -> Path {
 
 impl Edit<'_> {
     /// Runs the Grap handler `function` evaluates to at `path`.
-    fn grap(&mut self, root: Root, path: Path, function: Value, event: Value) -> bool {
+    fn grap(&mut self, path: Path, function: Value, event: Value) -> bool {
         let function =
             grap::evaluate(&function, &self.session.sources(), grap::DEFAULT_FUEL).result;
-        self.grap_runtime(root, path, function, event)
+        self.grap_runtime(path, function, event)
     }
 }
 
 /// An editor whose root holds `value` in a field, the document path to it,
 /// and an occurrence that jumps there.
-fn fixture(value: Value) -> (crate::Editor, Root, gid::Path, Path) {
+fn fixture(value: Value) -> (crate::Editor, gid::Path, Path) {
     let field = new_cell_id();
     let source = vec![gid::Step::Key(field)];
     let editor = crate::editor_of(Value::record([(field, value)]));
-    let root = editor.model.workspace.document_root().clone();
     let occurrence = jump(&source);
-    (editor, root, source, occurrence)
+    (editor, source, occurrence)
 }
 
 /// The value at `path`, as the occurrence there reads it.
@@ -49,13 +48,13 @@ fn line(spelling: &str) -> crate::display::LineEdit {
 
 #[test]
 fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence() {
-    let (mut editor, root, source, first) = fixture(text::value("before"));
+    let (mut editor, source, first) = fixture(text::value("before"));
     let second = jump(&source);
     let annotation = text::value("local state");
-    Edit::new(editor.session()).annotate(&root, &first, annotation.clone());
-    Edit::new(editor.session()).select(&root, &second);
+    Edit::new(editor.session()).annotate(&first, annotation.clone());
+    Edit::new(editor.session()).select(&second);
     assert!(
-        Edit::new(editor.session()).edit_line(&root, &second, &line("before"), &|edit| {
+        Edit::new(editor.session()).edit_line(&second, &line("before"), &|edit| {
             edit.state.set_text("after");
             true
         })
@@ -63,7 +62,7 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
     assert_eq!(read(&editor, &first), Some(&text::value("after")));
     assert_eq!(read(&editor, &second), Some(&text::value("after")));
     assert_eq!(editor.model.selection.as_ref().unwrap().path(), second);
-    let annotations = &editor.model.workspace.view(&root).unwrap().annotations;
+    let annotations = &editor.model.workspace.view_at(&first).unwrap().annotations;
     assert_eq!(annotations.at(&first), Some(&annotation));
     assert_eq!(annotations.at(&second), None);
     assert_eq!(annotations.at(&crate::occurrence::of(&source)), None);
@@ -73,7 +72,7 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
     assert_eq!(selected.path(), second);
     assert_eq!(selected.location(), Some(Location::root(source.as_slice())));
     assert!(
-        Edit::new(editor.session()).edit_line(&root, &second, &line("before"), &|edit| {
+        Edit::new(editor.session()).edit_line(&second, &line("before"), &|edit| {
             edit.state.set_text("after undo");
             true
         })
@@ -86,8 +85,8 @@ fn shared_source_edits_keep_selection_and_annotations_on_the_chosen_occurrence()
 
 #[test]
 fn structural_paste_delete_and_undo_keep_the_occurrence() {
-    let (mut editor, root, source, occurrence) = fixture(text::value("old"));
-    Edit::new(editor.session()).select(&root, &occurrence);
+    let (mut editor, source, occurrence) = fixture(text::value("old"));
+    Edit::new(editor.session()).select(&occurrence);
     assert!(editor.paste_value(text::value("pasted")));
     assert_eq!(
         editor.sources().resolve_path(&source),
@@ -113,10 +112,10 @@ fn structural_paste_delete_and_undo_keep_the_occurrence() {
 
 #[test]
 fn a_missing_child_under_a_jump_uses_the_ordinary_completion_and_continuation() {
-    let (mut editor, root, source, mut occurrence) = fixture(Value::record([]));
+    let (mut editor, source, mut occurrence) = fixture(Value::record([]));
     let field = new_cell_id();
     occurrence.push(Step::Key(field));
-    Edit::new(editor.session()).select(&root, &occurrence);
+    Edit::new(editor.session()).select(&occurrence);
     assert_eq!(
         editor
             .model
@@ -149,7 +148,7 @@ fn a_missing_child_under_a_jump_uses_the_ordinary_completion_and_continuation() 
 
 #[test]
 fn a_grap_handler_acts_at_its_occurrence_without_an_opaque_value() {
-    let (mut editor, root, source, occurrence) = fixture(text::value("data"));
+    let (mut editor, source, occurrence) = fixture(text::value("data"));
     let annotation = text::value("grap state");
     let handler = grap::lambda(
         [],
@@ -176,12 +175,7 @@ fn a_grap_handler_acts_at_its_occurrence_without_an_opaque_value() {
             )],
         ),
     );
-    assert!(Edit::new(editor.session()).grap(
-        root.clone(),
-        occurrence.clone(),
-        handler,
-        Value::record([])
-    ));
+    assert!(Edit::new(editor.session()).grap(occurrence.clone(), handler, Value::record([])));
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(selected.path(), occurrence);
     assert_eq!(selected.location(), Some(Location::root(source.as_slice())));
@@ -189,7 +183,7 @@ fn a_grap_handler_acts_at_its_occurrence_without_an_opaque_value() {
         editor
             .model
             .workspace
-            .view(&root)
+            .view_at(&occurrence)
             .unwrap()
             .annotations
             .at(&occurrence),
@@ -208,30 +202,22 @@ fn a_grap_handler_acts_at_its_occurrence_without_an_opaque_value() {
 
 #[test]
 fn folds_are_occurrence_local_and_undoable_without_dirtying_the_document() {
-    let (mut editor, root, source, first) = fixture(Value::list([text::value("item")]));
+    let (mut editor, source, first) = fixture(Value::list([text::value("item")]));
     let second = jump(&source);
     let document = editor.model.doc.clone();
-    assert!(
-        editor
-            .session()
-            .set_folded(&root, &first, false, Some(true))
-    );
-    let annotations = &editor.model.workspace.view(&root).unwrap().annotations;
+    assert!(editor.session().set_folded(&first, false, Some(true)));
+    let annotations = &editor.model.workspace.view_at(&first).unwrap().annotations;
     assert!(crate::annotations::folded(annotations.at(&first), false));
     assert!(!crate::annotations::folded(annotations.at(&second), false));
     assert!(Rc::ptr_eq(&document, &editor.model.doc));
     assert!(editor.model.step_history(true));
-    assert!(
-        editor
-            .session()
-            .set_folded(&root, &second, false, Some(true))
-    );
+    assert!(editor.session().set_folded(&second, false, Some(true)));
 }
 
 #[test]
 fn gesture_writes_share_the_occurrence_and_one_undo_step() {
-    let (mut editor, root, source, occurrence) = fixture(text::value("before"));
-    let mut run = Site::new(root, occurrence.clone().into()).edit_run();
+    let (mut editor, source, occurrence) = fixture(text::value("before"));
+    let mut run = Site::new(occurrence.clone().into()).edit_run();
     assert!(run.select(&mut editor.session()));
     assert!(run.write(&mut editor.session(), text::value("first")));
     assert!(run.write(&mut editor.session(), text::value("second")));
@@ -266,7 +252,7 @@ fn library_values_reached_by_a_jump_remain_read_only_and_failed_writes_change_no
 
 #[test]
 fn inserting_a_list_sibling_under_a_jump_preserves_the_occurrence() {
-    let (mut editor, root, source, occurrence) = fixture(Value::list([text::value("first")]));
+    let (mut editor, source, occurrence) = fixture(Value::list([text::value("first")]));
     let position = editor
         .sources()
         .resolve_path(&source)
@@ -279,7 +265,7 @@ fn inserting_a_list_sibling_under_a_jump_preserves_the_occurrence() {
         .clone();
     let position = gid::position::between(Some(&position), None).unwrap();
     let item = [occurrence.clone(), vec![Step::Element(position.clone())]].concat();
-    Edit::new(editor.session()).select(&root, &item);
+    Edit::new(editor.session()).select(&item);
     let selected = editor.model.selection.as_ref().unwrap();
     assert_eq!(&selected.path()[..occurrence.len()], occurrence);
     assert_eq!(

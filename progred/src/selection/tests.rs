@@ -25,8 +25,7 @@ fn replacing_query_text_settles_completion_state_before_the_next_edit() {
             f64::value(30.0),
         ),
     ]);
-    let mut selected =
-        Selection::from_payload(&crate::test_root(), &src(&doc, &libraries), vec![], payload);
+    let mut selected = Selection::from_payload(&src(&doc, &libraries), vec![], payload);
     assert_eq!(selected.choice(), 0);
     assert_eq!(selected.completion_scroll(), 0.0);
     selected.edit_query(|line| {
@@ -43,14 +42,12 @@ fn a_shadowing_document_definition_stays_editable() {
     let mut library_cells = Cells::new();
     library_cells.set_value(cell, Value::record([]));
     let lib = library_of(library_cells);
-    let root = crate::test_root();
     let mut doc = Rc::new(Document {
         root: Some(cell.into()),
         cells: Cells::new(),
     });
     assert!(
         pending_edge(
-            &root,
             &Read {
                 sources: src(&doc, &lib)
             },
@@ -63,7 +60,6 @@ fn a_shadowing_document_definition_stays_editable() {
         .cells
         .set_value(cell, Value::record([]));
     let pending = pending_edge(
-        &root,
         &Read {
             sources: src(&doc, &lib),
         },
@@ -73,7 +69,6 @@ fn a_shadowing_document_definition_stays_editable() {
     assert_eq!(pending.path(), &[Step::Follow(gid::Resolution::Document)]);
     assert!(
         pending_edge(
-            &root,
             &Read {
                 sources: src(&doc, &lib)
             },
@@ -86,7 +81,6 @@ fn a_shadowing_document_definition_stays_editable() {
         .cells
         .set_value(cell, Value::list([]));
     let pending = pending_into(
-        &root,
         &Read {
             sources: src(&doc, &lib),
         },
@@ -133,10 +127,9 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // A link to a record cell pends its field under Follow; an
     // inline record pends at its own path.
-    let on_cell = pending_edge(&crate::test_root(), &sources, vec![]).unwrap();
+    let on_cell = pending_edge(&sources, vec![]).unwrap();
     assert_eq!(on_cell.path(), &[Step::Follow(gid::Resolution::Document)]);
     let inline = pending_edge(
-        &crate::test_root(),
         &sources,
         vec![Step::Follow(gid::Resolution::Document), key("at").into()],
     )
@@ -151,7 +144,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     // makes its structure visible.
     assert!(
         pending_edge(
-            &crate::test_root(),
             &sources,
             vec![Step::Follow(gid::Resolution::Document), key("tags").into()]
         )
@@ -159,7 +151,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_edge(
-            &crate::test_root(),
             &sources,
             vec![Step::Follow(gid::Resolution::Document), key("s").into()]
         )
@@ -167,7 +158,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_edge(
-            &crate::test_root(),
             &sources,
             vec![Step::Follow(gid::Resolution::Document), key("lib").into()]
         )
@@ -175,7 +165,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_edge(
-            &crate::test_root(),
             &sources,
             vec![
                 Step::Follow(gid::Resolution::Document),
@@ -188,7 +177,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     // A bare cell pends its first value at Follow — the
     // within-gesture's meaning there.
     let filling = pending_follow(
-        &crate::test_root(),
         &sources,
         &[
             Step::Follow(gid::Resolution::Document),
@@ -206,7 +194,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_follow(
-            &crate::test_root(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("lib").into()]
         )
@@ -214,7 +201,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_follow(
-            &crate::test_root(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("at").into()]
         )
@@ -223,7 +209,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // Into a list through its link, appended at the end.
     let into = pending_into(
-        &crate::test_root(),
         &sources,
         &[Step::Follow(gid::Resolution::Document), key("tags").into()],
         true,
@@ -234,10 +219,9 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
 
     // The within chord: fields on records, elements into lists,
     // first values into bare cells.
-    assert!(pending_insert(&crate::test_root(), &sources, &[], false).is_some());
+    assert!(pending_insert(&sources, &[], false).is_some());
     assert!(
         pending_insert(
-            &crate::test_root(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("tags").into()],
             false
@@ -246,7 +230,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_insert(
-            &crate::test_root(),
             &sources,
             &[
                 Step::Follow(gid::Resolution::Document),
@@ -258,7 +241,6 @@ fn pendings_normalize_through_links_and_gate_on_authority() {
     );
     assert!(
         pending_insert(
-            &crate::test_root(),
             &sources,
             &[Step::Follow(gid::Resolution::Document), key("s").into()],
             false
@@ -339,7 +321,7 @@ fn selecting_an_empty_value_slot_pends() {
 
 #[test]
 fn the_pending_payload_is_derived_from_the_live_editor() {
-    let mut pending = crate::selection::pending_with_query(&crate::test_root(), Vec::new(), "");
+    let mut pending = crate::selection::pending_with_query(Vec::new(), "");
     pending.set_completion_view(24.0, 2);
     pending.edit_query(|line| line.handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string())));
     assert_eq!(pending.choice(), 0);

@@ -3,7 +3,7 @@
 use crate::display::widget::navigation::Geometry;
 use crate::location::Location;
 use crate::occurrence::Step;
-use crate::{display::widget::view::Root, selection, sources::Sources};
+use crate::{selection, sources::Sources};
 use gid::Value;
 use puri::edit::EditCtx;
 use puri::keyboard::CommandModifier;
@@ -32,7 +32,6 @@ pub(crate) fn write(session: &mut Session<'_>, location: &Location, value: Value
 
 fn edit_line(
     session: &mut Session<'_>,
-    root: &Root,
     path: &[Step],
     line: &crate::display::LineEdit,
     operation: &puri::edit::EditOperation<'_>,
@@ -49,8 +48,7 @@ fn edit_line(
         libraries,
     };
     let selected = model.selection.as_mut().filter(|selected| {
-        selected.root() == root
-            && selected.path() == path
+        selected.path() == path
             && selected.stage(&sources) == selection::Stage::Edge
             && selected.writable(&sources)
     });
@@ -142,24 +140,23 @@ pub(crate) fn enter_pending(
         Some(current) => {
             let read = Read { sources };
             if within {
-                selection::pending_insert(current.root(), &read, current.path(), shift)
+                selection::pending_insert(&read, current.path(), shift)
             } else {
-                selection::pending_enter(current.root(), &read, current.path(), shift)
+                selection::pending_enter(&read, current.path(), shift)
             }
             .map(|pending| pending.with_origin(current.path().to_vec()))
         }
-        None => selection::pending_root(session.model.workspace.document_root(), &sources),
+        None => selection::pending_root(&sources),
     }
 }
 
-/// Starts what Enter would author from the selected value in the view
-/// `root`, if it lands in the container drawn at `container`: a field on
+/// Starts what Enter would author from the selected value, if it lands in
+/// the container drawn at `container`: a field on
 /// that record, or an element of that list or cell. Containers offer this
 /// through [`crate::display::structure::authoring`], children first, so a
 /// projection without it, such as a number's, takes nothing in.
 pub(crate) fn author_in<W>(
     session: &mut Session<'_>,
-    root: &Root,
     container: &[Step],
     command: CommandModifier,
     geometry: Geometry<'_, W>,
@@ -178,8 +175,7 @@ pub(crate) fn author_in<W>(
         .selection
         .as_ref()
         .filter(|current| {
-            current.root() == root
-                && current.path().starts_with(reached)
+            current.path().starts_with(reached)
                 && current.stage(&sources) == selection::Stage::Edge
                 && (current.value_edit().is_none() || within)
         })

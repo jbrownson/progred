@@ -55,12 +55,7 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
     }
     let editor = driver.editor();
     let payload = editor.model.selection.as_ref().unwrap().payload();
-    let selection = Selection::from_payload(
-        &crate::test_root(),
-        &editor.sources(),
-        vec![],
-        payload.clone(),
-    );
+    let selection = Selection::from_payload(&editor.sources(), vec![], payload.clone());
     assert_eq!(selection.payload(), payload);
     assert_eq!(selection.edit().unwrap().text(), "abc");
 }
@@ -235,7 +230,6 @@ fn a_plain_selection_accepts_ime_and_clipboard_without_prior_initialization() {
 fn a_caret_override_does_not_need_to_duplicate_text_or_write_back_rules() {
     let mut editor = crate::editor_of(text::value("ab"));
     let selection = Selection::from_payload(
-        &crate::test_root(),
         &editor.sources(),
         vec![],
         Value::record([
@@ -396,12 +390,7 @@ fn payload_conversion_preserves_an_explicit_caret() {
     selection.edit_mut().unwrap().cursor_to_start();
     assert_eq!(selection.edit().unwrap().selection_offsets(), (0, 0));
     assert!(!write_text(&mut doc, &libraries, &mut selection));
-    let reified = Selection::from_payload(
-        &crate::test_root(),
-        &src(&doc, &libraries),
-        path,
-        selection.payload(),
-    );
+    let reified = Selection::from_payload(&src(&doc, &libraries), path, selection.payload());
     assert_eq!(reified.edit().unwrap().selection_offsets(), (0, 0));
     assert_eq!(reified.edit().unwrap().text(), "hello");
 }
@@ -694,7 +683,6 @@ fn missing_controls_default_without_mutating_selection_until_input() {
         for payload in [Value::record([]), crate::selection::payload::edge()] {
             let mut editor = crate::test_editor(doc.clone());
             editor.model.selection = Some(Selection::from_payload(
-                &crate::test_root(),
                 &src(&doc, &libraries),
                 path.clone(),
                 payload.clone(),

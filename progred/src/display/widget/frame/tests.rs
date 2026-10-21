@@ -8,7 +8,7 @@ fn view_scope_hides_other_views_hover_without_hiding_input() {
     use puri::handler::{Event, EventOutcome};
     use ui_events::pointer::{PointerState, PointerUpdate};
     let own = Root::document();
-    let other = Root::document();
+    let other = Root::pane(vec![gid::Step::Key(gid::new_cell_id())]);
     let mut pass: HoverPass<Vec<(u8, Option<u8>)>, u8> = HoverPass::new(&Default::default());
     for (id, root) in [(1, own.clone()), (2, other)] {
         pass.in_view(root, |pass| {

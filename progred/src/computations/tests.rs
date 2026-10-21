@@ -36,7 +36,6 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
         let mut libraries = Libraries::default();
         libraries.insert(library, definitions);
         let computations = Computations::default();
-        let root = Root::document();
         let mut doc = Document::default();
         let callable = grap::lambda(
             [argument],
@@ -49,7 +48,7 @@ fn memo_applications_track_reads_preserve_data_arguments_and_do_not_skip_effects
         let run = |doc: &Document, data: &Value| {
             computations.begin(Rc::new(doc.clone()), libraries.clone());
             computations
-                .apply_runtime(&root, &[], &callable, &[(argument, data.clone())], 100)
+                .apply_runtime(&[], &callable, &[(argument, data.clone())], 100)
                 .into_value()
         };
         let first = run(&doc, &data);
@@ -110,12 +109,11 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     libraries.insert(library, definitions);
     let mut doc = Document::default();
     let computations = Computations::default();
-    let view = Root::document();
     let expression = grap::call(function.into(), [(input, input.into())]);
     let run = |doc: &Document| {
         computations.begin(Rc::new(doc.clone()), libraries.clone());
         computations
-            .evaluate_runtime(&view, &[], &(&expression).into(), 100, None)
+            .evaluate_runtime(&[], &(&expression).into(), 100, None)
             .into_value()
     };
     let missing = run(&doc);
@@ -139,7 +137,7 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     let other_expression = grap::call(function.into(), [(input, Value::record([]))]);
     assert_eq!(
         computations
-            .evaluate_runtime(&view, &[], &(&other_expression).into(), 100, None)
+            .evaluate_runtime(&[], &(&other_expression).into(), 100, None)
             .into_value(),
         Value::record([])
     );
@@ -147,14 +145,14 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
     assert_eq!(
         grap::absent::reason(
             &computations
-                .evaluate_runtime(&view, &[], &(&other_expression).into(), 0, None)
+                .evaluate_runtime(&[], &(&other_expression).into(), 0, None)
                 .into_value()
         ),
         Some(grap::absent::FUEL_EXHAUSTED)
     );
     assert_eq!(
         computations
-            .evaluate_runtime(&view, &[], &(&other_expression).into(), 100, None)
+            .evaluate_runtime(&[], &(&other_expression).into(), 100, None)
             .into_value(),
         Value::record([])
     );
@@ -165,7 +163,6 @@ fn evaluation_roots_reuse_observed_results_and_invalidate_missing_definitions() 
 fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
     use grap::{RuntimeValue, SourceOrigin};
     let computations = Computations::default();
-    let view = Root::document();
     let doc = Document::default();
     let libraries = Libraries::default();
     let sources = Sources {
@@ -187,23 +184,36 @@ fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
     assert!(!a.same_result(&b));
     for closure in [&a, &a, &b, &b, &a] {
         let expression = RuntimeValue::record([(grap::vocabulary::VALUE, closure.clone())]);
-        let result = computations.evaluate_runtime(&view, &[], &expression, 100, None);
+        let result = computations.evaluate_runtime(&[], &expression, 100, None);
         assert!(result.same_result(closure));
     }
 }
 
 #[test]
-fn locations_in_different_views_have_independent_root_lifetimes() {
+fn occurrences_in_different_views_have_independent_root_lifetimes() {
     let computations = Computations::default();
-    let a = Root::document();
-    let b = Root::document();
-    let first = computations.at(&a, &[], || computations.runtime.input(1));
-    let second = computations.at(&b, &[], || computations.runtime.input(2));
+    // The document view's root, and a pane's, whose path starts with its
+    // declaration and a jump.
+    let document = Vec::new();
+    let pane = crate::test_examples::pane_root(
+        &crate::workspace::declarations(Some(
+            &crate::workspace::append(
+                &Value::record([]),
+                crate::workspace::Side::Left,
+                Value::record([]),
+            )
+            .unwrap()
+            .0,
+        ))[0]
+            .path,
+    );
+    let first = computations.at(&document, || computations.runtime.input(1));
+    let second = computations.at(&pane, || computations.runtime.input(2));
     first.set(3);
     assert_eq!(*second.observed().0, 2);
     assert!(Rc::ptr_eq(
         &first,
-        &computations.at(&a, &[], || unreachable!())
+        &computations.at(&document, || unreachable!())
     ));
     let weak = Rc::downgrade(&first);
     drop(first);

@@ -148,7 +148,6 @@ fn cam_outline_draws_as_the_main_value_with_the_panes_out_of_sight() {
     .concat();
     for (position, value) in entries {
         world.session().set_folded(
-            &crate::test_root(),
             &section(
                 &occurrence::of(&[&outline[..], &[Step::Element(position)]].concat()),
                 value.as_cell().unwrap(),
@@ -215,11 +214,8 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         // The document with B's body folded or not, and A's open.
         let driver = |b_folded| {
             let mut editor = crate::test_editor(doc.clone());
-            let root = editor.model.workspace.document_root().clone();
             for (path, folded) in [(&a_section, false), (&b_section, b_folded)] {
-                editor
-                    .session()
-                    .set_folded(&root, path, false, Some(folded));
+                editor.session().set_folded(path, false, Some(folded));
             }
             Driver::new(editor, kurbo::Size::new(700.0, 600.0))
         };
@@ -333,12 +329,9 @@ fn outline_library_tint_stops_at_the_heading() {
     ]));
     let heading_path = entry(&world, &[], key);
     let body_path = body(&heading_path, key);
-    world.session().set_folded(
-        &crate::test_root(),
-        &section(&heading_path, key),
-        false,
-        Some(false),
-    );
+    world
+        .session()
+        .set_folded(&section(&heading_path, key), false, Some(false));
     let f = editing_frame(&mut world);
     let heading_rect = stop(&f, &heading_path).rect;
     let body_rect = stop(&f, &body_path).rect;
@@ -613,10 +606,7 @@ fn outline_headings_delete_and_pick_references_not_bodies() {
     let (doc, a, _, extra) = document();
     let mut editor = crate::test_editor(doc);
     let e = entry(&editor, &[], a);
-    editor.model.selection = Some(pending_value(
-        &crate::test_root(),
-        occurrence::of(&[Step::Key(extra)]),
-    ));
+    editor.model.selection = Some(pending_value(occurrence::of(&[Step::Key(extra)])));
     let mut driver = Driver::new(editor, Driver::VIEWPORT);
     // The command key, on either platform, picks the heading's reference.
     driver.hold(ModifiersState::CONTROL | ModifiersState::SUPER);
@@ -672,7 +662,6 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
 
     let mut world = driver.runner.editor;
     world.model.selection = pending_edge(
-        &crate::test_root(),
         &crate::editing::Read {
             sources: world.sources(),
         },

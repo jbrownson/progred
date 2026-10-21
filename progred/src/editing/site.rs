@@ -1,9 +1,8 @@
-//! One projected occurrence as a place to act: the view it's drawn in and its
-//! path there, which says where its data is. Widgets act on their place
-//! through it, without carrying the view or the path themselves.
+//! One projected occurrence as a place to act: its path, which says the view
+//! it's drawn in and where its data is. Widgets act on their place through
+//! it, without carrying the path themselves.
 
 use super::{Edit, Session};
-use crate::display::widget::view::Root;
 use crate::hover::Hover;
 use crate::occurrence::Step;
 use gid::Value;
@@ -15,26 +14,24 @@ mod tests;
 
 #[derive(Clone)]
 pub(crate) struct Site {
-    root: Root,
     path: Rc<[Step]>,
 }
 
 impl Site {
-    pub(crate) fn new(root: Root, path: Rc<[Step]>) -> Self {
-        Self { root, path }
+    pub(crate) fn new(path: Rc<[Step]>) -> Self {
+        Self { path }
     }
 
     /// The occurrence a document path's `steps` below this one.
     pub(crate) fn below(&self, steps: &[gid::Step]) -> Self {
         Self {
-            root: self.root.clone(),
             path: crate::occurrence::below(&self.path, steps).into(),
         }
     }
 
     /// Whether `selection` is at this occurrence.
     pub(crate) fn holds(&self, selection: &crate::selection::Selection) -> bool {
-        selection.root() == &self.root && selection.path() == &*self.path
+        selection.path() == &*self.path
     }
 
     /// Where this occurrence is stored, if anywhere: what a jump to it
@@ -65,7 +62,7 @@ impl Site {
         computations: &crate::computations::Computations,
         create: impl FnOnce() -> T,
     ) -> Rc<T> {
-        computations.at(&self.root, &self.path, create)
+        computations.at(&self.path, create)
     }
 
     /// A drag's writes to the value here, recorded as one undo step.
@@ -119,12 +116,12 @@ impl SiteEdit<'_> {
 
     /// This occurrence's state, which its view keeps.
     pub(crate) fn state(&self) -> Option<&Value> {
-        self.edit.annotation(&self.site.root, &self.site.path)
+        self.edit.annotation(&self.site.path)
     }
 
     /// Replaces this occurrence's state; false when it was already `state`.
     pub(crate) fn set_state(&mut self, state: Value) -> bool {
-        self.edit.annotate(&self.site.root, &self.site.path, state)
+        self.edit.annotate(&self.site.path, state)
     }
 
     /// Writes `value` where this occurrence is stored.
@@ -133,29 +130,25 @@ impl SiteEdit<'_> {
     }
 
     pub(crate) fn select(&mut self) {
-        self.edit.select(&self.site.root, &self.site.path);
+        self.edit.select(&self.site.path);
     }
 
     /// Opens or closes this occurrence's fold, whose state is `default`
     /// until set, toggling it without `closed`.
     pub(crate) fn fold(&mut self, default: bool, closed: Option<bool>) -> bool {
-        self.edit
-            .fold(&self.site.root, &self.site.path, default, closed)
+        self.edit.fold(&self.site.path, default, closed)
     }
 
     /// Leaves the value `steps` below this occurrence pending, for the
     /// picker to fill.
     pub(crate) fn pend(&mut self, steps: &[gid::Step]) {
-        self.edit.pend(
-            &self.site.root,
-            crate::occurrence::below(&self.site.path, steps),
-        );
+        self.edit
+            .pend(crate::occurrence::below(&self.site.path, steps));
     }
 
     /// Selects this occurrence with a projection's own selection payload.
     pub(crate) fn select_with(&mut self, payload: Value) {
-        self.edit
-            .select_payload(&self.site.root, self.site.path.to_vec(), payload);
+        self.edit.select_payload(self.site.path.to_vec(), payload);
     }
 
     pub(crate) fn edit_line(
@@ -163,17 +156,12 @@ impl SiteEdit<'_> {
         line: &crate::display::LineEdit,
         operation: &puri::edit::EditOperation<'_>,
     ) -> bool {
-        self.edit
-            .edit_line(&self.site.root, &self.site.path, line, operation)
+        self.edit.edit_line(&self.site.path, line, operation)
     }
 
     /// Runs a Grap event handler here, with `event` as its argument.
     pub(crate) fn run_handler(&mut self, function: grap::RuntimeValue, event: Value) -> bool {
-        self.edit.grap_runtime(
-            self.site.root.clone(),
-            self.site.path.to_vec(),
-            function,
-            event,
-        )
+        self.edit
+            .grap_runtime(self.site.path.to_vec(), function, event)
     }
 }

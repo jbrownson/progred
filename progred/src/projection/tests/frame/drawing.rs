@@ -368,7 +368,8 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
 
     let mut editor = crate::test_editor(Document::default());
     let source_view = editor.model.workspace.document_root().clone();
-    let drawing_view = crate::display::widget::view::Root::document();
+    let drawing_view =
+        crate::display::widget::view::Root::pane(vec![gid::Step::Key(new_cell_id())]);
     let bounds = Rect::new(0.0, 0.0, 40.0, 40.0);
     let output = crate::display::widget::frame::place(
         crate::display::widget::view::in_view(
@@ -392,11 +393,9 @@ fn drawing_source_reveal_is_an_ordinary_hover_modifier_and_pick_handler() {
         path: crate::occurrence::of(&path).into(),
         rect: Rect::new(0.0, 500.0, 20.0, 530.0),
         select: Rc::new({
-            let root = source_view.clone();
             let path = path.clone();
             move |editor: &mut crate::Editor, _| {
-                crate::editing::Edit::new(editor.session())
-                    .select(&root, &crate::occurrence::of(&path));
+                crate::editing::Edit::new(editor.session()).select(&crate::occurrence::of(&path));
                 true
             }
         }),

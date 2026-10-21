@@ -64,7 +64,6 @@ pub(crate) fn offered(
     selection: &Selection,
 ) -> Vec<crate::display::widget::offers::Entry<crate::Editor>> {
     world.model.selection = Some(Selection::from_payload(
-        selection.root(),
         &world.sources(),
         selection.path().to_vec(),
         selection.payload(),
@@ -269,7 +268,6 @@ impl BenchContext {
             ProjectDescription {
                 focused: true,
                 computations,
-                view: &crate::test_root(),
                 completions: Some(&stack.completions),
                 sources,
                 root,
