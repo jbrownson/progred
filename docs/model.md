@@ -58,7 +58,7 @@ definition yet; a library's definitions are read-only. A route through a cell
 and a location starting at that cell are the same location.
 
 A selection's path also names the workspace view it's in: a pane's paths
-start with its declaration and a jump ([panes](#panes)), and every other
+start with its declaration and a pane step ([panes](#panes)), and every other
 path is the document view's. So two panes showing the same stored data keep
 separate focus, scroll, and folds, and a view is what it targets, the
 document or a pane's declaration, which a workspace `Root` names; it is not a
@@ -115,9 +115,10 @@ each occurrence holds its own step and a link to the trail of the occurrence
 it's drawn inside, so descending adds one link, siblings share what's above
 them, and what wants the whole path walks the parents. A selection, made
 rarely, holds its path whole. Its steps are the document's own, `Key`, `Element` and `Follow`,
-plus two of the editor's: a **jump** restarts the path at a location, as a
-projection's `jump` does, and a **computed** step stops it, as `at` does for a
-supplied value. Resolving a path starts from the document's root, or from its
+plus three of the editor's: a **jump** restarts the path at a location, as a
+projection's `jump` does, a **computed** step stops it, as `at` does for a
+supplied value, and a **pane** step marks where a pane starts, which only the
+frame writes. Resolving a path starts from the document's root, or from its
 last jump's location, and follows the data steps after it; past a computed step
 there's no location until a jump. A cell followed inside a computed value has
 no stored route to it, so following it jumps to its definition, which starts a
@@ -519,14 +520,16 @@ record, moving the document view's folds with it, and starting points that open
 a pane begin that way.
 
 The pane lists determine side and order; entries are ordinary values. A pane
-draws under its declaration's path, through a jump to what it shows, so its
-occurrences stay apart from the document view's even where that draws the
-declaration too, and their paths say where they write. An entry
+draws under its declaration's path, after a **pane** step that says a pane
+starts there and changes nothing about where the data is. So its occurrences
+stay apart from the document view's even where that draws the declaration too,
+their paths name the pane they're in, and a pane showing its entry reads and
+writes the entry. An entry
 can name a [location](#data-and-resolution) as data: `{steps: [...]}` from the
 document's root, or `{in: cell, follow: source, steps: [...]}` inside a cell's
 definition, with the steps and source in the path convention's encoding. While
-its pane shows the editor library, the pane draws and edits that place, so it
-stays in sync with the document; Plain and Raw show the entry itself. Open
+its pane shows the editor library, the pane jumps to that place after its pane
+step and draws and edits it there, so it stays in sync with the document; Plain and Raw show the entry itself. Open
 Value on Left and Right open the selection's place, starting at its nearest
 cell, so a cell is a location with no steps; a computed value has no place and
 opens as a copy. A place that's only empty, as after its value was deleted,

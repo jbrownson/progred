@@ -1034,7 +1034,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             panic!("pane path")
         };
         // The document view draws the declaration where it's stored, and the
-        // pane draws it under the declaration, through a jump to it.
+        // pane draws it under the declaration, after a pane step.
         let mut stored = path.clone();
         stored.extend(steps.iter().cloned());
         let drawn = crate::occurrence::below(&crate::test_examples::pane_root(path), &steps);

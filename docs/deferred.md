@@ -171,6 +171,16 @@ context; neither a path nor a cell-relative trace is a global address.
 Keep occurrence identity, cell identity, definition source, and view identity
 distinct while answering those questions.
 
+## Virtual steps for projections
+
+An occurrence path's steps are the document's own plus the editor's jump,
+computed and pane steps, and each says where its data is. A projection with a
+mini-interface that doesn't map cleanly onto its data might still want to hold
+selections and state at places inside it: virtual steps it names itself, which
+it maps onto data however it likes, as the old conjects let every projection
+do. Nothing needs this yet. On 21 October 2026 the owner chose a pane step
+over bringing conjects back, until a projection does.
+
 ## List positions
 
 List positions are saved with a document (October 2026), so a path through a

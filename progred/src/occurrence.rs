@@ -2,8 +2,9 @@
 //! way a document path names stored data, and it says where that occurrence's
 //! data is: its steps descend through data as a document path's do, a jump
 //! restarts them at a location, and a computed value stops them until a jump
-//! inside it. So the path alone tells two drawings of the same data apart, and
-//! says where each reads and writes.
+//! inside it. A pane step says a pane starts there, which changes nothing about
+//! where the data is. So the path alone tells two drawings of the same data
+//! apart, names the view each is in, and says where each reads and writes.
 
 use crate::location::{Location, Start};
 use crate::sources::Sources;
@@ -26,6 +27,9 @@ pub enum Step {
     /// From here on, a computed value, which isn't stored, until a jump
     /// inside it.
     Computed,
+    /// A pane starts here: the steps before it reach the pane's entry, and its
+    /// data goes on from there.
+    Pane,
 }
 
 pub type Path = Vec<Step>;
@@ -47,7 +51,7 @@ impl Hash for Step {
                 location.start.hash(state);
                 location.path.len().hash(state);
             }
-            Self::Computed => {}
+            Self::Computed | Self::Pane => {}
         }
     }
 }
@@ -97,7 +101,7 @@ impl Step {
             Self::Key(cell) => Some(gid::Step::Key(*cell)),
             Self::Element(position) => Some(gid::Step::Element(position.clone())),
             Self::Follow(resolution) => Some(gid::Step::Follow(*resolution)),
-            Self::Jump(_) | Self::Computed => None,
+            Self::Jump(_) | Self::Computed | Self::Pane => None,
         }
     }
 }
@@ -122,7 +126,8 @@ pub fn document(path: &[Step]) -> Option<gid::Path> {
 }
 
 /// Where the data at `path` is: from the document's root, or from the last
-/// jump's location, along the data steps after it. None for a computed value.
+/// jump's location, along the data steps after it, past any pane step. None
+/// for a computed value.
 pub fn location(path: &[Step]) -> Option<Location<'static>> {
     let marker = path
         .iter()
@@ -132,10 +137,10 @@ pub fn location(path: &[Step]) -> Option<Location<'static>> {
         Some((Step::Jump(location), index)) => ((**location).clone(), &path[index + 1..]),
         Some(_) => return None,
     };
-    location.path.to_mut().extend(
-        rest.iter()
-            .map(|step| step.data().expect("only data steps follow the last jump")),
-    );
+    location
+        .path
+        .to_mut()
+        .extend(rest.iter().filter_map(data_after_marker));
     Some(location)
 }
 
@@ -176,8 +181,9 @@ pub(crate) fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
             let before = from.map_or(&[][..], |location| &location.path);
             let cell = rest[..follow]
                 .iter()
+                .filter_map(data_after_marker)
                 .try_fold(sources.read_from(start, before)?, |value, step| {
-                    sources.step(value, &step.data()?)
+                    sources.step(value, &step)
                 })?
                 .as_cell()?;
             Some(Start::Cell { cell, resolution })
@@ -189,14 +195,27 @@ pub(crate) fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
     }
 }
 
+/// A step after a path's last jump or computed step as a document path's: a
+/// pane step, which only says a pane starts, has none.
+fn data_after_marker(step: &Step) -> Option<gid::Step> {
+    match step {
+        Step::Pane => None,
+        step => Some(
+            step.data()
+                .expect("only data and pane steps follow the last jump"),
+        ),
+    }
+}
+
 /// An occurrence path as ordinary GID data, for Grap and the web embed: data
-/// steps in the path convention's encoding, `{jump: location}` and
-/// `{computed: {}}`. The editor library names these cells.
+/// steps in the path convention's encoding, `{jump: location}`,
+/// `{computed: {}}` and `{pane: {}}`. The editor library names these cells.
 pub mod vocabulary {
     use gid::CellId;
 
     pub const JUMP: CellId = CellId::from_u128(0x03ac221c46af01eda93773d95edd2964);
     pub const COMPUTED: CellId = CellId::from_u128(0x8da525995c2c1283f642561a138397f0);
+    pub const PANE: CellId = CellId::from_u128(0x587214681dbcac90485c22e679cec303);
 }
 
 /// `path` as data.
@@ -206,6 +225,7 @@ pub fn value(path: &[Step]) -> Value {
             Value::record([(vocabulary::JUMP, crate::location::value(location))])
         }
         Step::Computed => Value::record([(vocabulary::COMPUTED, Value::record([]))]),
+        Step::Pane => Value::record([(vocabulary::PANE, Value::record([]))]),
         data => ::grap::path::step_value(&data.data().expect("a data step")),
     }))
 }
@@ -217,15 +237,15 @@ pub fn from_value(value: &Value) -> Option<Path> {
         .values()
         .map(|step| {
             let fields = step.as_record()?;
-            match (
-                fields.get(&vocabulary::JUMP),
-                fields.get(&vocabulary::COMPUTED),
-            ) {
-                (Some(location), None) if fields.len() == 1 => {
-                    crate::location::read(location).map(Step::jump)
-                }
-                (None, Some(_)) if fields.len() == 1 => Some(Step::Computed),
-                _ => ::grap::path::read_step(step).map(Step::from),
+            let only = |key| fields.len() == 1 && fields.get(&key).is_some();
+            if only(vocabulary::JUMP) {
+                crate::location::read(fields.get(&vocabulary::JUMP)?).map(Step::jump)
+            } else if only(vocabulary::COMPUTED) {
+                Some(Step::Computed)
+            } else if only(vocabulary::PANE) {
+                Some(Step::Pane)
+            } else {
+                ::grap::path::read_step(step).map(Step::from)
             }
         })
         .collect()

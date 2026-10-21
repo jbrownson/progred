@@ -56,7 +56,7 @@ fn a_library_toggles_whichever_way_the_area_lists_its_libraries() {
 fn a_path_names_the_view_it_is_drawn_in() {
     let (_, declaration) = append(&Value::record([]), Side::Left, Value::list([])).unwrap();
     let pane = crate::test_examples::pane_root(&declaration);
-    // A pane's paths start with its declaration and a jump.
+    // A pane's paths start with its declaration and a pane step.
     assert_eq!(view_of(&pane), Root::pane(declaration.clone()));
     assert_eq!(
         view_of(&crate::occurrence::below(
@@ -65,6 +65,13 @@ fn a_path_names_the_view_it_is_drawn_in() {
         )),
         Root::pane(declaration.clone())
     );
+    // A jump at a pane entry, as a document projection might draw one, is
+    // still the document view's: only a pane step starts a pane.
+    let mut jumped = crate::occurrence::of(&declaration);
+    jumped.push(crate::occurrence::Step::jump(
+        crate::location::Location::root(declaration.clone()),
+    ));
+    assert_eq!(view_of(&jumped), Root::document());
     // The declaration drawn as data is the document view's, as is the root.
     assert_eq!(
         view_of(&crate::occurrence::of(&declaration)),
@@ -464,9 +471,9 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
         }
     );
     assert_eq!(place.path.as_ref(), [Step::Element(first.clone())]);
-    // The pane draws the place through a jump under its declaration, and an
+    // The pane draws the place through a jump after its pane step, and an
     // edit there lands in the cell, which the document view reads.
-    let mut shown = crate::occurrence::of(&declaration);
+    let mut shown = crate::test_examples::pane_root(&declaration);
     shown.push(crate::occurrence::Step::jump(place));
     assert!(driver.drawn(&shown));
     let editor = &mut driver.runner.editor;
@@ -560,7 +567,7 @@ fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
     let declaration = declarations(driver.editor().model.doc.root.as_ref())
         .remove(0)
         .path;
-    let mut shown = crate::occurrence::of(&declaration);
+    let mut shown = crate::test_examples::pane_root(&declaration);
     shown.push(crate::occurrence::Step::jump(
         crate::location::Location::root(place.clone()),
     ));
@@ -638,7 +645,7 @@ fn show_panes_opens_the_panes_declaration_once() {
         )))
     );
     // The pane draws the declaration, its own entry included, and selects it.
-    let mut shown = crate::occurrence::of(&declared[0].path);
+    let mut shown = crate::test_examples::pane_root(&declared[0].path);
     shown.push(crate::occurrence::Step::jump(
         crate::location::Location::root(panes.to_vec()),
     ));

@@ -13,9 +13,11 @@ struct Link {
     step: Step,
     parent: Trail,
     len: usize,
-    /// How long the trail is through its last jump or computed step, 0
-    /// without one, and whether that step is a computed one.
+    /// How long the trail is through its last step other than a document
+    /// path's, 0 without one: a jump, a computed value, or a pane's start.
     marker: usize,
+    /// Whether what's here is computed: the last jump or computed step is a
+    /// computed one.
     computed: bool,
 }
 
@@ -35,13 +37,15 @@ impl Trail {
     /// This trail with `step` after it.
     pub fn push(&self, step: Step) -> Self {
         let len = self.len() + 1;
+        let (marker, computed) = self
+            .0
+            .as_ref()
+            .map_or((0, false), |link| (link.marker, link.computed));
         let (marker, computed) = match step {
             Step::Jump(_) => (len, false),
             Step::Computed => (len, true),
-            _ => self
-                .0
-                .as_ref()
-                .map_or((0, false), |link| (link.marker, link.computed)),
+            Step::Pane => (len, computed),
+            _ => (marker, computed),
         };
         Self(Some(Rc::new(Link {
             step,
@@ -103,6 +107,7 @@ impl Trail {
                     break;
                 }
                 Step::Computed => return None,
+                Step::Pane => {}
                 step => data.push(step.data().expect("a data step")),
             }
         }
@@ -123,8 +128,8 @@ impl Trail {
         self.0.as_ref().is_some_and(|link| link.computed)
     }
 
-    /// Whether every step after the first `start` is a data step, with no
-    /// jump or computed value among them.
+    /// Whether every step after the first `start` is a document path's, with
+    /// no jump, computed value or pane start among them.
     pub fn data_from(&self, start: usize) -> bool {
         self.0.as_ref().is_none_or(|link| link.marker <= start)
     }

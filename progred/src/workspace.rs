@@ -199,9 +199,8 @@ pub fn main_path(root: Option<&Value>) -> Option<Path> {
 }
 
 /// Where a view showing `target` starts drawing. A pane draws under its
-/// declaration, through a jump to what it shows, so its occurrences stay
-/// apart from the document view's, even where that draws the declaration
-/// too. With `interpreted`, as while the editor library is on, a pane whose
+/// declaration, after a pane step, so its occurrences stay apart from the
+/// document view's, even where that draws the declaration too. With `interpreted`, as while the editor library is on, a pane whose
 /// entry is a location shows that place, and a workspace record starts at
 /// its main value, so the workspace's own fields stay out of sight and out of
 /// reach. Otherwise a pane shows its entry.
@@ -213,17 +212,23 @@ pub fn root_path(
     let (mut path, shown) = match target {
         Target::Document => (Vec::new(), Location::root(Vec::new())),
         Target::Pane { path: declaration } => {
-            let shown = interpreted
+            let mut path = occurrence::of(declaration);
+            path.push(occurrence::Step::Pane);
+            // A location entry shows its place: the pane jumps there.
+            let place = interpreted
                 .then(|| {
                     sources
                         .resolve_path(declaration)
                         .and_then(crate::location::read)
                 })
-                .flatten()
-                .unwrap_or_else(|| Location::root(declaration.clone()));
-            let mut path = occurrence::of(declaration);
-            path.push(occurrence::Step::jump(shown.clone()));
-            (path, shown)
+                .flatten();
+            if let Some(place) = &place {
+                path.push(occurrence::Step::jump(place.clone()));
+            }
+            (
+                path,
+                place.unwrap_or_else(|| Location::root(declaration.clone())),
+            )
         }
     };
     if let Some(main) = main_path(sources.read(&shown)).filter(|_| interpreted) {
@@ -232,25 +237,13 @@ pub fn root_path(
     path
 }
 
-/// The view `path` is drawn in. A pane's paths start with its declaration
-/// and the jump to what it shows ([`root_path`]); every other path is the
-/// document view's.
+/// The view `path` is drawn in: the pane declared where its pane step
+/// starts one ([`root_path`]), else the document view.
 pub fn view_of(path: &[occurrence::Step]) -> Root {
-    use occurrence::Step::{Element, Jump, Key};
-    match path {
-        [
-            Key(vocabulary::PANES),
-            Key(column),
-            Element(position),
-            Jump(_),
-            ..,
-        ] if [vocabulary::LEFT, vocabulary::RIGHT].contains(column) => Root::pane(vec![
-            Step::Key(vocabulary::PANES),
-            Step::Key(*column),
-            Step::Element(position.clone()),
-        ]),
-        _ => Root::document(),
-    }
+    path.iter()
+        .position(|step| matches!(step, occurrence::Step::Pane))
+        .and_then(|start| path[..start].iter().map(occurrence::Step::data).collect())
+        .map_or_else(Root::document, Root::pane)
 }
 
 /// Read pane declarations only from the document root. No recursive

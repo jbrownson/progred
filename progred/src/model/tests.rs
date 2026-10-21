@@ -198,7 +198,7 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
         .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
     let first_root = model.workspace.left.panes[0].view.root.clone();
     let second_root = model.workspace.left.panes[1].view.root.clone();
-    // Each pane draws its entry under its declaration, through a jump.
+    // Each pane draws its entry under its declaration, after a pane step.
     let first_path = crate::test_examples::pane_root(&first.1);
     let second_path = crate::test_examples::pane_root(&second.1);
     select(&mut model, &first_path);

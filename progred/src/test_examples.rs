@@ -38,12 +38,10 @@ pub fn cam_editor(mode: CellId) -> crate::Editor {
 }
 
 /// Where a pane declared at `path` starts drawing its entry: under the
-/// declaration, through a jump to the entry.
+/// declaration, after a pane step.
 pub fn pane_root(path: &[Step]) -> crate::occurrence::Path {
     let mut root = crate::occurrence::of(path);
-    root.push(crate::occurrence::Step::jump(
-        crate::location::Location::root(path.to_vec()),
-    ));
+    root.push(crate::occurrence::Step::Pane);
     root
 }
 

@@ -193,7 +193,7 @@ fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
 fn occurrences_in_different_views_have_independent_root_lifetimes() {
     let computations = Computations::default();
     // The document view's root, and a pane's, whose path starts with its
-    // declaration and a jump.
+    // declaration and a pane step.
     let document = Trail::root();
     let pane = Trail::from(crate::test_examples::pane_root(
         &crate::workspace::declarations(Some(

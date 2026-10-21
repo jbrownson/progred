@@ -412,16 +412,16 @@ pub(crate) fn pending_into(read: &Read<'_>, path: &[Step], end: bool) -> Option<
 /// Plain Enter: a new peer BESIDE the selection — continue the
 /// enumeration you are in. An element pends a sibling (before with
 /// shift); a field value pends a new field on its parent; the root, and
-/// where a jump or computed value starts, has nothing beside it and falls
+/// where a pane, jump or computed value starts, has nothing beside it and falls
 /// within — a field on a record, an
 /// appended element on a list. A cell's whole value is drawn where its
 /// reference is, so it continues the reference's enumeration.
 pub(crate) fn pending_enter(read: &Read<'_>, path: &[Step], before: bool) -> Option<Selection> {
     match path {
         [reference @ .., Step::Follow(_)] => pending_enter(read, reference, before),
-        // Where a jump or a computed value starts, nothing drawn is beside
-        // it, as at the root.
-        [.., Step::Jump(_) | Step::Computed] => pending_insert(read, path, before),
+        // Where a pane, a jump or a computed value starts, nothing drawn is
+        // beside it, as at the root.
+        [.., Step::Pane | Step::Jump(_) | Step::Computed] => pending_insert(read, path, before),
         _ => pending_beside(read, path, !before)
             .or_else(|| {
                 path.split_last()
