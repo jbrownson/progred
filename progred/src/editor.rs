@@ -559,22 +559,28 @@ impl Editor {
         let existing = [workspace::Side::Left, workspace::Side::Right]
             .into_iter()
             .flat_map(|side| self.model.workspace.column(side).panes.iter())
-            .find_map(|pane| match pane.view.root.target() {
-                Target::Pane { path } if sources.resolve_path(path) == Some(&entry) => Some((
-                    pane.view.root.clone(),
-                    workspace::location_path(&entry, path)?,
-                )),
-                _ => None,
-            });
+            .find(|pane| match pane.view.root.target() {
+                Target::Pane { path } => sources.resolve_path(path) == Some(&entry),
+                Target::Document => false,
+            })
+            .map(|pane| pane.view.root.clone());
         match existing {
-            Some((root, shown)) => {
-                self.model.selection = Some(selection::Selection::edge(
-                    &root,
-                    crate::occurrence::of(&shown),
-                ));
-            }
+            Some(root) => self.select_view_root(&root),
             None => self.open_pane(workspace::Side::Right, |_, _| Some(entry)),
         }
+    }
+
+    /// Selects what the view `root` draws at its root.
+    fn select_view_root(&mut self, root: &Root) {
+        let Some(view) = self.model.workspace.view(root) else {
+            return;
+        };
+        let path = workspace::root_path(
+            &self.sources(),
+            root.target(),
+            view.shown.shows(crate::libraries::editor::ID),
+        );
+        self.model.selection = Some(selection::Selection::edge(root, path));
     }
 
     /// Opens what `entry` gives as the last pane on `side` and selects what
@@ -589,11 +595,10 @@ impl Editor {
         let next = self.model.doc.root.as_ref().and_then(|root| {
             let (root, wrapped) = workspace::workspace_root(root);
             let entry = entry(self, wrapped)?;
-            let (root, path) = workspace::append(&root, side, entry.clone())?;
-            let shown = workspace::location_path(&entry, &path).unwrap_or(path);
-            Some((root, shown, wrapped))
+            let (root, _) = workspace::append(&root, side, entry)?;
+            Some((root, wrapped))
         });
-        if let Some((value, shown, wrapped)) = next {
+        if let Some((value, wrapped)) = next {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);
             self.model.history.record(before);
@@ -607,9 +612,16 @@ impl Editor {
                 .workspace
                 .sync_declared(&workspace::declarations(self.model.doc.root.as_ref()));
             // The value opens as its column's last pane.
-            self.model.selection = self.model.workspace.column(side).panes.last().map(|pane| {
-                selection::Selection::edge(&pane.view.root, crate::occurrence::of(&shown))
-            });
+            if let Some(root) = self
+                .model
+                .workspace
+                .column(side)
+                .panes
+                .last()
+                .map(|pane| pane.view.root.clone())
+            {
+                self.select_view_root(&root);
+            }
             self.refresh_title();
         }
     }
@@ -639,44 +651,38 @@ impl Editor {
         }
     }
 
+    /// Moves the selected pane, keeping its selection on what it was on.
     fn move_selected_pane(&mut self, direction: workspace::Move) {
-        let next =
-            self.model
-                .selection
-                .as_ref()
-                .and_then(|selection| match selection.root().target() {
-                    Target::Pane { path } => {
-                        // A pane showing a place from the root keeps its
-                        // selection's path; one under the declaration moves
-                        // with it.
-                        let suffix = selection
-                            .path()
-                            .strip_prefix(crate::occurrence::of(path).as_slice())
-                            .map(<[_]>::to_vec);
-                        let (value, path) =
-                            workspace::move_value(self.model.doc.root.as_ref()?, path, direction)?;
-                        Some((value, path, suffix, selection.root().clone()))
-                    }
-                    Target::Document => None,
-                });
-        if let Some((value, path, suffix, root)) = next {
+        let next = self.model.selection.as_ref().and_then(|selection| {
+            let Target::Pane { path } = selection.root().target() else {
+                return None;
+            };
+            let interpreted = self
+                .model
+                .workspace
+                .view(selection.root())?
+                .shown
+                .shows(crate::libraries::editor::ID);
+            let shown =
+                workspace::root_path(&self.sources(), selection.root().target(), interpreted);
+            let below = selection.path().strip_prefix(shown.as_slice())?.to_vec();
+            let (value, path) =
+                workspace::move_value(self.model.doc.root.as_ref()?, path, direction)?;
+            Some((value, path, below, interpreted, selection.root().clone()))
+        });
+        if let Some((value, path, below, interpreted, root)) = next {
             let before = self.model.snapshot();
             Rc::make_mut(&mut self.model.doc).root = Some(value);
             self.model.history.record(before);
-            let next_root = Root::pane(path.clone());
+            let next_root = Root::pane(path);
             if let Some(view) = self.model.workspace.view_mut(&root) {
                 view.root = next_root.clone();
                 view.annotations = Default::default();
             }
+            let mut shown = workspace::root_path(&self.sources(), next_root.target(), interpreted);
+            shown.extend(below);
             if let Some(selection) = self.model.selection.as_mut() {
-                let path = match suffix {
-                    Some(suffix) => crate::occurrence::of(&path)
-                        .into_iter()
-                        .chain(suffix)
-                        .collect(),
-                    None => selection.path().to_vec(),
-                };
-                selection.relocate(next_root, path);
+                selection.relocate(next_root, shown);
             }
             self.model
                 .workspace

@@ -408,7 +408,7 @@ fn opening_a_pane_on_a_bare_root_wraps_it_and_keeps_its_folds() {
 #[test]
 fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
     use crate::driver::Driver;
-    use crate::location::{Location, Start};
+    use crate::location::Start;
     let [label, cell] = [CellId::from_u128(1), CellId::from_u128(2)];
     let mut cells = Cells::new();
     cells.set_value(
@@ -455,15 +455,16 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
         }
     );
     assert_eq!(place.path.as_ref(), [Step::Element(first.clone())]);
-    // The pane draws the place through its entry's own cell, and an edit
-    // there lands in the cell, which the document view reads.
-    let shown = location_path(entry, &declaration).unwrap();
+    // The pane draws the place through a jump under its declaration, and an
+    // edit there lands in the cell, which the document view reads.
+    let mut shown = crate::occurrence::of(&declaration);
+    shown.push(crate::occurrence::Step::jump(place));
     assert!(driver.drawn(&shown));
     let editor = &mut driver.runner.editor;
     assert!(crate::location::set_value(
         &mut editor.model.doc,
         &editor.stack.libraries,
-        &Location::root(shown),
+        &crate::occurrence::location(&shown).unwrap(),
         crate::libraries::f64::value(5.0),
     ));
     // Opening the pane wrapped the bare root under `main`.
@@ -547,6 +548,13 @@ fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
         });
     driver.present();
     let place = [&[Step::Key(vocabulary::MAIN)][..], &element].concat();
+    let declaration = declarations(driver.editor().model.doc.root.as_ref())
+        .remove(0)
+        .path;
+    let mut shown = crate::occurrence::of(&declaration);
+    shown.push(crate::occurrence::Step::jump(
+        crate::location::Location::root(place.clone()),
+    ));
     let remove = |driver: &mut Driver, path: &[Step]| {
         let editor = &mut driver.runner.editor;
         let root = crate::spine::without(editor.model.doc.root.as_ref().unwrap(), path).unwrap();
@@ -565,7 +573,7 @@ fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
     // With only the element deleted, its place in the list is still there to
     // write, as any empty place is.
     remove(&mut driver, &place);
-    driver.select(&place);
+    driver.select(&shown);
     assert!(writable(&driver));
     // With the list gone too, nothing can be written there, and the pane
     // says which place it can't find, a value computed in its place.
@@ -573,12 +581,8 @@ fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
         &mut driver,
         &[Step::Key(vocabulary::MAIN), Step::Key(outer)],
     );
-    driver.select(
-        &crate::occurrence::of(&place)
-            .into_iter()
-            .chain([crate::occurrence::Step::Computed])
-            .collect::<Vec<_>>(),
-    );
+    shown.push(crate::occurrence::Step::Computed);
+    driver.select(&shown);
     assert!(!writable(&driver));
     driver.keystroke(
         ui_events::keyboard::Key::Character("c".into()),
@@ -625,8 +629,12 @@ fn show_panes_opens_the_panes_declaration_once() {
         )))
     );
     // The pane draws the declaration, its own entry included, and selects it.
-    assert!(driver.drawn(&panes));
-    assert_eq!(driver.selection(), panes);
+    let mut shown = crate::occurrence::of(&declared[0].path);
+    shown.push(crate::occurrence::Step::jump(
+        crate::location::Location::root(panes.to_vec()),
+    ));
+    assert!(driver.drawn(&shown));
+    assert_eq!(driver.selection(), shown);
     // Showing them again selects that pane rather than opening another.
     driver.select(&[Step::Key(vocabulary::MAIN)]);
     show(&mut driver);
@@ -634,7 +642,50 @@ fn show_panes_opens_the_panes_declaration_once() {
         declarations(driver.editor().model.doc.root.as_ref()).len(),
         1
     );
-    assert_eq!(driver.selection(), panes);
+    assert_eq!(driver.selection(), shown);
+}
+
+#[test]
+fn moving_a_pane_keeps_its_selection_on_what_it_was_on() {
+    use crate::driver::Driver;
+    let (root, declaration) = append(
+        &Value::record([]),
+        Side::Left,
+        Value::list([crate::libraries::f64::value(1.0)]),
+    )
+    .unwrap();
+    let mut driver = Driver::new(
+        crate::test_editor(gid::Document {
+            root: Some(root),
+            cells: Cells::new(),
+        }),
+        Driver::VIEWPORT,
+    );
+    let element = |driver: &Driver, declaration: &[Step]| {
+        crate::occurrence::below(
+            &crate::test_examples::pane_root(declaration),
+            &[driver.element(declaration, 0, &[])[declaration.len()].clone()],
+        )
+    };
+    driver.select(&element(&driver, &declaration));
+    driver
+        .runner
+        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+            editor.run_doc_command(
+                crate::command::DocCommand::MovePane(Move::Right),
+                dispatch.geometry(1.0),
+            );
+            true
+        });
+    driver.present();
+    let moved = declarations(driver.editor().model.doc.root.as_ref())
+        .remove(0)
+        .path;
+    assert_ne!(moved, declaration);
+    // The selection moved with the pane, through its jump to the entry's new
+    // place.
+    assert_eq!(driver.selection(), element(&driver, &moved));
+    assert!(driver.drawn(&element(&driver, &moved)));
 }
 
 fn cell_positions(world: &crate::Editor, cell: CellId) -> Vec<gid::Position> {

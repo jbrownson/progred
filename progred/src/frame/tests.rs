@@ -1044,9 +1044,12 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         let Target::Pane { path } = pane.view.root.target() else {
             panic!("pane path")
         };
-        let mut path = path.clone();
-        path.extend(steps);
-        (pane.view.root.clone(), path)
+        // The document view draws the declaration where it's stored, and the
+        // pane draws it under the declaration, through a jump to it.
+        let mut stored = path.clone();
+        stored.extend(steps.iter().cloned());
+        let drawn = crate::occurrence::below(&crate::test_examples::pane_root(path), &steps);
+        (pane.view.root.clone(), stored, drawn)
     })
     .collect();
     let shown = place(&model);
@@ -1055,26 +1058,27 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
         2,
         "only the inline declaration and the selected cell definition at pane entry apply"
     );
-    for (pane, path) in &sources {
+    for (pane, stored, drawn) in &sources {
         for field in [
             presentation::vocabulary::VALUE,
             presentation::vocabulary::PROJECTION,
         ] {
-            let mut field_path = path.clone();
-            field_path.push(Step::Key(field));
+            let stored =
+                crate::occurrence::below(&crate::occurrence::of(stored), &[Step::Key(field)]);
+            let drawn = crate::occurrence::below(drawn, &[Step::Key(field)]);
             assert!(
                 shown
                     .landmarks
                     .iter()
                     .any(|target| target.root.as_ref() == Some(document)
-                        && target.path.as_ref() == field_path)
+                        && target.path.as_ref() == stored)
             );
             assert!(
                 !shown
                     .landmarks
                     .iter()
                     .any(|target| target.root.as_ref() == Some(pane)
-                        && target.path.as_ref() == field_path)
+                        && target.path.as_ref() == drawn)
             );
         }
     }
@@ -1083,18 +1087,17 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     }
     let raw = place(&model);
     assert_eq!(calls.replace(0), 0);
-    for (pane, path) in &sources {
+    for (pane, _, drawn) in &sources {
         for field in [
             presentation::vocabulary::VALUE,
             presentation::vocabulary::PROJECTION,
         ] {
-            let mut field_path = path.clone();
-            field_path.push(Step::Key(field));
+            let drawn = crate::occurrence::below(drawn, &[Step::Key(field)]);
             assert!(
                 raw.landmarks
                     .iter()
                     .any(|target| target.root.as_ref() == Some(pane)
-                        && target.path.as_ref() == field_path)
+                        && target.path.as_ref() == drawn)
             );
         }
     }
@@ -1104,9 +1107,9 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     *result.borrow_mut() = ::grap::absent::value(projector);
     let absent = place(&model);
     assert_eq!(calls.get(), 2);
-    for (pane, path) in &sources {
-        let mut source_path = path.clone();
-        source_path.push(Step::Key(presentation::vocabulary::VALUE));
+    for (pane, _, drawn) in &sources {
+        let source_path =
+            crate::occurrence::below(drawn, &[Step::Key(presentation::vocabulary::VALUE)]);
         assert!(absent.landmarks.iter().any(
             |target| target.root.as_ref() == Some(pane) && target.path.as_ref() == source_path
         ));
@@ -1191,6 +1194,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
     let Target::Pane { path } = pane.root.target() else {
         panic!("pane")
     };
+    let path = crate::test_examples::pane_root(path);
     for (size, scale) in [
         (Size::new(300.0, 500.0), 1.0),
         (Size::new(700.0, 400.0), 2.0),
@@ -1245,11 +1249,8 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         calls.borrow_mut().clear();
         let placed = place(&raw, None);
         assert!(calls.borrow().is_empty(), "Raw never invokes the viewport");
-        let field_path: Vec<_> = path
-            .iter()
-            .cloned()
-            .chain([Step::Key(presentation::vocabulary::VIEWPORT)])
-            .collect();
+        let field_path =
+            crate::occurrence::below(&path, &[Step::Key(presentation::vocabulary::VIEWPORT)]);
         assert!(placed.landmarks.landmark(&field_path).is_some());
         place(&model.workspace.document, None);
         assert!(
@@ -1338,6 +1339,7 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
     let Target::Pane { path } = upper.target() else {
         panic!("pane root")
     };
+    let path = crate::test_examples::pane_root(path);
     assert!(placed.landmarks.iter().any(|landmark| {
         landmark.root.as_ref() == Some(&upper) && landmark.path.as_ref() == path.as_slice()
     }));

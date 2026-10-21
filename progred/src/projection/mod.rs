@@ -740,7 +740,7 @@ fn highlighted(
 
 /// Standard commands for this displayed value, below its own widget handlers:
 /// copy and cut, and deleting it.
-/// The occurrence identifies the selection; only mutations need its conject.
+/// The occurrence's path identifies the selection and says where it writes.
 fn bind_selection(
     child: Measured<HoverPass<crate::Editor>>,
     root: crate::display::widget::view::Root,

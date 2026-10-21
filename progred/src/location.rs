@@ -86,8 +86,8 @@ pub enum Start {
 }
 
 /// A start and the steps from it. The steps can still follow cells, as a
-/// route a projection's conject names may; [`Location::stored`] restarts the
-/// location at the last cell it follows.
+/// route through drawn data may; [`Location::stored`] restarts the location
+/// at the last cell it follows.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Location<'a> {
     pub start: Start,

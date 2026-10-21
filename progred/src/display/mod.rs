@@ -892,8 +892,8 @@ pub fn at<World: 'static, Hover: 'static>(
     at_with_projection(steps, value, None, None)
 }
 
-/// Start projecting at a document path from its root while extending only the
-/// occurrence path by `steps`. Descendants conject back to that location.
+/// Draw at `steps` the value at a document path from its root: the occurrence
+/// path jumps there, so it and what's below it read and write there.
 pub fn jump<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     document: impl Into<Vec<Step>>,

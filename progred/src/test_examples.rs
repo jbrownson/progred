@@ -37,17 +37,25 @@ pub fn cam_editor(mode: CellId) -> crate::Editor {
     editor
 }
 
-/// Computed content owns annotations below the declaration that produced it.
-/// Where a pane declared at `path` draws its result: computed, beneath the
-/// presentation's result step.
+/// Where a pane declared at `path` starts drawing its entry: under the
+/// declaration, through a jump to the entry.
+pub fn pane_root(path: &[Step]) -> crate::occurrence::Path {
+    let mut root = crate::occurrence::of(path);
+    root.push(crate::occurrence::Step::jump(
+        crate::location::Location::root(path.to_vec()),
+    ));
+    root
+}
+
+/// Where a presentation at `path` in the document view draws its result:
+/// computed, beneath the presentation's result step.
 pub fn result_path(path: &[Step]) -> crate::occurrence::Path {
-    crate::occurrence::of(path)
-        .into_iter()
-        .chain([
-            crate::occurrence::Step::Key(crate::libraries::presentation::vocabulary::RESULT),
-            crate::occurrence::Step::Computed,
-        ])
-        .collect()
+    let mut result = crate::occurrence::of(path);
+    result.extend([
+        crate::occurrence::Step::Key(crate::libraries::presentation::vocabulary::RESULT),
+        crate::occurrence::Step::Computed,
+    ]);
+    result
 }
 
 pub fn cam_position(progress: f64) -> Value {

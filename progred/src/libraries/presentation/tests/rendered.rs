@@ -38,7 +38,15 @@ fn pane_result(driver: &Driver, rest: &[occurrence::Step]) -> occurrence::Path {
         0,
         &[],
     );
-    [crate::test_examples::result_path(&pane).as_slice(), rest].concat()
+    [
+        crate::test_examples::pane_root(&pane).as_slice(),
+        &[
+            occurrence::Step::Key(presentation::vocabulary::RESULT),
+            occurrence::Step::Computed,
+        ],
+        rest,
+    ]
+    .concat()
 }
 
 #[test]

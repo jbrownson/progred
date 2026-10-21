@@ -509,7 +509,10 @@ on a root without them makes the root the `main` value of a new workspace
 record, moving the document view's folds with it, and starting points that open
 a pane begin that way.
 
-The pane lists determine side and order; entries are ordinary values. An entry
+The pane lists determine side and order; entries are ordinary values. A pane
+draws under its declaration's path, through a jump to what it shows, so its
+occurrences stay apart from the document view's even where that draws the
+declaration too, and their paths say where they write. An entry
 can name a [location](#data-and-resolution) as data: `{steps: [...]}` from the
 document's root, or `{in: cell, follow: source, steps: [...]}` inside a cell's
 definition, with the steps and source in the path convention's encoding. While

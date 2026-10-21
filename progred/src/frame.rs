@@ -641,9 +641,12 @@ fn view_content<'a>(
         }
         _ => None,
     };
+    let interpreted = view.shown.shows(crate::libraries::editor::ID);
+    let root_path = workspace::root_path(&sources, view.root.target(), interpreted);
     match (view.root.target(), viewport) {
-        (_, Some(entry)) => ViewContent {
-            root_path: crate::occurrence::of(&entry.path),
+        (Target::Pane { path }, Some(entry)) => ViewContent {
+            // The cells the entry follows to its viewport, below the jump.
+            root_path: crate::occurrence::below(&root_path, &entry.path[path.len()..]),
             root: Some(Cow::Borrowed(entry.value)),
             projection: Cow::Owned(projection::viewport::projection(
                 &view_projection(stack, view, false),
@@ -651,17 +654,18 @@ fn view_content<'a>(
             )),
             viewport: true,
         },
-        (target, None) => {
-            let root_path = root_path(sources, view, target);
-            let not_found = not_found(sources, view, target, &root_path);
-            let mut drawn = crate::occurrence::of(&root_path);
+        (target, _) => {
+            let root = crate::occurrence::read(&sources, &root_path);
+            let not_found = root
+                .is_none()
+                .then(|| not_found(sources, target, interpreted, &root_path))
+                .flatten();
+            let mut drawn = root_path;
             if not_found.is_some() {
                 drawn.push(crate::occurrence::Step::Computed);
             }
             ViewContent {
-                root: not_found
-                    .map(Cow::Owned)
-                    .or_else(|| sources.resolve_path(&root_path).map(Cow::Borrowed)),
+                root: not_found.map(Cow::Owned).or(root.map(Cow::Borrowed)),
                 root_path: drawn,
                 projection: view_projection(stack, view, matches!(target, Target::Pane { .. })),
                 viewport: false,
@@ -670,57 +674,24 @@ fn view_content<'a>(
     }
 }
 
-/// What a pane showing a location draws when its place, at `root_path`,
-/// can't be reached, as after its container was deleted: an absent naming
-/// it. A place that's only empty draws as any empty place does, ready to
-/// write.
+/// What a pane showing a location draws when its place, where `root_path`
+/// jumps, can't be reached, as after its container was deleted: an absent
+/// naming it. A place that's only empty draws as any empty place does, ready
+/// to write.
 fn not_found(
     sources: sources::Sources<'_>,
-    view: &workspace::View,
     target: &Target,
-    root_path: &[gid::Step],
+    interpreted: bool,
+    root_path: &[crate::occurrence::Step],
 ) -> Option<gid::Value> {
     let Target::Pane { path } = target else {
         return None;
     };
-    let location = view
-        .shown
-        .shows(crate::libraries::editor::ID)
+    let location = interpreted
         .then(|| crate::location::read(sources.resolve_path(path)?))
         .flatten()?;
-    (sources.resolve_path(root_path).is_none()
-        && !crate::location::reachable(&sources, &crate::location::Location::root(root_path)))
-    .then(|| crate::location::not_found(&location))
-}
-
-/// Where `view` starts drawing. While it shows the editor library, which
-/// interprets both, a pane whose entry is a location starts at that place,
-/// and a workspace record starts at its main value, so the workspace's own
-/// fields stay out of sight and out of reach. Otherwise a view starts at the
-/// document's root or a pane's entry.
-fn root_path(
-    sources: sources::Sources<'_>,
-    view: &workspace::View,
-    target: &Target,
-) -> Vec<gid::Step> {
-    let declared = match target {
-        Target::Document => Vec::new(),
-        Target::Pane { path } => path.clone(),
-    };
-    if !view.shown.shows(crate::libraries::editor::ID) {
-        return declared;
-    }
-    let mut path = match target {
-        Target::Pane { path } => sources
-            .resolve_path(path)
-            .and_then(|entry| workspace::location_path(entry, path))
-            .unwrap_or(declared),
-        Target::Document => declared,
-    };
-    if let Some(main) = workspace::main_path(sources.resolve_path(&path)) {
-        path.extend(main);
-    }
-    path
+    let place = crate::occurrence::location(root_path)?;
+    (!crate::location::reachable(&sources, &place)).then(|| crate::location::not_found(&location))
 }
 
 /// Whether `view` labels cells with their names: only with the name library

@@ -6,6 +6,8 @@
 
 use crate::annotations::Annotations;
 use crate::display::widget::view::{Root, Target};
+use crate::location::Location;
+use crate::occurrence;
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
 
@@ -196,24 +198,38 @@ pub fn main_path(root: Option<&Value>) -> Option<Path> {
     .then(|| vec![Step::Key(vocabulary::MAIN)])
 }
 
-/// The path a pane declared at `declaration` draws when its entry is a
-/// location: the place itself, reached from the root for a location there,
-/// or through the entry's own `in` cell for one inside a cell's definition,
-/// so the pane edits that place and stays in sync with it.
-pub fn location_path(entry: &Value, declaration: &[Step]) -> Option<Path> {
-    let location = crate::location::read(entry)?;
-    Some(match location.start {
-        crate::location::Start::Root => location.path.into_owned(),
-        crate::location::Start::Cell { resolution, .. } => declaration
-            .iter()
-            .cloned()
-            .chain([
-                Step::Key(crate::location::vocabulary::IN),
-                Step::Follow(resolution),
-            ])
-            .chain(location.path.iter().cloned())
-            .collect(),
-    })
+/// Where a view showing `target` starts drawing. A pane draws under its
+/// declaration, through a jump to what it shows, so its occurrences stay
+/// apart from the document view's, even where that draws the declaration
+/// too. With `interpreted`, as while the editor library is on, a pane whose
+/// entry is a location shows that place, and a workspace record starts at
+/// its main value, so the workspace's own fields stay out of sight and out of
+/// reach. Otherwise a pane shows its entry.
+pub fn root_path(
+    sources: &crate::sources::Sources<'_>,
+    target: &Target,
+    interpreted: bool,
+) -> occurrence::Path {
+    let (mut path, shown) = match target {
+        Target::Document => (Vec::new(), Location::root(Vec::new())),
+        Target::Pane { path: declaration } => {
+            let shown = interpreted
+                .then(|| {
+                    sources
+                        .resolve_path(declaration)
+                        .and_then(crate::location::read)
+                })
+                .flatten()
+                .unwrap_or_else(|| Location::root(declaration.clone()));
+            let mut path = occurrence::of(declaration);
+            path.push(occurrence::Step::jump(shown.clone()));
+            (path, shown)
+        }
+    };
+    if let Some(main) = main_path(sources.read(&shown)).filter(|_| interpreted) {
+        path.extend(occurrence::of(&main));
+    }
+    path
 }
 
 /// Read pane declarations only from the document root. No recursive
