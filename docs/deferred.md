@@ -128,6 +128,19 @@ variables and 76 are computed expressions, so `unquote` stays common in either
 design. Independently of the semantics, the picker could offer in-scope variables
 inside a template and insert them as holes.
 
+## A missing argument under its own label
+
+`(□ * □)` reads `invalid arguments {left: missing argument left □, …}`: the
+parameter's name repeats the label it's filed under. It should drop the
+parameter's name there, keeping "missing argument", but only when the entry is
+that call's own missing argument. In `x + 1` inside a lambda called without
+`x`, the sum's entry is `left: missing argument x □`, and the name is the
+information. Telling the two apart from the data's shape isn't honest: the
+argument construct files a missing argument it made for its own call the same
+way as an absent it was handed. A fix would have the data say which, for
+example `invalid arguments` carrying its call and listing the parameters it got
+nothing for, apart from the keyed causes of arguments it was given.
+
 ## Lexical parameter lookup
 
 A call binds a missing argument to the missing-argument absent, so a body
