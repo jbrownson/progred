@@ -372,7 +372,7 @@ fn layout_program_is_an_ordinary_closure_with_its_lexical_environment() {
     assert!(result.completed);
     assert!(layout.is_none());
     let function = result.result.field(LAYOUT_PROGRAM).unwrap();
-    assert!(function.contains_field(::grap::vocabulary::CLOSURE));
+    assert!(function.contains_field(::grap::vocabulary::LAMBDA));
     let (result, layout) = run::<crate::Editor>(site, |scope| {
         ::grap::apply(
             &function,

@@ -64,10 +64,6 @@ fn closures_share_captured_data_with_each_other_and_the_explicit_value() {
         value
             .as_record()
             .unwrap()
-            .get(&vocabulary::CLOSURE)
-            .unwrap()
-            .as_record()
-            .unwrap()
             .get(&vocabulary::ENVIRONMENT)
             .unwrap()
             .clone()
@@ -115,10 +111,6 @@ fn different_closure_environments_preserve_shared_outer_containers() {
         .values()
         .map(|value| {
             value
-                .as_record()
-                .unwrap()
-                .get(&vocabulary::CLOSURE)
-                .unwrap()
                 .as_record()
                 .unwrap()
                 .get(&vocabulary::ENVIRONMENT)

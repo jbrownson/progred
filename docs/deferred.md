@@ -107,7 +107,7 @@ data with names: `"{circle: {x: x, y: 50}}`. It waits on two idioms that rely on
 bare references staying data, both workarounds worth removing first:
 
 - The CAM example writes deferred passes as closures in their stored form,
-  `"{closure: {params, body, environment}}`, whose `body` refers to variables
+  `"{lambda: {params, body}, environment}`, whose `body` refers to variables
   that `environment` captures through `unquote`. A lambda would capture its
   whole lexical environment. The original reason, not retaining recursive
   list-mapping accumulators, went away with scoped tree emission. Lambdas that

@@ -371,7 +371,7 @@ fn border_composes_with_an_ordinary_projection() {
         composition
             .result
             .as_record()
-            .is_some_and(|fields| fields.contains_key(&::grap::vocabulary::CLOSURE))
+            .is_some_and(|fields| fields.contains_key(&::grap::vocabulary::LAMBDA))
     );
     let evaluation = crate::test_support::test_apply(
         &composition.result,

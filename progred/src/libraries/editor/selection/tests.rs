@@ -1,47 +1,50 @@
 pub(crate) fn grap_at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
     use ::grap::{call, vocabulary as g};
     use gid::Value;
-    Value::record([(
-        g::CLOSURE,
-        Value::record([
-            (g::PARAMS, Value::list([])),
-            (
-                g::ENVIRONMENT,
-                Value::record([(crate::libraries::editor::site::vocabulary::VALUE, payload)]),
-            ),
-            (
-                g::BODY,
-                call(
-                    vocabulary::SET.into(),
-                    [
-                        (
-                            vocabulary::PATH,
-                            call(
-                                crate::libraries::list::vocabulary::CONCAT.into(),
-                                [
-                                    (
-                                        crate::libraries::grap::numbers::vocabulary::LEFT,
-                                        call(
-                                            crate::libraries::editor::site::vocabulary::PATH.into(),
-                                            [],
+    Value::record([
+        (
+            g::LAMBDA,
+            Value::record([
+                (g::PARAMS, Value::list([])),
+                (
+                    g::BODY,
+                    call(
+                        vocabulary::SET.into(),
+                        [
+                            (
+                                vocabulary::PATH,
+                                call(
+                                    crate::libraries::list::vocabulary::CONCAT.into(),
+                                    [
+                                        (
+                                            crate::libraries::grap::numbers::vocabulary::LEFT,
+                                            call(
+                                                crate::libraries::editor::site::vocabulary::PATH
+                                                    .into(),
+                                                [],
+                                            ),
                                         ),
-                                    ),
-                                    (
-                                        crate::libraries::grap::numbers::vocabulary::RIGHT,
-                                        crate::libraries::editor::path::value(path),
-                                    ),
-                                ],
+                                        (
+                                            crate::libraries::grap::numbers::vocabulary::RIGHT,
+                                            crate::libraries::editor::path::value(path),
+                                        ),
+                                    ],
+                                ),
                             ),
-                        ),
-                        (
-                            crate::libraries::editor::site::vocabulary::VALUE,
-                            crate::libraries::editor::site::vocabulary::VALUE.into(),
-                        ),
-                    ],
+                            (
+                                crate::libraries::editor::site::vocabulary::VALUE,
+                                crate::libraries::editor::site::vocabulary::VALUE.into(),
+                            ),
+                        ],
+                    ),
                 ),
-            ),
-        ]),
-    )])
+            ]),
+        ),
+        (
+            g::ENVIRONMENT,
+            Value::record([(crate::libraries::editor::site::vocabulary::VALUE, payload)]),
+        ),
+    ])
 }
 
 use super::*;

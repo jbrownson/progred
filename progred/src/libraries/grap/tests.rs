@@ -311,14 +311,16 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
     let alias = new_cell_id();
     let parameter = new_cell_id();
     let lambda = ::grap::lambda([parameter], Value::record([]));
-    let closure = Value::record([(
-        ::grap::vocabulary::CLOSURE,
-        Value::record([
-            (PARAMS, Value::list([parameter.into()])),
-            (BODY, Value::record([])),
-            (::grap::vocabulary::ENVIRONMENT, Value::record([])),
-        ]),
-    )]);
+    let closure = Value::record([
+        (
+            ::grap::vocabulary::LAMBDA,
+            Value::record([
+                (PARAMS, Value::list([parameter.into()])),
+                (BODY, Value::record([])),
+            ]),
+        ),
+        (::grap::vocabulary::ENVIRONMENT, Value::record([])),
+    ]);
     for value in [&lambda, &closure] {
         assert_eq!(
             function_parameters(&value.into(), &|_| panic!(

@@ -33,7 +33,6 @@
     "chamfer_stepover": fb027d8b1e4955251d78caa3695efdd8,
     "chamfer_strip": a3a5f7b86c3cd360f1dfdfab9bd89beb,
     "children": e10b73d5482f96ca7d3852c0f16b49ea,
-    "closure": db39600f3ed07398c77ac120deb108a8,
     "collect_tree": f070b08cda17ca0f5ec97de2ab5b2fab,
     "color": d6b4c91765541de967c02878c42d15ea,
     "compensation": 71c12dda3abeac8eb4aa5bb84b1c98fe,
@@ -105,6 +104,7 @@
     "is_finite": 1ff1fcec05b669eba2314ad52fe8e8f1,
     "item": 67bdfe4ec7d3bafc14407235618840aa,
     "iterate": 9546343518fe44f380e6134f3f56cf37,
+    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_face": 26c724208a09da7103cdd90bb5b4ae48,
     "length": 52ce1d9d7a07fc917126f7ce3f2e20c1,
@@ -886,7 +886,7 @@
           value: {
             function: quote,
             expression: {
-              closure: {
+              lambda: {
                 params: [],
                 body: {
                   function: where,
@@ -936,16 +936,16 @@
                     },
                   ],
                 },
-                environment: {
-                  contact_height: {
-                    unquote: contact_height,
-                  },
-                  cutter_diameter: {
-                    unquote: cutter_diameter,
-                  },
-                  strip: {
-                    unquote: strip,
-                  },
+              },
+              environment: {
+                contact_height: {
+                  unquote: contact_height,
+                },
+                cutter_diameter: {
+                  unquote: cutter_diameter,
+                },
+                strip: {
+                  unquote: strip,
                 },
               },
             },
@@ -1337,7 +1337,7 @@
                             value: {
                               function: quote,
                               expression: {
-                                closure: {
+                                lambda: {
                                   params: [],
                                   body: {
                                     feed_direction: feed_direction,
@@ -1372,25 +1372,25 @@
                                     },
                                     tool_axis: tool_axis,
                                   },
-                                  environment: {
-                                    state: {
-                                      unquote: state,
-                                    },
-                                    feed_direction: {
-                                      unquote: feed_direction,
-                                    },
-                                    row_direction: {
-                                      unquote: row_direction,
-                                    },
-                                    spacing: {
-                                      unquote: spacing,
-                                    },
-                                    rows: {
-                                      unquote: rows,
-                                    },
-                                    tool_axis: {
-                                      unquote: tool_axis,
-                                    },
+                                },
+                                environment: {
+                                  state: {
+                                    unquote: state,
+                                  },
+                                  feed_direction: {
+                                    unquote: feed_direction,
+                                  },
+                                  row_direction: {
+                                    unquote: row_direction,
+                                  },
+                                  spacing: {
+                                    unquote: spacing,
+                                  },
+                                  rows: {
+                                    unquote: rows,
+                                  },
+                                  tool_axis: {
+                                    unquote: tool_axis,
                                   },
                                 },
                               },
@@ -1608,7 +1608,7 @@
                                   value: {
                                     function: quote,
                                     expression: {
-                                      closure: {
+                                      lambda: {
                                         params: [],
                                         body: {
                                           function: action,
@@ -1618,16 +1618,16 @@
                                             left: state,
                                           },
                                         },
-                                        environment: {
-                                          segments: {
-                                            unquote: segments,
-                                          },
-                                          state: {
-                                            unquote: state,
-                                          },
-                                          action: {
-                                            unquote: action,
-                                          },
+                                      },
+                                      environment: {
+                                        segments: {
+                                          unquote: segments,
+                                        },
+                                        state: {
+                                          unquote: state,
+                                        },
+                                        action: {
+                                          unquote: action,
                                         },
                                       },
                                     },
@@ -2573,7 +2573,7 @@
           body: {
             function: quote,
             expression: {
-              closure: {
+              lambda: {
                 params: [],
                 body: {
                   function: map_points,
@@ -2582,13 +2582,13 @@
                     function: item,
                   },
                 },
-                environment: {
-                  item: {
-                    unquote: value,
-                  },
-                  mapping: {
-                    unquote: mapping,
-                  },
+              },
+              environment: {
+                item: {
+                  unquote: value,
+                },
+                mapping: {
+                  unquote: mapping,
                 },
               },
             },
@@ -2842,20 +2842,20 @@
           body: {
             function: quote,
             expression: {
-              closure: {
+              lambda: {
                 params: [],
                 body: {
                   function: rotate_paths,
                   orientation: orientation,
                   program: item,
                 },
-                environment: {
-                  item: {
-                    unquote: value,
-                  },
-                  orientation: {
-                    unquote: orientation,
-                  },
+              },
+              environment: {
+                item: {
+                  unquote: value,
+                },
+                orientation: {
+                  unquote: orientation,
                 },
               },
             },
@@ -3509,7 +3509,7 @@
           body: {
             function: quote,
             expression: {
-              closure: {
+              lambda: {
                 params: [],
                 body: {
                   function: with_tool,
@@ -3518,13 +3518,13 @@
                   },
                   tool: tool,
                 },
-                environment: {
-                  item: {
-                    unquote: value,
-                  },
-                  tool: {
-                    unquote: tool,
-                  },
+              },
+              environment: {
+                item: {
+                  unquote: value,
+                },
+                tool: {
+                  unquote: tool,
                 },
               },
             },

@@ -135,7 +135,7 @@ pub(super) fn scope<'a>(
     value_at: &dyn Fn(&[Step]) -> Option<&'a Value>,
     value_of: &dyn Fn(CellId) -> Option<&'a Value>,
 ) -> (BTreeMap<CellId, Binding>, bool) {
-    use ::grap::vocabulary::{ENVIRONMENT, EXPRESSION};
+    use ::grap::vocabulary::{ENVIRONMENT, EXPRESSION, LAMBDA};
     let mut result = BTreeMap::new();
     let mut quoted = false;
     for offset in 0..path.len() {
@@ -200,9 +200,12 @@ pub(super) fn scope<'a>(
                     let params: Vec<_> = params.values().filter_map(Value::as_cell).collect();
                     computed = super::unnamed_parameters(&params, value_of);
                     found.extend(params);
-                    if let Some(environment) = fields.get(&ENVIRONMENT).and_then(Value::as_record) {
-                        found.extend(environment.keys().copied());
-                    }
+                }
+            }
+            // A closure's environment binds in its lambda.
+            None if matches!(suffix.first(), Some(Step::Key(LAMBDA))) => {
+                if let Some(environment) = fields.get(&ENVIRONMENT).and_then(Value::as_record) {
+                    found.extend(environment.keys().copied());
                 }
             }
             _ => (),

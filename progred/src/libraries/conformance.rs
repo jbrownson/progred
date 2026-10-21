@@ -205,23 +205,17 @@ fn callable_record_patterns_are_transparent_to_lowering() {
     let cases_cell = new_cell_id();
     let binder = new_cell_id();
     for (subject, field) in [
-        (grap::lambda([], blob("body")), grap::vocabulary::CLOSURE),
+        (grap::lambda([], blob("body")), grap::vocabulary::LAMBDA),
         (
             grap::ffi(crate::libraries::grap::numbers::f64::SUM),
             grap::vocabulary::FFI,
         ),
     ] {
         let evaluated = evaluate(&subject, 100).result;
+        // The subject is evaluated at a different location inside `match`,
+        // so its body origin differs; this open pattern compares the callable,
+        // the lambda as written or the foreign cell, not that annotation.
         let contents = evaluated.as_record().unwrap().get(&field).unwrap().clone();
-        // The subject is evaluated at a different location inside `match`.
-        // This open pattern compares callable contents, not that annotation.
-        let contents = if field == grap::vocabulary::CLOSURE {
-            let mut fields = contents.as_record().unwrap().clone();
-            fields.remove(&grap::source::vocabulary::BODY_ORIGIN);
-            Value::Record(fields)
-        } else {
-            contents
-        };
         for pattern in [Value::record([]), Value::record([(field, contents)])] {
             let cases = Value::list([
                 Value::record([

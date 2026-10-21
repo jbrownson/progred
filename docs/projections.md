@@ -648,13 +648,16 @@ Grap recognizes these shapes through its vocabulary cells:
 {params: [parameter-cells...], body: expression}
 {function: callable-expression, parameter-cell: argument-expression, ...}
 {value: expression, ...}
-{closure: {params: [...], body: expression, environment: {...}}}
+{lambda: {params: [...], body: expression}, environment: {...}, body origin: ...}
 {ffi: function-cell}
 ```
 
 Evaluating an untagged `{params, body}` lambda captures its lexical environment
-in a callable value; materialized, it is `{closure: {params, body, environment}}`
-with the environment as an ordinary GID record. Grap-defined calls are strict,
+in a callable value, a closure. Materialized, it is `{lambda, environment, body
+origin}`: the lambda as written, the environment as an ordinary GID record of
+its bindings, and, when the body has a source, where it came from, so errors
+and traces inside a closure called later still point at it. A closure is a
+value: as code it matches no form, so evaluating it again gives itself. Grap-defined calls are strict,
 evaluating every declared argument before the body. A missing argument binds
 its parameter to the missing-argument absent, which answers only where the
 body uses it. Effects are explicit

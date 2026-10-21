@@ -554,7 +554,7 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::vocabulary::PARAMS, "params"),
             (::grap::vocabulary::BODY, "body"),
             (::grap::vocabulary::VALUE, "value"),
-            (::grap::vocabulary::CLOSURE, "closure"),
+            (::grap::vocabulary::LAMBDA, "lambda"),
             (::grap::vocabulary::ENVIRONMENT, "environment"),
             (::grap::vocabulary::FFI, "ffi"),
             (::grap::vocabulary::EVALUATE, "evaluate"),

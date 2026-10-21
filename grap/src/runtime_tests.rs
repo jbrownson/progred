@@ -46,7 +46,7 @@ fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
             ),
             (vocabulary::BODY, closure.clone()),
         ]),
-        RuntimeValue::record([(vocabulary::CLOSURE, RuntimeValue::f64(1.0))]),
+        RuntimeValue::record([(vocabulary::LAMBDA, RuntimeValue::f64(1.0))]),
         RuntimeValue::f64(1.0),
     ] {
         assert_eq!(value.callable_parameters(), None);
@@ -240,7 +240,8 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
             crate::f64::F64,
             crate::text::UTF8,
             vocabulary::FFI,
-            vocabulary::CLOSURE,
+            vocabulary::LAMBDA,
+            vocabulary::ENVIRONMENT,
         ] {
             assert_eq!(
                 value.contains_field(key),
@@ -590,17 +591,19 @@ fn runtime_built_callable_records_match_their_gid_forms() {
         ),
     )]);
     let foreign = RuntimeValue::record([(vocabulary::FFI, Value::from(identity).into())]);
-    let closure = RuntimeValue::record([(
-        vocabulary::CLOSURE,
-        RuntimeValue::record([
-            (vocabulary::PARAMS, RuntimeValue::list([])),
-            (vocabulary::BODY, Value::from(argument).into()),
-            (
-                vocabulary::ENVIRONMENT,
-                RuntimeValue::record([(argument, RuntimeValue::f64(8.0))]),
-            ),
-        ]),
-    )]);
+    let closure = RuntimeValue::record([
+        (
+            vocabulary::LAMBDA,
+            RuntimeValue::record([
+                (vocabulary::PARAMS, RuntimeValue::list([])),
+                (vocabulary::BODY, Value::from(argument).into()),
+            ]),
+        ),
+        (
+            vocabulary::ENVIRONMENT,
+            RuntimeValue::record([(argument, RuntimeValue::f64(8.0))]),
+        ),
+    ]);
     for function in [foreign, closure] {
         let expected = apply_value(
             &function.to_value(),
@@ -651,15 +654,15 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
     let closure = gid::Record::from_iter([
         number,
         (
-            vocabulary::CLOSURE,
+            vocabulary::LAMBDA,
             Value::record([
                 (vocabulary::PARAMS, Value::list([])),
                 (vocabulary::BODY, Value::from(argument)),
-                (
-                    vocabulary::ENVIRONMENT,
-                    Value::record([(argument, f64::value(8.0))]),
-                ),
             ]),
+        ),
+        (
+            vocabulary::ENVIRONMENT,
+            Value::record([(argument, f64::value(8.0))]),
         ),
     ]);
     let noop = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| unreachable!();
@@ -875,18 +878,9 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
         context.closure_value([], call(sink.into(), []), &Environment::default())
     };
     let serialized = generated.to_value();
-    let fields = serialized
-        .as_record()
-        .unwrap()
-        .get(&vocabulary::CLOSURE)
-        .unwrap()
-        .as_record()
-        .unwrap();
+    let fields = serialized.as_record().unwrap();
     assert!(!fields.contains_key(&source::vocabulary::BODY_ORIGIN));
-    let malformed = Value::record([(
-        vocabulary::CLOSURE,
-        Value::Record(fields.update(source::vocabulary::BODY_ORIGIN, f64::value(3.0))),
-    )]);
+    let malformed = Value::Record(fields.update(source::vocabulary::BODY_ORIGIN, f64::value(3.0)));
     let driver = evaluate_runtime_at(
         &RuntimeValue::from(lambda([callback], call(callback.into(), []))),
         Some(SourceOrigin::Stored(vec![gid::Step::Key(caller)])),
@@ -955,13 +949,7 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
     let a = evaluate(&first.into(), &creator, 100).result.to_value();
     let b = evaluate(&second.into(), &creator, 100).result.to_value();
     assert_eq!(a, b);
-    let fields = a
-        .as_record()
-        .unwrap()
-        .get(&vocabulary::CLOSURE)
-        .unwrap()
-        .as_record()
-        .unwrap();
+    let fields = a.as_record().unwrap();
     assert_eq!(
         source::read(fields.get(&source::vocabulary::BODY_ORIGIN).unwrap()),
         Some(SourceOrigin::Cell {

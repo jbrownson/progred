@@ -791,8 +791,6 @@ fn returned_closures_are_graph_values_with_graph_environments() {
     assert_eq!(
         closure
             .as_record()
-            .and_then(|value| value.get(&vocabulary::CLOSURE))
-            .and_then(Value::as_record)
             .and_then(|closure| closure.get(&vocabulary::ENVIRONMENT))
             .and_then(Value::as_record)
             .and_then(|environment| environment.get(&captured)),
@@ -914,7 +912,7 @@ fn grap_parameters_may_repeat_and_name_the_function_field() {
         evaluation
             .result
             .as_record()
-            .and_then(|fields| fields.get(&vocabulary::CLOSURE))
+            .and_then(|fields| fields.get(&vocabulary::LAMBDA))
             .is_some()
     );
 }

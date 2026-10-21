@@ -49,19 +49,26 @@ impl Reify {
                     Value::list(elements.iter().map(|value| this.value(value)))
                 }),
             RuntimeValueKind::Foreign(cell) => ffi(*cell),
+            // The lambda as written, then what it closes over and where its
+            // body came from, beside it.
             RuntimeValueKind::Closure(closure) => {
-                let mut fields = closure.fields.clone();
-                fields.insert(vocabulary::BODY, self.value(&closure.body.0.source));
-                fields.insert(
-                    vocabulary::ENVIRONMENT,
-                    self.environment(&closure.environment),
-                );
-                if let Some(origin) = source::origin(&closure.body) {
-                    fields.insert(source::vocabulary::BODY_ORIGIN, source::value(&origin));
-                } else {
-                    fields.remove(&source::vocabulary::BODY_ORIGIN);
-                }
-                Value::record([(vocabulary::CLOSURE, Value::Record(fields))])
+                let mut lambda = closure.fields.clone();
+                lambda.insert(vocabulary::BODY, self.value(&closure.body.0.source));
+                Value::record(
+                    [
+                        (vocabulary::LAMBDA, Value::Record(lambda)),
+                        (
+                            vocabulary::ENVIRONMENT,
+                            self.environment(&closure.environment),
+                        ),
+                    ]
+                    .into_iter()
+                    .chain(
+                        source::origin(&closure.body).map(|origin| {
+                            (source::vocabulary::BODY_ORIGIN, source::value(&origin))
+                        }),
+                    ),
+                )
             }
         }
     }

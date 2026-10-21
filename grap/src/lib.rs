@@ -285,10 +285,22 @@ pub struct PreparedCallable {
 
 #[derive(Clone)]
 struct Closure {
+    /// The lambda's own fields, as written.
     fields: Record,
     params: Rc<[CellId]>,
     body: Expression,
     environment: Environment,
+}
+
+/// A closure's fields as data, in its record's order: its lambda and
+/// environment, and its body's origin when it has one.
+fn closure_keys(closure: &Closure) -> Vec<CellId> {
+    let mut keys: Vec<_> = [vocabulary::LAMBDA, vocabulary::ENVIRONMENT]
+        .into_iter()
+        .chain(source::origin(&closure.body).map(|_| source::vocabulary::BODY_ORIGIN))
+        .collect();
+    keys.sort();
+    keys
 }
 
 impl RuntimeValue {
@@ -437,13 +449,11 @@ impl RuntimeValue {
             RuntimeValueKind::Foreign(foreign) => {
                 (field == vocabulary::FFI).then(|| Self::from(Value::from(*foreign)))
             }
-            RuntimeValueKind::Closure(_) if field == vocabulary::CLOSURE => self
-                .to_value()
-                .as_record()?
-                .get(&field)
-                .cloned()
+            RuntimeValueKind::Closure(closure) => closure_keys(closure)
+                .contains(&field)
+                .then(|| self.to_value().as_record()?.get(&field).cloned())
+                .flatten()
                 .map(Self::from),
-            RuntimeValueKind::Closure(_) => None,
             RuntimeValueKind::List(_) => None,
         }
     }
@@ -481,7 +491,8 @@ impl RuntimeValue {
             RuntimeValueKind::Data(value) => Some(value.as_record()?.len()),
             RuntimeValueKind::Record(fields) => Some(fields.len()),
             RuntimeValueKind::Unboxed(unboxed) => Some(unboxed.len()),
-            RuntimeValueKind::Foreign(_) | RuntimeValueKind::Closure(_) => Some(1),
+            RuntimeValueKind::Foreign(_) => Some(1),
+            RuntimeValueKind::Closure(closure) => Some(closure_keys(closure).len()),
             RuntimeValueKind::List(_) => None,
         }
     }
@@ -492,7 +503,7 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Closure(closure) => Some(closure.params.to_vec()),
             _ => {
-                let fields = self.field(vocabulary::CLOSURE);
+                let fields = self.field(vocabulary::LAMBDA);
                 let fields = fields.as_ref().unwrap_or(self);
                 fields.field(vocabulary::BODY)?;
                 fields
@@ -532,7 +543,7 @@ impl RuntimeValue {
             RuntimeValueKind::Record(fields) => runtime_field(fields, field).is_some(),
             RuntimeValueKind::Unboxed(unboxed) => unboxed.contains_field(field),
             RuntimeValueKind::Foreign(_) => field == vocabulary::FFI,
-            RuntimeValueKind::Closure(_) => field == vocabulary::CLOSURE,
+            RuntimeValueKind::Closure(closure) => closure_keys(closure).contains(&field),
             RuntimeValueKind::List(_) => false,
         }
     }
@@ -544,7 +555,7 @@ impl RuntimeValue {
             RuntimeValueKind::Record(fields) => Some(fields.iter().map(|(key, _)| *key).collect()),
             RuntimeValueKind::Unboxed(unboxed) => Some(unboxed.keys()),
             RuntimeValueKind::Foreign(_) => Some(vec![vocabulary::FFI]),
-            RuntimeValueKind::Closure(_) => Some(vec![vocabulary::CLOSURE]),
+            RuntimeValueKind::Closure(closure) => Some(closure_keys(closure)),
             RuntimeValueKind::List(_) => None,
         }
     }
@@ -568,7 +579,7 @@ impl RuntimeValue {
             }
             RuntimeValueKind::Unboxed(unboxed) => Shape::Record(unboxed.keys()),
             RuntimeValueKind::Foreign(_) => Shape::Record(vec![vocabulary::FFI]),
-            RuntimeValueKind::Closure(_) => Shape::Record(vec![vocabulary::CLOSURE]),
+            RuntimeValueKind::Closure(closure) => Shape::Record(closure_keys(closure)),
         }
     }
 
@@ -2309,18 +2320,18 @@ impl<'a> Context<'a> {
             RuntimeValueKind::Data(_)
             | RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_) => {
-                let fields = value.field(vocabulary::CLOSURE)?;
-                let params = fields
+                let lambda = value.field(vocabulary::LAMBDA)?;
+                let params = lambda
                     .field(vocabulary::PARAMS)?
                     .list_values()?
                     .map(|value| value.as_cell())
                     .collect::<Option<Rc<[_]>>>()?;
-                let origin = fields
+                let origin = value
                     .field(source::vocabulary::BODY_ORIGIN)
                     .and_then(|value| source::read(value.as_value()))
                     .map(|origin| OriginId(Rc::new(OriginNode::Root(OriginRoot::Located(origin)))));
-                let body = self.lower_runtime_code_at(&fields.field(vocabulary::BODY)?, origin);
-                let captured = fields.field(vocabulary::ENVIRONMENT)?;
+                let body = self.lower_runtime_code_at(&lambda.field(vocabulary::BODY)?, origin);
+                let captured = value.field(vocabulary::ENVIRONMENT)?;
                 let environment = match &captured.0 {
                     RuntimeValueKind::Data(value) => self.environment(value),
                     RuntimeValueKind::Record(fields) => Some(
@@ -2333,7 +2344,7 @@ impl<'a> Context<'a> {
                     params,
                     body,
                     environment,
-                    fields: fields.as_value().as_record()?.clone(),
+                    fields: lambda.as_value().as_record()?.clone(),
                 })
             }
             RuntimeValueKind::List(_) | RuntimeValueKind::Foreign(_) => None,
