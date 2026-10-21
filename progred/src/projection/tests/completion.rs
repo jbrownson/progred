@@ -99,7 +99,11 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
             .cloned()
             .chain([Step::Key(name::vocabulary::NAME)])
             .collect::<Path>();
-        assert_eq!(selected.path(), body_path);
+        // The first parameter is picked next, in the empty list.
+        assert!(matches!(
+            &selected.path()[path.len()..],
+            [Step::Key(PARAMS), Step::Element(_)]
+        ));
         assert_eq!(selected.stage(&world.sources()), Stage::Pending);
         assert!(crate::occurrence::read(&world.sources(), &body_path).is_none());
         assert!(crate::occurrence::read(&world.sources(), &name_path).is_none());

@@ -1104,6 +1104,7 @@ fn quote_and_unquote_are_offered_under_their_marks() {
     driver.select(&program);
     driver.type_text("λ");
     driver.choose("new lambda");
+    driver.select(&[&program[..], &[Step::Key(BODY)]].concat());
     let offered = |driver: &mut Driver| {
         driver
             .picker_entries()

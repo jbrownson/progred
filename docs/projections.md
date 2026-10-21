@@ -211,7 +211,8 @@ can contribute offers to one picker.
 
 Grap answers `Everything` with a `new lambda` value completion (aliases `lambda`
 and `λ`), which Grap's expression slots list. It inserts `{params: []}` and
-selects the missing body.
+opens its first parameter, whose slot offers a new one; Tab goes on to the
+missing body.
 The lambda projection accepts that unfinished shape and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
 An empty parameter slot offers only a new parameter, a new document cell: for

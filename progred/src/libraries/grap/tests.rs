@@ -1255,5 +1255,47 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
     );
 }
 
+#[test]
+fn a_new_lambda_starts_at_its_first_parameter() {
+    use ::grap::vocabulary::{BODY, PARAMS};
+    use ui_events::keyboard::NamedKey;
+    let mut driver =
+        crate::driver::Driver::of(Value::record([(vocabulary::GRAP, new_cell_id().into())]));
+    let program = [
+        Step::Key(vocabulary::GRAP),
+        Step::Follow(gid::Resolution::Document),
+    ];
+    driver.select(&program);
+    driver.type_text("λ");
+    driver.choose("new lambda");
+    assert_eq!(
+        driver.picker_entries(),
+        Some(vec!["new parameter".to_owned()]),
+        "the parameter list's slot is open"
+    );
+    driver.press(NamedKey::Enter);
+    driver.type_text("x");
+    driver.press(NamedKey::Enter);
+    let params = [&program[..], &[Step::Key(PARAMS)]].concat();
+    let parameter = driver
+        .value(&driver.element(&params, 0, &[]))
+        .as_cell()
+        .expect("a parameter cell");
+    assert_eq!(
+        driver
+            .editor()
+            .sources()
+            .resolve(parameter)
+            .map(|definition| definition.value.clone()),
+        Some(crate::libraries::name::record("x", []))
+    );
+    driver.press(NamedKey::Tab);
+    assert_eq!(
+        driver.selection(),
+        crate::occurrence::below(&[], &[&program[..], &[Step::Key(BODY)]].concat()),
+        "Tab goes on to the body"
+    );
+}
+
 mod declarations;
 mod parameter_names;

@@ -622,13 +622,16 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
         CompletionScope::Start => Some(vec![new_program(), notebook::starter()]),
         CompletionScope::Everything => Some(
             std::iter::once(
+                // Its first parameter is picked next.
                 crate::libraries::completion::insert(
                     "new lambda",
                     Value::record([(PARAMS, Value::list([]))]),
-                    Some(crate::selection::at(
-                        &[Step::Key(BODY)],
-                        crate::selection::payload::edge(),
-                    )),
+                    Some(crate::selection::pending_at(&[
+                        Step::Key(PARAMS),
+                        Step::Element(
+                            gid::position::between(None, None).expect("an empty list has room"),
+                        ),
+                    ])),
                 )
                 .with_aliases(["lambda", "λ"])
                 .with_detail(ID),
