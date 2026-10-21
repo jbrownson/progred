@@ -264,23 +264,27 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
 }
 
 #[test]
-fn compact_declarations_ignore_metadata_but_decline_invalid_names_and_active_insertions() {
+fn compact_declarations_draw_metadata_after_them_but_decline_invalid_names() {
     let env = env();
+    let declared = |input: &ProjectionInput<'_>| {
+        project_runtime(|input| declaration_name(input, None), input).is_some()
+    };
     let invalid = Value::record([(name::vocabulary::NAME, Value::from(vec![1]))]);
-    assert!(declaration_name(&projection_input(&env, &invalid), None).is_none());
-    // A declaration with no name yet is a hole for one, there to pick.
+    assert!(!declared(&projection_input(&env, &invalid)));
+    // A declaration with no name yet still draws its name's editor.
     let unnamed = Value::record([]);
     let mut input = projection_input(&env, &unnamed);
-    assert!(declaration_name(&input, None).is_some());
+    assert!(declared(&input));
     input.pending = Some(Pending::Child(Step::Key(name::vocabulary::NAME)));
-    assert!(declaration_name(&input, None).is_some());
+    assert!(declared(&input));
+    // Other fields, and one being added, follow the name.
     let value = name::record("size", [(new_cell_id(), Value::record([]))]);
     let mut input = projection_input(&env, &value);
-    assert!(declaration_name(&input, None).is_some());
+    assert!(declared(&input));
     input.pending = Some(Pending::Field);
-    assert!(declaration_name(&input, None).is_none());
+    assert!(declared(&input));
     input.pending = Some(Pending::Child(Step::Key(new_cell_id())));
-    assert!(declaration_name(&input, None).is_none());
+    assert!(declared(&input));
 }
 
 #[test]

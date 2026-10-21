@@ -230,32 +230,31 @@ pub(crate) fn declaration_cell<W: Host>(
         Delim::Paren,
         descend_local(
             [Step::Follow(definition.resolution)],
-            crate::display::partial(move |input| declaration_name(input, computed.as_deref())),
+            crate::display::runtime_partial(move |input| {
+                declaration_name(input, computed.as_deref())
+            }),
             &input.default_projection,
         ),
     )))
 }
 
-/// A declaration's name, there or not: a missing one is a hole for one. A
-/// name that isn't text, or another field being added, declines.
+/// A declaration's definition as its name, there or not, the definition a
+/// stop of its own around it; its other fields follow. A name that isn't
+/// text declines.
 fn declaration_name<W: Host>(
-    input: &ProjectionInput<'_, W>,
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<&str>,
 ) -> Option<Layout<W>> {
-    matches!(
-        &input.pending,
-        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME)))
-    )
-    .then_some(())?;
-    let value = input.value?;
-    if value.as_record()?.contains_key(&name::vocabulary::NAME) {
-        name::read(value)?;
-    }
-    Some(descend_local(
-        [Step::Key(name::vocabulary::NAME)],
-        name::projection(computed.map(str::to_owned)),
-        &input.default_projection,
-    ))
+    record_form(input, [name::vocabulary::NAME], &[], |[spelled]| {
+        if let Some(spelled) = spelled {
+            crate::libraries::text::read(spelled.as_value())?;
+        }
+        Some(group(descend_local(
+            [Step::Key(name::vocabulary::NAME)],
+            name::projection(computed.map(str::to_owned)),
+            &input.default_projection,
+        )))
+    })
 }
 
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {

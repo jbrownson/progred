@@ -317,7 +317,7 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
 }
 
 #[test]
-fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessible() {
+fn declaration_names_draw_metadata_after_them_and_take_new_fields() {
     let binder = new_cell_id();
     let extra = new_cell_id();
     let nested = new_cell_id();
@@ -342,19 +342,11 @@ fn declaration_names_ignore_metadata_but_raw_and_field_insertion_keep_it_accessi
     let libraries = core_libraries();
     let mut world = crate::test_editor(doc.clone());
     assert!(
-        !editing_frame(&mut world)
-            .landmarks
-            .landmark(&extra_path)
-            .is_some()
-    );
-    world.model.workspace.document.shown = crate::workspace::Shown::RAW;
-    assert!(
         editing_frame(&mut world)
             .landmarks
             .landmark(&extra_path)
             .is_some()
     );
-    world.model.workspace.document.shown = crate::workspace::Shown::ALL;
     let pending = pending_edge(
         &crate::editing::Read {
             sources: src(&doc, &libraries),

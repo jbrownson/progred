@@ -302,10 +302,12 @@ Grap. In lambda parameters, direct
 `let`/`where` binders, and pattern binders, a cell whose definition contains
 a text name projects as `(name)`: the usual cell parentheses surround an
 unquoted line editor at the real `Follow` → `name` path. This contextual
-projection is not in the default stack. Unrelated definition fields do not
-block it; malformed or missing names and active field insertion decline to the
-ordinary projection. Ordinary cells and quoted data are unchanged; named use
-sites remain shallow references.
+projection is not in the default stack. The definition is a navigation stop
+of its own between the cell and its name, and its other fields, and one being
+added, follow the name as a trailing record. A name that isn't text declines to
+the ordinary projection; a missing one is its line editor with nothing in it.
+Ordinary cells and quoted data are unchanged; named use sites remain shallow
+references.
 Calls use a stored or inline
 lambda's declared parameter order when available, then the ordinary order for
 extra fields. Missing declared arguments appear as ordinary editable empty slots

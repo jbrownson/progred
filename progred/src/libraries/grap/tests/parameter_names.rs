@@ -161,3 +161,23 @@ fn clicking_a_missing_name_picks_one() {
         Some(name::record("height", []))
     );
 }
+
+#[test]
+fn arrowing_left_out_of_a_name_stops_on_its_definition_then_its_cell() {
+    let (mut driver, _) = lambda_with_unnamed_parameters();
+    let cell = driver.element(&in_lambda(&[Step::Key(PARAMS)]), 1, &[]);
+    let definition = [&cell[..], &[Step::Follow(gid::Resolution::Document)]].concat();
+    let name = [&definition[..], &[Step::Key(name::vocabulary::NAME)]].concat();
+    driver.click(&name);
+    driver.type_text("w");
+    driver.press(ui_events::keyboard::NamedKey::ArrowLeft);
+    assert_eq!(
+        driver.selection(),
+        crate::occurrence::of(&name),
+        "the caret first"
+    );
+    for stop in [&definition, &cell] {
+        driver.press(ui_events::keyboard::NamedKey::ArrowLeft);
+        assert_eq!(driver.selection(), crate::occurrence::of(stop));
+    }
+}

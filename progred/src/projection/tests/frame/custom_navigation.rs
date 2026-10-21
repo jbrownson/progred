@@ -336,7 +336,7 @@ fn call_function_and_arguments_are_one_form_in_both_presentations() {
 }
 
 #[test]
-fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
+fn parameter_declarations_keep_cell_definition_and_name_stops_inside_the_parameter_list() {
     use NavigationDirection::*;
     let parameter = gid::new_cell_id();
     let mut cells = Cells::new();
@@ -347,6 +347,11 @@ fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
     let mut f = Fixture::new(lambda, cells);
     let params = f.child([Step::Key(PARAMS)]);
     let cell = f.child([Step::Key(PARAMS), Step::Element(position.clone())]);
+    let definition = f.child([
+        Step::Key(PARAMS),
+        Step::Element(position.clone()),
+        Step::Follow(gid::Resolution::Document),
+    ]);
     let name = f.child([
         Step::Key(PARAMS),
         Step::Element(position),
@@ -356,8 +361,10 @@ fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
     let body = f.child([Step::Key(BODY)]);
     for (from, direction, to) in [
         (params.clone(), Right, cell.clone()),
-        (cell.clone(), Right, name.clone()),
-        (name.clone(), Left, cell.clone()),
+        (cell.clone(), Right, definition.clone()),
+        (definition.clone(), Right, name.clone()),
+        (name.clone(), Left, definition.clone()),
+        (definition, Left, cell.clone()),
         (cell, Left, params),
         (name, Right, body.clone()),
         (body, Right, f.after.clone()),
