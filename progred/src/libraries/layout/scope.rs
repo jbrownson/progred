@@ -1,6 +1,7 @@
 //! Evaluation-local layout output. Grap carries only ordinary values; the
 //! borrowed FFIs emit into this Rust buffer, including through calls and loops.
 use super::*;
+use crate::display::Projected;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::editor::path;
 use ::grap::{Context, Evaluation, ForeignOverlay, RuntimeValue};
@@ -341,7 +342,7 @@ fn descend<W: Host>(
     let step = argument(context, call, environment, STEP, |value| {
         path::read_step(value.as_value())
     })?;
-    Ok(crate::display::descend([step], None, None))
+    Ok(crate::display::descend([step], Projected::ordinary()))
 }
 
 fn descend_path<W: Host>(
@@ -350,7 +351,7 @@ fn descend_path<W: Host>(
     environment: &Environment,
 ) -> Result<Layout<W>, BuildError> {
     let steps = argument(context, call, environment, STEPS, read_steps)?;
-    Ok(crate::display::descend(steps, None, None))
+    Ok(crate::display::descend(steps, Projected::ordinary()))
 }
 
 fn jump<W: Host>(
@@ -363,7 +364,7 @@ fn jump<W: Host>(
     Ok(crate::display::jump(
         steps,
         crate::location::Location::root(document),
-        None,
+        Projected::ordinary(),
     ))
 }
 
@@ -377,8 +378,7 @@ fn at<W: Host>(
     Ok(crate::display::at(
         steps,
         context.eval(value, environment)?,
-        None,
-        None,
+        Projected::ordinary(),
     ))
 }
 

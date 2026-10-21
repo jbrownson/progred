@@ -1,4 +1,5 @@
 use super::{one_marker, parameters, vocabulary::*};
+use crate::display::Projected;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::hug;
 use crate::display::{
@@ -102,7 +103,7 @@ pub(super) fn field<W: Host>(
         if precedence(marker).is_some() {
             representation::infix(operator, |key| {
                 (
-                    descend([Step::Key(marker), Step::Key(key)], None, None),
+                    descend([Step::Key(marker), Step::Key(key)], Projected::ordinary()),
                     fields
                         .get(&key)
                         .is_some_and(|value| grouped(marker, key, value)),
@@ -116,7 +117,10 @@ pub(super) fn field<W: Host>(
                         .iter()
                         .map(|key| {
                             fields.get(key)?;
-                            Some(descend([Step::Key(marker), Step::Key(*key)], None, None))
+                            Some(descend(
+                                [Step::Key(marker), Step::Key(*key)],
+                                Projected::ordinary(),
+                            ))
                         })
                         .collect::<Option<Vec<_>>>()?,
                 ),
@@ -130,10 +134,9 @@ pub(super) fn field<W: Host>(
                 row(
                     6.0,
                     [
-                        crate::display::descend_local(
+                        crate::display::descend(
                             [Step::Key(name::vocabulary::NAME)],
-                            name::projection(None),
-                            &input.default_projection,
+                            Projected::here(name::projection(None), &input.default_projection),
                         ),
                         dim("="),
                     ],

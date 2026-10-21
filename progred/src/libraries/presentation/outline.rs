@@ -55,7 +55,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 8.0,
                 [
                     label.clone(),
-                    d::descend([Step::Key(OUTLINE)], Some(entries), None),
+                    d::descend([Step::Key(OUTLINE)], d::Projected::by(Some(entries), None)),
                 ],
             )]
             .into_iter()
@@ -81,13 +81,21 @@ fn section<W: Host>(
         default_projection.clone(),
     ]));
     let unstored = match fields.get(&key) {
-        Some(value) => d::at(steps.clone(), value, body_projection.clone(), None),
+        Some(value) => d::at(
+            steps.clone(),
+            value,
+            d::Projected::by(body_projection.clone(), None),
+        ),
         None => d::slot(),
     };
     // The body stored there is edited there, along with what's stored below
     // it; one with nowhere stored draws as it is.
     let body = match outline.below(&[Step::Key(key)]).location() {
-        Some(stored) => d::jump(steps.clone(), stored, body_projection),
+        Some(stored) => d::jump(
+            steps.clone(),
+            stored,
+            d::Projected::by(body_projection, None),
+        ),
         None => unstored,
     };
     Layout::program(Rc::new(move |context, build| {

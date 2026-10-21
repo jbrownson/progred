@@ -850,21 +850,70 @@ pub fn shared<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     Layout::new(move |builder| builder.shared(id, &child))
 }
 
+/// Which projections draw a value a projection walks to, and what's inside
+/// it. Where one isn't given, the enclosing one does.
+pub struct Projected<World, Hover> {
+    here: Option<Partial<World, Hover>>,
+    inside: Option<Partial<World, Hover>>,
+}
+
+impl<World, Hover> Clone for Projected<World, Hover> {
+    fn clone(&self) -> Self {
+        Self {
+            here: self.here.clone(),
+            inside: self.inside.clone(),
+        }
+    }
+}
+
+impl<World: 'static, Hover: 'static> Projected<World, Hover> {
+    /// The enclosing projections, as anywhere.
+    pub fn ordinary() -> Self {
+        Self {
+            here: None,
+            inside: None,
+        }
+    }
+
+    /// `projection` tried on the value first, `default` otherwise and on
+    /// what's inside it.
+    pub fn here(projection: Partial<World, Hover>, default: &Partial<World, Hover>) -> Self {
+        Self {
+            here: Some(compose_partials([projection, default.clone()])),
+            inside: Some(default.clone()),
+        }
+    }
+
+    /// `projection` tried first on the value and on everything inside it,
+    /// `default` otherwise.
+    pub fn throughout(projection: Partial<World, Hover>, default: &Partial<World, Hover>) -> Self {
+        let projection = compose_partials([projection, default.clone()]);
+        Self {
+            here: Some(projection.clone()),
+            inside: Some(projection),
+        }
+    }
+
+    /// `here` draws the value and `inside` what's inside it, each replacing
+    /// the enclosing one, without composing with it, where it's given.
+    pub fn by(here: Option<Partial<World, Hover>>, inside: Option<Partial<World, Hover>>) -> Self {
+        Self { here, inside }
+    }
+}
+
 /// Descend `steps` through stored structure without projecting intermediate
-/// containers. `projection` draws what's there and `default_projection` its
-/// descendants; each is the enclosing one where it's `None`.
+/// containers, the value there drawn as `projected` says.
 pub fn descend<World: 'static, Hover: 'static>(
     steps: impl AsRef<[Step]> + 'static,
-    projection: Option<Partial<World, Hover>>,
-    default_projection: Option<Partial<World, Hover>>,
+    projected: Projected<World, Hover>,
 ) -> Layout<World, Hover> {
     Layout::program(Rc::new(move |context, build| {
         context.project.descend(
             context.text,
             build,
             steps.as_ref(),
-            projection.clone(),
-            default_projection.clone(),
+            projected.here.clone(),
+            projected.inside.clone(),
         )
     }))
 }
@@ -879,38 +928,23 @@ pub fn descend_raw<World: 'static, Hover: 'static>(step: Step) -> Layout<World, 
     }))
 }
 
-/// Try a specialization here, keeping the default for descendants.
-pub fn descend_local<World: 'static, Hover: 'static>(
-    steps: impl AsRef<[Step]> + 'static,
-    projection: Partial<World, Hover>,
-    default: &Partial<World, Hover>,
-) -> Layout<World, Hover> {
-    descend(
-        steps,
-        Some(compose_partials([projection, default.clone()])),
-        Some(default.clone()),
-    )
-}
-
-/// Draw `value` at `steps`, a computed occurrence with no document source;
-/// `projection` draws it and `default_projection` what's inside it, as for
-/// [`descend`].
+/// Draw `value` at `steps`, a computed occurrence with no document source,
+/// as `projected` says.
 pub fn at<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     value: impl Clone + Into<grap::RuntimeValue>,
-    projection: Option<Partial<World, Hover>>,
-    default_projection: Option<Partial<World, Hover>>,
+    projected: Projected<World, Hover>,
 ) -> Layout<World, Hover> {
-    computed(steps, value, None, projection, default_projection)
+    computed(steps, value, None, projected)
 }
 
-/// Draw at `steps` the value at `location`, by `projection` if given: the
+/// Draw at `steps` the value at `location`, as `projected` says: the
 /// occurrence path jumps there, so it and what's below it read and write
 /// there.
 pub fn jump<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     location: crate::location::Location<'static>,
-    projection: Option<Partial<World, Hover>>,
+    projected: Projected<World, Hover>,
 ) -> Layout<World, Hover> {
     let steps = steps.into();
     Layout::program(Rc::new(move |context, build| {
@@ -919,8 +953,8 @@ pub fn jump<World: 'static, Hover: 'static>(
             build,
             steps.clone(),
             location.clone(),
-            projection.clone(),
-            None,
+            projected.here.clone(),
+            projected.inside.clone(),
         )
     }))
 }
@@ -932,15 +966,19 @@ pub fn at_evaluated<World: 'static, Hover: 'static>(
     value: impl Clone + Into<grap::RuntimeValue>,
     evaluated: Evaluated,
 ) -> Layout<World, Hover> {
-    computed(steps, value, Some(Rc::new(evaluated)), None, None)
+    computed(
+        steps,
+        value,
+        Some(Rc::new(evaluated)),
+        Projected::ordinary(),
+    )
 }
 
 fn computed<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     value: impl Clone + Into<grap::RuntimeValue>,
     evaluated: Option<Rc<Evaluated>>,
-    projection: Option<Partial<World, Hover>>,
-    default_projection: Option<Partial<World, Hover>>,
+    projected: Projected<World, Hover>,
 ) -> Layout<World, Hover> {
     let steps = steps.into();
     let value = value.into();
@@ -951,8 +989,8 @@ fn computed<World: 'static, Hover: 'static>(
             steps.clone(),
             value.clone(),
             evaluated.clone(),
-            projection.clone(),
-            default_projection.clone(),
+            projected.here.clone(),
+            projected.inside.clone(),
         )
     }))
 }

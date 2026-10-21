@@ -195,13 +195,14 @@ pub(crate) fn tutorial_slots(
                             let view = match level {
                                 Level::Full => crate::display::descend(
                                     [Step::Key(*key)],
-                                    None,
-                                    Some(full_inside.clone()),
+                                    crate::display::Projected::by(None, Some(full_inside.clone())),
                                 ),
                                 Level::Plain => crate::display::descend(
                                     [Step::Key(*key)],
-                                    plain.clone(),
-                                    plain_inside.clone(),
+                                    crate::display::Projected::by(
+                                        plain.clone(),
+                                        plain_inside.clone(),
+                                    ),
                                 ),
                                 Level::Raw => crate::display::descend_raw(Step::Key(*key)),
                             };

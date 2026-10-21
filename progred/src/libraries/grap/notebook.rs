@@ -26,10 +26,12 @@ pub(super) fn display<W: Host>(
 ) -> Option<Layout<W>> {
     crate::display::structure::record_form(input, [vocabulary::NOTEBOOK], |[notebook]| {
         notebook?;
-        Some(crate::display::descend_local(
+        Some(crate::display::descend(
             [Step::Key(vocabulary::NOTEBOOK)],
-            crate::display::runtime_partial(entries),
-            &input.default_projection,
+            crate::display::Projected::here(
+                crate::display::runtime_partial(entries),
+                &input.default_projection,
+            ),
         ))
     })
 }

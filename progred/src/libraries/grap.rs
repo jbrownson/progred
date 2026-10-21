@@ -5,6 +5,7 @@
 //! representations in [`numbers`].
 
 use crate::computations::memo;
+use crate::display::Projected;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
@@ -14,7 +15,7 @@ use crate::display::hug;
 use crate::display::structure::record_form;
 use crate::display::{
     Completion, CompletionKind, Delim, Face, Name, Pending, Picker, ResolvedCell, activatable,
-    alternatives, col, descend_local, dim, faced, indent, picker, ranked, row, selectable_bracket,
+    alternatives, col, descend, dim, faced, indent, picker, ranked, row, selectable_bracket,
     shared,
 };
 use ::grap::source::vocabulary::BODY_ORIGIN;
@@ -228,12 +229,14 @@ pub(crate) fn declaration_cell<W: Host>(
     let definition = input.env.resolve(cell)?;
     Some(selectable_bracket(
         Delim::Paren,
-        descend_local(
+        descend(
             [Step::Follow(definition.resolution)],
-            crate::display::runtime_partial(move |input| {
-                declaration_name(input, computed.as_deref())
-            }),
-            &input.default_projection,
+            Projected::here(
+                crate::display::runtime_partial(move |input| {
+                    declaration_name(input, computed.as_deref())
+                }),
+                &input.default_projection,
+            ),
         ),
     ))
 }
@@ -248,10 +251,12 @@ fn declaration_name<W: Host>(
         if let Some(spelled) = spelled {
             crate::libraries::text::read(spelled.as_value())?;
         }
-        Some(descend_local(
+        Some(descend(
             [Step::Key(name::vocabulary::NAME)],
-            name::projection(computed.map(str::to_owned)),
-            &input.default_projection,
+            Projected::here(
+                name::projection(computed.map(str::to_owned)),
+                &input.default_projection,
+            ),
         ))
     })
 }
@@ -273,10 +278,9 @@ pub fn shallow_path<W: Host>(
     steps: impl AsRef<[Step]> + 'static,
     default: &Partial<W>,
 ) -> Layout<W> {
-    descend_local(
+    descend(
         steps,
-        crate::display::runtime_partial(name::shallow_cell),
-        default,
+        Projected::here(crate::display::runtime_partial(name::shallow_cell), default),
     )
 }
 
@@ -286,7 +290,10 @@ pub(crate) fn expression_path<W: Host>(
     steps: impl AsRef<[Step]> + 'static,
     default: &Partial<W>,
 ) -> Layout<W> {
-    descend_local(steps, crate::display::runtime_partial(expression), default)
+    descend(
+        steps,
+        Projected::here(crate::display::runtime_partial(expression), default),
+    )
 }
 
 /// A record naming a Grap program: the program its `grap` field names is
@@ -322,10 +329,12 @@ pub(crate) fn declaration_path<W: Host>(
     steps: impl AsRef<[Step]> + 'static,
     default: &Partial<W>,
 ) -> Layout<W> {
-    descend_local(
+    descend(
         steps,
-        crate::display::runtime_partial(|input| declaration_cell(input, None)),
-        default,
+        Projected::here(
+            crate::display::runtime_partial(|input| declaration_cell(input, None)),
+            default,
+        ),
     )
 }
 
@@ -411,10 +420,12 @@ pub(crate) fn call_with_function<W: Host>(
     let parameters = function
         .and_then(|function| function_parameters(&function, &|cell| input.env.resolve(cell)))
         .unwrap_or_default();
-    let function = descend_local(
+    let function = descend(
         [Step::Key(FUNCTION)],
-        function_projection.unwrap_or_else(|| crate::display::runtime_partial(expression)),
-        &input.default_projection,
+        Projected::here(
+            function_projection.unwrap_or_else(|| crate::display::runtime_partial(expression)),
+            &input.default_projection,
+        ),
     );
     // Its arguments are its function's parameters, in their order, each a
     // slot until it's given, then any others.
@@ -445,18 +456,22 @@ fn lambda_display<W: Host>(
             let computed = unnamed_parameters(&cells, &|cell| {
                 input.env.resolve(cell).map(|definition| definition.value)
             });
-            let params = descend_local(
+            let params = descend(
                 [Step::Key(PARAMS)],
-                crate::display::structure::list(Some(crate::display::runtime_partial(
-                    move |input| parameter(input, &computed),
-                ))),
-                &input.default_projection,
+                Projected::here(
+                    crate::display::structure::list(Some(crate::display::runtime_partial(
+                        move |input| parameter(input, &computed),
+                    ))),
+                    &input.default_projection,
+                ),
             );
             let body_site = input.site().below(&[Step::Key(BODY)]);
-            let lambda = descend_local(
+            let lambda = descend(
                 [Step::Key(name::vocabulary::NAME)],
-                crate::display::partial(lambda_name),
-                &input.default_projection,
+                Projected::here(
+                    crate::display::partial(lambda_name),
+                    &input.default_projection,
+                ),
             );
             let arrow = activatable(crate::display::arrow(), &body_site);
             let head = row(3.0, [lambda, params, arrow]);
@@ -524,12 +539,14 @@ fn value_display<W: Host>(
 ) -> Option<Layout<W>> {
     record_form(input, [name::vocabulary::NAME, VALUE], |[_, value]| {
         value?;
-        let name = descend_local(
+        let name = descend(
             [Step::Key(name::vocabulary::NAME)],
-            crate::display::partial(|input| {
-                name::editor(input.value?).map(crate::display::line_edit)
-            }),
-            &input.default_projection,
+            Projected::here(
+                crate::display::partial(|input| {
+                    name::editor(input.value?).map(crate::display::line_edit)
+                }),
+                &input.default_projection,
+            ),
         );
         let site = input.site().below(&[Step::Key(VALUE)]);
         Some(hug(

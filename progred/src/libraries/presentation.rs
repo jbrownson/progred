@@ -56,14 +56,21 @@ pub fn viewport_display<W: Host>(
 /// `value` drawn where a computed result goes: at the
 /// [`vocabulary::RESULT`] step below the occurrence that computed it.
 pub fn result_layout<W: Host>(value: impl Clone + Into<::grap::RuntimeValue>) -> Layout<W> {
-    at([Step::Key(vocabulary::RESULT)], value, None, None)
+    at(
+        [Step::Key(vocabulary::RESULT)],
+        value,
+        crate::display::Projected::ordinary(),
+    )
 }
 
 /// A projection's result in place, or where it's absent, the value it
 /// projects, so the absence exposes its source.
 fn result_or_value<W: Host>(result: ::grap::RuntimeValue) -> Layout<W> {
     if result.absent_reason().is_some() {
-        crate::display::descend([Step::Key(vocabulary::VALUE)], None, None)
+        crate::display::descend(
+            [Step::Key(vocabulary::VALUE)],
+            crate::display::Projected::ordinary(),
+        )
     } else {
         result_layout(&result)
     }

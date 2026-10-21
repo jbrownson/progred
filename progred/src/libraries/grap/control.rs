@@ -4,12 +4,13 @@
 //! expressions until the first absent, `all` retains every result, and
 //! `quote` constructs data while evaluating explicit unquotes.
 
+use crate::display::Projected;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use gid::{CellId, Step, Value};
 
 use crate::display::hug;
 use crate::display::structure::record_form;
-use crate::display::{activatable, alternatives, col, descend_local, dim, row, shared};
+use crate::display::{activatable, alternatives, col, descend, dim, row, shared};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
@@ -630,12 +631,14 @@ fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
             );
             Some(hug(
                 head,
-                descend_local(
+                descend(
                     [Step::Key(vocabulary::CASES)],
-                    crate::display::structure::list(Some(crate::display::runtime_partial(
-                        case_display,
-                    ))),
-                    &input.default_projection,
+                    Projected::here(
+                        crate::display::structure::list(Some(crate::display::runtime_partial(
+                            case_display,
+                        ))),
+                        &input.default_projection,
+                    ),
                 ),
                 4.0,
             ))
@@ -646,11 +649,10 @@ fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
 /// A pattern at `steps`, its binders declared there and in every pattern
 /// nested below.
 fn pattern_path<W: Host>(steps: impl AsRef<[Step]> + 'static, default: &Partial<W>) -> Layout<W> {
-    let pattern = crate::display::compose_partials([
-        crate::display::runtime_partial(pattern_binder),
-        default.clone(),
-    ]);
-    crate::display::descend(steps, Some(pattern.clone()), Some(pattern))
+    crate::display::descend(
+        steps,
+        Projected::throughout(crate::display::runtime_partial(pattern_binder), default),
+    )
 }
 
 /// A binder reads as the record it is, its cell declared; matching reads
@@ -732,10 +734,12 @@ fn bindings_form<W: Host>(
     input: &ProjectionInput<'_, W, RuntimeValue>,
     form: BindingForm,
 ) -> Layout<W> {
-    let bindings = shared(descend_local(
+    let bindings = shared(descend(
         [Step::Key(vocabulary::BINDINGS)],
-        crate::display::structure::list(Some(crate::display::runtime_partial(binding_display))),
-        &input.default_projection,
+        Projected::here(
+            crate::display::structure::list(Some(crate::display::runtime_partial(binding_display))),
+            &input.default_projection,
+        ),
     ));
     let function = shared(crate::libraries::grap::shallow_path(
         [Step::Key(::grap::vocabulary::FUNCTION)],
@@ -840,10 +844,12 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
         |[function, expression]| {
             (function?.as_cell()? == vocabulary::QUOTE).then_some(())?;
             expression?;
-            let marker = descend_local(
+            let marker = descend(
                 [Step::Key(::grap::vocabulary::FUNCTION)],
-                crate::display::runtime_partial(quote_marker),
-                &input.default_projection,
+                Projected::here(
+                    crate::display::runtime_partial(quote_marker),
+                    &input.default_projection,
+                ),
             );
             Some(row(
                 2.0,
@@ -851,8 +857,7 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
                     marker,
                     crate::display::descend(
                         [Step::Key(::grap::vocabulary::EXPRESSION)],
-                        None,
-                        None,
+                        Projected::ordinary(),
                     ),
                 ],
             ))
@@ -909,12 +914,14 @@ fn expression_list_display<W: Host>(
                         [Step::Key(::grap::vocabulary::FUNCTION)],
                         &input.default_projection,
                     ),
-                    descend_local(
+                    descend(
                         [Step::Key(vocabulary::EXPRESSIONS)],
-                        crate::display::structure::list(Some(crate::display::runtime_partial(
-                            crate::libraries::grap::expression,
-                        ))),
-                        &input.default_projection,
+                        Projected::here(
+                            crate::display::structure::list(Some(crate::display::runtime_partial(
+                                crate::libraries::grap::expression,
+                            ))),
+                            &input.default_projection,
+                        ),
                     ),
                 ],
             ))

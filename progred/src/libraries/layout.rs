@@ -9,6 +9,7 @@
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
 //!
+use crate::display::Projected;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, color, f64 as f64_convention, name, presentation};
 use gid::{CellId, Step, Value};
@@ -341,20 +342,21 @@ fn decode_with<W: Host>(
         ALTERNATIVES => Some(alternatives(children(&content, &place, site)?)),
         DESCEND => Some(descend(
             [path::read_step(content.field(STEP)?.as_value())?],
-            None,
-            None,
+            Projected::ordinary(),
         )),
-        DESCEND_PATH => Some(descend(path::read(content.as_value())?, None, None)),
+        DESCEND_PATH => Some(descend(
+            path::read(content.as_value())?,
+            Projected::ordinary(),
+        )),
         JUMP => Some(crate::display::jump(
             path::read(content.field(STEPS)?.as_value())?,
             crate::location::Location::root(path::read(content.field(DOCUMENT_PATH)?.as_value())?),
-            None,
+            Projected::ordinary(),
         )),
         AT => Some(crate::display::at(
             path::read(content.field(STEPS)?.as_value())?,
             content.field(VALUE)?,
-            None,
-            None,
+            Projected::ordinary(),
         )),
         TEXT => Some(leaf(Leaf::Text {
             text: content.field(CONTENT)?.as_text()?.to_string(),

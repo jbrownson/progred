@@ -96,8 +96,7 @@ fn cell_view<W: Host>(
                         definition.resolution
                     }),
             )],
-            None,
-            None,
+            crate::display::Projected::ordinary(),
         ),
     ));
     let Some(definition) = resolved else {

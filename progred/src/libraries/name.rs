@@ -192,7 +192,7 @@ pub(crate) fn with_name<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     content: Layout<W>,
 ) -> Layout<W> {
-    use crate::display::{Pending, descend_local};
+    use crate::display::{Pending, descend};
     let step = gid::Step::Key(vocabulary::NAME);
     let has_name = input
         .value
@@ -201,7 +201,10 @@ pub(crate) fn with_name<W: Host>(
         crate::display::row(
             6.0,
             [
-                descend_local([step], projection(None), &input.default_projection),
+                descend(
+                    [step],
+                    crate::display::Projected::here(projection(None), &input.default_projection),
+                ),
                 content,
             ],
         )

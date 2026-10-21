@@ -64,8 +64,7 @@ fn list_items_at<W: Host>(
         .map(|position| {
             let layout = shared(descend(
                 [Step::Element(position.clone())],
-                child.clone(),
-                None,
+                Projected::by(child.clone(), None),
             ));
             (position, layout)
         })
@@ -331,9 +330,11 @@ impl<W: Host> Fields<W> {
             label: record_label_reading(input, key, name, selects),
             value: descend(
                 [Step::Key(key)],
-                (self.child)(key)
-                    .map(|child| compose_partials([child, input.default_projection.clone()])),
-                None,
+                Projected::by(
+                    (self.child)(key)
+                        .map(|child| compose_partials([child, input.default_projection.clone()])),
+                    None,
+                ),
             ),
         }
     }

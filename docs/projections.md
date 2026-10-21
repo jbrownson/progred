@@ -145,21 +145,21 @@ extent plus a one-shot placement function, never a second container tree.
 Structural recording is a separate interpreter used only by tests. There is no
 parallel Progred drawing language.
 
-A projection draws three kinds of step: `descend` into what's stored,
-`at` a computed value, and `jump` to another location. `descend` and `at`
-accept independent optional replacements for the projection at their target
-and the default passed to descendants; `jump` accepts one for its target only.
-Omitting either inherits it; supplying one replaces it without implicit
-composition. The total structural fallback still handles a declined result.
-`descend_local` composes a custom partial before the default only at the
-target; passing that composition as both replacements applies it below as well,
-as a pattern's binders are. These are ordinary preparation functions, not
-path-bearing layout opcodes.
+A projection draws three kinds of step: `descend` into what's stored, `at` a
+computed value, and `jump` to another location. Each takes a `Projected` saying
+which projections draw the value there and what's inside it:
+`Projected::ordinary()` keeps the enclosing ones; `Projected::here(p, default)`
+tries `p` on the value first, `default` otherwise and inside it;
+`Projected::throughout(p, default)` tries `p` first on the value and everything
+inside it, as a pattern's binders are; and `Projected::by(here, inside)`
+replaces either without composing. The total structural fallback still handles
+a declined result. These are ordinary preparation functions, not path-bearing
+layout opcodes.
 
 `descend` follows steps of the displayed structure without projecting
 intermediate containers. It preserves the current location interpretation,
 except that following a cell starts a location at its definition.
-`jump(steps, location, projection)` extends the occurrence path by `steps` and
+`jump(steps, location, projected)` extends the occurrence path by `steps` and
 a jump step to a location, which it reads from: a document path from the root,
 or one within a cell's definition, which keeps that location's start. Its
 descendants' paths continue from that jump, for both projection reads and later

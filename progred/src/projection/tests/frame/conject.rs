@@ -196,7 +196,11 @@ fn at_copies_the_displayed_value_not_a_coincident_document_path() {
             let displayed = displayed.clone();
             move |input| {
                 input.value?.as_record()?.get(&marker)?;
-                Some(d::at([gid::Step::Key(occurrence)], &displayed, None, None))
+                Some(d::at(
+                    [gid::Step::Key(occurrence)],
+                    &displayed,
+                    d::Projected::ordinary(),
+                ))
             }
         }),
     );
@@ -235,10 +239,10 @@ fn copying_a_stored_or_jumped_cell_keeps_the_reference_shallow() {
                     d::jump(
                         [gid::Step::Key(occurrence)],
                         crate::location::Location::root(vec![gid::Step::Key(source)]),
-                        None,
+                        d::Projected::ordinary(),
                     )
                 } else {
-                    d::descend([gid::Step::Key(source)], None, None)
+                    d::descend([gid::Step::Key(source)], d::Projected::ordinary())
                 })
             }),
         );
@@ -291,8 +295,16 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
                 0,
                 8.0,
                 [
-                    d::at([gid::Step::Key(first)], &displayed, None, None),
-                    d::at([gid::Step::Key(second)], &displayed, None, None),
+                    d::at(
+                        [gid::Step::Key(first)],
+                        &displayed,
+                        d::Projected::ordinary(),
+                    ),
+                    d::at(
+                        [gid::Step::Key(second)],
+                        &displayed,
+                        d::Projected::ordinary(),
+                    ),
                 ],
             ))
         }),
@@ -365,12 +377,12 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
                     d::jump(
                         [gid::Step::Key(first)],
                         crate::location::Location::root(vec![gid::Step::Key(source)]),
-                        None,
+                        d::Projected::ordinary(),
                     ),
                     d::jump(
                         [gid::Step::Key(second)],
                         crate::location::Location::root(vec![gid::Step::Key(source)]),
-                        None,
+                        d::Projected::ordinary(),
                     ),
                 ],
             ))
@@ -430,7 +442,7 @@ fn missing_jump_target_is_a_real_editable_location() {
             Some(d::jump(
                 [gid::Step::Key(occurrence)],
                 crate::location::Location::root(vec![gid::Step::Key(missing)]),
-                None,
+                d::Projected::ordinary(),
             ))
         }),
     );
@@ -468,7 +480,11 @@ fn computed_reference() -> (crate::Editor, [CellId; 3]) {
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&marker)?;
-            Some(d::at([gid::Step::Key(source)], &value, None, None))
+            Some(d::at(
+                [gid::Step::Key(source)],
+                &value,
+                d::Projected::ordinary(),
+            ))
         }),
     );
     (world, [source, field, cell])
@@ -504,7 +520,11 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&marker)?;
-            Some(d::at([gid::Step::Key(source)], &value, None, None))
+            Some(d::at(
+                [gid::Step::Key(source)],
+                &value,
+                d::Projected::ordinary(),
+            ))
         }),
     );
     let before = world.model.doc.clone();
@@ -586,14 +606,13 @@ fn explicit_jump_can_establish_a_source_below_at() {
                 Some(d::at(
                     [gid::Step::Key(computed)],
                     Value::record([(computed, Value::record([]))]),
-                    None,
-                    None,
+                    d::Projected::ordinary(),
                 ))
             } else if fields.contains_key(&computed) {
                 Some(d::jump(
                     [gid::Step::Key(occurrence)],
                     crate::location::Location::root(vec![gid::Step::Key(source)]),
-                    None,
+                    d::Projected::ordinary(),
                 ))
             } else {
                 None
@@ -648,8 +667,7 @@ fn multi_step_descent_keeps_stored_children_editable_without_projecting_containe
             input.value?.as_record()?.get(&source)?;
             Some(d::descend(
                 [gid::Step::Key(source), gid::Step::Key(child)],
-                None,
-                None,
+                d::Projected::ordinary(),
             ))
         }),
     );

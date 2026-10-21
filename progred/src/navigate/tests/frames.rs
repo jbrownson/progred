@@ -168,8 +168,7 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                         input.value?.field(wrapper)?;
                         Some(d::descend(
                             [Step::Key(wrapper)],
-                            Some(d::structure::list_column(8.0, None)),
-                            None,
+                            d::Projected::by(Some(d::structure::list_column(8.0, None)), None),
                         ))
                     }),
                     ordinary,
@@ -313,12 +312,12 @@ fn navigation_arrival_through_jump_retains_editing_context() {
                     d::jump(
                         [Step::Key(first)],
                         crate::location::Location::root(vec![Step::Key(source)]),
-                        None,
+                        d::Projected::ordinary(),
                     ),
                     d::jump(
                         [Step::Key(second)],
                         crate::location::Location::root(vec![Step::Key(source)]),
-                        None,
+                        d::Projected::ordinary(),
                     ),
                 ],
             ))
