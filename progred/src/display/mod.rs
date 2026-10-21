@@ -298,6 +298,24 @@ pub struct DocumentLibrary {
     pub projection: grap::RuntimeValue,
 }
 
+/// A pure evaluation a computed value came from: what ran, where it's from,
+/// and its allowance, so it can be run again, with the same answer, to ask how
+/// it got there.
+#[derive(Clone, Debug)]
+pub struct Evaluated {
+    pub expression: grap::RuntimeValue,
+    pub origin: Option<grap::SourceOrigin>,
+    pub fuel: usize,
+}
+
+impl Evaluated {
+    pub fn same(&self, other: &Self) -> bool {
+        self.expression.same_result(&other.expression)
+            && self.origin == other.origin
+            && self.fuel == other.fuel
+    }
+}
+
 /// Host services a projection may need while building a [`Layout`].
 pub trait Env {
     /// Expression-facing application, without materializing the callable or
@@ -328,6 +346,34 @@ pub trait Env {
         fuel: usize,
         steps: &[Step],
     ) -> grap::RuntimeValue;
+
+    /// The evaluation of `expression`, stored `steps` below this occurrence,
+    /// with `fuel`, as [`Env::evaluate_runtime`] runs it.
+    fn evaluation(
+        &self,
+        expression: &grap::RuntimeValue,
+        fuel: usize,
+        _steps: &[Step],
+    ) -> Evaluated {
+        Evaluated {
+            expression: expression.clone(),
+            origin: None,
+            fuel,
+        }
+    }
+
+    /// The evaluation the computed value here came from, if it can be run
+    /// again.
+    fn evaluated(&self) -> Option<&Evaluated> {
+        None
+    }
+
+    /// The calls under which a call at `call` answered `value`, itself first,
+    /// found by running again the evaluation the computed value here came
+    /// from. None where it didn't come from one, or no such call answered it.
+    fn stack(&self, _call: &grap::SourceOrigin, _value: &Value) -> Option<Vec<grap::SourceOrigin>> {
+        None
+    }
 
     /// Borrow capabilities for this application only. Their output remains host-owned.
     fn apply_runtime_scoped(
@@ -981,6 +1027,26 @@ pub fn at_with_projection<World: 'static, Hover: 'static>(
     projection: Option<Partial<World, Hover>>,
     default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
+    computed(steps, value, None, projection, default_projection)
+}
+
+/// [`at`], for the result of `evaluated`, which what's drawn there can run
+/// again to ask how it got there.
+pub fn at_evaluated<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    value: impl Clone + Into<grap::RuntimeValue>,
+    evaluated: Evaluated,
+) -> Layout<World, Hover> {
+    computed(steps, value, Some(Rc::new(evaluated)), None, None)
+}
+
+fn computed<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    value: impl Clone + Into<grap::RuntimeValue>,
+    evaluated: Option<Rc<Evaluated>>,
+    projection: Option<Partial<World, Hover>>,
+    default_projection: Option<Partial<World, Hover>>,
+) -> Layout<World, Hover> {
     let steps = steps.into();
     let value = value.into();
     Layout::program(Rc::new(move |context, build| {
@@ -989,6 +1055,7 @@ pub fn at_with_projection<World: 'static, Hover: 'static>(
             build,
             steps.clone(),
             value.clone(),
+            evaluated.clone(),
             projection.clone(),
             default_projection.clone(),
         )

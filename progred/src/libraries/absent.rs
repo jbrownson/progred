@@ -22,6 +22,9 @@ pub mod vocabulary {
     pub const INVALID_ARGUMENTS: CellId = ::grap::absent::INVALID_ARGUMENTS;
     pub const MISSING_ARGUMENT: CellId = ::grap::absent::MISSING_ARGUMENT;
     pub const CALL: CellId = ::grap::absent::CALL;
+    /// The calls an absent's call was made under, drawn below it; in its
+    /// annotation record, whether they're shown.
+    pub const CALLERS: CellId = CellId::from_u128(0x8724595a170962636e05d4c6ea37d0f5);
     pub const OR_DEFAULT: CellId = CellId::from_u128(0x6a7a30847dd7d939448d0e7eaeb82893);
     pub const DEFAULT: CellId = CellId::from_u128(0xd8bdf7403b181a43fa73578bd976ba3b);
 }
@@ -31,12 +34,98 @@ pub mod vocabulary {
 /// that call, where it is.
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let reason = input.value?.absent_reason()?;
-    Some(on_red(crate::display::structure::with_extra_fields_by(
+    let absent = crate::display::structure::with_extra_fields_by(
         input,
         |key| key == vocabulary::ABSENT,
         call_field,
         head(input, reason),
-    )))
+    );
+    Some(on_red(match callers(input) {
+        Some(callers) => crate::display::col(0, 2.0, [absent, callers]),
+        None => absent,
+    }))
+}
+
+/// Below an absent about a call, in a result that can be run again, the calls
+/// that call was made under: shut, a toggle that opens them; open, each caller
+/// drawn where it is, found by running the evaluation again. Shut, nothing
+/// runs.
+fn callers<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    input.env.evaluated()?;
+    let value = input.value?;
+    let call = ::grap::source::read(&value.field(vocabulary::CALL)?.into_value())?;
+    let open = callers_open(input.state);
+    let site = input.site();
+    let hover = W::Hover::from(site.toggle_hover());
+    let toggle = crate::display::on_hover(
+        crate::display::on_activate(
+            crate::display::hover_highlight(
+                crate::display::dim(if open {
+                    "called from ▾"
+                } else {
+                    "called from ▸"
+                }),
+                hover.clone(),
+            ),
+            hover.clone(),
+            std::rc::Rc::new(move |session| {
+                let mut edit = site.open(session);
+                let state = with_callers_open(edit.state(), !open);
+                edit.set_state(state);
+                true
+            }),
+        ),
+        hover,
+    );
+    Some(match open {
+        false => toggle,
+        true => crate::display::col(
+            0,
+            2.0,
+            [
+                toggle,
+                match input.env.stack(&call, &value.to_value()) {
+                    // The call itself is first; with nothing after it, it's
+                    // the evaluation's own.
+                    Some(stack) if stack.len() < 2 => crate::display::dim("nothing: it's the top"),
+                    Some(stack) => crate::display::at_with_projection(
+                        [gid::Step::Key(vocabulary::CALLERS)],
+                        gid::Value::list(stack.iter().skip(1).map(::grap::source::value)),
+                        Some(crate::display::structure::list_column(
+                            2.0,
+                            Some(crate::display::runtime_partial(self::call)),
+                        )),
+                        None,
+                    ),
+                    None => crate::display::dim("not found"),
+                },
+            ],
+        ),
+    })
+}
+
+/// Whether an absent's annotation `state` shows its callers; they start
+/// shut.
+fn callers_open(state: Option<&gid::Value>) -> bool {
+    state
+        .and_then(gid::Value::as_record)
+        .and_then(|fields| fields.get(&vocabulary::CALLERS))
+        .and_then(gid::Value::as_cell)
+        == Some(crate::annotations::EXPANDED)
+}
+
+/// `state` with its callers shown or not, leaving its other fields.
+fn with_callers_open(state: Option<&gid::Value>, open: bool) -> gid::Value {
+    let fields = state
+        .and_then(gid::Value::as_record)
+        .cloned()
+        .unwrap_or_default()
+        .without(&vocabulary::CALLERS);
+    gid::Value::Record(if open {
+        fields.update(vocabulary::CALLERS, crate::annotations::EXPANDED.into())
+    } else {
+        fields
+    })
 }
 
 /// How an absent draws its field `key`: the call as [`call`] does, the
@@ -175,6 +264,7 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::CYCLE, "cycle"),
             (vocabulary::CAUSES, "causes"),
             (vocabulary::CALL, "call"),
+            (vocabulary::CALLERS, "callers"),
             (vocabulary::NO_ALTERNATIVE, "no applicable alternative"),
             (vocabulary::DECLINED, "not applicable"),
             (vocabulary::INVALID_ARGUMENTS, "invalid arguments"),

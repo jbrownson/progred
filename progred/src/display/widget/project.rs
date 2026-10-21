@@ -25,12 +25,16 @@ pub trait Project<World, Hover> {
         current: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
+    /// Draw `value` computed at `steps` below here, the result of
+    /// `evaluated` when it came from one.
+    #[allow(clippy::too_many_arguments)]
     fn at(
         &self,
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<World, Hover>>,
         steps: Vec<Step>,
         value: grap::RuntimeValue,
+        evaluated: Option<std::rc::Rc<crate::display::Evaluated>>,
         current: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;

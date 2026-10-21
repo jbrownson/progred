@@ -183,6 +183,52 @@ fn an_errors_call_is_drawn_where_the_call_is() {
 }
 
 #[test]
+fn an_errors_callers_open_to_the_calls_it_was_made_under() {
+    use crate::libraries::absent::vocabulary::CALLERS;
+    use crate::libraries::grap::numbers;
+    let (program, area, width) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(
+        area,
+        ::grap::lambda(
+            [width],
+            ::grap::call(
+                numbers::f64::MULTIPLY.into(),
+                [(numbers::vocabulary::LEFT, width.into())],
+            ),
+        ),
+    );
+    cells.set_value(program, ::grap::call(area.into(), []));
+    let mut driver = rendered_in_a_pane(program, program.into(), cells);
+    let error = pane_result(&driver, &[]);
+    let callers = pane_result(
+        &driver,
+        &[occurrence::Step::Key(CALLERS), occurrence::Step::Computed],
+    );
+    assert!(!driver.drawn(&callers), "they start shut, and nothing runs");
+    driver.click_at(
+        driver.locate(crate::frame::Hovered::Tree(crate::hover::Hover::Toggle(
+            occurrence::Trail::of(&error),
+        ))),
+    );
+    assert!(driver.drawn(&callers));
+    // The `*` in `area` failed; its one caller is the program's call of
+    // `area`, drawn where it is.
+    let program_call = occurrence::Step::jump(Location::in_cell(
+        program,
+        gid::Resolution::Document,
+        Vec::new(),
+    ));
+    let drawn: Vec<_> = driver
+        .drawn_under(&callers)
+        .into_iter()
+        .map(|(path, _)| path.to_vec())
+        .filter(|path| path.last() == Some(&program_call))
+        .collect();
+    assert_eq!(drawn.len(), 1, "{:?}", driver.drawn_under(&callers));
+}
+
+#[test]
 fn a_quoted_reference_in_a_result_edits_its_cell() {
     let (program, quoted) = (new_cell_id(), new_cell_id());
     let mut cells = Cells::new();

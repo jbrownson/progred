@@ -145,6 +145,63 @@ impl Computations {
         )
     }
 
+    /// The calls under which a call at `call` answered `value` in
+    /// `evaluated`, itself first, found by running it again with an observer,
+    /// kept for the occurrence at `path` as its own evaluation is.
+    pub fn answering(
+        &self,
+        path: &Trail,
+        evaluated: &crate::display::Evaluated,
+        call: &grap::SourceOrigin,
+        value: &Value,
+    ) -> Option<Vec<grap::SourceOrigin>> {
+        type Question = (crate::display::Evaluated, grap::SourceOrigin, Value);
+        struct Answering {
+            question: Input<Question>,
+            answer: incremental::Memo<Option<Vec<grap::SourceOrigin>>>,
+        }
+        let question: Question = (evaluated.clone(), call.clone(), value.clone());
+        let answering = self.at(path, || {
+            let question = self.runtime.input(question.clone());
+            let answer = self.runtime.memo_by(
+                {
+                    let question = question.clone();
+                    let definitions = self.definitions.clone();
+                    move |read| {
+                        let question = question.read(read);
+                        let (evaluated, call, value) = &*question;
+                        Ok(memo::run(&definitions, read, |host| {
+                            let answering = grap::Answering::new(call.clone(), value.clone());
+                            let evaluation = grap::evaluate_runtime_at(
+                                &evaluated.expression,
+                                evaluated.origin.clone(),
+                                &grap::Observed::new(host, &answering),
+                                evaluated.fuel,
+                            );
+                            grap::Evaluation {
+                                result: answering
+                                    .found()
+                                    .map(|trace| trace.origins().cloned().collect()),
+                                remaining_fuel: evaluation.remaining_fuel,
+                                completed: evaluation.completed,
+                            }
+                        })
+                        .result)
+                    }
+                },
+                PartialEq::eq,
+            );
+            Answering { question, answer }
+        });
+        answering
+            .question
+            .set_by(question, |a, b| a.0.same(&b.0) && a.1 == b.1 && a.2 == b.2);
+        self.runtime
+            .read(&answering.answer)
+            .ok()
+            .and_then(|answer| (*answer).clone())
+    }
+
     /// `run` over `input`, kept for the occurrence at `path`: it
     /// runs again only when the input changes, as `same` compares it, or a
     /// definition it resolved does. `run` is a plain function, since the

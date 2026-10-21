@@ -80,6 +80,7 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: &mut ChoiceBuild<widget::HoverPass<crate::Editor, crate::frame::Hovered>>,
         _: Vec<gid::Step>,
         value: ::grap::RuntimeValue,
+        _: Option<std::rc::Rc<crate::display::Evaluated>>,
         _: Option<Partial>,
         _: Option<Partial>,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {

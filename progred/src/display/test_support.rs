@@ -247,6 +247,7 @@ impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
         _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         steps: Vec<Step>,
         value: grap::RuntimeValue,
+        _: Option<std::rc::Rc<crate::display::Evaluated>>,
         projection: Option<Partial<W, H>>,
         default_projection: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {
@@ -557,6 +558,7 @@ impl<W, H> widget::project::Project<W, H> for NoProject {
         _: &mut ChoiceBuild<widget::HoverPass<W, H>>,
         _: Vec<Step>,
         _: grap::RuntimeValue,
+        _: Option<std::rc::Rc<crate::display::Evaluated>>,
         _: Option<Partial<W, H>>,
         _: Option<Partial<W, H>>,
     ) -> ChoiceLayout<widget::HoverPass<W, H>> {

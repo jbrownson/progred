@@ -769,7 +769,14 @@ The absent library draws an absent as its reason's name followed by any other
 fields, such as a failed alternative's `causes`, all on a red wash; each cause
 is washed in turn inside it. An unnamed reason shows its short cell identity.
 An absent's `call` reads as the call itself, drawn where it is: the same place
-as the call in its code. A missing argument reads as its reason and its parameter, drawn as a shallow
+as the call in its code. Inside a result that can be run again, such as a
+pane's render, an absent about a call also has its callers below it, shut: a
+"called from" toggle. Opened, they're found by running the result's evaluation
+again with an observer (`grap::Answering`) that watches for the call at that
+place answering that absent, and each caller is drawn where it is, outermost
+last. The run is memoised like the result's own evaluation, and a shut toggle
+runs nothing. A result drawn by `crate::display::at_evaluated` carries the
+evaluation it came from, so what's drawn inside it can ask. A missing argument reads as its reason and its parameter, drawn as a shallow
 reference, then the hole for the argument: a jump to the call's origin and the
 parameter's field there, so the error's hole and the call's are one place.
 Selecting either marks the other, and filling either fills the call. A call

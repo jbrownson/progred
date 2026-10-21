@@ -30,6 +30,7 @@ use puri::edit::LineEditState;
 use puri::handler::HasHandler;
 use puri::text::TextCtx;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 /// The toolkit's types over the editor, which hosts everything the runtime
 /// projects. Display and the libraries stay generic over their host, through
@@ -263,6 +264,26 @@ impl crate::display::Env for Occurrence<'_> {
             .computations
             .evaluate_runtime(self.path, expression, fuel, self.origin(steps))
     }
+    fn evaluation(
+        &self,
+        expression: &grap::RuntimeValue,
+        fuel: usize,
+        steps: &[gid::Step],
+    ) -> crate::display::Evaluated {
+        crate::display::Evaluated {
+            expression: expression.clone(),
+            origin: self.origin(steps),
+            fuel,
+        }
+    }
+    fn evaluated(&self) -> Option<&crate::display::Evaluated> {
+        self.ancestors.evaluated.as_deref()
+    }
+    fn stack(&self, call: &grap::SourceOrigin, value: &Value) -> Option<Vec<grap::SourceOrigin>> {
+        self.cx
+            .computations
+            .answering(self.path, self.evaluated()?, call, value)
+    }
     fn apply_runtime_scoped(
         &self,
         function: &grap::RuntimeValue,
@@ -313,6 +334,9 @@ struct Ancestry {
     /// the projection descends so no occurrence reads its route again. None
     /// for a computed value, or a route that no longer reaches a cell.
     stored: Option<Start>,
+    /// The evaluation the computed value here came from, kept below it so
+    /// what's drawn inside can run it again; none in the document.
+    evaluated: Option<Rc<crate::display::Evaluated>>,
     ground: Ground,
 }
 
@@ -512,6 +536,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             );
         }
         ancestry.stored = document.stored(&cx.sources).map(|stored| stored.start);
+        ancestry.evaluated = None;
         let jump = Step::jump(document);
         let state = descend_state(self.state, &steps).and_then(|node| node.child(&jump));
         let path = self.path.below(&steps).push(jump);
@@ -536,6 +561,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         build: &mut ChoiceBuild<HoverPass<crate::Editor>>,
         steps: Vec<gid::Step>,
         value: grap::RuntimeValue,
+        evaluated: Option<Rc<crate::display::Evaluated>>,
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
@@ -546,6 +572,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
                 path: &path,
                 ancestors: &Ancestry {
                     ground: self.ancestors.ground,
+                    evaluated,
                     ..Ancestry::default()
                 },
                 state: descend_state(self.state, &steps)

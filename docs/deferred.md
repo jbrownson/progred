@@ -155,10 +155,13 @@ only the questions asked, where that pays.
   answers a frame late, which could leave a stale mark until the next event.
   The tracer it would save costs about 0.7% of the forest hover canary's
   instructions (October 2026), so drawings keep tracing for now.
-- An absent's stack can be asked for before a run, when its stack is shown
-  expanded, or found by replay when it's expanded later; collapsed, it costs
-  nothing. Recognizing the absent needs its result path or its own `call`;
-  whether absents keep `call` once observers exist is open.
+- An absent's callers are found by replay when they're opened, and cost
+  nothing shut ([projections](projections.md)). Only a render's result offers
+  them so far: a result has to say which evaluation it came from, and
+  `evaluate` wrappers, viewports and scoped applications don't yet. A
+  standalone missing argument doesn't offer them either. Recognizing the
+  absent uses its own `call`; whether absents keep `call` once observers
+  exist is open.
 - Effects can't be replayed, so a handler's questions must be known before
   it runs: a debug mode attaches a logging observer to the real run, with a UI
   for what it logs to be designed.
@@ -200,11 +203,11 @@ absent of its own rather than the parameter's name.
 ## Where an absent came from
 
 An absent says why a value is missing, and its chain says what caused that
-(see [projections](projections.md)), but not where: which call made it, under
-which bindings. For debugging, each absent could carry the stack and
-environment it was made in, or in a debug mode a whole evaluation trace, so
-an absent shown in the editor leads back to the code that produced it. The
-display for this isn't designed yet.
+(see [projections](projections.md)). One about a call now says which call,
+and opens to the calls it was made under, found by replay (see *Observing
+evaluation*). The bindings it was made under aren't shown yet: an observer
+could capture the environment at the answering call the same way, for a
+display still to be designed.
 
 ## Context for an absent from below
 

@@ -117,24 +117,31 @@ fn fueled(render: &::grap::RuntimeValue) -> Option<(usize, ::grap::RuntimeValue)
     ))
 }
 
+/// A render reads as its result, which what's drawn inside can run again to
+/// ask how it got there.
 pub fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let render = input.value?.field(vocabulary::RENDER)?;
-    let result = match fueled(&render) {
-        Some((fuel, expression)) => input.env.evaluate_runtime_memo(
-            &expression,
+    let (expression, fuel, steps) = match fueled(&render) {
+        Some((fuel, expression)) => (
+            expression,
             fuel,
-            &[
+            vec![
                 Step::Key(vocabulary::RENDER),
                 Step::Key(::grap::vocabulary::EXPRESSION),
             ],
         ),
-        None => input.env.evaluate_runtime_memo(
-            &render,
+        None => (
+            render,
             ::grap::DEFAULT_FUEL,
-            &[Step::Key(vocabulary::RENDER)],
+            vec![Step::Key(vocabulary::RENDER)],
         ),
     };
-    Some(result_layout(&result))
+    let result = input.env.evaluate_runtime_memo(&expression, fuel, &steps);
+    Some(crate::display::at_evaluated(
+        [Step::Key(vocabulary::RESULT)],
+        result,
+        input.env.evaluation(&expression, fuel, &steps),
+    ))
 }
 
 /// Opt-in presentation of a declaration; not part of the library's

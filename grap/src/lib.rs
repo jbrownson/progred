@@ -9,7 +9,7 @@ use std::fmt;
 use std::rc::Rc;
 use unboxed::{Native, Unboxed};
 
-pub use trace::{CallTrace, Observed, Observer, Tracer};
+pub use trace::{Answering, CallTrace, Observed, Observer, Tracer};
 
 #[cfg(test)]
 mod effect_tests;
@@ -1414,7 +1414,7 @@ impl<'a> Context<'a> {
             Some(observer) => {
                 observer.entered(call);
                 let result = run(self);
-                observer.left();
+                observer.left(result.as_ref().ok());
                 result
             }
         }
