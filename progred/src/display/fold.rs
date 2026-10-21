@@ -50,10 +50,8 @@ pub fn foldable<W: Host>(
                 selection.path().len() > path.len() && path.leads(selection.path())
             });
         let layout = match context.value {
-            Some(value)
-                if !held && crate::annotations::folded(toolkit.state_below(&[]), default) =>
-            {
-                closed(delim, name.clone(), context.site(), value, default)
+            Some(_) if !held && crate::annotations::folded(toolkit.state_below(&[]), default) => {
+                closed(delim, name.clone(), context.site(), default)
             }
             _ => open.clone(),
         };
@@ -73,7 +71,6 @@ fn closed<W: Host>(
     delim: Delim,
     name: Option<Layout<W>>,
     site: crate::editing::Site,
-    value: &::grap::RuntimeValue,
     default: bool,
 ) -> Layout<W> {
     let hover = W::Hover::from(site.toggle_hover());
@@ -97,7 +94,7 @@ fn closed<W: Host>(
         Some(name) => row(4.0, [name, toggle]),
         None => toggle,
     };
-    crate::display::selectable_value(selectable_bracket(delim, content), &site, value)
+    crate::display::activatable(selectable_bracket(delim, content), &site)
 }
 
 /// `child` with the fold keys, acting while the occurrence at `site` is

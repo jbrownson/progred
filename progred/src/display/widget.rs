@@ -176,13 +176,14 @@ pub fn ground<World: 'static, Hover: 'static>(
     )
 }
 
+/// `child` drawn for the whole value here, which a click selects; a Cmd+click
+/// is the value's own, as anywhere it's drawn.
 pub fn selectable<W: Host>(
     context: &Context<'_, '_, W, W::Hover>,
 ) -> impl FnOnce(Measured<HoverPass<W, W::Hover>>) -> Measured<HoverPass<W, W::Hover>> + 'static {
     let site = context.site();
     let target = W::Hover::from(site.hover());
     let select = navigation::selecting(site);
-    let value = context.value.cloned();
     move |child| {
         before_place(
             child,
@@ -192,11 +193,7 @@ pub fn selectable<W: Host>(
                     output.on_press(
                         target,
                         move |world, _| select(&mut world.session()),
-                        move |world, _| {
-                            value
-                                .as_ref()
-                                .is_some_and(|value| interaction::pick(world, value))
-                        },
+                        |_, _| false,
                     );
                 }
             },

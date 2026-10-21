@@ -212,12 +212,9 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
             false,
             Some("select"),
         ),
-        (
-            Some(owner.clone()),
-            Some(target.clone()),
-            true,
-            Some("pick"),
-        ),
+        // A Cmd+click on the value is its landmark's, which picks it; the
+        // delimiter leaves it.
+        (Some(owner.clone()), Some(target.clone()), true, None),
         (Some(other), Some(target.clone()), false, None),
         (Some(owner), None, false, None),
     ] {
@@ -239,10 +236,8 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
             &mut DispatchContext::new(root, hovered),
         );
         assert_eq!(handled, expected.is_some());
-        match expected {
-            Some("pick") => assert_eq!(world.model.doc.root, Some(gid::Value::record([]))),
-            Some("select") => assert!(world.model.selection.is_some()),
-            _ => {}
+        if expected == Some("select") {
+            assert!(world.model.selection.is_some());
         }
     }
 }

@@ -595,20 +595,6 @@ pub(crate) fn field_label_at<W: Host>(
     )
 }
 
-/// `child` drawn for the whole `value` at `site`, which a click selects and a
-/// Cmd+click picks.
-pub(crate) fn selectable_value<W: Host>(
-    child: host::Layout<W>,
-    site: &crate::editing::Site,
-    value: &grap::RuntimeValue,
-) -> host::Layout<W> {
-    let child = child;
-    activatable(
-        pickable(child, W::Hover::from(site.hover()), value.clone()),
-        site,
-    )
-}
-
 pub use widget::gesture::{drag_outlined, on_point, on_state_drag};
 
 pub fn row<World: 'static, Hover: 'static>(

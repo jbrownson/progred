@@ -74,3 +74,28 @@ fn cmd_clicking_a_label_picks_the_label_not_its_value() {
     driver.pick_at(label_at(&driver, x));
     assert_eq!(driver.value(&[gid::Step::Key(y)]), x.into());
 }
+
+#[test]
+fn cmd_clicking_a_record_s_brace_picks_the_record_or_with_nothing_open_selects_it() {
+    use crate::frame::Hovered;
+    use crate::hover::Hover;
+    use crate::occurrence::Step;
+    use gid::{Value, new_cell_id};
+
+    let [x, y] = [new_cell_id(), new_cell_id()];
+    let inner = Value::record([(x, Value::list([]))]);
+    let mut driver = Driver::of(Value::record([(x, inner.clone()), (y, Value::list([]))]));
+    let brace = driver.locate(Hovered::Tree(Hover::Value(crate::occurrence::Trail::from(
+        [Step::Key(x)],
+    ))));
+    driver.pick_at(brace);
+    assert_eq!(
+        driver.selection(),
+        [Step::Key(x)],
+        "with nothing open, it selects as a click does"
+    );
+    driver.select(&[Step::Key(y)]);
+    driver.type_text("q");
+    driver.pick_at(brace);
+    assert_eq!(driver.value(&[gid::Step::Key(y)]), inner);
+}
