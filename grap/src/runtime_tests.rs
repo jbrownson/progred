@@ -66,14 +66,15 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     )
     .result;
     let traces = Rc::new(RefCell::new(Vec::new()));
+    let tracer = Rc::new(Tracer::default());
     let receiver = host(vec![(
         sink,
         Definition::foreign(
             Value::record([]),
             ForeignFunction::new({
-                let traces = traces.clone();
-                move |context, _, _| {
-                    traces.borrow_mut().push(context.call_trace().unwrap());
+                let (traces, tracer) = (traces.clone(), tracer.clone());
+                move |_, _, _| {
+                    traces.borrow_mut().push(tracer.trace().unwrap());
                     Ok(RuntimeValue::f64(7.0))
                 }
             }),
@@ -83,7 +84,7 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
     let result = evaluate_runtime_at(
         &expression,
         Some(SourceOrigin::Stored(vec![gid::Step::Key(invocation)])),
-        &receiver,
+        &Observed::new(&receiver, &*tracer),
         100,
     );
     assert!(result.completed);
@@ -146,14 +147,15 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
     let sink = new_cell_id();
     let location = new_cell_id();
     let traces = Rc::new(RefCell::new(Vec::new()));
+    let tracer = Rc::new(Tracer::default());
     let receiver = host(vec![(
         sink,
         Definition::foreign(
             Value::record([]),
             ForeignFunction::new({
-                let traces = traces.clone();
-                move |context, _, _| {
-                    traces.borrow_mut().push(context.call_trace());
+                let (traces, tracer) = (traces.clone(), tracer.clone());
+                move |_, _, _| {
+                    traces.borrow_mut().push(tracer.trace());
                     Ok(RuntimeValue::f64(7.0))
                 }
             }),
@@ -170,13 +172,14 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
     ] {
         for fuel in [0, 1, 100] {
             traces.borrow_mut().clear();
+            let observed = Observed::new(&receiver, &*tracer);
             let a = evaluate_runtime_at(
                 &RuntimeValue::from(&stored),
                 origin.clone(),
-                &receiver,
+                &observed,
                 fuel,
             );
-            let b = evaluate_runtime_at(&runtime, origin.clone(), &receiver, fuel);
+            let b = evaluate_runtime_at(&runtime, origin.clone(), &observed, fuel);
             assert_eq!(a.completed, b.completed);
             assert_eq!(a.remaining_fuel, b.remaining_fuel);
             assert!(a.result.same_result(&b.result));
@@ -472,14 +475,16 @@ fn generated_calls_retain_closures_and_their_original_inline_source() {
     assert_ne!(a.to_value(), b.to_value());
     for (closure, field) in [(a, first), (b, second)] {
         let source = RefCell::new(None);
-        let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
-            *source.borrow_mut() = context.call_trace();
+        let tracer = Tracer::default();
+        let capture = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| {
+            *source.borrow_mut() = tracer.trace();
             Ok(RuntimeValue::f64(7.0))
         };
         let ids = [sink];
         let overlay = ForeignOverlay::new(&ids, &capture);
         let expression = RuntimeValue::record([(vocabulary::FUNCTION, closure)]);
-        let result = evaluate_runtime_scoped(&expression, &empty, &overlay, 100);
+        let result =
+            evaluate_runtime_scoped(&expression, &Observed::new(&empty, &tracer), &overlay, 100);
         assert!(result.completed);
         assert_eq!(result.result.as_f64(), Some(7.0));
         assert_eq!(
@@ -729,12 +734,14 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
     ] {
         let traces = Rc::new(RefCell::new(Vec::new()));
         let output = traces.clone();
+        let tracer = Rc::new(Tracer::default());
+        let observer = tracer.clone();
         let receiver = host(vec![(
             sink,
             Definition::foreign(
                 Value::record([]),
                 ForeignFunction::new(move |context, call, environment| {
-                    output.borrow_mut().push(context.call_trace().unwrap());
+                    output.borrow_mut().push(observer.trace().unwrap());
                     let value =
                         context.eval(context.field(call, captured).unwrap(), environment)?;
                     Ok(RuntimeValue::f64(value.as_f64().unwrap() + offset))
@@ -747,7 +754,7 @@ fn retained_closures_keep_code_and_bindings_but_use_the_current_call_stack() {
                 (callback, callback_value),
                 (captured, RuntimeValue::f64(999.0)),
             ],
-            &receiver,
+            &Observed::new(&receiver, &*tracer),
             None,
             100,
         );
@@ -813,15 +820,17 @@ fn closure_origins_survive_repeated_round_trips_without_rebasing_or_resolving() 
         });
         let mut encoded = native.to_value();
         let trace = RefCell::new(None);
-        let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
-            *trace.borrow_mut() = context.call_trace();
+        let tracer = Tracer::default();
+        let capture = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| {
+            *trace.borrow_mut() = tracer.trace();
             Ok(RuntimeValue::f64(7.0))
         };
         let ids = [sink];
         let overlay = ForeignOverlay::new(&ids, &capture);
+        let observed = Observed::new(&empty, &tracer);
         for _ in 0..3 {
             // The source library is deliberately absent from the receiving host.
-            let mut context = context(&empty, Some(&overlay), 100);
+            let mut context = context(&observed, Some(&overlay), 100);
             let closure = RuntimeValue::new(RuntimeValueKind::Closure(
                 context.runtime_closure(&encoded.clone().into()).unwrap(),
             ));
@@ -886,14 +895,21 @@ fn generated_or_malformed_closure_origins_fall_back_to_the_invoking_call() {
     )
     .result;
     let trace = RefCell::new(None);
-    let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
-        *trace.borrow_mut() = context.call_trace();
+    let tracer = Tracer::default();
+    let capture = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| {
+        *trace.borrow_mut() = tracer.trace();
         Ok(RuntimeValue::f64(7.0))
     };
     let ids = [sink];
     let overlay = ForeignOverlay::new(&ids, &capture);
     for value in [generated, serialized.into(), malformed.into()] {
-        let result = apply(&driver, [(callback, value)], &empty, Some(&overlay), 100);
+        let result = apply(
+            &driver,
+            [(callback, value)],
+            &Observed::new(&empty, &tracer),
+            Some(&overlay),
+            100,
+        );
         assert!(result.completed);
         assert_eq!(result.result.as_f64(), Some(7.0));
         assert_eq!(
@@ -976,15 +992,22 @@ fn embedded_closure_origins_survive_a_generated_body_and_captured_environment() 
     let inline = context.lower_runtime_code(&RuntimeValue::record([(vocabulary::FUNCTION, inner)]));
     let embedded = context.closure([], inline, &Environment::default());
     let trace = RefCell::new(None);
-    let capture = |_, context: &mut Context<'_>, _: &Expression, _: &Environment| {
-        *trace.borrow_mut() = context.call_trace();
+    let tracer = Tracer::default();
+    let capture = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| {
+        *trace.borrow_mut() = tracer.trace();
         Ok(RuntimeValue::f64(7.0))
     };
     let ids = [sink];
     let overlay = ForeignOverlay::new(&ids, &capture);
     for closure in [captured, embedded] {
         for value in [closure.clone(), closure.to_value().into()] {
-            let result = apply(&value, [], &empty, Some(&overlay), 100);
+            let result = apply(
+                &value,
+                [],
+                &Observed::new(&empty, &tracer),
+                Some(&overlay),
+                100,
+            );
             assert!(result.completed);
             assert_eq!(result.result.as_f64(), Some(7.0));
             assert_eq!(

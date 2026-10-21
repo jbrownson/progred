@@ -884,6 +884,13 @@ An effectful decline also halts rather than returning normally.
 Returning that same value normally still counts as completed execution.
 Drawing-source origins are separate from failures.
 
+The evaluator keeps no call stack of its own. A host can offer an observer
+(`grap::Observer`), told of each call an evaluation enters and leaves, and
+`grap::Observed` attaches one to any host. A drawing's record step attaches a
+`grap::Tracer`, which keeps the calls a fill is drawn under and captures the
+source-bearing ones as a call trace, sharing prefixes between captures. An
+evaluation nobody observes pays one branch per call.
+
 ## Equivalent host representations
 
 The runtime can carry unboxed f64, f32 and u64 numbers, booleans and text, and

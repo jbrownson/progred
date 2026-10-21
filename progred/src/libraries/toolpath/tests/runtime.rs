@@ -20,23 +20,18 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
     let captured = gid::new_cell_id();
     let place = gid::new_cell_id();
     let origins = Rc::new(RefCell::new(Vec::new()));
-    let host = crate::test_support::TestHost(|cell| {
+    let tracer = Rc::new(::grap::Tracer::default());
+    let unobserved = crate::test_support::TestHost(|cell| {
         if cell == inspect {
-            let origins = origins.clone();
+            let (origins, tracer) = (origins.clone(), tracer.clone());
             Some((
                 gid::Resolution::Document,
                 ::grap::Definition::foreign(
                     Value::record([]),
                     ForeignFunction::new(move |context, call, environment| {
-                        origins.borrow_mut().push(
-                            context
-                                .call_trace()
-                                .unwrap()
-                                .origins()
-                                .next()
-                                .unwrap()
-                                .clone(),
-                        );
+                        origins
+                            .borrow_mut()
+                            .push(tracer.trace().unwrap().origins().next().unwrap().clone());
                         context.eval(context.field(call, captured).unwrap(), environment)
                     }),
                 ),
@@ -45,6 +40,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
             libraries.resolve(cell)
         }
     });
+    let host = ::grap::Observed::new(&unobserved, &*tracer);
     let make = |body, marker, value| {
         let maker = ::grap::evaluate_runtime_at(
             &::grap::RuntimeValue::from(::grap::lambda([captured], ::grap::lambda([], body))),
@@ -72,23 +68,17 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
         RuntimeValue::record([]),
     );
     // Reuse the closure in a receiving host; its saved code must call the new capability.
-    let receiver = crate::test_support::TestHost(|cell| {
+    let unobserved_receiver = crate::test_support::TestHost(|cell| {
         if cell == place {
-            let origins = origins.clone();
+            let (origins, tracer) = (origins.clone(), tracer.clone());
             Some((
                 gid::Resolution::Document,
                 ::grap::Definition::foreign(
                     Value::record([]),
-                    ForeignFunction::new(move |context, _, _| {
-                        origins.borrow_mut().push(
-                            context
-                                .call_trace()
-                                .unwrap()
-                                .origins()
-                                .next()
-                                .unwrap()
-                                .clone(),
-                        );
+                    ForeignFunction::new(move |_, _, _| {
+                        origins
+                            .borrow_mut()
+                            .push(tracer.trace().unwrap().origins().next().unwrap().clone());
                         Ok(RuntimeValue::record([]))
                     }),
                 ),
@@ -97,6 +87,7 @@ fn nested_programs_and_mappers_retain_captures_and_original_call_sites() {
             host.resolve(cell)
         }
     });
+    let receiver = ::grap::Observed::new(&unobserved_receiver, &*tracer);
     let sequence = runtime_call(
         SEQUENCE,
         [(

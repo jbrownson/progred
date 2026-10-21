@@ -9,8 +9,10 @@ fn calls_at(origin: SourceOrigin) -> SourceCalls {
     let sink = new_cell_id();
     let trace = Rc::new(std::cell::RefCell::new(None));
     let captured = trace.clone();
-    let function = grap::ForeignFunction::new(move |context, _, _| {
-        *captured.borrow_mut() = context.call_trace();
+    let tracer = Rc::new(grap::Tracer::default());
+    let observer = tracer.clone();
+    let function = grap::ForeignFunction::new(move |_, _, _| {
+        *captured.borrow_mut() = observer.trace();
         Ok(gid::Value::record([]).into())
     });
     let host = crate::test_support::TestHost(move |cell| {
@@ -21,7 +23,12 @@ fn calls_at(origin: SourceOrigin) -> SourceCalls {
             )
         })
     });
-    grap::evaluate_runtime_at(&grap::call(sink.into(), []).into(), Some(origin), &host, 10);
+    grap::evaluate_runtime_at(
+        &grap::call(sink.into(), []).into(),
+        Some(origin),
+        &grap::Observed::new(&host, &*tracer),
+        10,
+    );
     SourceCalls::new(trace.take().expect("the call has its origin"), None)
 }
 

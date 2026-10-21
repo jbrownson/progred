@@ -24,10 +24,11 @@ pub(super) fn program<W: Host>(
 }
 
 /// Runs `program` with the drawing functions installed, filling into the
-/// recorder.
+/// recorder, each fill with the calls it was drawn under.
 fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
     Rc::new(move |host, recorder: &mut Recorder| {
         let recorder = RefCell::new(recorder);
+        let tracer = grap::Tracer::default();
         let path = RefCell::new(BezPath::new());
         let unit = Value::record([]);
         let functions = [
@@ -92,7 +93,7 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     };
                     Ok(match (shape, read_paint(&paint), transform) {
                         (Some(shape), Some(paint), Some(transform)) => {
-                            let calls = context.call_trace();
+                            let calls = tracer.trace();
                             context.effect(|| {
                                 recorder.borrow_mut().fill(shape, paint, transform, calls);
                                 unit.clone()
@@ -105,7 +106,12 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
             }
         };
         let overlay = grap::ForeignOverlay::from_value(&functions, &draw);
-        let evaluation = grap::evaluate_runtime_scoped(&program, host, &overlay, fuel);
+        let evaluation = grap::evaluate_runtime_scoped(
+            &program,
+            &grap::Observed::new(host, &tracer),
+            &overlay,
+            fuel,
+        );
         evaluation.completed && !evaluation.result.declines()
     })
 }

@@ -1175,6 +1175,8 @@ fn captured_calls_share_ancestry_and_source_locations() {
     let leaf = new_cell_id();
     let captured = Rc::new(RefCell::new(Vec::new()));
     let output = captured.clone();
+    let tracer = Rc::new(Tracer::default());
+    let observer = tracer.clone();
     let functions = ForeignFunctions::default()
         .register(
             repeat,
@@ -1186,16 +1188,20 @@ fn captured_calls_share_ancestry_and_source_locations() {
         )
         .register(
             leaf,
-            ForeignFunction::from_value(move |context, _, _| {
-                let trace = context.call_trace().unwrap();
-                let again = context.call_trace().unwrap();
+            ForeignFunction::from_value(move |_, _, _| {
+                let trace = observer.trace().unwrap();
+                let again = observer.trace().unwrap();
                 assert!(Rc::ptr_eq(&trace.0, &again.0));
                 output.borrow_mut().push(trace);
                 Ok(blob("done"))
             }),
         );
     let expression = call(repeat.into(), [(body, call(leaf.into(), []))]);
-    let result = evaluate(&expression, |_| None, &functions, 100);
+    let result = super::evaluate_value(
+        &expression,
+        &Observed::new(&definitions_from_parts(|_| None, &functions), &*tracer),
+        100,
+    );
     assert!(result.completed);
     let captured = captured.borrow();
     assert_eq!(captured.len(), 2);
@@ -1220,6 +1226,8 @@ fn generated_prepared_calls_keep_their_source_callers() {
     let function = new_cell_id();
     let captured = Rc::new(RefCell::new(None));
     let output = captured.clone();
+    let tracer = Rc::new(Tracer::default());
+    let observer = tracer.clone();
     let functions = ForeignFunctions::default()
         .register(
             invoke,
@@ -1234,9 +1242,9 @@ fn generated_prepared_calls_keep_their_source_callers() {
         .register(
             leaf,
             ForeignFunction::staged(move |_, _| {
-                let output = output.clone();
-                Rc::new(move |context, _| {
-                    *output.borrow_mut() = context.call_trace();
+                let (output, observer) = (output.clone(), observer.clone());
+                Rc::new(move |_, _| {
+                    *output.borrow_mut() = observer.trace();
                     Ok(RuntimeValue::from(blob("done")))
                 })
             }),
@@ -1245,7 +1253,11 @@ fn generated_prepared_calls_keep_their_source_callers() {
         invoke.into(),
         [(function, lambda([], call(leaf.into(), [])))],
     );
-    let result = evaluate(&expression, |_| None, &functions, 100);
+    let result = super::evaluate_value(
+        &expression,
+        &Observed::new(&definitions_from_parts(|_| None, &functions), &*tracer),
+        100,
+    );
     assert!(result.completed);
     assert_eq!(
         captured

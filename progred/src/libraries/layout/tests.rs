@@ -138,13 +138,14 @@ fn border_retains_native_callbacks_and_their_call_origins() {
     let captured = gid::new_cell_id();
     let origin = gid::new_cell_id();
     let traces = Rc::new(RefCell::new(Vec::new()));
-    let host = crate::test_support::TestHost(|cell: CellId| {
+    let tracer = Rc::new(::grap::Tracer::default());
+    let unobserved = crate::test_support::TestHost(|cell: CellId| {
         let definition = if cell == sink {
-            let traces = traces.clone();
+            let (traces, tracer) = (traces.clone(), tracer.clone());
             Some(::grap::Definition::foreign(
                 Value::record([]),
                 ForeignFunction::new(move |context, call, environment| {
-                    traces.borrow_mut().push(context.call_trace().unwrap());
+                    traces.borrow_mut().push(tracer.trace().unwrap());
                     context.eval(context.field(call, captured).unwrap(), environment)
                 }),
             ))
@@ -153,6 +154,7 @@ fn border_retains_native_callbacks_and_their_call_origins() {
         };
         definition.map(|definition| (gid::Resolution::Document, definition))
     });
+    let host = ::grap::Observed::new(&unobserved, &*tracer);
     let callback = ::grap::evaluate_runtime_at(
         &::grap::RuntimeValue::from(::grap::lambda([], number(7.0))),
         Some(SourceOrigin::Stored(vec![Step::Key(gid::new_cell_id())])),

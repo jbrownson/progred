@@ -72,6 +72,8 @@ fn computed_clauses_preserve_closure_code_captures_and_origins() {
             let clauses = RuntimeValue::list([clause(function, body, binder)]);
             let seen = Rc::new(RefCell::new(None));
             let capture = seen.clone();
+            let tracer = Rc::new(::grap::Tracer::default());
+            let observer = tracer.clone();
             let foreign = functions()
                 .register(
                     producer,
@@ -80,11 +82,12 @@ fn computed_clauses_preserve_closure_code_captures_and_origins() {
                 .register(
                     sink,
                     ForeignFunction::new(move |context, call, environment| {
-                        *capture.borrow_mut() = context.call_trace();
+                        *capture.borrow_mut() = observer.trace();
                         context.eval(context.field(call, captured).unwrap(), environment)
                     }),
                 );
-            let host = crate::test_support::test_host(|_| None, &foreign);
+            let unobserved = crate::test_support::test_host(|_| None, &foreign);
+            let host = ::grap::Observed::new(&unobserved, &*tracer);
             let result = ::grap::evaluate(
                 &control_call(function, ::grap::call(producer.into(), []), binder),
                 &host,

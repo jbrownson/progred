@@ -130,19 +130,18 @@ inside a template and insert them as holes.
 
 ## Observing evaluation
 
-Grap captures provenance ahead of time, each consumer in its own way: every
-call pushes an active-call frame whether or not anyone asks, a drawing's fills
-each keep a call trace, a closure keeps its body's origin, and an absent about
-a call names where the call is. A single optional observer would replace the
-first two and could answer the rest on demand.
+Grap captures provenance ahead of time, each consumer in its own way: a
+drawing's fills each keep a call trace, a closure keeps its body's origin, and
+an absent about a call names where the call is. The first step is in: the
+evaluator keeps no call stack, offering each call it enters and leaves to an
+observer a host lends it, and a drawing's record step attaches a tracer that
+keeps every fill's trace as before. What remains is for observers to answer
+only the questions asked.
 
-- The evaluator offers an observer its activity at call boundaries: a call
-  entered and left, an effect performed. With none attached it keeps no stack
-  at all; with one, the observer keeps whatever it wants, such as a full stack
-  including frames with no source, and can stop the run once it has its answer.
-  Start with an optional observer on the context, one branch per call, and
-  measure before reaching for a generic no-op one, which would thread its type
-  through compiled code and every foreign function.
+- An observer could also be told of effects, and could stop the run once it
+  has its answer. A generic no-op observer, threading its type through compiled
+  code and every foreign function, would save the one branch per call an
+  unobserved evaluation pays; measure before reaching for it.
 - An observer goes on whichever run comes next. A question known before an
   evaluation runs rides on that run; one that comes up afterwards needs a
   replay, the same evaluation run again with the same fuel, which only a pure

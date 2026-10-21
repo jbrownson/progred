@@ -9,6 +9,8 @@ use std::fmt;
 use std::rc::Rc;
 use unboxed::{Native, Unboxed};
 
+pub use trace::{CallTrace, Observed, Observer, Tracer};
+
 #[cfg(test)]
 mod effect_tests;
 
@@ -25,6 +27,7 @@ pub mod primitive;
 mod reify;
 pub mod source;
 pub mod text;
+mod trace;
 pub mod u64;
 mod unboxed;
 pub mod vocabulary;
@@ -81,39 +84,6 @@ pub enum SourceOrigin {
         resolution: Resolution,
         path: Vec<gid::Step>,
     },
-}
-
-/// Captured source-bearing calls, innermost first. Nodes share caller ancestry
-/// and source locations, but retain neither environments nor evaluator storage.
-#[derive(Clone, Debug)]
-pub struct CallTrace(Rc<CallTraceNode>);
-
-#[derive(Debug)]
-struct CallTraceNode {
-    origin: Rc<SourceOrigin>,
-    caller: Option<CallTrace>,
-}
-
-impl CallTrace {
-    pub fn origins(&self) -> impl Iterator<Item = &SourceOrigin> {
-        std::iter::successors(Some(self), |trace| trace.0.caller.as_ref())
-            .map(|trace| trace.0.origin.as_ref())
-    }
-}
-
-impl PartialEq for CallTrace {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0) || self.origins().eq(other.origins())
-    }
-}
-
-impl Eq for CallTrace {}
-
-struct ActiveCall {
-    expression: Expression,
-    // The outer option means this prefix has been captured, even if none of
-    // its calls has an origin (e.g. a host-generated call).
-    captured: Option<Option<CallTrace>>,
 }
 
 /// A staged foreign function's per-visit form, returned by its
@@ -189,6 +159,10 @@ pub trait Host {
     fn untracked(&self) {}
     /// An observable write ran, which a reused result would leave out.
     fn effect(&self) {}
+    /// What watches the evaluations run against this host, if anything.
+    fn observer(&self) -> Option<&dyn Observer> {
+        None
+    }
 }
 
 impl ForeignFunction {
@@ -1084,8 +1058,7 @@ pub struct Context<'a> {
     remaining_fuel: usize,
     resolving: Vec<CellId>,
     compiled: ByNode<Thunk>,
-    calls: Vec<ActiveCall>,
-    call_origins: ByNode<Option<Rc<SourceOrigin>>>,
+    observer: Option<&'a dyn Observer>,
     cell_states: Vec<CellState>,
     indices: CellIndices,
 }
@@ -1430,46 +1403,21 @@ impl<'a> Context<'a> {
         source::origin(expression)
     }
 
-    /// Capture the active source call chain. Calls without a source are skipped,
-    /// not assigned a fabricated path. Repeated captures share live prefixes.
-    pub fn call_trace(&mut self) -> Option<CallTrace> {
-        let (start, mut caller) = self
-            .calls
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(index, call)| Some((index + 1, call.captured.clone()?)))
-            .unwrap_or((0, None));
-        for index in start..self.calls.len() {
-            let expression = self.calls[index].expression.clone();
-            let origin = match self.call_origins.get(&expression) {
-                Some(origin) => origin.clone(),
-                None => {
-                    let origin = self.source_origin(&expression).map(Rc::new);
-                    self.call_origins.insert(expression, origin.clone());
-                    origin
-                }
-            };
-            if let Some(origin) = origin {
-                caller = Some(CallTrace(Rc::new(CallTraceNode { origin, caller })));
-            }
-            self.calls[index].captured = Some(caller.clone());
-        }
-        caller
-    }
-
+    /// Run `call`, telling an observer it's entered and left.
     fn at_call(
         &mut self,
-        expression: Expression,
+        call: &Expression,
         run: impl FnOnce(&mut Self) -> Result<RuntimeValue, Halt>,
     ) -> Result<RuntimeValue, Halt> {
-        self.calls.push(ActiveCall {
-            expression,
-            captured: None,
-        });
-        let result = run(self);
-        self.calls.pop();
-        result
+        match self.observer {
+            None => run(self),
+            Some(observer) => {
+                observer.entered(call);
+                let result = run(self);
+                observer.left();
+                result
+            }
+        }
     }
 
     pub fn eval_to_value(
@@ -1664,7 +1612,7 @@ impl<'a> Context<'a> {
         let stages: RefCell<Option<(Prepare, Stage)>> = RefCell::new(None);
         let target: RefCell<Option<Rc<PreparedCallTarget>>> = RefCell::new(None);
         thunk(move |context, environment| {
-            context.at_call(call.clone(), |context| {
+            context.at_call(&call, |context| {
                 if let Some((cell, index)) = function_cell
                     && environment.get_at(&context.indices, cell, index).is_none()
                     && context.foreign_target_cell(cell).is_none()
@@ -2525,8 +2473,7 @@ fn context<'a>(
         remaining_fuel: fuel,
         resolving: Vec::new(),
         compiled: Default::default(),
-        calls: Vec::new(),
-        call_origins: Default::default(),
+        observer: host.observer(),
         cell_states: Vec::new(),
         indices: CellIndices::default(),
     }
