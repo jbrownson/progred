@@ -1,7 +1,8 @@
 //! A Grap notebook: a list of entry cells, each drawn as its expression and
 //! its result. Entries are cells like any other, so one refers to another
-//! the standard ways, and a change to one recomputes the entries that read
-//! it. Enter on an entry starts a new one after it; an empty notebook offers
+//! the standard ways, in either direction, and a change to one recomputes
+//! the entries that read it. They're drawn as a list, with a list's editing;
+//! Enter on an entry starts a new one after it, and an empty notebook offers
 //! its first.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
@@ -34,26 +35,29 @@ pub(super) fn display<W: Host>(
     })
 }
 
-/// The entries in order, each starting another beside it on Enter.
+/// The entries as a list, one under another, so inserting between them, the
+/// hole a deleted one leaves, and the rest of a list's editing are a list's
+/// own. Enter on an entry starts another beside it; an empty notebook offers
+/// its first.
 fn entries<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let positions = input.value?.list_positions()?;
-    if positions.is_empty() {
-        return Some(first_entry(input.site()));
+    match positions.is_empty() && input.pending.is_none() {
+        true => Some(first_entry(input.site())),
+        false => crate::display::structure::list_column_with(
+            input,
+            12.0,
+            Some(crate::display::runtime_partial(entry)),
+            move |at, item| match positions.iter().position(|entry| *entry == at) {
+                Some(index) => new_entry_on_enter(
+                    item,
+                    index.checked_sub(1).map(|before| positions[before].clone()),
+                    at,
+                    positions.get(index + 1).cloned(),
+                ),
+                None => item,
+            },
+        ),
     }
-    let entries = positions.iter().enumerate().map(|(index, at)| {
-        let entry = crate::display::descend_local(
-            [Step::Element(at.clone())],
-            crate::display::runtime_partial(entry),
-            &input.default_projection,
-        );
-        new_entry_on_enter(
-            entry,
-            index.checked_sub(1).map(|before| positions[before].clone()),
-            at.clone(),
-            positions.get(index + 1).cloned(),
-        )
-    });
-    Some(group(col(0, 12.0, entries.collect::<Vec<_>>())))
 }
 
 /// A click on what an empty notebook draws starts its first entry.
@@ -71,10 +75,46 @@ fn first_entry<W: Host>(list: crate::editing::Site) -> Layout<W> {
     )
 }
 
+/// An entry, or the place for one the list leaves to fill.
+fn entry<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    match input.value {
+        Some(reference) => entry_of(input, reference),
+        None => Some(new_entry_hole()),
+    }
+}
+
+/// A place for an entry, as between two or where one was deleted: its one
+/// offer starts an entry there, a new cell whose expression starts from
+/// what was typed.
+fn new_entry_hole<W: Host>() -> Layout<W> {
+    crate::display::picker(crate::display::Picker::new(
+        crate::display::CompletionKind::Value,
+        Rc::new(|request| {
+            let typed = request.query.to_owned();
+            vec![crate::display::widget::offers::entry(
+                request,
+                Completion::new("new entry", move |session| {
+                    if let Some(picking) = session.pending() {
+                        picking.commit(
+                            gid::new_cell_id().into(),
+                            Some(crate::selection::at(
+                                &[Step::Follow(Resolution::Document)],
+                                crate::selection::payload::pending(&typed),
+                            )),
+                        );
+                    }
+                }),
+            )]
+        }),
+    ))
+}
+
 /// An entry is its cell's expression, then, once the cell has one, what it
 /// evaluates to, beside it or below it where there's no room.
-fn entry<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let reference = input.value?;
+fn entry_of<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    reference: &::grap::RuntimeValue,
+) -> Option<Layout<W>> {
     let definition = input.env.resolve(reference.as_cell()?);
     let source = definition
         .as_ref()

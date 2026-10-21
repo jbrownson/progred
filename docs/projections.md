@@ -407,9 +407,12 @@ has no definition yet draws only its expression, so a new entry shows no error.
 Each entry evaluates at its own occurrence, so its result is memoized like a
 pane's and recomputes when a cell it reads changes, and an error in it opens to
 its callers. Entries refer to one another the standard ways: Cmd-clicking,
-copying, or naming. Enter on an entry, once its own handlers decline it, starts
-a new entry after it, or with Shift before it: a fresh cell whose expression is
-picked next. An empty notebook draws a "new entry" that starts its first. An
+copying, or naming. The entries are drawn as a list, with a list's editing:
+clicking between two inserts a place for one there, and deleting one leaves its
+place to fill. Such a place offers "new entry", a fresh cell whose expression
+starts from what was typed. Enter on an entry, once its own handlers decline
+it, starts a new entry after it, or with Shift before it, going straight to its
+expression. An empty notebook draws a "new entry" that starts its first. An
 element that isn't a cell draws as plain data. The arrow selects the entry
 itself rather than its expression.
 

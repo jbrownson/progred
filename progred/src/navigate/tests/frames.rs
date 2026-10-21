@@ -366,6 +366,28 @@ fn navigation_named_number_hands_off_from_name_at_text_boundary() {
 }
 
 #[test]
+fn an_arrow_from_a_selection_on_nothing_drawn_selects_the_root() {
+    // A number draws as its spelling, not its encoding's field, so a
+    // selection there is on nothing drawn.
+    let number = crate::test_values::key("number");
+    let mut world = crate::test_editor(Document {
+        root: Some(Value::record([(
+            crate::test_values::label("number"),
+            f64::value(42.0),
+        )])),
+        cells: Cells::new(),
+    });
+    world.model.selection = Some(make_selection(vec![
+        number,
+        Step::Key(f64::vocabulary::F64),
+    ]));
+    let mut driver = Driver::new(world, Driver::VIEWPORT);
+    assert!(!driver.drawn(&driver.selection()));
+    driver.press(NamedKey::ArrowDown);
+    assert_eq!(driver.selection(), crate::occurrence::of(&[]));
+}
+
+#[test]
 fn navigation_example_projects_and_navigates_without_an_app_window() {
     let (doc, _) = crate::gid_text::parse(crate::test_examples::NAVIGATION).unwrap();
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);

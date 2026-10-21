@@ -3,7 +3,7 @@
 use super::vocabulary::NOTEBOOK;
 use crate::driver::Driver;
 use crate::libraries::grap::numbers;
-use crate::libraries::{f64, presentation};
+use crate::libraries::{f32, f64, presentation};
 use crate::occurrence;
 use crate::selection::Stage;
 use gid::{CellId, Cells, Document, Resolution, Step, Value, new_cell_id};
@@ -285,19 +285,43 @@ fn arrows_go_into_a_notebook_from_its_whole_down_to_an_entry_s_expression() {
 }
 
 #[test]
-fn an_arrow_from_a_deleted_entry_s_place_selects_the_notebook() {
-    let entry_cell = new_cell_id();
+fn a_deleted_entry_leaves_its_place_to_start_another() {
+    let (first, second) = (new_cell_id(), new_cell_id());
     let mut cells = Cells::new();
-    cells.set_value(entry_cell, f64::value(42.0));
-    let mut driver = notebook(&[entry_cell], cells);
-    driver.select(&expression(&driver, 0));
-    driver.press(NamedKey::Enter);
-    // Backspace leaves the new entry's empty expression, then deletes the
-    // entry, its place still selected though the notebook draws none.
-    driver.press(NamedKey::Backspace);
+    cells.set_value(first, f64::value(1.0));
+    cells.set_value(second, f64::value(2.0));
+    let mut driver = notebook(&[first, second], cells);
+    driver.select(&entry(&driver, 0, &[]));
     driver.press(NamedKey::Backspace);
     assert_eq!(driver.positions(&[Step::Key(NOTEBOOK)]).len(), 1);
-    assert!(!driver.drawn(&driver.selection()));
-    assert!(driver.keystroke(Key::Named(NamedKey::ArrowDown), Modifiers::empty()));
-    assert_eq!(driver.selection(), occurrence::of(&[]));
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    assert!(driver.drawn(&driver.selection()), "the place is drawn");
+    assert_eq!(driver.picker_entries(), Some(vec!["new entry".into()]));
+
+    driver.type_text("7");
+    driver.press(NamedKey::Enter);
+    driver.press(NamedKey::Enter);
+    assert_eq!(driver.positions(&[Step::Key(NOTEBOOK)]).len(), 2);
+    assert_eq!(driver.value(&expression(&driver, 0)), f32::value(7.0));
+    assert_eq!(driver.value(&entry(&driver, 1, &[])), Value::from(second));
+}
+
+#[test]
+fn a_click_between_entries_starts_one_there() {
+    let (first, second) = (new_cell_id(), new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(first, f64::value(1.0));
+    cells.set_value(second, f64::value(2.0));
+    let mut driver = notebook(&[first, second], cells);
+    driver.click_between(&[Step::Key(NOTEBOOK)], 0);
+    assert_eq!(driver.picker_entries(), Some(vec!["new entry".into()]));
+
+    driver.type_text("7");
+    driver.press(NamedKey::Enter);
+    driver.press(NamedKey::Enter);
+    assert_eq!(driver.positions(&[Step::Key(NOTEBOOK)]).len(), 3);
+    assert_eq!(driver.value(&entry(&driver, 0, &[])), Value::from(first));
+    assert_eq!(driver.value(&expression(&driver, 1)), f32::value(7.0));
+    assert_eq!(result(&mut driver, 1), Some(f32::value(7.0)));
+    assert_eq!(driver.value(&entry(&driver, 2, &[])), Value::from(second));
 }
