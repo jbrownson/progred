@@ -351,7 +351,9 @@ fn the_document_libraries_entry_switches_the_documents_own_projections() {
                 .landmarks
                 .iter()
                 .find(|landmark| {
-                    landmark.path.first() == Some(&crate::occurrence::Step::Key(names["fractions"]))
+                    landmark
+                        .path
+                        .starts_with(&[crate::occurrence::Step::Key(names["fractions"])])
                         && landmark.path.last() == Some(&crate::occurrence::Step::Key(names[key]))
                 })
                 .unwrap()

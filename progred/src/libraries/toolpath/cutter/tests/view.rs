@@ -37,7 +37,9 @@ fn tool_profile_click_selects_its_stored_or_computed_occurrence() {
         let pointer = Point::new(profile.x0 + 55.0, profile.y0 + 90.0);
         assert_eq!(
             driver.hover_at(pointer),
-            Some(Hovered::Tree(Hover::Value(Rc::from(selected.clone()))))
+            Some(Hovered::Tree(Hover::Value(crate::occurrence::Trail::from(
+                selected.clone()
+            ))))
         );
         let document = driver.editor().model.doc.clone();
         driver.click_at(pointer);

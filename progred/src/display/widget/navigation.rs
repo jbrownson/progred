@@ -1,6 +1,6 @@
 //! Layout collects selectable stops; only the current selection's destinations survive.
 use super::{HoverPass, source::Secondary, view::Root};
-use crate::occurrence::Step;
+use crate::occurrence::Trail;
 use kurbo::Rect;
 use measured::Measured;
 use puri::handler::NavigationDirection;
@@ -35,7 +35,7 @@ pub fn stop<W: 'static, H: 'static>(
     super::before(
         child,
         Rc::new(|context| {
-            let path: Rc<[Step]> = Rc::from(context.path());
+            let path = context.path().clone();
             let selected = context.toolkit.selected();
             Box::new(move |output, _| output.navigation_stop(path, selected))
         }),
@@ -48,7 +48,7 @@ pub fn group<W: 'static, H: 'static>(
     super::around(
         child,
         Rc::new(move |context| {
-            let path: Rc<[Step]> = Rc::from(context.path());
+            let path = context.path().clone();
             let selected = context.toolkit.selected();
             Box::new(move |child| {
                 measured::around_into(child, move |_, inner, pass| {
@@ -63,7 +63,7 @@ pub fn group<W: 'static, H: 'static>(
 
 pub struct Landmark<World> {
     pub root: Option<Root>,
-    pub path: Rc<[Step]>,
+    pub path: Trail,
     pub rect: Rect,
     pub select: Select<World>,
     /// What it shares with other projections of the same thing.
@@ -90,14 +90,17 @@ impl<World> Clone for Landmark<World> {
 }
 
 /// The landmark drawn at `path` in the view `root`.
-pub(crate) fn landmark_at<'a, World>(
+pub(crate) fn landmark_at<'a, World, P: ?Sized>(
     landmarks: &'a [Landmark<World>],
     root: Option<&Root>,
-    path: &[Step],
-) -> Option<&'a Landmark<World>> {
+    path: &P,
+) -> Option<&'a Landmark<World>>
+where
+    Trail: PartialEq<P>,
+{
     landmarks
         .iter()
-        .find(|landmark| landmark.root.as_ref() == root && landmark.path.as_ref() == path)
+        .find(|landmark| landmark.root.as_ref() == root && landmark.path == *path)
 }
 
 /// What the selected occurrence shares with the projections that carry the
@@ -118,7 +121,7 @@ pub fn selected_secondary<World>(landmarks: &[Landmark<World>]) -> Option<Second
 /// names its own arrival.
 pub(crate) fn landmark<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
-    path: Rc<[Step]>,
+    path: Trail,
     select: Select<World>,
     secondary: Option<Secondary>,
     selected: bool,

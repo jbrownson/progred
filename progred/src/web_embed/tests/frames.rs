@@ -26,7 +26,7 @@ fn top_slots(driver: &Driver) -> Vec<CellId> {
     driver
         .drawn_under::<Step>(&[])
         .into_iter()
-        .filter_map(|(path, _)| match path.as_ref() {
+        .filter_map(|(path, _)| match path.to_vec().as_slice() {
             [crate::occurrence::Step::Key(key)] => Some(*key),
             _ => None,
         })

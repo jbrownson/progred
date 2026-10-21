@@ -47,7 +47,7 @@ pub fn foldable<W: Host>(
         let path = toolkit.path();
         let held = toolkit.label_query().is_some()
             || toolkit.selection().is_some_and(|selection| {
-                selection.path().len() > path.len() && selection.path().starts_with(path)
+                selection.path().len() > path.len() && path.leads(selection.path())
             });
         let layout = match context.value {
             Some(value)

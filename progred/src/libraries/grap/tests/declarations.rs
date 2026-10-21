@@ -179,11 +179,11 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
     let frame = editing_frame(&mut world);
     let name_path = [Step::Key(name::vocabulary::NAME)];
     let name_slot = frame.landmarks.landmark(&name_path).unwrap();
-    assert!(!frame.landmarks.iter().any(|d| d.path.as_ref()
+    assert!(!frame.landmarks.iter().any(|d| d.path
         == [
             Step::Key(grap::vocabulary::VALUE),
             Step::Follow(gid::Resolution::Document)
-        ]));
+        ][..]));
     let before = world.model.doc.clone();
     assert!((name_slot.select)(&mut world, None));
     assert!(editing_frame(&mut world).completion.is_some());
@@ -294,14 +294,14 @@ fn declarations_keep_cell_handles_real_name_paths_and_editing() {
             ..BenchFrame::of(&doc, 1200.0)
         });
         assert!(matches!(hovered.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == name_path));
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found == name_path));
         let point = Point::new((cell_rect.x0 + name_rect.x0) / 2.0, cell_rect.center().y);
         let (hovered, _) = place_with(BenchFrame {
             pointer: Some(point),
             ..BenchFrame::of(&doc, 1200.0)
         });
         assert!(matches!(hovered.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == binder_path));
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found == binder_path));
         let mut selected =
             make_projected_editing_selection(&doc, &libraries, crate::occurrence::of(&name_path));
         assert_eq!(selected.edit().unwrap().text(), "size");
@@ -602,7 +602,7 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
             ..BenchFrame::of(&doc, 1200.0)
         });
         assert!(matches!(hovered.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found.as_ref() == &expression_path[..1]));
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found == expression_path[..1]));
 
         let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
         driver.click_at(marker_position(&driver.runner.frame.dispatch.landmarks));

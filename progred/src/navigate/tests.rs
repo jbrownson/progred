@@ -8,7 +8,7 @@ use ui_events::keyboard::{KeyState, Modifiers};
 fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Landmark<()> {
     Landmark {
         root: None,
-        path: Rc::from(path),
+        path: path.into(),
         rect: Rect::new(x0, y0, x1, y1),
         select: Rc::new(|_, _| true),
         secondary: None,
@@ -85,7 +85,7 @@ fn command_a_selects_the_current_views_root() {
         let target = select_all(crate::modifiers::native(), &landmarks, root, &event)
             .expect("Select All reaches the view root");
         assert_eq!(target.root.as_ref(), Some(root));
-        assert_eq!(target.path.as_ref(), path);
+        assert_eq!(target.path, path);
     }
     for event in [
         KeyboardEvent {

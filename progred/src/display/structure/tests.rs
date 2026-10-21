@@ -40,9 +40,9 @@ fn cmd_clicking_a_label_picks_the_label_not_its_value() {
     use gid::{Document, Value, new_cell_id};
 
     let label_at = |driver: &Driver, key| {
-        driver.locate(Hovered::Tree(Hover::Label(std::rc::Rc::from([Step::Key(
-            key,
-        )]))))
+        driver.locate(Hovered::Tree(Hover::Label(crate::occurrence::Trail::from(
+            [Step::Key(key)],
+        ))))
     };
 
     // A new record's first label, its value still to come.

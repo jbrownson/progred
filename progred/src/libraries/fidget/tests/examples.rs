@@ -106,7 +106,7 @@ fn fidget_example_shows_each_preview_beside_its_code() {
         .landmarks
         .iter()
         .filter(|landmark| {
-            landmark.path.ends_with(&[
+            landmark.path.to_vec().ends_with(&[
                 crate::occurrence::Step::Key(presentation::vocabulary::RESULT),
                 crate::occurrence::Step::Computed,
             ])

@@ -193,9 +193,7 @@ fn the_example_libraries_draw_fractions_angles_and_their_functions() {
         let angle = frame
             .landmarks
             .iter()
-            .find(|landmark| {
-                landmark.path.as_ref() == [key("angles"), Step::Element(position.clone())]
-            })
+            .find(|landmark| landmark.path == [key("angles"), Step::Element(position.clone())][..])
             .unwrap()
             .rect;
         assert_eq!(lines(angle, [0x99; 3]), [0.0], "{degrees}: the zero line");

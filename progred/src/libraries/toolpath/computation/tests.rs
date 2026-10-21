@@ -57,7 +57,7 @@ impl crate::display::Env for ViewportEnv<'_> {
         fuel: usize,
     ) -> RuntimeValue {
         self.computations
-            .apply_runtime(&[], function, arguments, fuel)
+            .apply_runtime(crate::occurrence::Trail::ROOT, function, arguments, fuel)
     }
 }
 

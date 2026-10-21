@@ -30,7 +30,7 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
     let number_rect = rect(&number);
     assert!(!bench.landmarks.iter().any(|d| {
         d.path
-            .iter()
+            .steps()
             .any(|s| matches!(s, crate::occurrence::Step::Follow(_)))
     }));
     for (point, path) in [
@@ -49,7 +49,7 @@ fn fidget_operands_keep_editable_paths_and_operator_hover_selects_the_expression
             ..BenchFrame::of(&doc, 400.0)
         });
         assert!(matches!(hovered.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if *found == path));
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found == path));
     }
     let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
     driver.select(&number);

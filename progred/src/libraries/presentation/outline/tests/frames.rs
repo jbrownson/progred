@@ -100,7 +100,7 @@ fn hidden(world: &crate::Editor, path: &[occurrence::Step]) -> bool {
 fn click(driver: &mut Driver, point: Point, path: &[occurrence::Step]) {
     assert_eq!(
         driver.hover_at(point),
-        Some(Hovered::Tree(Hover::Value(Rc::from(path))))
+        Some(Hovered::Tree(Hover::Value(occurrence::Trail::from(path))))
     );
     driver.click_at(point);
 }
@@ -179,7 +179,7 @@ fn cam_outline_draws_as_the_main_value_with_the_panes_out_of_sight() {
             .iter()
             .any(|landmark| {
                 landmark.root.as_ref() == Some(&crate::test_root())
-                    && landmark.path.first() == Some(&occurrence::Step::Key(PANES))
+                    && landmark.path.starts_with(&[occurrence::Step::Key(PANES)])
             })
     );
 }
@@ -338,7 +338,7 @@ fn outline_library_tint_stops_at_the_heading() {
     assert!(heading_rect.y1 < body_rect.y0);
     assert!(occurrence::writable(
         &world.sources(),
-        &stop(&f, &body_path).path
+        &stop(&f, &body_path).path.to_vec()
     ));
 
     fn tints(commands: &[DrawCmd]) -> Vec<Rect> {
@@ -377,7 +377,7 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     assert!(driver.rect(&b_path).y0 < driver.rect(&a_path).y0);
     assert!(driver.rect(&a_path).y1 < driver.rect(&[Step::Key(extra)]).y0);
     assert_eq!(
-        occurrence::location(&driver.landmark(&b_path).unwrap().path),
+        driver.landmark(&b_path).unwrap().path.location(),
         Some(Location::root(vec![Step::Key(b)]))
     );
     driver.select(&b_path);
@@ -422,7 +422,7 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
         assert_eq!(
             occurrence::read(
                 &driver.editor().sources(),
-                &driver.landmark(path).unwrap().path
+                &driver.landmark(path).unwrap().path.to_vec()
             ),
             Some(&replacement)
         );
@@ -456,7 +456,9 @@ fn computed_outline_keeps_independent_read_only_occurrences() {
         element(gid::position::between(Some(&positions[0]), Some(&positions[1])).unwrap());
     assert_ne!(
         driver.hover_at(Point::new(first.x0 + 4.0, (first.y1 + second.y0) / 2.0)),
-        Some(Hovered::Tree(Hover::Value(Rc::from(missing)))),
+        Some(Hovered::Tree(Hover::Value(occurrence::Trail::from(
+            missing
+        )))),
         "computed lists have no insertion target"
     );
     driver.select(&result_body);
@@ -564,7 +566,9 @@ fn outline_body_column_gap_inserts_through_its_jump() {
         let missing = element(gid::position::between(Some(before), Some(after)).unwrap());
         assert_ne!(
             driver.hover_at(Point::new(first.x0 + 4.0, y)),
-            Some(Hovered::Tree(Hover::Value(Rc::from(missing)))),
+            Some(Hovered::Tree(Hover::Value(occurrence::Trail::from(
+                missing
+            )))),
             "both gaps beside a pending stay inactive"
         );
     }

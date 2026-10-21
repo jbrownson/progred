@@ -26,7 +26,7 @@ fn website_forest_hover_finds_the_available_call() {
         .landmarks
         .iter()
         .find_map(|landmark| {
-            let location = crate::occurrence::location(&landmark.path)?;
+            let location = landmark.path.location()?;
             let value = sources.read(&location)?;
             (value
                 .as_record()?

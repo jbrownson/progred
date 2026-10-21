@@ -9,12 +9,14 @@ use crate::driver::Driver;
 use crate::frame::test_support::{editing_frame, settle};
 use crate::libraries::text;
 use crate::library::Libraries;
+use crate::occurrence::Path;
 use gid::Document;
 use kurbo::{Point, Rect, Stroke};
 use measured::Extent;
 use peniko::{Brush, ImageData};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::hover::Claim;
+use std::rc::Rc;
 use ui_events::keyboard::NamedKey;
 use uig::Placement;
 
@@ -50,8 +52,12 @@ pub(crate) fn at_path<W: 'static, H: 'static, R>(
         project,
         toolkit: &Occurrence {
             cx,
-            path,
-            ancestors: &super::Ancestry::default(),
+            path: &crate::occurrence::Trail::of(path),
+            ancestors: &super::Ancestry {
+                stored: crate::occurrence::stored_start(&cx.sources, path),
+                ..super::Ancestry::default()
+            },
+            state: None,
         },
         value,
     })

@@ -1,7 +1,7 @@
 use super::*;
 use crate::display::test_support::Landmarks;
 use crate::display::widget::source::Secondary;
-use crate::occurrence::Step as Occurs;
+use crate::occurrence::{Step as Occurs, Trail};
 use crate::test_support::key_down;
 use gid::{CellId, Cells, Document, Step, Value};
 use puri::handler::test_support::DispatchShorthands;
@@ -67,7 +67,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
     )]));
     let root = editor.model.workspace.document_root().clone();
     let source = vec![Step::Key(field)];
-    let occurrence: Rc<[Occurs]> = Rc::from([
+    let occurrence = Trail::from([
         Occurs::Key(key),
         Occurs::jump(crate::location::Location::root(source.clone())),
     ]);
@@ -132,7 +132,7 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         (field, crate::libraries::text::value("shared")),
         (key, crate::libraries::text::value("coincidence")),
     ]));
-    let computed: Rc<[Occurs]> = Rc::from([Occurs::Key(key), Occurs::Computed]);
+    let computed = Trail::from([Occurs::Key(key), Occurs::Computed]);
     landmarks[0].path = computed.clone();
     let resolved = attribute(
         &editor.sources(),
@@ -168,9 +168,9 @@ fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {
                     },
                     move |output, placement| {
                         let target = Hovered::Tree(if (value as u64).is_multiple_of(2) {
-                            hover::Hover::Value(Rc::from([]))
+                            hover::Hover::Value(Trail::root())
                         } else {
-                            hover::Hover::Toggle(Rc::from([]))
+                            hover::Hover::Toggle(Trail::root())
                         });
                         output.claim(Probe::exact(placement, target));
                         output.after_hover(move |_, effects| {
@@ -272,7 +272,7 @@ fn pointer_hover_reactions_that_change_geometry_wait_for_paint_before_reacting_a
     assert_eq!(log.take(), [("hover", 0.0), ("project", 1.0)]);
     assert_eq!(
         runner.frame.hover,
-        Some(Hovered::Tree(hover::Hover::Toggle(Rc::from([]))))
+        Some(Hovered::Tree(hover::Hover::Toggle(Trail::root())))
     );
     assert!(paint_hover_frame(&mut runner));
     assert_eq!(log.take(), [("paint", 1.0)]);
@@ -833,7 +833,7 @@ fn a_new_target_missing_from_the_previous_frame_does_not_trigger_a_retry() {
 
 #[test]
 fn source_hover_is_immediate_from_code_and_explicit_from_drawing() {
-    let code = Hovered::Tree(hover::Hover::Value(Rc::from([])));
+    let code = Hovered::Tree(hover::Hover::Value(Trail::root()));
     let drawing = Hovered::Tree(hover::Hover::Source(SourceTrace::Stored(Rc::from([]))));
 
     assert!(source_hover_visible(Some(&code), false));
@@ -880,7 +880,7 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
                 Option<gid::Resolution>,
             > {
                 root: Some(root.clone()),
-                path: Rc::from([Occurs::Follow(resolution), Occurs::Key(call)]),
+                path: Trail::from([Occurs::Follow(resolution), Occurs::Key(call)]),
                 rect,
                 select: Rc::new(move |selected, _| {
                     *selected = Some(resolution);
@@ -1059,15 +1059,13 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
                 shown
                     .landmarks
                     .iter()
-                    .any(|target| target.root.as_ref() == Some(document)
-                        && target.path.as_ref() == stored)
+                    .any(|target| target.root.as_ref() == Some(document) && target.path == stored)
             );
             assert!(
                 !shown
                     .landmarks
                     .iter()
-                    .any(|target| target.root.as_ref() == Some(pane)
-                        && target.path.as_ref() == drawn)
+                    .any(|target| target.root.as_ref() == Some(pane) && target.path == drawn)
             );
         }
     }
@@ -1085,8 +1083,7 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             assert!(
                 raw.landmarks
                     .iter()
-                    .any(|target| target.root.as_ref() == Some(pane)
-                        && target.path.as_ref() == drawn)
+                    .any(|target| target.root.as_ref() == Some(pane) && target.path == drawn)
             );
         }
     }
@@ -1099,9 +1096,12 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     for (pane, _, drawn) in &sources {
         let source_path =
             crate::occurrence::below(drawn, &[Step::Key(presentation::vocabulary::VALUE)]);
-        assert!(absent.landmarks.iter().any(
-            |target| target.root.as_ref() == Some(pane) && target.path.as_ref() == source_path
-        ));
+        assert!(
+            absent
+                .landmarks
+                .iter()
+                .any(|target| target.root.as_ref() == Some(pane) && target.path == source_path)
+        );
     }
 }
 
@@ -1217,7 +1217,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
             placed
                 .landmarks
                 .iter()
-                .any(|node| node.path.as_ref() == path && node.rect == rect)
+                .any(|node| node.path == path && node.rect == rect)
         );
         assert!(matches!(
             placed.claim.map(|(_, claim)| claim),
@@ -1330,7 +1330,7 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
     };
     let path = crate::test_examples::pane_root(path);
     assert!(placed.landmarks.iter().any(|landmark| {
-        landmark.root.as_ref() == Some(&upper) && landmark.path.as_ref() == path.as_slice()
+        landmark.root.as_ref() == Some(&upper) && landmark.path == path.as_slice()
     }));
 }
 
@@ -1673,7 +1673,7 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
         })
     };
     for (selected, other) in [(&field, &missing), (&missing, &field)] {
-        driver.select(&selected.0);
+        driver.select(&selected.0.to_vec());
         assert!(
             marked(&driver, 0.10, other.1),
             "selecting {:?} marks {:?}",

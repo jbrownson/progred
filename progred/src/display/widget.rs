@@ -63,7 +63,7 @@ impl<World, Hover> Context<'_, '_, World, Hover> {
     }
 
     /// This widget's path in its view.
-    pub(crate) fn path(&self) -> &[crate::occurrence::Step] {
+    pub(crate) fn path(&self) -> &crate::occurrence::Trail {
         self.toolkit.path()
     }
 

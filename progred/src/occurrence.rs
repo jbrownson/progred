@@ -30,6 +30,9 @@ pub enum Step {
 
 pub type Path = Vec<Step>;
 
+mod trail;
+pub use trail::Trail;
+
 /// Occurrence paths key every drawn occurrence's state, so they hash on each
 /// frame: a jump hashes only where its location starts and how far it goes,
 /// which equal jumps share, and leaves telling the rest apart to equality.
@@ -118,22 +121,6 @@ pub fn document(path: &[Step]) -> Option<gid::Path> {
     path.iter().map(Step::data).collect()
 }
 
-/// Whether `steps` are all data steps, as a document path's are.
-pub fn is_data(steps: &[Step]) -> bool {
-    steps.iter().all(|step| step.data().is_some())
-}
-
-/// Whether what's at `path` is computed: the last jump or computed value on
-/// the way there is a computed value.
-pub fn computed(path: &[Step]) -> bool {
-    matches!(
-        path.iter()
-            .rev()
-            .find(|step| matches!(step, Step::Jump(_) | Step::Computed)),
-        Some(Step::Computed)
-    )
-}
-
 /// Where the data at `path` is: from the document's root, or from the last
 /// jump's location, along the data steps after it. None for a computed value.
 pub fn location(path: &[Step]) -> Option<Location<'static>> {
@@ -166,7 +153,7 @@ pub fn writable(sources: &Sources, path: &[Step]) -> bool {
 /// it, without building the location: the definition its last Follow enters,
 /// else where its last jump's location is stored, else the root. None for a
 /// computed value, or where the route to that Follow no longer reaches a cell.
-fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
+pub(crate) fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
     let marker = path
         .iter()
         .rposition(|step| matches!(step, Step::Jump(_) | Step::Computed));

@@ -161,7 +161,7 @@ pub fn hover(path: Vec<gid::Step>) -> Hovered {
 /// A projection test's occurrence: the root of the test view, so a site
 /// below it hovers and selects the steps it's given.
 pub fn test_site() -> crate::editing::Site {
-    crate::editing::Site::new(std::rc::Rc::from([]))
+    crate::editing::Site::new(crate::occurrence::Trail::root())
 }
 
 /// `value` projected writably at scale 1 through `env`, with no default

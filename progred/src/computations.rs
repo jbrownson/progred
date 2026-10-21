@@ -1,6 +1,6 @@
 //! The editor owns memo roots; libraries compose typed computations in them.
 
-use crate::occurrence::Step;
+use crate::occurrence::Trail;
 use crate::{library::Libraries, sources::Sources};
 use gid::{Document, Value};
 use grap::Host;
@@ -28,7 +28,7 @@ pub(crate) struct Computations {
     pub definitions: memo::Definitions<Snapshot>,
     /// Each occurrence's computations, by its path, which also names its
     /// view.
-    roots: Roots<Vec<Step>>,
+    roots: Roots<Trail>,
 }
 
 impl Default for Computations {
@@ -101,13 +101,13 @@ impl Computations {
         self.roots.begin();
     }
 
-    pub fn at<T: 'static>(&self, path: &[Step], create: impl FnOnce() -> T) -> Rc<T> {
-        self.roots.get(path.to_vec(), create)
+    pub fn at<T: 'static>(&self, path: &Trail, create: impl FnOnce() -> T) -> Rc<T> {
+        self.roots.get(path.clone(), create)
     }
 
     pub fn evaluate_runtime(
         &self,
-        path: &[Step],
+        path: &Trail,
         expression: &grap::RuntimeValue,
         fuel: usize,
         origin: Option<grap::SourceOrigin>,
@@ -124,7 +124,7 @@ impl Computations {
 
     pub fn apply_runtime(
         &self,
-        path: &[Step],
+        path: &Trail,
         function: &Value,
         arguments: &[(gid::CellId, Value)],
         fuel: usize,
@@ -151,7 +151,7 @@ impl Computations {
     /// occurrence's memo keeps the first call's.
     fn memoized<I: Clone + 'static>(
         &self,
-        path: &[Step],
+        path: &Trail,
         input: I,
         same: fn(&I, &I) -> bool,
         run: fn(&I, &dyn Host) -> grap::Evaluation,

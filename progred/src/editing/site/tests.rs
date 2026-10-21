@@ -1,16 +1,17 @@
 use super::*;
 use crate::frame::Hovered;
+use crate::occurrence::Step;
 use gid::new_cell_id;
 
 #[test]
 fn a_site_below_another_hovers_and_selects_the_appended_path() {
     let parent = new_cell_id();
     let field = new_cell_id();
-    let site = Site::new(Rc::from([Step::Key(parent)])).below(&[gid::Step::Key(field)]);
+    let site = Site::new(Trail::from([Step::Key(parent)])).below(&[gid::Step::Key(field)]);
     let expected = vec![Step::Key(parent), Step::Key(field)];
     assert_eq!(
         Hovered::from(site.hover()),
-        Hovered::Tree(Hover::Value(Rc::from(expected.clone())))
+        Hovered::Tree(Hover::Value(Trail::from(&expected)))
     );
     let mut world = crate::editor_of(Value::record([]));
     site.open(&mut world.session()).select();

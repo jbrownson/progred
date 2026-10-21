@@ -27,7 +27,7 @@ fn edit_runs_do_not_write_on_construction_or_retarget_another_selection() {
     let original = world.model.doc.clone();
     let other_path = vec![Step::Key(gid::new_cell_id())];
     world.model.selection = Some(Selection::edge(other_path.clone()));
-    let mut edit = Site::new(Rc::from([])).edit_run();
+    let mut edit = Site::new(crate::occurrence::Trail::from([])).edit_run();
     assert!(Rc::ptr_eq(&original, &world.model.doc));
     assert!(!edit.write(&mut world.session(), f64::value(10.0)));
     assert!(Rc::ptr_eq(&original, &world.model.doc));

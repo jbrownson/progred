@@ -320,7 +320,7 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
     assert!(!driver.drawn(&[Step::Key(first), Step::Computed, Step::Key(child)]));
     assert!(driver.drawn(&[Step::Key(second), Step::Computed, Step::Key(child)]));
     // The folded ellipsis uses the same occurrence-local operation as the key.
-    driver.click_at(driver.locate(Hovered::Tree(Hover::Toggle(Rc::from(path.clone())))));
+    driver.click_at(driver.locate(Hovered::Tree(Hover::Toggle(Trail::of(&path)))));
     assert!(!folded(&driver, &path));
     assert!(driver.undo());
     assert!(folded(&driver, &path));
@@ -388,11 +388,11 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
     for path in &paths {
         let target = driver.landmark(path).unwrap();
         assert_eq!(
-            crate::occurrence::read(&editor.sources(), &target.path),
+            crate::occurrence::read(&editor.sources(), &target.path.to_vec()),
             Some(&text::value("before!"))
         );
         assert_eq!(
-            crate::occurrence::location(&target.path),
+            target.path.location(),
             Some(Location::root(vec![gid::Step::Key(source)]))
         );
     }

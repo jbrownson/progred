@@ -4,7 +4,7 @@
 
 use crate::display::widget::navigation::{Geometry, Landmark, advance};
 use crate::display::widget::view::Root;
-use crate::occurrence::{Path, Step};
+use crate::occurrence::{Path, Step, Trail};
 use crate::selection::Selection;
 use puri::handler::NavigationDirection;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -86,7 +86,7 @@ pub(crate) fn initial_navigation(
             if matches!(event, puri::handler::Event::Navigate(_))
                 && editor.model.selection.is_none()
             {
-                crate::editing::Edit::new(editor.session()).select(&path);
+                crate::editing::Edit::new(editor.session()).select(&path.to_vec());
                 puri::handler::EventOutcome::accept()
             } else {
                 puri::handler::EventOutcome::decline(event)
@@ -145,15 +145,15 @@ fn siblings<'a, World>(
     landmarks: &'a [Landmark<World>],
     root: &Root,
     path: &'a [Step],
-) -> Option<(&'a [Step], Vec<&'a [Step]>, usize)> {
+) -> Option<(&'a [Step], Vec<&'a Trail>, usize)> {
     let (_, parent) = path.split_last()?;
-    let siblings: Vec<&[Step]> = landmarks
+    let siblings: Vec<&Trail> = landmarks
         .iter()
         .filter(|landmark| landmark.root.as_ref() == Some(root))
-        .map(|landmark| landmark.path.as_ref())
-        .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
+        .map(|landmark| &landmark.path)
+        .filter(|p| p.parent().is_some_and(|prefix| *prefix == parent))
         .collect();
-    let index = siblings.iter().position(|p| *p == path)?;
+    let index = siblings.iter().position(|p| **p == path)?;
     Some((parent, siblings, index))
 }
 

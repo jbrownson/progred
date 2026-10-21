@@ -130,7 +130,7 @@ fn placement_hover_render_and_dispatch_are_distinct_stages() {
                 true
             });
             output.on_arrival(
-                Rc::from([]),
+                crate::occurrence::Trail::root(),
                 Rc::new(|state, _| {
                     state.push("select");
                     true

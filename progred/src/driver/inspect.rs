@@ -10,7 +10,6 @@ use crate::occurrence::Step as Occurs;
 use gid::{CellId, Position, Step, Value};
 use kurbo::{Point, Rect, Size};
 use puri::draw::{DrawCmd, Shape};
-use std::rc::Rc;
 use ui_events::keyboard::{Key, Modifiers, NamedKey};
 use winit::keyboard::ModifiersState;
 
@@ -336,7 +335,7 @@ impl<P> Driver<P> {
     pub(crate) fn drawn_under<S: Clone + Into<Occurs>>(
         &self,
         prefix: &[S],
-    ) -> Vec<(Rc<[Occurs]>, Rect)> {
+    ) -> Vec<(crate::occurrence::Trail, Rect)> {
         let prefix = occurrence(prefix);
         self.runner
             .frame

@@ -11,7 +11,6 @@ use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionSc
 use crate::display::{Host, Toolkit};
 use crate::hover::Hover;
 use crate::location::Location;
-use crate::occurrence::Step;
 use crate::selection::{Selection, Stage};
 use kurbo::{Insets, Point};
 use measured::{Measured, min_width, pad};
@@ -91,7 +90,7 @@ fn pending_view<W: Host>(
     let writable = toolkit.writable();
     let selected = toolkit.selection().filter(|current| {
         writable
-            && current.path() == toolkit.path()
+            && *toolkit.path() == current.path()
             && current.stage(&toolkit.sources()) == Stage::Pending
     });
     let default = selected
@@ -110,7 +109,7 @@ fn pending_target<W: Host>(
     toolkit: &dyn Toolkit,
     child: Measured<HoverPass<W, W::Hover>>,
 ) -> Measured<HoverPass<W, W::Hover>> {
-    let path: Rc<[Step]> = Rc::from(toolkit.path());
+    let path = toolkit.path().clone();
     let scale = toolkit.styles().scale;
     let palette = toolkit.styles().palette;
     let selected = toolkit.selected();

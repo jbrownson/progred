@@ -1,5 +1,5 @@
 use super::*;
-use crate::occurrence::Step;
+use crate::occurrence::{Step, Trail};
 use gid::CellId;
 use puri::handler::NavigationDirection;
 use std::rc::Rc;
@@ -27,12 +27,12 @@ fn enclosed(stop: usize, child: Shape) -> Shape {
     Enclosed(stop, Box::new(child))
 }
 
-fn path(stop: usize) -> Rc<[Step]> {
-    Rc::from([Step::Key(CellId::from_u128(stop as u128))])
+fn path(stop: usize) -> Trail {
+    Trail::from([Step::Key(CellId::from_u128(stop as u128))])
 }
 
-fn index(path: &Rc<[Step]>) -> usize {
-    match path.as_ref() {
+fn index(path: &Trail) -> usize {
+    match path.to_vec().as_slice() {
         [Step::Key(cell)] => u128::from_be_bytes(*cell.as_bytes()) as usize,
         _ => unreachable!(),
     }
@@ -379,7 +379,7 @@ fn a_repeated_declaration_is_the_same_stop() {
 fn views_with_identical_paths_arrive_through_their_own_landmarks() {
     use super::super::super::{HoverInput, HoverPass, view::Root};
     use super::super::Landmark;
-    let paths: [Rc<[Step]>; 2] = std::array::from_fn(|_| Rc::from([Step::Key(gid::new_cell_id())]));
+    let paths: [Trail; 2] = std::array::from_fn(|_| Trail::from([Step::Key(gid::new_cell_id())]));
     let views = [
         Root::document(),
         Root::pane(vec![gid::Step::Key(gid::new_cell_id())]),

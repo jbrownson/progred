@@ -14,7 +14,7 @@ mod runtime;
 /// The occurrence at the top of the document view, where these tests keep
 /// their work.
 fn site() -> crate::editing::Site {
-    crate::editing::Site::new(Rc::from([]))
+    crate::editing::Site::new(crate::occurrence::Trail::from([]))
 }
 
 fn group(children: Value) -> Value {

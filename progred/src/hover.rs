@@ -3,8 +3,7 @@
 
 use crate::display::widget::offers::Offers;
 use crate::display::widget::source::{Secondary, SourceTrace};
-use crate::occurrence::Step;
-use std::rc::Rc;
+use crate::occurrence::Trail;
 
 /// What the pointer rests on: the address a later editor action will
 /// target. Values preview their selection; toggles and popup entries
@@ -14,12 +13,12 @@ use std::rc::Rc;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hover {
     /// Activate here selects the value at this path.
-    Value(Rc<[Step]>),
+    Value(Trail),
     /// Activate here toggles this path's collapse.
-    Toggle(Rc<[Step]>),
+    Toggle(Trail),
     /// The label of the field at this path. Activate here selects the field;
     /// pick picks the label, not the field's value.
-    Label(Rc<[Step]>),
+    Label(Trail),
     /// A generated widget or drawing linked to its source expression.
     Source(SourceTrace),
     /// A drawing's dynamic call ancestry; the UI chooses the innermost

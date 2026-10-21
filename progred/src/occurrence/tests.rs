@@ -17,7 +17,7 @@ fn a_path_reads_from_its_last_jump_and_not_inside_a_computed_value() {
     assert_eq!(location(&jumped), Some(inside.clone()));
     let result = [Step::Key(field), Step::Computed, Step::Key(other)];
     assert_eq!(location(&result), None);
-    assert!(computed(&result));
+    assert!(Trail::of(&result).computed());
     // A cell followed inside a computed value starts its location again.
     let followed = [
         Step::Key(field),
@@ -26,7 +26,7 @@ fn a_path_reads_from_its_last_jump_and_not_inside_a_computed_value() {
         Step::Key(other),
     ];
     assert_eq!(location(&followed), Some(inside));
-    assert!(!computed(&followed));
+    assert!(!Trail::of(&followed).computed());
 }
 
 #[test]

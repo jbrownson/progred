@@ -191,7 +191,7 @@ fn attribute(
     };
     let hovered_trace = match &hovered {
         Some(Hovered::Tree(hover::Hover::Value(_))) if visible => landmark
-            .and_then(|d| crate::occurrence::location(&d.path))
+            .and_then(|d| d.path.location())
             .map(|location| SourceTrace::from_location(sources, &location)),
         Some(Hovered::Tree(hover::Hover::Source(source))) if visible => Some(source.clone()),
         _ => None,

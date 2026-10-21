@@ -409,8 +409,7 @@ fn opening_a_pane_on_a_bare_root_wraps_it_and_keeps_its_folds() {
             .landmarks
             .iter()
             .any(|landmark| {
-                landmark.root.as_ref() == Some(&crate::test_root())
-                    && landmark.path.as_ref() == path
+                landmark.root.as_ref() == Some(&crate::test_root()) && landmark.path == path
             })
     };
     assert!(in_document(&main(&[Step::Key(outer)])));

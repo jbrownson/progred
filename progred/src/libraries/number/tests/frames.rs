@@ -144,7 +144,7 @@ fn numeric_operation_labels_preserve_function_hover_and_selection() {
         let head = bench.landmarks.landmark(&function_path).unwrap();
         assert!(!bench.landmarks.iter().any(|d| {
             d.path
-                .iter()
+                .steps()
                 .any(|s| matches!(s, crate::occurrence::Step::Follow(_)))
         }));
         for x in [head.rect.x0 + 0.5, head.rect.x1 - 0.5] {
@@ -153,7 +153,7 @@ fn numeric_operation_labels_preserve_function_hover_and_selection() {
                 ..BenchFrame::of(&doc, 900.0)
             });
             assert!(matches!(hovered.hit,
-                Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found.as_ref() == function_path));
+                Some(Claim::Direct(Hovered::Tree(Hover::Value(found)))) if found == function_path.as_slice()));
         }
         let mut editor = crate::test_editor(doc.clone());
         let original = editor.model.doc.clone();

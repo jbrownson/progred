@@ -36,7 +36,7 @@ pub trait Viewing {
 /// place in its view, and the selection and sources in full.
 pub(crate) trait Toolkit: Viewing {
     /// This occurrence's path, which names its view too.
-    fn path(&self) -> &[crate::occurrence::Step];
+    fn path(&self) -> &crate::occurrence::Trail;
     /// This occurrence, as a place to act.
     fn site(&self) -> Site;
     /// The theme, at the view's scale.

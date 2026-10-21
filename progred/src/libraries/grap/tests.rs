@@ -584,7 +584,9 @@ fn a_call_argument_label_targets_its_argument() {
     assert_eq!(
         crate::libraries::test_widgets::claim(&head[0]),
         Some(puri::hover::Claim::Direct(crate::frame::Hovered::Tree(
-            crate::hover::Hover::Label(std::rc::Rc::from([crate::occurrence::Step::Key(argument)]))
+            crate::hover::Hover::Label(crate::occurrence::Trail::from([
+                crate::occurrence::Step::Key(argument)
+            ]))
         )))
     );
     assert!(matches!(child.as_ref(), Recorded::Before { .. }));

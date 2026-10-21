@@ -88,11 +88,13 @@ definition can itself still be replaced or removed from a writable document.
 
 ## Selection and editing
 
-[`Selection`](../progred/src/selection.rs) owns a workspace root, path, GID
-payload, and optional Rust editor. Its stages distinguish an existing edge,
-a pending value, and a pending record label. Annotation records live in a
-path-keyed [`Annotations`](../progred/src/annotations.rs) map owned by the view;
-folding is one convention in those records. A projection folds what it draws by
+[`Selection`](../progred/src/selection.rs) owns a path, which names its
+workspace view, a GID payload, and an optional Rust editor. Its stages
+distinguish an existing edge, a pending value, and a pending record label.
+Annotation records live in an [`Annotations`](../progred/src/annotations.rs)
+tree owned by the view, a node per path step, so a projection carries the node
+for where it draws and reaches a child's by its one step; folding is one
+convention in those records. A projection folds what it draws by
 consulting that state through [`display::fold`](../progred/src/display/fold.rs),
 and decides how it starts: Raw's cells, lists and records fold, as do Grap's
 calls and the control forms. Space folds and unfolds the selected occurrence
@@ -107,8 +109,12 @@ do cells holding no cells, which can't cascade. A cell whose whole value is
 another cell opens through to it.
 
 An [occurrence path](../progred/src/occurrence.rs) says where its data is, so a
-selection, a site and a landmark are each a view and a path, with nothing
-beside them. Its steps are the document's own, `Key`, `Element` and `Follow`,
+selection, a site and a landmark are each a path, with nothing beside them.
+As projection builds them, paths are [trails](../progred/src/occurrence/trail.rs):
+each occurrence holds its own step and a link to the trail of the occurrence
+it's drawn inside, so descending adds one link, siblings share what's above
+them, and what wants the whole path walks the parents. A selection, made
+rarely, holds its path whole. Its steps are the document's own, `Key`, `Element` and `Follow`,
 plus two of the editor's: a **jump** restarts the path at a location, as a
 projection's `jump` does, and a **computed** step stops it, as `at` does for a
 supplied value. Resolving a path starts from the document's root, or from its

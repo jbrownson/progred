@@ -570,7 +570,7 @@ fn change_handlers_read_current_state_and_stage_writes_until_completion() {
         )
     }
     let mut editor = crate::test_editor(gid::Document::default());
-    let site = crate::editing::Site::new(Rc::from([]));
+    let site = crate::editing::Site::new(crate::occurrence::Trail::root());
     let first = field_update(A, B);
     let second = field_update(B, A);
     for (handler, value) in [(&first, 0.2), (&second, 0.8), (&first, 0.4)] {
@@ -677,7 +677,12 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
         let evaluate = |doc: &gid::Document| {
             computations.begin(Rc::new(doc.clone()), libraries.clone());
             let result = computations
-                .evaluate_runtime(&[], &(&expression).into(), 1000, None)
+                .evaluate_runtime(
+                    crate::occurrence::Trail::ROOT,
+                    &(&expression).into(),
+                    1000,
+                    None,
+                )
                 .into_value();
             result
                 .as_record()

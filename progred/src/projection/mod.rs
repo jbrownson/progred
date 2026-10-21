@@ -8,7 +8,7 @@ pub(crate) mod test_support;
 mod tests;
 pub(crate) mod viewport;
 
-use crate::annotations::Annotations;
+use crate::annotations::{Annotations, Node};
 use crate::display::widget::placed::{before, decorate};
 use crate::display::widget::source::{Secondary, SourceTrace};
 use crate::display::widget::style::{
@@ -17,7 +17,7 @@ use crate::display::widget::style::{
 use crate::frame::{Attribution, HoverPass, Hovered};
 use crate::hover::Hover;
 use crate::location::{Location, Start};
-use crate::occurrence::{Path, Step};
+use crate::occurrence::{Step, Trail};
 use crate::selection::{Selection, Stage};
 use crate::sources::Sources;
 use gid::{CellId, Value};
@@ -30,15 +30,12 @@ use puri::edit::LineEditState;
 use puri::handler::HasHandler;
 use puri::text::TextCtx;
 use std::collections::HashSet;
-use std::rc::Rc;
 
 /// The toolkit's types over the editor, which hosts everything the runtime
 /// projects. Display and the libraries stay generic over their host, through
 /// [`crate::display::host`].
 pub(crate) type Layout = crate::display::host::Layout<crate::Editor>;
 pub(crate) type Partial = crate::display::host::Partial<crate::Editor>;
-
-type SharedPath = Rc<[Step]>;
 
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
@@ -108,7 +105,6 @@ pub(crate) struct Cx<'a> {
     pub(crate) sources: Sources<'a>,
     /// Whether the name library labels cells here; field order follows.
     pub(crate) names: bool,
-    pub(crate) annotations: &'a Annotations,
     pub(crate) styles: &'a Styles,
     pub(crate) selection: Option<&'a Selection>,
     /// The selected structural source, normalized across projections
@@ -120,13 +116,15 @@ pub(crate) struct Cx<'a> {
 /// building its layout read the view.
 struct Occurrence<'a> {
     cx: &'a Cx<'a>,
-    path: &'a [Step],
+    path: &'a Trail,
     ancestors: &'a Ancestry,
+    /// The view's state here and below.
+    state: Option<&'a Node>,
 }
 
 impl Occurrence<'_> {
-    fn below(&self, steps: &[gid::Step]) -> Path {
-        crate::occurrence::below(self.path, steps)
+    fn below(&self, steps: &[gid::Step]) -> Trail {
+        self.path.below(steps)
     }
 
     /// Where what Grap evaluates `steps` below this occurrence comes from.
@@ -141,7 +139,7 @@ impl crate::display::Viewing for Occurrence<'_> {
     }
 
     fn writable(&self) -> bool {
-        crate::occurrence::writable(&self.cx.sources, self.path)
+        self.ancestors.writable()
     }
 
     fn host(&self) -> &dyn grap::Host {
@@ -153,14 +151,17 @@ impl crate::display::Viewing for Occurrence<'_> {
     }
 
     fn state_below(&self, steps: &[gid::Step]) -> Option<&Value> {
-        self.cx.annotations.at(&self.below(steps))
+        steps
+            .iter()
+            .try_fold(self.state?, |node, step| node.child(&step.into()))?
+            .value()
     }
 
     fn selected_below(&self, steps: &[gid::Step]) -> bool {
         let below = self.below(steps);
         self.cx
             .selection
-            .is_some_and(|selection| selection.path().starts_with(&below))
+            .is_some_and(|selection| below.leads(selection.path()))
     }
 
     fn inside(&self, cell: CellId) -> bool {
@@ -175,12 +176,12 @@ impl crate::display::Viewing for Occurrence<'_> {
 }
 
 impl crate::display::Toolkit for Occurrence<'_> {
-    fn path(&self) -> &[Step] {
+    fn path(&self) -> &Trail {
         self.path
     }
 
     fn site(&self) -> crate::editing::Site {
-        self.cx.site(Rc::from(self.path))
+        self.cx.site(self.path.clone())
     }
 
     fn styles(&self) -> &Styles {
@@ -192,7 +193,7 @@ impl crate::display::Toolkit for Occurrence<'_> {
     }
 
     fn location(&self) -> Option<Location<'static>> {
-        crate::occurrence::location(self.path)
+        crate::occurrence::location(&self.path.to_vec())
     }
 
     fn focused(&self) -> bool {
@@ -224,7 +225,7 @@ impl crate::display::Toolkit for Occurrence<'_> {
     }
 
     fn trace_below(&self, steps: &[gid::Step]) -> Option<SourceTrace> {
-        crate::occurrence::location(&self.below(steps))
+        crate::occurrence::location(&self.below(steps).to_vec())
             .map(|location| SourceTrace::from_location(&self.cx.sources, &location))
     }
 }
@@ -296,7 +297,7 @@ impl crate::display::Env for Occurrence<'_> {
         crate::workspace::libraries(&self.cx.sources)
     }
 
-    fn occurrence(&self) -> &[Step] {
+    fn occurrence(&self) -> &Trail {
         self.path
     }
 }
@@ -307,7 +308,19 @@ struct Ancestry {
     cells: HashSet<CellId>,
     /// The nearest followed definition and the start of its relative path.
     enclosing: Option<(CellId, gid::Resolution, usize)>,
+    /// Where the data here is stored starts, as
+    /// [`crate::occurrence::stored_start`] finds it from the path, kept as
+    /// the projection descends so no occurrence reads its route again. None
+    /// for a computed value, or a route that no longer reaches a cell.
+    stored: Option<Start>,
     ground: Ground,
+}
+
+impl Ancestry {
+    /// Whether a write can land where the data here is stored.
+    fn writable(&self) -> bool {
+        self.stored.is_some_and(crate::location::owned)
+    }
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -334,6 +347,7 @@ fn prepare(
                 cx: scope.cx,
                 path: scope.path,
                 ancestors: scope.ancestors,
+                state: scope.state,
             },
             value: scope.value,
         },
@@ -342,13 +356,14 @@ fn prepare(
 }
 
 /// One occurrence being projected: its view's context, the projection it
-/// draws with, its path, its ancestry, and its value.
+/// draws with, its path, its ancestry, the view's state here, and its value.
 #[derive(Clone, Copy)]
 struct ProjectionScope<'a, 's> {
     cx: &'a Cx<'s>,
     projection: &'a Projection,
-    path: &'a [Step],
+    path: &'a Trail,
     ancestors: &'a Ancestry,
+    state: Option<&'a Node>,
     value: Option<&'a grap::RuntimeValue>,
 }
 
@@ -365,7 +380,8 @@ impl ProjectionScope<'_, '_> {
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
         let cx = self.cx;
-        let mut path = self.path.to_vec();
+        let mut path = self.path.clone();
+        let mut state = self.state;
         let mut ancestors = self.ancestors.clone();
         let mut value = self.value.cloned();
         for step in steps {
@@ -376,18 +392,31 @@ impl ProjectionScope<'_, '_> {
                     .map(|cell| (cell, *source)),
                 gid::Step::Key(_) | gid::Step::Element(_) => None,
             };
-            path.push(match followed {
+            let step_here = match followed {
                 // A cell inside a computed value has no stored route to it, so
                 // following it jumps to its definition, which starts a
                 // location again.
-                Some((cell, source)) if crate::occurrence::computed(&path) => {
+                Some((cell, source)) if path.computed() => {
                     Step::jump(Location::in_cell(cell, source, Vec::new()))
                 }
                 _ => step.into(),
-            });
-            if let Some((cell, source)) = followed {
-                ancestors.cells.insert(cell);
-                ancestors.enclosing = Some((cell, source, path.len()));
+            };
+            state = state.and_then(|node| node.child(&step_here));
+            path = path.push(step_here);
+            match (step, followed) {
+                (_, Some((cell, source))) => {
+                    ancestors.cells.insert(cell);
+                    ancestors.enclosing = Some((cell, source, path.len()));
+                    // Following a cell enters its definition, which stores
+                    // what's below.
+                    ancestors.stored = Some(Start::Cell {
+                        cell,
+                        resolution: source,
+                    });
+                }
+                // A Follow from something that isn't a cell reaches nothing.
+                (gid::Step::Follow(_), None) => ancestors.stored = None,
+                _ => {}
             }
             value = value.as_ref().and_then(|value| {
                 child::of(value, step, |cell, source| cx.sources.value(cell, source))
@@ -398,6 +427,7 @@ impl ProjectionScope<'_, '_> {
                 cx,
                 path: &path,
                 ancestors: &ancestors,
+                state,
                 value: value.as_ref(),
                 ..*self
             },
@@ -481,15 +511,16 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
                 ),
             );
         }
-        let path = crate::occurrence::below(self.path, &steps)
-            .into_iter()
-            .chain([Step::jump(document)])
-            .collect::<Path>();
+        ancestry.stored = document.stored(&cx.sources).map(|stored| stored.start);
+        let jump = Step::jump(document);
+        let state = descend_state(self.state, &steps).and_then(|node| node.child(&jump));
+        let path = self.path.below(&steps).push(jump);
         prepare_value(
             ProjectionScope {
                 cx,
                 path: &path,
                 ancestors: &ancestry,
+                state,
                 value: value.as_ref(),
                 ..*self
             },
@@ -508,8 +539,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         current: Option<Partial>,
         default: Option<Partial>,
     ) -> ChoiceLayout<HoverPass<crate::Editor>> {
-        let mut path = crate::occurrence::below(self.path, &steps);
-        path.push(Step::Computed);
+        let path = self.path.below(&steps).push(Step::Computed);
         prepare_value(
             ProjectionScope {
                 cx: self.cx,
@@ -518,6 +548,8 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
                     ground: self.ancestors.ground,
                     ..Ancestry::default()
                 },
+                state: descend_state(self.state, &steps)
+                    .and_then(|node| node.child(&Step::Computed)),
                 value: Some(&value),
                 ..*self
             },
@@ -527,6 +559,13 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
             build,
         )
     }
+}
+
+/// The view's state a document path's `steps` below `node`.
+fn descend_state<'a>(node: Option<&'a Node>, steps: &[gid::Step]) -> Option<&'a Node> {
+    steps
+        .iter()
+        .try_fold(node?, |node, step| node.child(&step.into()))
 }
 
 /// The resolved hover's tree identity, for ink that lights its own
@@ -540,7 +579,7 @@ fn tree_hovered(hover: &Attribution) -> Option<&Hover> {
 
 impl Cx<'_> {
     /// The occurrence at `path`, as a place to act.
-    pub(crate) fn site(&self, path: SharedPath) -> crate::editing::Site {
+    pub(crate) fn site(&self, path: Trail) -> crate::editing::Site {
         crate::editing::Site::new(path)
     }
 
@@ -556,28 +595,28 @@ impl Cx<'_> {
     /// pending deliberately does not mark its parent — nothing is
     /// selected there, something is being authored inside; the
     /// pending row carries the highlight itself.
-    pub(crate) fn selected(&self, path: &[Step]) -> bool {
+    pub(crate) fn selected(&self, path: &Trail) -> bool {
         self.selection.is_some_and(|current| {
-            current.path() == path && current.stage(&self.sources) != Stage::Label
+            *path == current.path() && current.stage(&self.sources) != Stage::Label
         })
     }
 
     /// Whether the selection is a picker at `path` itself. Over an existing
     /// value it is replacing that value, so views draw the hole instead.
-    fn pending_at(&self, path: &[Step]) -> bool {
+    fn pending_at(&self, path: &Trail) -> bool {
         self.selection.is_some_and(|current| {
-            current.path() == path && current.explicit_stage() == Stage::Pending
+            *path == current.path() && current.explicit_stage() == Stage::Pending
         })
     }
 
     /// The pending child step under `path`, when the selection is
     /// authoring one there.
-    fn pending_child_of(&self, path: &[Step]) -> Option<Step> {
+    fn pending_child_of(&self, path: &Trail) -> Option<Step> {
         let current = self.selection?;
         (current
             .path()
             .split_last()
-            .is_some_and(|(_, parent)| parent == path)
+            .is_some_and(|(_, parent)| *path == parent)
             && current.stage(&self.sources) == Stage::Pending)
             .then(|| current.path().last().cloned())
             .flatten()
@@ -585,9 +624,9 @@ impl Cx<'_> {
 
     /// The label query of a new field being authored on the record at
     /// `path`.
-    pub(crate) fn pending_edge_under(&self, path: &[Step]) -> Option<&LineEditState> {
+    pub(crate) fn pending_edge_under(&self, path: &Trail) -> Option<&LineEditState> {
         let current = self.selection?;
-        (current.path() == path && current.stage(&self.sources) == Stage::Label)
+        (*path == current.path() && current.stage(&self.sources) == Stage::Label)
             .then(|| current.edit())
             .flatten()
     }
@@ -664,7 +703,6 @@ fn prepare_project(
         completions,
         sources,
         names,
-        annotations,
         styles,
         selection,
         selected_trace: source_selection.and_then(|selection| {
@@ -673,17 +711,21 @@ fn prepare_project(
     };
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();
-    let ancestry = followed.map_or_else(Ancestry::default, |(cell, source, start)| Ancestry {
-        cells: HashSet::from([cell]),
-        enclosing: Some((cell, source, start)),
-        ..Ancestry::default()
-    });
+    let ancestry = Ancestry {
+        stored: crate::occurrence::stored_start(&sources, root_path),
+        ..followed.map_or_else(Ancestry::default, |(cell, source, start)| Ancestry {
+            cells: HashSet::from([cell]),
+            enclosing: Some((cell, source, start)),
+            ..Ancestry::default()
+        })
+    };
     let layout = prepare_value(
         ProjectionScope {
             cx: &cx,
             projection,
-            path: root_path,
+            path: &Trail::of(root_path),
             ancestors: &ancestry,
+            state: annotations.node_at(root_path),
             value: root.cloned().map(grap::RuntimeValue::from).as_ref(),
         },
         None,
@@ -701,7 +743,7 @@ fn highlighted(
     palette: crate::display::widget::style::Palette,
     selected: bool,
     scale: f64,
-    path: SharedPath,
+    path: Trail,
     secondary: Option<Secondary>,
     child: Measured<HoverPass<crate::Editor>>,
 ) -> Measured<HoverPass<crate::Editor>> {
@@ -716,7 +758,7 @@ fn highlighted(
             } else if matches!(
                 tree_hovered(hover),
                 Some(Hover::Value(hovered) | Hover::Label(hovered))
-                    if hovered.as_ref() == path.as_ref()
+                    if *hovered == path
             ) {
                 hover_highlight(palette, scale, cv, outline);
             } else if shares(&hover.hovered_secondary) {
@@ -731,7 +773,7 @@ fn highlighted(
 /// The occurrence's path identifies the selection and says where it writes.
 fn bind_selection(
     child: Measured<HoverPass<crate::Editor>>,
-    path: SharedPath,
+    path: Trail,
     value: grap::RuntimeValue,
     scale: f64,
 ) -> Measured<HoverPass<crate::Editor>> {
@@ -742,14 +784,13 @@ fn bind_selection(
             let cut = crate::modifiers::chord(command, event, "x");
             event.state.is_down()
                 && editor.model.selection.as_ref().is_some_and(|selection| {
-                    selection.path() == path.as_ref()
-                        && selection.stage(&editor.sources()) == Stage::Edge
+                    path == selection.path() && selection.stage(&editor.sources()) == Stage::Edge
                 })
                 && if copy || cut {
                     // A cut's occurrence is gone before a picture of it
                     // could be drawn.
-                    let drawn = (!cut).then(|| path.as_ref());
-                    editor.copy_value(value.as_value(), drawn) && {
+                    let drawn = (!cut).then(|| path.to_vec());
+                    editor.copy_value(value.as_value(), drawn.as_deref()) && {
                         if cut {
                             editor.delete_selected_edge(input.geometry(scale));
                         }
@@ -762,30 +803,11 @@ fn bind_selection(
     })
 }
 
-/// Whether a write can land where what's drawn at `path` is stored. Below the
-/// nearest followed definition by fields and elements alone, that's the
-/// definition, which `ancestors` already names, so the route there needn't be
-/// read again.
-fn writable(cx: &Cx, path: &[Step], ancestors: &Ancestry) -> bool {
-    match ancestors.enclosing {
-        Some((cell, resolution, start))
-            if path.get(start..).is_some_and(|below| {
-                below
-                    .iter()
-                    .all(|step| matches!(step, Step::Key(_) | Step::Element(_)))
-            }) =>
-        {
-            crate::location::owned(Start::Cell { cell, resolution })
-        }
-        _ => crate::occurrence::writable(&cx.sources, path),
-    }
-}
-
 /// The ground under what's drawn at `path`, `writable` or not where it's
 /// stored: a computed value is read-only.
-fn ground(cx: &Cx, path: &[Step], value: Option<&grap::RuntimeValue>, writable: bool) -> Ground {
+fn ground(cx: &Cx, path: &Trail, value: Option<&grap::RuntimeValue>, writable: bool) -> Ground {
     match value.and_then(grap::RuntimeValue::as_cell) {
-        _ if crate::occurrence::computed(path) => Ground::Readonly,
+        _ if path.computed() => Ground::Readonly,
         // A reference remains replaceable; the ground describes its definition.
         Some(cell) if cx.sources.external(cell) => Ground::Readonly,
         Some(_) => Ground::Writable,
@@ -823,7 +845,7 @@ fn prepare_value(
     } = scope;
     // A picker over a value draws its hole instead.
     let value = scope.value.filter(|_| !cx.pending_at(path));
-    let writable = writable(cx, path, ancestors);
+    let writable = ancestors.writable();
     let ground = ground(cx, path, value, writable);
     let changed_ground = (ground != ancestors.ground).then_some(ground);
     let changed_ancestors = changed_ground.map(|ground| Ancestry {
@@ -865,6 +887,7 @@ fn prepare_value(
                     cx,
                     path,
                     ancestors,
+                    state: scope.state,
                 },
                 tcx,
                 &picker,
@@ -882,14 +905,12 @@ fn prepare_value(
                 layout,
                 build,
             );
-            let landmark_path: SharedPath = Rc::from(path);
+            let landmark_path = path.clone();
             // What this projection shares with others of the same location;
             // the frame marks those sharing the selected or hovered one's.
             // Where the path past the nearest followed cell, or from the root,
             // is the data's own, it says what's shared without reading it.
-            let descends = path
-                .get(ancestors.enclosing.map_or(0, |(_, _, start)| start)..)
-                .is_some_and(crate::occurrence::is_data);
+            let descends = path.data_from(ancestors.enclosing.map_or(0, |(_, _, start)| start));
             let secondary = value.and_then(|value| {
                 Some(if descends {
                     Secondary::from_context(
@@ -901,7 +922,10 @@ fn prepare_value(
                     // A reference names its cell even in a computed result.
                     Secondary::Cell(cell)
                 } else {
-                    Secondary::from_location(&cx.sources, &crate::occurrence::location(path)?)
+                    Secondary::from_location(
+                        &cx.sources,
+                        &crate::occurrence::location(&path.to_vec())?,
+                    )
                 })
             });
             // A landmark, not a target: highlight and keyboard reach span
@@ -973,13 +997,14 @@ fn value_layout(
         projection,
         path,
         ancestors,
+        state,
         value,
     } = scope;
     #[cfg(all(test, feature = "layout-profile"))]
     let _profile = crate::display::profile::enter(crate::display::profile::Kind::Projection);
     let selection = cx
         .selection
-        .filter(|current| current.path() == path)
+        .filter(|current| *path == current.path())
         .map(Selection::payload);
     let pending = if cx.pending_edge_under(path).is_some() {
         Some(crate::display::Pending::Field)
@@ -988,13 +1013,13 @@ fn value_layout(
             .and_then(|step| step.data())
             .map(crate::display::Pending::Child)
     };
-    let state = cx.annotations.at(path);
-    let occurrence = || cx.site(Rc::from(path));
+    let occurrence = || cx.site(path.clone());
     let input = crate::display::ProjectionInput {
         env: &Occurrence {
             cx,
             path,
             ancestors,
+            state,
         },
         default_projection: default_projection.clone(),
         value,
@@ -1002,7 +1027,7 @@ fn value_layout(
         writable,
         selection: selection.as_ref(),
         pending,
-        state,
+        state: state.and_then(Node::value),
         occurrence: &occurrence,
     };
     match current_projection {
@@ -1017,7 +1042,7 @@ fn value_layout(
 /// modifier never deadens the gesture. Inner Pick registrations answer
 /// first and this catches what they refused.
 fn pick_target(
-    path: SharedPath,
+    path: Trail,
     value: grap::RuntimeValue,
     select: crate::display::Action,
     child: Measured<HoverPass<crate::Editor>>,

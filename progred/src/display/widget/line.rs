@@ -40,7 +40,7 @@ pub fn view<W: Host>(
     let writable = toolkit.writable();
     let active = toolkit.selection().filter(|selection| {
         writable
-            && selection.path() == path
+            && *path == selection.path()
             && selection.stage(&toolkit.sources()) == crate::selection::Stage::Edge
     });
     let default = active
@@ -48,7 +48,7 @@ pub fn view<W: Host>(
         .map(|selection| selection.initial_line(&line.text));
     let editing = active.and_then(|selection| selection.edit().or(default.as_ref()));
     let site = context.site();
-    let path: Rc<[crate::occurrence::Step]> = Rc::from(path);
+    let path = path.clone();
     let content = match editing {
         Some(state) => {
             let widget = puri::edit::text_edit(

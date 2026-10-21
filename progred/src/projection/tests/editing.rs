@@ -736,7 +736,9 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
     let point = driver.rect(&path).center();
     assert_eq!(
         driver.hover_at(point),
-        Some(Hovered::Tree(Hover::Value(Rc::from(path.clone()))))
+        Some(Hovered::Tree(Hover::Value(crate::occurrence::Trail::from(
+            path.clone()
+        ))))
     );
     driver.click_at(point);
     assert_eq!(driver.selection(), path);

@@ -328,7 +328,7 @@ fn fidget_orbit_profile(name: &str, source: &str) {
                 let crate::hover::Hover::Value(path) = input.site().hover() else {
                     panic!("preview must have an occurrence");
                 };
-                *observed.borrow_mut() = Some(path);
+                *observed.borrow_mut() = Some(path.to_vec());
             }
             None
         }),

@@ -95,7 +95,7 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         });
     }
 
-    pub fn on_arrival(&mut self, path: std::rc::Rc<[crate::occurrence::Step]>, select: Select<C>) {
+    pub fn on_arrival(&mut self, path: crate::occurrence::Trail, select: Select<C>) {
         self.output.landmark_select = Some((path, select));
     }
 
@@ -116,16 +116,12 @@ impl<C: 'static, H: 'static> HoverContext<'_, C, H> {
         self.render(move |canvas, _| edit.draw(canvas, placement));
     }
 
-    pub fn navigation_stop(
-        &mut self,
-        path: std::rc::Rc<[crate::occurrence::Step]>,
-        selected: bool,
-    ) {
+    pub fn navigation_stop(&mut self, path: crate::occurrence::Trail, selected: bool) {
         self.navigation.stop(path, selected);
     }
 
     /// Marks this occurrence as a place to fill in, which Tab visits.
-    pub fn tab_stop(&mut self, path: std::rc::Rc<[crate::occurrence::Step]>) {
+    pub fn tab_stop(&mut self, path: crate::occurrence::Trail) {
         self.output.tab_stop = Some(path);
     }
 
@@ -547,11 +543,11 @@ pub struct HoverOutput<C, Hover> {
     /// A projected control may override how its occurrence's landmark is
     /// selected. The nearest enclosing landmark consumes this while
     /// assembling this frame, so it never leaks into an ancestor.
-    pub landmark_select: Option<(std::rc::Rc<[crate::occurrence::Step]>, Select<C>)>,
+    pub landmark_select: Option<(crate::occurrence::Trail, Select<C>)>,
     /// A widget marks its occurrence as a place to fill in, which Tab
     /// visits. The nearest enclosing landmark consumes it, as it does an
     /// arrival override.
-    pub tab_stop: Option<std::rc::Rc<[crate::occurrence::Step]>>,
+    pub tab_stop: Option<crate::occurrence::Trail>,
     pub completion: Option<Offers<C>>,
     /// The focused text editor's caret, for platform text composition.
     pub input_area: Option<Rect>,

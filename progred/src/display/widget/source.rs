@@ -61,11 +61,11 @@ impl SourceTrace {
 #[derive(Clone, Debug)]
 pub enum Secondary {
     Cell(CellId),
-    Stored(Rc<[crate::occurrence::Step]>),
+    Stored(crate::occurrence::Trail),
     InCell {
         cell: CellId,
         resolution: Resolution,
-        path: Rc<[crate::occurrence::Step]>,
+        path: crate::occurrence::Trail,
         /// The first step relative to `cell`, immediately after its
         /// `Follow` step in `path`.
         relative_from: usize,
@@ -76,7 +76,7 @@ impl Secondary {
     /// What an occurrence at `path`, whose data steps from the root, or from
     /// the `enclosing` cell's start, are its location's, shares.
     pub fn from_context(
-        path: Rc<[crate::occurrence::Step]>,
+        path: crate::occurrence::Trail,
         cell: Option<CellId>,
         enclosing: Option<(CellId, Resolution, usize)>,
     ) -> Self {
@@ -96,7 +96,9 @@ impl Secondary {
 
     pub fn from_trace(trace: &SourceTrace) -> Self {
         match trace {
-            SourceTrace::Stored(path) => Self::Stored(crate::occurrence::of(path).into()),
+            SourceTrace::Stored(path) => {
+                Self::Stored(crate::occurrence::Trail::of(&crate::occurrence::of(path)))
+            }
             SourceTrace::InCell {
                 cell,
                 resolution,
@@ -104,7 +106,7 @@ impl Secondary {
             } => Self::InCell {
                 cell: *cell,
                 resolution: *resolution,
-                path: crate::occurrence::of(path).into(),
+                path: crate::occurrence::Trail::of(&crate::occurrence::of(path)),
                 relative_from: 0,
             },
         }
@@ -137,7 +139,7 @@ impl PartialEq for Secondary {
             ) => {
                 left_cell == right_cell
                     && left_resolution == right_resolution
-                    && left_path.get(*left_from..) == right_path.get(*right_from..)
+                    && left_path.same_after(*left_from, right_path, *right_from)
             }
             _ => false,
         }

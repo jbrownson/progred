@@ -650,8 +650,8 @@ fn primary_and_related_highlights_share_geometry_without_overlapping() {
         });
         assert_eq!(
             hovered.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Value(Rc::from(
-                paths[0].clone()
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(Trail::from(
+                &paths[0]
             )))))
         );
         assert_eq!(fills(&hovered, 0.08), vec![outlines[0]]);
@@ -695,7 +695,9 @@ fn sample_text_line_claims_its_own_hover() {
     });
     assert_eq!(
         bench.hit,
-        Some(Claim::Direct(Hovered::Tree(Hover::Value(Rc::from(path)))))
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(Trail::from(
+            path
+        )))))
     );
 }
 
@@ -760,7 +762,7 @@ fn named_fields_display_alphabetically_before_unnamed_fields() {
         bench
             .landmarks
             .iter()
-            .filter(|landmark| landmark.path.as_ref() == [Step::Key(field)])
+            .filter(|landmark| landmark.path == [Step::Key(field)][..])
             .map(|landmark| landmark.rect.y0)
             .reduce(f64::min)
             .expect("field landmark")
@@ -887,7 +889,7 @@ fn placement_claims_the_hover_innermost_last() {
         .landmarks
         .iter()
         .find(|landmark| {
-            crate::occurrence::read(&sources, &landmark.path)
+            crate::occurrence::read(&sources, &landmark.path.to_vec())
                 .is_some_and(|value| text::read(value).is_some())
                 && !matches!(landmark.path.last(), Some(Step::Key(label)) if *label == name::vocabulary::NAME)
         })
@@ -1004,7 +1006,7 @@ fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Landmark<World>, Land
     let mut found: Vec<&Landmark<World>> = bench
         .landmarks
         .iter()
-        .filter(|landmark| matches!(landmark.path.as_ref(), [first, _] if *first == key(field)))
+        .filter(|landmark| landmark.path.len() == 2 && landmark.path.starts_with(&[key(field)]))
         .collect();
     found.sort_by(|a, b| {
         let (a, b) = if by_y {
@@ -1037,7 +1039,7 @@ fn flat_separators_claim_the_insert_between() {
     assert!(matches!(
         &bench.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
-            if path.as_ref() == insertion_between(&first.path, &second.path)
+            if *path == insertion_between(&first.path.to_vec(), &second.path.to_vec())
     ));
 }
 
@@ -1120,7 +1122,7 @@ fn list_presentation_callbacks_need_no_insertion_wiring() {
             editing_frame(&mut world);
             assert_eq!(visits.get(), count, "alternatives share projected children");
             let mut driver = Driver::new(world, Driver::VIEWPORT);
-            let target = Hovered::Tree(Hover::Value(Rc::from(path.clone())));
+            let target = Hovered::Tree(Hover::Value(Trail::from(&path)));
             let rect = driver.rect::<Step>(&[]);
             let point = (0..rect.width().ceil() as usize)
                 .map(|x| Point::new(rect.x0 + x as f64 + 0.5, rect.center().y))
@@ -1187,7 +1189,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
                  target: &[Step]| {
         let mut input = crate::frame::DispatchContext::new(
             Some(crate::test_root()),
-            Some(Hovered::Tree(Hover::Value(Rc::from(target)))),
+            Some(Hovered::Tree(Hover::Value(Trail::from(target)))),
         );
         frame.resolve_for_dispatch().dispatch_pointer_down_with(
             world,
@@ -1211,7 +1213,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
         let target = insertion_between(left, right);
         assert!(!matches!(
             frame.hover_geometry.probe(Some(point), None, 0.0),
-            Some((_, Claim::Direct(Hovered::Tree(Hover::Value(path))))) if path.as_ref() == target
+            Some((_, Claim::Direct(Hovered::Tree(Hover::Value(path))))) if path == target
         ));
         let payload = world.model.selection.as_ref().unwrap().payload();
         // Neither comma installs an action, even if given its old target.
@@ -1224,7 +1226,7 @@ fn flat_separators_beside_pending_are_inert_but_other_separators_still_insert() 
     assert!(matches!(
         frame.hover_geometry.probe(Some(point), None, 0.0),
         Some((_, Claim::Direct(Hovered::Tree(Hover::Value(ref path)))))
-            if path.as_ref() == insertion_between(&paths[0], &paths[1])
+            if *path == insertion_between(&paths[0], &paths[1])
     ));
     assert!(click(
         &mut world,
@@ -1285,7 +1287,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
         let point = Point::new(items[0].center().x, (top + bottom) / 2.0);
         assert_eq!(
             driver.hover_at(point),
-            Some(Hovered::Tree(Hover::Value(Rc::from(path.clone()))))
+            Some(Hovered::Tree(Hover::Value(Trail::from(&path))))
         );
         let before = driver.editor().model.doc.clone();
         driver.click_at(point);
@@ -1312,7 +1314,7 @@ fn bracketed_vertical_list_gaps_open_pending_at_every_boundary() {
                 )];
                 assert_ne!(
                     driver.hover_at(Point::new(pending.center().x, y)),
-                    Some(Hovered::Tree(Hover::Value(Rc::from(adjacent))))
+                    Some(Hovered::Tree(Hover::Value(Trail::from(adjacent))))
                 );
             }
         }
@@ -1338,7 +1340,7 @@ fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
     assert!(matches!(
         &gap.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
-            if path.as_ref() == insertion_between(&upper.path, &lower.path)
+            if *path == insertion_between(&upper.path.to_vec(), &lower.path.to_vec())
     ));
     // Just inside the bracket's absorbed gap, the bracket claims
     // the container outright — the widened handle.
@@ -1352,7 +1354,7 @@ fn block_gaps_claim_insertions_and_brackets_still_claim_the_list() {
     });
     assert!(matches!(
         &claimed.hit,
-        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.as_ref() == parent
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if *path == parent
     ));
 }
 
@@ -1382,7 +1384,7 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
             .landmarks
             .iter()
             .find(|landmark| {
-                landmark.path.as_ref() == [Step::Follow(gid::Resolution::Document), Step::Key(key)]
+                landmark.path == [Step::Follow(gid::Resolution::Document), Step::Key(key)][..]
             })
             .expect("the cell's record field has a landmark")
     };
@@ -1403,7 +1405,7 @@ fn cell_interiors_are_air_and_parentheses_are_handles() {
     assert!(matches!(
         &label.hit,
         Some(Claim::Direct(Hovered::Tree(Hover::Label(path))))
-            if path.as_ref() == upper.path.as_ref()
+            if *path == upper.path
     ));
     let gap_y = (upper.rect.y1 + lower.rect.y0) / 2.0;
     let (air, _) = place_with(BenchFrame {

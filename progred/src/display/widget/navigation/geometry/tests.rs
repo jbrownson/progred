@@ -57,7 +57,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
     let landmarks: [Landmark<()>; 2] = [
         Landmark {
             root: Some(other.clone()),
-            path: Rc::from([]),
+            path: crate::occurrence::Trail::root(),
             rect: Rect::new(0.0, 0.0, 20.0, 20.0),
             select: Rc::new(|_, _| false),
             secondary: None,
@@ -66,7 +66,7 @@ fn reveal_uses_the_requested_view_and_converts_pixels_to_scroll_units() {
         },
         Landmark {
             root: Some(root.clone()),
-            path: Rc::from([]),
+            path: crate::occurrence::Trail::root(),
             rect: Rect::new(0.0, 1_000.0, 20.0, 1_060.0),
             select: Rc::new(|_, _| false),
             secondary: None,

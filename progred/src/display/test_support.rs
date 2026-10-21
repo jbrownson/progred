@@ -327,7 +327,7 @@ impl crate::display::Viewing for NoSite<'_> {
 }
 
 impl crate::display::Toolkit for NoSite<'_> {
-    fn path(&self) -> &[crate::occurrence::Step] {
+    fn path(&self) -> &crate::occurrence::Trail {
         self.0.path()
     }
     fn site(&self) -> crate::editing::Site {
@@ -455,7 +455,6 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
     ) -> R,
 ) -> R {
     let mut fonts = Fonts::new();
-    let annotations = crate::annotations::Annotations::default();
     let styles = widget::style::editor(widget::style::Theme::Light.palette(), 1.0);
     let computations = crate::computations::Computations::from_sources(sources);
     let cx = crate::projection::Cx {
@@ -464,7 +463,6 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
         completions: None,
         sources,
         names: true,
-        annotations: &annotations,
         styles: &styles,
         selection: None,
         selected_trace: None,
@@ -590,7 +588,7 @@ impl<World> Landmarks<World> for [widget::navigation::Landmark<World>] {
     where
         crate::occurrence::Step: PartialEq<S>,
     {
-        self.iter().find(|landmark| landmark.path.as_ref() == path)
+        self.iter().find(|landmark| landmark.path == *path)
     }
 }
 

@@ -2,14 +2,12 @@
 use super::super::frame::DispatchContext;
 use super::super::view::Root;
 use super::landmark_at;
-use crate::occurrence::Step;
 use measured::{Composition, RowAlignment};
 use puri::handler::{Event, EventOutcome, Handler, NavigationDirection};
-use std::rc::Rc;
 
 /// A stop names its occurrence by path; arriving there is the occurrence's
 /// landmark's job, resolved when an arrow key is pressed.
-type OccurrencePath = Rc<[Step]>;
+type OccurrencePath = crate::occurrence::Trail;
 
 struct Stop {
     path: OccurrencePath,

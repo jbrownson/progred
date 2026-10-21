@@ -25,7 +25,7 @@ thread_local! {
     /// so its view can show the value's ordinary projection inside itself,
     /// in place or as a result.
     static DRAWING: std::cell::RefCell<
-        Vec<(std::rc::Rc<[crate::occurrence::Step]>, ::grap::RuntimeValue)>,
+        Vec<(crate::occurrence::Trail, ::grap::RuntimeValue)>,
     > =
         const { std::cell::RefCell::new(Vec::new()) };
 }
@@ -37,7 +37,7 @@ const NESTING: usize = 64;
 struct Drawing;
 
 impl Drawing {
-    fn at(occurrence: std::rc::Rc<[crate::occurrence::Step]>, value: ::grap::RuntimeValue) -> Self {
+    fn at(occurrence: crate::occurrence::Trail, value: ::grap::RuntimeValue) -> Self {
         DRAWING.with(|drawing| drawing.borrow_mut().push((occurrence, value)));
         Self
     }
@@ -57,7 +57,7 @@ impl Drop for Drawing {
 fn projection<W: Host>() -> Partial<W> {
     crate::display::runtime_partial(|input| {
         let value = input.value?;
-        let occurrence: std::rc::Rc<[crate::occurrence::Step]> = input.env.occurrence().into();
+        let occurrence = input.env.occurrence().clone();
         DRAWING
             .with(|drawing| {
                 let drawing = drawing.borrow();

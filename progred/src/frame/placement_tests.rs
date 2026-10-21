@@ -147,7 +147,7 @@ fn delimiter_interaction_is_opt_in_without_changing_ink_or_extent() {
                 assert_eq!(
                     interactive.claim.clone().map(|(_, claim)| claim),
                     Some(Claim::Direct(Hovered::Tree(crate::hover::Hover::Value(
-                        std::rc::Rc::from([])
+                        crate::occurrence::Trail::root()
                     ))))
                 );
                 let outlines = [inert, interactive].map(|placed| {
@@ -188,7 +188,7 @@ fn native_delimiter_actions_follow_retained_hover_and_view_ownership() {
     );
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let rect = measured.extent.rect_at(Point::new(20.0, 30.0));
-    let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
+    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root()));
     let point = Point::new(rect.x1 + 1.0, rect.center().y);
     let placed = crate::display::widget::frame::place(
         measured,
@@ -281,8 +281,8 @@ fn scroll_at(x: f64, y: f64) -> PointerScrollEvent {
 
 #[test]
 fn target_actions_and_raw_handlers_share_visual_precedence() {
-    let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
-    let other = Hovered::Tree(crate::hover::Hover::Toggle(std::rc::Rc::from([])));
+    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root()));
+    let other = Hovered::Tree(crate::hover::Hover::Toggle(crate::occurrence::Trail::root()));
     let placement = Placement::root(Rect::new(0.0, 0.0, 20.0, 20.0));
     let mut frame = HoverOutput::default();
     let mut navigation = Default::default();
@@ -418,7 +418,7 @@ fn popover_content_is_out_of_flow_and_raised_over_the_frame() {
 
 #[test]
 fn clipped_leaves_keep_handlers_but_contribute_no_visible_work() {
-    let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
+    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root()));
     let child = leaf(
         Extent {
             width: 10.0,
@@ -741,7 +741,9 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     );
     let popup = widget::navigation::landmark(
         popup,
-        std::rc::Rc::from([crate::occurrence::Step::Follow(gid::Resolution::Document)]),
+        crate::occurrence::Trail::from([crate::occurrence::Step::Follow(
+            gid::Resolution::Document,
+        )]),
         std::rc::Rc::new(|count, _| {
             *count += 10;
             true
@@ -785,8 +787,8 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     assert_eq!(landmark.root, Some(owner.clone()));
     assert_eq!(landmark.rect, rect);
     assert_eq!(
-        landmark.path.as_ref(),
-        &[gid::Step::Follow(gid::Resolution::Document)]
+        landmark.path,
+        [gid::Step::Follow(gid::Resolution::Document)][..]
     );
     let mut count = 0;
     assert!((landmark.select)(
@@ -811,7 +813,7 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
 
 #[test]
 fn semantic_actions_obey_scroll_clips_even_when_the_target_matches() {
-    let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
+    let target = Hovered::Tree(crate::hover::Hover::Value(crate::occurrence::Trail::root()));
     let claimed = target.clone();
     let child = leaf(
         Extent {
@@ -900,7 +902,7 @@ fn source_picks_share_pointer_order_and_respect_occlusion() {
         let mut pointer = DispatchContext::new(None, Some(hovered));
         pointer.landmarks = std::rc::Rc::from([crate::display::widget::navigation::Landmark {
             root: Some(editor.model.workspace.document_root().clone()),
-            path: std::rc::Rc::from([]),
+            path: crate::occurrence::Trail::root(),
             rect: placement.rect,
             select: std::rc::Rc::new({
                 let count = count.clone();
