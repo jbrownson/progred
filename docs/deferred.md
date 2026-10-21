@@ -329,8 +329,8 @@ typing one should work is undecided, set aside on 21 October 2026.
 
 Revisit how library-provided offers rank alongside built-in constructors and
 interpretations of the query. Grap's slots list the libraries' offers together,
-so `new lambda` sits among them in library order rather than with the editor's
-constructors. Providers cannot express that it belongs with other constructors.
+so `new lambda` and `new call` sit among them in library order rather than
+with the editor's constructors. Providers cannot express that it belongs with other constructors.
 Design that distinction through the completion interface rather than
 special-casing lambda or particular libraries. This is deferred UX design, not a
 priority for the current cleanup.

@@ -404,8 +404,13 @@ pub(crate) fn call_with_function<W: Host>(
     // Enter; one being added some other way shows in the plain record view.
     (input.pending != Some(Pending::Field)).then_some(())?;
     let fields = input.value?;
-    let function = fields.field(FUNCTION)?;
-    let parameters = function_parameters(&function, &|cell| input.env.resolve(cell));
+    // One whose function is still being picked is a call too.
+    let function = match fields.field(FUNCTION) {
+        Some(function) => Some(function),
+        None => (input.pending == Some(Pending::Child(Step::Key(FUNCTION)))).then_some(None)?,
+    };
+    let parameters = function
+        .and_then(|function| function_parameters(&function, &|cell| input.env.resolve(cell)));
     let mut parameter_positions = std::collections::BTreeMap::new();
     for (position, parameter) in parameters.iter().flatten().enumerate() {
         parameter_positions.entry(*parameter).or_insert(position);
@@ -424,7 +429,9 @@ pub(crate) fn call_with_function<W: Host>(
     };
     let trailing = match &input.pending {
         Some(Pending::Child(Step::Key(field)))
-            if !fields.contains_field(*field) && !parameter_positions.contains_key(field) =>
+            if *field != FUNCTION
+                && !fields.contains_field(*field)
+                && !parameter_positions.contains_key(field) =>
         {
             vec![argument(*field)]
         }
@@ -432,7 +439,7 @@ pub(crate) fn call_with_function<W: Host>(
     };
     let function = descend_local(
         [Step::Key(FUNCTION)],
-        function_projection.unwrap_or_else(|| crate::display::runtime_partial(reference)),
+        function_projection.unwrap_or_else(|| crate::display::runtime_partial(expression)),
         &input.default_projection,
     );
     let arguments = record_fragment_with(
@@ -736,6 +743,16 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
                 .with_aliases(["lambda", "λ"])
                 .with_detail(ID),
             )
+            .chain(std::iter::once(
+                // Its function is picked next: a binding, a lambda, or
+                // anything else that evaluates to one.
+                crate::libraries::completion::insert(
+                    "new call",
+                    Value::record([]),
+                    Some(crate::selection::pending_at(&[Step::Key(FUNCTION)])),
+                )
+                .with_detail(ID),
+            ))
             .chain(
                 (!request.query.trim().is_empty())
                     .then(|| call_completions(request))

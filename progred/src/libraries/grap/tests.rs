@@ -1327,5 +1327,50 @@ fn a_new_lambda_starts_at_its_first_parameter() {
     );
 }
 
+#[test]
+fn a_new_call_starts_at_its_function_then_takes_its_parameters_as_arguments() {
+    use ::grap::vocabulary::{BODY, PARAMS};
+    use ui_events::keyboard::NamedKey;
+    let mut driver =
+        crate::driver::Driver::of(Value::record([(vocabulary::GRAP, new_cell_id().into())]));
+    let program = [
+        Step::Key(vocabulary::GRAP),
+        Step::Follow(gid::Resolution::Document),
+    ];
+    driver.select(&program);
+    driver.choose("new call");
+    let function = [&program[..], &[Step::Key(FUNCTION)]].concat();
+    assert_eq!(driver.selection(), crate::occurrence::below(&[], &function));
+    assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
+
+    // The function is code like any other slot's.
+    driver.choose("new lambda");
+    driver.press(NamedKey::Enter);
+    driver.type_text("x");
+    driver.press(NamedKey::Enter);
+    let parameter = driver
+        .value(&driver.element(&[&function[..], &[Step::Key(PARAMS)]].concat(), 0, &[]))
+        .as_cell()
+        .expect("a parameter cell");
+    let argument = [&program[..], &[Step::Key(parameter)]].concat();
+    assert!(
+        !driver.drawn(&argument),
+        "a lambda with no body isn't callable yet"
+    );
+    driver.press(NamedKey::Tab);
+    assert_eq!(
+        driver.selection(),
+        crate::occurrence::below(&[], &[&function[..], &[Step::Key(BODY)]].concat())
+    );
+    driver.type_text("x");
+    driver.choose("x");
+    driver.press(NamedKey::Tab);
+    assert_eq!(
+        driver.selection(),
+        crate::occurrence::below(&[], &argument),
+        "the call's argument for the parameter is next"
+    );
+}
+
 mod declarations;
 mod parameter_names;

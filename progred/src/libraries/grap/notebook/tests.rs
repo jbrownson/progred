@@ -325,3 +325,49 @@ fn a_click_between_entries_starts_one_there() {
     assert_eq!(result(&mut driver, 1), Some(f32::value(7.0)));
     assert_eq!(driver.value(&entry(&driver, 2, &[])), Value::from(second));
 }
+
+#[test]
+fn a_call_of_a_lambda_returning_a_lambda_shows_the_closure_with_what_it_closes_over() {
+    use ::grap::vocabulary::{BODY, ENVIRONMENT, FUNCTION, LAMBDA, PARAMS};
+    let mut driver = notebook(&[new_cell_id()], Cells::new());
+    let call = expression(&driver, 0);
+    driver.select(&call);
+    driver.choose("new call");
+    let function = [&call[..], &[Step::Key(FUNCTION)]].concat();
+    driver.choose("new lambda");
+    driver.press(NamedKey::Enter);
+    driver.type_text("x");
+    driver.press(NamedKey::Enter);
+    driver.press(NamedKey::Tab);
+    driver.choose("new lambda");
+    driver.press(NamedKey::Enter);
+    driver.type_text("y");
+    driver.press(NamedKey::Enter);
+    driver.press(NamedKey::Tab);
+    driver.type_text("y");
+    driver.choose("y");
+    driver.press(NamedKey::Tab);
+    driver.type_text("42");
+    driver.press(NamedKey::Enter);
+
+    let x = driver
+        .value(&driver.element(&[&function[..], &[Step::Key(PARAMS)]].concat(), 0, &[]))
+        .as_cell()
+        .expect("a parameter cell");
+    let argument = driver.value(&[&call[..], &[Step::Key(x)]].concat());
+    let closure = result(&mut driver, 0).expect("a result");
+    assert_eq!(
+        closure.as_record().and_then(|fields| fields.get(&LAMBDA)),
+        Some(&driver.value(&[&function[..], &[Step::Key(BODY)]].concat())),
+        "the inner lambda"
+    );
+    assert_eq!(
+        closure
+            .as_record()
+            .and_then(|fields| fields.get(&ENVIRONMENT))
+            .and_then(Value::as_record)
+            .and_then(|environment| environment.get(&x)),
+        Some(&argument),
+        "closing over x"
+    );
+}

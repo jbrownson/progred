@@ -216,6 +216,12 @@ opens its first parameter, whose slot offers a new one; Tab goes on to the
 missing body.
 The lambda projection accepts that unfinished shape and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
+Beside it Grap offers `new call`, which inserts `{}` and opens its `function`
+field. A record whose `function` is being picked is a call being written, so
+the call projection draws it with its function slot open, an expression slot
+like any other: a binding, a lambda, or another call. Once the function is
+callable (a lambda needs its body), its parameters show as the call's argument
+slots, which Tab visits next.
 An empty parameter slot offers only a new parameter, a new document cell: for
 whatever is typed, `x — new parameter`, named `x`; with nothing typed, `new
 parameter`, which has no name yet, and whose name is picked next.
