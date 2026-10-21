@@ -672,9 +672,10 @@ Grap recovery. An intentionally empty layout can emit an empty row or column
 with `{}` as its child computation; an empty `do` is not a successful computation.
 
 The explicit boundary matters for composition: pane/viewport projection
-functions return ordinary values. The `border` combinator wraps
-a layout-program record like any other result. Neither it nor other
-value-returning functions changes meaning inside a secretly installed scope.
+functions return ordinary values, and no function changes meaning inside a
+secretly installed scope. A layout cell such as `drawing` or `border` is a
+layout construct only: a key in stored data, or a function a layout program
+calls. In ordinary evaluation it is no function at all.
 Grap can also return stored layout descriptions; a layout program avoids building
 and decoding them per node, but still allocates the chosen Rust
 layout representation and evaluates Grap code. It is not a cache or a guarantee

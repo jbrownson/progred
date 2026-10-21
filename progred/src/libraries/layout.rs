@@ -11,7 +11,7 @@
 //!
 use crate::display::Projected;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::libraries::{Library, color, f64 as f64_convention, name, presentation};
+use crate::libraries::{Library, color, f64 as f64_convention, name};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
@@ -23,9 +23,6 @@ use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use kurbo::{Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Stroke};
 use peniko::{Brush, ColorStop, Gradient};
 use puri::draw::{Command, Drawing, Leaf, Shape};
-
-const APPLY_BORDER_PROJECTION: CellId = CellId::from_u128(0x9803fe7e085a661271b4339db22db136);
-const CAPTURED_BORDER_PROJECTION: CellId = CellId::from_u128(0x79e405aaf432422ca572617eb6d98fa3);
 
 mod drawing;
 mod events;
@@ -137,89 +134,6 @@ pub mod vocabulary {
     pub const PAREN: CellId = CellId::from_u128(0x0af59c27b1e4d68318f4a06c9d7325eb);
     pub const SQUARE: CellId = CellId::from_u128(0x9e61d40b7f3ca258745c1e9b02d8f6a3);
     pub const CURLY: CellId = CellId::from_u128(0x63b8f5a2c90e17d4e12489d5b6a0c73f);
-}
-
-/// `drawing` is both the display-language marker and its ordinary
-/// unary constructor/projection function. Calling it with `value`
-/// produces the same data form that can also be written literally.
-fn drawing_projection(
-    context: &mut ::grap::Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<::grap::RuntimeValue, Halt> {
-    let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
-        return Ok(context.missing_runtime_argument(call, presentation::vocabulary::VALUE));
-    };
-    Ok(::grap::RuntimeValue::record([(
-        vocabulary::DRAWING,
-        context.eval(value, environment)?,
-    )]))
-}
-
-/// Turn an ordinary projection into one whose projected result is
-/// redispatched inside the standard border layout.
-fn border_projection(
-    context: &mut ::grap::Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<::grap::RuntimeValue, Halt> {
-    let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
-        return Ok(context.missing_runtime_argument(call, presentation::vocabulary::PROJECTION));
-    };
-    let projection = context.eval(projection, environment)?;
-    let captured = environment.extended_runtime([(CAPTURED_BORDER_PROJECTION, projection)]);
-    let body = ::grap::call(
-        Value::from(APPLY_BORDER_PROJECTION),
-        [
-            (
-                presentation::vocabulary::PROJECTION,
-                Value::from(CAPTURED_BORDER_PROJECTION),
-            ),
-            (
-                presentation::vocabulary::VALUE,
-                Value::from(presentation::vocabulary::VALUE),
-            ),
-        ],
-    );
-    Ok(context.closure_value([presentation::vocabulary::VALUE], body, &captured))
-}
-
-fn apply_border_projection(
-    context: &mut ::grap::Context,
-    call: &Expression,
-    environment: &Environment,
-) -> Result<::grap::RuntimeValue, Halt> {
-    let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
-        return Ok(context.missing_runtime_argument(call, presentation::vocabulary::PROJECTION));
-    };
-    let projection = context.eval(projection, environment)?;
-    let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
-        return Ok(context.missing_runtime_argument(call, presentation::vocabulary::VALUE));
-    };
-    let value = context.eval(value, environment)?;
-    let projected =
-        context.apply_expression(&projection, [(presentation::vocabulary::VALUE, value)])?;
-    Ok(::grap::RuntimeValue::record([(
-        vocabulary::BORDER,
-        ::grap::RuntimeValue::record([(
-            vocabulary::CHILD,
-            at([Step::Key(presentation::vocabulary::RESULT)], projected),
-        )]),
-    )]))
-}
-
-fn at(steps: impl IntoIterator<Item = Step>, value: ::grap::RuntimeValue) -> ::grap::RuntimeValue {
-    ::grap::RuntimeValue::record([(
-        vocabulary::AT,
-        ::grap::RuntimeValue::record([
-            (vocabulary::VALUE, value),
-            (
-                vocabulary::STEPS,
-                crate::libraries::editor::path::value(&steps.into_iter().collect::<Vec<_>>())
-                    .into(),
-            ),
-        ]),
-    )])
 }
 
 /// Which child's baseline a column, or a row aligning tops, keeps. A
@@ -773,34 +687,12 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::SQUARE, "square"),
             (vocabulary::CURLY, "curly"),
         ],
-        ForeignFunctions::default()
-            .register(
-                vocabulary::LAYOUT_PROGRAM,
-                ForeignFunction::new(scope::program)
-                    .parameters([::grap::vocabulary::EXPRESSION])
-                    .tracked(),
-            )
-            .register(
-                vocabulary::DRAWING,
-                ForeignFunction::new(drawing_projection)
-                    .parameters([presentation::vocabulary::VALUE])
-                    .tracked(),
-            )
-            .register(
-                vocabulary::BORDER,
-                ForeignFunction::new(border_projection)
-                    .parameters([presentation::vocabulary::PROJECTION])
-                    .tracked(),
-            )
-            .register(
-                APPLY_BORDER_PROJECTION,
-                ForeignFunction::new(apply_border_projection)
-                    .parameters([
-                        presentation::vocabulary::PROJECTION,
-                        presentation::vocabulary::VALUE,
-                    ])
-                    .tracked(),
-            ),
+        ForeignFunctions::default().register(
+            vocabulary::LAYOUT_PROGRAM,
+            ForeignFunction::new(scope::program)
+                .parameters([::grap::vocabulary::EXPRESSION])
+                .tracked(),
+        ),
     )
     .with_projection(crate::display::runtime_partial(display))
 }

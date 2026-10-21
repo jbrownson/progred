@@ -212,7 +212,7 @@ The first alternates the two variants each pair: 20 two-text rows built by Grap
 as GID layout descriptions versus scoped layout-emitting FFIs. Both use the
 same explicit fuel budget, library stack, fonts, text cache, geometry, and draw
 endpoint. A normal regression test compares their complete paint commands and
-extents, with and without the existing border combinator. No timing assertion
+extents, with and without a border around the column. No timing assertion
 is a correctness test.
 
 The workload was reduced from 100 to 20 rows on 2026-09-23: the returned layout

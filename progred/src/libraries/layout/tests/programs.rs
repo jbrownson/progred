@@ -70,35 +70,32 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
     };
     let calls = (0..rows).map(|index| call(ITEM, [(LABEL, text::value(format!("field {index}")))]));
     let body = if emitting {
-        call(
-            l::LAYOUT_PROGRAM,
-            [(
-                grap::vocabulary::EXPRESSION,
-                call(
-                    l::COL,
-                    [
-                        (l::GAP, crate::libraries::f64::value(2.0)),
-                        (l::CHILDREN, sequence(calls)),
-                    ],
-                ),
-            )],
-        )
+        let col = call(
+            l::COL,
+            [
+                (l::GAP, crate::libraries::f64::value(2.0)),
+                (l::CHILDREN, sequence(calls)),
+            ],
+        );
+        let layout = if bordered {
+            call(l::BORDER, [(l::CHILD, col)])
+        } else {
+            col
+        };
+        call(l::LAYOUT_PROGRAM, [(grap::vocabulary::EXPRESSION, layout)])
     } else {
-        quote(layout::test_support::col(
+        let col = layout::test_support::col(
             0,
             2.0,
             calls.map(|call| Value::record([(control::UNQUOTE, call)])),
-        ))
+        );
+        quote(if bordered {
+            layout::test_support::bordered(col)
+        } else {
+            col
+        })
     };
     let projection = grap::lambda([presentation::vocabulary::VALUE], body);
-    let projection = if bordered {
-        call(
-            l::BORDER,
-            [(presentation::vocabulary::PROJECTION, projection)],
-        )
-    } else {
-        projection
-    };
     let mut cells = Cells::new();
     cells.set_value(ITEM, grap::lambda([LABEL], item));
     Document {
@@ -134,7 +131,7 @@ fn presenting() -> BenchContext {
 }
 
 #[test]
-fn scoped_layout_program_matches_value_layout_through_the_real_frame_and_border_combinator() {
+fn scoped_layout_program_matches_value_layout_through_the_real_frame_with_and_without_a_border() {
     for bordered in [false, true] {
         let (view, mut context) = (view(), presenting());
         let annotations = Annotations::default();
