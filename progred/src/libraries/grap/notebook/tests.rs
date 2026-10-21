@@ -202,3 +202,27 @@ fn a_closure_reads_as_its_lambda_then_what_it_closes_over_then_its_origin_shut()
     assert!(driver.keystroke(Key::Character(" ".into()), Modifiers::empty()));
     assert!(driver.drawn_under(&origin).len() > 1, "open, its fields");
 }
+
+#[test]
+fn a_closure_in_a_result_reads_its_lambda_as_the_source_does() {
+    use ::grap::vocabulary::{BODY, LAMBDA};
+    let (entry, parameter) = (new_cell_id(), new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(parameter, Value::record([]));
+    cells.set_value(entry, ::grap::lambda([parameter], parameter.into()));
+    let driver = notebook(&[entry], cells);
+    let in_source = occurrence::below(
+        &[],
+        &[expression(&driver, 0), vec![Step::Key(BODY)]].concat(),
+    );
+    let in_result = occurrence::below(
+        &result_path(&driver, 0),
+        &[Step::Key(LAMBDA), Step::Key(BODY)],
+    );
+    assert_eq!(
+        driver.glyphs_at(&in_source).len(),
+        1,
+        "the unnamed parameter reads as its letter"
+    );
+    assert_eq!(driver.glyphs_at(&in_result), driver.glyphs_at(&in_source));
+}

@@ -418,6 +418,12 @@ pub trait Env {
     fn read_from(&self, _start: crate::location::Start, _path: &[Step]) -> Option<&Value> {
         None
     }
+
+    /// The value `path` reaches in the computed value the value being
+    /// projected lies in, as data: [`Env::read_from`] where nothing is stored.
+    fn read_computed(&self, _path: &[Step]) -> Option<&Value> {
+        None
+    }
 }
 
 /// Everything a partial projection receives for one value. It lends its

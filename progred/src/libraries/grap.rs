@@ -42,19 +42,36 @@ pub(crate) fn expression<W: Host>(
 
 /// A reference reads as its cell's name. A parameter with no name of its
 /// own reads, grey, as what its list calls it, found by walking out from
-/// where the reference is stored, as a slot's offers find what's in scope.
+/// the reference, as a slot's offers find what's in scope.
 fn reference<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     name::shallow_cell(input).or_else(|| {
         let cell = input.value?.as_cell()?;
-        let location = crate::occurrence::location(&input.env.occurrence().to_vec())?;
-        let (scope, _) = suggestions::scope(
-            &location.path,
-            &|path| input.env.read_from(location.start, path),
-            &|cell| input.env.resolve(cell).map(|definition| definition.value),
-        );
-        let computed = scope.get(&cell)?.computed.clone()?;
+        let computed = scope_around(input)?.remove(&cell)?.computed?;
         Some(name::shallow_reference(input, dim(computed)))
     })
+}
+
+/// The bindings in scope where `input` occurs: walking out through where
+/// it's stored, or through the computed value it lies in, as a closure in a
+/// result does.
+fn scope_around<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<std::collections::BTreeMap<CellId, suggestions::Binding>> {
+    let path = input.env.occurrence().to_vec();
+    let value_of = |cell| input.env.resolve(cell).map(|definition| definition.value);
+    let (scope, _) = match crate::occurrence::location(&path) {
+        Some(location) => suggestions::scope(
+            &location.path,
+            &|steps| input.env.read_from(location.start, steps),
+            &value_of,
+        ),
+        None => suggestions::scope(
+            &crate::occurrence::within_computed(&path)?,
+            &|steps| input.env.read_computed(steps),
+            &value_of,
+        ),
+    };
+    Some(scope)
 }
 
 /// What a parameter list calls its parameters with no name of their own: in

@@ -325,6 +325,17 @@ impl crate::display::Env for Occurrence<'_> {
     fn read_from(&self, start: crate::location::Start, path: &[gid::Step]) -> Option<&Value> {
         self.cx.sources.read_from(start, path)
     }
+
+    fn read_computed(&self, path: &[gid::Step]) -> Option<&Value> {
+        path.iter().try_fold(
+            self.ancestors.computed.as_deref()?.as_value(),
+            |value, step| match step {
+                gid::Step::Key(field) => value.as_record()?.get(field),
+                gid::Step::Element(position) => value.as_list()?.get(position),
+                gid::Step::Follow(_) => None,
+            },
+        )
+    }
 }
 
 #[derive(Clone, Default)]
@@ -341,6 +352,10 @@ struct Ancestry {
     /// The evaluation the computed value here came from, kept below it so
     /// what's drawn inside can run it again; none in the document.
     evaluated: Option<Rc<crate::display::Evaluated>>,
+    /// The computed value this occurrence lies in, shared below it so it's
+    /// made data once for whatever reads above itself there; none where
+    /// it's stored.
+    computed: Option<Rc<grap::RuntimeValue>>,
     ground: Ground,
 }
 
@@ -434,6 +449,7 @@ impl ProjectionScope<'_, '_> {
             match (step, followed) {
                 (_, Some((cell, source))) => {
                     ancestors.cells.insert(cell);
+                    ancestors.computed = None;
                     ancestors.enclosing = Some((cell, source, path.len()));
                     // Following a cell enters its definition, which stores
                     // what's below.
@@ -541,6 +557,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
         }
         ancestry.stored = document.stored(&cx.sources).map(|stored| stored.start);
         ancestry.evaluated = None;
+        ancestry.computed = None;
         let jump = Step::jump(document);
         let state = descend_state(self.state, &steps).and_then(|node| node.child(&jump));
         let path = self.path.below(&steps).push(jump);
@@ -577,6 +594,7 @@ impl crate::display::widget::project::Project<crate::Editor, Hovered> for Projec
                 ancestors: &Ancestry {
                     ground: self.ancestors.ground,
                     evaluated,
+                    computed: Some(Rc::new(value.clone())),
                     ..Ancestry::default()
                 },
                 state: descend_state(self.state, &steps)

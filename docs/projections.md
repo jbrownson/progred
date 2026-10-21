@@ -234,8 +234,12 @@ is typed; a line editor's (`LineEdit::placeholder`) shows where its text goes
 while there's none, the caret before it. A
 reference finds its list by walking out from where it's stored, the same walk a
 slot's offers make to find what's in scope, so each list names its own; an
-inner lambda's first unnamed parameter is `a` too. Outside its scope, as in a
-computed result, an unnamed parameter shows its short ID.
+inner lambda's first unnamed parameter is `a` too. In a computed value, such as
+a closure in a result, the walk goes out through that value instead, which the
+projection keeps for what it draws inside (`Env::read_computed`), so the
+closure's lambda reads as it does in its source. Outside any list that names
+it, as a closure's environment holds a parameter of the lambda that made it, an
+unnamed parameter shows its short ID.
 
 The expression-use partial also handles missing values with a focused completion
 provider. It lists statically visible bindings, the libraries' `Everything`

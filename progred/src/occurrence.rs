@@ -144,6 +144,20 @@ pub fn location(path: &[Step]) -> Option<Location<'static>> {
     Some(location)
 }
 
+/// The data steps to `path` from the computed value it lies in. None where
+/// it's stored, as [`location`] finds it.
+pub fn within_computed(path: &[Step]) -> Option<gid::Path> {
+    let marker = path
+        .iter()
+        .rposition(|step| matches!(step, Step::Jump(_) | Step::Computed))?;
+    matches!(path[marker], Step::Computed).then(|| {
+        path[marker + 1..]
+            .iter()
+            .filter_map(data_after_marker)
+            .collect()
+    })
+}
+
 /// The value at `path`, where it's stored.
 pub fn read<'a>(sources: &Sources<'a>, path: &[Step]) -> Option<&'a Value> {
     sources.read(&location(path)?)
