@@ -1194,4 +1194,63 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
     );
 }
 
+#[test]
+fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
+    use ::grap::vocabulary::PARAMS;
+    use ui_events::keyboard::NamedKey;
+    let function = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(function, Value::record([(PARAMS, Value::list([]))]));
+    let mut driver = crate::driver::Driver::new(
+        crate::test_editor(Document {
+            root: Some(Value::record([(vocabulary::GRAP, function.into())])),
+            cells,
+        }),
+        crate::driver::Driver::VIEWPORT,
+    );
+    let params = [
+        Step::Key(vocabulary::GRAP),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(PARAMS),
+    ];
+    driver.select(&params);
+    assert!(driver.keystroke(
+        ui_events::keyboard::Key::Named(NamedKey::Enter),
+        crate::test_support::command()
+    ));
+    assert_eq!(
+        driver.picker_entries(),
+        Some(vec!["new parameter".to_owned()])
+    );
+    driver.press(NamedKey::Enter);
+    let parameter = driver.element(&params, 0, &[]);
+    let name = [
+        parameter.as_slice(),
+        &[
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(crate::libraries::name::vocabulary::NAME),
+        ],
+    ]
+    .concat();
+    assert_eq!(
+        driver.selection(),
+        crate::occurrence::below(&[], &name),
+        "its name is selected"
+    );
+    driver.type_text("x");
+    driver.press(NamedKey::Enter);
+    let added = driver
+        .value(&parameter)
+        .as_cell()
+        .expect("a parameter cell");
+    assert_eq!(
+        driver
+            .editor()
+            .sources()
+            .resolve(added)
+            .map(|definition| definition.value.clone()),
+        Some(crate::libraries::name::record("x", []))
+    );
+}
+
 mod declarations;

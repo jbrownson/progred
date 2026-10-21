@@ -214,8 +214,9 @@ and `λ`), which Grap's expression slots list. It inserts `{params: []}` and
 selects the missing body.
 The lambda projection accepts that unfinished shape and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
-An empty parameter slot offers only `x — new parameter` for whatever is typed: a
-new document cell named `x`.
+An empty parameter slot offers only a new parameter, a new document cell: for
+whatever is typed, `x — new parameter`, named `x`; with nothing typed, `new
+parameter`, whose empty name is selected so typing goes into it.
 
 The expression-use partial also handles missing values with a focused completion
 provider. It lists statically visible bindings, the libraries' `Everything`

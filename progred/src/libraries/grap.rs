@@ -48,38 +48,45 @@ pub mod vocabulary {
 }
 
 /// A parameter is a cell. An empty slot offers only a new one, named as
-/// typed.
+/// typed, or with nothing typed, named next.
 fn parameter<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     match input.value {
         Some(_) => declaration_cell(input),
         None => Some(picker(Picker::new(
             CompletionKind::Value,
             ranked(std::rc::Rc::new(|request| {
-                let spelling = request.query.trim().to_owned();
-                Some(
-                    (!spelling.is_empty())
-                        .then(|| {
-                            Completion::new(
-                                crate::display::CompletionText::Literal(spelling.clone()),
-                                move |session| {
-                                    if let Some(picking) = session.pending() {
-                                        picking.commit_new_cell(
-                                            name::record(&spelling, []),
-                                            Some(crate::selection::at(
-                                                &[],
-                                                crate::selection::payload::edge(),
-                                            )),
-                                        );
-                                    }
-                                },
-                            )
-                            .with_detail("new parameter")
-                        })
-                        .into_iter()
-                        .collect(),
-                )
+                Some(vec![new_parameter(request.query.trim().to_owned())])
             })),
         ))),
+    }
+}
+
+/// A new parameter named `spelling`, then selected; with no spelling, its
+/// empty name is selected to type into.
+fn new_parameter(spelling: String) -> Completion {
+    let named = !spelling.is_empty();
+    let name = [
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(name::vocabulary::NAME),
+    ];
+    let then = crate::selection::at(
+        if named { &[][..] } else { &name[..] },
+        crate::selection::payload::edge(),
+    );
+    let display = if named {
+        spelling.clone()
+    } else {
+        "new parameter".to_owned()
+    };
+    let offer = Completion::new(display, move |session| {
+        if let Some(picking) = session.pending() {
+            picking.commit_new_cell(name::record(&spelling, []), Some(then.clone()));
+        }
+    });
+    if named {
+        offer.with_detail("new parameter")
+    } else {
+        offer
     }
 }
 
