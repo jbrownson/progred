@@ -121,7 +121,12 @@ fn numeric_name_decoration_keeps_missing_selected_and_unusual_names_accessible()
         let plain = editing_frame(&mut world);
         assert!(!plain.landmarks.landmark(&path).is_some());
         world.model.selection = Some(pending_value(crate::occurrence::of(&path)));
-        assert!(editing_frame(&mut world).completion.is_some());
+        assert!(
+            editing_frame(&mut world)
+                .landmarks
+                .landmark(&path)
+                .is_some()
+        );
         world.model.selection = None;
         for name in [text::value(""), Value::list([text::value("unusual name")])] {
             Rc::make_mut(&mut world.model.doc).root =

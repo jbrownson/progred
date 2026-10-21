@@ -296,19 +296,16 @@ pub(crate) fn projection<W: Host>(placeholder: Option<String>) -> Partial<W> {
     })
 }
 
-/// A missing name, which takes whatever is typed as its text, showing
-/// `placeholder` dim until then. Nothing typed offers the empty string,
-/// text that names nothing.
+/// A missing name, typed into as the name's own editor: the first edit
+/// writes it, as text, showing `placeholder` dim until then. Enter with
+/// nothing typed writes the empty string, which names nothing.
 pub(crate) fn hole<W: Host>(placeholder: Option<String>) -> Layout<W> {
-    crate::display::picker(
-        crate::display::Picker::new(
-            crate::display::CompletionKind::Value,
-            crate::display::ranked(std::rc::Rc::new(|request| {
-                Some(vec![text::completion(text::query_spelling(request.query))])
-            })),
-        )
-        .with_placeholder(placeholder),
-    )
+    crate::display::line_hole(crate::display::LineEdit {
+        prefix: String::new(),
+        suffix: String::new(),
+        placeholder,
+        ..text::editor_for_text("")
+    })
 }
 
 #[cfg(test)]

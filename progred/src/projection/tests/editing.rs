@@ -714,7 +714,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
 }
 
 #[test]
-fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
+fn an_anonymous_lambda_name_opens_for_typing_without_creating_a_field() {
     let lib = core_libraries();
     let (doc, cell) = doc_of(vec![
         (grap::vocabulary::PARAMS, Value::list([])),
@@ -745,44 +745,32 @@ fn an_anonymous_lambda_name_opens_a_picker_without_creating_a_field() {
     driver.click_at(point);
     assert_eq!(driver.selection(), path);
     assert_eq!(driver.stage(), Some(Stage::Pending));
-    assert_eq!(driver.line(), Some(""), "the picker's query starts empty");
-    assert!(driver.picker_entries().is_some());
+    assert_eq!(driver.line(), Some(""), "the name's line starts empty");
     unwritten(&mut driver);
     deselect(&mut driver);
-    assert!(driver.picker_entries().is_none());
+    assert!(driver.line().is_none());
     assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
 
-    // Keyboard navigation enters the same missing location.
+    // Keyboard navigation enters the same missing location, and moving the
+    // caret writes nothing.
     driver.select(&path);
     unwritten(&mut driver);
-    assert!(driver.picker_entries().is_some());
     driver.press(NamedKey::End);
     unwritten(&mut driver);
-    driver.type_text("\"tree\"");
-    assert_eq!(driver.stage(), Some(Stage::Pending));
-    assert_eq!(driver.line(), Some("\"tree\""));
-    unwritten(&mut driver);
+    assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
 
-    let editor = driver.editor();
-    let prepared = crate::completion::prepare(
-        &editor.sources(),
-        editor.model.selection.as_ref().unwrap(),
-        &Annotations::default(),
-        text::value("tree"),
-        None,
-        None,
-    )
-    .unwrap();
-    assert!(prepared.document_changed);
-    assert_eq!(prepared.path, path);
+    // The first keystroke writes the name, and typing goes on in its line.
+    driver.type_text("tree");
+    assert_eq!(driver.stage(), Some(Stage::Edge));
+    assert_eq!(driver.line(), Some("tree"));
     assert_eq!(
-        prepared.document.cells.value(cell).and_then(name::read),
-        Some("tree")
-    );
-    assert_eq!(
-        make_projected_editing_selection(&prepared.document, &lib, path)
-            .edit()
-            .map(LineEditState::text),
+        driver
+            .editor()
+            .model
+            .doc
+            .cells
+            .value(cell)
+            .and_then(name::read),
         Some("tree")
     );
 }

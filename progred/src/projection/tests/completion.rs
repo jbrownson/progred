@@ -5,46 +5,31 @@ use crate::test_support::{activate_projected, inserted_value, projected_completi
 use gid::Resolution;
 
 #[test]
-fn a_plain_missing_name_selection_offers_and_commits_text() {
-    let stack = crate::stack::load();
-    let doc = Document {
-        root: Some(grap::lambda([], Value::record([]))),
-        cells: Cells::new(),
-    };
-    let path = vec![gid::Step::Key(name::vocabulary::NAME)];
-    for payload in [Value::record([]), crate::selection::payload::edge()] {
-        let selected = Selection::from_payload(
-            &src(&doc, &stack.libraries),
-            crate::occurrence::of(&path),
-            payload.clone(),
-        );
-        assert!(selected.edit().is_none());
-        let empty = projected_completion_entries(&doc, &selected);
-        assert_eq!(
-            empty
-                .iter()
-                .map(|entry| entry.display.as_str())
-                .collect::<Vec<_>>(),
-            ["\"\""],
-            "nothing typed offers the empty string"
-        );
-        assert_eq!(selected.payload(), payload);
-        let selected = crate::selection::pending_with_query(crate::occurrence::of(&path), "w");
-        let entries = projected_completion_entries(&doc, &selected);
-        assert_eq!(entries.len(), 1);
-        let world = activate_projected(&doc, &selected, &entries[0]);
-        assert_eq!(world.sources().resolve_path(&path), Some(&text::value("w")));
-        assert_eq!(
-            world
-                .model
-                .selection
-                .as_ref()
-                .unwrap()
-                .stage(&world.sources()),
-            Stage::Edge
-        );
-        assert!(src(&doc, &stack.libraries).resolve_path(&path).is_none());
-    }
+fn a_plain_missing_name_is_typed_into_and_its_first_keystroke_writes_it() {
+    use crate::driver::Driver;
+    let path = [gid::Step::Key(name::vocabulary::NAME)];
+    let name = |driver: &Driver| driver.editor().sources().resolve_path(&path).cloned();
+    let mut driver = Driver::of(grap::lambda([], Value::record([])));
+    let original = driver.editor().model.doc.clone();
+    driver.select(&path);
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+    assert!(
+        driver.picker_entries().is_none(),
+        "no offers, only the line"
+    );
+    assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
+    driver.type_text("w");
+    assert_eq!(name(&driver), Some(text::value("w")));
+    assert_eq!(driver.stage(), Some(Stage::Edge), "the name is there now");
+    driver.type_text("x");
+    assert_eq!(name(&driver), Some(text::value("wx")));
+    assert_eq!(driver.line(), Some("wx"));
+    assert!(driver.undo());
+    assert_eq!(name(&driver), None, "the typing was one step");
+    // Enter with nothing typed writes the empty string.
+    driver.select(&path);
+    driver.press(NamedKey::Enter);
+    assert_eq!(name(&driver), Some(text::value("")));
 }
 
 #[test]
@@ -118,12 +103,12 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
         assert!(crate::occurrence::read(&world.sources(), &name_path).is_none());
         assert!(editing_frame(&mut world).completion.is_some());
 
-        let name_selection = crate::selection::pending_with_query(name_path, "area");
-        let names = projected_completion_entries(&world.model.doc, &name_selection);
-        assert_eq!(names.len(), 1);
+        let mut driver = crate::driver::Driver::new(world, crate::driver::Driver::VIEWPORT);
+        driver.select(&name_path);
+        driver.type_text("area");
         assert_eq!(
-            inserted_value(&world.model.doc, &name_selection, &names[0]),
-            Some(text::value("area"))
+            crate::occurrence::read(&driver.editor().sources(), &name_path),
+            Some(&text::value("area"))
         );
         assert!(
             doc.cells.value(cell).is_none(),

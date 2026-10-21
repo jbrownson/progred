@@ -186,6 +186,65 @@ impl Picking<'_, '_> {
             })
     }
 
+    /// Types into a value's pending as into the line its value will have:
+    /// the query takes `operation`, and once that changes what's typed,
+    /// `update`'s reading of it is written in the pending's place, which
+    /// stays selected, typing going on in the value's own line. Whether the
+    /// query took the operation.
+    pub(crate) fn type_line(
+        self,
+        operation: &EditOperation<'_>,
+        update: &crate::display::LineUpdate,
+    ) -> bool {
+        let before = self.session.model.snapshot();
+        let Session {
+            model,
+            libraries,
+            text,
+            ..
+        } = self.session;
+        let sources = Sources {
+            doc: &model.doc,
+            libraries,
+        };
+        let typed = model
+            .selection
+            .as_mut()
+            .filter(|selection| self.stage == Stage::Pending && selection.writable(&sources))
+            .map(|selection| {
+                let was = selection
+                    .edit()
+                    .map_or_else(String::new, |line| line.text().to_owned());
+                let handled = selection.edit_query(|state| {
+                    operation(EditCtx {
+                        state,
+                        fonts: text.fonts,
+                        layouts: text.layouts,
+                        clipboard: text.clipboard,
+                    })
+                });
+                let line = selection.edit().map_or("", |line| line.text());
+                let written = (line != was)
+                    .then(|| update(line, None))
+                    .flatten()
+                    .zip(selection.location());
+                (handled, written)
+            });
+        match typed {
+            Some((handled, Some((value, location)))) => {
+                if crate::location::set_value(&mut model.doc, libraries, &location, value) {
+                    model.history.record(before);
+                    if let Some(selection) = model.selection.as_mut() {
+                        selection.typing_on();
+                    }
+                }
+                handled
+            }
+            Some((handled, None)) => handled,
+            None => false,
+        }
+    }
+
     /// Scrolls the card and chooses its offer at `choice`.
     pub(crate) fn set_view(&mut self, scroll: f64, choice: usize) {
         if let Some(selection) = self.session.model.selection.as_mut() {

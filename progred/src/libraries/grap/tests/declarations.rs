@@ -194,14 +194,16 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
 }
 
 #[test]
-fn anonymous_lambda_marker_still_opens_name_completion_when_clicked() {
+fn anonymous_lambda_marker_opens_its_name_for_typing_when_clicked() {
     let mut driver = Driver::of(grap::lambda([], f64::value(3.0)));
     let before = driver.editor().model.doc.clone();
     let name_path = [Step::Key(name::vocabulary::NAME)];
     driver.click(&name_path);
     assert_eq!(driver.selection(), name_path);
-    assert!(driver.picker_entries().is_some());
+    assert_eq!(driver.line(), Some(""));
     assert!(Rc::ptr_eq(&driver.editor().model.doc, &before));
+    driver.type_text("f");
+    assert_eq!(driver.value(&name_path), text::value("f"));
 }
 
 fn declarations(binder: CellId) -> Vec<(Value, Path)> {

@@ -392,9 +392,9 @@ inferred. Cells that are neither bindings nor functions, such as a named
 constant, are not offered there.
 
 A projection that descends into a name passes the name library's partial, which
-draws an existing name as its line editor and a missing one as a hole taking
-whatever is typed as its text, including an empty string and optional
-surrounding quotes. A missing-name marker, such as an anonymous lambda's,
+draws an existing name as its line editor and a missing one as a line hole,
+typed into as that editor: the first keystroke writes the name, and Enter with
+nothing typed writes the empty string. A missing-name marker, such as an anonymous lambda's,
 selects that name location and then draws the same hole. A `name` field drawn by
 the generic structure projection offers Raw's instead. Circle and sphere are
 ordinary named Grap lambdas that use quote/unquote to return Fidget arithmetic;
@@ -406,8 +406,8 @@ doesn't parse, an empty one included, reads as no number. Any query reads as
 text, after the readings particular to it, an empty one as the empty string,
 which is text where it isn't a number. A new label needs something typed. An
 empty query therefore offers Raw's constructors, after a document root's
-starting points, then the empty string. A name's hole offers text the same way.
-A picker with nothing to offer draws no card, only its query.
+starting points, then the empty string. A picker with nothing to offer draws
+no card, only its query.
 Raw orders its offers: a reading that spells the query exactly, the
 constructors the query names, the other readings in library order, text (or a
 new label), then constructors the query matches only loosely. The editor does

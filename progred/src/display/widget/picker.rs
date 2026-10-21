@@ -30,9 +30,6 @@ pub struct Picker<W> {
     /// Typed into an empty query, each chooses its offer at once, as Raw's
     /// brackets make its constructors. Elsewhere a delimiter is text.
     pub keys: Vec<(&'static str, Completion)>,
-    /// Shown dim in the hole, and in its query while nothing is typed: what
-    /// the place is called without a value, never stored.
-    pub placeholder: Option<String>,
 }
 
 impl<W> Clone for Picker<W> {
@@ -41,7 +38,6 @@ impl<W> Clone for Picker<W> {
             kind: self.kind,
             offers: self.offers.clone(),
             keys: self.keys.clone(),
-            placeholder: self.placeholder.clone(),
         }
     }
 }
@@ -52,19 +48,11 @@ impl<W> Picker<W> {
             kind,
             offers,
             keys: Vec::new(),
-            placeholder: None,
         }
     }
 
     pub fn with_keys(self, keys: Vec<(&'static str, Completion)>) -> Self {
         Self { keys, ..self }
-    }
-
-    pub fn with_placeholder(self, placeholder: Option<String>) -> Self {
-        Self {
-            placeholder,
-            ..self
-        }
     }
 }
 
@@ -84,7 +72,9 @@ pub(crate) fn hole<W: Host>(
     picker: &Picker<W>,
 ) -> Measured<HoverPass<W, W::Hover>> {
     match picker.kind {
-        CompletionKind::Value => pending_view(toolkit, tcx, picker),
+        CompletionKind::Value => pending_view(toolkit, tcx, None, |tcx, query| {
+            query_content(toolkit, tcx, query, picker)
+        }),
         CompletionKind::Field => toolkit
             .label_query()
             .map(|query| label_query(toolkit, tcx, query, picker))
@@ -92,12 +82,14 @@ pub(crate) fn hole<W: Host>(
     }
 }
 
-/// A missing value with ordinary selection and navigation behavior.
-/// The active selection replaces its empty frame with a completion query.
+/// A missing value with ordinary selection and navigation behavior, its
+/// empty frame showing `placeholder` dim. The active selection replaces the
+/// frame with `engaged`'s drawing of its query.
 fn pending_view<W: Host>(
     toolkit: &dyn Toolkit,
     tcx: &mut TextCtx,
-    picker: &Picker<W>,
+    placeholder: Option<&str>,
+    engaged: impl FnOnce(&mut TextCtx, &LineEditState) -> Measured<HoverPass<W, W::Hover>>,
 ) -> Measured<HoverPass<W, W::Hover>> {
     let writable = toolkit.writable();
     let selected = toolkit.selection().filter(|current| {
@@ -108,9 +100,9 @@ fn pending_view<W: Host>(
     let default = selected
         .filter(|current| current.edit().is_none())
         .map(Selection::initial_query);
-    let engaged = selected.and_then(Selection::edit).or(default.as_ref());
-    let content = match (engaged, picker.placeholder.as_deref()) {
-        (Some(query), _) => query_content(toolkit, tcx, query, picker),
+    let query = selected.and_then(Selection::edit).or(default.as_ref());
+    let content = match (query, placeholder) {
+        (Some(query), _) => engaged(tcx, query),
         (None, Some(placeholder)) => {
             crate::display::widget::empty_with(tcx, toolkit.styles(), placeholder)
         }
@@ -118,6 +110,95 @@ fn pending_view<W: Host>(
     };
     // Selection draws the same outline as the inactive frame.
     pending_target(toolkit, content)
+}
+
+/// A missing value typed as the line it will have, with no offers to pick
+/// from: its first edit writes `line`'s reading of what's typed in its place,
+/// and typing goes on in that value's own line. Enter with nothing typed
+/// writes the reading of nothing, as the empty string is text.
+pub fn line_hole<W: Host>(line: crate::display::LineEdit) -> Layout<W> {
+    crate::display::Layout::widget(Rc::new(move |context| {
+        let toolkit = context.toolkit;
+        pending_view(
+            toolkit,
+            context.text,
+            line.placeholder.as_deref(),
+            |tcx, query| typed_line(toolkit, tcx, query, &line),
+        )
+    }))
+}
+
+/// A [`line_hole`]'s query, drawn as its line will be.
+fn typed_line<W: Host>(
+    toolkit: &dyn Toolkit,
+    tcx: &mut TextCtx,
+    query: &LineEditState,
+    line: &crate::display::LineEdit,
+) -> Measured<HoverPass<W, W::Hover>> {
+    let styles = toolkit.styles();
+    let site = toolkit.site();
+    let typing = line.clone();
+    let content = text_edit(
+        LineEditDescription {
+            state: query,
+            focused: toolkit.focused(),
+            presentation: styles.line_presentation(line),
+            style: &styles.edit,
+        },
+        tcx,
+        move |world: &mut W, operation| {
+            let mut session = world.session();
+            if session
+                .pending()
+                .is_some_and(|picking| picking.is_at(&site))
+            {
+                session
+                    .pending()
+                    .is_some_and(|picking| picking.type_line(operation, &typing.update))
+            } else {
+                // A keystroke after the first that reaches this frame's
+                // handler: the value is there now, its line typing.
+                site.open(&mut session).edit_line(&typing, operation)
+            }
+        },
+    );
+    let empty = query.text().is_empty() && query.preedit_parts().is_none();
+    let content = match line.placeholder.as_deref().filter(|_| empty) {
+        Some(placeholder) => measured::row(
+            0.0,
+            vec![
+                content,
+                text(
+                    tcx,
+                    placeholder,
+                    &crate::display::widget::placeholder_style(styles),
+                ),
+            ],
+        ),
+        None => content,
+    };
+    let content = min_width(
+        text_frame::empty_width(styles.label.size, styles.scale),
+        content,
+    );
+    let site = toolkit.site();
+    let update = line.update.clone();
+    on_key(content, move |world, event| {
+        event.state.is_down()
+            && event.key == Key::Named(NamedKey::Enter)
+            && empty
+            && world
+                .session()
+                .pending()
+                .filter(|picking| picking.is_at(&site))
+                .zip(update("", None))
+                .is_some_and(|(picking, value)| {
+                    picking.commit(
+                        value,
+                        Some(crate::selection::at(&[], crate::selection::payload::edge())),
+                    )
+                })
+    })
 }
 
 fn pending_target<W: Host>(
@@ -219,24 +300,6 @@ fn located_query<W: Host>(
         tcx,
         edit_query::<W>,
     );
-    let content = match picker
-        .placeholder
-        .as_deref()
-        .filter(|_| query.text().is_empty() && query.preedit_parts().is_none())
-    {
-        Some(placeholder) => measured::row(
-            0.0,
-            vec![
-                content,
-                text(
-                    tcx,
-                    placeholder,
-                    &crate::display::widget::placeholder_style(styles),
-                ),
-            ],
-        ),
-        None => content,
-    };
     // Preserve the empty frame's width while the query is short.
     let content = min_width(
         text_frame::empty_width(styles.label.size, styles.scale),

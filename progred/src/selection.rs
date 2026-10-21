@@ -250,6 +250,18 @@ impl Selection {
             .line
     }
 
+    /// This pending, its value just written in its place from what its
+    /// query typed: the value selected at its edge, typing going on in its
+    /// line from the query's caret. That write opened the run's undo step.
+    pub(crate) fn typing_on(&mut self) {
+        self.payload = payload::edge();
+        self.origin = None;
+        if let Some(editor) = &mut self.editor {
+            editor.query = false;
+            editor.recorded = true;
+        }
+    }
+
     pub(crate) fn edit_line_mut(&mut self, spelling: &str) -> &mut LineEditState {
         let payload = &mut self.payload;
         &mut self
