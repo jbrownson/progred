@@ -23,16 +23,14 @@ pub mod vocabulary {
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    input.value?.field(vocabulary::NOTEBOOK)?;
-    Some(crate::display::structure::with_extra_fields(
-        input,
-        |key| key == vocabulary::NOTEBOOK,
-        crate::display::descend_local(
+    crate::display::structure::record_form(input, [vocabulary::NOTEBOOK], &[], |[notebook]| {
+        notebook?;
+        Some(crate::display::descend_local(
             [Step::Key(vocabulary::NOTEBOOK)],
             crate::display::runtime_partial(entries),
             &input.default_projection,
-        ),
-    ))
+        ))
+    })
 }
 
 /// The entries in order, each starting another beside it on Enter.

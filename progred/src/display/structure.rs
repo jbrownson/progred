@@ -182,9 +182,31 @@ pub fn record_layout_at<W: Host>(
     keys: Vec<CellId>,
     child: impl Fn(CellId) -> Option<Partial<W>>,
 ) -> Layout<W> {
+    record_layout_of(input, ordered_keys(input, keys, &[]), child)
+}
+
+/// [`record_layout`], the `leading` fields first, in that order, and the
+/// others after them as usual.
+pub(crate) fn record_layout_led<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    leading: &[CellId],
+    child: impl Fn(CellId) -> Option<Partial<W>>,
+) -> Option<Layout<W>> {
+    Some(record_layout_of(
+        input,
+        ordered_keys(input, input.value?.record_keys()?, leading),
+        child,
+    ))
+}
+
+/// The fields `keys`, in their order, and one being added.
+fn record_layout_of<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    keys: Vec<CellId>,
+    child: impl Fn(CellId) -> Option<Partial<W>>,
+) -> Layout<W> {
     authoring(record_heads(
-        ordered_keys(input, keys)
-            .into_iter()
+        keys.into_iter()
             .map(|key| record_field(input, key, child(key))),
         pending_field(input),
     ))
@@ -193,20 +215,32 @@ pub fn record_layout_at<W: Host>(
 pub(crate) fn record_keys<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Vec<CellId>> {
-    Some(ordered_keys(input, input.value?.record_keys()?))
+    Some(ordered_keys(input, input.value?.record_keys()?, &[]))
 }
 
-/// Display order, including a pending new field.
+/// Display order, including a pending new field: the `leading` fields in
+/// their order, then the others by [`field_order`].
 fn ordered_keys<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     mut keys: Vec<CellId>,
+    leading: &[CellId],
 ) -> Vec<CellId> {
     if let Some(Pending::Child(Step::Key(key))) = &input.pending
         && !keys.contains(key)
     {
         keys.push(*key);
     }
-    keys.sort_by(|left, right| field_order(input.env, left, right));
+    let lead = |key: &CellId| {
+        leading
+            .iter()
+            .position(|leader| leader == key)
+            .unwrap_or(leading.len())
+    };
+    keys.sort_by(|left, right| {
+        lead(left)
+            .cmp(&lead(right))
+            .then_with(|| field_order(input.env, left, right))
+    });
     keys
 }
 
@@ -302,6 +336,30 @@ pub(crate) fn with_extra_fields_by<W: Host>(
         Some(extras) => group_hug(content, extras, 0.0),
         None => content,
     }
+}
+
+/// A form drawn from some of a record's fields, the others following it as a
+/// trailing record ([`with_extra_fields`]), so the form hides nothing it
+/// doesn't mean to. `draw` is given the `queried` fields' values, in their
+/// order, to bind by name. The `ignored` fields are drawn neither way, as
+/// metadata will be; one of them being added has nowhere to show, so a
+/// plainer view takes it. One of the queried being added is the form's to
+/// draw, or to leave to a plainer view.
+pub(crate) fn record_form<W: Host, const N: usize>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    queried: [CellId; N],
+    ignored: &[CellId],
+    draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
+) -> Option<Layout<W>> {
+    let fields = input.value?;
+    (!matches!(&input.pending, Some(Pending::Child(Step::Key(key))) if ignored.contains(key)))
+        .then_some(())?;
+    let content = draw(queried.map(|key| fields.field(key)))?;
+    Some(with_extra_fields(
+        input,
+        |key| queried.contains(&key) || ignored.contains(&key),
+        content,
+    ))
 }
 
 /// Enter's authoring for the container `child` draws: a field or element

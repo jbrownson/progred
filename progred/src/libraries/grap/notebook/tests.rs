@@ -162,3 +162,43 @@ fn the_arrow_selects_an_entry_to_delete() {
     assert_eq!(driver.positions(&[Step::Key(NOTEBOOK)]).len(), 1);
     assert_eq!(driver.value(&entry(&driver, 0, &[])), Value::from(second));
 }
+
+#[test]
+fn a_closure_reads_as_its_lambda_then_what_it_closes_over_then_its_origin_shut() {
+    use ::grap::source::vocabulary::BODY_ORIGIN;
+    use ::grap::vocabulary::{ENVIRONMENT, LAMBDA};
+    let (entry, x, y) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(x, crate::libraries::name::record("x", []));
+    cells.set_value(y, crate::libraries::name::record("y", []));
+    // `(λ [x] → λ [y] → x) {x: 1}`: a closure over `x`.
+    cells.set_value(
+        entry,
+        ::grap::call(
+            ::grap::lambda([x], ::grap::lambda([y], x.into())),
+            [(x, f64::value(1.0))],
+        ),
+    );
+    let mut driver = notebook(&[entry], cells);
+    let closure = result_path(&driver, 0);
+    let at = |steps: &[Step]| occurrence::below(&closure, steps);
+    let before = |first: &[Step], second: &[Step]| {
+        let (first, second) = (driver.rect(&at(first)), driver.rect(&at(second)));
+        first.y1 <= second.y0 || first.x1 <= second.x0
+    };
+    assert!(before(&[Step::Key(LAMBDA)], &[Step::Key(ENVIRONMENT)]));
+    assert!(before(&[Step::Key(ENVIRONMENT)], &[Step::Key(BODY_ORIGIN)]));
+    assert!(
+        driver.drawn(&at(&[
+            Step::Key(LAMBDA),
+            Step::Key(crate::libraries::name::vocabulary::NAME)
+        ])),
+        "the lambda reads as a lambda, its unnamed marker drawn"
+    );
+    assert!(driver.drawn(&at(&[Step::Key(ENVIRONMENT), Step::Key(x)])));
+    let origin = at(&[Step::Key(BODY_ORIGIN)]);
+    assert_eq!(driver.drawn_under(&origin).len(), 1, "shut, nothing within");
+    driver.select(&origin);
+    assert!(driver.keystroke(Key::Character(" ".into()), Modifiers::empty()));
+    assert!(driver.drawn_under(&origin).len() > 1, "open, its fields");
+}

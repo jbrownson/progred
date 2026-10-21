@@ -842,8 +842,9 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
     assert!(project_runtime(lambda_display, &input).is_some());
     input.pending = Some(Pending::Child(Step::Key(BODY)));
     assert!(project_runtime(lambda_display, &input).is_some());
+    // Another field being added follows the lambda, as its others do.
     input.pending = Some(Pending::Child(Step::Key(new_cell_id())));
-    assert!(project_runtime(lambda_display, &input).is_none());
+    assert!(project_runtime(lambda_display, &input).is_some());
 
     for malformed in [
         Value::record([]),
@@ -861,11 +862,7 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
 fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
     let definition = name::record(
         "tree",
-        [
-            (PARAMS, Value::list([])),
-            (BODY, Value::from(vec![1])),
-            (new_cell_id(), Value::record([])),
-        ],
+        [(PARAMS, Value::list([])), (BODY, Value::from(vec![1]))],
     );
     let layout = project_runtime(lambda_display, &projection_input(&env(), &definition)).unwrap();
     let Recorded::Alternatives(options) = layout.record().content().clone() else {

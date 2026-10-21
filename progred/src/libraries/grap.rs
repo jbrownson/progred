@@ -10,14 +10,15 @@ use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
-use crate::display::structure::{field_label, field_order};
+use crate::display::structure::{field_label, field_order, record_form};
 use crate::display::{
     Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
     activatable, alternatives, col, descend_local, dim, faced, indent, picker, ranked,
     record_fragment_with, row, selectable_bracket, shared,
 };
 use crate::display::{group, group_hug};
-use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
+use ::grap::source::vocabulary::BODY_ORIGIN;
+use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
 pub mod control;
@@ -162,7 +163,7 @@ fn new_parameter(spelling: String) -> Completion {
 
 /// A declaration's cell in parentheses, its name editable there; an empty
 /// name shows `computed` grey in its editor until a name is typed.
-fn declaration_cell<W: Host>(
+pub(crate) fn declaration_cell<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<String>,
 ) -> Option<Layout<W>> {
@@ -344,8 +345,7 @@ pub(crate) fn call_with_function<W: Host>(
     function_projection: Option<Partial<W>>,
 ) -> Option<Layout<W>> {
     // A call's arguments are its parameters, so it takes no new field from
-    // Enter; one being added some other way shows in the plain record view,
-    // as for the other compact forms.
+    // Enter; one being added some other way shows in the plain record view.
     (input.pending != Some(Pending::Field)).then_some(())?;
     let fields = input.value?;
     let function = fields.field(FUNCTION)?;
@@ -407,44 +407,74 @@ pub(crate) fn call_with_function<W: Host>(
 }
 
 /// A stored lambda exposes its parameter declarations deeply and
-/// projects its body as an expression.
+/// projects its body as an expression; its name and body may be missing,
+/// drawn as holes.
 fn lambda_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let fields = input.value?;
-    matches!(
-        &input.pending,
-        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | BODY)))
+    record_form(
+        input,
+        [name::vocabulary::NAME, PARAMS, BODY],
+        &[],
+        |[_, params, _]| {
+            let cells = params?
+                .list_values()?
+                .map(|param| param.as_cell())
+                .collect::<Option<Vec<_>>>()?;
+            let computed = unnamed_parameters(&cells, &|cell| {
+                input.env.resolve(cell).map(|definition| definition.value)
+            });
+            let params = descend_local(
+                [Step::Key(PARAMS)],
+                crate::display::structure::list(Some(crate::display::runtime_partial(
+                    move |input| parameter(input, &computed),
+                ))),
+                &input.default_projection,
+            );
+            let body_site = input.site().below(&[Step::Key(BODY)]);
+            let lambda = descend_local(
+                [Step::Key(name::vocabulary::NAME)],
+                crate::display::partial(lambda_name),
+                &input.default_projection,
+            );
+            let arrow = activatable(crate::display::arrow(), &body_site);
+            let head = row(3.0, [lambda, params, arrow]);
+            Some(group_hug(
+                head,
+                expression_path([Step::Key(BODY)], &input.default_projection),
+                6.0,
+            ))
+        },
     )
-    .then_some(())?;
-    let params = fields.field(PARAMS)?;
-    let cells = params
-        .list_values()?
-        .map(|param| param.as_cell())
-        .collect::<Option<Vec<_>>>()?;
-    let computed = unnamed_parameters(&cells, &|cell| {
-        input.env.resolve(cell).map(|definition| definition.value)
-    });
-    let params = descend_local(
-        [Step::Key(PARAMS)],
-        crate::display::structure::list(Some(crate::display::runtime_partial(move |input| {
-            parameter(input, &computed)
-        }))),
-        &input.default_projection,
-    );
-    let body_site = input.site().below(&[Step::Key(BODY)]);
-    let lambda = descend_local(
-        [Step::Key(name::vocabulary::NAME)],
-        crate::display::partial(lambda_name),
-        &input.default_projection,
-    );
-    let arrow = activatable(crate::display::arrow(), &body_site);
-    let head = row(3.0, [lambda, params, arrow]);
-    Some(group_hug(
-        head,
-        expression_path([Step::Key(BODY)], &input.default_projection),
-        6.0,
-    ))
+}
+
+/// A closure reads as the record it is: its lambda, drawn as a lambda is,
+/// then the environment that closes over, then where its body came from,
+/// as a record shut until it's opened.
+fn closure_display<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    let fields = input.value?;
+    fields.field(LAMBDA)?;
+    fields.field(ENVIRONMENT)?;
+    crate::display::structure::record_layout_led(
+        input,
+        &[LAMBDA, ENVIRONMENT, BODY_ORIGIN],
+        |key| {
+            (key == BODY_ORIGIN).then(|| {
+                crate::display::runtime_partial(|input| {
+                    let open = (input.default_projection)(input)
+                        .or_else(|| crate::display::structure::record_layout(input, |_| None))?;
+                    Some(crate::display::fold::foldable(
+                        Delim::Brace,
+                        None,
+                        |_| true,
+                        open,
+                    ))
+                })
+            })
+        },
+    )
 }
 
 /// A named expression, not a lexical binding. The name slot is always
@@ -452,60 +482,60 @@ fn lambda_display<W: Host>(
 fn value_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let fields = input.value?;
-    fields.field(VALUE)?;
-    matches!(
-        &input.pending,
-        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME | VALUE)))
-    )
-    .then_some(())?;
-    let name = descend_local(
-        [Step::Key(name::vocabulary::NAME)],
-        crate::display::partial(|input| name::editor(input.value?).map(crate::display::line_edit)),
-        &input.default_projection,
-    );
-    let site = input.site().below(&[Step::Key(VALUE)]);
-    Some(group_hug(
-        row(3.0, [name, activatable(dim("="), &site)]),
-        expression_path([Step::Key(VALUE)], &input.default_projection),
-        6.0,
-    ))
+    record_form(input, [name::vocabulary::NAME, VALUE], &[], |[_, value]| {
+        value?;
+        let name = descend_local(
+            [Step::Key(name::vocabulary::NAME)],
+            crate::display::partial(|input| {
+                name::editor(input.value?).map(crate::display::line_edit)
+            }),
+            &input.default_projection,
+        );
+        let site = input.site().below(&[Step::Key(VALUE)]);
+        Some(group_hug(
+            row(3.0, [name, activatable(dim("="), &site)]),
+            expression_path([Step::Key(VALUE)], &input.default_projection),
+            6.0,
+        ))
+    })
 }
 
 /// Foreignness is an evaluator implementation detail. In source, an
 /// FFI callable projects exactly like the cell it names.
 fn ffi_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let ffi = input.value?.field(FFI)?;
-    ffi.as_cell()?;
-    Some(group(shallow_path(
-        [Step::Key(FFI)],
-        &input.default_projection,
-    )))
+    record_form(input, [FFI], &[], |[ffi]| {
+        ffi?.as_cell()?;
+        Some(group(shallow_path(
+            [Step::Key(FFI)],
+            &input.default_projection,
+        )))
+    })
 }
 
 fn evaluate_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let expression = input.value?.field(EVALUATE)?;
-    let result =
-        input
-            .env
-            .evaluate_runtime(&expression, ::grap::DEFAULT_FUEL, &[Step::Key(EVALUATE)]);
-    let expression = shared(expression_path(
-        [Step::Key(EVALUATE)],
-        &input.default_projection,
-    ));
-    let shaft_site = input.site();
-    let shaft = shared(activatable(crate::display::arrow(), &shaft_site));
-    let result = shared(crate::libraries::presentation::result_layout(&result));
-    Some(group(alternatives([
-        row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
-        col(
-            0,
-            2.0,
-            [row(6.0, [expression, shaft]), indent(20.0, result)],
-        ),
-    ])))
+    record_form(input, [EVALUATE], &[], |[expression]| {
+        let result =
+            input
+                .env
+                .evaluate_runtime(&expression?, ::grap::DEFAULT_FUEL, &[Step::Key(EVALUATE)]);
+        let expression = shared(expression_path(
+            [Step::Key(EVALUATE)],
+            &input.default_projection,
+        ));
+        let shaft_site = input.site();
+        let shaft = shared(activatable(crate::display::arrow(), &shaft_site));
+        let result = shared(crate::libraries::presentation::result_layout(&result));
+        Some(group(alternatives([
+            row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
+            col(
+                0,
+                2.0,
+                [row(6.0, [expression, shaft]), indent(20.0, result)],
+            ),
+        ])))
+    })
 }
 
 fn evaluate_foreign(
@@ -604,6 +634,7 @@ pub fn library<W: Host>() -> Library<W> {
             crate::display::runtime_partial(evaluate_display),
             crate::display::fold::folding(crate::display::runtime_partial(call_display)),
             crate::display::runtime_partial(lambda_display),
+            crate::display::runtime_partial(closure_display),
             crate::display::runtime_partial(value_display),
             crate::display::runtime_partial(ffi_display),
             crate::display::runtime_partial(program_display),

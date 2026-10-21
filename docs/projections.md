@@ -120,8 +120,10 @@ identity. The current host partials are Rust callbacks,
 while presentation declarations can apply ordinary Grap callables.
 
 Recognition checks the fields a partial uses, not the absence of unrelated
-fields. Extra metadata may remain unshown in a compact projection; Raw exposes
-the stored record. Missing or malformed required contents decline normally,
+fields. A compact form shows the fields it doesn't draw after it, as a trailing
+record, so it hides nothing: `structure::record_form` takes the fields the form
+draws, handing their values to the drawing in order, and the fields it ignores,
+as metadata will be, which only Raw then shows, and appends the rest. Missing or malformed required contents decline normally,
 without reserving the record or blocking later partials. A convention whose
 tags are mutually exclusive settles a record carrying several of them its own
 way: layout decoding takes the first tag in a fixed precedence and ignores the
@@ -325,8 +327,8 @@ off, Raw among those, every field is unnamed, so order is by identity.
 Grap's `{name: text, value: expression}` wrapper projects as `name = expression`.
 The name slot is always present: a missing name uses Raw's ordinary empty
 picker, where what's typed reads as text. The expression uses the local
-shallow-reference projection. Other metadata does not block recognition, and
-both editors retain their stored field paths. This is a named expression, not a
+shallow-reference projection. Other metadata does not block recognition and
+follows as a trailing record, and both editors retain their stored field paths. This is a named expression, not a
 `let` binding; the evaluator ignores its name. Named numeric facets remain
 independent of this Grap-specific wrapper.
 
@@ -367,8 +369,13 @@ one group. When wrapped, the arrow stays with the stored
 expression and the result is indented underneath. Result children are ordinary
 navigation stops and can be copied and folded independently. An absent result
 projects like any other computed value. Recognition is open like text and f64:
-other fields do not block it, and an earlier partial in the composition wins if
-several match. Raw shows only the stored record. A result containing
+other fields do not block it and follow as a trailing record, and an earlier
+partial in the composition wins if several match. Raw shows only the stored
+record.
+
+A closure, as a result shows one, reads as the record it is, its fields in a
+fixed order: its lambda, drawn as a lambda is, then the environment it closes
+over, then its body origin, shut until it's opened, then any others. A result containing
 another `evaluate` field can invoke that projection again with an ordinary fresh
 evaluation allowance. Ordinary call-shaped values elsewhere, including returned
 ones, remain editable data until explicitly evaluated.
@@ -886,8 +893,7 @@ unquote prefix selects the whole unquote record; its body remains independently
 selectable at the stored field path. The expression
 uses Grap's local shallow-reference projection, while quoted data keeps its
 ordinary projection. Unrelated fields do not block either compact projection;
-Raw still exposes them. Active field insertion falls back to the full record/call
-display. These markers
+they follow it as a trailing record, as does a field being added. These markers
 are display notation only, not new evaluator or text-bridge syntax.
 
 Grap likewise projects a `match` call with a subject and a
@@ -960,8 +966,8 @@ retain a cell identity and resolve its implementation in that receiving
 evaluation. Code origins survive; a closure's creation-time call stack is not
 part of its invocation-time call stack.
 
-Closure GID records also retain an optional `body origin` field beside `body`
-and `environment`. It describes the body's source, not the call that created
+Closure GID records also retain an optional `body origin` field beside
+`lambda` and `environment`. It describes the body's source, not the call that created
 the closure. The ordinary record forms are:
 
 ```text

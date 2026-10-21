@@ -141,6 +141,10 @@ upstream when it can be.
   enum or single reducer.
 - Be resilient to invalid data: projections handle the expected shapes and fall
   back gracefully otherwise, never crashing or hiding data.
+- A custom projection of a record shows the fields it doesn't draw after it, as
+  a trailing record (`structure::record_form`). The fields it draws and any it
+  deliberately hides, such as metadata, are listed explicitly, never found by
+  reading its code.
 - Things should do something reasonable with no special setup. For example, any
   location can be selected, with controls supplying sensible defaults.
 

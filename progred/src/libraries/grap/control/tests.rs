@@ -299,10 +299,11 @@ fn compact_control_projections_recognize_required_fields_in_open_records() {
             let missing = Value::record(decorated.as_record().unwrap().without(key));
             assert!(projection(&projection_input(&NoEval, &(&missing).into())).is_none());
         }
+        // A field being added joins the others after the form.
         let runtime = (&decorated).into();
         let mut input = projection_input(&NoEval, &runtime);
         input.pending = Some(Pending::Field);
-        assert!(projection(&input).is_none());
+        assert!(projection(&input).is_some());
     }
 }
 

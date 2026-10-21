@@ -142,9 +142,9 @@ fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
         Driver::VIEWPORT,
     );
     for (path, typed) in [(&name_path[..], " label"), (&value_path[..], "2")] {
-        // Unrelated metadata does not disqualify the wrapper projection.
+        // Unrelated metadata doesn't disqualify the wrapper; it follows it.
         assert!(
-            !driver
+            driver
                 .drawn_under::<Step>(&[])
                 .iter()
                 .any(|(path, _)| path.last() == Some(&crate::occurrence::Step::Key(metadata)))
@@ -611,7 +611,7 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
 }
 
 #[test]
-fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
+fn quote_prefixes_draw_extra_fields_after_them_and_keep_field_insertion_available() {
     let extra = new_cell_id();
     for root in [
         Value::record([(control::UNQUOTE, text::value("expression"))]),
@@ -631,10 +631,7 @@ fn quote_prefixes_tolerate_extra_fields_and_keep_field_insertion_available() {
         let has_metadata = |frame: &crate::projection::test_support::HoverOutput<crate::Editor>| {
             frame.landmarks.landmark(&[Step::Key(extra)]).is_some()
         };
-        assert!(!has_metadata(&editing_frame(&mut world)));
-        world.model.workspace.document.shown = crate::workspace::Shown::RAW;
         assert!(has_metadata(&editing_frame(&mut world)));
-        world.model.workspace.document.shown = crate::workspace::Shown::ALL;
         world.model.selection = pending_edge(
             &crate::editing::Read {
                 sources: world.sources(),
@@ -715,7 +712,7 @@ fn infix_draws_other_fields_after_it_and_adds_fields_there() {
 }
 
 #[test]
-fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available() {
+fn compact_grap_forms_draw_other_fields_after_them_and_keep_field_insertion_available() {
     let extra = new_cell_id();
     let binder = new_cell_id();
     let mut forms = declarations(binder)
@@ -750,13 +747,6 @@ fn compact_grap_forms_ignore_metadata_but_keep_raw_and_field_insertion_available
             )),
         };
         let mut world = crate::test_editor(doc.clone());
-        assert!(
-            !editing_frame(&mut world)
-                .landmarks
-                .landmark(&[Step::Key(extra)])
-                .is_some()
-        );
-        world.model.workspace.document.shown = crate::workspace::Shown::RAW;
         assert!(
             editing_frame(&mut world)
                 .landmarks

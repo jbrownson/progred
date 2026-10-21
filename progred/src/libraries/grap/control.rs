@@ -7,9 +7,8 @@
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use gid::{CellId, Step, Value};
 
-use crate::display::{
-    RecordField, activatable, alternatives, col, descend_local, dim, record_heads, row, shared,
-};
+use crate::display::structure::record_form;
+use crate::display::{activatable, alternatives, col, descend_local, dim, row, shared};
 use crate::display::{group, group_hug, hug};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
@@ -605,35 +604,44 @@ fn matches_pattern(
 /// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
 fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?;
-    input.pending.is_none().then_some(())?;
-    let function = fields.field(::grap::vocabulary::FUNCTION)?;
-    (function.as_cell()? == vocabulary::MATCH).then_some(())?;
-    fields.field(vocabulary::VALUE)?;
-    let cases = fields.field(vocabulary::CASES)?;
-    cases.list_len()?;
-    let head = row(
-        4.0,
+    record_form(
+        input,
         [
-            crate::libraries::grap::shallow_path(
-                [Step::Key(::grap::vocabulary::FUNCTION)],
-                &input.default_projection,
-            ),
-            crate::libraries::grap::expression_path(
-                [Step::Key(vocabulary::VALUE)],
-                &input.default_projection,
-            ),
+            ::grap::vocabulary::FUNCTION,
+            vocabulary::VALUE,
+            vocabulary::CASES,
         ],
-    );
-    Some(group_hug(
-        head,
-        descend_local(
-            [Step::Key(vocabulary::CASES)],
-            crate::display::structure::list(Some(crate::display::runtime_partial(case_display))),
-            &input.default_projection,
-        ),
-        4.0,
-    ))
+        &[],
+        |[function, value, cases]| {
+            (function?.as_cell()? == vocabulary::MATCH).then_some(())?;
+            value?;
+            cases?.list_len()?;
+            let head = row(
+                4.0,
+                [
+                    crate::libraries::grap::shallow_path(
+                        [Step::Key(::grap::vocabulary::FUNCTION)],
+                        &input.default_projection,
+                    ),
+                    crate::libraries::grap::expression_path(
+                        [Step::Key(vocabulary::VALUE)],
+                        &input.default_projection,
+                    ),
+                ],
+            );
+            Some(group_hug(
+                head,
+                descend_local(
+                    [Step::Key(vocabulary::CASES)],
+                    crate::display::structure::list(Some(crate::display::runtime_partial(
+                        case_display,
+                    ))),
+                    &input.default_projection,
+                ),
+                4.0,
+            ))
+        },
+    )
 }
 
 fn pattern_path<W: Host>(steps: impl AsRef<[Step]> + 'static, default: &Partial<W>) -> Layout<W> {
@@ -644,45 +652,47 @@ fn pattern_path<W: Host>(steps: impl AsRef<[Step]> + 'static, default: &Partial<
     )
 }
 
+/// A binder reads as the record it is, its cell declared; matching reads
+/// only that field, but the others still show.
 fn pattern_binder<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    input.pending.is_none().then_some(())?;
-    let fields = input.value?;
-    let binder = fields.field(vocabulary::BIND)?;
-    binder.as_cell()?;
-    Some(record_heads(
-        [RecordField {
-            label: crate::display::structure::record_label(input, vocabulary::BIND),
-            value: crate::libraries::grap::declaration_path(
-                [Step::Key(vocabulary::BIND)],
-                &input.default_projection,
-            ),
-        }],
-        [],
-    ))
+    input.value?.field(vocabulary::BIND)?.as_cell()?;
+    crate::display::structure::record_layout(input, |key| {
+        (key == vocabulary::BIND).then(|| {
+            crate::display::runtime_partial(|input| {
+                crate::libraries::grap::declaration_cell(input, None)
+            })
+        })
+    })
 }
 
 fn case_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    input.pending.is_none().then_some(())?;
-    input.value?.field(vocabulary::PATTERN)?;
-    input.value?.field(::grap::vocabulary::EXPRESSION)?;
-    let expression_site = input
-        .site()
-        .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
-    let arrow = activatable(crate::display::arrow(), &expression_site);
-    Some(group_hug(
-        crate::display::centered_row(
-            6.0,
-            [
-                pattern_path([Step::Key(vocabulary::PATTERN)], &input.default_projection),
-                arrow,
-            ],
-        ),
-        crate::libraries::grap::expression_path(
-            [Step::Key(::grap::vocabulary::EXPRESSION)],
-            &input.default_projection,
-        ),
-        6.0,
-    ))
+    record_form(
+        input,
+        [vocabulary::PATTERN, ::grap::vocabulary::EXPRESSION],
+        &[],
+        |[pattern, expression]| {
+            pattern?;
+            expression?;
+            let expression_site = input
+                .site()
+                .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
+            let arrow = activatable(crate::display::arrow(), &expression_site);
+            Some(group_hug(
+                crate::display::centered_row(
+                    6.0,
+                    [
+                        pattern_path([Step::Key(vocabulary::PATTERN)], &input.default_projection),
+                        arrow,
+                    ],
+                ),
+                crate::libraries::grap::expression_path(
+                    [Step::Key(::grap::vocabulary::EXPRESSION)],
+                    &input.default_projection,
+                ),
+                6.0,
+            ))
+        },
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -695,17 +705,32 @@ enum BindingForm {
 /// arrangements. Keeping the function field visible makes switching
 /// between the prefix and postfix forms an ordinary graph edit.
 fn bindings_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?;
-    input.pending.is_none().then_some(())?;
-    let function = fields.field(::grap::vocabulary::FUNCTION)?;
-    let form = match function.as_cell()? {
-        vocabulary::LET => Some(BindingForm::Let),
-        vocabulary::WHERE => Some(BindingForm::Where),
-        _ => None,
-    }?;
-    let bindings = fields.field(vocabulary::BINDINGS)?;
-    bindings.list_len()?;
-    fields.field(::grap::vocabulary::EXPRESSION)?;
+    record_form(
+        input,
+        [
+            ::grap::vocabulary::FUNCTION,
+            vocabulary::BINDINGS,
+            ::grap::vocabulary::EXPRESSION,
+        ],
+        &[],
+        |[function, bindings, expression]| {
+            let form = match function?.as_cell()? {
+                vocabulary::LET => Some(BindingForm::Let),
+                vocabulary::WHERE => Some(BindingForm::Where),
+                _ => None,
+            }?;
+            bindings?.list_len()?;
+            expression?;
+            Some(bindings_form(input, form))
+        },
+    )
+}
+
+/// `let`, its bindings before its expression, or `where`, after.
+fn bindings_form<W: Host>(
+    input: &ProjectionInput<'_, W, RuntimeValue>,
+    form: BindingForm,
+) -> Layout<W> {
     let bindings = shared(descend_local(
         [Step::Key(vocabulary::BINDINGS)],
         crate::display::structure::list(Some(crate::display::runtime_partial(binding_display))),
@@ -725,7 +750,7 @@ fn bindings_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Op
                 .site()
                 .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
             let in_marker = shared(activatable(dim("in"), &expression_site));
-            Some(group(alternatives([
+            group(alternatives([
                 row(
                     4.0,
                     [
@@ -743,48 +768,59 @@ fn bindings_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Op
                         hug(in_marker, expression, 4.0),
                     ],
                 ),
-            ])))
+            ]))
         }
-        BindingForm::Where => Some(group(alternatives([
+        BindingForm::Where => group(alternatives([
             row(
                 4.0,
                 [expression.clone(), function.clone(), bindings.clone()],
             ),
             col(0, 2.0, [expression, hug(function, bindings, 4.0)]),
-        ]))),
+        ])),
     }
 }
 
+/// A binding binds a cell or a pattern, whichever it has. One of them being
+/// added has no place in that form, so a plainer view takes it.
 fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?;
-    input.pending.is_none().then_some(())?;
-    let left = match (
-        fields.field(vocabulary::BIND),
-        fields.field(vocabulary::PATTERN),
-    ) {
-        (Some(binder), None) => binder.as_cell().map(|_| {
-            crate::libraries::grap::declaration_path(
-                [Step::Key(vocabulary::BIND)],
-                &input.default_projection,
-            )
-        }),
-        (None, Some(_)) => Some(pattern_path(
-            [Step::Key(vocabulary::PATTERN)],
-            &input.default_projection,
-        )),
-        _ => None,
-    }?;
-    fields.field(vocabulary::VALUE)?;
-    let value_site = input.site().below(&[Step::Key(vocabulary::VALUE)]);
-    let equals = activatable(dim("="), &value_site);
-    Some(group_hug(
-        crate::display::centered_row(6.0, [left, equals]),
-        crate::libraries::grap::expression_path(
-            [Step::Key(vocabulary::VALUE)],
-            &input.default_projection,
-        ),
-        6.0,
-    ))
+    record_form(
+        input,
+        [vocabulary::BIND, vocabulary::PATTERN, vocabulary::VALUE],
+        &[],
+        |[binder, pattern, value]| {
+            (!matches!(
+                input.pending,
+                Some(crate::display::Pending::Child(Step::Key(
+                    vocabulary::BIND | vocabulary::PATTERN
+                )))
+            ))
+            .then_some(())?;
+            let left = match (binder, pattern) {
+                (Some(binder), None) => binder.as_cell().map(|_| {
+                    crate::libraries::grap::declaration_path(
+                        [Step::Key(vocabulary::BIND)],
+                        &input.default_projection,
+                    )
+                }),
+                (None, Some(_)) => Some(pattern_path(
+                    [Step::Key(vocabulary::PATTERN)],
+                    &input.default_projection,
+                )),
+                _ => None,
+            }?;
+            value?;
+            let value_site = input.site().below(&[Step::Key(vocabulary::VALUE)]);
+            let equals = activatable(dim("="), &value_site);
+            Some(group_hug(
+                crate::display::centered_row(6.0, [left, equals]),
+                crate::libraries::grap::expression_path(
+                    [Step::Key(vocabulary::VALUE)],
+                    &input.default_projection,
+                ),
+                6.0,
+            ))
+        },
+    )
 }
 
 fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
@@ -796,52 +832,59 @@ fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option
 
 /// Quote reads as a small structural marker followed by its template,
 /// rather than as a generic call with a redundant `expression` label.
-/// Unrelated fields do not change recognition. Active field insertion
-/// still uses the ordinary record/call projection.
+/// Unrelated fields do not change recognition; they follow the template.
 fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?;
-    input.pending.is_none().then_some(())?;
-    let function = fields.field(::grap::vocabulary::FUNCTION)?;
-    (function.as_cell()? == vocabulary::QUOTE).then_some(())?;
-    fields.field(::grap::vocabulary::EXPRESSION)?;
-    let marker = descend_local(
-        [Step::Key(::grap::vocabulary::FUNCTION)],
-        crate::display::runtime_partial(quote_marker),
-        &input.default_projection,
-    );
-    Some(group(row(
-        2.0,
-        [
-            marker,
-            crate::display::descend([Step::Key(::grap::vocabulary::EXPRESSION)], None, None),
-        ],
-    )))
+    record_form(
+        input,
+        [::grap::vocabulary::FUNCTION, ::grap::vocabulary::EXPRESSION],
+        &[],
+        |[function, expression]| {
+            (function?.as_cell()? == vocabulary::QUOTE).then_some(())?;
+            expression?;
+            let marker = descend_local(
+                [Step::Key(::grap::vocabulary::FUNCTION)],
+                crate::display::runtime_partial(quote_marker),
+                &input.default_projection,
+            );
+            Some(group(row(
+                2.0,
+                [
+                    marker,
+                    crate::display::descend(
+                        [Step::Key(::grap::vocabulary::EXPRESSION)],
+                        None,
+                        None,
+                    ),
+                ],
+            )))
+        },
+    )
 }
 
 /// Unquote marks an expression embedded in a quoted template. Its prefix
 /// is a handle for the whole unquote; the body keeps its own stored location.
 /// A just-inserted unquote is already one, so its empty hole offers code.
 fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?;
-    match &input.pending {
-        None => fields.contains_field(vocabulary::UNQUOTE),
-        Some(crate::display::Pending::Child(Step::Key(field))) => {
-            *field == vocabulary::UNQUOTE && fields.record_len() == Some(0)
+    record_form(input, [vocabulary::UNQUOTE], &[], |[unquote]| {
+        match &input.pending {
+            Some(crate::display::Pending::Child(Step::Key(vocabulary::UNQUOTE))) => {
+                input.value?.record_len() == Some(0)
+            }
+            _ => unquote.is_some(),
         }
-        _ => false,
-    }
-    .then_some(())?;
-    let site = input.site();
-    Some(group(row(
-        2.0,
-        [
-            activatable(dim("`"), &site),
-            crate::libraries::grap::expression_path(
-                [Step::Key(vocabulary::UNQUOTE)],
-                &input.default_projection,
-            ),
-        ],
-    )))
+        .then_some(())?;
+        let site = input.site();
+        Some(group(row(
+            2.0,
+            [
+                activatable(dim("`"), &site),
+                crate::libraries::grap::expression_path(
+                    [Step::Key(vocabulary::UNQUOTE)],
+                    &input.default_projection,
+                ),
+            ],
+        )))
+    })
 }
 
 /// `do [a, b, c]` evaluates as a control form while retaining the
@@ -854,28 +897,31 @@ fn expression_list_display<W: Host>(
     input: &ProjectionInput<'_, W, RuntimeValue>,
     callable: CellId,
 ) -> Option<Layout<W>> {
-    let fields = input.value?;
-    input.pending.is_none().then_some(())?;
-    let function = fields.field(::grap::vocabulary::FUNCTION)?;
-    (function.as_cell()? == callable).then_some(())?;
-    let expressions = fields.field(vocabulary::EXPRESSIONS)?;
-    expressions.list_len()?;
-    Some(group(row(
-        4.0,
-        [
-            crate::libraries::grap::shallow_path(
-                [Step::Key(::grap::vocabulary::FUNCTION)],
-                &input.default_projection,
-            ),
-            descend_local(
-                [Step::Key(vocabulary::EXPRESSIONS)],
-                crate::display::structure::list(Some(crate::display::runtime_partial(
-                    crate::libraries::grap::expression,
-                ))),
-                &input.default_projection,
-            ),
-        ],
-    )))
+    record_form(
+        input,
+        [::grap::vocabulary::FUNCTION, vocabulary::EXPRESSIONS],
+        &[],
+        |[function, expressions]| {
+            (function?.as_cell()? == callable).then_some(())?;
+            expressions?.list_len()?;
+            Some(group(row(
+                4.0,
+                [
+                    crate::libraries::grap::shallow_path(
+                        [Step::Key(::grap::vocabulary::FUNCTION)],
+                        &input.default_projection,
+                    ),
+                    descend_local(
+                        [Step::Key(vocabulary::EXPRESSIONS)],
+                        crate::display::structure::list(Some(crate::display::runtime_partial(
+                            crate::libraries::grap::expression,
+                        ))),
+                        &input.default_projection,
+                    ),
+                ],
+            )))
+        },
+    )
 }
 
 /// What control adds to the Grap library: the names of its cells, its
