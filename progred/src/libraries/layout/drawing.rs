@@ -48,10 +48,10 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                 })),
                 vocabulary::MOVE_TO | vocabulary::LINE_TO => {
                     let Some(x) = context.field(call, vocabulary::X) else {
-                        return Ok(context.missing_argument(vocabulary::X));
+                        return Ok(context.missing_argument(call, vocabulary::X));
                     };
                     let Some(y) = context.field(call, vocabulary::Y) else {
-                        return Ok(context.missing_argument(vocabulary::Y));
+                        return Ok(context.missing_argument(call, vocabulary::Y));
                     };
                     Ok(
                         match (
@@ -78,7 +78,7 @@ fn record(program: grap::RuntimeValue, fuel: usize) -> Record {
                     let Some(paint) =
                         evaluated_field(context, call, environment, vocabulary::PAINT)?
                     else {
-                        return Ok(context.missing_argument(vocabulary::PAINT));
+                        return Ok(context.missing_argument(call, vocabulary::PAINT));
                     };
                     let shape = match context.field(call, vocabulary::SHAPE) {
                         Some(shape) => evaluated_shape(&context.eval(shape, environment)?),

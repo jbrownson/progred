@@ -1115,7 +1115,7 @@ fn thunk(
 /// supplies for each parameter, in declaration order.
 struct CallPlan {
     params: Rc<[CellId]>,
-    arguments: Rc<[Option<Expression>]>,
+    arguments: Rc<[arguments::Argument]>,
     /// The parameters' indices in `table`, the callee environment's, so a
     /// call binds them without looking each one up.
     table: CellIndices,
@@ -1873,12 +1873,19 @@ impl<'a> Context<'a> {
         expression.0.elements.as_deref()
     }
 
-    pub fn missing_argument(&self, cell: CellId) -> Value {
-        absent::with_detail(absent::MISSING_ARGUMENT, absent::CELL, Value::from(cell))
+    /// Why `call` has no argument under `cell`, naming where the call is.
+    pub fn missing_argument(&self, call: &Expression, cell: CellId) -> Value {
+        absent::missing_argument(cell, self.source_origin(call).as_ref())
     }
 
-    pub fn missing_runtime_argument(&self, cell: CellId) -> RuntimeValue {
-        self.missing_argument(cell).into()
+    pub fn missing_runtime_argument(&self, call: &Expression, cell: CellId) -> RuntimeValue {
+        self.missing_argument(call, cell).into()
+    }
+
+    /// `call`'s argument under `label`, or why it has none.
+    pub fn argument(&self, call: &Expression, label: CellId) -> arguments::Argument {
+        self.field(call, label)
+            .ok_or_else(|| self.missing_runtime_argument(call, label))
     }
 
     fn eval_cell_at(
@@ -2218,7 +2225,7 @@ impl<'a> Context<'a> {
     /// Host calls bind argument values as a call expression binds its
     /// evaluated arguments: one step each, with a `function` parameter
     /// receiving the callee itself. A missing argument binds its absence
-    /// without a step.
+    /// without a step, naming no call: a host call has no source.
     fn call_closure(
         &mut self,
         closure: Closure,
@@ -2243,7 +2250,7 @@ impl<'a> Context<'a> {
                             self.burn()?;
                             value
                         }
-                        None => self.missing_runtime_argument(parameter),
+                        None => absent::missing_argument(parameter, None).into(),
                     },
                 ));
                 Ok::<_, Halt>(bound)
@@ -2306,10 +2313,10 @@ impl<'a> Context<'a> {
         let (arguments_plan, indices) = match cached {
             Some(cached) => cached,
             None => {
-                let arguments: Rc<[Option<Expression>]> = closure
+                let arguments: Rc<[arguments::Argument]> = closure
                     .params
                     .iter()
-                    .map(|&parameter| self.field(call, parameter))
+                    .map(|&parameter| self.argument(call, parameter))
                     .collect();
                 let table = closure.environment.indices.clone();
                 let indices: Rc<[CellIndex]> = closure
@@ -2329,26 +2336,19 @@ impl<'a> Context<'a> {
         // A missing argument binds its parameter to its absence, which
         // answers wherever the body uses it, so a body that doesn't still
         // has its value.
-        let arguments = closure
-            .params
-            .iter()
-            .zip(arguments_plan.iter())
-            .zip(indices.iter())
-            .try_fold(
-                Vec::with_capacity(closure.params.len()),
-                |mut arguments, ((&parameter, argument), &index)| {
-                    arguments.push((
-                        index,
-                        match argument {
-                            Some(expression) => {
-                                self.eval(expression.clone(), calling_environment)?
-                            }
-                            None => self.missing_runtime_argument(parameter),
-                        },
-                    ));
-                    Ok::<_, Halt>(arguments)
-                },
-            )?;
+        let arguments = arguments_plan.iter().zip(indices.iter()).try_fold(
+            Vec::with_capacity(closure.params.len()),
+            |mut arguments, (argument, &index)| {
+                arguments.push((
+                    index,
+                    match argument {
+                        Ok(expression) => self.eval(expression.clone(), calling_environment)?,
+                        Err(missing) => missing.clone(),
+                    },
+                ));
+                Ok::<_, Halt>(arguments)
+            },
+        )?;
         self.eval(
             closure.body,
             &closure.environment.extended_indexed(arguments),

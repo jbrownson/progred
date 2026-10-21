@@ -1,3 +1,4 @@
+use crate::SourceOrigin;
 use gid::{CellId, Value};
 
 pub const ABSENT: CellId = CellId::from_u128(0xd9c0a7145a38859a245640d3469cbcd4);
@@ -20,9 +21,25 @@ pub const INVALID_ARGUMENTS: CellId = CellId::from_u128(0xaeb37f359ed1437cbc1ade
 pub const CELL: CellId = CellId::from_u128(0x7ba69298ef92cf954456784b66e86032);
 pub const VALUE: CellId = CellId::from_u128(0xcfeaf191b71e06afef86c27ee43eb936);
 pub const CYCLE: CellId = CellId::from_u128(0x2776d28585d66ef8a747a8bc6dad7381);
+/// Where the call an absent is about is, as [`crate::source`] records an
+/// origin.
+pub const CALL: CellId = CellId::from_u128(0x31232e62ec458b0e6e201f3a7c1c10fe);
 
 pub fn with_detail(reason: CellId, field: CellId, detail: Value) -> Value {
     Value::record([(ABSENT, Value::from(reason)), (field, detail)])
+}
+
+/// Why a call has no argument under `cell`: carrying where the call is,
+/// when it has a source, so the argument's place can be found.
+pub fn missing_argument(cell: CellId, call: Option<&SourceOrigin>) -> Value {
+    Value::record(
+        [
+            (ABSENT, Value::from(MISSING_ARGUMENT)),
+            (CELL, Value::from(cell)),
+        ]
+        .into_iter()
+        .chain(call.map(|call| (CALL, crate::source::value(call)))),
+    )
 }
 
 pub fn value(reason: CellId) -> Value {

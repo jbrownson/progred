@@ -330,7 +330,7 @@ fn a_staged_foreign_prepares_once_per_compiled_call_site() {
             repeat,
             ForeignFunction::new(move |context, call, environment| {
                 let Some(argument) = context.field(call, argument) else {
-                    return Ok(context.missing_runtime_argument(argument));
+                    return Ok(context.missing_runtime_argument(call, argument));
                 };
                 context.eval(argument.clone(), environment)?;
                 context.eval(argument.clone(), environment)
@@ -376,7 +376,7 @@ fn a_staged_call_reprepares_when_a_scoped_function_changes() {
             run_scoped,
             ForeignFunction::new(move |context, call, environment| {
                 let Some(argument) = context.field(call, argument) else {
-                    return Ok(context.missing_runtime_argument(argument));
+                    return Ok(context.missing_runtime_argument(call, argument));
                 };
                 let before = context.eval(argument.clone(), environment)?;
                 let during = context.with_foreign_functions(scoped.clone(), |context| {
@@ -576,7 +576,7 @@ fn rust_functions_control_evaluation_while_graph_functions_are_strict() {
         hold,
         ForeignFunction::from_value(|context, call, _| match context.field(call, INPUT) {
             Some(value) => Ok(context.value(&value).clone()),
-            None => Ok(context.missing_argument(INPUT)),
+            None => Ok(context.missing_argument(call, INPUT)),
         }),
     );
     let graph = lambda([input], Value::from(input));
@@ -602,7 +602,7 @@ fn foreign_registrations_do_not_change_cell_values() {
         ForeignFunction::from_value(|context, call, environment| {
             match context.field(call, INPUT) {
                 Some(value) => context.eval_to_value(value, environment),
-                None => Ok(context.missing_argument(INPUT)),
+                None => Ok(context.missing_argument(call, INPUT)),
             }
         }),
     );
@@ -637,7 +637,7 @@ fn foreign_callables_pass_through_grap_bindings_as_values() {
         ForeignFunction::from_value(|context, call, environment| {
             match context.field(call, INPUT) {
                 Some(value) => context.eval_to_value(value, environment),
-                None => Ok(context.missing_argument(INPUT)),
+                None => Ok(context.missing_argument(call, INPUT)),
             }
         }),
     );
@@ -669,13 +669,13 @@ fn rust_functions_choose_which_raw_operands_to_evaluate() {
         choose,
         ForeignFunction::from_value(|context, call, environment| {
             let Some(condition) = context.field(call, CONDITION) else {
-                return Ok(context.missing_argument(CONDITION));
+                return Ok(context.missing_argument(call, CONDITION));
             };
             let Some(yes) = context.field(call, YES) else {
-                return Ok(context.missing_argument(YES));
+                return Ok(context.missing_argument(call, YES));
             };
             let Some(no) = context.field(call, NO) else {
-                return Ok(context.missing_argument(NO));
+                return Ok(context.missing_argument(call, NO));
             };
             if context.eval_to_value(condition, environment)? == blob("true") {
                 context.eval_to_value(yes, environment)
@@ -743,10 +743,10 @@ fn rust_functions_evaluate_raw_operands_in_extended_environments() {
         bind,
         ForeignFunction::from_value(|context, call, environment| {
             let Some(value) = context.field(call, VALUE) else {
-                return Ok(context.missing_argument(VALUE));
+                return Ok(context.missing_argument(call, VALUE));
             };
             let Some(body) = context.field(call, BODY) else {
-                return Ok(context.missing_argument(BODY));
+                return Ok(context.missing_argument(call, BODY));
             };
             let value = context.eval_to_value(value, environment)?;
             context.eval_to_value(body, &environment.extended([(BINDING, value)]))
@@ -928,10 +928,10 @@ fn foreign_functions_may_consume_the_function_field() {
         function,
         ForeignFunction::from_value(|context, call, _| {
             let Some(function) = context.field(call, vocabulary::FUNCTION) else {
-                return Ok(context.missing_argument(vocabulary::FUNCTION));
+                return Ok(context.missing_argument(call, vocabulary::FUNCTION));
             };
             let Some(value) = context.field(call, PARAMETER) else {
-                return Ok(context.missing_argument(PARAMETER));
+                return Ok(context.missing_argument(call, PARAMETER));
             };
             assert!(context.value(&function).as_cell().is_some());
             Ok(context.value(&value).clone())
@@ -1360,9 +1360,10 @@ fn a_missing_argument_answers_only_where_the_body_uses_it() {
         .result,
         given
     );
+    // It names the call it's missing from, here the evaluation's input.
     assert_eq!(
         evaluate(&call_with_used(unused), |_| None, &foreign, 20).result,
-        absent::with_detail(absent::MISSING_ARGUMENT, absent::CELL, unused.into())
+        absent::missing_argument(unused, Some(&crate::SourceOrigin::Input(vec![])))
     );
 }
 

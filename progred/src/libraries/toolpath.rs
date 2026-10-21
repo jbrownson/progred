@@ -151,7 +151,7 @@ fn background_unavailable<W: Host>(
 fn argument(context: &Context, call: &Expression, field: CellId) -> Result<Expression, Error> {
     context
         .field(call, field)
-        .ok_or_else(|| Error::Invalid(context.missing_runtime_argument(field)))
+        .ok_or_else(|| Error::Invalid(context.missing_runtime_argument(call, field)))
 }
 
 fn number(

@@ -258,7 +258,7 @@ fn set_state(
     staged: &RefCell<PendingChanges>,
 ) -> Result<Value, grap::Halt> {
     let Some(expression) = context.field(call, vocabulary::VALUE) else {
-        return Ok(context.missing_argument(vocabulary::VALUE));
+        return Ok(context.missing_argument(call, vocabulary::VALUE));
     };
     let value = context.eval_to_value(expression, environment)?;
     let value = (!absent::is_absent(&value)).then_some(value.clone());
@@ -279,7 +279,7 @@ fn set_selection(
     staged: &RefCell<PendingChanges>,
 ) -> Result<Value, grap::Halt> {
     let Some(expression) = context.field(call, vocabulary::SELECTION_PATH) else {
-        return Ok(context.missing_argument(vocabulary::SELECTION_PATH));
+        return Ok(context.missing_argument(call, vocabulary::SELECTION_PATH));
     };
     let encoded = context.eval_to_value(expression, environment)?;
     let Some(path) = crate::occurrence::from_value(&encoded) else {
@@ -290,7 +290,7 @@ fn set_selection(
         ));
     };
     let Some(expression) = context.field(call, vocabulary::VALUE) else {
-        return Ok(context.missing_argument(vocabulary::VALUE));
+        return Ok(context.missing_argument(call, vocabulary::VALUE));
     };
     let value = context.eval_to_value(expression, environment)?;
     let mut staged = staged.borrow_mut();

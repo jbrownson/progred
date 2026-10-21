@@ -717,8 +717,10 @@ label once per call site, as a primitive's operands are, then evaluated on each
 call and parsed into the Rust type the function works with (`Parse`), and the
 function's body runs only when every one parses. Otherwise the call returns
 "invalid arguments", carrying under each label why that argument couldn't be used: a
-missing argument, its type's reason carrying the value, or the absent it
-already was, passed on unchanged as the cause. Each type owns its reason, so a
+missing argument, naming its parameter and, under `call`, the origin of the
+call it's missing from, where the call has one; its type's reason carrying the
+value; or the absent it already was, passed on unchanged as the cause. A call
+site's missing arguments are found with the call, once. Each type owns its reason, so a
 function taking several types reports each correctly, and a library's own
 type, such as a list or a PNG, carries its own reason. So `*` with neither
 operand is "invalid arguments" carrying "missing argument" under both `left`
@@ -765,6 +767,11 @@ actual evaluator halts still halt rather than invoking the fallback.
 The absent library draws an absent as its reason's name followed by any other
 fields, such as a failed alternative's `causes`, all on a red wash; each cause
 is washed in turn inside it. An unnamed reason shows its short cell identity.
+A missing argument reads as its reason and its parameter, drawn as a shallow
+reference, then the hole for the argument: a jump to the call's origin and the
+parameter's field there, so the error's hole and the call's are one place.
+Selecting either marks the other, and filling either fills the call. A call
+with no origin, such as one a host makes, has no hole to show.
 
 `do` evaluates its expressions in order, returning the first absent unchanged
 or the last successful value. It short-circuits that sequence, not the evaluator:

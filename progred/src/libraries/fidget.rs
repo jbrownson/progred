@@ -151,7 +151,7 @@ fn preview_value(
 ) -> Result<Value, Halt> {
     let Some(field) = evaluated(context, call, environment, presentation::vocabulary::VALUE)?
     else {
-        return Ok(context.missing_argument(presentation::vocabulary::VALUE));
+        return Ok(context.missing_argument(call, presentation::vocabulary::VALUE));
     };
     let validation = if matches!(marker, vocabulary::PREVIEW_3D | vocabulary::PREVIEW_MESH) {
         scene_objects(&field).map(|_| ())
@@ -271,7 +271,7 @@ fn translate_function(
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(field) = evaluated(context, call, environment, vocabulary::FIELD)? else {
-        return Ok(context.missing_argument(vocabulary::FIELD));
+        return Ok(context.missing_argument(call, vocabulary::FIELD));
     };
     let deltas = [
         vocabulary::DELTA_X,

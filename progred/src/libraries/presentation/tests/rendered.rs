@@ -89,6 +89,59 @@ fn a_missing_cell_named_in_an_error_is_defined_from_the_error() {
 }
 
 #[test]
+fn a_missing_argument_is_given_from_the_error() {
+    use crate::libraries::grap::numbers;
+    let program = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(program, ::grap::call(numbers::f64::MULTIPLY.into(), []));
+    let mut driver = rendered_in_a_pane(program, program.into(), cells);
+    let argument =
+        |label| Location::in_cell(program, gid::Resolution::Document, vec![Step::Key(label)]);
+    let hole = |driver: &Driver, label| {
+        pane_result(
+            driver,
+            &[
+                occurrence::Step::Key(label),
+                occurrence::Step::Key(crate::libraries::absent::vocabulary::CALL),
+                occurrence::Step::jump(argument(label)),
+            ],
+        )
+    };
+    let left = hole(&driver, numbers::vocabulary::LEFT);
+    let in_program = [
+        Step::Key(crate::libraries::grap::vocabulary::GRAP),
+        Step::Follow(gid::Resolution::Document),
+        Step::Key(numbers::vocabulary::LEFT),
+    ];
+    // The error's hole and the program's are one place, drawn twice.
+    assert!(driver.shared(&left).is_some());
+    assert_eq!(driver.shared(&left), driver.shared(&in_program));
+    assert_ne!(
+        driver.shared(&left),
+        driver.shared(&hole(&driver, numbers::vocabulary::RIGHT))
+    );
+    driver.click(&left);
+    assert_eq!(
+        driver.editor().model.selection.as_ref().unwrap().location(),
+        Some(argument(numbers::vocabulary::LEFT))
+    );
+    driver.type_text("2");
+    driver.press(NamedKey::Enter);
+    let call = driver.editor().model.doc.cells.value(program).unwrap();
+    let arguments = call.as_record().unwrap();
+    assert!(
+        arguments.contains_key(&numbers::vocabulary::LEFT),
+        "{call:?}"
+    );
+    assert!(!arguments.contains_key(&numbers::vocabulary::RIGHT));
+    assert!(
+        !driver.drawn(&left),
+        "the left argument is no longer missing"
+    );
+    assert!(driver.drawn(&hole(&driver, numbers::vocabulary::RIGHT)));
+}
+
+#[test]
 fn a_quoted_reference_in_a_result_edits_its_cell() {
     let (program, quoted) = (new_cell_id(), new_cell_id());
     let mut cells = Cells::new();

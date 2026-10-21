@@ -94,7 +94,7 @@ fn do_foreign(
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
-        return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
+        return Ok(context.missing_runtime_argument(call, vocabulary::EXPRESSIONS));
     };
     match context.elements(&expressions) {
         Some(elements) => in_turn(elements, context, environment),
@@ -127,7 +127,7 @@ fn all_foreign(
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
-        return Ok(context.missing_runtime_argument(vocabulary::EXPRESSIONS));
+        return Ok(context.missing_runtime_argument(call, vocabulary::EXPRESSIONS));
     };
     match context.elements(&expressions) {
         Some(elements) => try_map_sized(elements, |expression| {
@@ -144,7 +144,7 @@ fn quote_foreign(
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     let Some(expression) = context.field(call, ::grap::vocabulary::EXPRESSION) else {
-        return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
+        return Ok(context.missing_runtime_argument(call, ::grap::vocabulary::EXPRESSION));
     };
     replace_unquotes(expression, context, environment)
 }
@@ -236,10 +236,10 @@ enum CompiledCases {
 }
 
 fn match_prepare(context: &Context, call: &Expression) -> Stage {
-    let subject = context.field(call, vocabulary::VALUE);
+    let subject = context.argument(call, vocabulary::VALUE);
     let compiled =
         context
-            .field(call, vocabulary::CASES)
+            .argument(call, vocabulary::CASES)
             .map(|cases| match context.elements(&cases) {
                 None => CompiledCases::Deferred(cases),
                 Some(elements) => CompiledCases::Cases(
@@ -261,11 +261,13 @@ fn match_prepare(context: &Context, call: &Expression) -> Stage {
                 ),
             });
     Rc::new(move |context, environment| {
-        let Some(subject) = subject.clone() else {
-            return Ok(context.missing_runtime_argument(vocabulary::VALUE));
+        let subject = match &subject {
+            Ok(subject) => subject.clone(),
+            Err(missing) => return Ok(missing.clone()),
         };
-        let Some(compiled) = &compiled else {
-            return Ok(context.missing_runtime_argument(vocabulary::CASES));
+        let compiled = match &compiled {
+            Ok(compiled) => compiled,
+            Err(missing) => return Ok(missing.clone()),
         };
         let value = context.eval(subject, environment)?;
         match compiled {
@@ -340,8 +342,9 @@ enum CompiledBindings {
 }
 
 fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
-    let compiled = context.field(call, vocabulary::BINDINGS).map(|bindings| {
-        match context.elements(&bindings) {
+    let compiled = context
+        .argument(call, vocabulary::BINDINGS)
+        .map(|bindings| match context.elements(&bindings) {
             None => CompiledBindings::Deferred(bindings),
             Some(elements) => CompiledBindings::Bindings(
                 elements
@@ -367,15 +370,16 @@ fn bindings_prepare(context: &Context, call: &Expression) -> Stage {
                     })
                     .collect(),
             ),
-        }
-    });
-    let expression = context.field(call, ::grap::vocabulary::EXPRESSION);
+        });
+    let expression = context.argument(call, ::grap::vocabulary::EXPRESSION);
     Rc::new(move |context, environment| {
-        let Some(compiled) = &compiled else {
-            return Ok(context.missing_runtime_argument(vocabulary::BINDINGS));
+        let compiled = match &compiled {
+            Ok(compiled) => compiled,
+            Err(missing) => return Ok(missing.clone()),
         };
-        let Some(expression) = expression.clone() else {
-            return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
+        let expression = match &expression {
+            Ok(expression) => expression.clone(),
+            Err(missing) => return Ok(missing.clone()),
         };
         let mut bound = environment.clone();
         let outcome = match compiled {

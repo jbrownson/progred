@@ -39,7 +39,7 @@ pub(super) fn program(
             let closure = context.closure([], expression, environment);
             Ok(::grap::RuntimeValue::record([(LAYOUT_PROGRAM, closure)]))
         }
-        None => Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION)),
+        None => Ok(context.missing_runtime_argument(call, ::grap::vocabulary::EXPRESSION)),
     }
 }
 

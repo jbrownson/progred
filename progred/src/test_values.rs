@@ -61,13 +61,10 @@ pub fn not(reason: CellId, value: Value) -> Value {
     ::grap::absent::with_detail(reason, ::grap::absent::VALUE, value)
 }
 
-/// A missing argument's absent, naming its label.
+/// A missing argument's absent, naming its label and the call it's missing
+/// from, the evaluation's input.
 pub fn missing(label: CellId) -> Value {
-    ::grap::absent::with_detail(
-        ::grap::absent::MISSING_ARGUMENT,
-        ::grap::absent::CELL,
-        label.into(),
-    )
+    ::grap::absent::missing_argument(label, Some(&::grap::SourceOrigin::Input(Vec::new())))
 }
 
 /// A call of each numeric representation's operations, beside the

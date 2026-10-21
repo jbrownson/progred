@@ -4,7 +4,8 @@
 //! carrying under its label why each that didn't couldn't: a missing
 //! argument, its type's reason ("not f64", carrying the value), or the absent
 //! it already was, passed on unchanged as the cause. Like a primitive's, the
-//! arguments are found once per call site rather than on every call.
+//! arguments are found once per call site rather than on every call, and so
+//! is the absence of one that's missing.
 //!
 //! ```ignore
 //! ForeignFunction::with_arguments([START, END], |_, (start, end): (f64, f64)| {
@@ -15,6 +16,10 @@
 use crate::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent};
 use gid::CellId;
 use std::rc::Rc;
+
+/// An argument as a call site gives it: its expression, or, where it gives
+/// none, the missing argument.
+pub type Argument = Result<Expression, RuntimeValue>;
 
 /// A Rust type an argument parses into.
 pub trait Parse: Sized {
@@ -51,7 +56,7 @@ pub trait Signature<const N: usize>: Sized {
     /// "invalid arguments" carrying why each that didn't parse couldn't.
     fn parse(
         context: &mut Context,
-        arguments: [(CellId, Option<&Expression>); N],
+        arguments: [(CellId, &Argument); N],
         environment: &Environment,
     ) -> Result<Result<Self, RuntimeValue>, Halt>;
 }
@@ -71,12 +76,12 @@ impl ForeignFunction {
     {
         let body = Rc::new(body);
         Self::staged(move |context, call| {
-            let arguments = labels.map(|label| (label, context.field(call, label)));
+            let arguments = labels.map(|label| (label, context.argument(call, label)));
             let body = body.clone();
             Rc::new(move |context, environment| {
                 let arguments = arguments
                     .each_ref()
-                    .map(|(label, expression)| (*label, expression.as_ref()));
+                    .map(|(label, argument)| (*label, argument));
                 Ok(match S::parse(context, arguments, environment)? {
                     Ok(values) => body(context, values).into(),
                     Err(invalid) => invalid,
@@ -90,13 +95,12 @@ impl ForeignFunction {
 #[inline]
 fn argument<T: Parse>(
     context: &mut Context,
-    label: CellId,
-    expression: Option<&Expression>,
+    argument: &Argument,
     environment: &Environment,
 ) -> Result<Result<T, RuntimeValue>, Halt> {
-    match expression {
-        Some(expression) => T::eval(context, expression.clone(), environment),
-        None => Ok(Err(context.missing_runtime_argument(label))),
+    match argument {
+        Ok(expression) => T::eval(context, expression.clone(), environment),
+        Err(missing) => Ok(Err(missing.clone())),
     }
 }
 
@@ -120,14 +124,14 @@ macro_rules! signature {
             #[inline]
             fn parse(
                 context: &mut Context,
-                [$(($label, $value)),+]: [(CellId, Option<&Expression>); $count],
+                [$(($label, $value)),+]: [(CellId, &Argument); $count],
                 environment: &Environment,
             ) -> Result<Result<Self, RuntimeValue>, Halt> {
                 // Only each argument's value stays live, so the values that
                 // parse aren't moved through the results around them.
                 let mut invalid = Vec::new();
                 $(
-                    let $value = match argument::<$type>(context, $label, $value, environment)? {
+                    let $value = match argument::<$type>(context, $value, environment)? {
                         Ok(value) => Some(value),
                         Err(why) => {
                             invalid.push(($label, why));

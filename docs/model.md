@@ -279,6 +279,8 @@ hosts use Control+Left/Right for words. Shift extends the selection in each case
 These controls handle movement before structural navigation; affixes remain
 outside the editable span.
 
+Related occurrences are references to the same cell, or occurrences of the same
+location, an empty one included, so a hole drawn in two places marks as one.
 Ordinary hover, selection, and related-occurrence highlights share one padded
 outline. Each occurrence paints at most one mark: selection takes precedence,
 then related selection, direct hover, and related hover. Pending text frames keep

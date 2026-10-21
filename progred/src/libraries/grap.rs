@@ -416,10 +416,10 @@ fn evaluate_foreign(
     calling_environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
     let Some(expression) = context.field(call, ::grap::vocabulary::EXPRESSION) else {
-        return Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION));
+        return Ok(context.missing_runtime_argument(call, ::grap::vocabulary::EXPRESSION));
     };
     let Some(environment) = context.field(call, ::grap::vocabulary::ENVIRONMENT) else {
-        return Ok(context.missing_runtime_argument(::grap::vocabulary::ENVIRONMENT));
+        return Ok(context.missing_runtime_argument(call, ::grap::vocabulary::ENVIRONMENT));
     };
     let environment = context.eval_to_value(environment, calling_environment)?;
     match context.environment(&environment) {

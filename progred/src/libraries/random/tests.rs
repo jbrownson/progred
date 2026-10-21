@@ -97,12 +97,12 @@ fn successive_samples_advance_the_scoped_stream() {
                 .field(call, first_field)
                 .map(|expression| context.eval_to_value(expression, environment))
                 .transpose()?
-                .unwrap_or_else(|| context.missing_argument(first_field));
+                .unwrap_or_else(|| context.missing_argument(call, first_field));
             let second = context
                 .field(call, second_field)
                 .map(|expression| context.eval_to_value(expression, environment))
                 .transpose()?
-                .unwrap_or_else(|| context.missing_argument(second_field));
+                .unwrap_or_else(|| context.missing_argument(call, second_field));
             Ok(Value::list([first, second]))
         }),
     );

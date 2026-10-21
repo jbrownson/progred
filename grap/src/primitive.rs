@@ -4,7 +4,7 @@
 //! the general foreign-call machinery. Resolution, shadowing, fuel and effects
 //! are those of any foreign call.
 
-use crate::arguments::{Parse, Signature};
+use crate::arguments::{Argument, Parse, Signature};
 use crate::{Context, Environment, Expression, ForeignFunction, Halt, RuntimeValue, absent};
 use gid::CellId;
 use std::rc::Rc;
@@ -104,8 +104,8 @@ impl Number for u64 {
     }
 }
 
-/// A call site's operand expressions, in the primitive's label order.
-pub(crate) type Operands = Rc<[Option<Expression>]>;
+/// A call site's operands, in the primitive's label order.
+pub(crate) type Operands = Rc<[Argument]>;
 
 impl Primitive {
     /// The foreign function a library registers for this operation.
@@ -130,14 +130,14 @@ impl Primitive {
     pub(crate) fn operands(&self, context: &Context, call: &Expression) -> Operands {
         self.labels()
             .into_iter()
-            .map(|label| context.field(call, label))
+            .map(|label| context.argument(call, label))
             .collect()
     }
 
     pub(crate) fn run(
         &self,
         context: &mut Context,
-        operands: &[Option<Expression>],
+        operands: &[Argument],
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         match self {
@@ -146,10 +146,7 @@ impl Primitive {
                 left,
                 right,
             } => {
-                let operands = [
-                    (*left, operands[0].as_ref()),
-                    (*right, operands[1].as_ref()),
-                ];
+                let operands = [(*left, &operands[0]), (*right, &operands[1])];
                 match operation {
                     BinaryOperation::F64(operation) => {
                         binary(operation, context, operands, environment)
@@ -163,7 +160,7 @@ impl Primitive {
                 }
             }
             Self::Unary { operation, operand } => {
-                let operand = [(*operand, operands[0].as_ref())];
+                let operand = [(*operand, &operands[0])];
                 match operation {
                     UnaryOperation::F64(operation) => {
                         unary(operation, context, operand, environment)
@@ -183,7 +180,7 @@ impl Primitive {
 fn binary<N: Number>(
     operation: &Binary<N>,
     context: &mut Context,
-    operands: [(CellId, Option<&Expression>); 2],
+    operands: [(CellId, &Argument); 2],
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     Ok(match <(N, N)>::parse(context, operands, environment)? {
@@ -201,7 +198,7 @@ fn binary<N: Number>(
 fn unary<N: Number>(
     operation: &Unary<N>,
     context: &mut Context,
-    operand: [(CellId, Option<&Expression>); 1],
+    operand: [(CellId, &Argument); 1],
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     Ok(match <(N,)>::parse(context, operand, environment)? {

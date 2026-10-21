@@ -71,15 +71,16 @@ fn functions() -> ForeignFunctions {
                 match evaluated(context, call, environment, vocabulary::SEED)?
                     .map_or(Some(0), |seed| u64::read(&seed))
                 {
-                    Some(seed) => match context.field(call, ::grap::vocabulary::EXPRESSION) {
-                        Some(expression) => context
-                            .with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
-                                context.eval(expression, environment)
-                            }),
-                        None => {
-                            Ok(context.missing_runtime_argument(::grap::vocabulary::EXPRESSION))
+                    Some(seed) => {
+                        match context.field(call, ::grap::vocabulary::EXPRESSION) {
+                            Some(expression) => context.with_foreign_functions(
+                                stream(Rc::new(Cell::new(seed))),
+                                |context| context.eval(expression, environment),
+                            ),
+                            None => Ok(context
+                                .missing_runtime_argument(call, ::grap::vocabulary::EXPRESSION)),
                         }
-                    },
+                    }
                     None => Ok(::grap::absent::value(vocabulary::INVALID_SEED).into()),
                 }
             })

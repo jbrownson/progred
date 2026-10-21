@@ -892,21 +892,35 @@ pub fn at<World: 'static, Hover: 'static>(
     at_with_projection(steps, value, None, None)
 }
 
-/// Draw at `steps` the value at a document path from its root: the occurrence
-/// path jumps there, so it and what's below it read and write there.
+/// Draw at `steps` the value at a document path from its root, as
+/// [`jump_at`] does.
 pub fn jump<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     document: impl Into<Vec<Step>>,
 ) -> Layout<World, Hover> {
+    jump_at(
+        steps,
+        crate::location::Location::root(document.into()),
+        None,
+    )
+}
+
+/// Draw at `steps` the value at `location`, by `projection` if given: the
+/// occurrence path jumps there, so it and what's below it read and write
+/// there.
+pub fn jump_at<World: 'static, Hover: 'static>(
+    steps: impl Into<Vec<Step>>,
+    location: crate::location::Location<'static>,
+    projection: Option<Partial<World, Hover>>,
+) -> Layout<World, Hover> {
     let steps = steps.into();
-    let document = crate::location::Location::root(document.into());
     Layout::program(Rc::new(move |context, build| {
         context.project.jump(
             context.text,
             build,
             steps.clone(),
-            document.clone(),
-            None,
+            location.clone(),
+            projection.clone(),
             None,
         )
     }))

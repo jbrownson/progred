@@ -39,7 +39,7 @@ fn evaluated(
 ) -> Result<RuntimeValue, Halt> {
     match context.field(call, field) {
         Some(expression) => context.eval(expression, environment),
-        None => Ok(context.missing_runtime_argument(field)),
+        None => Ok(context.missing_runtime_argument(call, field)),
     }
 }
 
@@ -96,7 +96,7 @@ fn consume(
             None
         } else {
             let Some(expression) = context.field(call, ACTION) else {
-                return Ok(context.missing_runtime_argument(ACTION));
+                return Ok(context.missing_runtime_argument(call, ACTION));
             };
             Some(context.prepare_callable(expression, env)?)
         };

@@ -64,7 +64,7 @@ fn constructor(
     let mut fields = Vec::new();
     for key in [CONTROLS, VIEW, VALUE, WIDTH, HEIGHT] {
         let Some(expression) = context.field(call, key) else {
-            return Ok(context.missing_runtime_argument(key));
+            return Ok(context.missing_runtime_argument(call, key));
         };
         let value = context.eval(expression, environment)?;
         if value.absent_reason().is_some() {
@@ -131,7 +131,7 @@ fn apply_change(
     let staged = RefCell::new(None);
     let update = |_, context: &mut Context<'_>, call: &Expression, environment: &Environment| {
         let Some(expression) = context.field(call, VALUE) else {
-            return Ok(context.missing_argument(VALUE));
+            return Ok(context.missing_argument(call, VALUE));
         };
         let value = context.eval_to_value(expression, environment)?;
         Ok(context.effect(|| {
@@ -471,13 +471,13 @@ fn slider<W: Host>(
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
     let Some(expression) = context.field(call, VALUE) else {
-        return Ok(context.missing_runtime_argument(VALUE));
+        return Ok(context.missing_runtime_argument(call, VALUE));
     };
     let Some(value) = context.eval_f64(expression, environment)? else {
         return Ok(invalid_input());
     };
     let Some(expression) = context.field(call, ON_CHANGE) else {
-        return Ok(context.missing_runtime_argument(ON_CHANGE));
+        return Ok(context.missing_runtime_argument(call, ON_CHANGE));
     };
     let handler = context.eval(expression, environment)?;
     if handler.absent_reason().is_some() {
@@ -512,14 +512,14 @@ fn radio<W: Host>(
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
     let Some(key) = context.field(call, KEY) else {
-        return Ok(context.missing_runtime_argument(KEY));
+        return Ok(context.missing_runtime_argument(call, KEY));
     };
     let key = context.eval(key, environment)?;
     let Some(key) = key.as_cell() else {
         return Ok(invalid_input());
     };
     let Some(expression) = context.field(call, OPTIONS) else {
-        return Ok(context.missing_runtime_argument(OPTIONS));
+        return Ok(context.missing_runtime_argument(call, OPTIONS));
     };
     let options = context.eval_to_value(expression, environment)?;
     let Some(options) = radio_options(&options) else {
@@ -555,14 +555,14 @@ fn tree_range_control<W: Host>(
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
     let Some(key) = context.field(call, KEY) else {
-        return Ok(context.missing_runtime_argument(KEY));
+        return Ok(context.missing_runtime_argument(call, KEY));
     };
     let key = context.eval(key, environment)?;
     let Some(key) = key.as_cell() else {
         return Ok(invalid_input());
     };
     let Some(expression) = context.field(call, ITEMS) else {
-        return Ok(context.missing_runtime_argument(ITEMS));
+        return Ok(context.missing_runtime_argument(call, ITEMS));
     };
     let decorate = stored_item_links(context, expression.clone());
     let items = context.eval_to_value(expression, environment)?;
@@ -587,14 +587,14 @@ fn tree_cursor<W: Host>(
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
     let Some(key) = context.field(call, KEY) else {
-        return Ok(context.missing_runtime_argument(KEY));
+        return Ok(context.missing_runtime_argument(call, KEY));
     };
     let key = context.eval(key, environment)?;
     let Some(key) = key.as_cell() else {
         return Ok(invalid_input());
     };
     let Some(expression) = context.field(call, ITEMS) else {
-        return Ok(context.missing_runtime_argument(ITEMS));
+        return Ok(context.missing_runtime_argument(call, ITEMS));
     };
     let decorate = stored_item_links(context, expression.clone());
     let items = context.eval_to_value(expression, environment)?;
@@ -628,14 +628,14 @@ fn tree_program_cursor<W: Host>(
     widgets: &RefCell<Vec<Widget<W>>>,
 ) -> Result<RuntimeValue, Halt> {
     let Some(key) = context.field(call, KEY) else {
-        return Ok(context.missing_runtime_argument(KEY));
+        return Ok(context.missing_runtime_argument(call, KEY));
     };
     let key = context.eval(key, environment)?;
     let Some(key) = key.as_cell() else {
         return Ok(invalid_input());
     };
     let Some(program) = context.field(call, tree::vocabulary::PROGRAM) else {
-        return Ok(context.missing_runtime_argument(tree::vocabulary::PROGRAM));
+        return Ok(context.missing_runtime_argument(call, tree::vocabulary::PROGRAM));
     };
     let program = context.eval(program, environment)?;
     if program.absent_reason().is_some() {

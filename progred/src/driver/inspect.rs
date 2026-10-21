@@ -284,6 +284,22 @@ impl<P> Driver<P> {
             .landmark(&occurrence(path))
     }
 
+    /// What the last frame's occurrence at `path` shares with the others the
+    /// frame marks beside it when it's selected or hovered.
+    pub(crate) fn shared<S: Clone + Into<Occurs>>(
+        &self,
+        path: &[S],
+    ) -> Option<crate::display::widget::source::Secondary> {
+        let path = occurrence(path);
+        self.runner
+            .frame
+            .dispatch
+            .landmarks
+            .iter()
+            .filter(|landmark| landmark.path == path)
+            .find_map(|landmark| landmark.secondary.clone())
+    }
+
     /// Where `path` is drawn.
     pub(crate) fn rect<S: Clone + Into<Occurs> + std::fmt::Debug>(&self, path: &[S]) -> Rect {
         self.landmark(path)

@@ -148,7 +148,7 @@ fn drawing_projection(
     environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
-        return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
+        return Ok(context.missing_runtime_argument(call, presentation::vocabulary::VALUE));
     };
     Ok(::grap::RuntimeValue::record([(
         vocabulary::DRAWING,
@@ -164,7 +164,7 @@ fn border_projection(
     environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
     let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
-        return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
+        return Ok(context.missing_runtime_argument(call, presentation::vocabulary::PROJECTION));
     };
     let projection = context.eval(projection, environment)?;
     let captured = environment.extended_runtime([(CAPTURED_BORDER_PROJECTION, projection)]);
@@ -190,11 +190,11 @@ fn apply_border_projection(
     environment: &Environment,
 ) -> Result<::grap::RuntimeValue, Halt> {
     let Some(projection) = context.field(call, presentation::vocabulary::PROJECTION) else {
-        return Ok(context.missing_runtime_argument(presentation::vocabulary::PROJECTION));
+        return Ok(context.missing_runtime_argument(call, presentation::vocabulary::PROJECTION));
     };
     let projection = context.eval(projection, environment)?;
     let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
-        return Ok(context.missing_runtime_argument(presentation::vocabulary::VALUE));
+        return Ok(context.missing_runtime_argument(call, presentation::vocabulary::VALUE));
     };
     let value = context.eval(value, environment)?;
     let projected =

@@ -910,24 +910,23 @@ fn prepare_value(
             // the frame marks those sharing the selected or hovered one's.
             // Where the path past the nearest followed cell, or from the root,
             // is the data's own, it says what's shared without reading it.
+            // An empty place shares its location too, so a hole drawn in two
+            // places is one hole.
             let descends = path.data_from(ancestors.enclosing.map_or(0, |(_, _, start)| start));
-            let secondary = value.and_then(|value| {
-                Some(if descends {
-                    Secondary::from_context(
-                        landmark_path.clone(),
-                        value.as_cell(),
-                        ancestors.enclosing,
-                    )
-                } else if let Some(cell) = value.as_cell() {
-                    // A reference names its cell even in a computed result.
-                    Secondary::Cell(cell)
-                } else {
-                    Secondary::from_location(
-                        &cx.sources,
-                        &crate::occurrence::location(&path.to_vec())?,
-                    )
-                })
-            });
+            let cell = value.and_then(grap::RuntimeValue::as_cell);
+            let secondary = if descends {
+                Some(Secondary::from_context(
+                    landmark_path.clone(),
+                    cell,
+                    ancestors.enclosing,
+                ))
+            } else if let Some(cell) = cell {
+                // A reference names its cell even in a computed result.
+                Some(Secondary::Cell(cell))
+            } else {
+                path.location()
+                    .map(|location| Secondary::from_location(&cx.sources, &location))
+            };
             // A landmark, not a target: highlight and keyboard reach span
             // the full bounds, while clicks belong to the content each arm
             // claimed above — structural whitespace deselects.
