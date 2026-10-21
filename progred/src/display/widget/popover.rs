@@ -13,8 +13,8 @@ pub fn popover<World: 'static, Hover: Clone + PartialEq + 'static>(
     trigger: Layout<World, Hover>,
     content: Layout<World, Hover>,
 ) -> Layout<World, Hover> {
-    floating(trigger, card(content), |scale, anchor, extent| {
-        position(anchor, extent, 4.0 * scale)
+    floating(trigger, card(content), |scale, anchor, extent, bounds| {
+        position(anchor, extent, bounds, 4.0 * scale)
     })
 }
 
@@ -47,13 +47,11 @@ pub fn card_border(scale: f64) -> Stroke {
     Stroke::new(scale)
 }
 
-pub fn position(anchor: Placement, extent: Extent, gap: f64) -> Option<Placement> {
-    (!anchor.clipped_out()).then(|| {
-        Placement::new(
-            rect(anchor.rect, extent.size(), anchor.clip_rect, gap),
-            anchor.clip_rect,
-        )
-    })
+/// A card of `extent` against `anchor`, within `bounds`; none while the
+/// anchor is clipped out.
+pub fn position(anchor: Placement, extent: Extent, bounds: Rect, gap: f64) -> Option<Placement> {
+    (!anchor.clipped_out())
+        .then(|| Placement::new(rect(anchor.rect, extent.size(), bounds, gap), bounds))
 }
 
 pub fn rect(anchor: Rect, size: Size, bounds: Rect, gap: f64) -> Rect {

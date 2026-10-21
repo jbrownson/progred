@@ -9,7 +9,8 @@ fn view_scope_hides_other_views_hover_without_hiding_input() {
     use ui_events::pointer::{PointerState, PointerUpdate};
     let own = Root::document();
     let other = Root::pane(vec![gid::Step::Key(gid::new_cell_id())]);
-    let mut pass: HoverPass<Vec<(u8, Option<u8>)>, u8> = HoverPass::new(&Default::default());
+    let mut pass: HoverPass<Vec<(u8, Option<u8>)>, u8> =
+        HoverPass::new(&Default::default(), Rect::ZERO);
     for (id, root) in [(1, own.clone()), (2, other)] {
         pass.in_view(root, |pass| {
             pass.visit(|output| {
@@ -103,7 +104,7 @@ fn hover_runs_in_paint_order_and_handlers_run_front_to_back() {
 
 #[test]
 fn a_frame_can_discard_paint_and_still_dispatch() {
-    let mut pass = HoverPass::<usize, ()>::new(&Default::default());
+    let mut pass = HoverPass::<usize, ()>::new(&Default::default(), Rect::ZERO);
     pass.visit(|output| {
         output.render(|_, _| panic!("paint is optional"));
         output.after_hover(|_, effects| {
@@ -139,10 +140,13 @@ fn nested_floaters_follow_their_parent_before_later_siblings() {
             });
         });
     }
-    let mut pass = HoverPass::new(&HoverInput {
-        pointer: Some(Point::new(5.0, 5.0)),
-        ..Default::default()
-    });
+    let mut pass = HoverPass::new(
+        &HoverInput {
+            pointer: Some(Point::new(5.0, 5.0)),
+            ..Default::default()
+        },
+        Rect::ZERO,
+    );
     pass.float(|pass| {
         mark(pass, 1);
         pass.float(|pass| mark(pass, 2));
@@ -201,7 +205,7 @@ fn retained_probes_preserve_order_clipping_retention_shapes_and_view_ownership()
             });
         });
     };
-    let mut pass = HoverPass::new(&Default::default());
+    let mut pass = HoverPass::new(&Default::default(), Rect::ZERO);
     layout(&mut pass);
     let retained = pass.finish().bind(Default::default()).hover_geometry;
     for (point, prior, expected) in [
@@ -240,7 +244,7 @@ fn retained_probes_preserve_order_clipping_retention_shapes_and_view_ownership()
             reach_px: 4.0,
             ..Default::default()
         };
-        let mut pass = HoverPass::new(&input);
+        let mut pass = HoverPass::new(&input, Rect::ZERO);
         layout(&mut pass);
         assert_eq!(pass.finish().claim, expected);
         assert_eq!(

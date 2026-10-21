@@ -543,7 +543,8 @@ fn every_input_receives_the_installed_dispatch_context() {
         runner.refresh_frame(1.0, VIEWPORT);
         let root = runner.editor.model.workspace.document_root().clone();
         let hover = crate::frame::Hovered::Blocked;
-        let mut pass = crate::display::widget::HoverPass::<(), _>::new(&Default::default());
+        let mut pass =
+            crate::display::widget::HoverPass::<(), _>::new(&Default::default(), Rect::ZERO);
         pass.in_view(root.clone(), |pass| {
             pass.visit(|output| {
                 output.claim(puri::hover::Probe::exact(

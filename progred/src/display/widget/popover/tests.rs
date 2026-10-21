@@ -1,14 +1,14 @@
 use super::*;
 
 #[test]
-fn placement_uses_the_ancestor_clip_and_skips_an_offscreen_anchor() {
+fn placement_stays_in_bounds_and_skips_an_offscreen_anchor() {
     let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
     let extent = Extent {
         width: 30.0,
         ascent: 0.0,
         descent: 40.0,
     };
-    let place = |rect| position(Placement::new(rect, bounds), extent, 4.0);
+    let place = |rect| position(Placement::new(rect, bounds), extent, bounds, 4.0);
     assert_eq!(
         place(Rect::new(85.0, 5.0, 95.0, 15.0)),
         Some(Placement::new(Rect::new(70.0, 19.0, 100.0, 59.0), bounds))
@@ -18,6 +18,18 @@ fn placement_uses_the_ancestor_clip_and_skips_an_offscreen_anchor() {
         Some(Placement::new(Rect::new(70.0, 41.0, 100.0, 81.0), bounds))
     );
     assert_eq!(place(Rect::new(110.0, 0.0, 120.0, 10.0)), None);
+    // An anchor in a narrower pane still floats to the bounds' edge, over
+    // the pane beside it.
+    let pane = Rect::new(0.0, 0.0, 50.0, 100.0);
+    assert_eq!(
+        position(
+            Placement::new(Rect::new(40.0, 5.0, 48.0, 15.0), pane),
+            extent,
+            bounds,
+            4.0
+        ),
+        Some(Placement::new(Rect::new(40.0, 19.0, 70.0, 59.0), bounds))
+    );
 }
 
 #[test]

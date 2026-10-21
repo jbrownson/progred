@@ -118,7 +118,9 @@ content uses `attach`: only the base contributes to surrounding width, and
 the consumer supplies how the two settled subtrees place. Popover styling,
 position, occlusion, and raising remain Progred policy.
 The display builder's `floating` operation supplies only two boxes and a
-positioning function. The ordinary [popover widget](../progred/src/display/widget/popover.rs)
+positioning function, which gets the anchor's placement and the bounds floats
+may use: the whole frame, so a card opened in a pane can extend over the pane
+beside it. The ordinary [popover widget](../progred/src/display/widget/popover.rs)
 composes its padding, panel ink, and input blocking explicitly; the layout
 interpreter does not add these to a floating box.
 

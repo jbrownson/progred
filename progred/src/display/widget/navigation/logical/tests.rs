@@ -384,9 +384,7 @@ fn views_with_identical_paths_arrive_through_their_own_landmarks() {
         Root::document(),
         Root::pane(vec![gid::Step::Key(gid::new_cell_id())]),
     ];
-    let mut pass = HoverPass::<Vec<usize>, ()>::new(&HoverInput {
-        ..Default::default()
-    });
+    let mut pass = HoverPass::<Vec<usize>, ()>::new(&HoverInput::default(), kurbo::Rect::ZERO);
     for (view, root) in views.into_iter().enumerate() {
         pass.in_view(root, |pass| {
             for (index, path) in paths.iter().enumerate() {

@@ -1025,13 +1025,11 @@ fn project_frame(
                     }
                 });
             });
-            container::floating(stage, popup, move |placement, extent| {
-                let x = x
-                    .min(placement.clip_rect.x1 - extent.width)
-                    .max(placement.clip_rect.x0);
+            container::floating(stage, popup, move |_, extent, bounds| {
+                let x = x.min(bounds.x1 - extent.width).max(bounds.x0);
                 Some(Placement::new(
                     extent.rect_at(Point::new(x, content_viewport.y0)),
-                    placement.clip_rect,
+                    bounds,
                 ))
             })
         }

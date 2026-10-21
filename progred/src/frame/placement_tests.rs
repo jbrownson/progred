@@ -382,8 +382,8 @@ fn popover_content_is_out_of_flow_and_raised_over_the_frame() {
             p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
         },
     );
-    let popup = floating(trigger, content, |placement, extent| {
-        crate::display::widget::popover::position(placement, extent, 2.0)
+    let popup = floating(trigger, content, |placement, extent, bounds| {
+        crate::display::widget::popover::position(placement, extent, bounds, 2.0)
     });
 
     assert_eq!(popup.extent.width, 10.0);
@@ -671,14 +671,17 @@ fn a_floater_keeps_its_view_when_it_covers_another_view() {
         floating(
             leaf(extent, |_: &mut Placed<'_, '_, Vec<&'static str>>, _| {}),
             row("popup"),
-            move |_, _| Some(Placement::new(popup_rect, bounds)),
+            move |_, _, _| Some(Placement::new(popup_rect, bounds)),
         ),
         owner.clone(),
     );
-    let mut pass = HoverPass::new(&HoverInput {
-        pointer: Some(popup_rect.center()),
-        ..Default::default()
-    });
+    let mut pass = HoverPass::new(
+        &HoverInput {
+            pointer: Some(popup_rect.center()),
+            ..Default::default()
+        },
+        bounds,
+    );
     measured::place_into(
         owner_view,
         Placement::new(extent.rect_at(Point::ZERO), bounds),
@@ -754,15 +757,18 @@ fn native_floaters_keep_their_view_and_raise_above_later_content() {
     let widget = container::floating(
         widget::leaf(Extent::default(), |_, _| {}),
         popup,
-        move |_, _| Some(Placement::new(rect, bounds)),
+        move |_, _, _| Some(Placement::new(rect, bounds)),
     );
     let native = measured::leaf_into(widget.extent, move |placement, pass| {
         measured::place_into(widget, placement, pass)
     });
-    let mut pass = HoverPass::new(&HoverInput {
-        pointer: Some(rect.center()),
-        ..Default::default()
-    });
+    let mut pass = HoverPass::new(
+        &HoverInput {
+            pointer: Some(rect.center()),
+            ..Default::default()
+        },
+        bounds,
+    );
     measured::place_into(
         in_view(native, owner.clone()),
         Placement::root(bounds),

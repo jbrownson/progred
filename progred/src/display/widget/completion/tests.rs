@@ -88,7 +88,8 @@ fn completion_popup_meets_the_painted_field_border_above_and_below() {
                 |_| Some(0.0),
                 |_, _| {},
             );
-            let floated = placement(Placement::new(field, bounds), layout.extent, scale).unwrap();
+            let floated =
+                placement(Placement::new(field, bounds), layout.extent, bounds, scale).unwrap();
             let mut drawn = paint(place(layout, floated, &Default::default()));
             primary_highlight(
                 styles.palette,

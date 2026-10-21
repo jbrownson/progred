@@ -626,13 +626,16 @@ pub fn overlay<World: 'static, Hover: 'static>(
     })
 }
 
+/// Where floating content goes, from the scale, its anchor's placement, its
+/// extent, and the bounds floats may use.
 pub type FloatingPosition =
-    Rc<dyn Fn(f64, uig::Placement, measured::Extent) -> Option<uig::Placement>>;
+    Rc<dyn Fn(f64, uig::Placement, measured::Extent, kurbo::Rect) -> Option<uig::Placement>>;
 
 pub fn floating<World: 'static, Hover: 'static>(
     base: Layout<World, Hover>,
     content: Layout<World, Hover>,
-    position: impl Fn(f64, uig::Placement, measured::Extent) -> Option<uig::Placement> + 'static,
+    position: impl Fn(f64, uig::Placement, measured::Extent, kurbo::Rect) -> Option<uig::Placement>
+    + 'static,
 ) -> Layout<World, Hover> {
     let position: FloatingPosition = Rc::new(position);
     Layout::new(move |builder| {

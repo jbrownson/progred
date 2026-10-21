@@ -210,11 +210,15 @@ pub struct HoverPass<C, H> {
     root: Option<Root>,
     output: HoverOutput<C, H>,
     floaters: Vec<Box<dyn FnOnce(&mut Self)>>,
+    /// Where floating placements may go: the whole frame, not the view or
+    /// clip their anchor is in.
+    bounds: Rect,
     pub(super) navigation: Collector,
 }
 
 impl<C: 'static, H: 'static> HoverPass<C, H> {
-    pub fn new(input: &HoverInput<'_, H>) -> Self
+    /// A pass over a frame within `bounds`.
+    pub fn new(input: &HoverInput<'_, H>, bounds: Rect) -> Self
     where
         H: Clone,
     {
@@ -227,8 +231,14 @@ impl<C: 'static, H: 'static> HoverPass<C, H> {
             root: None,
             output: HoverOutput::default(),
             floaters: Vec::new(),
+            bounds,
             navigation: Collector::default(),
         }
+    }
+
+    /// Where floating placements may go.
+    pub(crate) fn bounds(&self) -> Rect {
+        self.bounds
     }
 
     pub(crate) fn visit(&mut self, step: impl FnOnce(&mut HoverContext<'_, C, H>)) {
@@ -335,7 +345,7 @@ pub fn place<C: 'static, H: Clone + 'static>(
     placement: Placement,
     input: &HoverInput<'_, H>,
 ) -> HoverOutput<C, H> {
-    let mut pass = HoverPass::new(input);
+    let mut pass = HoverPass::new(input, placement.clip_rect);
     measured::place_into(layout, placement, &mut pass);
     pass.finish()
 }

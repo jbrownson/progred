@@ -2,21 +2,23 @@
 
 use super::HoverPass;
 
-use kurbo::{Point, Vec2};
+use kurbo::{Point, Rect, Vec2};
 use measured::{Extent, Measured};
 use puri::handler::{Event, EventOutcome, Handler, HasHandler, ScrollOutcome};
 use ui_events::pointer::PointerScrollEvent;
 use uig::Placement;
 
+/// `content` floating over `base`, where `place` puts it from `base`'s
+/// placement, its extent, and the bounds floats may use.
 pub fn floating<W: 'static, H: 'static>(
     base: Measured<HoverPass<W, H>>,
     content: Measured<HoverPass<W, H>>,
-    place: impl FnOnce(Placement, Extent) -> Option<Placement> + 'static,
+    place: impl FnOnce(Placement, Extent, Rect) -> Option<Placement> + 'static,
 ) -> Measured<HoverPass<W, H>> {
     let extent = content.extent;
     measured::around_into(base, move |placement, base, output| {
         base.place_into(output);
-        if let Some(placement) = place(placement, extent) {
+        if let Some(placement) = place(placement, extent, output.bounds()) {
             output.float(move |output| measured::place_into(content, placement, output));
         }
     })

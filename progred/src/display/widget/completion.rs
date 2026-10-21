@@ -6,7 +6,7 @@ use crate::hover::Hover;
 use super::offers::Entry;
 use super::style::{Styles, face_style, primary_highlight_stroke};
 use super::{container, extent, leaf, popover, scroll};
-use kurbo::{Insets, Point, Size, Vec2};
+use kurbo::{Insets, Point, Rect, Size, Vec2};
 use measured::{Extent, Measured, col, pad};
 use puri::handler::HasHandler;
 use puri::hover::Probe;
@@ -23,10 +23,10 @@ pub struct State {
     pub scroll: f64,
 }
 
-/// Where the card for a query drawn in `field` floats: against the field's
-/// selection ring, below it or above, as [`popover::shortened`] decides.
-/// None when the field is clipped out.
-pub fn placement(field: Placement, extent: Extent, scale: f64) -> Option<Placement> {
+/// Where the card for a query drawn in `field` floats within `bounds`:
+/// against the field's selection ring, below it or above, as
+/// [`popover::shortened`] decides. None when the field is clipped out.
+pub fn placement(field: Placement, extent: Extent, bounds: Rect, scale: f64) -> Option<Placement> {
     (!field.clipped_out()).then(|| {
         let ring_outset = primary_highlight_stroke(scale).width / 2.0;
         let anchor = text_frame::outline(scale, field.rect)
@@ -41,14 +41,11 @@ pub fn placement(field: Placement, extent: Extent, scale: f64) -> Option<Placeme
                 extent.width + 2.0 * border_outset,
                 extent.height() + 2.0 * border_outset,
             ),
-            field.clip_rect,
+            bounds,
             0.0,
             anchor.height(),
         );
-        Placement::new(
-            outer.inflate(-border_outset, -border_outset),
-            field.clip_rect,
-        )
+        Placement::new(outer.inflate(-border_outset, -border_outset), bounds)
     })
 }
 

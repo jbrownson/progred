@@ -162,8 +162,8 @@ fn floating_boxes_are_inert_and_popover_cards_explicitly_add_padding_and_occlusi
             let floating = if card {
                 crate::display::popover(trigger, content)
             } else {
-                crate::display::floating(trigger, content, |scale, anchor, extent| {
-                    widget::popover::position(anchor, extent, 4.0 * scale)
+                crate::display::floating(trigger, content, |scale, anchor, extent, bounds| {
+                    widget::popover::position(anchor, extent, bounds, 4.0 * scale)
                 })
             };
             Some(crate::display::overlay([

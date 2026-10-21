@@ -176,7 +176,7 @@ fn floaters_are_out_of_flow_and_only_place_when_requested() {
             capture.borrow_mut().push(placement)
         });
         let overlay = Placement::root(Rect::new(20.0, 30.0, 120.0, 130.0));
-        let widget = floating(base, child, move |_, extent| {
+        let widget = floating(base, child, move |_, extent, _| {
             assert_eq!(extent.width, 100.0);
             show.then_some(overlay)
         });

@@ -318,8 +318,8 @@ fn located_query<W: Host>(
             }
         });
     });
-    super::container::floating(trigger, card, move |placement, extent| {
-        crate::display::widget::completion::placement(placement, extent, scale)
+    super::container::floating(trigger, card, move |placement, extent, bounds| {
+        crate::display::widget::completion::placement(placement, extent, bounds, scale)
     })
 }
 
