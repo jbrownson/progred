@@ -3,6 +3,16 @@
 How to work on Progred. Design and implementation details live in the docs and
 the code; this file points to them rather than repeating them.
 
+## Model what you mean
+
+This matters more than anything else here. The owner optimizes for honesty
+the way others optimize for speed or memory. When something new needs saying,
+give it its own name, step or type, rather than encoding it in a mechanism that
+means something else: a jump to where you already are, a sentinel value, a
+telling shape of existing data. An overloaded mechanism carries a hidden
+meaning that its next user trips over; an honest model composes, and speed and
+robustness tend to follow.
+
 ## Key files
 
 - `MOTIVATION.md`: why this implementation exists, and its design style of
