@@ -126,18 +126,18 @@ fn parameter<W: Host>(
     }
 }
 
-/// A new parameter named `spelling`, then selected; with no spelling, its
-/// empty name is selected to type into.
+/// A new parameter named `spelling`, then selected; with no spelling, it
+/// has no name, and its name is picked next.
 fn new_parameter(spelling: String) -> Completion {
     let named = !spelling.is_empty();
-    let name = [
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(name::vocabulary::NAME),
-    ];
-    let then = crate::selection::at(
-        if named { &[][..] } else { &name[..] },
-        crate::selection::payload::edge(),
-    );
+    let then = if named {
+        crate::selection::at(&[], crate::selection::payload::edge())
+    } else {
+        crate::selection::pending_at(&[
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(name::vocabulary::NAME),
+        ])
+    };
     let display = if named {
         spelling.clone()
     } else {
@@ -145,7 +145,12 @@ fn new_parameter(spelling: String) -> Completion {
     };
     let offer = Completion::new(display, move |session| {
         if let Some(picking) = session.pending() {
-            picking.commit_new_cell(name::record(&spelling, []), Some(then.clone()));
+            let definition = if spelling.is_empty() {
+                Value::record([])
+            } else {
+                name::record(&spelling, [])
+            };
+            picking.commit_new_cell(definition, Some(then.clone()));
         }
     });
     if named {
@@ -173,12 +178,21 @@ fn declaration_cell<W: Host>(
     )))
 }
 
+/// A declaration's name, there or not: a missing one is a hole for one. A
+/// name that isn't text, or another field being added, declines.
 fn declaration_name<W: Host>(
     input: &ProjectionInput<'_, W>,
     computed: Option<&str>,
 ) -> Option<Layout<W>> {
-    input.pending.is_none().then_some(())?;
-    name::read(input.value?)?;
+    matches!(
+        &input.pending,
+        None | Some(Pending::Child(Step::Key(name::vocabulary::NAME)))
+    )
+    .then_some(())?;
+    let value = input.value?;
+    if value.as_record()?.contains_key(&name::vocabulary::NAME) {
+        name::read(value)?;
+    }
     Some(descend_local(
         [Step::Key(name::vocabulary::NAME)],
         name::projection(computed.map(str::to_owned)),
@@ -191,7 +205,7 @@ fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
         Some(value) => crate::display::line_edit(name::editor(value)?),
         // Naming an anonymous lambda is clickable, not an arrow-navigation
         // stop; selected, it's an empty name to type into.
-        None if input.selection.is_some() => name::hole(),
+        None if input.selection.is_some() => name::hole(None),
         None => {
             let site = input.site();
             activatable(faced("λ", Face::Name), &site)

@@ -217,14 +217,18 @@ The lambda projection accepts that unfinished shape and descends into the body
 to show its ordinary empty picker; neither a body nor a name is fabricated.
 An empty parameter slot offers only a new parameter, a new document cell: for
 whatever is typed, `x — new parameter`, named `x`; with nothing typed, `new
-parameter`, whose empty name is selected so typing goes into it.
+parameter`, which has no name yet, and whose name is picked next.
 
 A parameter with no name of its own, or an empty one, is called what its list
 calls it: in order, the first of a, b, c… that none of the list's named
 parameters uses. The name is computed wherever it's shown and never stored, and
-it's drawn grey: in the declaration as the empty name editor's placeholder,
-which typing replaces, in references to the parameter, and in offers. A line
-editor's placeholder (`LineEdit::placeholder`) shows dim where its text goes
+it's drawn grey: in the declaration as the placeholder in its name's hole (or
+its empty name's editor), which typing replaces, in references to the
+parameter, and in offers. A declaration descends into its name whether it has
+one or not, so a missing name is an ordinary hole to pick; nothing typed offers
+no name, since an empty one names nothing. A hole's placeholder
+(`Picker::placeholder`) shows dim in its frame and in its query until something
+is typed; a line editor's (`LineEdit::placeholder`) shows where its text goes
 while there's none, the caret before it. A
 reference finds its list by walking out from where it's stored, the same walk a
 slot's offers make to find what's in scope, so each list names its own; an

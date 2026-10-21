@@ -19,11 +19,16 @@ fn a_plain_missing_name_selection_offers_and_commits_text() {
             payload.clone(),
         );
         assert!(selected.edit().is_none());
+        assert!(
+            projected_completion_entries(&doc, &selected).is_empty(),
+            "nothing typed offers no name: an empty one names nothing"
+        );
+        assert_eq!(selected.payload(), payload);
+        let selected = crate::selection::pending_with_query(crate::occurrence::of(&path), "w");
         let entries = projected_completion_entries(&doc, &selected);
         assert_eq!(entries.len(), 1);
         let world = activate_projected(&doc, &selected, &entries[0]);
-        assert_eq!(selected.payload(), payload);
-        assert_eq!(world.sources().resolve_path(&path), Some(&text::value("")));
+        assert_eq!(world.sources().resolve_path(&path), Some(&text::value("w")));
         assert_eq!(
             world
                 .model
@@ -68,7 +73,6 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
     use crate::libraries::grap::vocabulary::GRAP;
     use grap::vocabulary::{BODY, PARAMS};
 
-    let libraries = core_libraries();
     let cell = new_cell_id();
     let doc = Document {
         root: Some(Value::record([(GRAP, cell.into())])),
@@ -109,12 +113,12 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
         assert!(crate::occurrence::read(&world.sources(), &name_path).is_none());
         assert!(editing_frame(&mut world).completion.is_some());
 
-        let name_selection = make_projected_selection(&world.model.doc, &libraries, name_path);
+        let name_selection = crate::selection::pending_with_query(name_path, "area");
         let names = projected_completion_entries(&world.model.doc, &name_selection);
         assert_eq!(names.len(), 1);
         assert_eq!(
             inserted_value(&world.model.doc, &name_selection, &names[0]),
-            Some(text::value(""))
+            Some(text::value("area"))
         );
         assert!(
             doc.cells.value(cell).is_none(),

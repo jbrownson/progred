@@ -30,6 +30,9 @@ pub struct Picker<W> {
     /// Typed into an empty query, each chooses its offer at once, as Raw's
     /// brackets make its constructors. Elsewhere a delimiter is text.
     pub keys: Vec<(&'static str, Completion)>,
+    /// Shown dim in the hole, and in its query while nothing is typed: what
+    /// the place is called without a value, never stored.
+    pub placeholder: Option<String>,
 }
 
 impl<W> Clone for Picker<W> {
@@ -38,6 +41,7 @@ impl<W> Clone for Picker<W> {
             kind: self.kind,
             offers: self.offers.clone(),
             keys: self.keys.clone(),
+            placeholder: self.placeholder.clone(),
         }
     }
 }
@@ -48,11 +52,19 @@ impl<W> Picker<W> {
             kind,
             offers,
             keys: Vec::new(),
+            placeholder: None,
         }
     }
 
     pub fn with_keys(self, keys: Vec<(&'static str, Completion)>) -> Self {
         Self { keys, ..self }
+    }
+
+    pub fn with_placeholder(self, placeholder: Option<String>) -> Self {
+        Self {
+            placeholder,
+            ..self
+        }
     }
 }
 
@@ -97,9 +109,12 @@ fn pending_view<W: Host>(
         .filter(|current| current.edit().is_none())
         .map(Selection::initial_query);
     let engaged = selected.and_then(Selection::edit).or(default.as_ref());
-    let content = match engaged {
-        Some(query) => query_content(toolkit, tcx, query, picker),
-        None => crate::display::widget::empty(tcx, toolkit.styles()),
+    let content = match (engaged, picker.placeholder.as_deref()) {
+        (Some(query), _) => query_content(toolkit, tcx, query, picker),
+        (None, Some(placeholder)) => {
+            crate::display::widget::empty_with(tcx, toolkit.styles(), placeholder)
+        }
+        (None, None) => crate::display::widget::empty(tcx, toolkit.styles()),
     };
     // Selection draws the same outline as the inactive frame.
     pending_target(toolkit, content)
@@ -204,6 +219,24 @@ fn located_query<W: Host>(
         tcx,
         edit_query::<W>,
     );
+    let content = match picker
+        .placeholder
+        .as_deref()
+        .filter(|_| query.text().is_empty() && query.preedit_parts().is_none())
+    {
+        Some(placeholder) => measured::row(
+            0.0,
+            vec![
+                content,
+                text(
+                    tcx,
+                    placeholder,
+                    &crate::display::widget::placeholder_style(styles),
+                ),
+            ],
+        ),
+        None => content,
+    };
     // Preserve the empty frame's width while the query is short.
     let content = min_width(
         text_frame::empty_width(styles.label.size, styles.scale),

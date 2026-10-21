@@ -34,8 +34,8 @@ fn lambda_with_unnamed_parameters() -> (Driver, [CellId; 3]) {
         (new_cell_id(), new_cell_id(), new_cell_id(), new_cell_id());
     let mut cells = Cells::new();
     cells.set_value(width, name::record("width", []));
-    cells.set_value(first, name::record("", []));
-    cells.set_value(second, name::record("", []));
+    cells.set_value(first, Value::record([]));
+    cells.set_value(second, Value::record([]));
     cells.set_value(
         function,
         ::grap::lambda(
@@ -106,5 +106,30 @@ fn a_slot_offers_unnamed_parameters_by_their_letters() {
         ])),
         Value::from(second),
         "`b` is the second unnamed parameter"
+    );
+}
+
+#[test]
+fn clicking_a_missing_name_picks_one() {
+    let (mut driver, [_, first, _]) = lambda_with_unnamed_parameters();
+    let name = driver.element(
+        &in_lambda(&[Step::Key(PARAMS)]),
+        1,
+        &[
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(name::vocabulary::NAME),
+        ],
+    );
+    driver.click(&name);
+    assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
+    driver.type_text("height");
+    driver.press(ui_events::keyboard::NamedKey::Enter);
+    assert_eq!(
+        driver
+            .editor()
+            .sources()
+            .resolve(first)
+            .map(|definition| definition.value.clone()),
+        Some(name::record("height", []))
     );
 }

@@ -266,12 +266,14 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
 #[test]
 fn compact_declarations_ignore_metadata_but_decline_invalid_names_and_active_insertions() {
     let env = env();
-    for value in [
-        Value::record([]),
-        Value::record([(name::vocabulary::NAME, Value::from(vec![1]))]),
-    ] {
-        assert!(declaration_name(&projection_input(&env, &value), None).is_none());
-    }
+    let invalid = Value::record([(name::vocabulary::NAME, Value::from(vec![1]))]);
+    assert!(declaration_name(&projection_input(&env, &invalid), None).is_none());
+    // A declaration with no name yet is a hole for one, there to pick.
+    let unnamed = Value::record([]);
+    let mut input = projection_input(&env, &unnamed);
+    assert!(declaration_name(&input, None).is_some());
+    input.pending = Some(Pending::Child(Step::Key(name::vocabulary::NAME)));
+    assert!(declaration_name(&input, None).is_some());
     let value = name::record("size", [(new_cell_id(), Value::record([]))]);
     let mut input = projection_input(&env, &value);
     assert!(declaration_name(&input, None).is_some());
@@ -1234,16 +1236,30 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
         ],
     ]
     .concat();
+    let cell = driver
+        .value(&parameter)
+        .as_cell()
+        .expect("a parameter cell");
+    assert_eq!(
+        driver
+            .editor()
+            .sources()
+            .resolve(cell)
+            .map(|definition| definition.value.clone()),
+        Some(Value::record([])),
+        "no name is stored for it"
+    );
     assert_eq!(
         driver.selection(),
         crate::occurrence::below(&[], &name),
-        "its name is selected"
+        "its name is picked next"
     );
+    assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
     let placeholder = driver.glyphs_at(&name);
     assert_eq!(
         placeholder.len(),
         1,
-        "the empty name shows its computed one, inside its editor"
+        "the missing name shows its computed one, inside its hole"
     );
     driver.type_text("x");
     assert_ne!(

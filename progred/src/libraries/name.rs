@@ -282,8 +282,8 @@ pub(crate) fn shallow_reference<W: Host>(
 }
 
 /// A name as its line editor or, missing, a hole for one. A projection
-/// passes this where it descends into a name; an empty name shows
-/// `placeholder` dim in its editor until one is typed.
+/// passes this where it descends into a name; a missing or empty name shows
+/// `placeholder` dim until one is typed.
 pub(crate) fn projection<W: Host>(placeholder: Option<String>) -> Partial<W> {
     crate::display::partial(move |input| match input.value {
         Some(value) => editor(value).map(|line| {
@@ -292,18 +292,29 @@ pub(crate) fn projection<W: Host>(placeholder: Option<String>) -> Partial<W> {
                 ..line
             })
         }),
-        None => Some(hole()),
+        None => Some(hole(placeholder.clone())),
     })
 }
 
-/// An empty name, which takes whatever is typed as its text.
-pub(crate) fn hole<W: Host>() -> Layout<W> {
-    crate::display::picker(crate::display::Picker::new(
-        crate::display::CompletionKind::Value,
-        crate::display::ranked(std::rc::Rc::new(|request| {
-            Some(vec![text::completion(text::query_spelling(request.query))])
-        })),
-    ))
+/// A missing name, which takes whatever is typed as its text, showing
+/// `placeholder` dim until then. Nothing typed offers nothing: an empty
+/// name names nothing.
+pub(crate) fn hole<W: Host>(placeholder: Option<String>) -> Layout<W> {
+    crate::display::picker(
+        crate::display::Picker::new(
+            crate::display::CompletionKind::Value,
+            crate::display::ranked(std::rc::Rc::new(|request| {
+                Some(
+                    Some(text::query_spelling(request.query))
+                        .filter(|spelling| !spelling.is_empty())
+                        .map(text::completion)
+                        .into_iter()
+                        .collect(),
+                )
+            })),
+        )
+        .with_placeholder(placeholder),
+    )
 }
 
 #[cfg(test)]
