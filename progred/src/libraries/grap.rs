@@ -156,7 +156,7 @@ fn new_parameter(spelling: String) -> Completion {
 }
 
 /// A declaration's cell in parentheses, its name editable there; an empty
-/// name shows `computed` grey after it until a name is typed.
+/// name shows `computed` grey in its editor until a name is typed.
 fn declaration_cell<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<String>,
@@ -178,26 +178,12 @@ fn declaration_name<W: Host>(
     computed: Option<&str>,
 ) -> Option<Layout<W>> {
     input.pending.is_none().then_some(())?;
-    let spelled = name::read(input.value?)?;
-    let name = descend_local(
+    name::read(input.value?)?;
+    Some(descend_local(
         [Step::Key(name::vocabulary::NAME)],
-        name::projection(),
+        name::projection(computed.map(str::to_owned)),
         &input.default_projection,
-    );
-    Some(match computed.filter(|_| spelled.is_empty()) {
-        // A click on the computed name selects the empty one to type in.
-        Some(computed) => row(
-            0.0,
-            [
-                name,
-                activatable(
-                    dim(computed),
-                    &input.site().below(&[Step::Key(name::vocabulary::NAME)]),
-                ),
-            ],
-        ),
-        None => name,
-    })
+    ))
 }
 
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {

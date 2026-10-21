@@ -388,6 +388,7 @@ fn hex_editor(color: Encoded) -> crate::display::LineEdit {
         prefix: "#".into(),
         suffix: String::new(),
         family: TextFamily::Monospace,
+        placeholder: None,
     }
 }
 

@@ -201,7 +201,7 @@ pub(crate) fn with_name<W: Host>(
         crate::display::row(
             6.0,
             [
-                descend_local([step], projection(), &input.default_projection),
+                descend_local([step], projection(None), &input.default_projection),
                 content,
             ],
         )
@@ -282,10 +282,16 @@ pub(crate) fn shallow_reference<W: Host>(
 }
 
 /// A name as its line editor or, missing, a hole for one. A projection
-/// passes this where it descends into a name.
-pub(crate) fn projection<W: Host>() -> Partial<W> {
-    crate::display::partial(|input| match input.value {
-        Some(value) => editor(value).map(crate::display::line_edit),
+/// passes this where it descends into a name; an empty name shows
+/// `placeholder` dim in its editor until one is typed.
+pub(crate) fn projection<W: Host>(placeholder: Option<String>) -> Partial<W> {
+    crate::display::partial(move |input| match input.value {
+        Some(value) => editor(value).map(|line| {
+            crate::display::line_edit(crate::display::LineEdit {
+                placeholder: placeholder.clone(),
+                ..line
+            })
+        }),
         None => Some(hole()),
     })
 }

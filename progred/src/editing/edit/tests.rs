@@ -43,6 +43,7 @@ fn line(spelling: &str) -> crate::display::LineEdit {
         prefix: String::new(),
         suffix: String::new(),
         family: Default::default(),
+        placeholder: None,
     }
 }
 

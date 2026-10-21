@@ -20,6 +20,7 @@ fn read_only_line_needs_no_selection_or_editing_capabilities() {
                             prefix: String::new(),
                             suffix: String::new(),
                             family: TextFamily::default(),
+                            placeholder: None,
                         },
                     )
                 },

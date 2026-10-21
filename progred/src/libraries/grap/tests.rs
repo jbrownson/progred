@@ -1239,7 +1239,18 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
         crate::occurrence::below(&[], &name),
         "its name is selected"
     );
+    let placeholder = driver.glyphs_at(&name);
+    assert_eq!(
+        placeholder.len(),
+        1,
+        "the empty name shows its computed one, inside its editor"
+    );
     driver.type_text("x");
+    assert_ne!(
+        driver.glyphs_at(&name)[0].1,
+        placeholder[0].1,
+        "typing replaces the grey placeholder"
+    );
     driver.press(NamedKey::Enter);
     let added = driver
         .value(&parameter)

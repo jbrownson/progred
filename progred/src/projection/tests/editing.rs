@@ -37,6 +37,7 @@ fn a_reminted_line_uses_its_current_conversion_not_selection_wiring() {
                 prefix: String::new(),
                 suffix: String::new(),
                 family: Default::default(),
+                placeholder: None,
             }))
         })])
     }
@@ -79,6 +80,7 @@ fn caret_motion_does_not_run_a_line_conversion() {
                 prefix: String::new(),
                 suffix: String::new(),
                 family: Default::default(),
+                placeholder: None,
             }))
         }
     })]);

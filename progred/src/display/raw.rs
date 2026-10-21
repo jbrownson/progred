@@ -76,6 +76,7 @@ fn hex_editor(bytes: &[u8]) -> crate::display::LineEdit {
         prefix: "0x".into(),
         suffix: String::new(),
         family: crate::display::TextFamily::Monospace,
+        placeholder: None,
     }
 }
 

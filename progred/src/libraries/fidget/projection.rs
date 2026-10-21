@@ -132,7 +132,7 @@ pub(super) fn field<W: Host>(
                     [
                         crate::display::descend_local(
                             [Step::Key(name::vocabulary::NAME)],
-                            name::projection(),
+                            name::projection(None),
                             &input.default_projection,
                         ),
                         dim("="),

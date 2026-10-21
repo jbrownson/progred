@@ -21,6 +21,9 @@ pub struct LineEdit {
     pub prefix: String,
     pub suffix: String,
     pub family: TextFamily,
+    /// Drawn dim where the text goes while there's none, the caret before
+    /// it; typing replaces it. Never stored.
+    pub placeholder: Option<String>,
 }
 
 pub type LineUpdate = Rc<dyn Fn(&str, Option<&Value>) -> Option<Value>>;
@@ -60,24 +63,36 @@ pub fn view<W: Host>(
                 },
                 context.text,
             );
+            let empty = state.text().is_empty() && state.preedit_parts().is_none();
             let site = site.clone();
-            let line = line.clone();
-            leaf(extent(widget.metrics()), move |output, placement| {
+            let edit_line = line.clone();
+            let edit = leaf(extent(widget.metrics()), move |output, placement| {
                 output.line_edit(widget, placement, move |world: &mut W, operation| {
-                    site.open(&mut world.session()).edit_line(&line, operation)
+                    site.open(&mut world.session())
+                        .edit_line(&edit_line, operation)
                 });
-            })
+            });
+            match line.placeholder.as_deref().filter(|_| empty) {
+                Some(placeholder) => measured::row(
+                    0.0,
+                    vec![edit, placeholder_text(context, &line, placeholder)],
+                ),
+                None => edit,
+            }
         }
-        None => {
-            let text = puri::text::text(
-                context.text,
-                &format!("{}{}{}", line.prefix, line.text, line.suffix),
-                &context.toolkit.styles().line_style(&line),
-            );
-            leaf(extent(text.metrics()), move |output, placement| {
-                output.render(move |canvas, _| text.place(canvas, placement));
-            })
-        }
+        None => match line.placeholder.as_deref().filter(|_| line.text.is_empty()) {
+            Some(placeholder) => placeholder_text(context, &line, placeholder),
+            None => {
+                let text = puri::text::text(
+                    context.text,
+                    &format!("{}{}{}", line.prefix, line.text, line.suffix),
+                    &context.toolkit.styles().line_style(&line),
+                );
+                leaf(extent(text.metrics()), move |output, placement| {
+                    output.render(move |canvas, _| text.place(canvas, placement));
+                })
+            }
+        },
     };
     let active = active.is_some();
     let selected = toolkit.selected();
@@ -143,6 +158,23 @@ pub fn view<W: Host>(
             output.navigation_stop(path, selected);
         })
     }
+}
+
+/// `placeholder` drawn as the line's text would be, in the dim color.
+fn placeholder_text<W: Host>(
+    context: &mut Context<'_, '_, W, W::Hover>,
+    line: &LineEdit,
+    placeholder: &str,
+) -> Measured<HoverPass<W, W::Hover>> {
+    let styles = context.toolkit.styles();
+    let style = puri::text::TextStyle {
+        brush: styles.dim.brush.clone(),
+        ..styles.line_style(line)
+    };
+    let text = puri::text::text(context.text, placeholder, &style);
+    leaf(extent(text.metrics()), move |output, placement| {
+        output.render(move |canvas, _| text.place(canvas, placement));
+    })
 }
 
 #[cfg(test)]

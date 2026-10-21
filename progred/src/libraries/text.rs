@@ -62,6 +62,7 @@ fn editor_for_text(text: &str) -> crate::display::LineEdit {
         prefix: "\"".into(),
         suffix: "\"".into(),
         family: crate::display::TextFamily::SystemUi,
+        placeholder: None,
     }
 }
 

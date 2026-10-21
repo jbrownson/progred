@@ -66,6 +66,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
             prefix: String::new(),
             suffix: String::new(),
             family: crate::display::TextFamily::SystemUi,
+            placeholder: None,
         });
         let line = tagged(input, digits, self.tag);
         let site = input.site();
