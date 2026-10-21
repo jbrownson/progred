@@ -269,6 +269,21 @@ list survives a reload. Left for later:
   image it writes, dropping it, so the bytes would have to go under the
   platform's PNG type directly.
 
+## Fields on lists
+
+Only a record holds fields, so a list can't carry metadata: a parameter list's
+type, a drawing's name, who made something. The owner's direction, from 21
+October 2026, for when that's needed: let a list have fields beside its
+elements. Folding lists into records keyed by fractional positions would give
+the same, but it would merge `[]` and `{}`, and every place that tells a list
+from a record would have to decide what a mix of keys means. With fields beside
+the elements, lists keep their positions and what ignores fields keeps working.
+It touches GID's list with its equality and hashing, the text bridge's list
+syntax, a `Key` step into a list, Raw's list view (the fields following, as a
+form's extra fields do), the Grap runtime's list, and an open question: whether
+evaluating a list evaluates its fields, as a record's are, or carries them as
+data. Not a blocker as of that date.
+
 ## Native GID storage
 
 GID's native binary representation isn't designed yet; see [GID](gid.md). The
