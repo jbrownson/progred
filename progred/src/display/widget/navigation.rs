@@ -28,39 +28,6 @@ pub(crate) fn arrival<W: crate::display::Host>(site: crate::editing::Site) -> Se
     Rc::new(move |world: &mut W, _| select(&mut world.session()))
 }
 
-/// A native control supplies its entry without introducing child routing.
-pub fn stop<W: 'static, H: 'static>(
-    child: crate::display::Layout<W, H>,
-) -> crate::display::Layout<W, H> {
-    super::before(
-        child,
-        Rc::new(|context| {
-            let path = context.path().clone();
-            let selected = context.toolkit.selected();
-            Box::new(move |output, _| output.navigation_stop(path, selected))
-        }),
-    )
-}
-
-pub fn group<W: 'static, H: 'static>(
-    child: crate::display::Layout<W, H>,
-) -> crate::display::Layout<W, H> {
-    super::around(
-        child,
-        Rc::new(move |context| {
-            let path = context.path().clone();
-            let selected = context.toolkit.selected();
-            Box::new(move |child| {
-                measured::around_into(child, move |_, inner, pass| {
-                    pass.navigation.begin_container(path, selected);
-                    inner.place_into(pass);
-                    pass.navigation.end_container();
-                })
-            })
-        }),
-    )
-}
-
 pub struct Landmark<World> {
     pub root: Option<Root>,
     pub path: Trail,
@@ -118,10 +85,9 @@ pub fn selected_secondary<World>(landmarks: &[Landmark<World>]) -> Option<Second
 /// (heads, delimiters, rows), so a click on structural whitespace (gutters,
 /// gaps between rows, the dead space inside a box) falls through to the
 /// background's deselect. Arriving selects through `select` unless the child
-/// names its own arrival. Selected, an occurrence whose projection gave it no
-/// stop of its own is one anyway, before what's drawn inside it, so arrows
-/// leave wherever the selection is: into what's inside, or, with nothing
-/// inside, to its neighbors.
+/// names its own arrival. Every occurrence drawn is an arrow stop: where a
+/// control drawn for it declares its stop, there, and otherwise before what's
+/// drawn inside it.
 pub(crate) fn landmark<World: 'static, H: 'static>(
     child: Measured<HoverPass<World, H>>,
     path: Trail,
@@ -130,15 +96,12 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
     selected: bool,
 ) -> Measured<HoverPass<World, H>> {
     measured::around_into(child, move |placement, inner, pass| {
-        let stop = selected.then(|| path.clone());
+        let stop = path.clone();
         pass.scope(
-            |pass| match stop {
-                Some(stop) => {
-                    pass.navigation.begin_selected(stop);
-                    inner.place_into(pass);
-                    pass.navigation.end_selected();
-                }
-                None => inner.place_into(pass),
+            |pass| {
+                pass.navigation.begin_landmark(stop, selected);
+                inner.place_into(pass);
+                pass.navigation.end_landmark();
             },
             move |mut output| {
                 let select = match output.landmark_select.take() {

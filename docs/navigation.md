@@ -1,6 +1,6 @@
 # Layout-derived keyboard navigation
 
-Projections declare selectable stops by occurrence path. While the
+Every drawn occurrence is a selectable stop, named by its path. While the
 chosen layout alternative is placed, the collector folds those stops into
 temporary line summaries. No coordinates, distances, or measured-height
 thresholds choose arrow destinations; Tab's order (below) comes from painted
@@ -40,34 +40,24 @@ to the outermost stop. A stop before the block, such as a function label, ends
 that sharing. An enclosing stop always begins the topmost entry line, so it
 precedes a deeper block that sits beside its first one.
 
-A repeated declaration of the innermost open whole value's occurrence is the
-same stop, not a second one.
+## Stops
 
-## Projection stops
+Every occurrence drawn is an arrow stop; projections declare nothing for
+navigation. An occurrence's landmark adds a whole-value stop before what's drawn
+inside it, unless a control drawn for the occurrence, a line edit or a picker,
+declares the occurrence's stop itself. That stop stays where the control is
+drawn, as a number's does after its name, and the landmark adds no second one;
+a landmark nested directly in another at the same occurrence, as a picker's is,
+shares its stop. So cells, lists, records, custom forms, and values drawn by a
+Grap projection function all stop the same way. What a projection draws as part
+of its own occurrence, such as a call's argument record or an outline's extra
+fields, adds no stop, and punctuation, padding, and other inert decoration add
+no stops or lines. Empty lists stop once; empty cells offer both the reference
+and the missing contents.
 
-`display::group(content)` adds the whole-value stop before its
-contents; cells, lists, records, and custom forms all use it. `group_hug`
-combines a selectable whole with inline or indented head-body alternatives;
-ordinary `row` and `col` need no navigation-specific counterpart. A call groups
-its function and argument fields together, and its arguments use
-`record_fragment_with` to arrange fields without another whole-call stop. An
-outline groups its heading and body in a column, then composes sections and
-extras vertically; extras use `record_fragment` so they add no second
-root-record stop. Empty lists stop once; empty cells offer both the reference
-and the missing contents. A leaf facet can supply its widget-specific selection
-callback at the occurrence of an enclosing whole-value stop without adding a
-stop. Punctuation, padding, and other inert decoration declare no stops or lines.
-
-Whatever a projection declares, the selection is never stranded. A selected
-occurrence whose projection gave it no stop of its own, such as the root an
-arrow selects when nothing is, gets one from its landmark, before what's drawn
-inside it: arrows go into its contents or, with none, to its neighbors. Where
-the projection did declare one, that stop stays where it put it, as a number's
-does after its name. Unselected, such an occurrence adds no stop, so ordinary
-navigation passes no invisible levels. A selection on nothing drawn, such as
-one inside a value its projection draws whole, as a number draws its spelling
-rather than its encoding, leaves arrows as no selection does: the first selects
-the root.
+A selection on nothing drawn, such as one inside a value its projection draws
+whole, as a number draws its spelling rather than its encoding, leaves arrows
+as no selection does: the first selects the root.
 
 ## Arrow policy
 
@@ -131,9 +121,9 @@ to go declines, so a browser moves focus on to the rest of its page, which
 clears the selection. A window has nowhere else to go, so there that Tab clears
 the selection itself, and the next starts over from the first.
 
-The anonymous lambda's `λ` marker is clickable to name the function but is
-neither an arrow stop nor a tab stop; the whole lambda, parameter list, and
-body remain navigable.
+The anonymous lambda's `λ` marker is the missing name's place, an arrow stop
+like any drawn occurrence. Arriving there types into the name as a line, with
+no completion; it isn't a tab stop, since the name is optional.
 
 Revealing a destination follows [selection and reveal](puri.md#selection-and-reveal).
 

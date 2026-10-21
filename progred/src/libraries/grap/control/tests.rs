@@ -420,9 +420,6 @@ fn quote_projects_a_selectable_marker_and_its_expression() {
     ))
     .unwrap();
     let Recorded::Before { child, .. } = marker.record() else {
-        panic!("the marker contributes its navigation target");
-    };
-    let Recorded::Before { child, .. } = *child else {
         panic!("the marker claims hover");
     };
     let Recorded::Before { child, .. } = *child else {

@@ -1,7 +1,6 @@
 //! Outline entries own their UI state; their bodies jump to shared record fields.
 
 use super::vocabulary::OUTLINE;
-use crate::display::group;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::display::{self as d, col};
 use gid::{CellId, Step, Value};
@@ -48,7 +47,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 })
             }
         });
-        group(col(
+        col(
             0,
             24.0,
             [d::col(
@@ -61,7 +60,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
             )]
             .into_iter()
             .chain(footer.clone()),
-        ))
+        )
         .measure(context, build)
     })))
 }

@@ -228,8 +228,9 @@ clipping and floater attachment. Hover callbacks compose input handlers through
 immediately in painting order; only floating placements are queued, running
 afterward, outside ancestor clips.
 
-The [navigation combinators](../progred/src/display/widget/navigation.rs) supply
-selectable leaf and whole-value stops. Progred consumes the box engine's
+Every drawn occurrence's [landmark](../progred/src/display/widget/navigation.rs)
+is a stop: a control's own, where a line edit or picker declares one, or a
+whole-value stop before its contents. Progred consumes the box engine's
 `ObserveLayout` traversal, folding each child into line summaries as it finishes:
 columns concatenate, while rows align the declared logical baselines. After
 placement only the selected occurrence's four destinations remain, in one
@@ -242,10 +243,9 @@ Puri does not know this policy; it still receives ordinary events and handlers.
 lines, dispatch, the arrow policy, and arrival.
 
 The [projection helpers](../progred/src/display/mod.rs) beside `row` and `col`
-only declare whole-value and leaf stops and compose common inline-or-indented
-head/body layouts. They use the ordinary layout functions, with no
-navigation-specific row/column wrappers. `group(content)` uses the generic
-`widget::around` placement boundary, not a layout opcode.
+compose common inline-or-indented head/body layouts. They use the ordinary
+layout functions; projections declare nothing for navigation, so there are no
+navigation-specific wrappers.
 
 `widget::before` and `widget::after` contribute the same native outputs below
 or above an arbitrary child. Their preparation functions capture current inputs,

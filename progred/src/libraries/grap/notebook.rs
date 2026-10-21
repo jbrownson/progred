@@ -6,7 +6,7 @@
 //! its first.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::display::{Completion, activatable, alternatives, col, group, indent, row, shared};
+use crate::display::{Completion, activatable, alternatives, col, indent, row, shared};
 use gid::{Position, Resolution, Step, Value};
 use puri::handler::HasHandler;
 use std::rc::Rc;
@@ -20,18 +20,17 @@ pub mod vocabulary {
     pub const NOTEBOOK: CellId = CellId::from_u128(0x30371e11863404e70052ccff54276702);
 }
 
-/// A record naming a notebook draws its entries, then its other fields, the
-/// whole a stop arrows go into, as the entries are.
+/// A record naming a notebook draws its entries, then its other fields.
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     crate::display::structure::record_form(input, [vocabulary::NOTEBOOK], |[notebook]| {
         notebook?;
-        Some(group(crate::display::descend_local(
+        Some(crate::display::descend_local(
             [Step::Key(vocabulary::NOTEBOOK)],
             crate::display::runtime_partial(entries),
             &input.default_projection,
-        )))
+        ))
     })
 }
 
@@ -121,7 +120,7 @@ fn entry_of<W: Host>(
         .map_or(Resolution::Document, |definition| definition.resolution);
     let expression = super::expression_path([Step::Follow(source)], &input.default_projection);
     if definition.is_none() {
-        return Some(group(expression));
+        return Some(expression);
     }
     let result = crate::display::at_evaluated(
         [Step::Key(
@@ -138,14 +137,14 @@ fn entry_of<W: Host>(
         shared(activatable(crate::display::arrow(), &site)),
         shared(result),
     );
-    Some(group(alternatives([
+    Some(alternatives([
         row(6.0, [expression.clone(), arrow.clone(), result.clone()]),
         col(
             0,
             2.0,
             [row(6.0, [expression, arrow]), indent(20.0, result)],
         ),
-    ])))
+    ]))
 }
 
 /// Enter on the entry at `at`, after its own handlers decline it, starts a

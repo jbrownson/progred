@@ -199,14 +199,21 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
 }
 
 #[test]
-fn logical_down_enters_an_anonymous_lambda_without_opening_name_completion() {
+fn arrows_enter_an_anonymous_lambda_at_its_name_slot_without_opening_completion() {
+    use NavigationDirection::{Down, Right};
     let mut world = crate::editor_of(grap::lambda(
         [],
         text::value("a long function body ".repeat(40)),
     ));
     world.model.selection = Some(make_selection(vec![]));
-    for field in [grap::vocabulary::PARAMS, grap::vocabulary::BODY] {
-        assert!(step(&mut world, NavigationDirection::Down));
+    // The λ is the missing name's place, typed into as a line, so arriving
+    // there opens no completion.
+    for (direction, field) in [
+        (Down, crate::libraries::name::vocabulary::NAME),
+        (Right, grap::vocabulary::PARAMS),
+        (Down, grap::vocabulary::BODY),
+    ] {
+        assert!(step(&mut world, direction));
         assert_eq!(
             world.model.selection.as_ref().unwrap().path(),
             [Step::Key(field)]

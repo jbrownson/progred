@@ -567,7 +567,6 @@ pub fn leaf<World: 'static, Hover: 'static>(leaf: Leaf<Paint>) -> Layout<World, 
 
 pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, pickable};
-pub use widget::navigation::{group, stop};
 
 /// `child`, which hovers `site` and selects it when activated.
 pub(crate) fn activatable<W: Host>(
@@ -596,14 +595,14 @@ pub(crate) fn field_label_at<W: Host>(
     )
 }
 
-/// `child` drawn for the whole `value` at `site`: a navigation stop that a
-/// click selects and a Cmd+click picks.
+/// `child` drawn for the whole `value` at `site`, which a click selects and a
+/// Cmd+click picks.
 pub(crate) fn selectable_value<W: Host>(
     child: host::Layout<W>,
     site: &crate::editing::Site,
     value: &grap::RuntimeValue,
 ) -> host::Layout<W> {
-    let child = stop(child);
+    let child = child;
     activatable(
         pickable(child, W::Hover::from(site.hover()), value.clone()),
         site,
@@ -666,15 +665,6 @@ pub fn hug<World: 'static, Hover: Clone + 'static>(
         row(gap, [head.clone(), child.clone()]),
         col(0, 2.0, [head, indent(TAB, child)]),
     ])
-}
-
-/// A selectable whole around either head/body presentation.
-pub fn group_hug<World: 'static, Hover: Clone + 'static>(
-    head: Layout<World, Hover>,
-    child: Layout<World, Hover>,
-    gap: f64,
-) -> Layout<World, Hover> {
-    group(hug(head, child, gap))
 }
 
 pub fn overlay<World: 'static, Hover: 'static>(
@@ -829,7 +819,7 @@ pub struct RecordField<World, Hover> {
     pub value: Layout<World, Hover>,
 }
 
-/// Ordered fields without a whole-value stop; the enclosing form owns it.
+/// Ordered fields of the enclosing form's own occurrence.
 /// Trailing fields, such as one being authored, follow in both responsive
 /// forms but take no part in sorting the stored fields.
 pub fn record_fragment_with<W: Host, T>(
@@ -872,11 +862,11 @@ pub fn record_heads<W: Host>(
     trailing: impl IntoIterator<Item = host::Layout<W>>,
 ) -> host::Layout<W> {
     let [horizontal, vertical] = record_forms(fields, trailing);
-    selectable_bracket(Delim::Brace, group(alternatives([horizontal, vertical])))
+    selectable_bracket(Delim::Brace, alternatives([horizontal, vertical]))
 }
 
-/// A record-shaped fragment of a larger projection. Its fields compose their
-/// navigation, but the enclosing projection owns the whole-value stop.
+/// A record-shaped fragment of a larger projection, part of its occurrence:
+/// the fields are occurrences of their own, the fragment isn't.
 pub fn record_fragment<W: Host>(
     fields: impl IntoIterator<Item = RecordField<W, W::Hover>>,
     trailing: impl IntoIterator<Item = host::Layout<W>>,

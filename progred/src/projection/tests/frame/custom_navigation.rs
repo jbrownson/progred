@@ -107,7 +107,7 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
         (
             "unnamed lambda",
             ::grap::lambda([], number()),
-            vec![Step::Key(PARAMS)],
+            vec![Step::Key(name::vocabulary::NAME)],
         ),
         (
             "named value",

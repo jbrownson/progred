@@ -273,12 +273,12 @@ pub(crate) fn shallow_cell_with<W: Host>(
     ))
 }
 
-/// A cell reference drawn as `label`, a stop that a click selects.
+/// A cell reference drawn as `label`, which a click selects.
 pub(crate) fn shallow_reference<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     label: Layout<W>,
 ) -> Layout<W> {
-    crate::display::stop(crate::display::activatable(label, &input.site()))
+    crate::display::activatable(label, &input.site())
 }
 
 /// A name as its line editor, there or missing: typing into a missing one

@@ -60,9 +60,9 @@ fn build(shape: &Shape, selected: usize, collector: &mut Collector) {
             collector,
         ),
         Enclosed(stop, child) => {
-            collector.begin_container(path(*stop), *stop == selected);
+            collector.begin_landmark(path(*stop), *stop == selected);
             build(child, selected, collector);
-            collector.end_container();
+            collector.end_landmark();
         }
     }
 }
@@ -361,18 +361,57 @@ fn a_row_with_multiline_content_is_multiline_but_empty_decorations_add_no_lines(
     assert_eq!(lines(&shape), [vec![0], vec![1], vec![2]]);
 }
 
-#[test]
-fn a_repeated_declaration_is_the_same_stop() {
+/// The destinations of `selected` among stops a test declares directly.
+fn declared(selected: usize, declare: impl Fn(&mut Collector, usize)) -> [Option<usize>; 4] {
     let mut collector = Collector::default();
-    collector.stop(path(0), false);
-    collector.begin_container(path(1), false);
-    collector.stop(path(1), true);
-    collector.stop(path(2), false);
-    collector.end_container();
-    assert_eq!(
-        indices(collector.current.lines.destinations().unwrap()),
-        [Some(0), Some(2), None, None]
-    );
+    declare(&mut collector, selected);
+    indices(collector.current.lines.destinations().unwrap())
+}
+
+#[test]
+fn a_landmark_s_own_stop_stays_where_its_control_declares_it() {
+    // A named number: the name, then the number's own stop at its spelling.
+    let number = |collector: &mut Collector, selected: usize| {
+        collector.stop(path(0), selected == 0);
+        collector.begin_landmark(path(1), selected == 1);
+        collector.begin_landmark(path(2), selected == 2);
+        collector.stop(path(2), selected == 2);
+        collector.end_landmark();
+        collector.stop(path(1), selected == 1);
+        collector.end_landmark();
+    };
+    assert_eq!(declared(2, number), [Some(0), Some(1), None, None]);
+    assert_eq!(declared(1, number), [Some(2), None, None, None]);
+}
+
+#[test]
+fn a_landmark_with_no_stop_of_its_own_stops_before_its_contents() {
+    let wrapped = |collector: &mut Collector, selected: usize| {
+        collector.stop(path(0), selected == 0);
+        collector.begin_landmark(path(1), selected == 1);
+        collector.stop(path(2), selected == 2);
+        collector.end_landmark();
+    };
+    assert_eq!(declared(1, wrapped), [Some(0), Some(2), None, None]);
+}
+
+#[test]
+fn landmarks_nested_at_one_occurrence_share_its_stop() {
+    for own in [false, true] {
+        let nested = |collector: &mut Collector, selected: usize| {
+            collector.stop(path(0), selected == 0);
+            collector.begin_landmark(path(1), selected == 1);
+            collector.begin_landmark(path(1), selected == 1);
+            if own {
+                collector.stop(path(1), selected == 1);
+            }
+            collector.end_landmark();
+            collector.end_landmark();
+            collector.stop(path(2), selected == 2);
+        };
+        assert_eq!(declared(1, nested), [Some(0), Some(2), None, None]);
+        assert_eq!(declared(2, nested), [Some(1), None, None, None]);
+    }
 }
 
 #[test]

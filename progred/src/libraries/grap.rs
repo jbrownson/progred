@@ -10,13 +10,13 @@ use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
+use crate::display::hug;
 use crate::display::structure::{field_label, field_order, record_form};
 use crate::display::{
     Completion, CompletionKind, Delim, Face, Name, Pending, Picker, RecordField, ResolvedCell,
     activatable, alternatives, col, descend_local, dim, faced, indent, picker, ranked,
     record_fragment_with, row, selectable_bracket, shared,
 };
-use crate::display::{group, group_hug};
 use ::grap::source::vocabulary::BODY_ORIGIN;
 use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
@@ -226,7 +226,7 @@ pub(crate) fn declaration_cell<W: Host>(
 ) -> Option<Layout<W>> {
     let cell = input.value?.as_cell()?;
     let definition = input.env.resolve(cell)?;
-    Some(group(selectable_bracket(
+    Some(selectable_bracket(
         Delim::Paren,
         descend_local(
             [Step::Follow(definition.resolution)],
@@ -235,12 +235,11 @@ pub(crate) fn declaration_cell<W: Host>(
             }),
             &input.default_projection,
         ),
-    )))
+    ))
 }
 
-/// A declaration's definition as its name, there or not, the definition a
-/// stop of its own around it; its other fields follow. A name that isn't
-/// text declines.
+/// A declaration's definition as its name, there or not; its other fields
+/// follow. A name that isn't text declines.
 fn declaration_name<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<&str>,
@@ -249,19 +248,19 @@ fn declaration_name<W: Host>(
         if let Some(spelled) = spelled {
             crate::libraries::text::read(spelled.as_value())?;
         }
-        Some(group(descend_local(
+        Some(descend_local(
             [Step::Key(name::vocabulary::NAME)],
             name::projection(computed.map(str::to_owned)),
             &input.default_projection,
-        )))
+        ))
     })
 }
 
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
     Some(match input.value {
         Some(value) => crate::display::line_edit(name::editor(value)?),
-        // Naming an anonymous lambda is clickable, not an arrow-navigation
-        // stop; selected, it's an empty name to type into.
+        // The missing name's place; selected, it's an empty name to type
+        // into.
         None if input.selection.is_some() => crate::display::line_edit(name::line(None)?),
         None => {
             let site = input.site();
@@ -311,10 +310,10 @@ fn program<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
         .map_or(gid::Resolution::Document, |definition| {
             definition.resolution
         });
-    Some(group(selectable_bracket(
+    Some(selectable_bracket(
         Delim::Paren,
         expression_path([Step::Follow(source)], &input.default_projection),
-    )))
+    ))
 }
 
 /// Declaration cells keep their parentheses, with a named definition
@@ -466,7 +465,7 @@ pub(crate) fn call_with_function<W: Host>(
         |field, _| argument(field),
         trailing,
     );
-    Some(group_hug(function, arguments, 0.0))
+    Some(hug(function, arguments, 0.0))
 }
 
 /// A stored lambda exposes its parameter declarations deeply and
@@ -501,7 +500,7 @@ fn lambda_display<W: Host>(
             );
             let arrow = activatable(crate::display::arrow(), &body_site);
             let head = row(3.0, [lambda, params, arrow]);
-            Some(group_hug(
+            Some(hug(
                 head,
                 expression_path([Step::Key(BODY)], &input.default_projection),
                 6.0,
@@ -568,7 +567,7 @@ fn value_display<W: Host>(
             &input.default_projection,
         );
         let site = input.site().below(&[Step::Key(VALUE)]);
-        Some(group_hug(
+        Some(hug(
             row(3.0, [name, activatable(dim("="), &site)]),
             expression_path([Step::Key(VALUE)], &input.default_projection),
             6.0,
@@ -581,10 +580,7 @@ fn value_display<W: Host>(
 fn ffi_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     record_form(input, [FFI], |[ffi]| {
         ffi?.as_cell()?;
-        Some(group(shallow_path(
-            [Step::Key(FFI)],
-            &input.default_projection,
-        )))
+        Some(shallow_path([Step::Key(FFI)], &input.default_projection))
     })
 }
 
@@ -603,14 +599,14 @@ fn evaluate_display<W: Host>(
         let shaft_site = input.site();
         let shaft = shared(activatable(crate::display::arrow(), &shaft_site));
         let result = shared(crate::libraries::presentation::result_layout(&result));
-        Some(group(alternatives([
+        Some(alternatives([
             row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
             col(
                 0,
                 2.0,
                 [row(6.0, [expression, shaft]), indent(20.0, result)],
             ),
-        ])))
+        ]))
     })
 }
 

@@ -188,7 +188,7 @@ pub(crate) fn tutorial_slots(
             Ok(projection.with_entry(crate::display::partial(move |input| {
                 matches!(input.value, Some(Value::Record(_))).then(|| {
                     let same = same_as_above(&slots, input.value);
-                    crate::display::group(crate::display::col(
+                    crate::display::col(
                         0,
                         16.0,
                         slots.iter().zip(same).map(|((key, level), same)| {
@@ -224,7 +224,7 @@ pub(crate) fn tutorial_slots(
                                 view
                             }
                         }),
-                    ))
+                    )
                 })
             })))
         }

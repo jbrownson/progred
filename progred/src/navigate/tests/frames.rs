@@ -21,8 +21,8 @@ fn sample_projection() -> Projection {
         if let Some(items) = d::structure::list_items(input, None) {
             let items: Vec<_> = items.into_iter().map(|(_, layout)| layout).collect();
             Some(d::alternatives([
-                d::group(d::row(8.0, items.clone())),
-                d::group(d::col(0, 8.0, items)),
+                d::row(8.0, items.clone()),
+                d::col(0, 8.0, items),
             ]))
         } else {
             crate::libraries::text::display(input)
@@ -307,13 +307,13 @@ fn navigation_arrival_through_jump_retains_editing_context() {
     world.stack.projection = Projection::new([
         d::runtime_partial(move |input| {
             input.value?.field(source)?;
-            Some(d::group(d::row(
+            Some(d::row(
                 8.0,
                 [
                     d::jump([Step::Key(first)], [Step::Key(source)]),
                     d::jump([Step::Key(second)], [Step::Key(source)]),
                 ],
-            )))
+            ))
         }),
         sample_projection().partial().clone(),
     ]);
@@ -779,7 +779,7 @@ fn navigation_empty_cell_stops_before_entering_missing_contents() {
 }
 
 #[test]
-fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
+fn a_leaf_s_own_stop_is_its_occurrence_s_only_stop() {
     let root = Value::list([text::value("first"), text::value("second")]);
     let paths: Vec<_> = positions(&root)
         .into_iter()
@@ -788,7 +788,7 @@ fn navigation_whole_wrapper_reuses_a_leaf_at_the_same_occurrence() {
     let mut world = crate::editor_of(root);
     let ordinary = sample_projection();
     world.stack.projection = Projection::new([
-        d::runtime_partial(|input| crate::libraries::text::display(input).map(d::group)),
+        d::runtime_partial(|input| crate::libraries::text::display(input)),
         ordinary.partial().clone(),
     ]);
     world.model.selection = Some(make_selection(paths[1].clone()));
@@ -1005,4 +1005,27 @@ fn content_after_a_multiline_block_stays_on_its_content_line() {
     check(&beside, NamedKey::ArrowRight, &beside_item);
     check(&beside_item, NamedKey::ArrowRight, &second);
     check(&beside_item, NamedKey::ArrowDown, &second);
+}
+
+#[test]
+fn a_value_a_grap_function_draws_is_an_arrow_stop() {
+    // An angle draws as a dial, its degrees and a word, all from a Grap
+    // function that declares nothing for navigation: the degrees are a stop
+    // of their own, and the angle is one before them.
+    let (doc, _) =
+        crate::gid_text::parse(include_str!("../../../../examples/libraries.gid")).unwrap();
+    let mut driver = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
+    let angles = Step::Key(gid::CellId::from_u128(0x1658642f21a8218fbfec1e4825521991));
+    let degrees = Step::Key(gid::CellId::from_u128(0xca9a2253bfe9bb037b1daf8416c70a8c));
+    let angle = driver.element(&[angles], 0, &[]);
+    let number = [&angle[..], &[degrees]].concat();
+    driver.select(&number);
+    // The degrees' caret moves first, as far as its spelling goes.
+    for _ in 0..8 {
+        driver.press(NamedKey::ArrowLeft);
+        if driver.selection() != crate::occurrence::of(&number) {
+            break;
+        }
+    }
+    assert_eq!(driver.selection(), crate::occurrence::of(&angle));
 }

@@ -1,9 +1,9 @@
 use super::{one_marker, parameters, vocabulary::*};
 use crate::display::host::{Host, Layout, ProjectionInput};
+use crate::display::hug;
 use crate::display::{
     Delim, activatable, alternatives, col, descend, dim, row, selectable_bracket, shared,
 };
-use crate::display::{group, group_hug, hug};
 use crate::libraries::name;
 use crate::libraries::representation::{self, Precedence};
 use gid::{CellId, Step, Value};
@@ -126,7 +126,7 @@ pub(super) fn field<W: Host>(
     };
     Some(
         match input.value?.as_record()?.get(&name::vocabulary::NAME) {
-            Some(_) => group_hug(
+            Some(_) => hug(
                 row(
                     6.0,
                     [
@@ -141,7 +141,7 @@ pub(super) fn field<W: Host>(
                 body,
                 6.0,
             ),
-            None => group(body),
+            None => body,
         },
     )
 }

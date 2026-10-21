@@ -7,9 +7,9 @@
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use gid::{CellId, Step, Value};
 
+use crate::display::hug;
 use crate::display::structure::record_form;
 use crate::display::{activatable, alternatives, col, descend_local, dim, row, shared};
-use crate::display::{group, group_hug, hug};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
@@ -628,7 +628,7 @@ fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
                     ),
                 ],
             );
-            Some(group_hug(
+            Some(hug(
                 head,
                 descend_local(
                     [Step::Key(vocabulary::CASES)],
@@ -675,7 +675,7 @@ fn case_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option
                 .site()
                 .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
             let arrow = activatable(crate::display::arrow(), &expression_site);
-            Some(group_hug(
+            Some(hug(
                 crate::display::centered_row(
                     6.0,
                     [
@@ -747,7 +747,7 @@ fn bindings_form<W: Host>(
                 .site()
                 .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
             let in_marker = shared(activatable(dim("in"), &expression_site));
-            group(alternatives([
+            alternatives([
                 row(
                     4.0,
                     [
@@ -765,15 +765,15 @@ fn bindings_form<W: Host>(
                         hug(in_marker, expression, 4.0),
                     ],
                 ),
-            ]))
+            ])
         }
-        BindingForm::Where => group(alternatives([
+        BindingForm::Where => alternatives([
             row(
                 4.0,
                 [expression.clone(), function.clone(), bindings.clone()],
             ),
             col(0, 2.0, [expression, hug(function, bindings, 4.0)]),
-        ])),
+        ]),
     }
 }
 
@@ -807,7 +807,7 @@ fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
             value?;
             let value_site = input.site().below(&[Step::Key(vocabulary::VALUE)]);
             let equals = activatable(dim("="), &value_site);
-            Some(group_hug(
+            Some(hug(
                 crate::display::centered_row(6.0, [left, equals]),
                 crate::libraries::grap::expression_path(
                     [Step::Key(vocabulary::VALUE)],
@@ -822,7 +822,7 @@ fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
 fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
         let site = input.site();
-        crate::display::stop(activatable(dim("\""), &site))
+        activatable(dim("\""), &site)
     })
 }
 
@@ -841,7 +841,7 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
                 crate::display::runtime_partial(quote_marker),
                 &input.default_projection,
             );
-            Some(group(row(
+            Some(row(
                 2.0,
                 [
                     marker,
@@ -851,7 +851,7 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
                         None,
                     ),
                 ],
-            )))
+            ))
         },
     )
 }
@@ -869,7 +869,7 @@ fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
         }
         .then_some(())?;
         let site = input.site();
-        Some(group(row(
+        Some(row(
             2.0,
             [
                 activatable(dim("`"), &site),
@@ -878,7 +878,7 @@ fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
                     &input.default_projection,
                 ),
             ],
-        )))
+        ))
     })
 }
 
@@ -898,7 +898,7 @@ fn expression_list_display<W: Host>(
         |[function, expressions]| {
             (function?.as_cell()? == callable).then_some(())?;
             expressions?.list_len()?;
-            Some(group(row(
+            Some(row(
                 4.0,
                 [
                     crate::libraries::grap::shallow_path(
@@ -913,7 +913,7 @@ fn expression_list_display<W: Host>(
                         &input.default_projection,
                     ),
                 ],
-            )))
+            ))
         },
     )
 }

@@ -3,7 +3,6 @@
 //! tightly infix binds. An operator's own name carries its tag.
 
 use crate::display::Pending;
-use crate::display::group;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{Delim, Face, alternatives, col, row, selectable_bracket, shared, subscript};
 use crate::libraries::grap::numbers::vocabulary::{LEFT, RIGHT};
@@ -97,7 +96,7 @@ pub(crate) fn infix_display<W: Host>(
     Some(crate::display::structure::with_extra_fields(
         input,
         |key| key == FUNCTION || key == LEFT || key == RIGHT,
-        group(layout),
+        layout,
     ))
 }
 

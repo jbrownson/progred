@@ -25,7 +25,7 @@ pub(crate) fn list_column_with<W: Host>(
     item: impl Fn(gid::Position, Layout<W>) -> Layout<W>,
 ) -> Option<Layout<W>> {
     let items = list_items(input, child)?;
-    Some(authoring(group(if items.is_empty() {
+    Some(authoring(if items.is_empty() {
         selectable_bracket(Delim::Bracket, row(0.0, []))
     } else {
         col(
@@ -35,7 +35,7 @@ pub(crate) fn list_column_with<W: Host>(
                 list_gap(gap, before, after)
             }),
         )
-    })))
+    }))
 }
 
 /// Prepare element paths, including a pending insertion, and share their
@@ -166,7 +166,7 @@ pub fn list_layout_at<W: Host>(
     );
     authoring(selectable_bracket(
         Delim::Bracket,
-        group(alternatives([row(0.0, horizontal), col(1, 0.0, vertical)])),
+        alternatives([row(0.0, horizontal), col(1, 0.0, vertical)]),
     ))
 }
 
@@ -364,7 +364,7 @@ pub(crate) fn with_extra_fields_by<W: Host>(
     content: Layout<W>,
 ) -> Layout<W> {
     match extra_fields_by(input, drawn, child) {
-        Some(extras) => group_hug(content, extras, 0.0),
+        Some(extras) => hug(content, extras, 0.0),
         None => content,
     }
 }

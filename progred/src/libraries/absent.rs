@@ -201,7 +201,7 @@ fn location(origin: ::grap::SourceOrigin) -> Option<Location<'static>> {
     }
 }
 
-/// `reason`'s name, a stop for the absent drawn here.
+/// `reason`'s name; a click on it selects the absent drawn here.
 fn head<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     reason: CellId,
@@ -210,7 +210,7 @@ fn head<W: Host>(
         Some(name) => crate::display::named(&name, crate::display::Face::Ink),
         None => crate::display::faced(crate::identity::short_id(reason), crate::display::Face::Ink),
     };
-    crate::display::stop(crate::display::activatable(name, &input.site()))
+    crate::display::activatable(name, &input.site())
 }
 
 fn on_red<W: Host>(content: Layout<W>) -> Layout<W> {
