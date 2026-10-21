@@ -143,23 +143,27 @@ first two and could answer the rest on demand.
   Start with an optional observer on the context, one branch per call, and
   measure before reaching for a generic no-op one, which would thread its type
   through compiled code and every foreign function.
-- A drawing already runs once per frame, through the canvas functions its
-  record step installs, so its questions ride on that run instead of a
-  replay. The frame brings them: the fill hovered as of the last frame, the
-  selected source, the hovered source. The record step attaches an observer
-  to the evaluation it already runs, and each fill asks it whether its stack
-  answers any of them: the hovered fill takes its stack, and a fill drawn under
-  the selected or hovered source is marked. The canvas alone can't, since it
-  sees only drawing calls, not the calls between them. With no question,
-  nothing is observed and fills keep no traces.
-- Elsewhere, where evaluation is pure, provenance comes from replay: run the
-  same evaluation again, with the same fuel, with an observer looking for one
-  thing. The answer is a computation keyed by the evaluation and the question.
-- An absent's stack can be found the same way, shown collapsed and found when
-  it's expanded. Recognizing the absent in a replay needs its result path or
-  its own `call`; whether absents keep `call` once replay exists is open.
-- Effects can't be replayed. Handlers get a debug mode that attaches a
-  logging observer to the real run, with a UI for what it logs to be designed.
+- An observer goes on whichever run comes next. A question known before an
+  evaluation runs rides on that run; one that comes up afterwards needs a
+  replay, the same evaluation run again with the same fuel, which only a pure
+  evaluation allows. Either way the answer is a computation keyed by the
+  evaluation and the question.
+- A drawing runs once per frame, through the canvas functions its record step
+  installs, so its questions are always known before its run: the fill
+  hovered as of the last frame, the selected source, the hovered source. The
+  record step attaches an observer to the evaluation it already runs, and each
+  fill asks it whether its stack answers any of them: the hovered fill takes
+  its stack, and a fill drawn under the selected or hovered source is marked.
+  The canvas alone can't, since it sees only drawing calls, not the calls
+  between them. With no question, nothing is observed and fills keep no
+  traces.
+- An absent's stack can be asked for before a run, when its stack is shown
+  expanded, or found by replay when it's expanded later; collapsed, it costs
+  nothing. Recognizing the absent needs its result path or its own `call`;
+  whether absents keep `call` once observers exist is open.
+- Effects can't be replayed, so a handler's questions must be known before
+  it runs: a debug mode attaches a logging observer to the real run, with a UI
+  for what it logs to be designed.
 
 ## A missing argument under its own label
 
