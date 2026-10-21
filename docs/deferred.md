@@ -135,8 +135,8 @@ drawing's fills each keep a call trace, a closure keeps its body's origin, and
 an absent about a call names where the call is. The first step is in: the
 evaluator keeps no call stack, offering each call it enters and leaves to an
 observer a host lends it, and a drawing's record step attaches a tracer that
-keeps every fill's trace as before. What remains is for observers to answer
-only the questions asked.
+keeps every fill's trace as before. What remains is observers that answer
+only the questions asked, where that pays.
 
 - An observer could also be told of effects, and could stop the run once it
   has its answer. A generic no-op observer, threading its type through compiled
@@ -147,15 +147,14 @@ only the questions asked.
   replay, the same evaluation run again with the same fuel, which only a pure
   evaluation allows. Either way the answer is a computation keyed by the
   evaluation and the question.
-- A drawing runs once per frame, through the canvas functions its record step
-  installs, so its questions are always known before its run: the fill
-  hovered as of the last frame, the selected source, the hovered source. The
-  record step attaches an observer to the evaluation it already runs, and each
-  fill asks it whether its stack answers any of them: the hovered fill takes
-  its stack, and a fill drawn under the selected or hovered source is marked.
-  The canvas alone can't, since it sees only drawing calls, not the calls
-  between them. With no question, nothing is observed and fills keep no
-  traces.
+- A drawing could ask only the frame's questions instead of tracing every
+  fill: the hovered fill's stack, and which fills were drawn under the
+  selected or hovered source. But within one frame they aren't all known
+  before the run. Which fills to mark for a hovered fill depends on that
+  fill's source, which comes out of the same run, so it would take two runs or
+  answers a frame late, which could leave a stale mark until the next event.
+  The tracer it would save costs about 0.7% of the forest hover canary's
+  instructions (October 2026), so drawings keep tracing for now.
 - An absent's stack can be asked for before a run, when its stack is shown
   expanded, or found by replay when it's expanded later; collapsed, it costs
   nothing. Recognizing the absent needs its result path or its own `call`;
