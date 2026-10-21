@@ -611,7 +611,6 @@ fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
             vocabulary::VALUE,
             vocabulary::CASES,
         ],
-        &[],
         |[function, value, cases]| {
             (function?.as_cell()? == vocabulary::MATCH).then_some(())?;
             value?;
@@ -669,7 +668,6 @@ fn case_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option
     record_form(
         input,
         [vocabulary::PATTERN, ::grap::vocabulary::EXPRESSION],
-        &[],
         |[pattern, expression]| {
             pattern?;
             expression?;
@@ -712,7 +710,6 @@ fn bindings_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Op
             vocabulary::BINDINGS,
             ::grap::vocabulary::EXPRESSION,
         ],
-        &[],
         |[function, bindings, expression]| {
             let form = match function?.as_cell()? {
                 vocabulary::LET => Some(BindingForm::Let),
@@ -786,7 +783,6 @@ fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
     record_form(
         input,
         [vocabulary::BIND, vocabulary::PATTERN, vocabulary::VALUE],
-        &[],
         |[binder, pattern, value]| {
             (!matches!(
                 input.pending,
@@ -837,7 +833,6 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
     record_form(
         input,
         [::grap::vocabulary::FUNCTION, ::grap::vocabulary::EXPRESSION],
-        &[],
         |[function, expression]| {
             (function?.as_cell()? == vocabulary::QUOTE).then_some(())?;
             expression?;
@@ -865,7 +860,7 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
 /// is a handle for the whole unquote; the body keeps its own stored location.
 /// A just-inserted unquote is already one, so its empty hole offers code.
 fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    record_form(input, [vocabulary::UNQUOTE], &[], |[unquote]| {
+    record_form(input, [vocabulary::UNQUOTE], |[unquote]| {
         match &input.pending {
             Some(crate::display::Pending::Child(Step::Key(vocabulary::UNQUOTE))) => {
                 input.value?.record_len() == Some(0)
@@ -900,7 +895,6 @@ fn expression_list_display<W: Host>(
     record_form(
         input,
         [::grap::vocabulary::FUNCTION, vocabulary::EXPRESSIONS],
-        &[],
         |[function, expressions]| {
             (function?.as_cell()? == callable).then_some(())?;
             expressions?.list_len()?;

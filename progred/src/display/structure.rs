@@ -370,25 +370,20 @@ pub(crate) fn with_extra_fields_by<W: Host>(
 }
 
 /// A form drawn from some of a record's fields, the others following it as a
-/// trailing record ([`with_extra_fields`]), so the form hides nothing it
-/// doesn't mean to. `draw` is given the `queried` fields' values, in their
-/// order, to bind by name. The `ignored` fields are drawn neither way, as
-/// metadata will be; one of them being added has nowhere to show, so a
-/// plainer view takes it. One of the queried being added is the form's to
-/// draw, or to leave to a plainer view.
+/// trailing record ([`with_extra_fields`]), so the form hides nothing.
+/// `draw` is given the `queried` fields' values, in their order, to bind by
+/// name. One of the queried being added is the form's to draw, or to leave to
+/// a plainer view.
 pub(crate) fn record_form<W: Host, const N: usize>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     queried: [CellId; N],
-    ignored: &[CellId],
     draw: impl FnOnce([Option<::grap::RuntimeValue>; N]) -> Option<Layout<W>>,
 ) -> Option<Layout<W>> {
     let fields = input.value?;
-    (!matches!(&input.pending, Some(Pending::Child(Step::Key(key))) if ignored.contains(key)))
-        .then_some(())?;
     let content = draw(queried.map(|key| fields.field(key)))?;
     Some(with_extra_fields(
         input,
-        |key| queried.contains(&key) || ignored.contains(&key),
+        |key| queried.contains(&key),
         content,
     ))
 }

@@ -287,15 +287,14 @@ data. Not a blocker as of that date.
 ## Metadata fields
 
 A custom projection shows the fields it doesn't draw after it, as a trailing
-record, and `structure::record_form` takes a list of fields to hide, for
-metadata such as who made something and when. The owner's direction, from 21
-October 2026: rather than each projection listing what to hide, tag the field's
-own definition, its label cell, with a field saying it's metadata, so every
-projection treats it alike and a new metadata field needs no projection
-changed. A library tags its labels and a document its own. Raw and Plain would
-still show everything, and a view could offer to. Nothing is metadata yet, and
-nothing passes `record_form` fields to hide: when the first metadata field
-comes, the tag replaces that list, and the rule in AGENTS.md changes with it.
+record, metadata such as who made something and when included. The owner's
+direction, from 21 October 2026: rather than each projection listing what to
+hide, tag the field's own definition, its label cell, with a field saying it's
+metadata, so every projection treats it alike and a new metadata field needs
+no projection changed. A library tags its labels and a document its own. Raw and Plain would
+still show everything, and a view could offer to. Nothing is metadata yet;
+when the first metadata field comes, `structure::record_form` leaves tagged
+fields out of its trailing record, and the rule in AGENTS.md says so.
 
 ## Native GID storage
 

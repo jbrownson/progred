@@ -245,7 +245,7 @@ fn declaration_name<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     computed: Option<&str>,
 ) -> Option<Layout<W>> {
-    record_form(input, [name::vocabulary::NAME], &[], |[spelled]| {
+    record_form(input, [name::vocabulary::NAME], |[spelled]| {
         if let Some(spelled) = spelled {
             crate::libraries::text::read(spelled.as_value())?;
         }
@@ -471,7 +471,6 @@ fn lambda_display<W: Host>(
     record_form(
         input,
         [name::vocabulary::NAME, PARAMS, BODY],
-        &[],
         |[_, params, _]| {
             let cells = params?
                 .list_values()?
@@ -552,7 +551,7 @@ fn environment<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
 fn value_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    record_form(input, [name::vocabulary::NAME, VALUE], &[], |[_, value]| {
+    record_form(input, [name::vocabulary::NAME, VALUE], |[_, value]| {
         value?;
         let name = descend_local(
             [Step::Key(name::vocabulary::NAME)],
@@ -573,7 +572,7 @@ fn value_display<W: Host>(
 /// Foreignness is an evaluator implementation detail. In source, an
 /// FFI callable projects exactly like the cell it names.
 fn ffi_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    record_form(input, [FFI], &[], |[ffi]| {
+    record_form(input, [FFI], |[ffi]| {
         ffi?.as_cell()?;
         Some(group(shallow_path(
             [Step::Key(FFI)],
@@ -585,7 +584,7 @@ fn ffi_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
 fn evaluate_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    record_form(input, [EVALUATE], &[], |[expression]| {
+    record_form(input, [EVALUATE], |[expression]| {
         let result =
             input
                 .env

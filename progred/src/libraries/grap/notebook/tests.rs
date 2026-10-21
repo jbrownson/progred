@@ -260,3 +260,26 @@ fn a_closure_calls_the_unnamed_bindings_it_holds_e_subscript_numbered_and_its_la
         "the environment labels it as its lambda reads it"
     );
 }
+
+#[test]
+fn arrows_go_into_a_notebook_from_its_whole_down_to_an_entry_s_expression() {
+    let entry_cell = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(entry_cell, f64::value(42.0));
+    let mut driver = notebook(&[entry_cell], cells);
+    let arrow = |driver: &mut Driver, key| {
+        assert!(driver.keystroke(Key::Named(key), Modifiers::empty()));
+        driver.selection()
+    };
+    assert_eq!(arrow(&mut driver, NamedKey::ArrowDown), occurrence::of(&[]));
+    for stop in [
+        vec![Step::Key(NOTEBOOK)],
+        entry(&driver, 0, &[]),
+        expression(&driver, 0),
+    ] {
+        assert_eq!(
+            arrow(&mut driver, NamedKey::ArrowRight),
+            occurrence::of(&stop)
+        );
+    }
+}

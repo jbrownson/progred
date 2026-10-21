@@ -19,17 +19,18 @@ pub mod vocabulary {
     pub const NOTEBOOK: CellId = CellId::from_u128(0x30371e11863404e70052ccff54276702);
 }
 
-/// A record naming a notebook draws its entries, then its other fields.
+/// A record naming a notebook draws its entries, then its other fields, the
+/// whole a stop arrows go into, as the entries are.
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    crate::display::structure::record_form(input, [vocabulary::NOTEBOOK], &[], |[notebook]| {
+    crate::display::structure::record_form(input, [vocabulary::NOTEBOOK], |[notebook]| {
         notebook?;
-        Some(crate::display::descend_local(
+        Some(group(crate::display::descend_local(
             [Step::Key(vocabulary::NOTEBOOK)],
             crate::display::runtime_partial(entries),
             &input.default_projection,
-        ))
+        )))
     })
 }
 
@@ -52,7 +53,7 @@ fn entries<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
             positions.get(index + 1).cloned(),
         )
     });
-    Some(col(0, 12.0, entries.collect::<Vec<_>>()))
+    Some(group(col(0, 12.0, entries.collect::<Vec<_>>())))
 }
 
 /// A click on what an empty notebook draws starts its first entry.

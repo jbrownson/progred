@@ -122,8 +122,7 @@ while presentation declarations can apply ordinary Grap callables.
 Recognition checks the fields a partial uses, not the absence of unrelated
 fields. A compact form shows the fields it doesn't draw after it, as a trailing
 record, so it hides nothing: `structure::record_form` takes the fields the form
-draws, handing their values to the drawing in order, and the fields it ignores,
-as metadata will be, which only Raw then shows, and appends the rest. Missing or malformed required contents decline normally,
+draws, handing their values to the drawing in order, and appends the rest. Missing or malformed required contents decline normally,
 without reserving the record or blocking later partials. A convention whose
 tags are mutually exclusive settles a record carrying several of them its own
 way: layout decoding takes the first tag in a fixed precedence and ignores the
