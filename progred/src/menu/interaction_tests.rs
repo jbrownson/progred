@@ -422,3 +422,27 @@ fn the_name_entry_switches_labels_to_identities() {
     .sum::<usize>();
     assert_eq!(glyphs(&driver) - named, lengthened);
 }
+
+#[test]
+fn the_version_copies_from_the_bar_and_the_help_menu() {
+    use puri::edit::TextClipboard;
+    let mut driver = empty();
+    driver.click_at(point_for(&driver, Hover::Stage));
+    assert_eq!(
+        driver.runner.editor.text_clipboard.get_text(),
+        Some(crate::editor::stage())
+    );
+    assert_eq!(driver.runner.editor.menu.open(), None);
+
+    driver.runner.editor.text_clipboard = Default::default();
+    let help = definition(Vec::new()).len() - 1;
+    driver.click_at(point_for(&driver, Hover::Heading(help)));
+    driver.click_at(point_for(
+        &driver,
+        Hover::Item(Command::Doc(DocCommand::CopyVersion)),
+    ));
+    assert_eq!(
+        driver.runner.editor.text_clipboard.get_text(),
+        Some(crate::editor::stage())
+    );
+}

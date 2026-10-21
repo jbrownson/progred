@@ -759,6 +759,9 @@ impl Editor {
                     self.zoom = zoom;
                 }
             }
+            DocCommand::CopyVersion => {
+                self.text_clipboard.copy(stage(), None, None);
+            }
         }
     }
 

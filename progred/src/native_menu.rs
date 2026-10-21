@@ -181,6 +181,7 @@ fn definition<'a>(projections: impl IntoIterator<Item = (gid::CellId, &'a str)>)
             ],
             windows_menu: true,
         },
+        section("Help", vec![Entry::Command(C::Doc(D::CopyVersion))]),
     ]
 }
 

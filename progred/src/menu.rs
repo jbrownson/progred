@@ -126,6 +126,10 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
                 )
                 .collect(),
         },
+        Menu {
+            label: "Help",
+            entries: vec![Entry::Command(C::Doc(D::CopyVersion))],
+        },
     ]
 }
 
@@ -133,6 +137,8 @@ pub fn definition(projections: impl IntoIterator<Item = gid::CellId>) -> Vec<Men
 pub enum Hover {
     Heading(usize),
     Item(Command),
+    /// The version at the bar's far end, which a click copies.
+    Stage,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -674,14 +680,37 @@ mod view {
                 .map(|node| node.extent.width)
                 .sum()
         });
-        // How finished Progred is, at the bar's far end: a note, not a menu.
+        // How finished Progred is, at the bar's far end: a note, not a menu,
+        // which a click copies.
         let stage = {
+            let scale = description.scale;
             let text = placed::text(tcx, &crate::editor::stage(), &styles.dim);
-            let vertical = ((bar_height(description.scale) - text.extent.height()) / 2.0).max(0.0);
-            let horizontal = 10.0 * description.scale;
-            measured::pad(
-                Insets::new(horizontal, vertical, horizontal, vertical),
-                text,
+            let vertical = ((bar_height(scale) - text.extent.height()) / 2.0).max(0.0);
+            let horizontal = 10.0 * scale;
+            let content = placed::decorate(
+                measured::pad(
+                    Insets::new(horizontal, vertical, horizontal, vertical),
+                    text,
+                ),
+                move |p, rect| {
+                    p.render(move |cv: &mut dyn puri::draw::CanvasSink, hover| {
+                        if hover.hovered.as_ref() == Some(&Hovered::Menu(Hover::Stage)) {
+                            cv.fill(rect, palette.accent.with_alpha(0.14), Affine::IDENTITY);
+                        }
+                    });
+                },
+            );
+            interactive(
+                Hover::Stage,
+                content,
+                |_| {},
+                move |app, input| {
+                    app.choose_menu(
+                        Command::Doc(crate::command::DocCommand::CopyVersion),
+                        input.geometry(scale),
+                    );
+                    true
+                },
             )
         };
         let spacer = placed::leaf(

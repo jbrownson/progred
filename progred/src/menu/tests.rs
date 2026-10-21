@@ -320,7 +320,7 @@ fn an_open_menu_captures_other_key_downs() {
 fn the_drawn_tree_lists_every_command_once() {
     let definition = definition([]);
     let commands = commands(&definition).collect::<Vec<_>>();
-    assert_eq!(commands.len(), 23 + Example::ALL.len());
+    assert_eq!(commands.len(), 24 + Example::ALL.len());
     for (index, command) in commands.iter().enumerate() {
         assert!(commands[index + 1..].iter().all(|other| command != other));
     }
@@ -331,7 +331,7 @@ fn the_file_menu_carries_the_application_lifecycle() {
     let definition = definition([]);
     assert_eq!(
         definition.iter().map(|menu| menu.label).collect::<Vec<_>>(),
-        vec!["File", "Examples", "Edit", "View", "Projections"]
+        vec!["File", "Examples", "Edit", "View", "Projections", "Help"]
     );
     assert_eq!(
         definition[0].entries,

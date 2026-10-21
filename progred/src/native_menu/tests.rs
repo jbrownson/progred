@@ -28,13 +28,14 @@ fn the_native_tree_lists_every_command_once() {
             "Edit",
             "View",
             "Projections",
-            "Window"
+            "Window",
+            "Help"
         ]
     );
     let commands = commands(&definition);
     assert_eq!(
         commands.len(),
-        26 + Example::ALL.len() + stack.switchable().count()
+        27 + Example::ALL.len() + stack.switchable().count()
     );
     for (index, command) in commands.iter().enumerate() {
         assert!(commands[index + 1..].iter().all(|other| command != other));

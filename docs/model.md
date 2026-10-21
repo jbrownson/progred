@@ -603,6 +603,10 @@ menu also omits its shortcuts and keyboard navigation. Undo/redo have a separate
 editing handler, so embedded tutorials retain history without inheriting Raw,
 example switching, or pane commands. Native menus keep their own command routing.
 
+A build's version, the commit it came from, is at the drawn bar's far end and in
+window titles. A click on the drawn one copies it, as Help → Copy Version does
+in either menu, including the macOS one, where only the title shows it.
+
 Examples and replace-in-place New Document are development/demo conveniences,
 not the intended production File menu. Cmd+N (Ctrl+N on non-Mac hosts) and the
 example shortcuts replace the current document after confirming any unsaved

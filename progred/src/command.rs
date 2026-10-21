@@ -151,6 +151,8 @@ pub enum DocCommand {
     ZoomIn,
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     ZoomOut,
+    /// Copy the version the menu bar and window titles show, for a report.
+    CopyVersion,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -344,6 +346,7 @@ pub fn spec(command: Command) -> Spec {
         Command::Doc(DocCommand::ZoomOut) => {
             item("Zoom Out", Some(Shortcut::plain(ShortcutKey::Minus)))
         }
+        Command::Doc(DocCommand::CopyVersion) => item("Copy Version", None),
     }
 }
 
@@ -393,6 +396,7 @@ impl Availability {
             DocCommand::ZoomIn => self.zoom_in,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ZoomOut => self.zoom_out,
+            DocCommand::CopyVersion => true,
         }
     }
 

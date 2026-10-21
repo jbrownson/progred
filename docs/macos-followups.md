@@ -17,6 +17,9 @@ empty.
   `picture_copy`). Copy a list or a record, including one with a 3D preview,
   and paste it into an app that takes images, such as Notes or a chat, and
   into a plain-text editor; check the picture's size on a Retina display.
+- **Help → Copy Version.** The native menu's new Help section was checked with
+  `--target aarch64-apple-darwin` but not run. Choose it and paste into another
+  app: it should give the window title's version, such as `pre-alpha 1a2b3c4d`.
 - **The 18–19 October cleanup's macOS-only code.** It was checked with
   `--target aarch64-apple-darwin` but not run: `native_menu.rs`, whose
   `Menu::new` takes the app's stack's projections and whose View menu's pane
