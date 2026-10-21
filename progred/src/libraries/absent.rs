@@ -1,7 +1,6 @@
 //! Tagged Grap absence values. The tag identifies the result as absent;
 //! its cell payload is the stable, language-independent reason identity.
 
-use crate::display::Projected;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::libraries::{Library, name};
 use crate::location::Location;
@@ -89,12 +88,11 @@ fn callers<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
                     Some(stack) => crate::display::at(
                         [gid::Step::Key(vocabulary::CALLERS)],
                         gid::Value::list(stack.iter().skip(1).map(::grap::source::value)),
-                        Projected::overriding(crate::display::instead(
-                            crate::display::structure::list_column(
-                                2.0,
-                                Some(crate::display::runtime_partial(self::call)),
-                            ),
+                        Some(crate::display::structure::list_column(
+                            2.0,
+                            Some(crate::display::runtime_partial(self::call)),
                         )),
+                        None,
                     ),
                     None => crate::display::dim("not found"),
                 },
@@ -137,7 +135,7 @@ fn call_field<W: Host>(key: CellId) -> Option<crate::display::host::Partial<W>> 
 /// call drawn in its code.
 fn call<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let call = location(::grap::source::read(&input.value?.to_value())?)?;
-    Some(crate::display::jump([], call, Projected::ordinary()))
+    Some(crate::display::jump([], call, None, None))
 }
 
 /// A missing argument reads as its reason and the parameter, then the hole
@@ -159,16 +157,20 @@ fn missing_argument<W: Host>(
         crate::display::jump(
             [gid::Step::Key(vocabulary::CALL)],
             argument,
-            Projected::overriding(crate::display::first(crate::display::runtime_partial(
-                crate::libraries::grap::expression,
-            ))),
+            Some(crate::display::first(
+                input,
+                crate::display::runtime_partial(crate::libraries::grap::expression),
+            )),
+            None,
         )
     });
     let named = crate::display::descend(
         [gid::Step::Key(vocabulary::CELL)],
-        Projected::overriding(crate::display::first(crate::display::runtime_partial(
-            crate::libraries::name::shallow_cell,
-        ))),
+        Some(crate::display::first(
+            input,
+            crate::display::runtime_partial(crate::libraries::name::shallow_cell),
+        )),
+        None,
     );
     Some(on_red(
         crate::display::structure::Fields::default()

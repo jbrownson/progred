@@ -512,12 +512,7 @@ fn only_the_active_empty_requests_completion_offers() {
         Some(crate::display::col(
             0,
             0.0,
-            fields.map(|field| {
-                descend(
-                    [gid::Step::Key(field)],
-                    crate::display::Projected::overriding(crate::display::instead(hole.clone())),
-                )
-            }),
+            fields.map(|field| descend([gid::Step::Key(field)], Some(hole.clone()), None)),
         ))
     })]);
     let document = Document {

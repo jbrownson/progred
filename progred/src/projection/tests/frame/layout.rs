@@ -55,7 +55,8 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
         Some(d::at(
             [],
             value.clone(),
-            d::Projected::throughout(d::instead(children)),
+            Some(children.clone()),
+            Some(children),
         ))
     })]);
     for expected in 1..=2 {
@@ -100,7 +101,8 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
         Some(d::at(
             [gid::Step::Key(result)],
             value.clone(),
-            d::Projected::throughout(d::instead(children)),
+            Some(children.clone()),
+            Some(children),
         ))
     })]);
     let mut world = crate::editor_of(Value::record([]));

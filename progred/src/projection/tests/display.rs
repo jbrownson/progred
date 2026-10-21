@@ -18,8 +18,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
             let local = partial(
                 move |input: &crate::display::ProjectionInput<'_, crate::Editor, Hovered>| {
                     calls.borrow_mut().push(input.value?.clone());
-                    accepts
-                        .then(|| descend([Step::Key(child)], crate::display::Projected::ordinary()))
+                    accepts.then(|| descend([Step::Key(child)], None, None))
                 },
             );
             let expected_root = root.clone();
@@ -35,19 +34,17 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
                                 at(
                                     [Step::Key(field)],
                                     &nested,
-                                    crate::display::Projected::overriding(crate::display::first(
-                                        local.clone(),
-                                    )),
+                                    Some(crate::display::first(input, local.clone())),
+                                    None,
                                 )
                             } else {
                                 descend(
                                     [Step::Key(field)],
-                                    crate::display::Projected::overriding(crate::display::first(
-                                        local.clone(),
-                                    )),
+                                    Some(crate::display::first(input, local.clone())),
+                                    None,
                                 )
                             },
-                            descend([Step::Key(sibling)], crate::display::Projected::ordinary()),
+                            descend([Step::Key(sibling)], None, None),
                         ],
                     )
                 })
@@ -82,13 +79,10 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
                 match mode {
                     0 => Some(descend(
                         [Step::Follow(gid::Resolution::Document)],
-                        crate::display::Projected::ordinary(),
+                        None,
+                        None,
                     )),
-                    1 => Some(at(
-                        [Step::Key(field)],
-                        Value::from(vec![7]),
-                        crate::display::Projected::ordinary(),
-                    )),
+                    1 => Some(at([Step::Key(field)], Value::from(vec![7]), None, None)),
                     _ => None,
                 }
             },
@@ -98,7 +92,8 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
             (input.value == Some(&expected_root)).then(|| {
                 descend(
                     [Step::Key(if mode == 2 { cell } else { field })],
-                    crate::display::Projected::overriding(crate::display::first(local.clone())),
+                    Some(crate::display::first(input, local.clone())),
+                    None,
                 )
             })
         })]);
@@ -182,21 +177,17 @@ fn descents_replace_current_and_default_projections_independently() {
                             at(
                                 [Step::Key(field)],
                                 &nested,
-                                crate::display::Projected::overriding(crate::display::instead(
-                                    current.clone(),
-                                ))
-                                .defaulting(crate::display::instead(children.clone())),
+                                Some(current.clone()),
+                                Some(children.clone()),
                             )
                         } else {
                             descend(
                                 [Step::Key(field)],
-                                crate::display::Projected::overriding(crate::display::instead(
-                                    current.clone(),
-                                ))
-                                .defaulting(crate::display::instead(children.clone())),
+                                Some(current.clone()),
+                                Some(children.clone()),
                             )
                         },
-                        descend([Step::Key(sibling)], crate::display::Projected::ordinary()),
+                        descend([Step::Key(sibling)], None, None),
                     ],
                 )
             })
@@ -245,11 +236,10 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
                     at(
                         [Step::Key(scoped)],
                         &nested,
-                        crate::display::Projected::throughout(crate::display::instead(
-                            scoped_projection,
-                        )),
+                        Some(scoped_projection.clone()),
+                        Some(scoped_projection),
                     ),
-                    descend([Step::Key(ordinary)], crate::display::Projected::ordinary()),
+                    descend([Step::Key(ordinary)], None, None),
                 ],
             )
         })

@@ -148,13 +148,15 @@ parallel Progred drawing language.
 A projection draws three kinds of step: `descend` into what's stored, `at` a
 computed value, and `jump` to another location. The root is seeded with the
 editor's projection stack, and each projection hands it down; a walk can change
-it on the way. A `Projected` says how: an override for the value the walk
-reaches, and the default that trickles down to what's inside that value. Each
-change is a function given the projection the walk inherits, returning the one
-to use; `first(p)` tries `p` before the inherited one and `instead(p)` replaces
-it. `Projected::ordinary()` keeps both, `Projected::overriding(change)` changes
-the value's, `.defaulting(change)` what's inside it, and
-`Projected::throughout(change)` both, as a pattern's binders are. A walk's new
+it on the way. Each walk takes two optional projections: `overriding` draws the
+value the walk reaches, and `default` is handed down to draw what's inside that
+value. Where either is none, the inherited projection stands, as the engine has
+it: a pane's entry, which lets its value present itself, included. A projection
+reads the one it inherits as its input's `default_projection` (the stack without
+that entry), so it builds a change in the open: `first(input, p)` tries `p`
+before the inherited one, and `p` alone replaces it. Most walks override only
+the value they reach; a pattern sets both to its binders' projection, so the
+binders of patterns nested in it are drawn as binders too. A walk's new
 default applies below the value, not to the value itself. The total structural
 fallback still handles a declined result. These are ordinary preparation
 functions, not path-bearing layout opcodes.
@@ -162,7 +164,7 @@ functions, not path-bearing layout opcodes.
 `descend` follows steps of the displayed structure without projecting
 intermediate containers. It preserves the current location interpretation,
 except that following a cell starts a location at its definition.
-`jump(steps, location, projected)` extends the occurrence path by `steps` and
+`jump(steps, location, overriding, default)` extends the occurrence path by `steps` and
 a jump step to a location, which it reads from: a document path from the root,
 or one within a cell's definition, which keeps that location's start. Its
 descendants' paths continue from that jump, for both projection reads and later

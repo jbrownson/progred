@@ -203,7 +203,8 @@ pub(crate) fn with_name<W: Host>(
             [
                 descend(
                     [step],
-                    crate::display::Projected::overriding(crate::display::first(projection(None))),
+                    Some(crate::display::first(input, projection(None))),
+                    None,
                 ),
                 content,
             ],

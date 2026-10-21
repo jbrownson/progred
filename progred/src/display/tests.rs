@@ -10,10 +10,7 @@ fn probe(_: &ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
 fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
     let steps = vec![Step::Key(gid::new_cell_id()), Step::Key(gid::new_cell_id())];
     let source = vec![Step::Key(gid::new_cell_id())];
-    let layout: Layout<(), ()> = descend(
-        steps.clone(),
-        Projected::overriding(crate::display::first(partial(probe))),
-    );
+    let layout: Layout<(), ()> = descend(steps.clone(), Some(partial(probe)), None);
     match inspect(&layout) {
         ProjectionCall::Descend {
             steps: actual,
@@ -32,7 +29,8 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
     let layout: Layout<(), ()> = jump(
         steps.clone(),
         crate::location::Location::root(source.clone()),
-        Projected::ordinary(),
+        None,
+        None,
     );
     match inspect(&layout) {
         ProjectionCall::Jump {
@@ -121,14 +119,12 @@ fn recorder_preserves_local_and_descendant_projection_inputs() {
     let default = partial::<(), ()>(|_| None);
     let step = Step::Key(gid::new_cell_id());
     for layout in [
-        descend(
-            [step.clone()],
-            Projected::overriding(instead(local.clone())).defaulting(instead(default.clone())),
-        ),
+        descend([step.clone()], Some(local.clone()), Some(default.clone())),
         at(
             [step],
             Value::record([]),
-            Projected::overriding(instead(local.clone())).defaulting(instead(default.clone())),
+            Some(local.clone()),
+            Some(default.clone()),
         ),
     ] {
         let (actual, descendants) = match inspect(&layout) {
@@ -158,7 +154,7 @@ fn record_braces_keep_the_supplied_order_in_both_responsive_forms() {
     let layout: crate::projection::Layout = record_braces(
         [(SECOND, &second), (FIRST, &first)].map(|(key, value)| RecordField {
             label: dim("field"),
-            value: at([Step::Key(key)], value, Projected::ordinary()),
+            value: at([Step::Key(key)], value, None, None),
         }),
         [],
     );

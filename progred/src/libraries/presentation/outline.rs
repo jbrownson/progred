@@ -39,7 +39,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 let heading = d::runtime_partial(heading);
                 d::structure::list_column_with(input, 24.0, Some(heading), |position, heading| {
                     match elements.list_element(&position).and_then(|v| v.as_cell()) {
-                        Some(key) => section(position, key, heading, &here, &fields),
+                        Some(key) => section(input, position, key, heading, &here, &fields),
                         None => heading,
                     }
                 })
@@ -53,10 +53,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 8.0,
                 [
                     label.clone(),
-                    d::descend(
-                        [Step::Key(OUTLINE)],
-                        d::Projected::overriding(d::instead(entries)),
-                    ),
+                    d::descend([Step::Key(OUTLINE)], Some(entries), None),
                 ],
             )]
             .into_iter()
@@ -69,6 +66,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
 /// A section whose body is the outline's field `key`, drawn where the
 /// outline is stored and edited there.
 fn section<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     position: gid::Position,
     key: CellId,
     heading: Layout<W>,
@@ -77,15 +75,15 @@ fn section<W: Host>(
 ) -> Layout<W> {
     let steps = [Step::Element(position), Step::Key(key)];
     // A body is a column of its items, which the projections it inherits draw.
-    let body_projection = d::Projected::overriding(d::first(d::structure::list_column(16.0, None)));
+    let body_projection = d::first(input, d::structure::list_column(16.0, None));
     let unstored = match fields.get(&key) {
-        Some(value) => d::at(steps.clone(), value, body_projection.clone()),
+        Some(value) => d::at(steps.clone(), value, Some(body_projection.clone()), None),
         None => d::slot(),
     };
     // The body stored there is edited there, along with what's stored below
     // it; one with nowhere stored draws as it is.
     let body = match outline.below(&[Step::Key(key)]).location() {
-        Some(stored) => d::jump(steps.clone(), stored, body_projection),
+        Some(stored) => d::jump(steps.clone(), stored, Some(body_projection), None),
         None => unstored,
     };
     Layout::program(Rc::new(move |context, build| {

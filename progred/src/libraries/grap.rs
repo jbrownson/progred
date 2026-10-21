@@ -5,7 +5,6 @@
 //! representations in [`numbers`].
 
 use crate::computations::memo;
-use crate::display::Projected;
 use crate::display::host::{Host, Layout, Partial, ProjectionInput};
 use crate::libraries::{Library, name};
 use gid::{CellId, Step, Value};
@@ -230,9 +229,13 @@ pub(crate) fn declaration_cell<W: Host>(
         Delim::Paren,
         descend(
             [Step::Follow(definition.resolution)],
-            Projected::overriding(crate::display::first(crate::display::runtime_partial(
-                move |input| declaration_name(input, computed.as_deref()),
-            ))),
+            Some(crate::display::first(
+                input,
+                crate::display::runtime_partial(move |input| {
+                    declaration_name(input, computed.as_deref())
+                }),
+            )),
+            None,
         ),
     ))
 }
@@ -249,9 +252,11 @@ fn declaration_name<W: Host>(
         }
         Some(descend(
             [Step::Key(name::vocabulary::NAME)],
-            Projected::overriding(crate::display::first(name::projection(
-                computed.map(str::to_owned),
-            ))),
+            Some(crate::display::first(
+                input,
+                name::projection(computed.map(str::to_owned)),
+            )),
+            None,
         ))
     })
 }
@@ -269,23 +274,33 @@ fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
     })
 }
 
-pub fn shallow_path<W: Host>(steps: impl AsRef<[Step]> + 'static) -> Layout<W> {
+pub fn shallow_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
+    steps: impl AsRef<[Step]> + 'static,
+) -> Layout<W> {
     descend(
         steps,
-        Projected::overriding(crate::display::first(crate::display::runtime_partial(
-            name::shallow_cell,
-        ))),
+        Some(crate::display::first(
+            input,
+            crate::display::runtime_partial(name::shallow_cell),
+        )),
+        None,
     )
 }
 
 /// A named direct expression reference is shallow. A compound expression's
 /// projection explicitly chooses the roles of its own children.
-pub(crate) fn expression_path<W: Host>(steps: impl AsRef<[Step]> + 'static) -> Layout<W> {
+pub(crate) fn expression_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
+    steps: impl AsRef<[Step]> + 'static,
+) -> Layout<W> {
     descend(
         steps,
-        Projected::overriding(crate::display::first(crate::display::runtime_partial(
-            expression,
-        ))),
+        Some(crate::display::first(
+            input,
+            crate::display::runtime_partial(expression),
+        )),
+        None,
     )
 }
 
@@ -312,18 +327,23 @@ fn program<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
         });
     Some(selectable_bracket(
         Delim::Paren,
-        expression_path([Step::Follow(source)]),
+        expression_path(input, [Step::Follow(source)]),
     ))
 }
 
 /// Declaration cells keep their parentheses, with a named definition
 /// shown as an unquoted editor at the real name field.
-pub(crate) fn declaration_path<W: Host>(steps: impl AsRef<[Step]> + 'static) -> Layout<W> {
+pub(crate) fn declaration_path<W: Host, V>(
+    input: &ProjectionInput<'_, W, V>,
+    steps: impl AsRef<[Step]> + 'static,
+) -> Layout<W> {
     descend(
         steps,
-        Projected::overriding(crate::display::first(crate::display::runtime_partial(
-            |input| declaration_cell(input, None),
-        ))),
+        Some(crate::display::first(
+            input,
+            crate::display::runtime_partial(|input| declaration_cell(input, None)),
+        )),
+        None,
     )
 }
 
@@ -411,9 +431,11 @@ pub(crate) fn call_with_function<W: Host>(
         .unwrap_or_default();
     let function = descend(
         [Step::Key(FUNCTION)],
-        Projected::overriding(crate::display::first(
+        Some(crate::display::first(
+            input,
             function_projection.unwrap_or_else(|| crate::display::runtime_partial(expression)),
         )),
+        None,
     );
     // Its arguments are its function's parameters, in their order, each a
     // slot until it's given, then any others.
@@ -446,20 +468,26 @@ fn lambda_display<W: Host>(
             });
             let params = descend(
                 [Step::Key(PARAMS)],
-                Projected::overriding(crate::display::first(crate::display::structure::list(
-                    Some(crate::display::runtime_partial(move |input| {
-                        parameter(input, &computed)
-                    })),
-                ))),
+                Some(crate::display::first(
+                    input,
+                    crate::display::structure::list(Some(crate::display::runtime_partial(
+                        move |input| parameter(input, &computed),
+                    ))),
+                )),
+                None,
             );
             let body_site = input.site().below(&[Step::Key(BODY)]);
             let lambda = descend(
                 [Step::Key(name::vocabulary::NAME)],
-                Projected::overriding(crate::display::first(crate::display::partial(lambda_name))),
+                Some(crate::display::first(
+                    input,
+                    crate::display::partial(lambda_name),
+                )),
+                None,
             );
             let arrow = selectable(crate::display::arrow(), &body_site);
             let head = row(3.0, [lambda, params, arrow]);
-            Some(hug(head, expression_path([Step::Key(BODY)]), 6.0))
+            Some(hug(head, expression_path(input, [Step::Key(BODY)]), 6.0))
         },
     )
 }
@@ -521,14 +549,18 @@ fn value_display<W: Host>(
         value?;
         let name = descend(
             [Step::Key(name::vocabulary::NAME)],
-            Projected::overriding(crate::display::first(crate::display::partial(|input| {
-                name::editor(input.value?).map(crate::display::line_edit)
-            }))),
+            Some(crate::display::first(
+                input,
+                crate::display::partial(|input| {
+                    name::editor(input.value?).map(crate::display::line_edit)
+                }),
+            )),
+            None,
         );
         let site = input.site().below(&[Step::Key(VALUE)]);
         Some(hug(
             row(3.0, [name, selectable(dim("="), &site)]),
-            expression_path([Step::Key(VALUE)]),
+            expression_path(input, [Step::Key(VALUE)]),
             6.0,
         ))
     })
@@ -539,7 +571,7 @@ fn value_display<W: Host>(
 fn ffi_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     record_form(input, [FFI], |[ffi]| {
         ffi?.as_cell()?;
-        Some(shallow_path([Step::Key(FFI)]))
+        Some(shallow_path(input, [Step::Key(FFI)]))
     })
 }
 
@@ -551,7 +583,7 @@ fn evaluate_display<W: Host>(
             input
                 .env
                 .evaluate_runtime(&expression?, ::grap::DEFAULT_FUEL, &[Step::Key(EVALUATE)]);
-        let expression = shared(expression_path([Step::Key(EVALUATE)]));
+        let expression = shared(expression_path(input, [Step::Key(EVALUATE)]));
         let shaft_site = input.site();
         let shaft = shared(selectable(crate::display::arrow(), &shaft_site));
         let result = shared(crate::libraries::presentation::result_layout(&result));

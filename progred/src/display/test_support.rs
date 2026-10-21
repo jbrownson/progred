@@ -193,9 +193,8 @@ pub fn delimited<W, H>(
     }
 }
 
-/// Records the walk a layout makes, from where the inherited projection is
-/// the second field.
-struct Recorder<W, H>(RefCell<ProjectionCall<W, H>>, Partial<W, H>);
+/// Records the walk a layout makes.
+struct Recorder<W, H>(RefCell<ProjectionCall<W, H>>);
 
 impl<W: 'static, H: 'static> Recorder<W, H> {
     fn record(&self, call: ProjectionCall<W, H>) -> ChoiceLayout<widget::HoverPass<W, H>> {
@@ -205,9 +204,6 @@ impl<W: 'static, H: 'static> Recorder<W, H> {
 }
 
 impl<W: 'static, H: 'static> widget::project::Project<W, H> for Recorder<W, H> {
-    fn inherited(&self) -> Partial<W, H> {
-        self.1.clone()
-    }
     fn descend(
         &self,
         _: &mut TextCtx,
@@ -477,10 +473,7 @@ pub(crate) fn with_view<W: 'static, H: 'static, R>(
 }
 
 pub fn inspect<W: 'static, H: 'static>(layout: &impl Recordable<W, H>) -> ProjectionCall<W, H> {
-    let recorder = Recorder(
-        RefCell::new(ProjectionCall::Other),
-        crate::display::partial(|_| None),
-    );
+    let recorder = Recorder(RefCell::new(ProjectionCall::Other));
     if let Recorded::Program(program) = record(layout).content() {
         with_context(&recorder, |context| {
             program(context, &mut ChoiceBuild::default());
@@ -535,9 +528,6 @@ impl<W> Default for widget::navigation::Geometry<'_, W> {
 /// Native-only widget tests intentionally provide no document recursion.
 pub struct NoProject;
 impl<W, H> widget::project::Project<W, H> for NoProject {
-    fn inherited(&self) -> Partial<W, H> {
-        panic!("unexpected walk")
-    }
     fn descend(
         &self,
         _: &mut TextCtx,

@@ -1,5 +1,4 @@
 use super::{one_marker, parameters, vocabulary::*};
-use crate::display::Projected;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::hug;
 use crate::display::{
@@ -92,7 +91,7 @@ pub(super) fn field<W: Host>(
     let input = input.with_value(input.value.map(::grap::RuntimeValue::as_value));
     let (marker, content) = form(input.value?)?;
     let body = if marker == AXIS {
-        crate::libraries::grap::shallow_path([Step::Key(AXIS)])
+        crate::libraries::grap::shallow_path(&input, [Step::Key(AXIS)])
     } else {
         let site = input.site();
         let operator = selectable(
@@ -103,7 +102,7 @@ pub(super) fn field<W: Host>(
         if precedence(marker).is_some() {
             representation::infix(operator, |key| {
                 (
-                    descend([Step::Key(marker), Step::Key(key)], Projected::ordinary()),
+                    descend([Step::Key(marker), Step::Key(key)], None, None),
                     fields
                         .get(&key)
                         .is_some_and(|value| grouped(marker, key, value)),
@@ -117,10 +116,7 @@ pub(super) fn field<W: Host>(
                         .iter()
                         .map(|key| {
                             fields.get(key)?;
-                            Some(descend(
-                                [Step::Key(marker), Step::Key(*key)],
-                                Projected::ordinary(),
-                            ))
+                            Some(descend([Step::Key(marker), Step::Key(*key)], None, None))
                         })
                         .collect::<Option<Vec<_>>>()?,
                 ),
@@ -136,7 +132,8 @@ pub(super) fn field<W: Host>(
                     [
                         crate::display::descend(
                             [Step::Key(name::vocabulary::NAME)],
-                            Projected::overriding(crate::display::first(name::projection(None))),
+                            Some(crate::display::first(&input, name::projection(None))),
+                            None,
                         ),
                         dim("="),
                     ],

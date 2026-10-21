@@ -8,15 +8,12 @@ use measured::choices::{ChoiceBuild, ChoiceLayout};
 use puri::text::TextCtx;
 
 pub trait Project<World, Hover> {
-    /// The projection handed down where this stands: what draws what's below
-    /// here unless a walk changes it.
-    fn inherited(&self) -> Partial<World, Hover>;
     fn descend(
         &self,
         text: &mut TextCtx,
         build: &mut ChoiceBuild<HoverPass<World, Hover>>,
         steps: &[Step],
-        current: Option<Partial<World, Hover>>,
+        overriding: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
     fn jump(
@@ -25,7 +22,7 @@ pub trait Project<World, Hover> {
         build: &mut ChoiceBuild<HoverPass<World, Hover>>,
         steps: Vec<Step>,
         document: crate::location::Location<'static>,
-        current: Option<Partial<World, Hover>>,
+        overriding: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
     /// Draw `value` computed at `steps` below here, the result of
@@ -38,7 +35,7 @@ pub trait Project<World, Hover> {
         steps: Vec<Step>,
         value: grap::RuntimeValue,
         evaluated: Option<std::rc::Rc<crate::display::Evaluated>>,
-        current: Option<Partial<World, Hover>>,
+        overriding: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
     /// Descend showing the child as Raw does: no value projections and no
