@@ -10,7 +10,7 @@ use gid::{CellId, Step, Value};
 
 use crate::display::hug;
 use crate::display::structure::record_form;
-use crate::display::{activatable, alternatives, col, descend, dim, row, shared};
+use crate::display::{alternatives, col, descend, dim, row, selectable, shared};
 use ::grap::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue, Stage,
 };
@@ -680,7 +680,7 @@ fn case_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option
             let expression_site = input
                 .site()
                 .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
-            let arrow = activatable(crate::display::arrow(), &expression_site);
+            let arrow = selectable(crate::display::arrow(), &expression_site);
             Some(hug(
                 crate::display::centered_row(
                     6.0,
@@ -754,7 +754,7 @@ fn bindings_form<W: Host>(
             let expression_site = input
                 .site()
                 .below(&[Step::Key(::grap::vocabulary::EXPRESSION)]);
-            let in_marker = shared(activatable(dim("in"), &expression_site));
+            let in_marker = shared(selectable(dim("in"), &expression_site));
             alternatives([
                 row(
                     4.0,
@@ -814,7 +814,7 @@ fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
             }?;
             value?;
             let value_site = input.site().below(&[Step::Key(vocabulary::VALUE)]);
-            let equals = activatable(dim("="), &value_site);
+            let equals = selectable(dim("="), &value_site);
             Some(hug(
                 crate::display::centered_row(6.0, [left, equals]),
                 crate::libraries::grap::expression_path(
@@ -830,7 +830,7 @@ fn binding_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
 fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     (input.value?.as_cell()? == vocabulary::QUOTE).then(|| {
         let site = input.site();
-        activatable(dim("\""), &site)
+        selectable(dim("\""), &site)
     })
 }
 
@@ -881,7 +881,7 @@ fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Opt
         Some(row(
             2.0,
             [
-                activatable(dim("`"), &site),
+                selectable(dim("`"), &site),
                 crate::libraries::grap::expression_path(
                     [Step::Key(vocabulary::UNQUOTE)],
                     &input.default_projection,

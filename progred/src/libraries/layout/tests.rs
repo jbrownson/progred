@@ -422,7 +422,7 @@ fn border_wraps_any_decoded_layout() {
 #[test]
 fn a_layout_round_trips_from_data() {
     let value = options([
-        selectable(row(
+        selectable_node(row(
             4.0,
             [
                 text_leaf("shape", vocabulary::NAME_FACE),
@@ -492,7 +492,7 @@ fn intents_and_leaves_decode() {
     );
     assert_eq!(
         crate::libraries::test_widgets::claim(
-            &decoded(&selectable(text_leaf("h", vocabulary::LABEL_FACE))).unwrap()
+            &decoded(&selectable_node(text_leaf("h", vocabulary::LABEL_FACE))).unwrap()
         ),
         Some(puri::hover::Claim::Direct(
             crate::libraries::test_widgets::hover(vec![])

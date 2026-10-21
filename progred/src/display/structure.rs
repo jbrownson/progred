@@ -96,7 +96,7 @@ where
                 .map(|position| input.site().below(&[Step::Element(position)]));
             let content = render(site.as_ref().map(|site| W::Hover::from(site.hover())));
             widget::fill_width(match site {
-                Some(site) => activatable(content, &site),
+                Some(site) => selectable(content, &site),
                 None => content,
             })
         })
@@ -322,12 +322,12 @@ impl<W: Host> Fields<W> {
         input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
         key: CellId,
     ) -> RecordField<W, W::Hover> {
-        let name = (self.label)(key).unwrap_or_else(|| field_label(input.env, key));
+        let name = (self.label)(key).unwrap_or_else(|| field_name(input.env, key));
         // A missing field's name selects it only where it's a slot to fill.
         let selects =
             self.slots.contains(&key) || input.value.is_some_and(|value| value.contains_field(key));
         RecordField {
-            label: record_label_reading(input, key, name, selects),
+            label: field_label(input, key, name, selects),
             value: descend(
                 [Step::Key(key)],
                 Projected::by(
@@ -360,33 +360,57 @@ pub(crate) fn field_order(env: &dyn Env, left: &CellId, right: &CellId) -> Order
 }
 
 /// A field's name, or its short id where it has none.
-pub(crate) fn field_label<W: Host>(env: &dyn Env, key: CellId) -> Layout<W> {
+pub(crate) fn field_name<W: Host>(env: &dyn Env, key: CellId) -> Layout<W> {
     match env.name(key) {
         Some(name) => crate::display::named(&name, Face::Label),
         None => faced(crate::identity::short_id(key), Face::Id),
     }
 }
 
-/// The ordinary field-name presentation and interaction, independent of how
-/// the enclosing record arranges its fields.
-pub(crate) fn record_label<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    key: CellId,
-) -> Layout<W> {
-    let present = input.value.is_some_and(|value| value.contains_field(key));
-    record_label_reading(input, key, field_label(input.env, key), present)
-}
-
-/// A field's label read as `name`, which a click on selects the field where
-/// `selects`.
-fn record_label_reading<W: Host>(
+/// The label of the field `key` here, read as `name`, then its colon. It
+/// hovers apart from the field's value, so a Cmd+click picks the label, not
+/// the value, or, with no slot open, acts as a click; a click selects the
+/// field where `selects`.
+pub(crate) fn field_label<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     key: CellId,
     name: Layout<W>,
     selects: bool,
 ) -> Layout<W> {
     let site = input.site().below(&[Step::Key(key)]);
-    crate::display::field_label_at(row(0.0, [name, dim(":")]), &site, key, selects)
+    let target = W::Hover::from(site.label_hover());
+    let hover = target.clone();
+    let select = selects.then(|| widget::navigation::selecting(site));
+    let label = ::grap::RuntimeValue::from(Value::from(key));
+    let pressed = widget::before(
+        row(0.0, [name, dim(":")]),
+        Rc::new(move |_| {
+            let target = target.clone();
+            let select = select.clone();
+            let label = label.clone();
+            Box::new(move |output, placement| {
+                if !placement.clipped_out() {
+                    let (click, otherwise) = (select.clone(), select.clone());
+                    let label = label.clone();
+                    output.on_press(
+                        target,
+                        move |world: &mut W, _| {
+                            click
+                                .as_ref()
+                                .is_some_and(|select| select(&mut world.session()))
+                        },
+                        move |world: &mut W, _| {
+                            widget::interaction::pick(world, &label)
+                                || otherwise
+                                    .as_ref()
+                                    .is_some_and(|select| select(&mut world.session()))
+                        },
+                    );
+                }
+            })
+        }),
+    );
+    on_hover(pressed, hover)
 }
 
 /// Enter's authoring for the container `child` draws: a field or element

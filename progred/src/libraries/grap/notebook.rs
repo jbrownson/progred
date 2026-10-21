@@ -6,7 +6,7 @@
 //! its first.
 
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::display::{Completion, activatable, alternatives, col, indent, row, shared};
+use crate::display::{Completion, alternatives, col, indent, row, selectable, shared};
 use gid::{Position, Resolution, Step, Value};
 use puri::handler::HasHandler;
 use std::rc::Rc;
@@ -136,7 +136,7 @@ fn entry_of<W: Host>(
     let site = input.site();
     let (expression, arrow, result) = (
         shared(expression),
-        shared(activatable(crate::display::arrow(), &site)),
+        shared(selectable(crate::display::arrow(), &site)),
         shared(result),
     );
     Some(alternatives([

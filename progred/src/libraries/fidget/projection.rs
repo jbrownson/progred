@@ -3,7 +3,7 @@ use crate::display::Projected;
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::hug;
 use crate::display::{
-    Delim, activatable, alternatives, col, descend, dim, row, selectable_bracket, shared,
+    Delim, alternatives, col, descend, dim, row, selectable, selectable_bracket, shared,
 };
 use crate::libraries::name;
 use crate::libraries::representation::{self, Precedence};
@@ -95,8 +95,8 @@ pub(super) fn field<W: Host>(
         crate::libraries::grap::shallow_path([Step::Key(AXIS)], &input.default_projection)
     } else {
         let site = input.site();
-        let operator = activatable(
-            crate::display::structure::field_label(input.env, marker),
+        let operator = selectable(
+            crate::display::structure::field_name(input.env, marker),
             &site,
         );
         let fields = content.as_record()?;

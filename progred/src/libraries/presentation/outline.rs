@@ -23,7 +23,12 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
     let runtime_input = input.with_value(Some(&value));
     let footer = d::structure::Fields::default()
         .rest(&runtime_input, |key| key == OUTLINE || keys.contains(&key));
-    let label = d::structure::record_label(&runtime_input, OUTLINE);
+    let label = d::structure::field_label(
+        &runtime_input,
+        OUTLINE,
+        d::structure::field_name(input.env, OUTLINE),
+        true,
+    );
     Some(Layout::program(Rc::new(move |context, build| {
         let here = context.site();
         let entries = d::runtime_partial({

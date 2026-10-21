@@ -26,7 +26,7 @@ pub fn view<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Op
         {
             crate::display::line_edit(hex_editor(bytes))
         }
-        ::grap::Shape::Blob(bytes) => crate::display::activatable(
+        ::grap::Shape::Blob(bytes) => crate::display::selectable(
             crate::display::id(format!(
                 "0x{}… ({} bytes)",
                 gid::hex_string(&bytes[..8]),

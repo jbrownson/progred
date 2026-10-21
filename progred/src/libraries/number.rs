@@ -2,8 +2,8 @@
 //! and drawn, the typed reading of a number, and scrub editing. Their
 //! arithmetic is Grap's, in [`crate::libraries::grap::numbers`].
 
-use crate::display::activatable;
 use crate::display::host::{Host, Layout, ProjectionInput};
+use crate::display::selectable;
 use crate::libraries::representation::tagged;
 use crate::libraries::{Library, name};
 use ::grap::RuntimeValue;
@@ -70,7 +70,7 @@ impl<N: Scrubbable + std::str::FromStr> Representation<N> {
         });
         let line = tagged(input, digits, self.tag);
         let site = input.site();
-        let line = activatable(line, &site);
+        let line = selectable(line, &site);
         let line = if number.scrubbable() {
             let original = original.clone();
             // Outlined where it drags: the whole number, its tag too.

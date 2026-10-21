@@ -218,7 +218,7 @@ fn head<W: Host>(
         Some(name) => crate::display::named(&name, crate::display::Face::Ink),
         None => crate::display::faced(crate::identity::short_id(reason), crate::display::Face::Ink),
     };
-    crate::display::activatable(name, &input.site())
+    crate::display::selectable(name, &input.site())
 }
 
 fn on_red<W: Host>(content: Layout<W>) -> Layout<W> {

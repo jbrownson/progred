@@ -219,7 +219,7 @@ pub fn close() -> Value {
     node(vocabulary::CLOSE, Value::record([]))
 }
 
-pub fn selectable(child: Value) -> Value {
+pub fn selectable_node(child: Value) -> Value {
     node(
         vocabulary::SELECTABLE,
         Value::record([(vocabulary::CHILD, child)]),

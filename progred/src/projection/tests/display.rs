@@ -363,7 +363,7 @@ fn a_projection_defined_as_data_realizes() {
         use crate::libraries::layout::{test_support as data, vocabulary};
         input.value?.as_blob()?;
         data::decode(
-            &data::selectable(data::row(
+            &data::selectable_node(data::row(
                 4.0,
                 [
                     data::text_leaf("from", vocabulary::NAME_FACE),

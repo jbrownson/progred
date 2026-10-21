@@ -14,9 +14,8 @@ pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::hug;
 use crate::display::structure::record_form;
 use crate::display::{
-    Completion, CompletionKind, Delim, Face, Name, Pending, Picker, ResolvedCell, activatable,
-    alternatives, col, descend, dim, faced, indent, picker, ranked, row, selectable_bracket,
-    shared,
+    Completion, CompletionKind, Delim, Face, Name, Pending, Picker, ResolvedCell, alternatives,
+    col, descend, dim, faced, indent, picker, ranked, row, selectable, selectable_bracket, shared,
 };
 use ::grap::source::vocabulary::BODY_ORIGIN;
 use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE};
@@ -269,7 +268,7 @@ fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
         None if input.selection.is_some() => crate::display::line_edit(name::line(None)?),
         None => {
             let site = input.site();
-            activatable(faced("λ", Face::Name), &site)
+            selectable(faced("λ", Face::Name), &site)
         }
     })
 }
@@ -473,7 +472,7 @@ fn lambda_display<W: Host>(
                     &input.default_projection,
                 ),
             );
-            let arrow = activatable(crate::display::arrow(), &body_site);
+            let arrow = selectable(crate::display::arrow(), &body_site);
             let head = row(3.0, [lambda, params, arrow]);
             Some(hug(
                 head,
@@ -550,7 +549,7 @@ fn value_display<W: Host>(
         );
         let site = input.site().below(&[Step::Key(VALUE)]);
         Some(hug(
-            row(3.0, [name, activatable(dim("="), &site)]),
+            row(3.0, [name, selectable(dim("="), &site)]),
             expression_path([Step::Key(VALUE)], &input.default_projection),
             6.0,
         ))
@@ -579,7 +578,7 @@ fn evaluate_display<W: Host>(
             &input.default_projection,
         ));
         let shaft_site = input.site();
-        let shaft = shared(activatable(crate::display::arrow(), &shaft_site));
+        let shaft = shared(selectable(crate::display::arrow(), &shaft_site));
         let result = shared(crate::libraries::presentation::result_layout(&result));
         Some(alternatives([
             row(6.0, [expression.clone(), shaft.clone(), result.clone()]),

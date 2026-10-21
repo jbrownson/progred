@@ -569,30 +569,13 @@ pub use widget::hover::{block_hover, hover_highlight, on_hover};
 pub use widget::interaction::{on_activate, pickable};
 
 /// `child`, which hovers `site` and selects it when activated.
-pub(crate) fn activatable<W: Host>(
+pub(crate) fn selectable<W: Host>(
     child: host::Layout<W>,
     site: &crate::editing::Site,
 ) -> host::Layout<W> {
     let target = W::Hover::from(site.hover());
     let select = widget::navigation::selecting(site.clone());
     on_hover(on_activate(child, target.clone(), select), target)
-}
-
-/// `child` drawn as the label `key` of the field at `site`. It hovers apart
-/// from the field's value, so a Cmd+click picks the label, not the value; a
-/// click selects the field if `select`.
-pub(crate) fn field_label_at<W: Host>(
-    child: host::Layout<W>,
-    site: &crate::editing::Site,
-    key: CellId,
-    select: bool,
-) -> host::Layout<W> {
-    let target = W::Hover::from(site.label_hover());
-    let select = select.then(|| widget::navigation::selecting(site.clone()));
-    on_hover(
-        widget::interaction::activate_or_pick(child, target.clone(), select, Value::from(key)),
-        target,
-    )
 }
 
 pub use widget::gesture::{drag_outlined, on_point, on_state_drag};

@@ -94,7 +94,7 @@ fn closed<W: Host>(
         Some(name) => row(4.0, [name, toggle]),
         None => toggle,
     };
-    crate::display::activatable(selectable_bracket(delim, content), &site)
+    crate::display::selectable(selectable_bracket(delim, content), &site)
 }
 
 /// `child` with the fold keys, acting while the occurrence at `site` is

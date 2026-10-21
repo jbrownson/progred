@@ -16,8 +16,8 @@ use gid::{CellId, Step, Value};
 
 pub const ID: CellId = CellId::from_u128(0xfb2a4dac87512d69448650bc0e29dc80);
 use crate::display::{
-    Delim, Face, Paint, RowAlignment, activatable, alternatives, block_hover, border, bracket,
-    descend, leaf, overlay as layout_overlay, pickable, slot,
+    Delim, Face, Paint, RowAlignment, alternatives, block_hover, border, bracket, descend, leaf,
+    overlay as layout_overlay, pickable, selectable, slot,
 };
 use ::grap::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use kurbo::{Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Stroke};
@@ -390,7 +390,7 @@ fn decode_with<W: Host>(
         }
         SLOT => Some(slot()),
         RULE => Some(crate::display::rule()),
-        SELECTABLE => Some(activatable(child()?, &site())),
+        SELECTABLE => Some(selectable(child()?, &site())),
         PICKABLE => Some(pickable(
             child()?,
             W::Hover::from(site().hover()),

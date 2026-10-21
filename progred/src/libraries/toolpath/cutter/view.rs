@@ -1,6 +1,6 @@
 use super::*;
 use crate::display::host::{Host, Layout, ProjectionInput};
-use crate::display::{RowAlignment, activatable, aligned_row, structure, widget};
+use crate::display::{RowAlignment, aligned_row, selectable, structure, widget};
 use kurbo::{Affine, BezPath, PathEl, Stroke};
 use peniko::Color;
 use puri::draw::Canvas;
@@ -23,7 +23,7 @@ pub(crate) fn display<W: Host>(
     let tool = Tool::read(value.as_value())?;
     let fields = structure::Fields::default().record(input)?;
     let site = input.site();
-    let picture = activatable(picture(&tool)?, &site);
+    let picture = selectable(picture(&tool)?, &site);
     Some(aligned_row(
         RowAlignment::Top { baseline: 1 },
         12.0,

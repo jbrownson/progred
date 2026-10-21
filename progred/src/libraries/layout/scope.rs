@@ -224,8 +224,9 @@ fn operation<W: Host>(
         JUMP => jump(context, call, environment),
         AT => at(context, call, environment),
         DRAWING => drawing(context, call, environment),
-        SELECTABLE => single_child(context, call, environment, output)
-            .map(|child| activatable(child, &site())),
+        SELECTABLE => {
+            single_child(context, call, environment, output).map(|child| selectable(child, &site()))
+        }
         HOVER_BLOCK => single_child(context, call, environment, output).map(block_hover),
         PICKABLE => pickable(context, call, environment, output, site),
         ON_EVENT => on_event(context, call, environment, output),
