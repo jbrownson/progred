@@ -293,7 +293,7 @@ place of that filter, and names projected rather than read, remain. The `.gid`
 printer still binds only plain-text names, and only plain names have an editor.
 
 Nothing yet lets someone type a subscript, or any other formatted part. A name's
-editor and a missing name's line hole write plain text, so the subscripts a
+editor, there or missing, writes plain text, so the subscripts a
 computed name draws, a closure environment's e₀ and e₁, can't be typed into a
 name of one's own; a formatted name is stored only by writing its GID. How
 typing one should work is undecided, set aside on 21 October 2026.

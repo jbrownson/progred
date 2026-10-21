@@ -262,16 +262,18 @@ impl Selection {
         }
     }
 
+    /// The line being typed here, mounted over `spelling` if none is. A
+    /// pending's query becomes the line's own when a line drawn where the
+    /// value is missing types into it.
     pub(crate) fn edit_line_mut(&mut self, spelling: &str) -> &mut LineEditState {
         let payload = &mut self.payload;
-        &mut self
-            .editor
-            .get_or_insert_with(|| {
-                let (rest, editor) = mount(payload, spelling, false);
-                *payload = rest;
-                editor
-            })
-            .line
+        let editor = self.editor.get_or_insert_with(|| {
+            let (rest, editor) = mount(payload, spelling, false);
+            *payload = rest;
+            editor
+        });
+        editor.query = false;
+        &mut editor.line
     }
 
     fn query_changed(&self) -> bool {

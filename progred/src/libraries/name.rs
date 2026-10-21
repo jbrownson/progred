@@ -281,31 +281,26 @@ pub(crate) fn shallow_reference<W: Host>(
     crate::display::stop(crate::display::activatable(label, &input.site()))
 }
 
-/// A name as its line editor or, missing, a hole for one. A projection
-/// passes this where it descends into a name; a missing or empty name shows
-/// `placeholder` dim until one is typed.
+/// A name as its line editor, there or missing: typing into a missing one
+/// writes it from the first keystroke. A projection passes this where it
+/// descends into a name; a missing or empty name shows `placeholder` dim
+/// until one is typed.
 pub(crate) fn projection<W: Host>(placeholder: Option<String>) -> Partial<W> {
-    crate::display::partial(move |input| match input.value {
-        Some(value) => editor(value).map(|line| {
-            crate::display::line_edit(crate::display::LineEdit {
-                placeholder: placeholder.clone(),
-                ..line
-            })
-        }),
-        None => Some(hole(placeholder.clone())),
+    crate::display::partial(move |input| {
+        Some(crate::display::line_edit(crate::display::LineEdit {
+            placeholder: placeholder.clone(),
+            ..line(input.value)?
+        }))
     })
 }
 
-/// A missing name, typed into as the name's own editor: the first edit
-/// writes it, as text, showing `placeholder` dim until then. Enter with
-/// nothing typed writes the empty string, which names nothing.
-pub(crate) fn hole<W: Host>(placeholder: Option<String>) -> Layout<W> {
-    crate::display::line_hole(crate::display::LineEdit {
-        prefix: String::new(),
-        suffix: String::new(),
-        placeholder,
-        ..text::editor_for_text("")
-    })
+/// The editor of the name `value`, or of a missing one, which its first
+/// keystroke writes.
+pub(crate) fn line(value: Option<&Value>) -> Option<crate::display::LineEdit> {
+    match value {
+        Some(value) => editor(value),
+        None => editor(&text::value("")),
+    }
 }
 
 #[cfg(test)]

@@ -32,6 +32,10 @@ pub fn line_edit<W: Host>(line: LineEdit) -> crate::display::host::Layout<W> {
     Layout::widget(Rc::new(move |context| view(context, line.clone())))
 }
 
+/// The line `line` describes. Drawn where its value is missing, it's that
+/// place's hole too, a Tab stop typed into as the line: the first edit writes
+/// the value, and Enter with nothing typed writes the line's reading of
+/// nothing. With nothing to show and no placeholder, it shows an empty frame.
 pub fn view<W: Host>(
     context: &mut Context<'_, '_, W, W::Hover>,
     line: LineEdit,
@@ -41,10 +45,15 @@ pub fn view<W: Host>(
     let toolkit = context.toolkit;
     let path = context.path();
     let writable = toolkit.writable();
+    let missing = context.value.is_none();
     let active = toolkit.selection().filter(|selection| {
         writable
             && *path == selection.path()
-            && selection.stage(&toolkit.sources()) == crate::selection::Stage::Edge
+            && match selection.stage(&toolkit.sources()) {
+                crate::selection::Stage::Edge => true,
+                crate::selection::Stage::Pending => missing,
+                crate::selection::Stage::Label => false,
+            }
     });
     let default = active
         .filter(|selection| selection.edit().is_none())
@@ -82,6 +91,9 @@ pub fn view<W: Host>(
         }
         None => match line.placeholder.as_deref().filter(|_| line.text.is_empty()) {
             Some(placeholder) => placeholder_text(context, &line, placeholder),
+            None if line.prefix.is_empty() && line.text.is_empty() && line.suffix.is_empty() => {
+                crate::display::widget::empty(context.text, context.toolkit.styles())
+            }
             None => {
                 let text = puri::text::text(
                     context.text,
@@ -94,6 +106,7 @@ pub fn view<W: Host>(
             }
         },
     };
+    let blank = editing.is_some_and(|state| state.text().is_empty());
     let active = active.is_some();
     let selected = toolkit.selected();
     if writable {
@@ -121,7 +134,30 @@ pub fn view<W: Host>(
         let presentation = context.toolkit.styles().line_presentation(&line);
         let scale = context.toolkit.styles().scale as f32;
         let target = W::Hover::from(site.hover());
+        let empty_site = site.clone();
+        let update = line.update.clone();
+        let content = crate::display::widget::placed::on_key(content, move |world, event| {
+            event.state.is_down()
+                && event.key
+                    == ui_events::keyboard::Key::Named(ui_events::keyboard::NamedKey::Enter)
+                && missing
+                && blank
+                && world
+                    .session()
+                    .pending()
+                    .filter(|picking| picking.is_at(&empty_site))
+                    .zip(update("", None))
+                    .is_some_and(|(picking, value)| {
+                        picking.commit(
+                            value,
+                            Some(crate::selection::at(&[], crate::selection::payload::edge())),
+                        )
+                    })
+        });
         crate::display::widget::before_place(content, move |placement: Placement, output| {
+            if missing {
+                output.tab_stop(stop.clone());
+            }
             output.navigation_stop(stop.clone(), selected);
             // Arriving from the left or right places the caret at that edge.
             output.on_arrival(stop.clone(), navigation);

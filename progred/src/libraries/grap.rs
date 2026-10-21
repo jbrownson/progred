@@ -263,7 +263,7 @@ fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
         Some(value) => crate::display::line_edit(name::editor(value)?),
         // Naming an anonymous lambda is clickable, not an arrow-navigation
         // stop; selected, it's an empty name to type into.
-        None if input.selection.is_some() => name::hole(None),
+        None if input.selection.is_some() => crate::display::line_edit(name::line(None)?),
         None => {
             let site = input.site();
             activatable(faced("λ", Face::Name), &site)

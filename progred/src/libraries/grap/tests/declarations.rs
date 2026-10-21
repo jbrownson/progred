@@ -200,7 +200,7 @@ fn anonymous_lambda_marker_opens_its_name_for_typing_when_clicked() {
     let name_path = [Step::Key(name::vocabulary::NAME)];
     driver.click(&name_path);
     assert_eq!(driver.selection(), name_path);
-    assert_eq!(driver.line(), Some(""));
+    assert_eq!(driver.stage(), Some(crate::selection::Stage::Pending));
     assert!(Rc::ptr_eq(&driver.editor().model.doc, &before));
     driver.type_text("f");
     assert_eq!(driver.value(&name_path), text::value("f"));

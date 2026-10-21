@@ -64,7 +64,7 @@ pub use widget::line::{LineEdit, LineUpdate, line_edit};
 pub use widget::delimiter::{bracket, selectable_bracket};
 
 pub use widget::offers::ranked;
-pub use widget::picker::{Picker, line_hole, picker};
+pub use widget::picker::{Picker, picker};
 
 pub use measured::RowAlignment;
 

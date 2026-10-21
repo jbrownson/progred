@@ -392,10 +392,10 @@ inferred. Cells that are neither bindings nor functions, such as a named
 constant, are not offered there.
 
 A projection that descends into a name passes the name library's partial, which
-draws an existing name as its line editor and a missing one as a line hole,
-typed into as that editor: the first keystroke writes the name, and Enter with
-nothing typed writes the empty string. A missing-name marker, such as an anonymous lambda's,
-selects that name location and then draws the same hole. A `name` field drawn by
+draws a name as its line editor, there or missing: typed into where it's
+missing, the first keystroke writes the name, and Enter with nothing typed
+writes the empty string. A missing-name marker, such as an anonymous lambda's,
+selects that name location and then draws the same editor. A `name` field drawn by
 the generic structure projection offers Raw's instead. Circle and sphere are
 ordinary named Grap lambdas that use quote/unquote to return Fidget arithmetic;
 the Fidget parser has no circle or sphere forms.

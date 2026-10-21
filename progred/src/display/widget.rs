@@ -242,44 +242,6 @@ pub fn empty<World: 'static, Hover: 'static>(
     })
 }
 
-/// [`empty`], with `placeholder` dim in the middle of its frame, which
-/// widens to hold it.
-pub fn empty_with<World: 'static, Hover: 'static>(
-    text: &mut TextCtx,
-    styles: &style::Styles,
-    placeholder: &str,
-) -> Measured<HoverPass<World, Hover>> {
-    let frame = puri_widgets::text_frame::empty(text, &styles.label, styles.dim.brush.clone());
-    let placeholder = puri::text::text(text, placeholder, &placeholder_style(styles));
-    let inner = placeholder.metrics().width;
-    let metrics = frame.metrics();
-    let width = metrics.width.max(inner + metrics.width / 3.0);
-    leaf(
-        extent(puri::text::TextMetrics { width, ..metrics }),
-        move |output, placement| {
-            output.render(move |canvas, _| {
-                frame.place(canvas, placement);
-                let x = placement.rect.x0 + (placement.rect.width() - inner) / 2.0;
-                placeholder.place(
-                    canvas,
-                    Placement {
-                        rect: placement.rect.with_origin((x, placement.rect.y0)),
-                        ..placement
-                    },
-                );
-            })
-        },
-    )
-}
-
-/// What a hole shows dim where its value goes while it has none.
-pub(crate) fn placeholder_style(styles: &style::Styles) -> puri::text::TextStyle {
-    puri::text::TextStyle {
-        brush: styles.dim.brush.clone(),
-        ..styles.label.clone()
-    }
-}
-
 pub fn leaf<World: 'static, Hover: 'static>(
     extent: Extent,
     hover: impl FnOnce(&mut HoverContext<'_, World, Hover>, Placement) + 'static,

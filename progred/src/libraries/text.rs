@@ -55,7 +55,7 @@ pub(crate) fn editor(value: &Value) -> Option<crate::display::LineEdit> {
     Some(editor_for_text(read(value)?))
 }
 
-pub(crate) fn editor_for_text(text: &str) -> crate::display::LineEdit {
+fn editor_for_text(text: &str) -> crate::display::LineEdit {
     crate::display::LineEdit {
         text: text.into(),
         update: Rc::new(edit),

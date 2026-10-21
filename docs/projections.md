@@ -227,13 +227,15 @@ parameters uses. The name is computed wherever it's shown and never stored, and
 it's drawn grey: in the declaration as the placeholder in its name's hole (or
 its empty name's editor), which typing replaces, in references to the
 parameter, and in offers. A declaration descends into its name whether it has
-one or not, and a missing name is a line hole (`line_hole`): a hole with no
-offers, typed into as the name's own editor. Its first edit writes the name,
-and the selection stays on it at its edge, typing going on in its line from
-the same caret, the write and the rest of the typing one undo step; Enter with
-nothing typed writes the empty string, which names nothing. A line's
-placeholder (`LineEdit::placeholder`) shows dim in the hole's frame, then where
-its text goes while there's none, the caret before it. A
+one or not, and draws it with the same line editor either way, so a missing
+name and an empty one look alike. A line drawn where its value is missing is
+that place's hole too, a Tab stop with no offers: its first edit writes the
+value, and the selection stays on it at its edge, typing going on in its line
+from the same caret, the write and the rest of the typing one undo step; Enter
+with nothing typed writes the empty string, which names nothing. A line's
+placeholder (`LineEdit::placeholder`) shows dim where its text goes while
+there's none, the caret before it; with nothing to show and no placeholder, a
+line shows an empty frame. A
 reference finds its list by walking out from where it's stored, the same walk a
 slot's offers make to find what's in scope, so each list names its own; an
 inner lambda's first unnamed parameter is `a` too. In a computed value, such as

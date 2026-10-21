@@ -745,7 +745,6 @@ fn an_anonymous_lambda_name_opens_for_typing_without_creating_a_field() {
     driver.click_at(point);
     assert_eq!(driver.selection(), path);
     assert_eq!(driver.stage(), Some(Stage::Pending));
-    assert_eq!(driver.line(), Some(""), "the name's line starts empty");
     unwritten(&mut driver);
     deselect(&mut driver);
     assert!(driver.line().is_none());
@@ -756,7 +755,6 @@ fn an_anonymous_lambda_name_opens_for_typing_without_creating_a_field() {
     driver.select(&path);
     unwritten(&mut driver);
     driver.press(NamedKey::End);
-    unwritten(&mut driver);
     assert!(Rc::ptr_eq(&driver.editor().model.doc, &original));
 
     // The first keystroke writes the name, and typing goes on in its line.
