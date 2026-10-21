@@ -164,6 +164,16 @@ first two and could answer the rest on demand.
 - Effects can't be replayed, so a handler's questions must be known before
   it runs: a debug mode attaches a logging observer to the real run, with a UI
   for what it logs to be designed.
+- Grap gets observers too, so tracing isn't only Rust's: `evaluate` takes an
+  observer as a fold over the run's events, an initial state and a step from
+  state and event to state, and returns the result with the final state. The
+  events are GID records (a call entered, with its origin; a call left; an
+  effect performed), and a step can answer "stop". Each `evaluate` observes
+  only its own run. A Grap observer is one more implementation of the
+  evaluator's hooks, as a Grap function is of a callable; the hooks the
+  editor needs fast stay in Rust. The canvas differs in kind: it's handed to
+  the program as functions it calls, where an observer sees what the evaluator
+  does without being called.
 
 ## A missing argument under its own label
 
