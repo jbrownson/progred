@@ -146,15 +146,18 @@ Structural recording is a separate interpreter used only by tests. There is no
 parallel Progred drawing language.
 
 A projection draws three kinds of step: `descend` into what's stored, `at` a
-computed value, and `jump` to another location. Each takes a `Projected` saying
-which projections draw the value there and what's inside it:
-`Projected::ordinary()` keeps the enclosing ones; `Projected::here(p, default)`
-tries `p` on the value first, `default` otherwise and inside it;
-`Projected::throughout(p, default)` tries `p` first on the value and everything
-inside it, as a pattern's binders are; and `Projected::by(here, inside)`
-replaces either without composing. The total structural fallback still handles
-a declined result. These are ordinary preparation functions, not path-bearing
-layout opcodes.
+computed value, and `jump` to another location. The root is seeded with the
+editor's projection stack, and each projection hands it down; a walk can change
+it on the way. A `Projected` says how: an override for the value the walk
+reaches, and the default that trickles down to what's inside that value. Each
+change is a function given the projection the walk inherits, returning the one
+to use; `first(p)` tries `p` before the inherited one and `instead(p)` replaces
+it. `Projected::ordinary()` keeps both, `Projected::overriding(change)` changes
+the value's, `.defaulting(change)` what's inside it, and
+`Projected::throughout(change)` both, as a pattern's binders are. A walk's new
+default applies below the value, not to the value itself. The total structural
+fallback still handles a declined result. These are ordinary preparation
+functions, not path-bearing layout opcodes.
 
 `descend` follows steps of the displayed structure without projecting
 intermediate containers. It preserves the current location interpretation,

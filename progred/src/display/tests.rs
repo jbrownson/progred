@@ -12,7 +12,7 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
     let source = vec![Step::Key(gid::new_cell_id())];
     let layout: Layout<(), ()> = descend(
         steps.clone(),
-        Projected::here(partial(probe), &partial(probe)),
+        Projected::overriding(crate::display::first(partial(probe))),
     );
     match inspect(&layout) {
         ProjectionCall::Descend {
@@ -22,7 +22,10 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
         } => {
             assert_eq!(actual, steps);
             assert!(projection.is_some());
-            assert!(default_projection.is_some());
+            assert!(
+                default_projection.is_none(),
+                "what's inside keeps the inherited default"
+            );
         }
         _ => panic!("stored traversal"),
     }
@@ -120,12 +123,12 @@ fn recorder_preserves_local_and_descendant_projection_inputs() {
     for layout in [
         descend(
             [step.clone()],
-            Projected::by(Some(local.clone()), Some(default.clone())),
+            Projected::overriding(instead(local.clone())).defaulting(instead(default.clone())),
         ),
         at(
             [step],
             Value::record([]),
-            Projected::by(Some(local.clone()), Some(default.clone())),
+            Projected::overriding(instead(local.clone())).defaulting(instead(default.clone())),
         ),
     ] {
         let (actual, descendants) = match inspect(&layout) {

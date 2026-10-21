@@ -168,7 +168,9 @@ fn containers_follow_logical_lines_including_cells_around_multiline_contents() {
                         input.value?.field(wrapper)?;
                         Some(d::descend(
                             [Step::Key(wrapper)],
-                            d::Projected::by(Some(d::structure::list_column(8.0, None)), None),
+                            d::Projected::overriding(d::instead(d::structure::list_column(
+                                8.0, None,
+                            ))),
                         ))
                     }),
                     ordinary,

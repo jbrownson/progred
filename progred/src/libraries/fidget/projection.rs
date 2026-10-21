@@ -92,7 +92,7 @@ pub(super) fn field<W: Host>(
     let input = input.with_value(input.value.map(::grap::RuntimeValue::as_value));
     let (marker, content) = form(input.value?)?;
     let body = if marker == AXIS {
-        crate::libraries::grap::shallow_path([Step::Key(AXIS)], &input.default_projection)
+        crate::libraries::grap::shallow_path([Step::Key(AXIS)])
     } else {
         let site = input.site();
         let operator = selectable(
@@ -136,7 +136,7 @@ pub(super) fn field<W: Host>(
                     [
                         crate::display::descend(
                             [Step::Key(name::vocabulary::NAME)],
-                            Projected::here(name::projection(None), &input.default_projection),
+                            Projected::overriding(crate::display::first(name::projection(None))),
                         ),
                         dim("="),
                     ],

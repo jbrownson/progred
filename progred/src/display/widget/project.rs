@@ -8,6 +8,9 @@ use measured::choices::{ChoiceBuild, ChoiceLayout};
 use puri::text::TextCtx;
 
 pub trait Project<World, Hover> {
+    /// The projection handed down where this stands: what draws what's below
+    /// here unless a walk changes it.
+    fn inherited(&self) -> Partial<World, Hover>;
     fn descend(
         &self,
         text: &mut TextCtx,

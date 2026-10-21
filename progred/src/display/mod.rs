@@ -833,55 +833,102 @@ pub fn shared<World: 'static, Hover: 'static>(child: Layout<World, Hover>) -> La
     Layout::new(move |builder| builder.shared(id, &child))
 }
 
-/// Which projections draw a value a projection walks to, and what's inside
-/// it. Where one isn't given, the enclosing one does.
+/// How a walk changes the projections handed down as it goes: an override
+/// for the value it reaches, and the default that trickles down to what's
+/// inside that value. Each change is given the projection the walk inherits,
+/// the one the enclosing projection hands down, and returns the one to use;
+/// where there's none, the inherited one stands.
 pub struct Projected<World, Hover> {
-    here: Option<Partial<World, Hover>>,
-    inside: Option<Partial<World, Hover>>,
+    overriding: Option<Change<World, Hover>>,
+    defaulting: Option<Change<World, Hover>>,
 }
+
+/// A change to a projection: given the inherited one, the one to use.
+pub type Change<World, Hover> = Rc<dyn Fn(&Partial<World, Hover>) -> Partial<World, Hover>>;
 
 impl<World, Hover> Clone for Projected<World, Hover> {
     fn clone(&self) -> Self {
         Self {
-            here: self.here.clone(),
-            inside: self.inside.clone(),
+            overriding: self.overriding.clone(),
+            defaulting: self.defaulting.clone(),
         }
     }
 }
 
 impl<World: 'static, Hover: 'static> Projected<World, Hover> {
-    /// The enclosing projections, as anywhere.
+    /// Both as inherited.
     pub fn ordinary() -> Self {
         Self {
-            here: None,
-            inside: None,
+            overriding: None,
+            defaulting: None,
         }
     }
 
-    /// `projection` tried on the value first, `default` otherwise and on
-    /// what's inside it.
-    pub fn here(projection: Partial<World, Hover>, default: &Partial<World, Hover>) -> Self {
+    /// The value reached drawn by `change` of the inherited projection.
+    pub fn overriding(
+        change: impl Fn(&Partial<World, Hover>) -> Partial<World, Hover> + 'static,
+    ) -> Self {
         Self {
-            here: Some(compose_partials([projection, default.clone()])),
-            inside: Some(default.clone()),
+            overriding: Some(Rc::new(change)),
+            defaulting: None,
         }
     }
 
-    /// `projection` tried first on the value and on everything inside it,
-    /// `default` otherwise.
-    pub fn throughout(projection: Partial<World, Hover>, default: &Partial<World, Hover>) -> Self {
-        let projection = compose_partials([projection, default.clone()]);
+    /// What's inside the value reached drawn by `change` of the inherited
+    /// default.
+    #[cfg_attr(not(any(test, target_arch = "wasm32")), allow(dead_code))]
+    pub fn defaulting(
+        self,
+        change: impl Fn(&Partial<World, Hover>) -> Partial<World, Hover> + 'static,
+    ) -> Self {
         Self {
-            here: Some(projection.clone()),
-            inside: Some(projection),
+            defaulting: Some(Rc::new(change)),
+            ..self
         }
     }
 
-    /// `here` draws the value and `inside` what's inside it, each replacing
-    /// the enclosing one, without composing with it, where it's given.
-    pub fn by(here: Option<Partial<World, Hover>>, inside: Option<Partial<World, Hover>>) -> Self {
-        Self { here, inside }
+    /// The value reached and everything inside it drawn by `change` of the
+    /// inherited projection.
+    pub fn throughout(
+        change: impl Fn(&Partial<World, Hover>) -> Partial<World, Hover> + 'static,
+    ) -> Self {
+        let change: Change<World, Hover> = Rc::new(change);
+        Self {
+            overriding: Some(change.clone()),
+            defaulting: Some(change),
+        }
     }
+
+    /// The override and default for a walk from where `project` stands.
+    fn resolve(
+        &self,
+        project: &dyn widget::project::Project<World, Hover>,
+    ) -> (Option<Partial<World, Hover>>, Option<Partial<World, Hover>>) {
+        match (&self.overriding, &self.defaulting) {
+            (None, None) => (None, None),
+            (overriding, defaulting) => {
+                let inherited = project.inherited();
+                (
+                    overriding.as_ref().map(|change| change(&inherited)),
+                    defaulting.as_ref().map(|change| change(&inherited)),
+                )
+            }
+        }
+    }
+}
+
+/// A change that tries `projection` first, then the inherited one.
+pub fn first<World: 'static, Hover: 'static>(
+    projection: Partial<World, Hover>,
+) -> impl Fn(&Partial<World, Hover>) -> Partial<World, Hover> + 'static {
+    move |inherited| compose_partials([projection.clone(), inherited.clone()])
+}
+
+/// A change that puts `projection` in place of the inherited one.
+pub fn instead<World: 'static, Hover: 'static>(
+    projection: Partial<World, Hover>,
+) -> impl Fn(&Partial<World, Hover>) -> Partial<World, Hover> + 'static {
+    move |_| projection.clone()
 }
 
 /// Descend `steps` through stored structure without projecting intermediate
@@ -891,13 +938,10 @@ pub fn descend<World: 'static, Hover: 'static>(
     projected: Projected<World, Hover>,
 ) -> Layout<World, Hover> {
     Layout::program(Rc::new(move |context, build| {
-        context.project.descend(
-            context.text,
-            build,
-            steps.as_ref(),
-            projected.here.clone(),
-            projected.inside.clone(),
-        )
+        let (overriding, defaulting) = projected.resolve(context.project);
+        context
+            .project
+            .descend(context.text, build, steps.as_ref(), overriding, defaulting)
     }))
 }
 
@@ -931,13 +975,14 @@ pub fn jump<World: 'static, Hover: 'static>(
 ) -> Layout<World, Hover> {
     let steps = steps.into();
     Layout::program(Rc::new(move |context, build| {
+        let (overriding, defaulting) = projected.resolve(context.project);
         context.project.jump(
             context.text,
             build,
             steps.clone(),
             location.clone(),
-            projected.here.clone(),
-            projected.inside.clone(),
+            overriding,
+            defaulting,
         )
     }))
 }
@@ -966,14 +1011,15 @@ fn computed<World: 'static, Hover: 'static>(
     let steps = steps.into();
     let value = value.into();
     Layout::program(Rc::new(move |context, build| {
+        let (overriding, defaulting) = projected.resolve(context.project);
         context.project.at(
             context.text,
             build,
             steps.clone(),
             value.clone(),
             evaluated.clone(),
-            projected.here.clone(),
-            projected.inside.clone(),
+            overriding,
+            defaulting,
         )
     }))
 }

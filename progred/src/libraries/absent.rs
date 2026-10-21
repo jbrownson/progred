@@ -89,13 +89,12 @@ fn callers<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
                     Some(stack) => crate::display::at(
                         [gid::Step::Key(vocabulary::CALLERS)],
                         gid::Value::list(stack.iter().skip(1).map(::grap::source::value)),
-                        Projected::by(
-                            Some(crate::display::structure::list_column(
+                        Projected::overriding(crate::display::instead(
+                            crate::display::structure::list_column(
                                 2.0,
                                 Some(crate::display::runtime_partial(self::call)),
-                            )),
-                            None,
-                        ),
+                            ),
+                        )),
                     ),
                     None => crate::display::dim("not found"),
                 },
@@ -160,21 +159,16 @@ fn missing_argument<W: Host>(
         crate::display::jump(
             [gid::Step::Key(vocabulary::CALL)],
             argument,
-            Projected::by(
-                Some(crate::display::compose_partials([
-                    crate::display::runtime_partial(crate::libraries::grap::expression),
-                    input.default_projection.clone(),
-                ])),
-                None,
-            ),
+            Projected::overriding(crate::display::first(crate::display::runtime_partial(
+                crate::libraries::grap::expression,
+            ))),
         )
     });
     let named = crate::display::descend(
         [gid::Step::Key(vocabulary::CELL)],
-        Projected::here(
-            crate::display::runtime_partial(crate::libraries::name::shallow_cell),
-            &input.default_projection,
-        ),
+        Projected::overriding(crate::display::first(crate::display::runtime_partial(
+            crate::libraries::name::shallow_cell,
+        ))),
     );
     Some(on_red(
         crate::display::structure::Fields::default()

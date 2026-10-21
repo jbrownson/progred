@@ -45,6 +45,9 @@ const B: CellId = CellId::from_u128(2);
 #[derive(Default)]
 struct Output(RefCell<Option<Value>>);
 impl Project<crate::Editor, crate::frame::Hovered> for Output {
+    fn inherited(&self) -> Partial {
+        unreachable!()
+    }
     fn descend(
         &self,
         _: &mut puri::text::TextCtx,

@@ -58,13 +58,15 @@ fn list_items_at<W: Host>(
         positions.push(position.clone());
         positions.sort();
     }
-    let child = child.map(|p| compose_partials([p, input.default_projection.clone()]));
+    let projected = child.map_or_else(Projected::ordinary, |child| {
+        Projected::overriding(crate::display::first(child))
+    });
     positions
         .into_iter()
         .map(|position| {
             let layout = shared(descend(
                 [Step::Element(position.clone())],
-                Projected::by(child.clone(), None),
+                projected.clone(),
             ));
             (position, layout)
         })
@@ -330,11 +332,9 @@ impl<W: Host> Fields<W> {
             label: field_label(input, key, name, selects),
             value: descend(
                 [Step::Key(key)],
-                Projected::by(
-                    (self.child)(key)
-                        .map(|child| compose_partials([child, input.default_projection.clone()])),
-                    None,
-                ),
+                (self.child)(key).map_or_else(Projected::ordinary, |child| {
+                    Projected::overriding(crate::display::first(child))
+                }),
             ),
         }
     }

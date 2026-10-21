@@ -1,7 +1,7 @@
 //! Outline entries own their UI state; their bodies jump to shared record fields.
 
 use super::vocabulary::OUTLINE;
-use crate::display::host::{Host, Layout, Partial, ProjectionInput};
+use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{self as d, col};
 use gid::{CellId, Step, Value};
 use std::rc::Rc;
@@ -39,14 +39,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 let heading = d::runtime_partial(heading);
                 d::structure::list_column_with(input, 24.0, Some(heading), |position, heading| {
                     match elements.list_element(&position).and_then(|v| v.as_cell()) {
-                        Some(key) => section(
-                            position,
-                            key,
-                            heading,
-                            &here,
-                            &fields,
-                            &input.default_projection,
-                        ),
+                        Some(key) => section(position, key, heading, &here, &fields),
                         None => heading,
                     }
                 })
@@ -60,7 +53,10 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 8.0,
                 [
                     label.clone(),
-                    d::descend([Step::Key(OUTLINE)], d::Projected::by(Some(entries), None)),
+                    d::descend(
+                        [Step::Key(OUTLINE)],
+                        d::Projected::overriding(d::instead(entries)),
+                    ),
                 ],
             )]
             .into_iter()
@@ -78,29 +74,18 @@ fn section<W: Host>(
     heading: Layout<W>,
     outline: &crate::editing::Site,
     fields: &gid::Record,
-    default_projection: &Partial<W>,
 ) -> Layout<W> {
     let steps = [Step::Element(position), Step::Key(key)];
-    let body_projection = Some(d::compose_partials([
-        d::structure::list_column(16.0, None),
-        default_projection.clone(),
-    ]));
+    // A body is a column of its items, which the projections it inherits draw.
+    let body_projection = d::Projected::overriding(d::first(d::structure::list_column(16.0, None)));
     let unstored = match fields.get(&key) {
-        Some(value) => d::at(
-            steps.clone(),
-            value,
-            d::Projected::by(body_projection.clone(), None),
-        ),
+        Some(value) => d::at(steps.clone(), value, body_projection.clone()),
         None => d::slot(),
     };
     // The body stored there is edited there, along with what's stored below
     // it; one with nowhere stored draws as it is.
     let body = match outline.below(&[Step::Key(key)]).location() {
-        Some(stored) => d::jump(
-            steps.clone(),
-            stored,
-            d::Projected::by(body_projection, None),
-        ),
+        Some(stored) => d::jump(steps.clone(), stored, body_projection),
         None => unstored,
     };
     Layout::program(Rc::new(move |context, build| {

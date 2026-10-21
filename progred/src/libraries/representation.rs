@@ -78,13 +78,10 @@ pub(crate) fn infix_display<W: Host>(
     let fields = input.value?;
     let precedence = binds(fields)?;
     let layout = infix(
-        crate::libraries::grap::shallow_path([Step::Key(FUNCTION)], &input.default_projection),
+        crate::libraries::grap::shallow_path([Step::Key(FUNCTION)]),
         |field| {
             (
-                crate::libraries::grap::expression_path(
-                    [Step::Key(field)],
-                    &input.default_projection,
-                ),
+                crate::libraries::grap::expression_path([Step::Key(field)]),
                 fields
                     .field(field)
                     .as_ref()

@@ -203,7 +203,7 @@ pub(crate) fn with_name<W: Host>(
             [
                 descend(
                     [step],
-                    crate::display::Projected::here(projection(None), &input.default_projection),
+                    crate::display::Projected::overriding(crate::display::first(projection(None))),
                 ),
                 content,
             ],

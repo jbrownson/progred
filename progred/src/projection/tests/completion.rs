@@ -515,7 +515,7 @@ fn only_the_active_empty_requests_completion_offers() {
             fields.map(|field| {
                 descend(
                     [gid::Step::Key(field)],
-                    crate::display::Projected::by(Some(hole.clone()), None),
+                    crate::display::Projected::overriding(crate::display::instead(hole.clone())),
                 )
             }),
         ))

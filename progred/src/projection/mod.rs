@@ -484,6 +484,9 @@ impl ProjectionScope<'_, '_> {
 }
 
 impl crate::display::widget::project::Project<crate::Editor, Hovered> for ProjectionScope<'_, '_> {
+    fn inherited(&self) -> Partial {
+        self.projection.partial.clone()
+    }
     fn descend(
         &self,
         text: &mut TextCtx,

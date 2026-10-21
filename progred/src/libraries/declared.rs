@@ -98,10 +98,7 @@ fn projection<W: Host>() -> Partial<W> {
                             crate::display::at(
                                 [Step::Key(vocabulary::RESULT)],
                                 result,
-                                crate::display::Projected::by(
-                                    Some(input.default_projection.clone()),
-                                    Some(input.default_projection.clone()),
-                                ),
+                                crate::display::Projected::ordinary(),
                             )
                         }),
                 }

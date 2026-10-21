@@ -28,10 +28,9 @@ pub(super) fn display<W: Host>(
         notebook?;
         Some(crate::display::descend(
             [Step::Key(vocabulary::NOTEBOOK)],
-            crate::display::Projected::here(
+            crate::display::Projected::overriding(crate::display::first(
                 crate::display::runtime_partial(entries),
-                &input.default_projection,
-            ),
+            )),
         ))
     })
 }
@@ -120,7 +119,7 @@ fn entry_of<W: Host>(
     let source = definition
         .as_ref()
         .map_or(Resolution::Document, |definition| definition.resolution);
-    let expression = super::expression_path([Step::Follow(source)], &input.default_projection);
+    let expression = super::expression_path([Step::Follow(source)]);
     if definition.is_none() {
         return Some(expression);
     }
