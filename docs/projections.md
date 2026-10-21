@@ -237,9 +237,13 @@ slot's offers make to find what's in scope, so each list names its own; an
 inner lambda's first unnamed parameter is `a` too. In a computed value, such as
 a closure in a result, the walk goes out through that value instead, which the
 projection keeps for what it draws inside (`Env::read_computed`), so the
-closure's lambda reads as it does in its source. Outside any list that names
-it, as a closure's environment holds a parameter of the lambda that made it, an
-unnamed parameter shows its short ID.
+closure's lambda reads as it does in its source. A closure's environment holds
+parameters of the lambda that made it without the list that named them, so it
+calls its own: its bindings with no name of their own are e₀, e₁, e₂…, the
+numeral a subscript, in its order, skipping what its named ones use, grey in
+its labels and in its lambda's references to them. A computed name is a `Name`,
+so it can carry subscripts, and an offer shows one as it's drawn
+(`CompletionText::Named`). Anywhere else, an unnamed parameter shows its short ID.
 
 The expression-use partial also handles missing values with a focused completion
 provider. It lists statically visible bindings, the libraries' `Everything`

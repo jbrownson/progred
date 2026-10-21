@@ -199,6 +199,28 @@ pub(crate) fn record_layout_led<W: Host>(
     ))
 }
 
+/// [`record_layout`], a field with no name of its own read, dim, as
+/// `computed` calls it, where it does.
+pub(crate) fn record_layout_calling<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    computed: &std::collections::BTreeMap<CellId, Name<'static>>,
+) -> Option<Layout<W>> {
+    Some(authoring(record_heads(
+        record_keys(input)?.into_iter().map(|key| RecordField {
+            label: record_label_reading(
+                input,
+                key,
+                computed.get(&key).map_or_else(
+                    || field_label(input.env, key),
+                    |name| named(name, Face::Dim),
+                ),
+            ),
+            value: descend([Step::Key(key)], None, None),
+        }),
+        pending_field(input),
+    )))
+}
+
 /// The fields `keys`, in their order, and one being added.
 fn record_layout_of<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
@@ -283,8 +305,17 @@ pub(crate) fn record_label<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     key: CellId,
 ) -> Layout<W> {
+    record_label_reading(input, key, field_label(input.env, key))
+}
+
+/// [`record_label`], the field read as `name`.
+fn record_label_reading<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    key: CellId,
+    name: Layout<W>,
+) -> Layout<W> {
     let site = input.site().below(&[Step::Key(key)]);
-    let head = row(0.0, [field_label(input.env, key), dim(":")]);
+    let head = row(0.0, [name, dim(":")]);
     let present = input.value.is_some_and(|value| value.contains_field(key));
     crate::display::field_label_at(head, &site, key, present)
 }

@@ -16,16 +16,44 @@ fn a_list_calls_its_unnamed_parameters_by_letters_its_named_ones_leave() {
     cells.set_value(nameless, Value::record([]));
     let computed = unnamed_parameters(&[first, named, second, nameless], &|cell| cells.value(cell));
     assert_eq!(
-        computed,
+        spelled(&computed),
         [first, second, nameless]
             .into_iter()
-            .zip(["b", "c", "d"].map(String::from))
+            .zip(["b", "c", "d"].map(|name| (name.to_owned(), Vec::new())))
             .collect()
     );
     assert_eq!(
         [0, 25, 26, 27, 701, 702].map(letters),
         ["a", "z", "aa", "ab", "zz", "aaa"].map(String::from)
     );
+}
+
+#[test]
+fn an_environment_calls_its_unnamed_bindings_e_subscript_numbered_its_named_ones_leave() {
+    let (named, first, second) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(named, name::record("e0", []));
+    cells.set_value(first, Value::record([]));
+    cells.set_value(second, name::record("", []));
+    let computed = unnamed_bindings(&[first, named, second], &|cell| cells.value(cell));
+    assert_eq!(
+        spelled(&computed),
+        [first, second]
+            .into_iter()
+            .zip(["e1", "e2"].map(|name| (name.to_owned(), vec![1..2])))
+            .collect(),
+        "their numerals subscripts"
+    );
+}
+
+/// Computed names as their spellings and where their subscripts are.
+fn spelled(
+    computed: &std::collections::BTreeMap<CellId, crate::display::Name<'static>>,
+) -> std::collections::BTreeMap<CellId, (String, Vec<std::ops::Range<usize>>)> {
+    computed
+        .iter()
+        .map(|(cell, name)| (*cell, (name.spelling().into_owned(), name.subscripts())))
+        .collect()
 }
 
 /// `{grap: λ [(width) () ()] → second * …}`, with the call's right empty.

@@ -141,6 +141,7 @@ fn listed<W: Host>(
 fn text(request: &CompletionRequest<'_>, text: &CompletionText) -> (String, Vec<Range<usize>>) {
     match text {
         CompletionText::Literal(text) => (text.clone(), Vec::new()),
+        CompletionText::Named(name) => (name.spelling().into_owned(), name.subscripts()),
         CompletionText::Name(cell) => match (request.name)(*cell) {
             Some(name) => (name.spelling().into_owned(), name.subscripts()),
             None => (name_or_short_id(None::<&str>, *cell), Vec::new()),

@@ -1,5 +1,5 @@
 use super::*;
-use crate::display::{CompletionRequest, CompletionScope};
+use crate::display::{CompletionRequest, CompletionScope, CompletionText};
 use crate::libraries::{completion::select, grap::control::vocabulary as control};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,8 +18,9 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
         ordered.sort_by_cached_key(|(cell, binding)| {
             let name = binding
                 .computed
-                .clone()
-                .or_else(|| (request.name)(**cell).map(|name| name.spelling().into_owned()))
+                .as_ref()
+                .or((request.name)(**cell).as_ref())
+                .map(|name| name.spelling().into_owned())
                 .unwrap_or_default();
             (Reverse(binding.depth), name.to_lowercase(), name)
         });
@@ -29,7 +30,7 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
                 // calls it, grey, as it's drawn.
                 Some(computed) => Completion {
                     face: crate::display::Face::Dim,
-                    ..select(computed.clone(), (*cell).into())
+                    ..select(CompletionText::Named(computed.clone()), (*cell).into())
                 },
                 None => select(*cell, (*cell).into()),
             }
@@ -123,7 +124,7 @@ fn binding_names(value: &Value, result: &mut BTreeSet<CellId>) {
 /// no name of its own, what its list calls it.
 pub(super) struct Binding {
     pub(super) depth: usize,
-    pub(super) computed: Option<String>,
+    pub(super) computed: Option<Name<'static>>,
 }
 
 /// The bindings statically visible at `path`, found by walking out through
@@ -205,7 +206,9 @@ pub(super) fn scope<'a>(
             // A closure's environment binds in its lambda.
             None if matches!(suffix.first(), Some(Step::Key(LAMBDA))) => {
                 if let Some(environment) = fields.get(&ENVIRONMENT).and_then(Value::as_record) {
-                    found.extend(environment.keys().copied());
+                    let bindings: Vec<_> = environment.keys().copied().collect();
+                    computed = super::unnamed_bindings(&bindings, value_of);
+                    found.extend(bindings);
                 }
             }
             _ => (),

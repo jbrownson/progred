@@ -226,3 +226,37 @@ fn a_closure_in_a_result_reads_its_lambda_as_the_source_does() {
     );
     assert_eq!(driver.glyphs_at(&in_result), driver.glyphs_at(&in_source));
 }
+
+#[test]
+fn a_closure_calls_the_unnamed_bindings_it_holds_e_subscript_numbered_and_its_lambda_reads_them_so()
+{
+    use ::grap::vocabulary::{BODY, ENVIRONMENT, LAMBDA};
+    let (entry, outer, inner) = (new_cell_id(), new_cell_id(), new_cell_id());
+    let mut cells = Cells::new();
+    cells.set_value(outer, Value::record([]));
+    cells.set_value(inner, crate::libraries::name::record("y", []));
+    // `(λ [a] → λ [y] → a) {a: 2}`: a closure holding the unnamed `a`, which
+    // the list that named it doesn't come with.
+    cells.set_value(
+        entry,
+        ::grap::call(
+            ::grap::lambda([outer], ::grap::lambda([inner], outer.into())),
+            [(outer, f64::value(2.0))],
+        ),
+    );
+    let driver = notebook(&[entry], cells);
+    let closure = result_path(&driver, 0);
+    let used = driver.glyphs_at(&occurrence::below(
+        &closure,
+        &[Step::Key(LAMBDA), Step::Key(BODY)],
+    ));
+    let [(letter, _), (numeral, _)] = &used[..] else {
+        panic!("the reference reads as e₀, its numeral a subscript: {used:?}")
+    };
+    assert_eq!((letter.len(), numeral.len()), (1, 1));
+    let held = driver.glyphs_at(&occurrence::below(&closure, &[Step::Key(ENVIRONMENT)]));
+    assert!(
+        used.iter().all(|run| held.contains(run)),
+        "the environment labels it as its lambda reads it"
+    );
+}

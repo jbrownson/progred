@@ -12,7 +12,7 @@ use gid::{CellId, Step, Value};
 pub const ID: CellId = CellId::from_u128(0xf7735b90f6826b25c350a8fd83af8c47);
 use crate::display::structure::{field_label, field_order, record_form};
 use crate::display::{
-    Completion, CompletionKind, Delim, Face, Pending, Picker, RecordField, ResolvedCell,
+    Completion, CompletionKind, Delim, Face, Name, Pending, Picker, RecordField, ResolvedCell,
     activatable, alternatives, col, descend_local, dim, faced, indent, picker, ranked,
     record_fragment_with, row, selectable_bracket, shared,
 };
@@ -20,6 +20,7 @@ use crate::display::{group, group_hug};
 use ::grap::source::vocabulary::BODY_ORIGIN;
 use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use puri::text::Script;
 
 pub mod control;
 pub mod notebook;
@@ -47,7 +48,10 @@ fn reference<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> O
     name::shallow_cell(input).or_else(|| {
         let cell = input.value?.as_cell()?;
         let computed = scope_around(input)?.remove(&cell)?.computed?;
-        Some(name::shallow_reference(input, dim(computed)))
+        Some(name::shallow_reference(
+            input,
+            crate::display::named(&computed, Face::Dim),
+        ))
     })
 }
 
@@ -80,17 +84,53 @@ fn scope_around<W: Host>(
 pub(crate) fn unnamed_parameters<'a>(
     params: &[CellId],
     value_of: &dyn Fn(CellId) -> Option<&'a Value>,
-) -> std::collections::BTreeMap<CellId, String> {
-    let named: Vec<_> = params
+) -> std::collections::BTreeMap<CellId, Name<'static>> {
+    computed_names(
+        params,
+        value_of,
+        (0..).map(|index| Name::Formatted([(letters(index), Script::Normal)].into())),
+    )
+}
+
+/// What a closure's environment calls the bindings it holds with no name of
+/// their own: in its order, the first of e₀, e₁, e₂… that none of its named
+/// bindings uses. The parameter list that named them isn't in the closure.
+pub(crate) fn unnamed_bindings<'a>(
+    bindings: &[CellId],
+    value_of: &dyn Fn(CellId) -> Option<&'a Value>,
+) -> std::collections::BTreeMap<CellId, Name<'static>> {
+    computed_names(
+        bindings,
+        value_of,
+        (0..).map(|index| {
+            Name::Formatted(
+                [
+                    ("e".to_owned(), Script::Normal),
+                    (index.to_string(), Script::Subscript),
+                ]
+                .into(),
+            )
+        }),
+    )
+}
+
+/// `cells` with no name of their own, each called the next of `names` that
+/// none of the named ones uses.
+fn computed_names<'a>(
+    cells: &[CellId],
+    value_of: &dyn Fn(CellId) -> Option<&'a Value>,
+    names: impl Iterator<Item = Name<'static>>,
+) -> std::collections::BTreeMap<CellId, Name<'static>> {
+    let named: Vec<_> = cells
         .iter()
         .filter_map(|cell| name::of_cell(value_of, *cell))
         .map(|name| name.spelling().into_owned())
         .collect();
-    let mut free = (0..).map(letters).filter(|name| !named.contains(name));
+    let mut free = names.filter(|name| !named.contains(&name.spelling().into_owned()));
     let mut computed = std::collections::BTreeMap::new();
-    for cell in params {
+    for cell in cells {
         if name::of_cell(value_of, *cell).is_none() && !computed.contains_key(cell) {
-            computed.insert(*cell, free.next().expect("letters never run out"));
+            computed.insert(*cell, free.next().expect("names never run out"));
         }
     }
     computed
@@ -125,7 +165,7 @@ pub mod vocabulary {
 /// typed, or with nothing typed, named next.
 fn parameter<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    computed: &std::collections::BTreeMap<CellId, String>,
+    computed: &std::collections::BTreeMap<CellId, Name<'static>>,
 ) -> Option<Layout<W>> {
     match input.value {
         Some(value) => declaration_cell(
@@ -133,7 +173,7 @@ fn parameter<W: Host>(
             value
                 .as_cell()
                 .and_then(|cell| computed.get(&cell))
-                .cloned(),
+                .map(|name| name.spelling().into_owned()),
         ),
         None => Some(picker(Picker::new(
             CompletionKind::Value,
@@ -466,8 +506,8 @@ fn lambda_display<W: Host>(
 }
 
 /// A closure reads as the record it is: its lambda, drawn as a lambda is,
-/// then the environment that closes over, then where its body came from,
-/// as a record shut until it's opened.
+/// then the environment it closes over, then where its body came from, as a
+/// record shut until it's opened.
 fn closure_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
@@ -477,21 +517,35 @@ fn closure_display<W: Host>(
     crate::display::structure::record_layout_led(
         input,
         &[LAMBDA, ENVIRONMENT, BODY_ORIGIN],
-        |key| {
-            (key == BODY_ORIGIN).then(|| {
-                crate::display::runtime_partial(|input| {
-                    let open = (input.default_projection)(input)
-                        .or_else(|| crate::display::structure::record_layout(input, |_| None))?;
-                    Some(crate::display::fold::foldable(
-                        Delim::Brace,
-                        None,
-                        |_| true,
-                        open,
-                    ))
-                })
-            })
+        |key| match key {
+            ENVIRONMENT => Some(crate::display::runtime_partial(environment)),
+            BODY_ORIGIN => Some(crate::display::runtime_partial(|input| {
+                let open = (input.default_projection)(input)
+                    .or_else(|| crate::display::structure::record_layout(input, |_| None))?;
+                Some(crate::display::fold::foldable(
+                    Delim::Brace,
+                    None,
+                    |_| true,
+                    open,
+                ))
+            })),
+            _ => None,
         },
     )
+}
+
+/// A closure's environment, its bindings with no name of their own read as
+/// it calls them, as its lambda's references to them do.
+fn environment<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    let bindings = input.value?.record_keys()?;
+    let computed = unnamed_bindings(&bindings, &|cell| {
+        input.env.resolve(cell).map(|definition| definition.value)
+    });
+    let open = crate::display::structure::record_layout_calling(input, &computed)?;
+    Some(match bindings.is_empty() {
+        true => open,
+        false => crate::display::fold::foldable(Delim::Brace, None, |_| false, open),
+    })
 }
 
 /// A named expression, not a lexical binding. The name slot is always

@@ -139,7 +139,9 @@ fn unnamed_parameters_offer_their_letters_the_closest_list_first() {
     assert_eq!(
         bindings,
         [inner, outer].map(|cell| (
-            crate::display::CompletionText::Literal("a".into()),
+            crate::display::CompletionText::Named(crate::display::Name::Formatted(
+                [("a".to_owned(), puri::text::Script::Normal)].into()
+            )),
             Some(cell)
         ))
     );

@@ -95,6 +95,8 @@ pub struct Completion {
 pub enum CompletionText {
     Literal(String),
     Name(CellId),
+    /// A name given here rather than a cell's, as a computed one is.
+    Named(Name<'static>),
 }
 
 impl From<String> for CompletionText {
