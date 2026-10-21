@@ -85,7 +85,7 @@ fn callers<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Opt
                     // The call itself is first; with nothing after it, it's
                     // the evaluation's own.
                     Some(stack) if stack.len() < 2 => crate::display::dim("nothing: it's the top"),
-                    Some(stack) => crate::display::at_with_projection(
+                    Some(stack) => crate::display::at(
                         [gid::Step::Key(vocabulary::CALLERS)],
                         gid::Value::list(stack.iter().skip(1).map(::grap::source::value)),
                         Some(crate::display::structure::list_column(
@@ -135,7 +135,7 @@ fn call_field<W: Host>(key: CellId) -> Option<crate::display::host::Partial<W>> 
 /// call drawn in its code.
 fn call<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let call = location(::grap::source::read(&input.value?.to_value())?)?;
-    Some(crate::display::jump_at([], call, None))
+    Some(crate::display::jump([], call, None))
 }
 
 /// A missing argument reads as its reason and the parameter, then the hole
@@ -154,7 +154,7 @@ fn missing_argument<W: Host>(
     let hole = call.as_ref().map(|call| {
         let mut argument = call.clone();
         argument.path.to_mut().push(gid::Step::Key(parameter));
-        crate::display::jump_at(
+        crate::display::jump(
             [gid::Step::Key(vocabulary::CALL)],
             argument,
             Some(crate::display::compose_partials([

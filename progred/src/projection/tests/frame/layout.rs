@@ -52,7 +52,7 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
             d::runtime_partial(crate::libraries::presentation::display),
             child.clone(),
         ]);
-        Some(d::at_with_projection(
+        Some(d::at(
             [],
             value.clone(),
             Some(children.clone()),
@@ -98,7 +98,7 @@ fn structural_runtime_lists_and_records_preserve_callable_children_and_paths() {
             d::structure::list(None),
             d::test_support::record_partial(|_| None),
         ]);
-        Some(d::at_with_projection(
+        Some(d::at(
             [gid::Step::Key(result)],
             value.clone(),
             Some(children.clone()),

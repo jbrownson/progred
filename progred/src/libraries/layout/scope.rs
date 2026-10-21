@@ -358,7 +358,11 @@ fn jump<W: Host>(
 ) -> Result<Layout<W>, BuildError> {
     let steps = argument(context, call, environment, STEPS, read_steps)?;
     let document = argument(context, call, environment, DOCUMENT_PATH, read_steps)?;
-    Ok(crate::display::jump(steps, document))
+    Ok(crate::display::jump(
+        steps,
+        crate::location::Location::root(document),
+        None,
+    ))
 }
 
 fn at<W: Host>(
@@ -368,7 +372,12 @@ fn at<W: Host>(
 ) -> Result<Layout<W>, BuildError> {
     let steps = argument(context, call, environment, STEPS, read_steps)?;
     let value = context.field(call, VALUE).ok_or(BuildError::Invalid)?;
-    Ok(crate::display::at(steps, context.eval(value, environment)?))
+    Ok(crate::display::at(
+        steps,
+        context.eval(value, environment)?,
+        None,
+        None,
+    ))
 }
 
 fn canvas<W: Host>(

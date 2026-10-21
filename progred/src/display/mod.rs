@@ -893,31 +893,35 @@ pub fn descend_raw<World: 'static, Hover: 'static>(step: Step) -> Layout<World, 
     }))
 }
 
-/// Project a supplied value at an occurrence with no document source.
+/// Try a specialization here, keeping the default for descendants.
+pub fn descend_local<World: 'static, Hover: 'static>(
+    steps: impl AsRef<[Step]> + 'static,
+    projection: Partial<World, Hover>,
+    default: &Partial<World, Hover>,
+) -> Layout<World, Hover> {
+    descend(
+        steps,
+        Some(compose_partials([projection, default.clone()])),
+        Some(default.clone()),
+    )
+}
+
+/// Draw `value` at `steps`, a computed occurrence with no document source;
+/// `projection` draws it and `default_projection` what's inside it, as for
+/// [`descend`].
 pub fn at<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     value: impl Clone + Into<grap::RuntimeValue>,
+    projection: Option<Partial<World, Hover>>,
+    default_projection: Option<Partial<World, Hover>>,
 ) -> Layout<World, Hover> {
-    at_with_projection(steps, value, None, None)
-}
-
-/// Draw at `steps` the value at a document path from its root, as
-/// [`jump_at`] does.
-pub fn jump<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
-    document: impl Into<Vec<Step>>,
-) -> Layout<World, Hover> {
-    jump_at(
-        steps,
-        crate::location::Location::root(document.into()),
-        None,
-    )
+    computed(steps, value, None, projection, default_projection)
 }
 
 /// Draw at `steps` the value at `location`, by `projection` if given: the
 /// occurrence path jumps there, so it and what's below it read and write
 /// there.
-pub fn jump_at<World: 'static, Hover: 'static>(
+pub fn jump<World: 'static, Hover: 'static>(
     steps: impl Into<Vec<Step>>,
     location: crate::location::Location<'static>,
     projection: Option<Partial<World, Hover>>,
@@ -933,61 +937,6 @@ pub fn jump_at<World: 'static, Hover: 'static>(
             None,
         )
     }))
-}
-
-/// Draw at `steps` the value stored where `target` is, edited there along
-/// with what's stored below it, as [`jump`] does; `otherwise` where nothing
-/// stores it.
-pub fn jump_to<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
-    target: crate::editing::Site,
-    projection: Option<Partial<World, Hover>>,
-    otherwise: Layout<World, Hover>,
-) -> Layout<World, Hover> {
-    let steps = steps.into();
-    Layout::program(Rc::new(move |context, build| match target.location() {
-        Some(document) => context.project.jump(
-            context.text,
-            build,
-            steps.clone(),
-            document.into_owned(),
-            projection.clone(),
-            None,
-        ),
-        None => otherwise.measure(context, build),
-    }))
-}
-
-/// Try a specialization here, keeping the default for descendants.
-pub fn descend_local<World: 'static, Hover: 'static>(
-    steps: impl AsRef<[Step]> + 'static,
-    projection: Partial<World, Hover>,
-    default: &Partial<World, Hover>,
-) -> Layout<World, Hover> {
-    descend(
-        steps,
-        Some(compose_partials([projection, default.clone()])),
-        Some(default.clone()),
-    )
-}
-
-/// Try a specialization here and at every descendant.
-pub fn descend_scoped<World: 'static, Hover: 'static>(
-    steps: impl AsRef<[Step]> + 'static,
-    projection: Partial<World, Hover>,
-    default: &Partial<World, Hover>,
-) -> Layout<World, Hover> {
-    let projection = compose_partials([projection, default.clone()]);
-    descend(steps, Some(projection.clone()), Some(projection))
-}
-
-pub fn at_with_projection<World: 'static, Hover: 'static>(
-    steps: impl Into<Vec<Step>>,
-    value: impl Clone + Into<grap::RuntimeValue>,
-    projection: Option<Partial<World, Hover>>,
-    default_projection: Option<Partial<World, Hover>>,
-) -> Layout<World, Hover> {
-    computed(steps, value, None, projection, default_projection)
 }
 
 /// [`at`], for the result of `evaluated`, which what's drawn there can run

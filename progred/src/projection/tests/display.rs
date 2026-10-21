@@ -5,9 +5,7 @@ use gid::Step;
 
 #[test]
 fn contextual_projection_is_local_whether_it_accepts_or_declines() {
-    use crate::display::{
-        at_with_projection, compose_partials, descend, descend_local, partial, row,
-    };
+    use crate::display::{at, compose_partials, descend, descend_local, partial, row};
     for use_at in [false, true] {
         for accepts in [false, true] {
             let field = new_cell_id();
@@ -33,7 +31,7 @@ fn contextual_projection_is_local_whether_it_accepts_or_declines() {
                         0.0,
                         [
                             if use_at {
-                                at_with_projection(
+                                at(
                                     [Step::Key(field)],
                                     &nested,
                                     Some(compose_partials([
@@ -87,7 +85,7 @@ fn local_projection_receives_missing_values_without_leaking_through_follow_or_at
                         None,
                         None,
                     )),
-                    1 => Some(at([Step::Key(field)], Value::from(vec![7]))),
+                    1 => Some(at([Step::Key(field)], Value::from(vec![7]), None, None)),
                     _ => None,
                 }
             },
@@ -142,7 +140,7 @@ fn pane_entry_still_follows_cells_but_stops_at_the_first_non_cell() {
 
 #[test]
 fn descents_replace_current_and_default_projections_independently() {
-    use crate::display::{at_with_projection, descend, dim, partial, row};
+    use crate::display::{at, descend, dim, partial, row};
     for use_at in [false, true] {
         let field = new_cell_id();
         let child = new_cell_id();
@@ -179,7 +177,7 @@ fn descents_replace_current_and_default_projections_independently() {
                     0.0,
                     [
                         if use_at {
-                            at_with_projection(
+                            at(
                                 [Step::Key(field)],
                                 &nested,
                                 Some(current.clone()),
@@ -214,7 +212,7 @@ fn descents_replace_current_and_default_projections_independently() {
 
 #[test]
 fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
-    use crate::display::{at_with_projection, compose_partials, descend, dim, partial, row};
+    use crate::display::{at, compose_partials, descend, dim, partial, row};
     let scoped = new_cell_id();
     let ordinary = new_cell_id();
     let items = new_cell_id();
@@ -238,7 +236,7 @@ fn explicit_scope_reaches_nested_containers_and_cells_but_not_siblings() {
             row(
                 0.0,
                 [
-                    at_with_projection(
+                    at(
                         [Step::Key(scoped)],
                         &nested,
                         Some(scoped_projection.clone()),

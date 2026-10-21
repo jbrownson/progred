@@ -196,7 +196,7 @@ fn at_copies_the_displayed_value_not_a_coincident_document_path() {
             let displayed = displayed.clone();
             move |input| {
                 input.value?.as_record()?.get(&marker)?;
-                Some(d::at([gid::Step::Key(occurrence)], &displayed))
+                Some(d::at([gid::Step::Key(occurrence)], &displayed, None, None))
             }
         }),
     );
@@ -232,7 +232,11 @@ fn copying_a_stored_or_jumped_cell_keeps_the_reference_shallow() {
             d::partial(move |input| {
                 input.value?.as_record()?.get(&source)?;
                 Some(if jump {
-                    d::jump([gid::Step::Key(occurrence)], [gid::Step::Key(source)])
+                    d::jump(
+                        [gid::Step::Key(occurrence)],
+                        crate::location::Location::root(vec![gid::Step::Key(source)]),
+                        None,
+                    )
                 } else {
                     d::descend([gid::Step::Key(source)], None, None)
                 })
@@ -287,8 +291,8 @@ fn at_folds_are_occurrence_local_undoable_and_do_not_dirty_the_document() {
                 0,
                 8.0,
                 [
-                    d::at([gid::Step::Key(first)], &displayed),
-                    d::at([gid::Step::Key(second)], &displayed),
+                    d::at([gid::Step::Key(first)], &displayed, None, None),
+                    d::at([gid::Step::Key(second)], &displayed, None, None),
                 ],
             ))
         }),
@@ -358,8 +362,16 @@ fn jump_displays_and_edits_one_source_at_two_independent_occurrences() {
                 0,
                 8.0,
                 [
-                    d::jump([gid::Step::Key(first)], [gid::Step::Key(source)]),
-                    d::jump([gid::Step::Key(second)], [gid::Step::Key(source)]),
+                    d::jump(
+                        [gid::Step::Key(first)],
+                        crate::location::Location::root(vec![gid::Step::Key(source)]),
+                        None,
+                    ),
+                    d::jump(
+                        [gid::Step::Key(second)],
+                        crate::location::Location::root(vec![gid::Step::Key(source)]),
+                        None,
+                    ),
                 ],
             ))
         }),
@@ -417,7 +429,8 @@ fn missing_jump_target_is_a_real_editable_location() {
             input.value?.as_record()?.get(&marker)?;
             Some(d::jump(
                 [gid::Step::Key(occurrence)],
-                [gid::Step::Key(missing)],
+                crate::location::Location::root(vec![gid::Step::Key(missing)]),
+                None,
             ))
         }),
     );
@@ -455,7 +468,7 @@ fn computed_reference() -> (crate::Editor, [CellId; 3]) {
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&marker)?;
-            Some(d::at([gid::Step::Key(source)], &value))
+            Some(d::at([gid::Step::Key(source)], &value, None, None))
         }),
     );
     (world, [source, field, cell])
@@ -491,7 +504,7 @@ fn a_library_cell_followed_from_a_computed_value_stays_read_only() {
         &world,
         d::partial(move |input| {
             input.value?.as_record()?.get(&marker)?;
-            Some(d::at([gid::Step::Key(source)], &value))
+            Some(d::at([gid::Step::Key(source)], &value, None, None))
         }),
     );
     let before = world.model.doc.clone();
@@ -573,11 +586,14 @@ fn explicit_jump_can_establish_a_source_below_at() {
                 Some(d::at(
                     [gid::Step::Key(computed)],
                     Value::record([(computed, Value::record([]))]),
+                    None,
+                    None,
                 ))
             } else if fields.contains_key(&computed) {
                 Some(d::jump(
                     [gid::Step::Key(occurrence)],
-                    [gid::Step::Key(source)],
+                    crate::location::Location::root(vec![gid::Step::Key(source)]),
+                    None,
                 ))
             } else {
                 None

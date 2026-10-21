@@ -23,7 +23,11 @@ fn stored_paths_jump_and_supplied_values_are_distinct_operations() {
         }
         _ => panic!("stored traversal"),
     }
-    let layout: Layout<(), ()> = jump(steps.clone(), source.clone());
+    let layout: Layout<(), ()> = jump(
+        steps.clone(),
+        crate::location::Location::root(source.clone()),
+        None,
+    );
     match inspect(&layout) {
         ProjectionCall::Jump {
             steps: actual,
@@ -112,7 +116,7 @@ fn recorder_preserves_local_and_descendant_projection_inputs() {
     let step = Step::Key(gid::new_cell_id());
     for layout in [
         descend([step.clone()], Some(local.clone()), Some(default.clone())),
-        at_with_projection(
+        at(
             [step],
             Value::record([]),
             Some(local.clone()),
@@ -146,7 +150,7 @@ fn record_braces_keep_the_supplied_order_in_both_responsive_forms() {
     let layout: crate::projection::Layout = record_braces(
         [(SECOND, &second), (FIRST, &first)].map(|(key, value)| RecordField {
             label: dim("field"),
-            value: at([Step::Key(key)], value),
+            value: at([Step::Key(key)], value, None, None),
         }),
         [],
     );

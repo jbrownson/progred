@@ -95,7 +95,7 @@ fn projection<W: Host>() -> Partial<W> {
                     None => Some(evaluation.result)
                         .filter(|result| evaluation.completed && result.absent_reason().is_none())
                         .map(|result| {
-                            crate::display::at_with_projection(
+                            crate::display::at(
                                 [Step::Key(vocabulary::RESULT)],
                                 result,
                                 Some(input.default_projection.clone()),

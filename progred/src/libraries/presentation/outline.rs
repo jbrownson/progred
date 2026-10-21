@@ -81,15 +81,15 @@ fn section<W: Host>(
         default_projection.clone(),
     ]));
     let unstored = match fields.get(&key) {
-        Some(value) => d::at_with_projection(steps.clone(), value, body_projection.clone(), None),
+        Some(value) => d::at(steps.clone(), value, body_projection.clone(), None),
         None => d::slot(),
     };
-    let body = d::jump_to(
-        steps.clone(),
-        outline.below(&[Step::Key(key)]),
-        body_projection,
-        unstored,
-    );
+    // The body stored there is edited there, along with what's stored below
+    // it; one with nowhere stored draws as it is.
+    let body = match outline.below(&[Step::Key(key)]).location() {
+        Some(stored) => d::jump(steps.clone(), stored, body_projection),
+        None => unstored,
+    };
     Layout::program(Rc::new(move |context, build| {
         let visible = open(context.viewing(), &steps);
         col(

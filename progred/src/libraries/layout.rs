@@ -342,11 +342,14 @@ fn decode_with<W: Host>(
         DESCEND_PATH => Some(descend(path::read(content.as_value())?, None, None)),
         JUMP => Some(crate::display::jump(
             path::read(content.field(STEPS)?.as_value())?,
-            path::read(content.field(DOCUMENT_PATH)?.as_value())?,
+            crate::location::Location::root(path::read(content.field(DOCUMENT_PATH)?.as_value())?),
+            None,
         )),
         AT => Some(crate::display::at(
             path::read(content.field(STEPS)?.as_value())?,
             content.field(VALUE)?,
+            None,
+            None,
         )),
         TEXT => Some(leaf(Leaf::Text {
             text: content.field(CONTENT)?.as_text()?.to_string(),

@@ -145,25 +145,27 @@ extent plus a one-shot placement function, never a second container tree.
 Structural recording is a separate interpreter used only by tests. There is no
 parallel Progred drawing language.
 
-`descend` and `at_with_projection` accept independent optional replacements
-for the projection at their target and the default passed to descendants;
-`jump_to` accepts one for its target only, and `at` and `jump` take neither.
+A projection draws three kinds of step: `descend` into what's stored,
+`at` a computed value, and `jump` to another location. `descend` and `at`
+accept independent optional replacements for the projection at their target
+and the default passed to descendants; `jump` accepts one for its target only.
 Omitting either inherits it; supplying one replaces it without implicit
 composition. The total structural fallback still handles a declined result.
 `descend_local` composes a custom partial before the default only at the
-target. `descend_scoped` passes that composition both here and below. These are
-ordinary preparation functions, not path-bearing layout opcodes.
+target; passing that composition as both replacements applies it below as well,
+as a pattern's binders are. These are ordinary preparation functions, not
+path-bearing layout opcodes.
 
 `descend` follows steps of the displayed structure without projecting
 intermediate containers. It preserves the current location interpretation,
 except that following a cell starts a location at its definition.
-`jump(steps, document)` extends the occurrence path by `steps` and a jump
-step to an absolute, source-qualified document path, which it reads from. Its
+`jump(steps, location, projection)` extends the occurrence path by `steps` and
+a jump step to a location, which it reads from: a document path from the root,
+or one within a cell's definition, which keeps that location's start. Its
 descendants' paths continue from that jump, for both projection reads and later
-edits; no inverse is required. `jump_to` reads from wherever a site is stored instead, such as
-within a cell's definition, and keeps that location's start.
+edits; no inverse is required.
 
-`at(steps, value)` instead projects the supplied value with no document source,
+`at(steps, value, …)` instead projects the supplied value with no document source,
 extending the path by `steps` and a computed step, which gives no location,
 including for ordinary descendants. A cell followed
 inside it still starts a location at its definition, which is stored data, and
@@ -465,14 +467,13 @@ columns retain an ordinary empty-list handle.
 
 A heading selects the real list element, so navigation, insertion, deletion,
 and picking remain list operations. Removing an entry removes only the reference,
-not the source field. The body uses `jump_to` at `outline / element / field`,
-drawing the source record's field where it is stored, whatever jumps led to
-the outline. Repeated entries
+not the source field. The body jumps at `outline / element / field` to where the
+source record's field is stored, whatever jumps led to the outline. Repeated entries
 therefore share document edits but have independent selection and fold state.
 Section lists use the same unbracketed column with spacing between items.
-A computed outline is stored nowhere, so `jump_to` falls back to
-`at_with_projection` for its bodies: copy and folding remain
-available without inventing a document source.
+A computed outline is stored nowhere, so its bodies are drawn with `at`
+instead: copy and folding remain available without inventing a document
+source.
 
 Visibility uses the existing undoable fold annotation at each body occurrence,
 without document edits or a separate state store. Clicking a heading folds its

@@ -643,12 +643,14 @@ fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
     )
 }
 
+/// A pattern at `steps`, its binders declared there and in every pattern
+/// nested below.
 fn pattern_path<W: Host>(steps: impl AsRef<[Step]> + 'static, default: &Partial<W>) -> Layout<W> {
-    crate::display::descend_scoped(
-        steps,
+    let pattern = crate::display::compose_partials([
         crate::display::runtime_partial(pattern_binder),
-        default,
-    )
+        default.clone(),
+    ]);
+    crate::display::descend(steps, Some(pattern.clone()), Some(pattern))
 }
 
 /// A binder reads as the record it is, its cell declared; matching reads

@@ -310,8 +310,16 @@ fn navigation_arrival_through_jump_retains_editing_context() {
             Some(d::row(
                 8.0,
                 [
-                    d::jump([Step::Key(first)], [Step::Key(source)]),
-                    d::jump([Step::Key(second)], [Step::Key(source)]),
+                    d::jump(
+                        [Step::Key(first)],
+                        crate::location::Location::root(vec![Step::Key(source)]),
+                        None,
+                    ),
+                    d::jump(
+                        [Step::Key(second)],
+                        crate::location::Location::root(vec![Step::Key(source)]),
+                        None,
+                    ),
                 ],
             ))
         }),
