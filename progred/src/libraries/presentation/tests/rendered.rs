@@ -154,28 +154,32 @@ fn an_errors_call_is_drawn_where_the_call_is() {
         ),
     );
     let driver = rendered_in_a_pane(program, program.into(), cells);
-    // The call reads as its function, which is the program's own.
-    let function = pane_result(
-        &driver,
-        &[
-            occurrence::Step::Key(crate::libraries::absent::vocabulary::CALL),
-            occurrence::Step::jump(Location::in_cell(
-                program,
-                gid::Resolution::Document,
-                Vec::new(),
-            )),
-            occurrence::Step::Key(::grap::vocabulary::FUNCTION),
-        ],
-    );
-    assert!(driver.drawn(&function));
-    assert_eq!(
-        driver.shared(&function),
-        driver.shared(&[
-            Step::Key(crate::libraries::grap::vocabulary::GRAP),
-            Step::Follow(gid::Resolution::Document),
-            Step::Key(::grap::vocabulary::FUNCTION),
-        ])
-    );
+    // The call reads as itself, its parts the program's own.
+    let in_error = |key| {
+        pane_result(
+            &driver,
+            &[
+                occurrence::Step::Key(crate::libraries::absent::vocabulary::CALL),
+                occurrence::Step::jump(Location::in_cell(
+                    program,
+                    gid::Resolution::Document,
+                    Vec::new(),
+                )),
+                occurrence::Step::Key(key),
+            ],
+        )
+    };
+    for key in [::grap::vocabulary::FUNCTION, numbers::vocabulary::LEFT] {
+        assert!(driver.drawn(&in_error(key)));
+        assert_eq!(
+            driver.shared(&in_error(key)),
+            driver.shared(&[
+                Step::Key(crate::libraries::grap::vocabulary::GRAP),
+                Step::Follow(gid::Resolution::Document),
+                Step::Key(key),
+            ])
+        );
+    }
 }
 
 #[test]

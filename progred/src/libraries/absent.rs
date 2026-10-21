@@ -28,7 +28,7 @@ pub mod vocabulary {
 
 /// An absent value reads as its reason, then any other fields, such as a
 /// failed alternative's causes, all on red. The call it's about reads as
-/// that call, by its function, where it is.
+/// that call, where it is.
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let reason = input.value?.absent_reason()?;
     Some(on_red(crate::display::structure::with_extra_fields_by(
@@ -45,28 +45,11 @@ fn call_field<W: Host>(key: CellId) -> Option<crate::display::host::Partial<W>> 
     (key == vocabulary::CALL).then(|| crate::display::runtime_partial(call))
 }
 
-/// Where a call is, drawn as the call there, by its function, so it's the
-/// same place as the call drawn in its code.
+/// Where a call is, drawn as the call there, so it's the same place as the
+/// call drawn in its code.
 fn call<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let call = location(::grap::source::read(&input.value?.to_value())?)?;
-    Some(crate::display::jump_at(
-        [],
-        call,
-        Some(crate::display::compose_partials([
-            crate::display::runtime_partial(function),
-            input.default_projection.clone(),
-        ])),
-    ))
-}
-
-/// A call by its function, drawn as a reference where it's a named cell.
-fn function<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    input.value?.field(::grap::vocabulary::FUNCTION)?;
-    Some(crate::display::descend_local(
-        [gid::Step::Key(::grap::vocabulary::FUNCTION)],
-        crate::display::runtime_partial(crate::libraries::name::shallow_cell),
-        &input.default_projection,
-    ))
+    Some(crate::display::jump_at([], call, None))
 }
 
 /// A missing argument reads as its reason and the parameter, then the hole

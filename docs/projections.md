@@ -768,8 +768,8 @@ actual evaluator halts still halt rather than invoking the fallback.
 The absent library draws an absent as its reason's name followed by any other
 fields, such as a failed alternative's `causes`, all on a red wash; each cause
 is washed in turn inside it. An unnamed reason shows its short cell identity.
-An absent's `call` reads as the call, by its function, drawn where the call is:
-the same place as the call in its code. A missing argument reads as its reason and its parameter, drawn as a shallow
+An absent's `call` reads as the call itself, drawn where it is: the same place
+as the call in its code. A missing argument reads as its reason and its parameter, drawn as a shallow
 reference, then the hole for the argument: a jump to the call's origin and the
 parameter's field there, so the error's hole and the call's are one place.
 Selecting either marks the other, and filling either fills the call. A call
