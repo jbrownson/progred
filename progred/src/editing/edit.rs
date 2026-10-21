@@ -42,6 +42,17 @@ impl Edit<'_> {
         self.session.model.selection.as_ref()
     }
 
+    /// Whether the selection is at `path` or below it, resting on a value
+    /// rather than picking one or typing one.
+    pub(crate) fn rests_within(&self, path: &[Step]) -> bool {
+        let sources = self.session.sources();
+        self.selection().is_some_and(|current| {
+            current.path().starts_with(path)
+                && current.stage(&sources) == selection::Stage::Edge
+                && current.value_edit().is_none()
+        })
+    }
+
     /// The state of the occurrence at `path`, which its view keeps.
     pub(crate) fn annotation(&self, path: &[Step]) -> Option<&Value> {
         self.session

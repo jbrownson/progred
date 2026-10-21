@@ -403,7 +403,8 @@ Directions this surfaced:
 Where offers come from, as of 20 October 2026, with the owner's view of each:
 
 - **Starting points** (`CompletionScope::Start`): what a document starts as,
-  Grap's new program and Fidget's new scene, for an empty root's hole. These
+  Grap's new program and notebook and Fidget's new scene, for an empty root's
+  hole. These
   stay a category of their own: they are how a document gets into a custom
   projection, whose holes then offer its own. They may not need to be
   root-only; that's undecided.
@@ -436,11 +437,12 @@ strings and numbers.
 
 A document's empty root offers the libraries' starting points, then Raw's
 offers. There should be one for every direction a person might want to go, each
-landing on something that works. Today's two, Grap's new program and Fidget's
-new scene, each lead somewhere awkward; Grap's opens with a missing-cell error
-in its pane until the program is written (that error's hole does take the
-program now). A Grap notebook in the style of a REPL should be a starting point
-of its own beside Grap's; see [Notebook and REPL](#notebook-and-repl).
+landing on something that works. Of today's three, Grap's new program and
+Fidget's new scene each lead somewhere awkward; Grap's opens with a missing-cell
+error in its pane until the program is written (that error's hole does take the
+program now). Grap's notebook opens on its first entry's expression, with
+nothing in error; see [Notebook and REPL](#notebook-and-repl) for what it
+lacks.
 
 ## Workspace documents
 
@@ -1198,13 +1200,20 @@ Fidget took 25%.
 
 A Grap notebook in the style of Jupyter, but reactive like Pluto, marimo and
 Observable: changing a cell recomputes the cells that use it, so there is no
-hidden state from running cells out of order. Much of it exists already:
-results project through the normal projections (pictures, tool previews, 3D
+hidden state from running cells out of order. A first one is Grap's notebook
+starting point ([projections](projections.md)): a projection of a list of entry
+cells, each drawn as its expression and its result, with a new entry on Enter.
+Results project through the normal projections (pictures, tool previews, 3D
 views), and observed evaluation tracks the cell definitions an evaluation reads.
-A notebook is then mostly a projection of a list of entry cells, each drawn as
-its expression and its result, with ergonomics: a new entry on Enter, and
-progress and cancellation for long computations. It's a starting point of its
-own, beside Grap's.
+Still to come:
+
+- Progress and cancellation for long computations; an entry's result is
+  computed while the frame is drawn, as a pane's is.
+- Selecting an entry itself, to move or delete it, has only the arrow; there is
+  no gutter or handle.
+- Reaching the empty notebook's "new entry" from the keyboard.
+- An entry referred to without a name reads as its short ID, as any unnamed
+  cell does.
 
 - Entries are cells, and one refers to another the standard ways: Cmd-clicking
   it into a slot, copy and paste, or naming it and referring to it by name. No

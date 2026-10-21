@@ -21,6 +21,7 @@ use ::grap::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS, VALUE};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
 pub mod control;
+pub mod notebook;
 pub mod numbers;
 mod suggestions;
 
@@ -468,6 +469,7 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::source::vocabulary::PATH, "source path"),
             (::grap::source::vocabulary::SOURCE, "definition source"),
             (vocabulary::GRAP, "grap"),
+            (notebook::vocabulary::NOTEBOOK, "notebook"),
             (::grap::absent::FUEL_EXHAUSTED, "fuel exhausted"),
             (memo::CYCLE, "computation cycle"),
             (memo::INPUTS_CHANGED, "inputs changed during computation"),
@@ -508,6 +510,7 @@ pub fn library<W: Host>() -> Library<W> {
             crate::display::runtime_partial(value_display),
             crate::display::runtime_partial(ffi_display),
             crate::display::runtime_partial(program_display),
+            crate::display::runtime_partial(notebook::display),
         ]),
     )
     .with_completions(completions)
@@ -517,8 +520,9 @@ fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Co
     use crate::display::CompletionScope;
     (request.kind == CompletionKind::Value).then_some(())?;
     match request.scope {
-        // An empty document can start as a program in a pane.
-        CompletionScope::Start => Some(vec![new_program()]),
+        // An empty document can start as a program in a pane, or as a
+        // notebook.
+        CompletionScope::Start => Some(vec![new_program(), notebook::starter()]),
         CompletionScope::Everything => Some(
             std::iter::once(
                 crate::libraries::completion::insert(

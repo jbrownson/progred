@@ -362,6 +362,19 @@ and draws the program `grap` names as an expression slot: the cell keeps its
 parentheses, and an empty program offers Grap's suggestions rather than the
 whole vocabulary.
 
+Grap's other root template is a notebook: a record whose `notebook` field lists
+entry cells. Each entry draws as its cell's expression, an arrow, and what it
+evaluates to, beside it or below it where there's no room. An entry whose cell
+has no definition yet draws only its expression, so a new entry shows no error.
+Each entry evaluates at its own occurrence, so its result is memoized like a
+pane's and recomputes when a cell it reads changes, and an error in it opens to
+its callers. Entries refer to one another the standard ways: Cmd-clicking,
+copying, or naming. Enter on an entry, once its own handlers decline it, starts
+a new entry after it, or with Shift before it: a fresh cell whose expression is
+picked next. An empty notebook draws a "new entry" that starts its first. An
+element that isn't a cell draws as plain data. The arrow selects the entry
+itself rather than its expression.
+
 The presentation library offers an opt-in interpreter for
 `{value: source, projection: function}`. Pane views try it only at entry,
 following cells through their ordinary definition paths. The document view

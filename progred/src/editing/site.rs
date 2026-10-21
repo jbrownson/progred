@@ -114,6 +114,12 @@ impl SiteEdit<'_> {
         }
     }
 
+    /// Whether the selection is here or below, resting on a value rather
+    /// than picking one or typing one.
+    pub(crate) fn rests_within(&self) -> bool {
+        self.edit.rests_within(&self.site.path.to_vec())
+    }
+
     /// This occurrence's state, which its view keeps.
     pub(crate) fn state(&self) -> Option<&Value> {
         self.edit.annotation(&self.site.path.to_vec())

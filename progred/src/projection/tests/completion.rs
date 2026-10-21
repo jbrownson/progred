@@ -440,7 +440,14 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
     };
     assert_eq!(
         displays(""),
-        ["fidget", "grap", "new cell", "new list", "new record"]
+        [
+            "fidget",
+            "grap",
+            "notebook",
+            "new cell",
+            "new list",
+            "new record"
+        ]
     );
     let selection = crate::selection::pending_with_query(vec![], "sdf");
     let entries = projected_completion_entries(&doc, &selection);
