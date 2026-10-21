@@ -146,14 +146,6 @@ pub fn owned(start: Start) -> bool {
     )
 }
 
-/// Whether a write at `location` can land: where it's stored must be the
-/// document's own.
-pub fn writable(sources: &Sources, location: &Location) -> bool {
-    location
-        .stored(sources)
-        .is_some_and(|stored| owned(stored.start))
-}
-
 /// Whether a value could be written at `location`, ignoring permissions: it
 /// holds one, or its container does, as for a deleted field or element,
 /// or it's a cell's definition, written or not.

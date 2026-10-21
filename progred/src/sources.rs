@@ -166,12 +166,17 @@ impl<'a> Sources<'a> {
                 Start::Root => self.root(),
                 Start::Cell { cell, resolution } => self.value(cell, &resolution),
             }?,
-            |value, step| match step {
-                Step::Follow(resolution) => self.value(value.as_cell()?, resolution),
-                Step::Key(label) => value.as_record()?.get(label),
-                Step::Element(position) => value.as_list()?.get(position),
-            },
+            |value, step| self.step(value, step),
         )
+    }
+
+    /// The value `step` reaches from `value`.
+    pub fn step(&self, value: &'a Value, step: &Step) -> Option<&'a Value> {
+        match step {
+            Step::Follow(resolution) => self.value(value.as_cell()?, resolution),
+            Step::Key(label) => value.as_record()?.get(label),
+            Step::Element(position) => value.as_list()?.get(position),
+        }
     }
 
     pub fn cells(&self) -> Vec<CellId> {

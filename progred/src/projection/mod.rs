@@ -762,16 +762,35 @@ fn bind_selection(
     })
 }
 
-fn ground(cx: &Cx, source: Option<&Location>, value: Option<&grap::RuntimeValue>) -> Ground {
-    match (source, value.and_then(grap::RuntimeValue::as_cell)) {
-        (None, _) => Ground::Readonly,
-        // A reference remains replaceable; the ground describes its definition.
-        (Some(_), Some(cell)) if cx.sources.external(cell) => Ground::Readonly,
-        (Some(_), Some(_)) => Ground::Writable,
-        (Some(location), None) if crate::location::writable(&cx.sources, location) => {
-            Ground::Writable
+/// Whether a write can land where what's drawn at `path` is stored. Below the
+/// nearest followed definition by fields and elements alone, that's the
+/// definition, which `ancestors` already names, so the route there needn't be
+/// read again.
+fn writable(cx: &Cx, path: &[Step], ancestors: &Ancestry) -> bool {
+    match ancestors.enclosing {
+        Some((cell, resolution, start))
+            if path.get(start..).is_some_and(|below| {
+                below
+                    .iter()
+                    .all(|step| matches!(step, Step::Key(_) | Step::Element(_)))
+            }) =>
+        {
+            crate::location::owned(Start::Cell { cell, resolution })
         }
-        (Some(_), None) => Ground::Readonly,
+        _ => crate::occurrence::writable(&cx.sources, path),
+    }
+}
+
+/// The ground under what's drawn at `path`, `writable` or not where it's
+/// stored: a computed value is read-only.
+fn ground(cx: &Cx, path: &[Step], value: Option<&grap::RuntimeValue>, writable: bool) -> Ground {
+    match value.and_then(grap::RuntimeValue::as_cell) {
+        _ if crate::occurrence::computed(path) => Ground::Readonly,
+        // A reference remains replaceable; the ground describes its definition.
+        Some(cell) if cx.sources.external(cell) => Ground::Readonly,
+        Some(_) => Ground::Writable,
+        None if writable => Ground::Writable,
+        None => Ground::Readonly,
     }
 }
 
@@ -804,8 +823,8 @@ fn prepare_value(
     } = scope;
     // A picker over a value draws its hole instead.
     let value = scope.value.filter(|_| !cx.pending_at(path));
-    let source = crate::occurrence::location(path);
-    let ground = ground(cx, source.as_ref(), value);
+    let writable = writable(cx, path, ancestors);
+    let ground = ground(cx, path, value, writable);
     let changed_ground = (ground != ancestors.ground).then_some(ground);
     let changed_ancestors = changed_ground.map(|ground| Ancestry {
         ground,
@@ -830,7 +849,7 @@ fn prepare_value(
         },
         current_projection,
         &child_projection.partial,
-        source.as_ref(),
+        writable,
     );
     let prepared = match layout {
         None => {
@@ -882,7 +901,7 @@ fn prepare_value(
                     // A reference names its cell even in a computed result.
                     Secondary::Cell(cell)
                 } else {
-                    Secondary::from_location(&cx.sources, source.as_ref()?)
+                    Secondary::from_location(&cx.sources, &crate::occurrence::location(path)?)
                 })
             });
             // A landmark, not a target: highlight and keyboard reach span
@@ -947,7 +966,7 @@ fn value_layout(
     scope: ProjectionScope<'_, '_>,
     current_projection: Option<&Partial>,
     default_projection: &Partial,
-    source: Option<&Location>,
+    writable: bool,
 ) -> Option<Layout> {
     let ProjectionScope {
         cx,
@@ -980,7 +999,7 @@ fn value_layout(
         default_projection: default_projection.clone(),
         value,
         scale_factor: cx.styles.scale,
-        writable: source.is_some_and(|source| crate::location::writable(&cx.sources, source)),
+        writable,
         selection: selection.as_ref(),
         pending,
         state,

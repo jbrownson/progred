@@ -9,6 +9,21 @@ fn sources<'a>(doc: &'a Document, libraries: &'a Libraries) -> Sources<'a> {
     Sources { doc, libraries }
 }
 
+/// Whether a write can land at `location`, as an occurrence drawn there
+/// finds it: through a jump to it and, from the root, along its own steps,
+/// which must agree.
+fn writable(sources: &Sources, location: &Location) -> bool {
+    let jumped =
+        crate::occurrence::writable(sources, &[crate::occurrence::Step::jump(location.clone())]);
+    if location.start == Start::Root {
+        assert_eq!(
+            crate::occurrence::writable(sources, &crate::occurrence::of(&location.path)),
+            jumped
+        );
+    }
+    jumped
+}
+
 #[test]
 fn a_location_reads_from_its_start() {
     let (field, cell) = (new_cell_id(), new_cell_id());

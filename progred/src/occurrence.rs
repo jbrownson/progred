@@ -5,13 +5,14 @@
 //! inside it. So the path alone tells two drawings of the same data apart, and
 //! says where each reads and writes.
 
-use crate::location::Location;
+use crate::location::{Location, Start};
 use crate::sources::Sources;
 use gid::{CellId, Position, Resolution, Value};
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 /// One step of an occurrence path.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Step {
     /// Into a record's field, as a document path steps.
     Key(CellId),
@@ -28,6 +29,25 @@ pub enum Step {
 }
 
 pub type Path = Vec<Step>;
+
+/// Occurrence paths key every drawn occurrence's state, so they hash on each
+/// frame: a jump hashes only where its location starts and how far it goes,
+/// which equal jumps share, and leaves telling the rest apart to equality.
+impl Hash for Step {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Key(cell) => cell.hash(state),
+            Self::Element(position) => position.hash(state),
+            Self::Follow(resolution) => resolution.hash(state),
+            Self::Jump(location) => {
+                location.start.hash(state);
+                location.path.len().hash(state);
+            }
+            Self::Computed => {}
+        }
+    }
+}
 
 impl From<gid::Step> for Step {
     fn from(step: gid::Step) -> Self {
@@ -139,7 +159,47 @@ pub fn read<'a>(sources: &Sources<'a>, path: &[Step]) -> Option<&'a Value> {
 
 /// Whether a write can land where `path`'s data is stored.
 pub fn writable(sources: &Sources, path: &[Step]) -> bool {
-    location(path).is_some_and(|location| crate::location::writable(sources, &location))
+    stored_start(sources, path).is_some_and(crate::location::owned)
+}
+
+/// Where the data at `path` is stored starts, as [`Location::stored`] finds
+/// it, without building the location: the definition its last Follow enters,
+/// else where its last jump's location is stored, else the root. None for a
+/// computed value, or where the route to that Follow no longer reaches a cell.
+fn stored_start(sources: &Sources, path: &[Step]) -> Option<Start> {
+    let marker = path
+        .iter()
+        .rposition(|step| matches!(step, Step::Jump(_) | Step::Computed));
+    let (from, rest) = match marker {
+        None => (None, path),
+        Some(index) => match &path[index] {
+            Step::Jump(location) => (Some(&**location), &path[index + 1..]),
+            _ => return None,
+        },
+    };
+    match rest
+        .iter()
+        .rposition(|step| matches!(step, Step::Follow(_)))
+    {
+        Some(follow) => {
+            let Step::Follow(resolution) = rest[follow] else {
+                unreachable!("found as a Follow")
+            };
+            let start = from.map_or(Start::Root, |location| location.start);
+            let before = from.map_or(&[][..], |location| &location.path);
+            let cell = rest[..follow]
+                .iter()
+                .try_fold(sources.read_from(start, before)?, |value, step| {
+                    sources.step(value, &step.data()?)
+                })?
+                .as_cell()?;
+            Some(Start::Cell { cell, resolution })
+        }
+        None => match from {
+            None => Some(Start::Root),
+            Some(location) => location.stored(sources).map(|stored| stored.start),
+        },
+    }
 }
 
 /// An occurrence path as ordinary GID data, for Grap and the web embed: data
