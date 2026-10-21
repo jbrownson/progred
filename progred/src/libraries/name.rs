@@ -249,6 +249,29 @@ fn new_label(spelling: &str) -> Completion {
     }
 }
 
+/// A named cell as its name, a reference to it, where a projection means the
+/// cell rather than what it holds, as Grap's references do. One without a
+/// name is left to show its definition.
+pub(crate) fn shallow_cell<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+) -> Option<Layout<W>> {
+    shallow_cell_with(input, |label| label)
+}
+
+/// [`shallow_cell`], its name drawn by `decorate`.
+pub(crate) fn shallow_cell_with<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    decorate: impl FnOnce(Layout<W>) -> Layout<W>,
+) -> Option<Layout<W>> {
+    let cell = input.value?.as_cell()?;
+    let name = input.env.name(cell)?;
+    let site = input.site();
+    Some(crate::display::stop(crate::display::activatable(
+        decorate(crate::display::named(&name, Face::Name)),
+        &site,
+    )))
+}
+
 /// A name as its line editor or, missing, a hole for one. A projection
 /// passes this where it descends into a name.
 pub(crate) fn projection<W: Host>() -> Partial<W> {

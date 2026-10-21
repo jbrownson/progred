@@ -28,7 +28,7 @@ pub(crate) fn expression<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     match input.value {
-        Some(_) => shallow_cell(input),
+        Some(_) => name::shallow_cell(input),
         None => (input.default_projection)(input).or_else(|| {
             Some(picker(Picker::new(
                 CompletionKind::Value,
@@ -44,27 +44,6 @@ pub mod vocabulary {
     /// Source whose contents belong to the Grap domain. This is an
     /// ordinary field and requests no evaluation.
     pub const GRAP: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
-}
-
-/// A named cell as a reference, otherwise leave its definition visible.
-/// Contextual projections use this for expression and callable references.
-fn shallow_cell<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-) -> Option<Layout<W>> {
-    shallow_cell_with(input, |label| label)
-}
-
-pub(crate) fn shallow_cell_with<W: Host>(
-    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
-    decorate: impl FnOnce(Layout<W>) -> Layout<W>,
-) -> Option<Layout<W>> {
-    let cell = input.value?.as_cell()?;
-    let name = input.env.name(cell)?;
-    let site = input.site();
-    Some(crate::display::stop(activatable(
-        decorate(crate::display::named(&name, Face::Name)),
-        &site,
-    )))
 }
 
 /// A parameter is a cell. An empty slot offers only a new one, named as
@@ -147,7 +126,7 @@ pub fn shallow_path<W: Host>(
 ) -> Layout<W> {
     descend_local(
         steps,
-        crate::display::runtime_partial(shallow_cell),
+        crate::display::runtime_partial(name::shallow_cell),
         default,
     )
 }
@@ -304,7 +283,7 @@ pub(crate) fn call_with_function<W: Host>(
     };
     let function = descend_local(
         [Step::Key(FUNCTION)],
-        function_projection.unwrap_or_else(|| crate::display::runtime_partial(shallow_cell)),
+        function_projection.unwrap_or_else(|| crate::display::runtime_partial(name::shallow_cell)),
         &input.default_projection,
     );
     let arguments = record_fragment_with(

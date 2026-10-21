@@ -241,7 +241,7 @@ fn named_reference(
         ::grap::RuntimeValue,
     >,
 ) -> Option<crate::display::Layout<Editor, crate::frame::Hovered>> {
-    crate::libraries::grap::shallow_cell_with(input, |name| {
+    crate::libraries::name::shallow_cell_with(input, |name| {
         crate::display::selectable_bracket(crate::display::Delim::Paren, name)
     })
 }

@@ -116,7 +116,7 @@ const CLOSED: bool = false;
 fn heading<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let key = input.value?.as_cell()?;
     let site = input.site();
-    crate::libraries::grap::shallow_cell_with(input, move |label| {
+    crate::libraries::name::shallow_cell_with(input, move |label| {
         Layout::program(Rc::new(move |context, build| {
             let visible = open(context.viewing(), &[Step::Key(key)]);
             let section = context.site().below(&[Step::Key(key)]);
