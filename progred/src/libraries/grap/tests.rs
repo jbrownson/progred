@@ -7,9 +7,7 @@ use crate::display::test_support::{EvaluatesTo, ProjectionCall, inspect, unshare
 use crate::identity::short_id;
 use crate::libraries::test_widgets::{project_runtime, projection_input};
 use crate::library::Libraries;
-use crate::test_support::{
-    activated, completion_entries_with, core_libraries, library_offers, src,
-};
+use crate::test_support::{activated, completion_entries_with, core_libraries, src};
 use gid::{Cells, Document, new_cell_id};
 
 #[test]
@@ -88,7 +86,7 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
             )
         };
         assert_eq!(
-            call_completions(&request)
+            function_offers(&request, &|_| false)
                 .iter()
                 .map(|offer| offer.test_value())
                 .collect::<Vec<_>>(),
@@ -1000,10 +998,7 @@ fn document_function_completion_inserts_a_call_and_opens_its_first_argument() {
     let time = names["sun_time"];
     let libraries = core_libraries();
     let sources = src(&document, &libraries);
-    let everything = library_offers(
-        crate::stack::load().completions,
-        crate::display::CompletionScope::Everything,
-    );
+    let everything = crate::libraries::grap::slot_offers();
     let entries = completion_entries_with(
         &sources,
         &CompletionKind::Value,
@@ -1051,10 +1046,7 @@ fn call_offers_follow_resolved_definitions_without_evaluating_them() {
         root: root.clone(),
         cells: cells.clone(),
     };
-    let everything = library_offers(
-        crate::stack::load().completions,
-        crate::display::CompletionScope::Everything,
-    );
+    let everything = crate::libraries::grap::slot_offers();
     let offers = |document: &Document| {
         completion_entries_with(
             &src(document, &libraries),
@@ -1084,10 +1076,7 @@ fn built_in_call_completion_opens_its_first_argument() {
     use crate::libraries::grap::numbers::{f64::SUM, vocabulary::LEFT};
     let document = Document::default();
     let libraries = core_libraries();
-    let everything = library_offers(
-        crate::stack::load().completions,
-        crate::display::CompletionScope::Everything,
-    );
+    let everything = crate::libraries::grap::slot_offers();
     let entries = completion_entries_with(
         &src(&document, &libraries),
         &CompletionKind::Value,

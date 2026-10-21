@@ -5,7 +5,7 @@ use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::libraries::f64;
 use crate::test_examples::website_growing_forest_editor;
-use crate::test_support::{completion_entries_with, library_offers};
+use crate::test_support::completion_entries_with;
 use gid::{CellId, Value};
 use kurbo::Point;
 use peniko::Color;
@@ -264,10 +264,7 @@ fn website_growing_forest_clouds_are_discoverable_optional_and_slider_driven() {
         &crate::display::CompletionKind::Value,
         "clouds",
         None,
-        Some(&library_offers(
-            editor.stack.completions.clone(),
-            crate::display::CompletionScope::Everything,
-        )),
+        Some(&crate::libraries::grap::slot_offers()),
     );
     assert!(
         offers

@@ -445,14 +445,14 @@ Where offers come from, as of 20 October 2026, with the owner's view of each:
   as typed. Raw's holes ask every shown library for them. The owner doesn't
   want this as a category of its own: any offer could instead be contingent on
   what's typed.
-- **Offers for anywhere** (`Everything`): color's new color, and Grap's new
-  lambda and calls by name. Only Grap's slots ask for them, and new color is
-  the only answer from outside Grap, so dropping the category would leave
-  color no way into a Grap slot. The owner considers the category the wrong
+- **Offers for anywhere** (`Everything`): color's new color. Only Grap's slots
+  ask for them, after their own, and new color is the only answer, so dropping
+  the category would leave color no way into a Grap slot. The owner considers the category the wrong
   answer to a real problem, and would rather leave it as it is than patch it,
   to be rethought here.
 - **A projection's own**: Raw's new cell, list and record; Grap's bindings in
-  scope and quote and unquote. Grap knowing control's binding forms and quote is
+  scope, new lambda and new call, the functions in reach, and quote and
+  unquote. Grap knowing control's binding forms and quote is
   fine: they are Grap's macros, which don't follow the parameter lists offers
   are otherwise computed from. Declaring such forms instead of coding them can
   come later.

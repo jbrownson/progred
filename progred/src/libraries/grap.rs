@@ -704,49 +704,36 @@ pub fn library<W: Host>() -> Library<W> {
     .with_completions(completions)
 }
 
+/// An empty document can start as a program in a pane, or as a notebook.
+/// Grap's other offers are its slots' own.
 fn completions(request: &crate::display::CompletionRequest<'_>) -> Option<Vec<Completion>> {
-    use crate::display::CompletionScope;
-    (request.kind == CompletionKind::Value).then_some(())?;
-    match request.scope {
-        // An empty document can start as a program in a pane, or as a
-        // notebook.
-        CompletionScope::Start => Some(vec![new_program(), notebook::starter()]),
-        CompletionScope::Everything => Some(
-            std::iter::once(
-                // Its first parameter is picked next.
-                crate::libraries::completion::insert(
-                    "new lambda",
-                    Value::record([(PARAMS, Value::list([]))]),
-                    Some(crate::selection::pending_at(&[
-                        Step::Key(PARAMS),
-                        Step::Element(
-                            gid::position::between(None, None).expect("an empty list has room"),
-                        ),
-                    ])),
-                )
-                .with_aliases(["lambda", "λ"])
-                .with_detail(ID),
-            )
-            .chain(std::iter::once(
-                // Its function is picked next: a binding, a lambda, or
-                // anything else that evaluates to one.
-                crate::libraries::completion::insert(
-                    "new call",
-                    Value::record([]),
-                    Some(crate::selection::pending_at(&[Step::Key(FUNCTION)])),
-                )
-                .with_detail(ID),
-            ))
-            .chain(
-                (!request.query.trim().is_empty())
-                    .then(|| call_completions(request))
-                    .into_iter()
-                    .flatten(),
-            )
-            .collect(),
-        ),
-        CompletionScope::Literal => None,
-    }
+    (request.kind == CompletionKind::Value
+        && request.scope == crate::display::CompletionScope::Start)
+        .then(|| vec![new_program(), notebook::starter()])
+}
+
+/// What Grap builds in a slot that names no function: a lambda, its first
+/// parameter picked next, and a call, its function picked next: a binding,
+/// a function, or anything else that evaluates to one.
+fn constructs() -> [Completion; 2] {
+    [
+        crate::libraries::completion::insert(
+            "new lambda",
+            Value::record([(PARAMS, Value::list([]))]),
+            Some(crate::selection::pending_at(&[
+                Step::Key(PARAMS),
+                Step::Element(gid::position::between(None, None).expect("an empty list has room")),
+            ])),
+        )
+        .with_aliases(["lambda", "λ"])
+        .with_detail(ID),
+        crate::libraries::completion::insert(
+            "new call",
+            Value::record([]),
+            Some(crate::selection::pending_at(&[Step::Key(FUNCTION)])),
+        )
+        .with_detail(ID),
+    ]
 }
 
 fn new_program() -> Completion {
@@ -759,15 +746,17 @@ fn new_program() -> Completion {
     .with_detail(ID)
 }
 
-/// Where a call offer's function comes from: the document, or a library by name.
-fn call_detail(
+/// What an offer is, `call` or `function`, and where its function comes
+/// from: the document, or a library by name.
+fn function_detail(
     request: &crate::display::CompletionRequest<'_>,
+    what: &str,
     resolution: gid::Resolution,
 ) -> String {
     match resolution {
-        gid::Resolution::Document => "call".to_owned(),
+        gid::Resolution::Document => what.to_owned(),
         gid::Resolution::Library(library) => format!(
-            "call · {}",
+            "{what} · {}",
             crate::identity::name_or_short_id(
                 (request.resolve)(library).and_then(|definition| name::read(definition.value)),
                 library,
@@ -776,38 +765,78 @@ fn call_detail(
     }
 }
 
-fn call_completions(request: &crate::display::CompletionRequest<'_>) -> Vec<Completion> {
-    if matches!(request.path.last(), Some(Step::Key(field)) if *field == FUNCTION || *field == FFI)
-    {
-        Vec::new()
-    } else {
-        let mut offers: Vec<_> = (request.cells)()
-            .into_iter()
-            .filter_map(|cell| {
-                let definition = (request.resolve)(cell)?;
-                let name = name::of_cell(
-                    &|cell| (request.resolve)(cell).map(|definition| definition.value),
-                    cell,
-                )?
-                .spelling();
-                (definition.native
-                    || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
-                .then(|| {
-                    let offer = call_completion(cell.into(), cell, request.resolve)
-                        .with_detail(call_detail(request, definition.resolution));
-                    (
-                        matches!(definition.resolution, gid::Resolution::Library(_)),
-                        name,
-                        offer,
-                    )
-                })
+/// The functions in reach by name, the document's before the libraries'. A
+/// call's function slot offers each as itself; any other slot, a call of
+/// it. Quote, offered as its mark, and the cells `bound` says are bindings,
+/// offered by name already, are left out.
+fn function_offers(
+    request: &crate::display::CompletionRequest<'_>,
+    bound: &dyn Fn(CellId) -> bool,
+) -> Vec<Completion> {
+    let as_function = match request.path.last() {
+        Some(Step::Key(field)) if *field == FFI => return Vec::new(),
+        Some(Step::Key(field)) => *field == FUNCTION,
+        _ => false,
+    };
+    let mut offers: Vec<_> = (request.cells)()
+        .into_iter()
+        .filter(|&cell| cell != control::vocabulary::QUOTE && !bound(cell))
+        .filter_map(|cell| {
+            let definition = (request.resolve)(cell)?;
+            let name = name::of_cell(
+                &|cell| (request.resolve)(cell).map(|definition| definition.value),
+                cell,
+            )?
+            .spelling();
+            (definition.native
+                || function_parameters(&Value::from(cell).into(), request.resolve).is_some())
+            .then(|| {
+                let offer = if as_function {
+                    function_completion(cell, request.resolve).with_detail(function_detail(
+                        request,
+                        "function",
+                        definition.resolution,
+                    ))
+                } else {
+                    call_completion(cell.into(), cell, request.resolve)
+                        .with_detail(function_detail(request, "call", definition.resolution))
+                };
+                (
+                    matches!(definition.resolution, gid::Resolution::Library(_)),
+                    name,
+                    offer,
+                )
             })
-            .collect();
-        offers.sort_by_cached_key(|(external, name, _)| {
-            (*external, name.to_lowercase(), name.clone())
-        });
-        offers.into_iter().map(|(_, _, offer)| offer).collect()
-    }
+        })
+        .collect();
+    offers.sort_by_cached_key(|(external, name, _)| (*external, name.to_lowercase(), name.clone()));
+    offers.into_iter().map(|(_, _, offer)| offer).collect()
+}
+
+/// `function` picked for the call whose function slot this is: the call's
+/// first declared parameter is picked next, as a call picked whole opens it.
+fn function_completion<'a>(
+    function: CellId,
+    resolve: &dyn Fn(CellId) -> Option<ResolvedCell<'a>>,
+) -> Completion {
+    let first = function_parameters(&Value::from(function).into(), resolve)
+        .and_then(|parameters| parameters.first().copied());
+    let then = match first {
+        Some(parameter) => crate::selection::pending_at(&[Step::Key(parameter)]),
+        None => crate::selection::at(&[], crate::selection::payload::edge()),
+    };
+    // The call is where its function slot is.
+    let continuation: crate::site::Continuation = std::rc::Rc::new(move |read, slot, staged| {
+        slot.split_last()
+            .is_some_and(|(_, call)| then(read, call, staged))
+    });
+    crate::libraries::completion::insert(function, function.into(), Some(continuation))
+}
+
+/// What a Grap slot offers, for tests that read its list without a picker.
+#[cfg(test)]
+pub(crate) fn slot_offers() -> crate::display::CompletionProvider {
+    std::rc::Rc::new(suggestions::offers)
 }
 
 #[cfg(test)]

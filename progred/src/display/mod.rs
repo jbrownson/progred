@@ -193,8 +193,8 @@ impl Completion {
 /// What a library is asked.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CompletionScope {
-    /// The values and calls it offers anywhere, such as a new color, for a
-    /// projection that wants them among its own, as Grap's slots do.
+    /// The values it offers anywhere, such as a new color, for a projection
+    /// that wants them among its own, as Grap's slots do.
     Everything,
     /// What was typed, read as one of a library's values, like a number or a
     /// string, or as a field's label, like a new cell with that name. Raw asks

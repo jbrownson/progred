@@ -4,8 +4,9 @@ use crate::libraries::{completion::select, grap::control::vocabulary as control}
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// A slot's offers: the bindings in scope, the libraries' offers, Raw's
-/// constructors, and what's typed read as a value.
+/// A slot's offers: the bindings in scope, Grap's own constructs, the
+/// functions in reach, the other libraries' offers, Raw's constructors, and
+/// what's typed read as a value.
 pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
     let quoted = request.query.trim().starts_with('"');
     let (bindings, templated) = scope(request.path, request.value_at, &|cell| {
@@ -36,35 +37,20 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
             }
             .with_detail("binding")
         }));
+        offers.extend(super::constructs());
+        offers.extend(super::function_offers(request, &|cell| {
+            bindings.contains_key(&cell)
+        }));
         let library_request = CompletionRequest {
             scope: CompletionScope::Everything,
             ..*request
         };
-        let library_offers: Vec<_> = request
-            .libraries
-            .and_then(|provider| provider(&library_request))
-            .unwrap_or_default()
-            .into_iter()
-            .chain(
-                request
-                    .query
-                    .trim()
-                    .is_empty()
-                    .then(|| super::call_completions(request))
-                    .into_iter()
-                    .flatten(),
-            )
-            .filter(|offer| {
-                !offer
-                    .preview
-                    .as_ref()
-                    .and_then(Value::as_record)
-                    .and_then(|fields| fields.get(&FUNCTION))
-                    .and_then(Value::as_cell)
-                    .is_some_and(|cell| cell == control::QUOTE || bindings.contains_key(&cell))
-            })
-            .collect();
-        offers.extend(library_offers);
+        offers.extend(
+            request
+                .libraries
+                .and_then(|provider| provider(&library_request))
+                .unwrap_or_default(),
+        );
         offers.extend(crate::display::raw::constructors(request.kind));
     }
     if !templated {
@@ -80,7 +66,7 @@ fn quote(request: &CompletionRequest<'_>) -> Option<Completion> {
     let source = (request.resolve)(control::QUOTE)?.resolution;
     Some(
         super::call_completion(control::QUOTE.into(), control::QUOTE, request.resolve)
-            .with_detail(super::call_detail(request, source))
+            .with_detail(super::function_detail(request, "call", source))
             .with_aliases(["\""]),
     )
 }

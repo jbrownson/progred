@@ -371,3 +371,33 @@ fn a_call_of_a_lambda_returning_a_lambda_shows_the_closure_with_what_it_closes_o
         "closing over x"
     );
 }
+
+#[test]
+fn a_slot_offers_grap_s_own_first_and_a_call_s_function_slot_its_functions() {
+    use crate::libraries::grap::numbers::{f64::SUM, vocabulary::LEFT};
+    let mut driver = notebook(&[new_cell_id()], Cells::new());
+    let slot = expression(&driver, 0);
+    driver.select(&slot);
+    let offers = driver.picker_entries().unwrap();
+    assert_eq!(offers[..2], ["new lambda", "new call"]);
+    let place = |display: &str| offers.iter().position(|offer| offer == display).unwrap();
+    assert!(
+        place("+f64") < place("new color"),
+        "functions come before other libraries' values"
+    );
+
+    // A new call's function is picked from the functions themselves, and
+    // its first argument next, as picking the call whole does.
+    driver.choose("new call");
+    assert_eq!(
+        driver.picker_detail("+f64").as_deref(),
+        Some("function · grap")
+    );
+    driver.choose("+f64");
+    assert_eq!(driver.value(&slot), ::grap::call(SUM.into(), []));
+    assert_eq!(
+        driver.selection(),
+        occurrence::below(&[], &[slot, vec![Step::Key(LEFT)]].concat())
+    );
+    assert_eq!(driver.stage(), Some(Stage::Pending));
+}

@@ -5,7 +5,7 @@ use crate::library::Libraries;
 use crate::selection::payload as selection_payload;
 use crate::sources::Sources;
 use crate::test_support::{
-    CompletionResult, activated, completion_entries_with, core_libraries, library_offers, src,
+    CompletionResult, activated, completion_entries_with, core_libraries, src,
 };
 use gid::{Cells, Document, Step};
 use ui_events::keyboard::NamedKey;
@@ -31,7 +31,6 @@ fn completion_entries(
 
 #[test]
 fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary() {
-    use crate::display::CompletionScope;
     let libraries = core_libraries();
     let roof = new_cell_id();
     let mut cells = Cells::new();
@@ -50,9 +49,8 @@ fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary()
     );
     assert_eq!(displays(true, ""), ["new cell"]);
     assert_eq!(displays(true, "roof"), ["roof"]);
-    // An existing cell is pointed at or pasted, not named here, and the
-    // libraries' other offers, such as a new lambda, are for projections that
-    // ask for them.
+    // An existing cell is pointed at or pasted, not named here, and what a
+    // projection offers, such as a new lambda, is that projection's own.
     for query in ["roof", "lambda", "λ"] {
         for labels in [false, true] {
             assert!(
@@ -63,21 +61,18 @@ fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary()
             );
         }
     }
-    let everything = library_offers(
-        crate::stack::load().completions,
-        CompletionScope::Everything,
+    // A Grap slot offers one.
+    assert!(
+        completion_entries_with(
+            &sources,
+            &CompletionKind::Value,
+            "lambda",
+            None,
+            Some(&crate::libraries::grap::slot_offers()),
+        )
+        .iter()
+        .any(|entry| entry.display == "new lambda")
     );
-    for (kind, offered) in [
-        (CompletionKind::Value, true),
-        (CompletionKind::Field, false),
-    ] {
-        assert_eq!(
-            completion_entries_with(&sources, &kind, "lambda", None, Some(&everything))
-                .iter()
-                .any(|entry| entry.display == "new lambda"),
-            offered
-        );
-    }
 }
 
 #[test]

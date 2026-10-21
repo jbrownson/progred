@@ -217,8 +217,8 @@ projections retain their quotes.
 Library completion providers compose separately, so multiple libraries
 can contribute offers to one picker.
 
-Grap answers `Everything` with a `new lambda` value completion (aliases `lambda`
-and `λ`), which Grap's expression slots list. It inserts `{params: []}` and
+Grap's expression slots offer a `new lambda` value completion (aliases `lambda`
+and `λ`). It inserts `{params: []}` and
 opens its first parameter, whose slot offers a new one; Tab goes on to the
 missing body.
 The lambda projection accepts that unfinished shape and descends into the body
@@ -226,7 +226,9 @@ to show its ordinary empty picker; neither a body nor a name is fabricated.
 Beside it Grap offers `new call`, which inserts `{}` and opens its `function`
 field. A record whose `function` is being picked is a call being written, so
 the call projection draws it with its function slot open, an expression slot
-like any other: a binding, a lambda, or another call. Once the function is
+like any other: a binding, a lambda, or another call. There the functions in
+reach are offered as themselves, and picking one opens the call's first
+argument, as picking its call whole does elsewhere. Once the function is
 callable (a lambda needs its body), its parameters show as the call's argument
 slots, which Tab visits next.
 An empty parameter slot offers only a new parameter, a new document cell: for
@@ -262,8 +264,9 @@ so it can carry subscripts, and an offer shows one as it's drawn
 (`CompletionText::Named`). Anywhere else, an unnamed parameter shows its short ID.
 
 The expression-use partial also handles missing values with a focused completion
-provider. It lists statically visible bindings, the libraries' `Everything`
-offers, callable cells, Raw's constructors, quote, and what's typed read as a value.
+provider. It lists statically visible bindings, Grap's new lambda and new call,
+the functions in reach as calls, the other libraries' `Everything` offers, Raw's
+constructors, quote, and what's typed read as a value.
 Only explicit expression children use this provider, not quoted data, parameter
 declarations, or ordinary structural containers. Provider composition is lazy:
 only an active picker reads the loaded libraries' provider, from the toolkit.
