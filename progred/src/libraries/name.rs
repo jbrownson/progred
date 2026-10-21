@@ -297,20 +297,14 @@ pub(crate) fn projection<W: Host>(placeholder: Option<String>) -> Partial<W> {
 }
 
 /// A missing name, which takes whatever is typed as its text, showing
-/// `placeholder` dim until then. Nothing typed offers nothing: an empty
-/// name names nothing.
+/// `placeholder` dim until then. Nothing typed offers the empty string,
+/// text that names nothing.
 pub(crate) fn hole<W: Host>(placeholder: Option<String>) -> Layout<W> {
     crate::display::picker(
         crate::display::Picker::new(
             crate::display::CompletionKind::Value,
             crate::display::ranked(std::rc::Rc::new(|request| {
-                Some(
-                    Some(text::query_spelling(request.query))
-                        .filter(|spelling| !spelling.is_empty())
-                        .map(text::completion)
-                        .into_iter()
-                        .collect(),
-                )
+                Some(vec![text::completion(text::query_spelling(request.query))])
             })),
         )
         .with_placeholder(placeholder),

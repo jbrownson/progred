@@ -271,38 +271,20 @@ fn located_query<W: Host>(
                 })
         });
     });
-    let scroll = toolkit
-        .selection()
-        .map(Selection::completion_scroll)
-        .unwrap_or(0.0);
-    let site = toolkit.site();
-    let scroll_site = site.clone();
-    let card = crate::display::widget::completion::card(
-        tcx,
-        styles,
-        &entries,
-        crate::display::widget::completion::State { choice, scroll },
-        move |world: &mut W| {
-            world
-                .session()
-                .pending()
-                .filter(|picking| picking.is_at(&scroll_site))
-                .map(|picking| picking.scroll())
-        },
-        move |world: &mut W, view| {
-            if let Some(mut picking) = world
-                .session()
-                .pending()
-                .filter(|picking| picking.is_at(&site))
-            {
-                picking.set_view(view.scroll, view.choice);
-            }
-        },
-    );
-    let card =
-        if !picker.keys.is_empty() && query.text().is_empty() && query.preedit_parts().is_none() {
-            let keys = picker.keys.clone();
-            on_key(card, move |world, event| {
+    // Raw's bracket keys act while nothing's typed.
+    let keys = (query.text().is_empty() && query.preedit_parts().is_none())
+        .then(|| picker.keys.clone())
+        .filter(|keys| !keys.is_empty());
+    // Tab commits what's been typed, as Enter would, then moves on to the
+    // next empty slot, unless the commit opened one of its own, such as a new
+    // call's first argument. With no slot left it stays on what it committed;
+    // the next Tab lets go. An empty query leaves Tab to the editor.
+    let typed = (!query.text().is_empty())
+        .then(|| entries.get(choice).map(|entry| entry.activate.clone()))
+        .flatten();
+    let keyed = move |measured: Measured<HoverPass<W, W::Hover>>| {
+        let measured = match keys {
+            Some(keys) => on_key(measured, move |world, event| {
                 if event.state.is_down()
                     && !(event.modifiers.ctrl() || event.modifiers.meta())
                     && let Key::Character(key) = &event.key
@@ -313,48 +295,74 @@ fn located_query<W: Host>(
                 } else {
                     false
                 }
-            })
-        } else {
-            card
+            }),
+            None => measured,
         };
-    // Tab commits what's been typed, as Enter would, then moves on to the
-    // next empty slot, unless the commit opened one of its own, such as a new
-    // call's first argument. With no slot left it stays on what it committed;
-    // the next Tab lets go. An empty query leaves Tab to the editor.
-    let typed = (!query.text().is_empty())
-        .then(|| entries.get(choice).map(|entry| entry.activate.clone()))
-        .flatten();
-    let card = before(card, move |p, _| {
-        p.handler().on_key_with(move |world: &mut W, event, input| {
-            if event.state.is_down()
-                && event.key == Key::Named(NamedKey::Tab)
-                && crate::modifiers::at_most_shift(&event.modifiers)
-                && let Some(activate) = typed.as_ref()
-            {
-                activate(world);
-                let committed =
-                    {
+        before(measured, move |p, _| {
+            p.handler().on_key_with(move |world: &mut W, event, input| {
+                if event.state.is_down()
+                    && event.key == Key::Named(NamedKey::Tab)
+                    && crate::modifiers::at_most_shift(&event.modifiers)
+                    && let Some(activate) = typed.as_ref()
+                {
+                    activate(world);
+                    let committed = {
                         let session = world.session();
                         session.model.selection.as_ref().is_some_and(|selected| {
                             selected.stage(&session.sources()) == Stage::Edge
                         })
                     };
-                if committed {
-                    crate::display::widget::navigation::advance(
-                        world,
-                        input.geometry(scale),
-                        event.modifiers.shift(),
-                    );
+                    if committed {
+                        crate::display::widget::navigation::advance(
+                            world,
+                            input.geometry(scale),
+                            event.modifiers.shift(),
+                        );
+                    }
+                    true
+                } else {
+                    false
                 }
-                true
-            } else {
-                false
-            }
-        });
-    });
-    super::container::floating(trigger, card, move |placement, extent, bounds| {
-        crate::display::widget::completion::placement(placement, extent, bounds, scale)
-    })
+            });
+        })
+    };
+    // With nothing to offer there's no card: an empty one reads as a stray
+    // frame. Up and Down, with no list to move through, go on to navigation.
+    if entries.is_empty() {
+        keyed(trigger)
+    } else {
+        let scroll = toolkit
+            .selection()
+            .map(Selection::completion_scroll)
+            .unwrap_or(0.0);
+        let site = toolkit.site();
+        let scroll_site = site.clone();
+        let card = crate::display::widget::completion::card(
+            tcx,
+            styles,
+            &entries,
+            crate::display::widget::completion::State { choice, scroll },
+            move |world: &mut W| {
+                world
+                    .session()
+                    .pending()
+                    .filter(|picking| picking.is_at(&scroll_site))
+                    .map(|picking| picking.scroll())
+            },
+            move |world: &mut W, view| {
+                if let Some(mut picking) = world
+                    .session()
+                    .pending()
+                    .filter(|picking| picking.is_at(&site))
+                {
+                    picking.set_view(view.scroll, view.choice);
+                }
+            },
+        );
+        super::container::floating(trigger, keyed(card), move |placement, extent, bounds| {
+            crate::display::widget::completion::placement(placement, extent, bounds, scale)
+        })
+    }
 }
 
 /// Edits the open picker's query. A retained handler can outlive it, and

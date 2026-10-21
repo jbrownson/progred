@@ -44,7 +44,10 @@ fn raw_offers_constructors_and_typed_values_but_no_cells_or_library_vocabulary()
             .map(|entry| entry.display)
             .collect::<Vec<_>>()
     };
-    assert_eq!(displays(false, ""), ["new cell", "new list", "new record"]);
+    assert_eq!(
+        displays(false, ""),
+        ["new cell", "new list", "new record", "\"\""]
+    );
     assert_eq!(displays(true, ""), ["new cell"]);
     assert_eq!(displays(true, "roof"), ["roof"]);
     // An existing cell is pointed at or pasted, not named here, and the
@@ -138,16 +141,17 @@ fn typed_numbers_offer_each_valid_representation_then_literal_text() {
                 .all(|entry| entry.detail.is_some())
         );
     }
-    // An empty query reads as nothing; the empty string takes a `"`.
-    for query in ["", " \t"] {
+    // An empty query is no number, but it is the empty string; whitespace is
+    // text too.
+    for (query, expected) in [
+        ("", &["new cell", "new list", "new record", "\"\""][..]),
+        (" \t", &["\" \t\""]),
+    ] {
         let displays = completion_entries(&sources, false, query)
             .into_iter()
             .map(|entry| entry.display)
             .collect::<Vec<_>>();
-        assert!(
-            displays.iter().all(|display| display.starts_with("new ")),
-            "{query:?}: {displays:?}"
-        );
+        assert_eq!(displays, expected, "{query:?}");
     }
     let quote = completion_entries(&sources, false, "\"");
     assert_eq!(activated(&quote[0]).value, Some(text::value("")));

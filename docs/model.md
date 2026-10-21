@@ -402,12 +402,12 @@ the Fidget parser has no circle or sphere forms.
 
 The numeric libraries read the query as `f32`, `f64`, and `u64` numbers when it
 parses, showing the representation and the actual stored number; a query that
-doesn't parse, an empty one included, reads as no number. Any nonempty query
-reads as text, after the readings particular to it; the empty string takes at
-least a `"`. A new label likewise needs something typed. An empty query
-therefore offers no typed values, and Raw shows just its constructors, after a
-document root's starting points. A projection whose hole expects a number or
-text can still offer one for an empty query, as a name's hole does for text.
+doesn't parse, an empty one included, reads as no number. Any query reads as
+text, after the readings particular to it, an empty one as the empty string,
+which is text where it isn't a number. A new label needs something typed. An
+empty query therefore offers Raw's constructors, after a document root's
+starting points, then the empty string. A name's hole offers text the same way.
+A picker with nothing to offer draws no card, only its query.
 Raw orders its offers: a reading that spells the query exactly, the
 constructors the query names, the other readings in library order, text (or a
 new label), then constructors the query matches only loosely. The editor does

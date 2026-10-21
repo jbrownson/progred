@@ -360,9 +360,8 @@ removed, so it isn't lost:
   that ask the libraries for them offer them, as Grap's slots do.
 - **Typed values for an empty query.** An empty query offered zero in each
   numeric representation, the empty string, and a new label with no name. Now
-  it offers none of them; the empty string takes a `"`. A hole that expects a
-  number or text, drawn by its own projection, could offer one for an empty
-  query again.
+  it offers no number, since an empty query isn't one, and no new label, but
+  still the empty string, which is text.
 
 Directions this surfaced:
 

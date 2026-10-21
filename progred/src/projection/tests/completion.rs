@@ -19,9 +19,14 @@ fn a_plain_missing_name_selection_offers_and_commits_text() {
             payload.clone(),
         );
         assert!(selected.edit().is_none());
-        assert!(
-            projected_completion_entries(&doc, &selected).is_empty(),
-            "nothing typed offers no name: an empty one names nothing"
+        let empty = projected_completion_entries(&doc, &selected);
+        assert_eq!(
+            empty
+                .iter()
+                .map(|entry| entry.display.as_str())
+                .collect::<Vec<_>>(),
+            ["\"\""],
+            "nothing typed offers the empty string"
         );
         assert_eq!(selected.payload(), payload);
         let selected = crate::selection::pending_with_query(crate::occurrence::of(&path), "w");
@@ -454,7 +459,8 @@ fn an_empty_document_s_root_offers_starting_points_then_raw_s() {
             "notebook",
             "new cell",
             "new list",
-            "new record"
+            "new record",
+            "\"\""
         ]
     );
     let selection = crate::selection::pending_with_query(vec![], "sdf");

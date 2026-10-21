@@ -228,7 +228,7 @@ it's drawn grey: in the declaration as the placeholder in its name's hole (or
 its empty name's editor), which typing replaces, in references to the
 parameter, and in offers. A declaration descends into its name whether it has
 one or not, so a missing name is an ordinary hole to pick; nothing typed offers
-no name, since an empty one names nothing. A hole's placeholder
+the empty string, which names nothing. A hole's placeholder
 (`Picker::placeholder`) shows dim in its frame and in its query until something
 is typed; a line editor's (`LineEdit::placeholder`) shows where its text goes
 while there's none, the caret before it. A
