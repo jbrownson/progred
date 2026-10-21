@@ -43,17 +43,25 @@ pub fn binary_call(function: CellId, left: Value, right: Value) -> Value {
     call(function, [(LEFT, left), (RIGHT, right)])
 }
 
-/// A function's arguments it couldn't use: "invalid arguments", carrying why
-/// under each label.
+/// A function's arguments it couldn't use: "invalid arguments" for a call
+/// that's the evaluation's input, carrying why under each label.
 pub fn invalid_arguments(why: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     Value::record(
-        [(
-            ::grap::absent::ABSENT,
-            ::grap::absent::INVALID_ARGUMENTS.into(),
-        )]
+        [
+            (
+                ::grap::absent::ABSENT,
+                ::grap::absent::INVALID_ARGUMENTS.into(),
+            ),
+            (::grap::absent::CALL, input_call()),
+        ]
         .into_iter()
         .chain(why),
     )
+}
+
+/// Where a call that's the evaluation's input is.
+fn input_call() -> Value {
+    ::grap::source::value(&::grap::SourceOrigin::Input(Vec::new()))
 }
 
 /// Why `value` isn't a type: its `reason`, carrying it.

@@ -64,12 +64,17 @@ pub fn decline() -> Value {
 /// growing a layer per element.
 pub const CHAIN_LIMIT: usize = 8;
 
-/// An absent for `reason`, carrying each value it couldn't use, absent or
-/// not, under its field: its causes are those that are absent, so absents
-/// make a tree. An absent the same as one before it isn't repeated, so a
-/// value used twice doesn't double the tree. Where a chain of causes would
-/// grow past [`CHAIN_LIMIT`], the longest passes on unchanged instead.
-pub fn caused_by_all(reason: CellId, details: impl IntoIterator<Item = (CellId, Value)>) -> Value {
+/// An absent for `reason` about `call`, naming where the call is when it
+/// has a source, and carrying each value it couldn't use, absent or not,
+/// under its field: its causes are those that are absent, so absents make a
+/// tree. An absent the same as one before it isn't repeated, so a value used
+/// twice doesn't double the tree. Where a chain of causes would grow past
+/// [`CHAIN_LIMIT`], the longest passes on unchanged instead.
+pub fn caused_by_all(
+    reason: CellId,
+    call: Option<&SourceOrigin>,
+    details: impl IntoIterator<Item = (CellId, Value)>,
+) -> Value {
     let mut fields: Vec<(CellId, Value)> = Vec::new();
     for (field, detail) in details {
         if !(is_absent(&detail) && fields.iter().any(|(_, seen)| *seen == detail)) {
@@ -78,7 +83,12 @@ pub fn caused_by_all(reason: CellId, details: impl IntoIterator<Item = (CellId, 
     }
     match fields.iter().max_by_key(|(_, detail)| chain_length(detail)) {
         Some((_, longest)) if chain_length(longest) >= CHAIN_LIMIT => longest.clone(),
-        _ => Value::record(std::iter::once((ABSENT, Value::from(reason))).chain(fields)),
+        _ => Value::record(
+            [(ABSENT, Value::from(reason))]
+                .into_iter()
+                .chain(call.map(|call| (CALL, crate::source::value(call))))
+                .chain(fields),
+        ),
     }
 }
 

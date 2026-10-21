@@ -27,14 +27,46 @@ pub mod vocabulary {
 }
 
 /// An absent value reads as its reason, then any other fields, such as a
-/// failed alternative's causes, all on red.
+/// failed alternative's causes, all on red. The call it's about reads as
+/// that call, by its function, where it is.
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
     let reason = input.value?.absent_reason()?;
-    Some(on_red(crate::display::structure::with_extra_fields(
+    Some(on_red(crate::display::structure::with_extra_fields_by(
         input,
         |key| key == vocabulary::ABSENT,
+        call_field,
         head(input, reason),
     )))
+}
+
+/// How an absent draws its field `key`: the call as [`call`] does, the
+/// others as usual.
+fn call_field<W: Host>(key: CellId) -> Option<crate::display::host::Partial<W>> {
+    (key == vocabulary::CALL).then(|| crate::display::runtime_partial(call))
+}
+
+/// Where a call is, drawn as the call there, by its function, so it's the
+/// same place as the call drawn in its code.
+fn call<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    let call = location(::grap::source::read(&input.value?.to_value())?)?;
+    Some(crate::display::jump_at(
+        [],
+        call,
+        Some(crate::display::compose_partials([
+            crate::display::runtime_partial(function),
+            input.default_projection.clone(),
+        ])),
+    ))
+}
+
+/// A call by its function, drawn as a reference where it's a named cell.
+fn function<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    input.value?.field(::grap::vocabulary::FUNCTION)?;
+    Some(crate::display::descend_local(
+        [gid::Step::Key(::grap::vocabulary::FUNCTION)],
+        crate::display::runtime_partial(crate::libraries::name::shallow_cell),
+        &input.default_projection,
+    ))
 }
 
 /// A missing argument reads as its reason and the parameter, then the hole
@@ -67,13 +99,14 @@ fn missing_argument<W: Host>(
         crate::display::runtime_partial(crate::libraries::name::shallow_cell),
         &input.default_projection,
     );
-    Some(on_red(crate::display::structure::with_extra_fields(
+    Some(on_red(crate::display::structure::with_extra_fields_by(
         input,
         |key| {
             key == vocabulary::ABSENT
                 || key == vocabulary::CELL
                 || key == vocabulary::CALL && call.is_some()
         },
+        call_field,
         crate::display::row(
             4.0,
             [head(input, vocabulary::MISSING_ARGUMENT), named]

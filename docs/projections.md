@@ -716,7 +716,8 @@ its arguments with `ForeignFunction::with_arguments`: each is found under its
 label once per call site, as a primitive's operands are, then evaluated on each
 call and parsed into the Rust type the function works with (`Parse`), and the
 function's body runs only when every one parses. Otherwise the call returns
-"invalid arguments", carrying under each label why that argument couldn't be used: a
+"invalid arguments", naming under `call` the origin of the call, where it has
+one, and carrying under each label why that argument couldn't be used: a
 missing argument, naming its parameter and, under `call`, the origin of the
 call it's missing from, where the call has one; its type's reason carrying the
 value; or the absent it already was, passed on unchanged as the cause. A call
@@ -767,7 +768,8 @@ actual evaluator halts still halt rather than invoking the fallback.
 The absent library draws an absent as its reason's name followed by any other
 fields, such as a failed alternative's `causes`, all on a red wash; each cause
 is washed in turn inside it. An unnamed reason shows its short cell identity.
-A missing argument reads as its reason and its parameter, drawn as a shallow
+An absent's `call` reads as the call, by its function, drawn where the call is:
+the same place as the call in its code. A missing argument reads as its reason and its parameter, drawn as a shallow
 reference, then the hole for the argument: a jump to the call's origin and the
 parameter's field there, so the error's hole and the call's are one place.
 Selecting either marks the other, and filling either fills the call. A call

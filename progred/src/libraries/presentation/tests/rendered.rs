@@ -142,6 +142,43 @@ fn a_missing_argument_is_given_from_the_error() {
 }
 
 #[test]
+fn an_errors_call_is_drawn_where_the_call_is() {
+    use crate::libraries::grap::numbers;
+    let program = new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(
+        program,
+        ::grap::call(
+            numbers::f64::MULTIPLY.into(),
+            [(numbers::vocabulary::LEFT, text::value("three"))],
+        ),
+    );
+    let driver = rendered_in_a_pane(program, program.into(), cells);
+    // The call reads as its function, which is the program's own.
+    let function = pane_result(
+        &driver,
+        &[
+            occurrence::Step::Key(crate::libraries::absent::vocabulary::CALL),
+            occurrence::Step::jump(Location::in_cell(
+                program,
+                gid::Resolution::Document,
+                Vec::new(),
+            )),
+            occurrence::Step::Key(::grap::vocabulary::FUNCTION),
+        ],
+    );
+    assert!(driver.drawn(&function));
+    assert_eq!(
+        driver.shared(&function),
+        driver.shared(&[
+            Step::Key(crate::libraries::grap::vocabulary::GRAP),
+            Step::Follow(gid::Resolution::Document),
+            Step::Key(::grap::vocabulary::FUNCTION),
+        ])
+    );
+}
+
+#[test]
 fn a_quoted_reference_in_a_result_edits_its_cell() {
     let (program, quoted) = (new_cell_id(), new_cell_id());
     let mut cells = Cells::new();

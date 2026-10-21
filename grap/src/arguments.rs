@@ -52,10 +52,12 @@ pub fn not(reason: CellId, value: RuntimeValue) -> RuntimeValue {
 /// Arguments that parse together: a tuple of [`Parse`] types, one for each
 /// label.
 pub trait Signature<const N: usize>: Sized {
-    /// Each argument, given under its label or not, parsed as its type; or
-    /// "invalid arguments" carrying why each that didn't parse couldn't.
+    /// Each of `call`'s arguments, given under its label or not, parsed as
+    /// its type; or "invalid arguments" carrying why each that didn't parse
+    /// couldn't.
     fn parse(
         context: &mut Context,
+        call: &Expression,
         arguments: [(CellId, &Argument); N],
         environment: &Environment,
     ) -> Result<Result<Self, RuntimeValue>, Halt>;
@@ -77,12 +79,12 @@ impl ForeignFunction {
         let body = Rc::new(body);
         Self::staged(move |context, call| {
             let arguments = labels.map(|label| (label, context.argument(call, label)));
-            let body = body.clone();
+            let (call, body) = (call.clone(), body.clone());
             Rc::new(move |context, environment| {
                 let arguments = arguments
                     .each_ref()
                     .map(|(label, argument)| (*label, argument));
-                Ok(match S::parse(context, arguments, environment)? {
+                Ok(match S::parse(context, &call, arguments, environment)? {
                     Ok(values) => body(context, values).into(),
                     Err(invalid) => invalid,
                 })
@@ -104,13 +106,15 @@ fn argument<T: Parse>(
     }
 }
 
-/// "invalid arguments", carrying why each argument couldn't be used under its
-/// label: off the path a call takes when its arguments are fine.
+/// "invalid arguments" for `call`, carrying why each argument couldn't be
+/// used under its label: off the path a call takes when its arguments are
+/// fine, so where the call is is found only here.
 #[cold]
 #[inline(never)]
-fn invalid_arguments(invalid: Vec<(CellId, RuntimeValue)>) -> RuntimeValue {
+fn invalid_arguments(call: &Expression, invalid: Vec<(CellId, RuntimeValue)>) -> RuntimeValue {
     absent::caused_by_all(
         absent::INVALID_ARGUMENTS,
+        crate::source::origin(call).as_ref(),
         invalid
             .into_iter()
             .map(|(label, why)| (label, why.into_value())),
@@ -124,6 +128,7 @@ macro_rules! signature {
             #[inline]
             fn parse(
                 context: &mut Context,
+                call: &Expression,
                 [$(($label, $value)),+]: [(CellId, &Argument); $count],
                 environment: &Environment,
             ) -> Result<Result<Self, RuntimeValue>, Halt> {
@@ -141,7 +146,7 @@ macro_rules! signature {
                 )+
                 Ok(match ($($value,)+) {
                     ($(Some($value),)+) => Ok(($($value,)+)),
-                    _ => Err(invalid_arguments(invalid)),
+                    _ => Err(invalid_arguments(call, invalid)),
                 })
             }
         }

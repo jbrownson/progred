@@ -1763,7 +1763,7 @@ impl<'a> Context<'a> {
                 }
             }
             PreparedCallTargetKind::Primitive(primitive, operands) => {
-                primitive.run(context, operands, environment)
+                primitive.run(context, call, operands, environment)
             }
             PreparedCallTargetKind::Missing => Ok(missing_cell(cell)),
         })

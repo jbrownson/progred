@@ -261,10 +261,20 @@ pub(crate) fn extra_fields<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     drawn: impl Fn(CellId) -> bool,
 ) -> Option<Layout<W>> {
+    extra_fields_by(input, drawn, |_| None)
+}
+
+/// [`extra_fields`], a field's value drawn by the projection `child` gives
+/// for its key, where it gives one.
+pub(crate) fn extra_fields_by<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    drawn: impl Fn(CellId) -> bool,
+    child: impl Fn(CellId) -> Option<Partial<W>>,
+) -> Option<Layout<W>> {
     let fields = record_keys(input)?
         .into_iter()
         .filter(|key| !drawn(*key))
-        .map(|key| record_field(input, key, None))
+        .map(|key| record_field(input, key, child(key)))
         .collect::<Vec<_>>();
     let pending = pending_field(input);
     (!fields.is_empty() || pending.is_some()).then(|| record_fragment(fields, pending))
@@ -278,7 +288,17 @@ pub(crate) fn with_extra_fields<W: Host>(
     drawn: impl Fn(CellId) -> bool,
     content: Layout<W>,
 ) -> Layout<W> {
-    match extra_fields(input, drawn) {
+    with_extra_fields_by(input, drawn, |_| None, content)
+}
+
+/// [`with_extra_fields`], their values drawn as [`extra_fields_by`] says.
+pub(crate) fn with_extra_fields_by<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    drawn: impl Fn(CellId) -> bool,
+    child: impl Fn(CellId) -> Option<Partial<W>>,
+    content: Layout<W>,
+) -> Layout<W> {
+    match extra_fields_by(input, drawn, child) {
         Some(extras) => group_hug(content, extras, 0.0),
         None => content,
     }
