@@ -321,6 +321,10 @@ impl crate::display::Env for Occurrence<'_> {
     fn occurrence(&self) -> &Trail {
         self.path
     }
+
+    fn read_from(&self, start: crate::location::Start, path: &[gid::Step]) -> Option<&Value> {
+        self.cx.sources.read_from(start, path)
+    }
 }
 
 #[derive(Clone, Default)]

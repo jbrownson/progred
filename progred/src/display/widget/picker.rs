@@ -209,8 +209,10 @@ fn located_query<W: Host>(
         text_frame::empty_width(styles.label.size, styles.scale),
         content,
     );
+    let choice = toolkit.selection().map(Selection::choice).unwrap_or(0);
     let offers = Offers {
         entries: entries.clone(),
+        chosen: choice.min(entries.len().saturating_sub(1)),
     };
     let scale = styles.scale;
     let trigger = before(content, move |p, placement| {
@@ -236,7 +238,6 @@ fn located_query<W: Host>(
                 })
         });
     });
-    let choice = toolkit.selection().map(Selection::choice).unwrap_or(0);
     let scroll = toolkit
         .selection()
         .map(Selection::completion_scroll)

@@ -33,6 +33,16 @@ impl<C> Clone for Entry<C> {
 /// Retained in the placed frame for attribution to the exact visible offers.
 pub struct Offers<C> {
     pub entries: Rc<[Entry<C>]>,
+    /// The entry the keyboard has chosen.
+    pub chosen: usize,
+}
+
+impl<C> Offers<C> {
+    /// The cell the chosen entry refers to, which the frame marks as the
+    /// hovered entry's is.
+    pub fn chosen_source(&self) -> Option<CellId> {
+        self.entries.get(self.chosen)?.source
+    }
 }
 
 /// A hole's list for a query, in the order shown, with the spans that matched.

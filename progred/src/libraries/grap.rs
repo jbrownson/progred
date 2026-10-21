@@ -29,7 +29,7 @@ pub(crate) fn expression<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     match input.value {
-        Some(_) => name::shallow_cell(input),
+        Some(_) => reference(input),
         None => (input.default_projection)(input).or_else(|| {
             Some(picker(Picker::new(
                 CompletionKind::Value,
@@ -37,6 +37,61 @@ pub(crate) fn expression<W: Host>(
             )))
         }),
     }
+}
+
+/// A reference reads as its cell's name. A parameter with no name of its
+/// own reads, grey, as what its list calls it, found by walking out from
+/// where the reference is stored, as a slot's offers find what's in scope.
+fn reference<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    name::shallow_cell(input).or_else(|| {
+        let cell = input.value?.as_cell()?;
+        let location = crate::occurrence::location(&input.env.occurrence().to_vec())?;
+        let (scope, _) = suggestions::scope(
+            &location.path,
+            &|path| input.env.read_from(location.start, path),
+            &|cell| input.env.resolve(cell).map(|definition| definition.value),
+        );
+        let computed = scope.get(&cell)?.computed.clone()?;
+        Some(name::shallow_reference(input, dim(computed)))
+    })
+}
+
+/// What a parameter list calls its parameters with no name of their own: in
+/// order, the first of a, b, c… that none of its named parameters uses.
+/// Computed wherever it's shown, never stored.
+pub(crate) fn unnamed_parameters<'a>(
+    params: &[CellId],
+    value_of: &dyn Fn(CellId) -> Option<&'a Value>,
+) -> std::collections::BTreeMap<CellId, String> {
+    let named: Vec<_> = params
+        .iter()
+        .filter_map(|cell| name::of_cell(value_of, *cell))
+        .map(|name| name.spelling().into_owned())
+        .collect();
+    let mut free = (0..).map(letters).filter(|name| !named.contains(name));
+    let mut computed = std::collections::BTreeMap::new();
+    for cell in params {
+        if name::of_cell(value_of, *cell).is_none() && !computed.contains_key(cell) {
+            computed.insert(*cell, free.next().expect("letters never run out"));
+        }
+    }
+    computed
+}
+
+/// The `index`th of a…z, aa…az, ba…, as a spreadsheet's columns go.
+fn letters(index: usize) -> String {
+    let mut digits = Vec::new();
+    let mut rest = index + 1;
+    while rest > 0 {
+        rest -= 1;
+        digits.push(b'a' + (rest % 26) as u8);
+        rest /= 26;
+    }
+    digits
+        .iter()
+        .rev()
+        .map(|digit| char::from(*digit))
+        .collect()
 }
 
 pub mod vocabulary {
@@ -47,11 +102,21 @@ pub mod vocabulary {
     pub const GRAP: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
 }
 
-/// A parameter is a cell. An empty slot offers only a new one, named as
+/// A parameter is a cell, with no name of its own called what its list
+/// calls it, among `computed`. An empty slot offers only a new one, named as
 /// typed, or with nothing typed, named next.
-fn parameter<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+fn parameter<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    computed: &std::collections::BTreeMap<CellId, String>,
+) -> Option<Layout<W>> {
     match input.value {
-        Some(_) => declaration_cell(input),
+        Some(value) => declaration_cell(
+            input,
+            value
+                .as_cell()
+                .and_then(|cell| computed.get(&cell))
+                .cloned(),
+        ),
         None => Some(picker(Picker::new(
             CompletionKind::Value,
             ranked(std::rc::Rc::new(|request| {
@@ -90,8 +155,11 @@ fn new_parameter(spelling: String) -> Completion {
     }
 }
 
+/// A declaration's cell in parentheses, its name editable there; an empty
+/// name shows `computed` grey after it until a name is typed.
 fn declaration_cell<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    computed: Option<String>,
 ) -> Option<Layout<W>> {
     let cell = input.value?.as_cell()?;
     let definition = input.env.resolve(cell)?;
@@ -99,20 +167,37 @@ fn declaration_cell<W: Host>(
         Delim::Paren,
         descend_local(
             [Step::Follow(definition.resolution)],
-            crate::display::partial(declaration_name),
+            crate::display::partial(move |input| declaration_name(input, computed.as_deref())),
             &input.default_projection,
         ),
     )))
 }
 
-fn declaration_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
+fn declaration_name<W: Host>(
+    input: &ProjectionInput<'_, W>,
+    computed: Option<&str>,
+) -> Option<Layout<W>> {
     input.pending.is_none().then_some(())?;
-    name::read(input.value?)?;
-    Some(descend_local(
+    let spelled = name::read(input.value?)?;
+    let name = descend_local(
         [Step::Key(name::vocabulary::NAME)],
         name::projection(),
         &input.default_projection,
-    ))
+    );
+    Some(match computed.filter(|_| spelled.is_empty()) {
+        // A click on the computed name selects the empty one to type in.
+        Some(computed) => row(
+            0.0,
+            [
+                name,
+                activatable(
+                    dim(computed),
+                    &input.site().below(&[Step::Key(name::vocabulary::NAME)]),
+                ),
+            ],
+        ),
+        None => name,
+    })
 }
 
 fn lambda_name<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<W>> {
@@ -183,7 +268,7 @@ pub(crate) fn declaration_path<W: Host>(
 ) -> Layout<W> {
     descend_local(
         steps,
-        crate::display::runtime_partial(declaration_cell),
+        crate::display::runtime_partial(|input| declaration_cell(input, None)),
         default,
     )
 }
@@ -291,7 +376,7 @@ pub(crate) fn call_with_function<W: Host>(
     };
     let function = descend_local(
         [Step::Key(FUNCTION)],
-        function_projection.unwrap_or_else(|| crate::display::runtime_partial(name::shallow_cell)),
+        function_projection.unwrap_or_else(|| crate::display::runtime_partial(reference)),
         &input.default_projection,
     );
     let arguments = record_fragment_with(
@@ -333,13 +418,18 @@ fn lambda_display<W: Host>(
     )
     .then_some(())?;
     let params = fields.field(PARAMS)?;
-    params
+    let cells = params
         .list_values()?
-        .all(|param| param.as_cell().is_some())
-        .then_some(())?;
+        .map(|param| param.as_cell())
+        .collect::<Option<Vec<_>>>()?;
+    let computed = unnamed_parameters(&cells, &|cell| {
+        input.env.resolve(cell).map(|definition| definition.value)
+    });
     let params = descend_local(
         [Step::Key(PARAMS)],
-        crate::display::structure::list(Some(crate::display::runtime_partial(parameter))),
+        crate::display::structure::list(Some(crate::display::runtime_partial(move |input| {
+            parameter(input, &computed)
+        }))),
         &input.default_projection,
     );
     let body_site = input.site().below(&[Step::Key(BODY)]);

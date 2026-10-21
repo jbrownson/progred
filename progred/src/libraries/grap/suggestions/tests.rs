@@ -3,6 +3,20 @@ use crate::test_support::ask_over;
 use ::grap::vocabulary::EXPRESSION;
 use gid::Cells;
 
+/// The bindings at the request's slot, each at the depth that binds it.
+fn bindings(request: &CompletionRequest<'_>) -> (BTreeMap<CellId, usize>, bool) {
+    let (scope, quoted) = scope(request.path, request.value_at, &|cell| {
+        (request.resolve)(cell).map(|definition| definition.value)
+    });
+    (
+        scope
+            .into_iter()
+            .map(|(cell, binding)| (cell, binding.depth))
+            .collect(),
+        quoted,
+    )
+}
+
 fn visible(root: Value, path: &[Step]) -> BTreeSet<CellId> {
     let document = gid::Document {
         root: Some(root),
@@ -88,6 +102,47 @@ fn completion_bindings_sort_nearest_scope_first_then_by_current_name() {
         "a rebound cell belongs to the nearest scope"
     );
     assert_eq!(depths[&inner_z], 0);
+}
+
+#[test]
+fn unnamed_parameters_offer_their_letters_the_closest_list_first() {
+    let (outer, inner) = (gid::new_cell_id(), gid::new_cell_id());
+    let mut document = gid::Document {
+        root: Some(::grap::lambda(
+            [outer],
+            ::grap::lambda([inner], Value::record([])),
+        )),
+        cells: Cells::new(),
+    };
+    for cell in [outer, inner] {
+        document.cells.set_value(cell, name::record("", []));
+    }
+    let libraries = crate::library::Libraries::default();
+    let sources = crate::sources::Sources {
+        doc: &document,
+        libraries: &libraries,
+    };
+    let offers = ask_over(
+        &sources,
+        CompletionKind::Value,
+        CompletionScope::Everything,
+        "",
+        &[Step::Key(BODY), Step::Key(BODY)],
+        offers,
+    )
+    .unwrap();
+    let bindings: Vec<_> = offers
+        .iter()
+        .filter(|offer| offer.detail == Some("binding".into()))
+        .map(|offer| (offer.display.clone(), offer.test_value().as_cell()))
+        .collect();
+    assert_eq!(
+        bindings,
+        [inner, outer].map(|cell| (
+            crate::display::CompletionText::Literal("a".into()),
+            Some(cell)
+        ))
+    );
 }
 
 #[test]

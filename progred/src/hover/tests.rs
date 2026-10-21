@@ -207,6 +207,7 @@ fn entry_hover_marks_follow_the_visible_offers() {
             source: value.as_cell(),
             activate: Rc::new(|_: &mut crate::Editor| {}),
         }]),
+        chosen: 0,
     };
 
     assert_eq!(

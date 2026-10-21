@@ -218,6 +218,16 @@ An empty parameter slot offers only a new parameter, a new document cell: for
 whatever is typed, `x — new parameter`, named `x`; with nothing typed, `new
 parameter`, whose empty name is selected so typing goes into it.
 
+A parameter with no name of its own, or an empty one, is called what its list
+calls it: in order, the first of a, b, c… that none of the list's named
+parameters uses. The name is computed wherever it's shown and never stored, and
+it's drawn grey: after the empty name in the declaration, where a click selects
+the name to type one, in references to the parameter, and in offers. A
+reference finds its list by walking out from where it's stored, the same walk a
+slot's offers make to find what's in scope, so each list names its own; an
+inner lambda's first unnamed parameter is `a` too. Outside its scope, as in a
+computed result, an unnamed parameter shows its short ID.
+
 The expression-use partial also handles missing values with a focused completion
 provider. It lists statically visible bindings, the libraries' `Everything`
 offers, callable cells, Raw's constructors, quote, and what's typed read as a value.

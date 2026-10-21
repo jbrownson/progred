@@ -199,7 +199,12 @@ fn attribute(
     Attribution {
         hovered,
         hovered_secondary,
-        selected_secondary: crate::display::widget::navigation::selected_secondary(landmarks),
+        // While picking, what the chosen offer refers to, as for the hovered
+        // offer; otherwise what the selection shares.
+        selected_secondary: completion
+            .and_then(|offers| offers.chosen_source())
+            .map(crate::display::widget::source::Secondary::Cell)
+            .or_else(|| crate::display::widget::navigation::selected_secondary(landmarks)),
         hovered_trace,
     }
 }

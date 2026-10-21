@@ -205,12 +205,14 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
         for spelling in ["size", ""] {
             let env = DefinitionEnv(name::record(spelling, []), source);
             let cell = Value::from(new_cell_id());
-            let declaration =
-                declaration_cell(&projection_input(&env, &cell).with_value(Some(&(&cell).into())))
-                    .unwrap()
-                    .record()
-                    .content()
-                    .clone();
+            let declaration = declaration_cell(
+                &projection_input(&env, &cell).with_value(Some(&(&cell).into())),
+                None,
+            )
+            .unwrap()
+            .record()
+            .content()
+            .clone();
             let (_, child, _) = crate::display::test_support::delimited(&declaration);
             let ProjectionCall::Descend {
                 steps,
@@ -268,15 +270,15 @@ fn compact_declarations_ignore_metadata_but_decline_invalid_names_and_active_ins
         Value::record([]),
         Value::record([(name::vocabulary::NAME, Value::from(vec![1]))]),
     ] {
-        assert!(declaration_name(&projection_input(&env, &value)).is_none());
+        assert!(declaration_name(&projection_input(&env, &value), None).is_none());
     }
     let value = name::record("size", [(new_cell_id(), Value::record([]))]);
     let mut input = projection_input(&env, &value);
-    assert!(declaration_name(&input).is_some());
+    assert!(declaration_name(&input, None).is_some());
     input.pending = Some(Pending::Field);
-    assert!(declaration_name(&input).is_none());
+    assert!(declaration_name(&input, None).is_none());
     input.pending = Some(Pending::Child(Step::Key(new_cell_id())));
-    assert!(declaration_name(&input).is_none());
+    assert!(declaration_name(&input, None).is_none());
 }
 
 #[test]
@@ -1254,3 +1256,4 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
 }
 
 mod declarations;
+mod parameter_names;

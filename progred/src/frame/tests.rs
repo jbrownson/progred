@@ -145,6 +145,54 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
     assert!(resolved.hovered_trace.is_none());
 }
 
+#[test]
+fn while_picking_the_chosen_offer_marks_what_it_refers_to() {
+    let editor = crate::editor_of(Value::record([]));
+    let root = editor.model.workspace.document_root().clone();
+    let (place, cell) = (Secondary::Cell(gid::new_cell_id()), gid::new_cell_id());
+    // The pending slot, selected, shares its place.
+    let landmarks = [crate::display::widget::navigation::Landmark::<Editor> {
+        path: Trail::ROOT.clone(),
+        root: Some(root.clone()),
+        rect: Rect::new(0.0, 0.0, 10.0, 10.0),
+        select: Rc::new(|_, _| true),
+        secondary: Some(place.clone()),
+        selected: true,
+        tab_stop: false,
+    }];
+    let entry = |source| crate::display::widget::offers::Entry {
+        display: "offer".to_owned(),
+        subscripts: Vec::new(),
+        detail: None,
+        matches: Vec::new(),
+        face: crate::display::Face::Label,
+        source,
+        activate: Rc::new(|_: &mut Editor| {}),
+    };
+    let offers = |chosen| crate::display::widget::offers::Offers {
+        entries: Rc::from([entry(None), entry(Some(cell))]),
+        chosen,
+    };
+    let selected = |offers: Option<&crate::display::widget::offers::Offers<Editor>>| {
+        attribute(
+            &editor.sources(),
+            &landmarks,
+            Some(&root),
+            offers,
+            None,
+            false,
+        )
+        .selected_secondary
+    };
+    assert_eq!(selected(Some(&offers(1))), Some(Secondary::Cell(cell)));
+    assert_eq!(
+        selected(Some(&offers(0))),
+        Some(place.clone()),
+        "an offer that refers to nothing leaves the selection's"
+    );
+    assert_eq!(selected(None), Some(place));
+}
+
 fn hover_runner(log: &HoverLog, change_target: bool) -> EditorRunner {
     use crate::display::{Layout, partial, widget};
     use crate::libraries::f64;

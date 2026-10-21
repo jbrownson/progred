@@ -411,6 +411,13 @@ pub trait Env {
     fn occurrence(&self) -> &crate::occurrence::Trail {
         crate::occurrence::Trail::ROOT
     }
+
+    /// The stored value `path` reaches from `start`: what a projection reads
+    /// above where its own value is stored, as a picker does to find what's
+    /// in scope.
+    fn read_from(&self, _start: crate::location::Start, _path: &[Step]) -> Option<&Value> {
+        None
+    }
 }
 
 /// Everything a partial projection receives for one value. It lends its

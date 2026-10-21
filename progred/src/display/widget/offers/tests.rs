@@ -22,21 +22,35 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
         .unwrap();
     let provider: CompletionProvider = Rc::new(move |_| Some(vec![offer.clone()]));
 
-    for (definition, display, detail) in [
-        (None, "sphere".to_owned(), "fidget"),
+    // An empty name names nothing, as no name doesn't.
+    for (definition, library, display, detail) in [
+        (None, None, "sphere".to_owned(), "fidget".to_owned()),
         (
             Some(name::record("boule", [])),
+            Some("formes"),
             "boule".to_owned(),
-            "formes",
+            "formes".to_owned(),
         ),
-        (Some(name::record("", [])), String::new(), ""),
-        (Some(Value::record([])), short_id(SPHERE), "sans nom"),
+        (
+            Some(name::record("", [])),
+            Some(""),
+            short_id(SPHERE),
+            short_id(fidget::ID),
+        ),
+        (
+            Some(Value::record([])),
+            Some("sans nom"),
+            short_id(SPHERE),
+            "sans nom".to_owned(),
+        ),
     ] {
         if let Some(value) = definition {
             document.cells.set_value(SPHERE, value);
+        }
+        if let Some(library) = library {
             document
                 .cells
-                .set_value(fidget::ID, name::record(detail, []));
+                .set_value(fidget::ID, name::record(library, []));
         }
         let sources = src(&document, &stack.libraries);
         for query in ["", display.as_str(), "unrelated query", "sphere"] {
@@ -56,7 +70,7 @@ fn retained_completion_offers_follow_live_names_before_filtering() {
                     panic!("expected one offer");
                 };
                 assert_eq!(entry.display, display);
-                assert_eq!(entry.detail.as_deref(), Some(detail));
+                assert_eq!(entry.detail.as_deref(), Some(detail.as_str()));
                 let result = activated(&test_entry(entry.clone(), CompletionKind::Value));
                 assert_eq!(result.value.as_ref(), Some(&expected_value));
                 let (path, payload) = result.selected.unwrap();

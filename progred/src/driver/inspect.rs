@@ -347,6 +347,33 @@ impl<P> Driver<P> {
             .unwrap_or_else(|| panic!("no text drawn at {path:?}"))
     }
 
+    /// The glyph runs drawn wholly within `path`'s box, each as its glyphs
+    /// and paint: what's spelled there, and in which face.
+    pub(crate) fn glyphs_at<S: Clone + Into<Occurs> + std::fmt::Debug>(
+        &self,
+        path: &[S],
+    ) -> Vec<(Vec<u32>, peniko::Brush)> {
+        let rect = self.rect(path);
+        crate::display::test_support::painted(&self.painted.0)
+            .filter_map(|command| match command {
+                DrawCmd::GlyphRun(run) => Some(run),
+                _ => None,
+            })
+            .filter(|run| {
+                !run.glyphs.is_empty()
+                    && run.glyphs.iter().all(|glyph| {
+                        rect.contains(run.transform * Point::new(glyph.x.into(), glyph.y.into()))
+                    })
+            })
+            .map(|run| {
+                (
+                    run.glyphs.iter().map(|glyph| glyph.id).collect(),
+                    run.brush.clone(),
+                )
+            })
+            .collect()
+    }
+
     /// Every landmark drawn under `prefix`, and where.
     pub(crate) fn drawn_under<S: Clone + Into<Occurs>>(
         &self,

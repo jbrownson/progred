@@ -73,6 +73,8 @@ fn named<'a>(
 ) -> Option<Name<'a>> {
     let name = value_of(cell)?.as_record()?.get(&vocabulary::NAME)?;
     Some(match text::read(name) {
+        // An empty name names nothing.
+        Some("") => return None,
         Some(text) => Name::Plain(text),
         None => {
             let mut runs = Vec::new();
@@ -265,11 +267,18 @@ pub(crate) fn shallow_cell_with<W: Host>(
 ) -> Option<Layout<W>> {
     let cell = input.value?.as_cell()?;
     let name = input.env.name(cell)?;
-    let site = input.site();
-    Some(crate::display::stop(crate::display::activatable(
+    Some(shallow_reference(
+        input,
         decorate(crate::display::named(&name, Face::Name)),
-        &site,
-    )))
+    ))
+}
+
+/// A cell reference drawn as `label`, a stop that a click selects.
+pub(crate) fn shallow_reference<W: Host>(
+    input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
+    label: Layout<W>,
+) -> Layout<W> {
+    crate::display::stop(crate::display::activatable(label, &input.site()))
 }
 
 /// A name as its line editor or, missing, a hole for one. A projection

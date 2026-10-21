@@ -281,6 +281,8 @@ outside the editable span.
 
 Related occurrences are references to the same cell, or occurrences of the same
 location, an empty one included, so a hole drawn in two places marks as one.
+An offer that inserts a cell relates to it: hovering the offer, or choosing it
+from the keyboard while picking, marks where that cell is declared and used.
 Ordinary hover, selection, and related-occurrence highlights share one padded
 outline. Each occurrence paints at most one mark: selection takes precedence,
 then related selection, direct hover, and related hover. Pending text frames keep
