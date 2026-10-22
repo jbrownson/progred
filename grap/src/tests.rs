@@ -417,25 +417,18 @@ fn cells_evaluate_when_they_are_the_expression() {
 }
 
 #[test]
-fn a_hole_answers_its_absent_wherever_it_is_even_defined_or_called() {
-    let defined = |cell| (cell == crate::hole::HOLE).then(|| blob("not this"));
-    let alone = evaluate(
-        &Value::from(crate::hole::HOLE),
-        defined,
-        &ForeignFunctions::default(),
-        10,
-    );
-    assert_eq!(alone.result, crate::hole::absent());
+fn a_call_of_an_absent_function_answers_that_absent() {
+    let reason = new_cell_id();
     let called = evaluate(
-        &crate::call(crate::hole::HOLE.into(), []),
-        defined,
+        &crate::call(absent::value(reason), []),
+        |_| None,
         &ForeignFunctions::default(),
         10,
     );
     assert_eq!(
         called.result,
-        crate::hole::absent(),
-        "a call of a hole answers the hole, not that it isn't callable"
+        absent::value(reason),
+        "what failed before the call is the reason, not that it isn't callable"
     );
 }
 

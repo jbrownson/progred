@@ -7,20 +7,9 @@ use gid::Step;
 use measured::choices::{ChoiceBuild, ChoiceLayout};
 use puri::text::TextCtx;
 
-/// What a walk makes of the value it reaches.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Reached {
-    /// A stop of its own.
-    Stop,
-    /// A stop that what holds it requires: deleting it leaves a hole, so the
-    /// shape keeps its field.
-    Required,
-    /// Part of the occurrence that walked to it, joining its stop.
-    Part,
-}
-
 pub trait Project<World, Hover> {
-    /// Draw what's at `steps` below here, as `reached` says.
+    /// Draw what's at `steps` below here; as a `part`, it joins this
+    /// occurrence's stop rather than being a stop of its own.
     fn descend(
         &self,
         text: &mut TextCtx,
@@ -28,7 +17,7 @@ pub trait Project<World, Hover> {
         steps: &[Step],
         overriding: Option<Partial<World, Hover>>,
         default: Option<Partial<World, Hover>>,
-        reached: Reached,
+        part: bool,
     ) -> ChoiceLayout<HoverPass<World, Hover>>;
     fn jump(
         &self,

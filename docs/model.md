@@ -189,24 +189,7 @@ editor doesn't take never starts its typing.
 Deleting a selected value keeps its place selected as a hole, so the next
 keystrokes write its replacement; Backspace or Delete on the hole's empty query
 removes it, Backspace landing on the sibling before it, else on its container,
-and Delete on the stop after it, even past its container's end. Where a
-projection draws the value as required by what holds it (`display::required`,
-a walk like `descend`), as Grap draws a call's function, deleting it writes a
-hole there instead of removing the field, so the shape stays what it is; the
-hole's Backspace then steps back the same way, removing nothing, and from
-there Backspace deletes what's selected.
-
-A hole is a reference to the hole library's cell, written where a shape
-requires a value that isn't written yet: a new call is `{function: hole}`, a
-new lambda `{params: [], body: hole}`. The editor treats a hole as missing
-wherever it's drawn, Raw included, so its place draws its picker and its
-selection is a pending one; writing there replaces it. It's never offered, so
-it can't be picked to mean "unknown"; constructors and deletion of what's
-required are the only writers. Grap answers a hole with an absent whose reason
-is the hole, and a call of an absent function answers that absent, so an
-unfinished program says where it's unfinished rather than reading as data.
-The cell's constant lives in the evaluator, beside f64's tag, and the hole
-library owns it in vocabulary. Typing over a
+and Delete on the stop after it, even past its container's end. Typing over a
 selected value opens a picker in its place seeded with what was typed: an
 explicit pending payload over the existing value, which projection draws as
 missing until a choice commits, so the document is untouched until then. Where Grap is

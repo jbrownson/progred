@@ -215,22 +215,18 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
             let ProjectionCall::Descend {
                 steps,
                 projection: Some(projection),
-                reached,
+                part,
                 ..
             } = &inspect(child)
             else {
                 panic!("a declaration follows the cell definition");
             };
             assert_eq!(*steps, [Step::Follow(source)]);
-            assert_eq!(
-                *reached,
-                crate::display::widget::project::Reached::Part,
-                "the cell and its definition are one thing"
-            );
+            assert!(*part, "the cell and its definition are one thing");
             let ProjectionCall::Descend {
                 steps,
                 projection: Some(projection),
-                reached,
+                part,
                 ..
             } = &inspect(
                 &(projection(&projection_input(&env, &env.0).with_value(Some(&(&env.0).into())))
@@ -240,11 +236,7 @@ fn declaration_cells_follow_their_source_and_edit_the_name_field() {
                 panic!("the compact definition descends to its actual name");
             };
             assert_eq!(*steps, [Step::Key(name::vocabulary::NAME)]);
-            assert_eq!(
-                *reached,
-                crate::display::widget::project::Reached::Stop,
-                "the name is a stop of its own"
-            );
+            assert!(!*part, "the name is a stop of its own");
             let value = env
                 .0
                 .as_record()
@@ -1354,8 +1346,8 @@ fn a_new_call_starts_at_its_function_then_takes_its_parameters_as_arguments() {
         .expect("a parameter cell");
     let argument = [&program[..], &[Step::Key(parameter)]].concat();
     assert!(
-        driver.drawn(&argument),
-        "a lambda whose body is a hole is still a lambda, its parameters the call's arguments"
+        !driver.drawn(&argument),
+        "a lambda with no body isn't callable yet"
     );
     driver.press(NamedKey::Tab);
     assert_eq!(

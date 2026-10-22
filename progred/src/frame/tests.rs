@@ -81,7 +81,6 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         secondary: Some(secondary.clone()),
         selected: false,
         tab_stop: false,
-        required: false,
     }];
     let hover = Some(Hovered::Tree(hover::Hover::Value(occurrence.clone())));
     let resolved = attribute(
@@ -113,7 +112,6 @@ fn source_hover_conjects_the_occurrence_in_its_own_view() {
         occurrence.clone(),
         Rc::new(|_, _| true),
         Some(secondary.clone()),
-        false,
         false,
     );
     let frame = hover_frame(
@@ -161,7 +159,6 @@ fn while_picking_the_chosen_offer_marks_what_it_refers_to() {
         secondary: Some(place.clone()),
         selected: true,
         tab_stop: false,
-        required: false,
     }];
     let entry = |source| crate::display::widget::offers::Entry {
         display: "offer".to_owned(),
@@ -938,7 +935,6 @@ fn a_drawing_source_selects_its_definition_among_equal_cell_paths() {
                 secondary: None,
                 selected: false,
                 tab_stop: false,
-                required: false,
             },
         );
     for (resolution, rect) in targets {

@@ -1134,11 +1134,7 @@ fn quote_and_unquote_are_offered_under_their_marks() {
     driver.type_text("`");
     assert_eq!(offered(&mut driver)[0], "unquote");
     driver.press(NamedKey::Enter);
-    assert_eq!(
-        driver.value(&expression),
-        Value::record([(vocabulary::UNQUOTE, crate::libraries::hole::value())]),
-        "a new unquote holds a hole for its expression"
-    );
+    assert_eq!(driver.value(&expression), Value::record([]));
     let hole = [&expression[..], &[Step::Key(vocabulary::UNQUOTE)]].concat();
     assert_eq!(driver.selection(), hole);
     assert_eq!(driver.stage(), Some(Stage::Pending));

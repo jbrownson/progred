@@ -40,8 +40,6 @@ pub struct Landmark<World> {
     /// Whether Tab visits it: a place to fill in, as the widget drawn there
     /// marked it.
     pub tab_stop: bool,
-    /// Whether what holds it requires it, so deleting it leaves a hole.
-    pub required: bool,
 }
 
 impl<World> Clone for Landmark<World> {
@@ -54,7 +52,6 @@ impl<World> Clone for Landmark<World> {
             secondary: self.secondary.clone(),
             selected: self.selected,
             tab_stop: self.tab_stop,
-            required: self.required,
         }
     }
 }
@@ -71,22 +68,6 @@ where
     landmarks
         .iter()
         .find(|landmark| landmark.root.as_ref() == root && landmark.path == *path)
-}
-
-/// Whether what holds what's drawn at `path` in the view `root` requires it,
-/// so deleting it leaves a hole. A hole's picker draws a landmark of its own
-/// inside the occurrence's, so any landmark there may say so.
-pub(crate) fn required_at<World, P: ?Sized>(
-    landmarks: &[Landmark<World>],
-    root: Option<&Root>,
-    path: &P,
-) -> bool
-where
-    Trail: PartialEq<P>,
-{
-    landmarks.iter().any(|landmark| {
-        landmark.required && landmark.root.as_ref() == root && landmark.path == *path
-    })
 }
 
 /// What the selected occurrence shares with the projections that carry the
@@ -130,7 +111,6 @@ pub(crate) fn part_landmark<World: 'static, H: 'static>(
                         secondary: None,
                         selected,
                         tab_stop,
-                        required: false,
                     });
                 }
                 output
@@ -154,7 +134,6 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
     select: Select<World>,
     secondary: Option<Secondary>,
     selected: bool,
-    required: bool,
 ) -> Measured<HoverPass<World, H>> {
     measured::around_into(child, move |placement, inner, pass| {
         let stop = path.clone();
@@ -187,7 +166,6 @@ pub(crate) fn landmark<World: 'static, H: 'static>(
                     secondary,
                     selected,
                     tab_stop,
-                    required,
                 });
                 output
             },

@@ -209,25 +209,6 @@ evaluation*). The bindings it was made under aren't shown yet: an observer
 could capture the environment at the answering call the same way, for a
 display still to be designed.
 
-## Holes
-
-Holes landed on 22 October 2026 (see [model](model.md#selection-and-editing)).
-Open beside them:
-
-- **Which hole.** A hole's absent has only its reason, so two holes in one
-  result read alike. It could carry where the hole is, as a missing
-  argument's absent carries its call, so the result could draw the hole
-  itself to fill.
-- **Where "required" is said.** A projection declares it, so it holds only
-  where that projection draws the shape: in Raw, deleting a call's function
-  removes the field. A shape declared by its library, a type, would hold in
-  every view; that's the structural type system the owner has in mind.
-- **Lists a shape requires.** Deleting a lambda's parameter list removes it,
-  rather than emptying it to `[]`, which would keep the lambda.
-- **Documents written before.** A `{params: [...]}` with no body still draws
-  as a lambda but evaluates as data; a `{}` left by an old new call stays a
-  record.
-
 ## Context for an absent from below
 
 A function written in Rust reports the arguments it couldn't use in its own

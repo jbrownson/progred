@@ -52,7 +52,7 @@ impl Project<crate::Editor, crate::frame::Hovered> for Output {
         _: &[gid::Step],
         _: Option<Partial>,
         _: Option<Partial>,
-        _: crate::display::widget::project::Reached,
+        _: bool,
     ) -> ChoiceLayout<widget::HoverPass<crate::Editor, crate::frame::Hovered>> {
         unreachable!()
     }

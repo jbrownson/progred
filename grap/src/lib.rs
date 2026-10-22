@@ -21,7 +21,6 @@ pub mod absent;
 pub mod arguments;
 pub mod f32;
 pub mod f64;
-pub mod hole;
 pub mod logic;
 pub mod path;
 pub mod primitive;
@@ -1322,9 +1321,6 @@ impl<'a> Context<'a> {
 
     fn lower_with(&mut self, value: &Value, origin: Option<OriginId>) -> Expression {
         let (form, fields, elements) = match value {
-            Value::Cell(cell) if *cell == hole::HOLE => {
-                (Form::Ready(RuntimeValue::from(hole::absent())), None, None)
-            }
             Value::Cell(cell) => (Form::Cell(*cell), None, None),
             Value::Record(fields) => {
                 let lower_field = |this: &mut Self, field: CellId, value: &Value| {
@@ -2378,8 +2374,7 @@ fn native_f64(value: &RuntimeValue) -> Option<f64> {
 }
 
 /// The absence a call answers when `callable` can't be called: an absent
-/// `callable` as it is, since what failed before it is the reason, as a hole
-/// for the function is.
+/// `callable` as it is, since what failed before it is the reason.
 fn not_callable(callable: &RuntimeValue) -> RuntimeValue {
     arguments::not(absent::NOT_CALLABLE, callable.clone())
 }
