@@ -130,13 +130,7 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
         assert_eq!(
             pane,
             &if field == fidget::vocabulary::FIDGET {
-                Value::record([
-                    (presentation::vocabulary::VALUE, cell.into()),
-                    (
-                        presentation::vocabulary::VIEWPORT,
-                        fidget::vocabulary::PREVIEW_3D.into(),
-                    ),
-                ])
+                presentation::sized(cell.into(), fidget::vocabulary::PREVIEW_3D.into())
             } else {
                 presentation::render(cell.into())
             }

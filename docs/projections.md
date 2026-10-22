@@ -469,8 +469,9 @@ expression. An empty notebook draws a "new entry" that starts its first. An
 element that isn't a cell draws as plain data. The arrow selects the entry
 itself rather than its expression.
 
-The presentation library offers an opt-in interpreter for
-`{value: source, projection: function}`. Pane views try it only at entry,
+The presentation library offers an opt-in interpreter for a projected value,
+`{isa: projected value, value: source, projection: function}`. Pane views try it
+only at entry, as its kind says,
 following cells through their ordinary definition paths. The document view
 leaves the declaration as editable data. It applies the function to the source
 as data and projects the result with `at` using the normal
@@ -532,8 +533,8 @@ declines to the normal projection.
 This is a library presentation available at any record, not a special root or
 workspace model. Raw still projects the underlying record normally.
 
-Assigned-size panes instead use `{value: source, viewport: function}`. The editor
-recognizes this contract at pane entry and passes the settled logical `width`
+Assigned-size panes instead use a sized value, `{isa: sized value, value:
+source, viewport: function}`. The editor recognizes this kind at pane entry and passes the settled logical `width`
 and `height` along with the unevaluated `value` as data. An optional `prepare`
 function runs first, receiving only `value`; its result replaces that argument
 to the viewport function. Preparation uses the ordinary dependency-tracked

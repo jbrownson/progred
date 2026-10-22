@@ -46,6 +46,7 @@ pub fn library<W: Host>() -> Library<W> {
             (path::vocabulary::LIBRARY, "library"),
             (path::vocabulary::INDEXABLE, "indexable"),
             (path::vocabulary::INVALID_PATH, "invalid path"),
+            (crate::location::vocabulary::kind::LOCATION, "location"),
             (crate::location::vocabulary::IN, "in"),
             (crate::location::vocabulary::STEPS, "steps"),
             (crate::location::vocabulary::NOT_FOUND, "place not found"),

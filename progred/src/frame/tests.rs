@@ -965,20 +965,11 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     let library = CellId::from_u128(3);
     let nested_projector = CellId::from_u128(4);
     let alias = CellId::from_u128(5);
-    let source = Value::record([
-        (
-            presentation::vocabulary::VALUE,
-            Value::from(b"source".to_vec()),
-        ),
-        (
-            presentation::vocabulary::PROJECTION,
-            Value::from(nested_projector),
-        ),
-    ]);
-    let declaration = Value::record([
-        (presentation::vocabulary::VALUE, source.clone()),
-        (presentation::vocabulary::PROJECTION, Value::from(projector)),
-    ]);
+    let source = presentation::projected(
+        Value::from(b"source".to_vec()),
+        Value::from(nested_projector),
+    );
+    let declaration = presentation::projected(source.clone(), Value::from(projector));
     let mut cells = Cells::new();
     cells.set_value(linked, declaration.clone());
     cells.set_value(alias, Value::from(linked));
@@ -1158,28 +1149,25 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
     use std::cell::RefCell;
     let function = gid::new_cell_id();
     let source = Value::from(b"source".to_vec());
-    let declaration = Value::record([
-        (presentation::vocabulary::VALUE, source.clone()),
-        (
-            presentation::vocabulary::VIEWPORT,
-            grap::lambda(
+    let declaration = presentation::sized(
+        source.clone(),
+        grap::lambda(
+            [
+                presentation::vocabulary::VALUE,
+                layout::vocabulary::WIDTH,
+                layout::vocabulary::HEIGHT,
+            ],
+            grap::call(
+                function.into(),
                 [
                     presentation::vocabulary::VALUE,
                     layout::vocabulary::WIDTH,
                     layout::vocabulary::HEIGHT,
-                ],
-                grap::call(
-                    function.into(),
-                    [
-                        presentation::vocabulary::VALUE,
-                        layout::vocabulary::WIDTH,
-                        layout::vocabulary::HEIGHT,
-                    ]
-                    .map(|label| (label, label.into())),
-                ),
+                ]
+                .map(|label| (label, label.into())),
             ),
         ),
-    ]);
+    );
     let mut model = Model::new(Document {
         root: Some(
             workspace::append(

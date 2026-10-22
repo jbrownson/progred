@@ -1,10 +1,10 @@
 //! Projections for computed artifacts. A document may place one in a
-//! pane, whose view opts into presenting it: applying its declared
-//! projection, or drawing a render's result. The document view leaves that
-//! declaration editable. A projection function receives one argument under
-//! [`vocabulary::VALUE`] and returns a value; an absent result exposes its
-//! source. An explicit viewport function also receives the pane's assigned
-//! logical width and height.
+//! pane, whose view opts into presenting it: drawing a render's result, a
+//! projected value as its projection draws it, or a sized value as its
+//! viewport draws it. The document view leaves that declaration editable. A
+//! projection function receives one argument under [`vocabulary::VALUE`] and
+//! returns a value; an absent result exposes its source. A viewport function
+//! also receives the pane's assigned logical width and height.
 
 use crate::display::at;
 use crate::display::host::{Host, Layout, ProjectionInput};
@@ -38,11 +38,40 @@ pub mod vocabulary {
         /// An expression a pane draws as its result: `{isa: render,
         /// expression, fuel?}`.
         pub const RENDER: CellId = CellId::from_u128(0x2a93e331172d418c82f7c67e426a95f6);
+        /// A value a pane draws as its projection function does:
+        /// `{isa: projected value, value, projection}`.
+        pub const PROJECTED: CellId = CellId::from_u128(0xabeefc6dc6554c99a3ac987fb0fb73df);
+        /// A value a pane draws as its viewport function does, given the
+        /// pane's size: `{isa: sized value, value, viewport, prepare?,
+        /// fuel?}`.
+        pub const SIZED: CellId = CellId::from_u128(0xcc9c98621a79466f8c9f928d8ba09198);
     }
 }
 
+/// `value` as `projection` draws it, in a pane.
+#[cfg(test)]
+pub(crate) fn projected(value: gid::Value, projection: gid::Value) -> gid::Value {
+    ::grap::isa::record(
+        vocabulary::kind::PROJECTED,
+        [
+            (vocabulary::VALUE, value),
+            (vocabulary::PROJECTION, projection),
+        ],
+    )
+}
+
+/// `value` as `viewport` draws it at a pane's size.
+pub fn sized(value: gid::Value, viewport: gid::Value) -> gid::Value {
+    ::grap::isa::record(
+        vocabulary::kind::SIZED,
+        [(vocabulary::VALUE, value), (vocabulary::VIEWPORT, viewport)],
+    )
+}
+
+/// A sized value's value and viewport function.
 pub fn viewport(value: &gid::Value) -> Option<(&gid::Value, &gid::Value)> {
     let fields = value.as_record()?;
+    (::grap::isa::of(fields)? == vocabulary::kind::SIZED).then_some(())?;
     Some((
         fields.get(&vocabulary::VALUE)?,
         fields.get(&vocabulary::VIEWPORT)?,
@@ -134,7 +163,6 @@ fn render_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
     let render = input.value?;
-    (render.kind()? == vocabulary::kind::RENDER).then_some(())?;
     let expression = render.field(::grap::vocabulary::EXPRESSION)?;
     let fuel = match render.field(layout::vocabulary::FUEL) {
         Some(fuel) => ::grap::f64::to_usize(fuel.as_f64()?)?,
@@ -149,16 +177,20 @@ fn render_display<W: Host>(
     ))
 }
 
-/// A pane's value presented: a render as its result, or a declaration as
-/// its projection draws it. Not part of the library's ordinary authoring
-/// projection, so elsewhere both are the records they are.
+/// A pane's value presented, as its kind says: a render as its result, or a
+/// projected value as its projection draws it. Not part of the library's
+/// ordinary authoring projection, so elsewhere both are the records they are.
 pub fn pane_entry<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    render_display(input).or_else(|| projected_display(input))
+    match input.value?.kind()? {
+        vocabulary::kind::RENDER => render_display(input),
+        vocabulary::kind::PROJECTED => projected_display(input),
+        _ => None,
+    }
 }
 
-/// A declaration as its projection function draws it.
+/// A projected value as its projection function draws it.
 fn projected_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
@@ -176,6 +208,8 @@ pub fn library<W: Host>() -> Library<W> {
         "presentation",
         [
             (vocabulary::kind::RENDER, "render"),
+            (vocabulary::kind::PROJECTED, "projected value"),
+            (vocabulary::kind::SIZED, "sized value"),
             (vocabulary::PROJECTION, "projection"),
             (vocabulary::VIEWPORT, "viewport"),
             (vocabulary::PREPARE, "prepare"),

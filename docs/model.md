@@ -549,9 +549,12 @@ starts there and changes nothing about where the data is. So its occurrences
 stay apart from the document view's even where that draws the declaration too,
 their paths name the pane they're in, and a pane showing its entry reads and
 writes the entry. An entry
-can name a [location](#data-and-resolution) as data: `{steps: [...]}` from the
-document's root, or `{in: cell, follow: source, steps: [...]}` inside a cell's
-definition, with the steps and source in the path convention's encoding. While
+can name a [location](#data-and-resolution) as data: `{isa: location, steps:
+[...]}` from the document's root, or `{isa: location, in: cell, follow: source,
+steps: [...]}` inside a cell's definition, with the steps and source in the
+path convention's encoding. A pane tells what its entry is by its kind, so any
+other value, a record that happens to have a `steps` field included, shows as
+it is. While
 its pane shows the editor library, the pane jumps to that place after its pane
 step and draws and edits it there, so it stays in sync with the document; Plain and Raw show the entry itself. Open
 Value on Left and Right open the selection's place, starting at its nearest
@@ -560,7 +563,7 @@ opens as a copy. A place that's only empty, as after its value was deleted,
 draws as any empty place does, ready to write; one that can't be reached, as
 after its container was deleted, draws a read-only `place not found` absent
 carrying the location. Show Panes opens a location pane on the panes
-declaration, `{steps: [panes]}`, or selects the one already open, so the panes
+declaration, `{isa: location, steps: [panes]}`, or selects the one already open, so the panes
 can be edited as data while they show. The Libraries menu does the same for a
 loaded library, opening a location pane at its own cell, which is read-only
 like every library value; Open Value on a cell it lists opens that cell's
@@ -580,7 +583,8 @@ Moving an entry assigns a new list position and explicitly retargets selection;
 its size, scroll, and the libraries it shows carry across, while path-keyed folds
 reset.
 
-`{value: source, projection: function}` is a presentation-library convention,
+`{isa: projected value, value: source, projection: function}` is a
+presentation-library convention,
 not workspace configuration. The document's normal projection shows this
 declaration as editable data. At pane entry, including through cell definitions,
 the view tries the presentation library's declaration interpreter first. Nested
@@ -590,7 +594,8 @@ following is separate from explicit local or scoped projection composition.
 Raw shows the structural data in either view. See
 [projection composition](projections.md#projection-composition).
 
-An assigned-size pane uses `{value: source, viewport: function}` instead. The
+An assigned-size pane uses `{isa: sized value, value: source, viewport:
+function}` instead. The
 function receives `value`, `width`, and `height` (logical display units) and
 returns ordinary display content, including handlers. Its pane has no automatic
 padding or document scrolling; the assigned rectangle clips its output. Pane

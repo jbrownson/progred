@@ -67,10 +67,7 @@ fn viewport_passes_logical_dimensions_and_preserves_its_value_as_data() {
             panic!("the declaration has nothing to prepare")
         }
     }
-    let declaration = Value::record([
-        (vocabulary::VALUE, LEFT_VALUE.into()),
-        (vocabulary::VIEWPORT, LEFT_VALUE.into()),
-    ]);
+    let declaration = sized(LEFT_VALUE.into(), LEFT_VALUE.into());
     assert!(matches!(
         (projected(&declaration, &CheckArguments, |input| viewport_display(
             input, 420.5, 160.25
@@ -124,6 +121,7 @@ fn viewport_preparation_failure_does_not_call_the_viewport() {
         }
     }
     let mut fields = Value::record([
+        (::grap::isa::ISA, vocabulary::kind::SIZED.into()),
         (vocabulary::VALUE, LEFT_VALUE.into()),
         (vocabulary::PREPARE, vocabulary::PREPARE.into()),
         (vocabulary::VIEWPORT, vocabulary::VIEWPORT.into()),
@@ -193,6 +191,7 @@ fn viewport_preparation_receives_only_data_before_dimensions_are_supplied() {
         }
     }
     let declaration = Value::record([
+        (::grap::isa::ISA, vocabulary::kind::SIZED.into()),
         (vocabulary::VALUE, LEFT_VALUE.into()),
         (vocabulary::PREPARE, vocabulary::PREPARE.into()),
         (layout::vocabulary::FUEL, f64::value(1234.0)),
@@ -269,6 +268,10 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
     )
     .result;
     let declaration = ::grap::RuntimeValue::record([
+        (
+            ::grap::isa::ISA,
+            Value::from(vocabulary::kind::PROJECTED).into(),
+        ),
         (vocabulary::PROJECTION, callback.clone()),
         (vocabulary::VALUE, callback.clone()),
     ]);
@@ -286,10 +289,7 @@ fn declaration_passes_runtime_callable_and_data_without_reification() {
 #[test]
 fn declarations_are_inert_until_the_view_opts_in_and_absent_reveals_the_source() {
     let source = Value::from(b"source".to_vec());
-    let value = Value::record([
-        (vocabulary::VALUE, source),
-        (vocabulary::PROJECTION, Value::from(LEFT_VALUE)),
-    ]);
+    let value = super::projected(source, Value::from(LEFT_VALUE));
     let result = Value::from(b"projected".to_vec());
     assert!(
         matches!((projected(&value, &EvaluatesTo(result.clone()), projected_display)).map(|layout| inspect(&layout)),

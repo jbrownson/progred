@@ -13,12 +13,19 @@ use gid::{CellId, Document, Resolution, Step, Value};
 use std::borrow::Cow;
 use std::rc::Rc;
 
-/// A location as ordinary GID data, as a pane declares the place it shows:
-/// `{in: cell, follow: resolution, steps: […]}` inside a cell's definition, or
-/// `{steps: […]}` from the document's root. The steps and resolution use the
-/// path convention's encoding. The editor library names these cells.
+/// A location as GID data, as a pane declares the place it shows:
+/// `{isa: location, in: cell, follow: resolution, steps: […]}` inside a
+/// cell's definition, or `{isa: location, steps: […]}` from the document's
+/// root. The steps and resolution use the path convention's encoding. The
+/// editor library names these cells.
 pub mod vocabulary {
     use gid::CellId;
+
+    pub mod kind {
+        use gid::CellId;
+
+        pub const LOCATION: CellId = CellId::from_u128(0xeca950da78a34d7f85cbaba09f49c4ea);
+    }
 
     pub const IN: CellId = CellId::from_u128(0x46f7f059b8b648c7a2a973d7deb5c914);
     pub const STEPS: CellId = CellId::from_u128(0xcb41b29467c842858d8e59860308cf73);
@@ -29,16 +36,20 @@ pub mod vocabulary {
 /// `location` as data.
 pub fn value(location: &Location) -> Value {
     let steps = (vocabulary::STEPS, ::grap::path::value(&location.path));
+    let kind = vocabulary::kind::LOCATION;
     match location.start {
-        Start::Root => Value::record([steps]),
-        Start::Cell { cell, resolution } => Value::record([
-            (vocabulary::IN, cell.into()),
-            (
-                ::grap::path::vocabulary::FOLLOW,
-                ::grap::path::resolution_value(resolution),
-            ),
-            steps,
-        ]),
+        Start::Root => ::grap::isa::record(kind, [steps]),
+        Start::Cell { cell, resolution } => ::grap::isa::record(
+            kind,
+            [
+                (vocabulary::IN, cell.into()),
+                (
+                    ::grap::path::vocabulary::FOLLOW,
+                    ::grap::path::resolution_value(resolution),
+                ),
+                steps,
+            ],
+        ),
     }
 }
 
@@ -46,15 +57,21 @@ pub fn value(location: &Location) -> Value {
 pub fn not_found(location: &Location) -> Value {
     let described = value(location);
     let fields = described.as_record().expect("a location is a record");
+    // The absent's details are the place's own fields; what kind it is, the
+    // absent says.
     ::grap::absent::absent(
         vocabulary::NOT_FOUND,
-        fields.iter().map(|(key, value)| (*key, value.clone())),
+        fields
+            .iter()
+            .filter(|(key, _)| *key != ::grap::isa::ISA)
+            .map(|(key, value)| (*key, value.clone())),
     )
 }
 
 /// The location `value` describes, when it's one.
 pub fn read(value: &Value) -> Option<Location<'static>> {
     let fields = value.as_record()?;
+    (::grap::isa::of(fields)? == vocabulary::kind::LOCATION).then_some(())?;
     let path = ::grap::path::read(fields.get(&vocabulary::STEPS)?)?;
     let start = match fields.get(&vocabulary::IN) {
         None => Start::Root,

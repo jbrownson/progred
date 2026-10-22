@@ -6,10 +6,7 @@ use gid::{Cells, Document, Resolution, new_cell_id};
 fn only_root_declarations_followed_through_stable_definitions_are_viewports() {
     let alias = new_cell_id();
     let definition = new_cell_id();
-    let declaration = Value::record([
-        (presentation::vocabulary::VALUE, Value::record([])),
-        (presentation::vocabulary::VIEWPORT, Value::record([])),
-    ]);
+    let declaration = presentation::sized(Value::record([]), Value::record([]));
     let mut cells = Cells::new();
     cells.set_value(alias, definition.into());
     cells.set_value(definition, declaration.clone());

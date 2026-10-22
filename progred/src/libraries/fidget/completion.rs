@@ -3,7 +3,6 @@
 use super::{ID, vocabulary};
 use crate::display::{Completion, CompletionKind, CompletionRequest, CompletionScope};
 use crate::libraries::presentation;
-use gid::Value;
 
 pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>> {
     (request.scope == CompletionScope::Start && request.kind == CompletionKind::Value)
@@ -12,13 +11,7 @@ pub(super) fn offers(request: &CompletionRequest<'_>) -> Option<Vec<Completion>>
 
 fn root_completion() -> Completion {
     crate::libraries::completion::starter(vocabulary::FIDGET, |cell| {
-        Value::record([
-            (presentation::vocabulary::VALUE, cell.into()),
-            (
-                presentation::vocabulary::VIEWPORT,
-                vocabulary::PREVIEW_3D.into(),
-            ),
-        ])
+        presentation::sized(cell.into(), vocabulary::PREVIEW_3D.into())
     })
     .with_aliases(["sdf"])
     .with_detail(ID)

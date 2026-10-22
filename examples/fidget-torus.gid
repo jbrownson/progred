@@ -14,6 +14,7 @@
     "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
     "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "right": 6ab1e9c9a6604d82b1aabddcfa03d0d8,
+    "sized_value": cc9c98621a79466f8c9f928d8ba09198,
     "sqrt": db6e742a39104ba89f2216ad9ab75e99,
     "square": d4f866cfe9014192a360d5567df9cbef,
     "subtract": 4535d940d2f04affa350291dd96f06bc,
@@ -86,6 +87,7 @@
         0x80: {
           viewport: preview_3d,
           projection_value: torus,
+          isa: sized_value,
         },
       ],
     },
