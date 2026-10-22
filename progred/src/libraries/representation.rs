@@ -76,7 +76,7 @@ pub(crate) fn infix_display<W: Host>(
             .map(|(_, precedence)| *precedence)
     };
     let fields = input.value?;
-    (fields.kind() == Some(::grap::vocabulary::CALL)).then_some(())?;
+    (fields.kind() == Some(::grap::vocabulary::kind::CALL)).then_some(())?;
     let precedence = binds(fields)?;
     let layout = infix(
         crate::libraries::grap::expression_path(input, [Step::Key(FUNCTION)]),

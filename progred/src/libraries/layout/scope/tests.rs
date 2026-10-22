@@ -38,7 +38,13 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
         100,
     )
     .result;
-    let returned = RuntimeValue::record([(::grap::vocabulary::VALUE, callback.clone())]);
+    let returned = RuntimeValue::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+        ),
+        (::grap::vocabulary::VALUE, callback.clone()),
+    ]);
     let (evaluation, layout) = run::<crate::Editor>(site, |scope| {
         ::grap::evaluate_runtime_scoped(&returned, &host, scope, 100)
     });
@@ -53,7 +59,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
     let program = RuntimeValue::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::CALL).into(),
+            gid::Value::from(::grap::vocabulary::kind::CALL).into(),
         ),
         (::grap::vocabulary::FUNCTION, Value::from(ROW).into()),
         (
@@ -61,7 +67,7 @@ fn layout_results_and_nested_absent_details_keep_native_callbacks() {
             RuntimeValue::record([
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::CALL).into(),
+                    gid::Value::from(::grap::vocabulary::kind::CALL).into(),
                 ),
                 (
                     ::grap::vocabulary::FUNCTION,

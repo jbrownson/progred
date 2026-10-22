@@ -84,10 +84,16 @@ fn tab_stops_at_empty_holes_optional_or_not_but_not_at_markers() {
     let parameter = new_cell_id();
     let mut cells = Cells::new();
     cells.set_value(parameter, name::record("y", []));
-    let root = Value::record([(
-        ::grap::vocabulary::VALUE,
-        ::grap::lambda([parameter], parameter.into()),
-    )]);
+    let root = Value::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+        ),
+        (
+            ::grap::vocabulary::VALUE,
+            ::grap::lambda([parameter], parameter.into()),
+        ),
+    ]);
     let mut driver = Driver::new(
         crate::test_editor(Document {
             root: Some(root),

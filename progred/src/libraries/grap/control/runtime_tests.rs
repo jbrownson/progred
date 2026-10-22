@@ -68,7 +68,7 @@ fn computed_clauses_preserve_closure_code_captures_and_origins() {
                 RuntimeValue::record([
                     (
                         ::grap::isa::ISA,
-                        gid::Value::from(::grap::vocabulary::CALL).into(),
+                        gid::Value::from(::grap::vocabulary::kind::CALL).into(),
                     ),
                     (::grap::vocabulary::FUNCTION, closure.clone()),
                 ])

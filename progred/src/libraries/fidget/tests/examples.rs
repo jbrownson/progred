@@ -47,7 +47,7 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
         let call = Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::CALL).into(),
+                gid::Value::from(::grap::vocabulary::kind::CALL).into(),
             ),
             (::grap::vocabulary::FUNCTION, Value::from(names[*preview])),
             (
@@ -55,7 +55,7 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
                 Value::record([
                     (
                         ::grap::isa::ISA,
-                        gid::Value::from(::grap::vocabulary::CALL).into(),
+                        gid::Value::from(::grap::vocabulary::kind::CALL).into(),
                     ),
                     (
                         ::grap::vocabulary::FUNCTION,

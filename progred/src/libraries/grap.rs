@@ -17,7 +17,7 @@ use crate::display::{
     col, descend, dim, faced, indent, picker, ranked, row, selectable, selectable_bracket, shared,
 };
 use ::grap::source::vocabulary::BODY_ORIGIN;
-use ::grap::vocabulary::{BODY, CALL, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE};
+use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE, kind};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use puri::text::Script;
 
@@ -475,7 +475,7 @@ pub(crate) fn call_with_function<W: Host>(
     (input.pending != Some(Pending::Field)).then_some(())?;
     let fields = input.value?;
     // It's a call while its function is still to be picked.
-    (fields.kind() == Some(CALL)).then_some(())?;
+    (fields.kind() == Some(kind::CALL)).then_some(())?;
     let parameters = fields
         .field(FUNCTION)
         .and_then(|function| function_parameters(&function, &|cell| input.env.resolve(cell)))
@@ -512,7 +512,7 @@ fn lambda_display<W: Host>(
 ) -> Option<Layout<W>> {
     crate::display::structure::kind_form(
         input,
-        LAMBDA,
+        kind::LAMBDA,
         [name::vocabulary::NAME, PARAMS, BODY],
         |[_, params, _]| {
             let cells = params?
@@ -554,11 +554,9 @@ fn lambda_display<W: Host>(
 fn closure_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let fields = input.value?;
-    fields.field(LAMBDA)?;
-    fields.field(ENVIRONMENT)?;
+    (input.value?.kind() == Some(kind::CLOSURE)).then_some(())?;
     crate::display::structure::Fields::default()
-        .leading([LAMBDA, ENVIRONMENT, BODY_ORIGIN])
+        .leading([::grap::isa::ISA, LAMBDA, ENVIRONMENT, BODY_ORIGIN])
         .child(|key| match key {
             ENVIRONMENT => Some(crate::display::runtime_partial(environment)),
             BODY_ORIGIN => Some(crate::display::runtime_partial(|input| {
@@ -601,25 +599,29 @@ fn environment<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) ->
 fn value_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    record_form(input, [name::vocabulary::NAME, VALUE], |[_, value]| {
-        value?;
-        let name = descend(
-            [Step::Key(name::vocabulary::NAME)],
-            Some(crate::display::first(
-                input,
-                crate::display::partial(|input| {
-                    name::editor(input.value?).map(crate::display::line_edit)
-                }),
-            )),
-            None,
-        );
-        let site = input.site().below(&[Step::Key(VALUE)]);
-        Some(hug(
-            row(3.0, [name, selectable(dim("="), &site)]),
-            expression_path(input, [Step::Key(VALUE)]),
-            6.0,
-        ))
-    })
+    crate::display::structure::kind_form(
+        input,
+        kind::VALUE_WRAPPER,
+        [name::vocabulary::NAME, VALUE],
+        |_| {
+            let name = descend(
+                [Step::Key(name::vocabulary::NAME)],
+                Some(crate::display::first(
+                    input,
+                    crate::display::partial(|input| {
+                        name::editor(input.value?).map(crate::display::line_edit)
+                    }),
+                )),
+                None,
+            );
+            let site = input.site().below(&[Step::Key(VALUE)]);
+            Some(hug(
+                row(3.0, [name, selectable(dim("="), &site)]),
+                expression_path(input, [Step::Key(VALUE)]),
+                6.0,
+            ))
+        },
+    )
 }
 
 /// Foreignness is an evaluator implementation detail. In source, an
@@ -701,6 +703,10 @@ pub fn library<W: Host>() -> Library<W> {
             (::grap::vocabulary::BODY, "body"),
             (::grap::vocabulary::VALUE, "value"),
             (::grap::vocabulary::LAMBDA, "lambda"),
+            (kind::CALL, "call"),
+            (kind::LAMBDA, "lambda"),
+            (kind::CLOSURE, "closure"),
+            (kind::VALUE_WRAPPER, "value wrapper"),
             (::grap::vocabulary::ENVIRONMENT, "environment"),
             (::grap::vocabulary::FFI, "ffi"),
             (::grap::vocabulary::EVALUATE, "evaluate"),
@@ -776,7 +782,7 @@ fn constructs() -> [Completion; 2] {
     [
         crate::libraries::completion::insert(
             "new lambda",
-            ::grap::isa::record(LAMBDA, [(PARAMS, Value::list([]))]),
+            ::grap::isa::record(kind::LAMBDA, [(PARAMS, Value::list([]))]),
             Some(crate::selection::pending_at(&[
                 Step::Key(PARAMS),
                 Step::Element(gid::position::between(None, None).expect("an empty list has room")),
@@ -786,7 +792,7 @@ fn constructs() -> [Completion; 2] {
         .with_detail(ID),
         crate::libraries::completion::insert(
             "new call",
-            ::grap::isa::record(CALL, []),
+            ::grap::isa::record(kind::CALL, []),
             Some(crate::selection::pending_at(&[Step::Key(FUNCTION)])),
         )
         .with_detail(ID),

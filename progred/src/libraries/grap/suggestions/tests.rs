@@ -155,7 +155,7 @@ fn completion_bindings_follow_lambda_scope_and_quote_boundaries() {
         Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (PARAMS, Value::list([Value::from(parameter)])),
             (BODY, body),
@@ -179,7 +179,10 @@ fn completion_bindings_follow_lambda_scope_and_quote_boundaries() {
                 lambda(
                     inner,
                     Value::record([
-                        (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+                        (
+                            ::grap::isa::ISA,
+                            gid::Value::from(control::kind::UNQUOTE).into(),
+                        ),
                         (control::UNQUOTE, Value::record([])),
                     ]),
                 ),

@@ -10,7 +10,7 @@ fn runtime_call(
         [
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::CALL).into(),
+                gid::Value::from(::grap::vocabulary::kind::CALL).into(),
             ),
             (grap::vocabulary::FUNCTION, Value::from(function).into()),
         ]

@@ -169,7 +169,7 @@ fn logical_down_from_a_multiline_cell_enters_the_first_line_before_the_body() {
             [
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                 ),
                 (::grap::vocabulary::PARAMS, Value::list([])),
                 (

@@ -85,7 +85,7 @@ pub fn at_display_partial() -> Value {
     name::record(
         "at display",
         [
-            (::grap::isa::ISA, ::grap::vocabulary::LAMBDA.into()),
+            (::grap::isa::ISA, ::grap::vocabulary::kind::LAMBDA.into()),
             (
                 grap::vocabulary::PARAMS,
                 Value::list([Value::from(layout::vocabulary::VALUE)]),
@@ -206,8 +206,8 @@ pub fn planets(view_body: &str) -> (crate::Editor, crate::gid_text::Binders) {
             "moons": 6122302fdbe3db3624731717321b94a1,
             "planet_view": 0b570cad527f02e4ed4b06110a62bf67,
             "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-            "call": 31232e62ec458b0e6e201f3a7c1c10fe,
-            "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
+            "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+            "lambda": e4a0653134ca48379cab2e008bed03e7,
           }},
           "cells": {{
             planet: {{name: "planet"}},

@@ -24,7 +24,13 @@ fn runtime_render_preserves_native_closures_through_evaluation() {
         100,
     )
     .result;
-    let expression = ::grap::RuntimeValue::record([(::grap::vocabulary::VALUE, closure.clone())]);
+    let expression = ::grap::RuntimeValue::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+        ),
+        (::grap::vocabulary::VALUE, closure.clone()),
+    ]);
     let value = ::grap::RuntimeValue::record([(
         crate::libraries::presentation::vocabulary::RENDER,
         expression,

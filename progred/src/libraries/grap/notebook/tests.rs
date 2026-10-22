@@ -417,7 +417,7 @@ fn a_slot_offers_grap_s_own_first_and_a_call_s_function_slot_its_functions() {
 
 #[test]
 fn a_call_left_without_its_function_stays_a_call_and_says_what_it_lacks() {
-    use ::grap::vocabulary::{CALL, FUNCTION};
+    use ::grap::vocabulary::{FUNCTION, kind::CALL};
     let mut driver = notebook(&[new_cell_id()], Cells::new());
     let slot = expression(&driver, 0);
     driver.select(&slot);
@@ -447,7 +447,7 @@ fn a_call_left_without_its_function_stays_a_call_and_says_what_it_lacks() {
 
 #[test]
 fn backspacing_a_call_s_function_leaves_the_call_and_then_steps_back() {
-    use ::grap::vocabulary::{CALL, FUNCTION};
+    use ::grap::vocabulary::{FUNCTION, kind::CALL};
     let mut driver = notebook(&[new_cell_id()], Cells::new());
     let slot = expression(&driver, 0);
     driver.select(&slot);

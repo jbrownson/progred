@@ -106,7 +106,7 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
                 [
                     (
                         ::grap::isa::ISA,
-                        gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                        gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                     ),
                     (PARAMS, Value::list([])),
                     (BODY, number()),
@@ -139,7 +139,7 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
             Value::record([
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(control::vocabulary::UNQUOTE).into(),
+                    gid::Value::from(control::vocabulary::kind::UNQUOTE).into(),
                 ),
                 (control::vocabulary::UNQUOTE, number()),
             ]),
@@ -364,7 +364,7 @@ fn parameter_declarations_keep_cell_and_name_stops_inside_the_parameter_list() {
         [
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (PARAMS, params),
             (BODY, parameter.into()),
@@ -405,7 +405,7 @@ fn multiline_cell_and_its_function_share_a_vertical_entrance() {
             [
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                 ),
                 (PARAMS, Value::list([])),
                 (BODY, f64::value(3.0)),

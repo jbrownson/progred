@@ -3,11 +3,15 @@ pub(crate) fn grap_at(path: &[gid::Step], payload: gid::Value) -> gid::Value {
     use gid::Value;
     Value::record([
         (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::kind::CLOSURE).into(),
+        ),
+        (
             g::LAMBDA,
             Value::record([
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                 ),
                 (g::PARAMS, Value::list([])),
                 (

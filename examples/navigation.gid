@@ -71,8 +71,10 @@
     "block": 00b29f3a5482ed976ef832dcb5864ebe,
     "beside": bdc1d0d88c90d2c4113b31ca3edf16bd,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
-    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "value_wrapper": f615f8d777294ffd9e5296faf34edd9d,
   },
   "cells": {
     parameters: {name: "Text and numbers"},
@@ -230,13 +232,13 @@
           ],
         },
       },
-      {name: "Area expression", named_value: {isa: call, function: multiply, left: width, right: length}},
+      {isa: value_wrapper, name: "Area expression", named_value: {isa: call, function: multiply, left: width, right: length}},
       {
         isa: call,
         function: quote,
         expression: [
           "A quoted template",
-          {isa: unquote, unquote: {isa: call, function: multiply, left: width, right: length}},
+          {isa: unquote_2, unquote: {isa: call, function: multiply, left: width, right: length}},
           ["Nested", "data"],
         ],
       },

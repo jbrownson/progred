@@ -717,7 +717,7 @@ fn missing_controls_default_without_mutating_selection_until_input() {
 fn an_anonymous_lambda_name_opens_for_typing_without_creating_a_field() {
     let lib = core_libraries();
     let (doc, cell) = doc_of(vec![
-        (::grap::isa::ISA, grap::vocabulary::LAMBDA.into()),
+        (::grap::isa::ISA, grap::vocabulary::kind::LAMBDA.into()),
         (grap::vocabulary::PARAMS, Value::list([])),
         (grap::vocabulary::BODY, Value::from(vec![1])),
     ]);

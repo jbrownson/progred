@@ -243,7 +243,7 @@ fn radial_function(spelling: &str, squared_distance: Value) -> Value {
     name::record(
         spelling,
         [
-            (::grap::isa::ISA, ::grap::vocabulary::LAMBDA.into()),
+            (::grap::isa::ISA, ::grap::vocabulary::kind::LAMBDA.into()),
             (
                 ::grap::vocabulary::PARAMS,
                 Value::list([vocabulary::RADIUS.into()]),

@@ -43,7 +43,7 @@ fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
     let sum = RuntimeValue::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::CALL).into(),
+            gid::Value::from(::grap::vocabulary::kind::CALL).into(),
         ),
         (
             FUNCTION,
@@ -61,7 +61,7 @@ fn generated_arithmetic_keeps_its_grouping_with_runtime_operands() {
     let product = RuntimeValue::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::CALL).into(),
+            gid::Value::from(::grap::vocabulary::kind::CALL).into(),
         ),
         (
             FUNCTION,

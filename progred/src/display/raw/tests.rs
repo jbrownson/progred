@@ -549,7 +549,7 @@ fn delimiters_make_constructors_in_raw_s_holes_and_are_text_in_grap_s() {
     let function = Value::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
         ),
         (
             ::grap::vocabulary::PARAMS,

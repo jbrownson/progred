@@ -25,7 +25,7 @@ fn failed_toolpath_preview_discards_the_model_and_partial_paths() {
             let program = Value::record([
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                 ),
                 (grap::vocabulary::PARAMS, Value::list([])),
                 (

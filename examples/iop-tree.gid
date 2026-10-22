@@ -20,7 +20,7 @@
     "branch_points": 8ae688f06bec51bfbb2d207dfa9f6761,
     "branch_width": abe1635b2cd83f005071c5d7a6bbb40c,
     "branches": e303be811c2209c2f87bc861e22bc4d0,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "canvas_height": 274d0b51bc6c8033eb55de7d825eca01,
     "canvas_width": 957105218c1fd308ab76b51fd4e368cb,
     "cases": a9aadcb44755963498c743fa114f0f00,
@@ -66,7 +66,7 @@
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "item": 67bdfe4ec7d3bafc14407235618840aa,
     "iterate": 9546343518fe44f380e6134f3f56cf37,
-    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_angle": 46c6cebbd94b017d68e355e57d6fffb0,
     "length": fb16faf9e37d6a0489205c28afcf55c1,
@@ -144,6 +144,7 @@
     "u64": fc77282178c2fa31b80aed2b8b6f7888,
     "unfold": b71c173bae05b26bfdca3b5bc79b2b09,
     "unquote": da48703c290e3b35d7353c38110bc953,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "value": 00dafdc01c7e014edd857e174c6c8b6f,
     "viewport": 709c987e4c2a110931d8597c4da68f69,
     "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
@@ -226,15 +227,15 @@
                                 circle: {
                                   x: {
                                     unquote: x,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                   y: {
                                     unquote: y,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                   radius: {
                                     unquote: radius,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                 },
                               },
@@ -246,11 +247,11 @@
                             expression: {
                               blossom_index: {
                                 unquote: next_blossom,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               segment_index: {
                                 unquote: next_segment,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                             },
                             isa: call,
@@ -440,11 +441,11 @@
                                   expression: {
                                     blossom_index: {
                                       unquote: next_blossom,
-                                      isa: unquote,
+                                      isa: unquote_2,
                                     },
                                     segment_index: {
                                       unquote: segment_index,
-                                      isa: unquote,
+                                      isa: unquote_2,
                                     },
                                   },
                                   isa: call,
@@ -469,7 +470,7 @@
                                         left: segment_index,
                                         isa: call,
                                       },
-                                      isa: unquote,
+                                      isa: unquote_2,
                                     },
                                   },
                                   isa: call,
@@ -643,7 +644,7 @@
                           },
                           isa: call,
                         },
-                        isa: unquote,
+                        isa: unquote_2,
                       },
                       0x80: {
                         unquote: {
@@ -654,11 +655,11 @@
                           left: canvas_width,
                           isa: call,
                         },
-                        isa: unquote,
+                        isa: unquote_2,
                       },
                       0xaa: {
                         unquote: canvas_height,
-                        isa: unquote,
+                        isa: unquote_2,
                       },
                       0xd5: {
                         f64: 0x0000000000003e40,
@@ -694,12 +695,12 @@
                             state: {
                               frontier: {
                                 unquote: new_frontier,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                             },
                             item: {
                               unquote: branch_item,
-                              isa: unquote,
+                              isa: unquote_2,
                             },
                           },
                           isa: call,
@@ -977,45 +978,45 @@
                                               0x55: [
                                                 0x2a: {
                                                   unquote: child_depth,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                                 0x55: {
                                                   unquote: left_angle,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                                 0x80: {
                                                   unquote: tip_x,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                                 0xaa: {
                                                   unquote: tip_y,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                                 0xd5: {
                                                   unquote: child_width,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                               ],
                                               0xaa: [
                                                 0x2a: {
                                                   unquote: child_depth,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                                 0x55: {
                                                   unquote: right_angle,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                                 0x80: {
                                                   unquote: tip_x,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                                 0xaa: {
                                                   unquote: tip_y,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                                 0xd5: {
                                                   unquote: child_width,
-                                                  isa: unquote,
+                                                  isa: unquote_2,
                                                 },
                                               ],
                                             ],
@@ -1087,23 +1088,23 @@
                                                   expression: [
                                                     0x2a: {
                                                       unquote: child_depth,
-                                                      isa: unquote,
+                                                      isa: unquote_2,
                                                     },
                                                     0x55: {
                                                       unquote: left_angle,
-                                                      isa: unquote,
+                                                      isa: unquote_2,
                                                     },
                                                     0x80: {
                                                       unquote: tip_x,
-                                                      isa: unquote,
+                                                      isa: unquote_2,
                                                     },
                                                     0xaa: {
                                                       unquote: tip_y,
-                                                      isa: unquote,
+                                                      isa: unquote_2,
                                                     },
                                                     0xd5: {
                                                       unquote: child_width,
-                                                      isa: unquote,
+                                                      isa: unquote_2,
                                                     },
                                                   ],
                                                   isa: call,
@@ -1153,19 +1154,19 @@
                                       0x80: [
                                         0x33: {
                                           unquote: x,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                         0x66: {
                                           unquote: y,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                         0x99: {
                                           unquote: tip_x,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                         0xcc: {
                                           unquote: tip_y,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                       ],
                                     ],
@@ -1194,18 +1195,18 @@
                                         translate: {
                                           x: {
                                             unquote: x,
-                                            isa: unquote,
+                                            isa: unquote_2,
                                           },
                                           y: {
                                             unquote: y,
-                                            isa: unquote,
+                                            isa: unquote_2,
                                           },
                                         },
                                       },
                                       0xaa: {
                                         rotate: {
                                           unquote: angle,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                       },
                                     ],
@@ -1232,15 +1233,15 @@
                                             },
                                             isa: call,
                                           },
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                         height: {
                                           unquote: branch_width,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                         width: {
                                           unquote: length,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                       },
                                     },
@@ -1382,7 +1383,7 @@
                   },
                   y: {
                     unquote: initial_y,
-                    isa: unquote,
+                    isa: unquote_2,
                   },
                 },
                 isa: call,
@@ -1421,11 +1422,11 @@
                                 expression: {
                                   x: {
                                     unquote: next_x,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                   y: {
                                     unquote: next_y,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                 },
                                 isa: call,
@@ -1673,7 +1674,7 @@
                 },
                 y: {
                   unquote: canvas_height,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
               },
               gradient_start: {
@@ -1701,11 +1702,11 @@
               },
               height: {
                 unquote: canvas_height,
-                isa: unquote,
+                isa: unquote_2,
               },
               width: {
                 unquote: canvas_width,
-                isa: unquote,
+                isa: unquote_2,
               },
             },
           },
@@ -1856,7 +1857,7 @@
                 drawing: {
                   descent: {
                     unquote: height,
-                    isa: unquote,
+                    isa: unquote_2,
                   },
                   fuel: {
                     f64: 0x0000000080843e41,
@@ -1867,21 +1868,21 @@
                   program: {
                     canvas_height: {
                       unquote: height,
-                      isa: unquote,
+                      isa: unquote_2,
                     },
                     function: {
                       unquote: projection_value,
-                      isa: unquote,
+                      isa: unquote_2,
                     },
                     canvas_width: {
                       unquote: width,
-                      isa: unquote,
+                      isa: unquote_2,
                     },
                     isa: call,
                   },
                   width: {
                     unquote: width,
-                    isa: unquote,
+                    isa: unquote_2,
                   },
                 },
               },

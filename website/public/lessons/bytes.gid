@@ -17,16 +17,17 @@
     "fourth": 8ec6740fa565a2b3b0348132d030d03b,
     "fifth": 24f6d8a4161e69ebc99c0aa4591beb43,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
   },
   "cells": {
     raw: 0x4f50454e,
   },
   "root": {
     first: raw,
-    second: {render: {isa: call, function: quote, expression: {mystery: {isa: unquote, unquote: raw}}}},
-    third: {render: {isa: call, function: quote, expression: {utf8: {isa: unquote, unquote: raw}}}},
-    fourth: {render: {isa: call, function: quote, expression: {rgba: {isa: unquote, unquote: raw}}}},
-    fifth: {render: {isa: call, function: quote, expression: {f32: {isa: unquote, unquote: raw}}}},
+    second: {render: {isa: call, function: quote, expression: {mystery: {isa: unquote_2, unquote: raw}}}},
+    third: {render: {isa: call, function: quote, expression: {utf8: {isa: unquote_2, unquote: raw}}}},
+    fourth: {render: {isa: call, function: quote, expression: {rgba: {isa: unquote_2, unquote: raw}}}},
+    fifth: {render: {isa: call, function: quote, expression: {f32: {isa: unquote_2, unquote: raw}}}},
   },
 }

@@ -75,7 +75,7 @@ fn quote(request: &CompletionRequest<'_>) -> Option<Completion> {
 fn unquote() -> Completion {
     crate::libraries::completion::insert(
         control::UNQUOTE,
-        ::grap::isa::record(control::UNQUOTE, []),
+        ::grap::isa::record(control::kind::UNQUOTE, []),
         Some(crate::selection::pending_at(&[Step::Key(control::UNQUOTE)])),
     )
     .with_aliases(["`"])
@@ -133,7 +133,7 @@ pub(super) fn scope<'a>(
         let mut computed = BTreeMap::new();
         let kind = ::grap::isa::of(fields);
         if quoted {
-            if kind == Some(control::UNQUOTE)
+            if kind == Some(control::kind::UNQUOTE)
                 && matches!(suffix.first(), Some(Step::Key(field)) if *field == control::UNQUOTE)
             {
                 quoted = false;
@@ -142,7 +142,7 @@ pub(super) fn scope<'a>(
         }
         let mut found = BTreeSet::new();
         let callee = match kind {
-            Some(::grap::vocabulary::CALL) => fields.get(&FUNCTION).and_then(Value::as_cell),
+            Some(::grap::vocabulary::kind::CALL) => fields.get(&FUNCTION).and_then(Value::as_cell),
             _ => None,
         };
         match callee {
@@ -187,7 +187,9 @@ pub(super) fn scope<'a>(
                     pattern_bindings(pattern, &mut found);
                 }
             }
-            None if kind == Some(LAMBDA) && matches!(suffix.first(), Some(Step::Key(BODY))) => {
+            None if kind == Some(::grap::vocabulary::kind::LAMBDA)
+                && matches!(suffix.first(), Some(Step::Key(BODY))) =>
+            {
                 if let Some(params) = fields.get(&PARAMS).and_then(Value::as_list) {
                     let params: Vec<_> = params.values().filter_map(Value::as_cell).collect();
                     computed = super::unnamed_parameters(&params, value_of);
@@ -195,7 +197,9 @@ pub(super) fn scope<'a>(
                 }
             }
             // A closure's environment binds in its lambda.
-            None if matches!(suffix.first(), Some(Step::Key(LAMBDA))) => {
+            None if kind == Some(::grap::vocabulary::kind::CLOSURE)
+                && matches!(suffix.first(), Some(Step::Key(LAMBDA))) =>
+            {
                 if let Some(environment) = fields.get(&ENVIRONMENT).and_then(Value::as_record) {
                     let bindings: Vec<_> = environment.keys().copied().collect();
                     computed = super::unnamed_bindings(&bindings, value_of);

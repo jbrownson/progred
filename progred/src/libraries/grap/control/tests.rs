@@ -367,28 +367,46 @@ fn quote_returns_recognized_expressions_as_data() {
 fn quote_preserves_value_wrappers_and_splices_inside_them() {
     let expression = name::record(
         "named expression",
-        [(grap::vocabulary::VALUE, new_cell_id().into())],
+        [
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+            ),
+            (grap::vocabulary::VALUE, new_cell_id().into()),
+        ],
     );
     assert_eq!(evaluate(&quote_call(expression.clone())).result, expression);
     let template = name::record(
         "named expression",
-        [(
-            grap::vocabulary::VALUE,
-            Value::record([
-                (
-                    ::grap::isa::ISA,
-                    gid::Value::from(vocabulary::UNQUOTE).into(),
-                ),
-                (vocabulary::UNQUOTE, blob("spliced")),
-            ]),
-        )],
+        [
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+            ),
+            (
+                grap::vocabulary::VALUE,
+                Value::record([
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(vocabulary::kind::UNQUOTE).into(),
+                    ),
+                    (vocabulary::UNQUOTE, blob("spliced")),
+                ]),
+            ),
+        ],
     );
     let result = evaluate(&quote_call(template)).result;
     assert_eq!(
         result,
         name::record(
             "named expression",
-            [(grap::vocabulary::VALUE, blob("spliced"))]
+            [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into()
+                ),
+                (grap::vocabulary::VALUE, blob("spliced"))
+            ]
         ),
     );
     assert_eq!(evaluate(&result).result, blob("spliced"));
@@ -460,7 +478,7 @@ fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
         [
             (
                 ::grap::isa::ISA,
-                gid::Value::from(vocabulary::UNQUOTE).into(),
+                gid::Value::from(vocabulary::kind::UNQUOTE).into(),
             ),
             (vocabulary::UNQUOTE, blob("body")),
             (extra, blob("metadata")),
@@ -472,7 +490,7 @@ fn quote_prefixes_recognize_required_fields_despite_unrelated_metadata() {
         Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::CALL).into(),
+                gid::Value::from(::grap::vocabulary::kind::CALL).into(),
             ),
             (grap::vocabulary::FUNCTION, vocabulary::QUOTE.into()),
         ]),
@@ -496,7 +514,7 @@ fn quote_replaces_unquotes_in_its_calling_environment() {
         Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(vocabulary::UNQUOTE).into(),
+                gid::Value::from(vocabulary::kind::UNQUOTE).into(),
             ),
             (vocabulary::UNQUOTE, Value::from(parameter)),
         ]),
@@ -534,7 +552,7 @@ fn unquote_is_ordinary_data_outside_quote() {
     let expression = Value::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(vocabulary::UNQUOTE).into(),
+            gid::Value::from(vocabulary::kind::UNQUOTE).into(),
         ),
         (vocabulary::UNQUOTE, Value::from(missing)),
     ]);
@@ -548,14 +566,14 @@ fn quote_does_not_revisit_an_unquoted_result() {
     let inner = Value::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(vocabulary::UNQUOTE).into(),
+            gid::Value::from(vocabulary::kind::UNQUOTE).into(),
         ),
         (vocabulary::UNQUOTE, Value::from(missing)),
     ]);
     let expression = quote_call(Value::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(vocabulary::UNQUOTE).into(),
+            gid::Value::from(vocabulary::kind::UNQUOTE).into(),
         ),
         (vocabulary::UNQUOTE, inner.clone()),
     ]));
@@ -1176,7 +1194,7 @@ fn quote_and_unquote_are_offered_under_their_marks() {
     driver.press(NamedKey::Enter);
     assert_eq!(
         driver.value(&expression),
-        ::grap::isa::record(vocabulary::UNQUOTE, []),
+        ::grap::isa::record(vocabulary::kind::UNQUOTE, []),
         "an unquote while its expression is yet to be written"
     );
     let hole = [&expression[..], &[Step::Key(vocabulary::UNQUOTE)]].concat();

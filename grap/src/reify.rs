@@ -56,6 +56,7 @@ impl Reify {
                 lambda.insert(vocabulary::BODY, self.value(&closure.body.0.source));
                 Value::record(
                     [
+                        (crate::isa::ISA, Value::from(vocabulary::kind::CLOSURE)),
                         (vocabulary::LAMBDA, Value::Record(lambda)),
                         (
                             vocabulary::ENVIRONMENT,

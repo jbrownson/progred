@@ -77,7 +77,7 @@ fn grap_authored_producer_captures_its_environment_and_can_yield_absent_data() {
     let captured = gid::new_cell_id();
     let unquote = |value| {
         Value::record([
-            (::grap::isa::ISA, gid::Value::from(c::UNQUOTE).into()),
+            (::grap::isa::ISA, gid::Value::from(c::kind::UNQUOTE).into()),
             (c::UNQUOTE, value),
         ])
     };

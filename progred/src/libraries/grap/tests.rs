@@ -66,7 +66,7 @@ fn call_suggestions_order_document_before_library_and_by_name_not_identity() {
                 [
                     (
                         ::grap::isa::ISA,
-                        gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                        gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                     ),
                     (PARAMS, Value::list([])),
                     (BODY, Value::record([])),
@@ -122,7 +122,7 @@ fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
     let lambda = R::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
         ),
         (PARAMS, R::list([Value::from(parameter).into()])),
         (BODY, Value::from(parameter).into()),
@@ -131,7 +131,7 @@ fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
     let call = R::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::CALL).into(),
+            gid::Value::from(::grap::vocabulary::kind::CALL).into(),
         ),
         (FUNCTION, lambda.clone()),
         (extra, R::list([lambda.clone()])),
@@ -146,12 +146,18 @@ fn generated_call_and_lambda_shapes_use_runtime_fields_and_parameters() {
     let malformed = R::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
         ),
         (PARAMS, R::list([R::f64(3.0)])),
     ]);
     assert!(lambda_display(&input.with_value(Some(&malformed))).is_none());
-    let wrapper = R::record([(VALUE, call)]);
+    let wrapper = R::record([
+        (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+        ),
+        (VALUE, call),
+    ]);
     assert!(value_display(&input.with_value(Some(&wrapper))).is_some());
 }
 
@@ -314,36 +320,36 @@ fn compact_declarations_draw_metadata_after_them_but_decline_invalid_names() {
 }
 
 #[test]
-fn value_projection_leaves_competing_forms_to_composition() {
+fn a_record_is_drawn_as_the_one_kind_it_says_it_is() {
     let env = env();
-    let malformed_lambda = Value::record([
-        (
-            ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
-        ),
-        (PARAMS, Value::record([])),
-        (BODY, Value::record([])),
-        (VALUE, Value::record([])),
-    ]);
-    let input = projection_input(&env, &malformed_lambda);
-    assert!(project_runtime(lambda_display, &input).is_none());
-    assert!(project_runtime(value_display, &input).is_some());
-    assert!(project_runtime(&*library().projection.unwrap(), &input).is_some());
-
-    let call = Value::record([
-        (
-            ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::CALL).into(),
-        ),
-        (FUNCTION, Value::record([])),
-        (VALUE, Value::record([])),
-    ]);
-    let input = ProjectionInput {
-        value: Some(&call),
-        ..input
-    };
+    // A lambda with a value field is a lambda, its value an extra field.
+    let lambda = ::grap::lambda([], Value::record([]))
+        .as_record()
+        .unwrap()
+        .clone();
+    let lambda = Value::Record(lambda.update(VALUE, Value::record([])));
+    let input = projection_input(&env, &lambda);
+    assert!(project_runtime(lambda_display, &input).is_some());
+    assert!(project_runtime(value_display, &input).is_none());
+    // So is a call with one.
+    let call = Value::Record(
+        ::grap::call(Value::record([]), [])
+            .as_record()
+            .unwrap()
+            .clone()
+            .update(VALUE, Value::record([])),
+    );
+    let input = projection_input(&env, &call);
     assert!(project_runtime(call_display, &input).is_some());
-    assert!(project_runtime(value_display, &input).is_some());
+    assert!(project_runtime(value_display, &input).is_none());
+    // A value wrapper is drawn as one only when it says it is.
+    let wrapper = ::grap::isa::record(
+        ::grap::vocabulary::kind::VALUE_WRAPPER,
+        [(VALUE, Value::record([]))],
+    );
+    assert!(project_runtime(value_display, &projection_input(&env, &wrapper)).is_some());
+    let shaped = Value::record([(VALUE, Value::record([]))]);
+    assert!(project_runtime(value_display, &projection_input(&env, &shaped)).is_none());
 }
 
 #[test]
@@ -354,11 +360,15 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
     let lambda = ::grap::lambda([parameter], Value::record([]));
     let closure = Value::record([
         (
+            ::grap::isa::ISA,
+            gid::Value::from(::grap::vocabulary::kind::CLOSURE).into(),
+        ),
+        (
             ::grap::vocabulary::LAMBDA,
             Value::record([
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                 ),
                 (PARAMS, Value::list([parameter.into()])),
                 (BODY, Value::record([])),
@@ -415,7 +425,7 @@ fn parameter_metadata_accepts_lambdas_closures_and_aliases_but_not_unknown_calla
         Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (PARAMS, Value::list([Value::record([])])),
             (BODY, Value::record([])),
@@ -885,7 +895,7 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
     let definition = Value::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
         ),
         (PARAMS, Value::list([])),
         (new_cell_id(), Value::record([])),
@@ -903,14 +913,14 @@ fn an_unfinished_lambda_keeps_its_missing_body_visible() {
         Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (PARAMS, Value::record([])),
         ]),
         Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (
                 PARAMS,
@@ -929,7 +939,7 @@ fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
         [
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (PARAMS, Value::list([])),
             (BODY, Value::from(vec![1])),
@@ -992,7 +1002,7 @@ fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
         [
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (PARAMS, Value::list([])),
             (BODY, Value::from(vec![1])),
@@ -1233,7 +1243,7 @@ fn a_parameter_slot_offers_a_new_parameter_named_as_typed() {
         Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (PARAMS, Value::list([])),
         ]),
@@ -1286,7 +1296,7 @@ fn an_empty_parameter_slot_offers_a_parameter_whose_name_is_typed_next() {
         Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (PARAMS, Value::list([])),
         ]),

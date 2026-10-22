@@ -703,19 +703,20 @@ Grap recognizes these forms through its vocabulary cells:
 ```text
 {isa: lambda, params: [parameter-cells...], body: expression}
 {isa: call, function: callable-expression, parameter-cell: argument-expression, ...}
-{value: expression, ...}
-{lambda: {isa: lambda, params: [...], body: expression}, environment: {...}, body origin: ...}
+{isa: value wrapper, value: expression, ...}
+{isa: closure, lambda: {isa: lambda, params: [...], body: expression}, environment: {...}, body origin: ...}
 {ffi: function-cell}
 ```
 
-A record is a call or a lambda only when its `isa` says so (the shared kind
-convention, which the `isa` library owns): without one, a record with a
-`function` or `params` is data. So an unfinished one stays what it is, and a
-field its kind requires that's missing answers a missing-field absent naming
-it, where it's used: a call with no function when it's called, a lambda with
-no body when it's applied. A lambda has its parameters, so a call of it its
-argument slots, before its body is written. Closures, values computed whole,
-are still told by their fields, as numbers and absents are.
+A record is a call, a lambda, a value wrapper or a closure only when its `isa`
+says so (the shared kind convention, which the `isa` library owns): without
+one, a record with a `function` or `params` is data. Each kind is a cell of its
+own (`grap::vocabulary::kind`), not the field that shares its name, such as a
+closure's `lambda`. So an unfinished one stays what it is, and a field its kind
+requires that's missing answers a missing-field absent naming it, where it's
+used: a call with no function when it's called, a lambda with no body when
+it's applied. A lambda has its parameters, so a call of it its argument slots,
+before its body is written.
 
 Evaluating a lambda captures its lexical environment
 in a callable value, a closure. Materialized, it is `{lambda, environment, body

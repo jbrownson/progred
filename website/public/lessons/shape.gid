@@ -198,13 +198,17 @@
     "mesh_depth": 47114a01984bb53e1538906f13333f84,
     "preview_paths_refined": 76f66199a77dd4a6f7af65f29f1cacf7,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "lambda_2": e4a0653134ca48379cab2e008bed03e7,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
+    "closure": 0e8180c5b2f0492291ce5150f2292697,
+    "value_wrapper": f615f8d777294ffd9e5296faf34edd9d,
   },
   "cells": {
     model: {name: "Model"},
     progress: {name: "Playback"},
     program_tree: {
-      isa: lambda,
+      isa: lambda_2,
       name: "Preview groups",
       params: [],
       body: {
@@ -215,7 +219,7 @@
             isa: call,
             function: tooled_groups,
             program: {
-              isa: lambda,
+              isa: lambda_2,
               params: [],
               body: {
                 isa: call,
@@ -236,7 +240,7 @@
             isa: call,
             function: tooled_groups,
             program: {
-              isa: lambda,
+              isa: lambda_2,
               params: [],
               body: {
                 isa: call,
@@ -261,7 +265,7 @@
     axis_y: {name: "axis y"},
     axis_z: {name: "axis z"},
     ball_center: {
-      isa: lambda,
+      isa: lambda_2,
       name: "ball center",
       params: [x, y, z, normal],
       body: {
@@ -322,7 +326,7 @@
     },
     ball_radius: {name: "ball radius"},
     ball_tip: {
-      isa: lambda,
+      isa: lambda_2,
       name: "ball tip",
       params: [x, y, z, normal, orientation, tool_axis],
       body: {
@@ -353,6 +357,7 @@
       },
     },
     ball_tool: {
+      isa: value_wrapper,
       name: "ball tool",
       grap_value: {isa: call, tool_length: {f64: 0x000000000000e03f}, function: ball_mill, cutter_diameter: tool_diameter},
     },
@@ -364,7 +369,7 @@
     control_depth: {name: "depth"},
     coordinate: {name: "coordinate"},
     crosshatch: {
-      isa: lambda,
+      isa: lambda_2,
       name: "crosshatch",
       params: [face, orientation, setup_up, compensation],
       body: {
@@ -393,7 +398,7 @@
       },
     },
     crossing_passes: {
-      isa: lambda,
+      isa: lambda_2,
       name: "crossing passes",
       params: [orientation, slope, setup_up, face, compensation],
       body: {
@@ -404,20 +409,20 @@
           function: mapped_groups,
           mapping: {isa: call, function: compensation, tool_axis: tool_axis},
           program: {
-            isa: lambda,
+            isa: lambda_2,
             params: [],
             body: {
               isa: call,
               function: mapped_groups,
               mapping: face,
               program: {
-                isa: lambda,
+                isa: lambda_2,
                 params: [],
                 body: {
                   isa: call,
                   function: mapped_groups,
                   mapping: {
-                    isa: lambda,
+                    isa: lambda_2,
                     params: [x, y, z],
                     body: {
                       isa: call,
@@ -438,7 +443,7 @@
                     },
                   },
                   program: {
-                    isa: lambda,
+                    isa: lambda_2,
                     params: [],
                     body: {
                       isa: call,
@@ -470,7 +475,7 @@
     curve: {name: "curve"},
     slope: {name: "diagonal direction"},
     diagonal_groups: {
-      isa: lambda,
+      isa: lambda_2,
       name: "diagonal line groups",
       params: [rows, spacing, tool_axis, feed_direction, row_direction],
       body: {
@@ -492,7 +497,7 @@
               isa: call,
               initial: {f64: 0x000000000000f03f},
               step: {
-                isa: lambda,
+                isa: lambda_2,
                 params: [state],
                 body: {
                   isa: call,
@@ -512,8 +517,9 @@
                               isa: call,
                               function: quote,
                               expression: {
+                                isa: closure,
                                 lambda: {
-                                  isa: lambda,
+                                  isa: lambda_2,
                                   params: [],
                                   body: {
                                     isa: call,
@@ -545,12 +551,12 @@
                                   },
                                 },
                                 environment: {
-                                  state: {isa: unquote, unquote: state},
-                                  feed_direction: {isa: unquote, unquote: feed_direction},
-                                  row_direction: {isa: unquote, unquote: row_direction},
-                                  spacing: {isa: unquote, unquote: spacing},
-                                  rows: {isa: unquote, unquote: rows},
-                                  tool_axis: {isa: unquote, unquote: tool_axis},
+                                  state: {isa: unquote_2, unquote: state},
+                                  feed_direction: {isa: unquote_2, unquote: feed_direction},
+                                  row_direction: {isa: unquote_2, unquote: row_direction},
+                                  spacing: {isa: unquote_2, unquote: spacing},
+                                  rows: {isa: unquote_2, unquote: rows},
+                                  tool_axis: {isa: unquote_2, unquote: tool_axis},
                                 },
                               },
                             },
@@ -571,7 +577,7 @@
       },
     },
     dot: {
-      isa: lambda,
+      isa: lambda_2,
       name: "dot product",
       params: [left, right],
       body: {
@@ -597,7 +603,7 @@
     edge_limit: {name: "edge limit"},
     face_pair: {name: "face pair"},
     face_paths: {
-      isa: lambda,
+      isa: lambda_2,
       name: "face passes",
       params: [orientation, setup_up],
       body: {
@@ -606,10 +612,10 @@
         expression: {
           isa: call,
           compensation: {
-            isa: lambda,
+            isa: lambda_2,
             params: [tool_axis],
             body: {
-              isa: lambda,
+              isa: lambda_2,
               params: [x, y, z],
               body: {
                 isa: call,
@@ -633,7 +639,7 @@
     },
     feed_direction: {name: "feed direction"},
     cube: {
-      isa: lambda,
+      isa: lambda_2,
       name: "fidget cube",
       params: [],
       body: {
@@ -644,9 +650,9 @@
           function: quote,
           expression: {
             normal: {
-              isa: unquote,
+              isa: unquote_2,
               unquote: {
-                isa: lambda,
+                isa: lambda_2,
                 params: [x, y, z],
                 body: {
                   isa: call,
@@ -734,9 +740,9 @@
               },
             },
             field: {
-              isa: unquote,
+              isa: unquote_2,
               unquote: {
-                isa: lambda,
+                isa: lambda_2,
                 params: [],
                 body: {
                   isa: call,
@@ -792,7 +798,7 @@
                     {subject: {isa: call, operand: edge_limit, function: to_f32}, bind: edge_limit},
                     {
                       subject: {
-                        isa: lambda,
+                        isa: lambda_2,
                         params: [coordinate],
                         body: {
                           isa: call,
@@ -814,7 +820,7 @@
                     },
                     {
                       subject: {
-                        isa: lambda,
+                        isa: lambda_2,
                         params: [normal, u, v],
                         body: {
                           isa: call,
@@ -842,7 +848,7 @@
                     },
                     {
                       subject: {
-                        isa: lambda,
+                        isa: lambda_2,
                         params: [u, v],
                         body: {
                           isa: call,
@@ -864,7 +870,7 @@
             },
             chamfer_strip: {
               normal: {
-                isa: unquote,
+                isa: unquote_2,
                 unquote: {
                   isa: call,
                   function: point,
@@ -883,11 +889,11 @@
                   },
                 },
               },
-              length: {isa: unquote, unquote: size},
+              length: {isa: unquote_2, unquote: size},
               curve: {
-                isa: unquote,
+                isa: unquote_2,
                 unquote: {
-                  isa: lambda,
+                  isa: lambda_2,
                   params: [t],
                   body: {
                     isa: call,
@@ -914,7 +920,7 @@
                 },
               },
               across: {
-                isa: unquote,
+                isa: unquote_2,
                 unquote: {
                   isa: call,
                   function: point,
@@ -939,7 +945,7 @@
                 },
               },
               width: {
-                isa: unquote,
+                isa: unquote_2,
                 unquote: {
                   isa: call,
                   right: {isa: call, right: {f64: 0x000000000000f03f}, function: hypot, left: {f64: 0x000000000000f03f}},
@@ -949,9 +955,9 @@
               },
             },
             face: {
-              isa: unquote,
+              isa: unquote_2,
               unquote: {
-                isa: lambda,
+                isa: lambda_2,
                 params: [x, y, z],
                 body: {
                   isa: call,
@@ -1018,24 +1024,25 @@
     intercept: {name: "intercept"},
     length: {name: "length"},
     mapped_groups: {
-      isa: lambda,
+      isa: lambda_2,
       name: "map path groups",
       params: [mapping, program],
       body: {
         isa: call,
         tree_mapping: {
-          isa: lambda,
+          isa: lambda_2,
           params: [value],
           body: {
             isa: call,
             function: quote,
             expression: {
+              isa: closure,
               lambda: {
-                isa: lambda,
+                isa: lambda_2,
                 params: [],
                 body: {isa: call, function: map_points, mapping: mapping, expression: {isa: call, function: item}},
               },
-              environment: {item: {isa: unquote, unquote: value}, mapping: {isa: unquote, unquote: mapping}},
+              environment: {item: {isa: unquote_2, unquote: value}, mapping: {isa: unquote_2, unquote: mapping}},
             },
           },
         },
@@ -1052,7 +1059,7 @@
     preview_mode: {name: "preview mode"},
     program_items: {name: "program items"},
     pull_direction: {
-      isa: lambda,
+      isa: lambda_2,
       name: "pull direction",
       params: [orientation, slope, setup_up],
       body: {
@@ -1077,7 +1084,7 @@
     },
     direction: {name: "pull sign"},
     right_face: {
-      isa: lambda,
+      isa: lambda_2,
       name: "right face",
       params: [x, y, z],
       body: {isa: call, function: point, y: y, x: z, z: {isa: call, right: x, function: subtract, left: {f64: 0x0000000000000000}}},
@@ -1085,7 +1092,7 @@
     row_direction: {name: "row direction"},
     rows: {name: "passes"},
     sample_pass: {
-      isa: lambda,
+      isa: lambda_2,
       name: "sample pass",
       params: [intercept, spacing, tool_axis, feed_direction],
       body: {
@@ -1128,7 +1135,7 @@
               isa: call,
               initial: {f64: 0x000000000000f03f},
               step: {
-                isa: lambda,
+                isa: lambda_2,
                 params: [state],
                 body: {
                   isa: call,
@@ -1251,7 +1258,7 @@
     tilt: {name: "tilt"},
     angle: {name: "tilt (radians)"},
     cut_axis: {
-      isa: lambda,
+      isa: lambda_2,
       name: "tilted axis",
       params: [orientation, slope, direction],
       body: {
@@ -1311,24 +1318,25 @@
     },
     tool_diameter: {name: "tool diameter", f64: 0x000000000000c03f},
     tooled_groups: {
-      isa: lambda,
+      isa: lambda_2,
       name: "tool for path groups",
       params: [tool, program],
       body: {
         isa: call,
         tree_mapping: {
-          isa: lambda,
+          isa: lambda_2,
           params: [value],
           body: {
             isa: call,
             function: quote,
             expression: {
+              isa: closure,
               lambda: {
-                isa: lambda,
+                isa: lambda_2,
                 params: [],
                 body: {isa: call, function: with_tool, expression: {isa: call, function: item}, tool: tool},
               },
-              environment: {item: {isa: unquote, unquote: value}, tool: {isa: unquote, unquote: tool}},
+              environment: {item: {isa: unquote_2, unquote: value}, tool: {isa: unquote_2, unquote: tool}},
             },
           },
         },
@@ -1336,7 +1344,7 @@
         children: {isa: call, function: program},
       },
     },
-    top: {isa: lambda, name: "top", params: [x, y, z], body: {isa: call, function: point, y: y, x: x, z: z}},
+    top: {isa: lambda_2, name: "top", params: [x, y, z], body: {isa: call, function: point, y: y, x: x, z: z}},
     face: {name: "top face"},
     u: {name: "u"},
     u1: {name: "u end"},
@@ -1345,16 +1353,16 @@
     v1: {name: "v end"},
     v0: {name: "v start"},
     machine: {
-      isa: lambda,
+      isa: lambda_2,
       name: "machine cube",
       params: [rows, control_depth, tilt],
       body: {
-        isa: lambda,
+        isa: lambda_2,
         params: [width, height],
         body: {
           isa: call,
           view: {
-            isa: lambda,
+            isa: lambda_2,
             params: [value, width, height, parameters],
             body: {
               isa: call,
@@ -1372,11 +1380,11 @@
                         isa: call,
                         function: quote,
                         expression: {
-                          focus: {isa: unquote, unquote: focus},
-                          position: {isa: unquote, unquote: progress},
-                          profile_tolerance: {isa: unquote, unquote: profile_tolerance},
-                          stock_max: {isa: unquote, unquote: stock_max},
-                          stock_min: {isa: unquote, unquote: stock_min},
+                          focus: {isa: unquote_2, unquote: focus},
+                          position: {isa: unquote_2, unquote: progress},
+                          profile_tolerance: {isa: unquote_2, unquote: profile_tolerance},
+                          stock_max: {isa: unquote_2, unquote: stock_max},
+                          stock_min: {isa: unquote_2, unquote: stock_min},
                         },
                       },
                     },
@@ -1386,11 +1394,11 @@
                         isa: call,
                         function: quote,
                         expression: {
-                          focus: {isa: unquote, unquote: focus},
-                          position: {isa: unquote, unquote: progress},
-                          profile_tolerance: {isa: unquote, unquote: profile_tolerance},
-                          stock_max: {isa: unquote, unquote: stock_max},
-                          stock_min: {isa: unquote, unquote: stock_min},
+                          focus: {isa: unquote_2, unquote: focus},
+                          position: {isa: unquote_2, unquote: progress},
+                          profile_tolerance: {isa: unquote_2, unquote: profile_tolerance},
+                          stock_max: {isa: unquote_2, unquote: stock_max},
+                          stock_min: {isa: unquote_2, unquote: stock_min},
                           stock: {color: {rgb: 0xb89b6d}},
                         },
                       },
@@ -1408,7 +1416,7 @@
                     scene: [
                       {
                         field: {
-                          isa: unquote,
+                          isa: unquote_2,
                           unquote: {
                             isa: call,
                             function: where,
@@ -1467,7 +1475,7 @@
           function: with_controls,
           value: program_tree,
           controls: {
-            isa: lambda,
+            isa: lambda_2,
             params: [],
             body: {
               isa: call,
@@ -1475,7 +1483,7 @@
               expression: {
                 isa: call,
                 function: quote,
-                expression: {playback: {isa: unquote, unquote: parameters}, preview_mode: {isa: unquote, unquote: preview_mode}},
+                expression: {playback: {isa: unquote_2, unquote: parameters}, preview_mode: {isa: unquote_2, unquote: preview_mode}},
               },
               bindings: [
                 {

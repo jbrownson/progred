@@ -211,13 +211,18 @@ display still to be designed.
 
 ## Kinds
 
-Grap's calls, lambdas and unquotes say their kind (`isa`) since 22 October
-2026 (see [model](model.md#data-and-resolution)); before, a stored hole kept a
-shape's identifying field present, which recorded what the kind required when
-it was written. Open beside it:
+Grap's calls, lambdas, closures, value wrappers and unquotes say their kind
+(`isa`) since 22 October 2026 (see [model](model.md#data-and-resolution));
+before, a stored hole kept a shape's identifying field present, which recorded
+what the kind required when it was written. Open beside it:
 
-- **Value wrappers** (`{value: expression}`) are still told by their field, so
-  one whose expression is deleted becomes data. The editor offers none yet.
+- **Kinds everywhere, and dispatch on them.** The owner's direction: use the
+  isa generally, not by a clever rule about where it's needed, with values
+  encoded under one tag (numbers, text, booleans) the exception. Then the
+  projection stack, and evaluation, could dispatch on a record's kind instead
+  of trying each projection in turn. Still told by their fields: absents,
+  `{ffi: cell}`, `{evaluate: …}`, programs, notebooks, `match` cases and
+  patterns, `let` bindings, and the other libraries' records.
 - **Declared kinds.** A kind's cell could hold its definition, the fields it
   has and which it requires, so forms and offers read it instead of each
   projection listing its own; that's the structural type system the owner has

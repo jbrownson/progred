@@ -4,7 +4,7 @@ use gid::new_cell_id;
 /// A call built at runtime from `fields`, its function among them.
 fn runtime_call(fields: impl IntoIterator<Item = (CellId, RuntimeValue)>) -> RuntimeValue {
     RuntimeValue::record(
-        [(isa::ISA, Value::from(vocabulary::CALL).into())]
+        [(isa::ISA, Value::from(vocabulary::kind::CALL).into())]
             .into_iter()
             .chain(fields),
     )
@@ -31,7 +31,7 @@ fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
     let syntax = lambda([second, first], Value::record([]));
     let closure = evaluate(&syntax, &host(vec![]), 100).result;
     let generated = RuntimeValue::record([
-        (isa::ISA, Value::from(vocabulary::LAMBDA).into()),
+        (isa::ISA, Value::from(vocabulary::kind::LAMBDA).into()),
         (
             vocabulary::PARAMS,
             RuntimeValue::list([Value::from(second).into(), Value::from(first).into()]),
@@ -48,7 +48,7 @@ fn callable_parameters_inspect_runtime_and_stored_forms_without_evaluation() {
         assert!(value.1.get().is_none());
     }
     let unwritten = RuntimeValue::from(isa::record(
-        vocabulary::LAMBDA,
+        vocabulary::kind::LAMBDA,
         [(
             vocabulary::PARAMS,
             Value::list([Value::from(second), Value::from(first)]),
@@ -123,7 +123,13 @@ fn located_runtime_evaluation_retains_embedded_closures_and_current_call_origins
         ]
     );
     // Returning an embedded callback must not serialize and re-lower it.
-    let wrapper = RuntimeValue::record([(vocabulary::VALUE, closure.clone())]);
+    let wrapper = RuntimeValue::record([
+        (
+            isa::ISA,
+            Value::from(vocabulary::kind::VALUE_WRAPPER).into(),
+        ),
+        (vocabulary::VALUE, closure.clone()),
+    ]);
     assert!(
         evaluate_runtime_at(&wrapper, None, &receiver, 100)
             .result
@@ -138,7 +144,7 @@ fn runtime_syntax_origins_descend_through_generated_lists_and_lambdas() {
     let syntax = RuntimeValue::record([(
         field,
         RuntimeValue::list([RuntimeValue::record([
-            (isa::ISA, Value::from(vocabulary::LAMBDA).into()),
+            (isa::ISA, Value::from(vocabulary::kind::LAMBDA).into()),
             (vocabulary::PARAMS, RuntimeValue::list([])),
             (vocabulary::BODY, RuntimeValue::record([])),
         ])]),
@@ -185,10 +191,16 @@ fn runtime_evaluation_matches_stored_code_fuel_and_optional_origins() {
             }),
         ),
     )]);
-    let runtime = RuntimeValue::record([(
-        vocabulary::VALUE,
-        runtime_call([(vocabulary::FUNCTION, Value::from(sink).into())]),
-    )]);
+    let runtime = RuntimeValue::record([
+        (
+            isa::ISA,
+            Value::from(vocabulary::kind::VALUE_WRAPPER).into(),
+        ),
+        (
+            vocabulary::VALUE,
+            runtime_call([(vocabulary::FUNCTION, Value::from(sink).into())]),
+        ),
+    ]);
     let stored = runtime.to_value();
     for origin in [
         None,
@@ -325,6 +337,7 @@ fn interpreting_an_accelerated_number_as_code_preserves_syntax_precedence() {
     let interpret = new_cell_id();
     let source = gid::Record::from_iter([
         (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec())),
+        (isa::ISA, Value::from(vocabulary::kind::VALUE_WRAPPER)),
         (vocabulary::VALUE, f64::value(9.0)),
     ]);
     let value = unboxed(source);
@@ -423,6 +436,7 @@ fn interpreting_unboxed_text_as_code_preserves_syntax_precedence() {
     let interpret = new_cell_id();
     let source = gid::Record::from_iter([
         (crate::text::UTF8, Value::from(b"three".to_vec())),
+        (isa::ISA, Value::from(vocabulary::kind::VALUE_WRAPPER)),
         (vocabulary::VALUE, f64::value(9.0)),
     ]);
     let value = unboxed(source);
@@ -616,6 +630,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
     )]);
     let foreign = RuntimeValue::record([(vocabulary::FFI, Value::from(identity).into())]);
     let closure = RuntimeValue::record([
+        (isa::ISA, Value::from(vocabulary::kind::CLOSURE).into()),
         (
             vocabulary::LAMBDA,
             RuntimeValue::record([
@@ -677,6 +692,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
         gid::Record::from_iter([number.clone(), (vocabulary::FFI, Value::from(identity))]);
     let closure = gid::Record::from_iter([
         number,
+        (isa::ISA, Value::from(vocabulary::kind::CLOSURE)),
         (
             vocabulary::LAMBDA,
             Value::record([
@@ -961,10 +977,10 @@ fn inline_closures_anchor_at_the_nearest_cell_not_the_reference_occurrence() {
         } else if cell == enclosing {
             vec![(
                 Resolution::Library(library),
-                Definition::Value(Value::record([(
-                    vocabulary::VALUE,
-                    lambda([], call(sink.into(), [])),
-                )])),
+                Definition::Value(isa::record(
+                    vocabulary::kind::VALUE_WRAPPER,
+                    [(vocabulary::VALUE, lambda([], call(sink.into(), [])))],
+                )),
             )]
         } else {
             vec![]

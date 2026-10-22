@@ -32,12 +32,13 @@
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
-    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
   },
   "cells": {
     x_param: {name: "x"},
-    recipe: {isa: lambda, name: "tree", params: [x_param], body: {isa: call, function: all, expressions: [{isa: call, function: fill, paint: {rgb: 0x9a6849}, shape: {isa: call, function: quote, expression: {rect: {height: {f64: 0x0000000000004e40}, width: {f64: 0x0000000000002040}, x: {isa: unquote, unquote: x_param}, y: {f64: 0x0000000000005940}}}}}, {isa: call, function: fill, paint: {rgb: 0x548b64}, shape: {isa: call, function: quote, expression: {circle: {radius: {f64: 0x0000000000003b40}, x: {isa: unquote, unquote: {isa: call, function: sum, left: x_param, right: {f64: 0x0000000000001040}}}, y: {f64: 0x0000000000005940}}}}}]}},
+    recipe: {isa: lambda, name: "tree", params: [x_param], body: {isa: call, function: all, expressions: [{isa: call, function: fill, paint: {rgb: 0x9a6849}, shape: {isa: call, function: quote, expression: {rect: {height: {f64: 0x0000000000004e40}, width: {f64: 0x0000000000002040}, x: {isa: unquote_2, unquote: x_param}, y: {f64: 0x0000000000005940}}}}}, {isa: call, function: fill, paint: {rgb: 0x548b64}, shape: {isa: call, function: quote, expression: {circle: {radius: {f64: 0x0000000000003b40}, x: {isa: unquote_2, unquote: {isa: call, function: sum, left: x_param, right: {f64: 0x0000000000001040}}}, y: {f64: 0x0000000000005940}}}}}]}},
     calls: {isa: call, function: all, expressions: [{isa: call, function: recipe, x_param: {f64: 0x0000000000004e40}}, {isa: call, function: recipe, x_param: {f64: 0x0000000000006440}}]},
   },
   "root": {

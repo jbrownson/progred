@@ -110,8 +110,9 @@
     "x": 415def0fa0a9ac40dfba5fca4d0f8876,
     "y": 4e2dcde5b1ab1480a2f126176dd148c7,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
-    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
   },
   "cells": {
   functions: {name: "functions"},
@@ -220,7 +221,7 @@
                 function: fill,
                 shape: {isa: call, function: quote, expression: {
                   circle: {
-                    x: {isa: unquote, unquote: {
+                    x: {isa: unquote_2, unquote: {
                       isa: call,
                       function: sum,
                       left: cloud_x,
@@ -231,7 +232,7 @@
                         right: {f64: 0xcdccccccccccecbf}
                       }
                     }},
-                    y: {isa: unquote, unquote: {
+                    y: {isa: unquote_2, unquote: {
                       isa: call,
                       function: subtract,
                       left: cloud_y,
@@ -242,7 +243,7 @@
                         right: {f64: 0x9a9999999999e93f}
                       }
                     }},
-                    radius: {isa: unquote, unquote: {
+                    radius: {isa: unquote_2, unquote: {
                       isa: call,
                       function: multiply,
                       left: cloud_radius,
@@ -257,7 +258,7 @@
                 function: fill,
                 shape: {isa: call, function: quote, expression: {
                   circle: {
-                    x: {isa: unquote, unquote: {
+                    x: {isa: unquote_2, unquote: {
                       isa: call,
                       function: sum,
                       left: cloud_x,
@@ -268,7 +269,7 @@
                         right: {f64: 0x0000000000000000}
                       }
                     }},
-                    y: {isa: unquote, unquote: {
+                    y: {isa: unquote_2, unquote: {
                       isa: call,
                       function: subtract,
                       left: cloud_y,
@@ -279,7 +280,7 @@
                         right: {f64: 0x666666666666f23f}
                       }
                     }},
-                    radius: {isa: unquote, unquote: {
+                    radius: {isa: unquote_2, unquote: {
                       isa: call,
                       function: multiply,
                       left: cloud_radius,
@@ -294,7 +295,7 @@
                 function: fill,
                 shape: {isa: call, function: quote, expression: {
                   circle: {
-                    x: {isa: unquote, unquote: {
+                    x: {isa: unquote_2, unquote: {
                       isa: call,
                       function: sum,
                       left: cloud_x,
@@ -305,7 +306,7 @@
                         right: {f64: 0x000000000000f03f}
                       }
                     }},
-                    y: {isa: unquote, unquote: {
+                    y: {isa: unquote_2, unquote: {
                       isa: call,
                       function: subtract,
                       left: cloud_y,
@@ -316,7 +317,7 @@
                         right: {f64: 0xcdccccccccccec3f}
                       }
                     }},
-                    radius: {isa: unquote, unquote: {
+                    radius: {isa: unquote_2, unquote: {
                       isa: call,
                       function: multiply,
                       left: cloud_radius,
@@ -366,7 +367,7 @@
             function: fill,
             shape: {isa: call, function: quote, expression: {
               rect: {
-                x: {isa: unquote, unquote: {
+                x: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
                   left: tree_x,
@@ -377,7 +378,7 @@
                     right: {f64: 0x0000000000001040}
                   }
                 }},
-                y: {isa: unquote, unquote: {
+                y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
@@ -388,13 +389,13 @@
                     right: {f64: 0x000000000000f03f}
                   }
                 }},
-                width: {isa: unquote, unquote: {
+                width: {isa: unquote_2, unquote: {
                   isa: call,
                   function: multiply,
                   left: age,
                   right: {f64: 0x0000000000002040}
                 }},
-                height: {isa: unquote, unquote: tree_height}
+                height: {isa: unquote_2, unquote: tree_height}
               }
             }},
             paint: trunk
@@ -586,7 +587,7 @@
             function: fill,
             shape: {isa: call, function: quote, expression: {
               circle: {
-                x: {isa: unquote, unquote: {
+                x: {isa: unquote_2, unquote: {
                   isa: call,
                   function: sum,
                   left: tree_x,
@@ -597,7 +598,7 @@
                     right: {f64: 0x3d0ad7a3703de2bf}
                   }
                 }},
-                y: {isa: unquote, unquote: {
+                y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
@@ -608,7 +609,7 @@
                     right: {f64: 0x713d0ad7a370ed3f}
                   }
                 }},
-                radius: {isa: unquote, unquote: {
+                radius: {isa: unquote_2, unquote: {
                   isa: call,
                   function: multiply,
                   left: crown,
@@ -623,7 +624,7 @@
             function: fill,
             shape: {isa: call, function: quote, expression: {
               circle: {
-                x: {isa: unquote, unquote: {
+                x: {isa: unquote_2, unquote: {
                   isa: call,
                   function: sum,
                   left: tree_x,
@@ -634,7 +635,7 @@
                     right: {f64: 0xf6285c8fc2f5e03f}
                   }
                 }},
-                y: {isa: unquote, unquote: {
+                y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
@@ -645,7 +646,7 @@
                     right: {f64: 0x000000000000f03f}
                   }
                 }},
-                radius: {isa: unquote, unquote: {
+                radius: {isa: unquote_2, unquote: {
                   isa: call,
                   function: multiply,
                   left: crown,
@@ -660,8 +661,8 @@
             function: fill,
             shape: {isa: call, function: quote, expression: {
               circle: {
-                x: {isa: unquote, unquote: tree_x},
-                y: {isa: unquote, unquote: {
+                x: {isa: unquote_2, unquote: tree_x},
+                y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
@@ -672,7 +673,7 @@
                     right: {f64: 0xb81e85eb51b8f23f}
                   }
                 }},
-                radius: {isa: unquote, unquote: crown}
+                radius: {isa: unquote_2, unquote: crown}
               }
             }},
             paint: leaves
@@ -682,7 +683,7 @@
             function: fill,
             shape: {isa: call, function: quote, expression: {
               circle: {
-                x: {isa: unquote, unquote: {
+                x: {isa: unquote_2, unquote: {
                   isa: call,
                   function: sum,
                   left: tree_x,
@@ -693,7 +694,7 @@
                     right: {f64: 0x295c8fc2f528ccbf}
                   }
                 }},
-                y: {isa: unquote, unquote: {
+                y: {isa: unquote_2, unquote: {
                   isa: call,
                   function: subtract,
                   left: {f64: 0x0000000000e06f40},
@@ -704,7 +705,7 @@
                     right: {f64: 0x000000000000f43f}
                   }
                 }},
-                radius: {isa: unquote, unquote: {
+                radius: {isa: unquote_2, unquote: {
                   isa: call,
                   function: multiply,
                   left: crown,
@@ -927,7 +928,7 @@
       function: fill,
       shape: {isa: call, function: quote, expression: {
         circle: {
-          x: {isa: unquote, unquote: {
+          x: {isa: unquote_2, unquote: {
             isa: call,
             function: sum,
             left: {f64: 0x0000000000804640},
@@ -948,7 +949,7 @@
               }
             }
           }},
-          y: {isa: unquote, unquote: {
+          y: {isa: unquote_2, unquote: {
             isa: call,
             function: subtract,
             left: {f64: 0x0000000000806640},
@@ -1001,7 +1002,7 @@
           fuel: {f64: 0x00000000006a0841},
           program: {
             isa: call,
-            function: {isa: unquote, unquote: program}
+            function: {isa: unquote_2, unquote: program}
           }
         }
       }

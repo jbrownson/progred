@@ -129,6 +129,10 @@ fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
         name::record(
             "size",
             [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+                ),
                 (grap::vocabulary::VALUE, f64::value(1.0)),
                 (metadata, Value::record([])),
             ],
@@ -157,6 +161,10 @@ fn named_values_keep_the_name_and_expression_editable_at_their_stored_paths() {
         Some(&name::record(
             "size label",
             [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into()
+                ),
                 (grap::vocabulary::VALUE, f64::value(12.0)),
                 (metadata, Value::record([]))
             ]
@@ -170,10 +178,25 @@ fn value_wrappers_always_offer_the_name_slot_and_keep_direct_references_shallow(
     let mut cells = Cells::new();
     cells.set_value(
         cell,
-        name::record("expression", [(grap::vocabulary::VALUE, f64::value(1.0))]),
+        name::record(
+            "expression",
+            [
+                (
+                    ::grap::isa::ISA,
+                    gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+                ),
+                (grap::vocabulary::VALUE, f64::value(1.0)),
+            ],
+        ),
     );
     let mut world = crate::test_editor(Document {
-        root: Some(Value::record([(grap::vocabulary::VALUE, cell.into())])),
+        root: Some(Value::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+            ),
+            (grap::vocabulary::VALUE, cell.into()),
+        ])),
         cells,
     });
     let frame = editing_frame(&mut world);
@@ -212,7 +235,7 @@ fn declarations(binder: CellId) -> Vec<(Value, Path)> {
     let lambda = Value::record([
         (
             ::grap::isa::ISA,
-            gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+            gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
         ),
         (grap::vocabulary::PARAMS, parameters),
         (grap::vocabulary::BODY, binder.into()),
@@ -575,7 +598,10 @@ fn unquote_preserves_expression_paths_and_local_shallow_references() {
                 [(
                     grap::vocabulary::EXPRESSION,
                     Value::record([
-                        (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+                        (
+                            ::grap::isa::ISA,
+                            gid::Value::from(control::kind::UNQUOTE).into(),
+                        ),
                         (control::UNQUOTE, expression),
                     ]),
                 )],
@@ -616,7 +642,10 @@ fn quote_prefixes_draw_extra_fields_after_them_and_keep_field_insertion_availabl
     let extra = new_cell_id();
     for root in [
         Value::record([
-            (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(control::kind::UNQUOTE).into(),
+            ),
             (control::UNQUOTE, text::value("expression")),
         ]),
         grap::call(

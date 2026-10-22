@@ -20,8 +20,8 @@
     "absent_value": cfeaf191b71e06afef86c27ee43eb936,
     "default": d8bdf7403b181a43fa73578bd976ba3b,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
-    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
   },
   "cells": {
     x: {name: "x"},

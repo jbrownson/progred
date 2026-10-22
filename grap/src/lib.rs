@@ -296,7 +296,7 @@ struct Closure {
 /// A closure's fields as data, in its record's order: its lambda and
 /// environment, and its body's origin when it has one.
 fn closure_keys(closure: &Closure) -> Vec<CellId> {
-    let mut keys: Vec<_> = [vocabulary::LAMBDA, vocabulary::ENVIRONMENT]
+    let mut keys: Vec<_> = [isa::ISA, vocabulary::LAMBDA, vocabulary::ENVIRONMENT]
         .into_iter()
         .chain(source::origin(&closure.body).map(|_| source::vocabulary::BODY_ORIGIN))
         .collect();
@@ -450,6 +450,9 @@ impl RuntimeValue {
             RuntimeValueKind::Foreign(foreign) => {
                 (field == vocabulary::FFI).then(|| Self::from(Value::from(*foreign)))
             }
+            RuntimeValueKind::Closure(_) if field == isa::ISA => {
+                Some(Self::from(Value::from(vocabulary::kind::CLOSURE)))
+            }
             RuntimeValueKind::Closure(closure) => closure_keys(closure)
                 .contains(&field)
                 .then(|| self.to_value().as_record()?.get(&field).cloned())
@@ -481,7 +484,10 @@ impl RuntimeValue {
     /// Why this value is absent, if it is.
     /// The kind its `isa` says it is.
     pub fn kind(&self) -> Option<CellId> {
-        self.field(isa::ISA)?.as_cell()
+        match &self.0 {
+            RuntimeValueKind::Closure(_) => Some(vocabulary::kind::CLOSURE),
+            _ => self.field(isa::ISA)?.as_cell(),
+        }
     }
 
     pub fn absent_reason(&self) -> Option<CellId> {
@@ -511,12 +517,10 @@ impl RuntimeValue {
             // A closure's lambda, as it's called; or a lambda, which has its
             // parameters before its body is written.
             _ => {
-                let lambda = match self.field(vocabulary::LAMBDA) {
-                    Some(lambda) => lambda,
-                    None => {
-                        (self.field(isa::ISA)?.as_cell()? == vocabulary::LAMBDA).then_some(())?;
-                        self.clone()
-                    }
+                let lambda = match self.kind()? {
+                    kind if kind == vocabulary::kind::CLOSURE => self.field(vocabulary::LAMBDA)?,
+                    kind if kind == vocabulary::kind::LAMBDA => self.clone(),
+                    _ => return None,
                 };
                 lambda
                     .field(vocabulary::PARAMS)?
@@ -1280,10 +1284,10 @@ impl<'a> Context<'a> {
                 };
                 let params = value.field(vocabulary::PARAMS);
                 let form = match value.field(isa::ISA).and_then(|kind| kind.as_cell()) {
-                    Some(kind) if kind == vocabulary::CALL => Form::Call {
+                    Some(kind) if kind == vocabulary::kind::CALL => Form::Call {
                         function: required(vocabulary::FUNCTION),
                     },
-                    Some(kind) if kind == vocabulary::LAMBDA => Form::Lambda {
+                    Some(kind) if kind == vocabulary::kind::LAMBDA => Form::Lambda {
                         parameters: LambdaParameters::parse(
                             params
                                 .as_ref()
@@ -1300,10 +1304,10 @@ impl<'a> Context<'a> {
                             .map(|(key, value)| (*key, value.to_value()))
                             .collect(),
                     },
-                    _ => match lowered_field(&fields, vocabulary::VALUE) {
-                        Some(value) => Form::Value(value),
-                        None => Form::Ready(value.clone()),
-                    },
+                    Some(kind) if kind == vocabulary::kind::VALUE_WRAPPER => {
+                        Form::Value(required(vocabulary::VALUE))
+                    }
+                    _ => Form::Ready(value.clone()),
                 };
                 Expression(Rc::new(Lowered {
                     source: value.clone(),
@@ -1366,14 +1370,15 @@ impl<'a> Context<'a> {
                         missing_field(field, child_origin(origin.clone(), gid::Step::Key(field)))
                     }
                 };
-                // A record is a call or a lambda only when its `isa` says so.
-                match (isa::of(fields), fields.get(&vocabulary::VALUE)) {
-                    (Some(kind), _) if kind == vocabulary::CALL => {
+                // A record is a call, a lambda or a value wrapper only when its
+                // `isa` says so.
+                match isa::of(fields) {
+                    Some(kind) if kind == vocabulary::kind::CALL => {
                         let function = required(self, vocabulary::FUNCTION);
                         let fields = lower_all(self, Some((vocabulary::FUNCTION, &function)));
                         (Form::Call { function }, Some(fields), None)
                     }
-                    (Some(kind), _) if kind == vocabulary::LAMBDA => (
+                    Some(kind) if kind == vocabulary::kind::LAMBDA => (
                         Form::Lambda {
                             parameters: LambdaParameters::parse(
                                 fields
@@ -1391,12 +1396,12 @@ impl<'a> Context<'a> {
                         None,
                         None,
                     ),
-                    (_, Some(value)) => {
-                        let value = lower_field(self, vocabulary::VALUE, value);
+                    Some(kind) if kind == vocabulary::kind::VALUE_WRAPPER => {
+                        let value = required(self, vocabulary::VALUE);
                         let fields = lower_all(self, Some((vocabulary::VALUE, &value)));
                         (Form::Value(value), Some(fields), None)
                     }
-                    (_, None) => (
+                    _ => (
                         // A number or text literal is its native value
                         // from the start, rather than read on every use.
                         match Unboxed::recognize(fields) {
@@ -1497,7 +1502,7 @@ impl<'a> Context<'a> {
     ) -> RuntimeValue {
         let params: Rc<[CellId]> = params.into_iter().collect();
         let fields = [
-            (isa::ISA, Value::from(vocabulary::LAMBDA)),
+            (isa::ISA, Value::from(vocabulary::kind::LAMBDA)),
             (
                 vocabulary::PARAMS,
                 Value::list(params.iter().copied().map(Value::from)),
@@ -1964,7 +1969,10 @@ impl<'a> Context<'a> {
     ) -> Result<RuntimeValue, Halt> {
         let call = self.lower_runtime_code(&RuntimeValue::record(
             [
-                (isa::ISA, RuntimeValue::from(Value::from(vocabulary::CALL))),
+                (
+                    isa::ISA,
+                    RuntimeValue::from(Value::from(vocabulary::kind::CALL)),
+                ),
                 (vocabulary::FUNCTION, callable),
             ]
             .into_iter()
@@ -2353,6 +2361,7 @@ impl<'a> Context<'a> {
             RuntimeValueKind::Data(_)
             | RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_) => {
+                (value.kind()? == vocabulary::kind::CLOSURE).then_some(())?;
                 let lambda = value.field(vocabulary::LAMBDA)?;
                 let params = lambda
                     .field(vocabulary::PARAMS)?
@@ -2473,7 +2482,10 @@ fn runtime_expression(value: RuntimeValue) -> Expression {
 fn runtime_call(function: RuntimeValue, arguments: Vec<(CellId, RuntimeValue)>) -> Expression {
     let fields: Rc<[_]> = gid::sorted_entries(
         [
-            (isa::ISA, RuntimeValue::from(Value::from(vocabulary::CALL))),
+            (
+                isa::ISA,
+                RuntimeValue::from(Value::from(vocabulary::kind::CALL)),
+            ),
             (vocabulary::FUNCTION, function),
         ]
         .into_iter()
@@ -2496,7 +2508,7 @@ fn runtime_call(function: RuntimeValue, arguments: Vec<(CellId, RuntimeValue)>) 
 
 pub fn lambda(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
     isa::record(
-        vocabulary::LAMBDA,
+        vocabulary::kind::LAMBDA,
         [
             (
                 vocabulary::PARAMS,
@@ -2514,7 +2526,7 @@ pub fn ffi(cell: CellId) -> Value {
 
 pub fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     isa::record(
-        vocabulary::CALL,
+        vocabulary::kind::CALL,
         [(vocabulary::FUNCTION, function)]
             .into_iter()
             .chain(arguments),

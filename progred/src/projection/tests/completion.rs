@@ -83,7 +83,7 @@ fn lambda_completion_opens_a_real_missing_body_and_keeps_the_name_editable() {
             Some(&Value::record([
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::LAMBDA).into()
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into()
                 ),
                 (PARAMS, Value::list([]))
             ]))
@@ -144,7 +144,7 @@ fn expression_list_insertion(callable: CellId) {
             [
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                 ),
                 (grap::vocabulary::PARAMS, Value::list([argument.into()])),
                 (grap::vocabulary::BODY, Value::record([])),
@@ -184,7 +184,7 @@ fn without_the_text_library_nothing_offers_a_string() {
         root: Some(Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (grap::vocabulary::PARAMS, Value::list([parameter.into()])),
         ])),
@@ -235,7 +235,7 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
             [
                 (
                     ::grap::isa::ISA,
-                    gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                    gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
                 ),
                 (grap::vocabulary::PARAMS, Value::list([unrelated.into()])),
                 (grap::vocabulary::BODY, Value::record([])),
@@ -246,7 +246,7 @@ fn expression_completion_offers_grap_s_own_vocabulary() {
         root: Some(Value::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (grap::vocabulary::PARAMS, Value::list([parameter.into()])),
         ])),

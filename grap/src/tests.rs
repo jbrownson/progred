@@ -164,6 +164,7 @@ fn value_wrappers_evaluate_only_their_expression_in_the_calling_environment() {
     let parameter = new_cell_id();
     let metadata = new_cell_id();
     let wrapper = Value::record([
+        (isa::ISA, vocabulary::kind::VALUE_WRAPPER.into()),
         (vocabulary::VALUE, parameter.into()),
         (metadata, new_cell_id().into()),
     ]);
@@ -182,10 +183,16 @@ fn value_wrappers_evaluate_only_their_expression_in_the_calling_environment() {
 fn value_wrappers_can_be_anonymous_nested_and_callable() {
     let parameter = new_cell_id();
     let cell = new_cell_id();
-    let wrapper = Value::record([(
-        vocabulary::VALUE,
-        Value::record([(vocabulary::VALUE, lambda([parameter], parameter.into()))]),
-    )]);
+    let wrapper = isa::record(
+        vocabulary::kind::VALUE_WRAPPER,
+        [(
+            vocabulary::VALUE,
+            isa::record(
+                vocabulary::kind::VALUE_WRAPPER,
+                [(vocabulary::VALUE, lambda([parameter], parameter.into()))],
+            ),
+        )],
+    );
     let evaluation = evaluate(
         &call(cell.into(), [(parameter, blob("argument"))]),
         |queried| (queried == cell).then(|| wrapper.clone()),
@@ -212,7 +219,10 @@ fn referencing_a_value_wrapper_again_reruns_its_expression() {
             }))
         }),
     );
-    let wrapper = Value::record([(vocabulary::VALUE, call(function.into(), []))]);
+    let wrapper = isa::record(
+        vocabulary::kind::VALUE_WRAPPER,
+        [(vocabulary::VALUE, call(function.into(), []))],
+    );
     let evaluation = evaluate(
         &call(
             lambda([first, second], first.into()),
@@ -228,7 +238,10 @@ fn referencing_a_value_wrapper_again_reruns_its_expression() {
 
 #[test]
 fn value_wrappers_do_not_evaluate_inside_data_or_foreign_results() {
-    let wrapper = Value::record([(vocabulary::VALUE, new_cell_id().into())]);
+    let wrapper = isa::record(
+        vocabulary::kind::VALUE_WRAPPER,
+        [(vocabulary::VALUE, new_cell_id().into())],
+    );
     let foreign_cell = new_cell_id();
     let result = wrapper.clone();
     let foreign = ForeignFunctions::default().register(
@@ -254,7 +267,10 @@ fn value_wrappers_do_not_evaluate_inside_data_or_foreign_results() {
 fn value_wrappers_propagate_absence_cycles_and_fuel_exhaustion() {
     let foreign = ForeignFunctions::default();
     let absent = absent::value(absent::MISSING_ARGUMENT);
-    let wrapper = Value::record([(vocabulary::VALUE, absent.clone())]);
+    let wrapper = isa::record(
+        vocabulary::kind::VALUE_WRAPPER,
+        [(vocabulary::VALUE, absent.clone())],
+    );
     let evaluation = evaluate(&wrapper, |_| None, &foreign, 10);
     assert_eq!(evaluation.result, absent);
     assert!(evaluation.completed);
@@ -263,7 +279,10 @@ fn value_wrappers_propagate_absence_cycles_and_fuel_exhaustion() {
     assert!(!exhausted.completed);
 
     let cell = new_cell_id();
-    let wrapper = Value::record([(vocabulary::VALUE, cell.into())]);
+    let wrapper = isa::record(
+        vocabulary::kind::VALUE_WRAPPER,
+        [(vocabulary::VALUE, cell.into())],
+    );
     let cycle = evaluate(&cell.into(), |_| Some(wrapper.clone()), &foreign, 20);
     assert_eq!(absent::reason(&cycle.result), Some(absent::CELL_CYCLE));
 }
@@ -278,7 +297,10 @@ fn value_wrappers_preserve_the_inner_expression_source() {
         *origin.borrow_mut() = context.source_origin(call);
         Ok(blob("result"))
     };
-    let wrapper = Value::record([(vocabulary::VALUE, call(function.into(), []))]);
+    let wrapper = isa::record(
+        vocabulary::kind::VALUE_WRAPPER,
+        [(vocabulary::VALUE, call(function.into(), []))],
+    );
     let evaluation = super::evaluate_runtime_scoped(
         &RuntimeValue::from(Value::from(cell)),
         &definitions_from_parts(
@@ -456,14 +478,14 @@ fn a_record_is_a_call_or_a_lambda_only_when_its_isa_says_so() {
 
 #[test]
 fn a_call_or_a_lambda_missing_what_its_kind_requires_answers_why() {
-    let unfinished = isa::record(vocabulary::CALL, []);
+    let unfinished = isa::record(vocabulary::kind::CALL, []);
     assert_eq!(
         evaluate(&unfinished, |_| None, &ForeignFunctions::default(), 10).result,
         absent::missing_field(vocabulary::FUNCTION)
     );
     let parameter = new_cell_id();
     let bodiless = isa::record(
-        vocabulary::LAMBDA,
+        vocabulary::kind::LAMBDA,
         [(vocabulary::PARAMS, Value::list([Value::from(parameter)]))],
     );
     assert_eq!(
@@ -875,7 +897,7 @@ fn absents_carry_stable_reasons_and_occurrence_details() {
     );
 
     let malformed = isa::record(
-        vocabulary::LAMBDA,
+        vocabulary::kind::LAMBDA,
         [
             (vocabulary::PARAMS, blob("not a list")),
             (vocabulary::BODY, blob("body")),
@@ -889,7 +911,7 @@ fn absents_carry_stable_reasons_and_occurrence_details() {
 
     let invalid = blob("not a cell");
     let lambda = isa::record(
-        vocabulary::LAMBDA,
+        vocabulary::kind::LAMBDA,
         [
             (vocabulary::PARAMS, Value::list([invalid.clone()])),
             (vocabulary::BODY, blob("body")),

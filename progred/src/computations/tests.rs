@@ -183,7 +183,13 @@ fn runtime_evaluation_roots_keep_closures_and_invalidate_on_origin_changes() {
     assert_ne!(a.to_value(), b.to_value());
     assert!(!a.same_result(&b));
     for closure in [&a, &a, &b, &b, &a] {
-        let expression = RuntimeValue::record([(grap::vocabulary::VALUE, closure.clone())]);
+        let expression = RuntimeValue::record([
+            (
+                ::grap::isa::ISA,
+                gid::Value::from(::grap::vocabulary::kind::VALUE_WRAPPER).into(),
+            ),
+            (grap::vocabulary::VALUE, closure.clone()),
+        ]);
         let result = computations.evaluate_runtime(Trail::ROOT, &expression, 100, None);
         assert!(result.same_result(closure));
     }

@@ -45,11 +45,21 @@ pub mod vocabulary {
     pub const PATTERN_MISMATCH: CellId = CellId::from_u128(0xc44d3f1a71dea754a02bc14561a143b7);
     pub const MISSING_FINAL_EXPRESSION: CellId =
         CellId::from_u128(0x9e3fa2dd570e0b38a8b0053585f4dde2);
+
+    /// The kinds of control's forms, as a record's `isa` names them.
+    pub mod kind {
+        use gid::CellId;
+
+        pub const UNQUOTE: CellId = CellId::from_u128(0x732eb340fd444f89ab0c6e9afc89b8bd);
+    }
 }
 
 /// An unquote of `expression`, as a quoted template holds one.
 pub fn unquote(expression: Value) -> Value {
-    ::grap::isa::record(vocabulary::UNQUOTE, [(vocabulary::UNQUOTE, expression)])
+    ::grap::isa::record(
+        vocabulary::kind::UNQUOTE,
+        [(vocabulary::UNQUOTE, expression)],
+    )
 }
 
 fn functions() -> ForeignFunctions {
@@ -161,7 +171,8 @@ fn replace_unquotes(
     if let Some(fields) = context.fields(&expression) {
         // An unquote, as its `isa` says, evaluates the expression it requires.
         let unquote = fields.iter().any(|(field, kind)| {
-            *field == ::grap::isa::ISA && context.value(kind).as_cell() == Some(vocabulary::UNQUOTE)
+            *field == ::grap::isa::ISA
+                && context.value(kind).as_cell() == Some(vocabulary::kind::UNQUOTE)
         });
         if unquote {
             return match fields
@@ -209,7 +220,7 @@ fn replace_unquotes_value(
     environment: &Environment,
 ) -> Result<RuntimeValue, Halt> {
     match value {
-        Value::Record(fields) if ::grap::isa::of(fields) == Some(vocabulary::UNQUOTE) => {
+        Value::Record(fields) if ::grap::isa::of(fields) == Some(vocabulary::kind::UNQUOTE) => {
             match fields.get(&vocabulary::UNQUOTE) {
                 Some(expression) => context.eval_value_runtime(expression, environment),
                 None => Ok(::grap::absent::missing_field(vocabulary::UNQUOTE).into()),
@@ -621,7 +632,7 @@ fn matches_pattern(
 fn match_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     kind_form(
         input,
-        ::grap::vocabulary::CALL,
+        ::grap::vocabulary::kind::CALL,
         [
             ::grap::vocabulary::FUNCTION,
             vocabulary::VALUE,
@@ -722,7 +733,7 @@ enum BindingForm {
 fn bindings_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     kind_form(
         input,
-        ::grap::vocabulary::CALL,
+        ::grap::vocabulary::kind::CALL,
         [
             ::grap::vocabulary::FUNCTION,
             vocabulary::BINDINGS,
@@ -844,7 +855,7 @@ fn quote_marker<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option
 fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
     kind_form(
         input,
-        ::grap::vocabulary::CALL,
+        ::grap::vocabulary::kind::CALL,
         [::grap::vocabulary::FUNCTION, ::grap::vocabulary::EXPRESSION],
         |[function, expression]| {
             (function?.as_cell()? == vocabulary::QUOTE).then_some(())?;
@@ -876,16 +887,24 @@ fn quote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Optio
 /// is a handle for the whole unquote; the body keeps its own stored location.
 /// It's an unquote while its expression is still a hole, which offers code.
 fn unquote_display<W: Host>(input: &ProjectionInput<'_, W, RuntimeValue>) -> Option<Layout<W>> {
-    kind_form(input, vocabulary::UNQUOTE, [vocabulary::UNQUOTE], |_| {
-        let site = input.site();
-        Some(row(
-            2.0,
-            [
-                selectable(dim("`"), &site),
-                crate::libraries::grap::expression_path(input, [Step::Key(vocabulary::UNQUOTE)]),
-            ],
-        ))
-    })
+    kind_form(
+        input,
+        vocabulary::kind::UNQUOTE,
+        [vocabulary::UNQUOTE],
+        |_| {
+            let site = input.site();
+            Some(row(
+                2.0,
+                [
+                    selectable(dim("`"), &site),
+                    crate::libraries::grap::expression_path(
+                        input,
+                        [Step::Key(vocabulary::UNQUOTE)],
+                    ),
+                ],
+            ))
+        },
+    )
 }
 
 /// `do [a, b, c]` evaluates as a control form while retaining the
@@ -900,7 +919,7 @@ fn expression_list_display<W: Host>(
 ) -> Option<Layout<W>> {
     kind_form(
         input,
-        ::grap::vocabulary::CALL,
+        ::grap::vocabulary::kind::CALL,
         [::grap::vocabulary::FUNCTION, vocabulary::EXPRESSIONS],
         |[function, expressions]| {
             (function?.as_cell()? == callable).then_some(())?;
@@ -940,6 +959,7 @@ pub(super) fn contribution<W: Host>() -> (Vec<(CellId, &'static str)>, ForeignFu
         (vocabulary::BIND, "bind"),
         (vocabulary::QUOTE, "quote"),
         (vocabulary::UNQUOTE, "unquote"),
+        (vocabulary::kind::UNQUOTE, "unquote"),
         (vocabulary::LET, "let"),
         (vocabulary::WHERE, "where"),
         (vocabulary::BINDINGS, "bindings"),

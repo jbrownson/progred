@@ -61,7 +61,10 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
                         (
                             l::CONTENT,
                             Value::record([
-                                (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+                                (
+                                    ::grap::isa::ISA,
+                                    gid::Value::from(control::kind::UNQUOTE).into(),
+                                ),
                                 (control::UNQUOTE, LABEL.into()),
                             ]),
                         ),
@@ -92,7 +95,10 @@ fn document(emitting: bool, rows: usize, bordered: bool) -> Document {
             2.0,
             calls.map(|call| {
                 Value::record([
-                    (::grap::isa::ISA, gid::Value::from(control::UNQUOTE).into()),
+                    (
+                        ::grap::isa::ISA,
+                        gid::Value::from(control::kind::UNQUOTE).into(),
+                    ),
                     (control::UNQUOTE, call),
                 ])
             }),

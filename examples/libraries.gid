@@ -42,8 +42,9 @@
     "c": cd14a98bae038f0afef708aaf33d3ce8, "d": 926ce389301245d4525841b37fe1ce0b,
     "deg": 50d88e6a6ed070c14a6879ecfd09c186, "ray": d297ddfcad8995732c9585ea7530be74,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
-    "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
+    "lambda": e4a0653134ca48379cab2e008bed03e7,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
   },
   "cells": {
     over: {name: "over"}, under: {name: "under"}, degrees: {name: "degrees"},
@@ -68,10 +69,10 @@
         {pattern: {over: {bind: c}, under: {bind: d}}, subject: q},
       ],
       expression: {isa: call, function: quote, expression: {
-        over: {isa: unquote, unquote: {isa: call, function: sum,
+        over: {isa: unquote_2, unquote: {isa: call, function: sum,
           left: {isa: call, function: multiply, left: a, right: d},
           right: {isa: call, function: multiply, left: c, right: b}}},
-        under: {isa: unquote, unquote: {isa: call, function: multiply, left: b, right: d}},
+        under: {isa: unquote_2, unquote: {isa: call, function: multiply, left: b, right: d}},
       }},
     }},
     half: {over: {f64: 0x000000000000f03f}, under: {f64: 0x0000000000000040}},
@@ -82,7 +83,7 @@
       function: row, gap: {f64: 0x0000000000001040}, children: {isa: call, function: do, expressions: [
         {isa: call, function: drawing, width: {f64: 0x0000000000003c40}, ascent: {f64: 0x0000000000003440},
           descent: {f64: 0x0000000000002040},
-          program: {isa: call, function: quote, expression: {isa: call, function: dial, value: {isa: unquote, unquote: value}}}},
+          program: {isa: call, function: quote, expression: {isa: call, function: dial, value: {isa: unquote_2, unquote: value}}}},
         {isa: call, function: descend, step: {key: degrees}},
         {isa: call, function: text, content: "degrees"},
       ]},
@@ -103,7 +104,7 @@
         {isa: call, function: fill, paint: {rgb: 0x444444}, shape: ray,
           transform: {isa: call, function: quote, expression: [
             {translate: {x: {f64: 0x0000000000002c40}, y: {f64: 0x0000000000002c40}}},
-            {rotate: {isa: unquote, unquote: {isa: call, function: multiply, left: deg, right: {f64: 0x399d52a246df91bf}}}},
+            {rotate: {isa: unquote_2, unquote: {isa: call, function: multiply, left: deg, right: {f64: 0x399d52a246df91bf}}}},
           ]}},
       ]},
     }},

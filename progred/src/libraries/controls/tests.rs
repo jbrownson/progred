@@ -109,7 +109,7 @@ fn quote(value: Value) -> Value {
 }
 fn splice(value: Value) -> Value {
     Value::record([
-        (::grap::isa::ISA, gid::Value::from(c::UNQUOTE).into()),
+        (::grap::isa::ISA, gid::Value::from(c::kind::UNQUOTE).into()),
         (c::UNQUOTE, value),
     ])
 }
@@ -413,7 +413,7 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
         &RuntimeValue::record([
             (
                 ::grap::isa::ISA,
-                gid::Value::from(::grap::vocabulary::LAMBDA).into(),
+                gid::Value::from(::grap::vocabulary::kind::LAMBDA).into(),
             ),
             (::grap::vocabulary::PARAMS, RuntimeValue::list([])),
             (
@@ -421,7 +421,7 @@ fn program_cursor_returns_retained_runtime_leaves_with_and_without_memoization()
                 RuntimeValue::record([
                     (
                         ::grap::isa::ISA,
-                        gid::Value::from(::grap::vocabulary::CALL).into(),
+                        gid::Value::from(::grap::vocabulary::kind::CALL).into(),
                     ),
                     (
                         ::grap::vocabulary::FUNCTION,

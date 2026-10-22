@@ -23,7 +23,7 @@
     "body": 986143866eda2e2fbf9ab8484357a0c9,
     "bool": b2d13b64336a9e808133d0c7d5e4981e,
     "bottom_face": e05cb05bec16e656fd056d260441562f,
-    "call": 31232e62ec458b0e6e201f3a7c1c10fe,
+    "call": 8dd318828a4c42cf9f2d5d1ba9b068fe,
     "cases": a9aadcb44755963498c743fa114f0f00,
     "ceil": e1ddb3a620b61117d3873c163f603488,
     "center_depth": 0006e7b3a692dacf923c343f440997b4,
@@ -34,6 +34,7 @@
     "chamfer_stepover": fb027d8b1e4955251d78caa3695efdd8,
     "chamfer_strip": a3a5f7b86c3cd360f1dfdfab9bd89beb,
     "children": e10b73d5482f96ca7d3852c0f16b49ea,
+    "closure": 0e8180c5b2f0492291ce5150f2292697,
     "collect_tree": f070b08cda17ca0f5ec97de2ab5b2fab,
     "color": d6b4c91765541de967c02878c42d15ea,
     "compensation": 71c12dda3abeac8eb4aa5bb84b1c98fe,
@@ -107,6 +108,7 @@
     "item": 67bdfe4ec7d3bafc14407235618840aa,
     "iterate": 9546343518fe44f380e6134f3f56cf37,
     "lambda": e070bde324bb9d90e1d457a2fdba6bf7,
+    "lambda_2": e4a0653134ca48379cab2e008bed03e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_face": 26c724208a09da7103cdd90bb5b4ae48,
     "length": 52ce1d9d7a07fc917126f7ce3f2e20c1,
@@ -245,10 +247,12 @@
     "u1": b64d80018a2257079ca8b6b617d9a6d9,
     "unit_vector": 975b663cebf464f1550ddd54df4f5596,
     "unquote": da48703c290e3b35d7353c38110bc953,
+    "unquote_2": 732eb340fd444f89ab0c6e9afc89b8bd,
     "v": 2029830ebecc5accb54f884443f9ae07,
     "v0": a5204d915920fe26c29525020c2eae4e,
     "v1": d9722fd96f763e6016557b9e5cd485e7,
     "value": 84d3ba81fd2a52ea37478f4a868106f4,
+    "value_wrapper": f615f8d777294ffd9e5296faf34edd9d,
     "vector": cd6c67e9d2143ed60ce52b6e68db9396,
     "view": 047d43dfc6ba836cd75a7c840f4b9df7,
     "viewport": 709c987e4c2a110931d8597c4da68f69,
@@ -294,11 +298,11 @@
               },
             ],
           },
-          isa: lambda,
+          isa: lambda_2,
         },
         tool: square_tool,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     op1_groups: {
       name: "Op 1 · paths",
@@ -331,7 +335,7 @@
                   isa: call,
                   orientation: top,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               tool: ball_tool,
             },
@@ -358,7 +362,7 @@
                   isa: call,
                   orientation: right_face,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               tool: ball_tool,
             },
@@ -385,7 +389,7 @@
                   isa: call,
                   orientation: back_face,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               tool: ball_tool,
             },
@@ -412,7 +416,7 @@
                   isa: call,
                   orientation: left_face,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               tool: ball_tool,
             },
@@ -439,7 +443,7 @@
                   isa: call,
                   orientation: front_face,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               tool: ball_tool,
             },
@@ -450,7 +454,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     op1: {
       name: "Op 1 · top and four sides",
@@ -464,7 +468,7 @@
           tree_program: op1_groups,
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     op2: {
       name: "Op 2 · bottom",
@@ -478,7 +482,7 @@
           tree_program: op2_groups,
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     op2_chamfers: {
       name: "Op 2 · chamfers",
@@ -493,11 +497,11 @@
             isa: call,
             orientation: bottom_face,
           },
-          isa: lambda,
+          isa: lambda_2,
         },
         tool: square_tool,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     op2_groups: {
       name: "Op 2 · paths",
@@ -530,7 +534,7 @@
                   isa: call,
                   orientation: bottom_face,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               tool: ball_tool,
             },
@@ -541,7 +545,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     operations_section: {
       name: "Operations",
@@ -569,7 +573,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     preview_operations: {
       name: "Preview · Op 1 + Op 2",
@@ -588,7 +592,7 @@
         function: do,
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     strategies_section: {
       name: "Strategies",
@@ -632,7 +636,7 @@
           isa: call,
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     ball_center: {
       name: "ball center",
@@ -745,7 +749,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     ball_radius: {
       name: "ball radius",
@@ -869,7 +873,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     ball_tool: {
       name: "ball tool",
@@ -881,6 +885,7 @@
         cutter_diameter: tool_diameter,
         isa: call,
       },
+      isa: value_wrapper,
     },
     ball_path: {
       name: "ball-tip passes",
@@ -911,11 +916,11 @@
               isa: call,
               orientation: top,
             },
-            isa: lambda,
+            isa: lambda_2,
           },
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     bottom_face: {
       name: "bottom face",
@@ -945,7 +950,7 @@
           isa: call,
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     center_depth: {
       name: "center depth",
@@ -984,6 +989,7 @@
           value: {
             function: quote,
             expression: {
+              isa: closure,
               lambda: {
                 params: [],
                 body: {
@@ -1041,20 +1047,20 @@
                     },
                   ],
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               environment: {
                 contact_height: {
                   unquote: contact_height,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
                 cutter_diameter: {
                   unquote: cutter_diameter,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
                 strip: {
                   unquote: strip,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
               },
             },
@@ -1062,9 +1068,9 @@
           },
           isa: call,
         },
-        isa: lambda,
+        isa: lambda_2,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     control_depth: {
       name: "control depth",
@@ -1108,7 +1114,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     crossing_passes: {
       name: "crossing passes",
@@ -1176,7 +1182,7 @@
                       isa: call,
                       z: z,
                     },
-                    isa: lambda,
+                    isa: lambda_2,
                   },
                   isa: call,
                   program: {
@@ -1199,13 +1205,13 @@
                       tool_axis: tool_axis,
                       isa: call,
                     },
-                    isa: lambda,
+                    isa: lambda_2,
                   },
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
             },
-            isa: lambda,
+            isa: lambda_2,
           },
         },
         isa: call,
@@ -1232,7 +1238,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     crosswise_chamfer: {
       name: "crosswise chamfer",
@@ -1307,7 +1313,7 @@
                       tool_axis: normal,
                       isa: call,
                     },
-                    isa: lambda,
+                    isa: lambda_2,
                   },
                 },
               },
@@ -1339,9 +1345,9 @@
             },
           ],
         },
-        isa: lambda,
+        isa: lambda_2,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     cube_chamfers: {
       name: "cube chamfers",
@@ -1366,10 +1372,10 @@
                   isa: call,
                   strip: strip,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
             },
-            isa: lambda,
+            isa: lambda_2,
           },
         },
         isa: call,
@@ -1391,7 +1397,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     curve: {
       name: "curve",
@@ -1508,6 +1514,7 @@
                             value: {
                               function: quote,
                               expression: {
+                                isa: closure,
                                 lambda: {
                                   params: [],
                                   body: {
@@ -1549,32 +1556,32 @@
                                     tool_axis: tool_axis,
                                     isa: call,
                                   },
-                                  isa: lambda,
+                                  isa: lambda_2,
                                 },
                                 environment: {
                                   state: {
                                     unquote: state,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                   feed_direction: {
                                     unquote: feed_direction,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                   row_direction: {
                                     unquote: row_direction,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                   spacing: {
                                     unquote: spacing,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                   rows: {
                                     unquote: rows,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                   tool_axis: {
                                     unquote: tool_axis,
-                                    isa: unquote,
+                                    isa: unquote_2,
                                   },
                                 },
                               },
@@ -1598,7 +1605,7 @@
                   ],
                   isa: call,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               function: iterate,
               isa: call,
@@ -1608,7 +1615,7 @@
         function: do,
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     diagonals: {
       name: "diagonal passes",
@@ -1636,11 +1643,11 @@
               tool_axis: tool_axis,
               isa: call,
             },
-            isa: lambda,
+            isa: lambda_2,
           },
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     dot: {
       name: "dot product",
@@ -1708,7 +1715,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     edge_limit: {
       name: "edge limit",
@@ -1826,6 +1833,7 @@
                                   value: {
                                     function: quote,
                                     expression: {
+                                      isa: closure,
                                       lambda: {
                                         params: [],
                                         body: {
@@ -1838,20 +1846,20 @@
                                           },
                                           isa: call,
                                         },
-                                        isa: lambda,
+                                        isa: lambda_2,
                                       },
                                       environment: {
                                         segments: {
                                           unquote: segments,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                         state: {
                                           unquote: state,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                         action: {
                                           unquote: action,
-                                          isa: unquote,
+                                          isa: unquote_2,
                                         },
                                       },
                                     },
@@ -1875,7 +1883,7 @@
                         ],
                         isa: call,
                       },
-                      isa: lambda,
+                      isa: lambda_2,
                     },
                     function: iterate,
                     isa: call,
@@ -1913,7 +1921,7 @@
         function: do,
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     extend_stroke: {
       name: "extend straight stroke",
@@ -1986,9 +1994,9 @@
             },
           ],
         },
-        isa: lambda,
+        isa: lambda_2,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     face_pair: {
       name: "face pair",
@@ -2022,9 +2030,9 @@
                 orientation: orientation,
                 z: z,
               },
-              isa: lambda,
+              isa: lambda_2,
             },
-            isa: lambda,
+            isa: lambda_2,
           },
           function: crosshatch,
           setup_up: setup_up,
@@ -2050,7 +2058,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     factor: {
       name: "factor",
@@ -2234,9 +2242,9 @@
                     },
                   ],
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
-              isa: unquote,
+              isa: unquote_2,
             },
             field: {
               unquote: {
@@ -2395,7 +2403,7 @@
                           },
                           isa: call,
                         },
-                        isa: lambda,
+                        isa: lambda_2,
                       },
                       bind: shoulder,
                     },
@@ -2439,7 +2447,7 @@
                           },
                           isa: call,
                         },
-                        isa: lambda,
+                        isa: lambda_2,
                       },
                       bind: face_pair,
                     },
@@ -2468,15 +2476,15 @@
                           },
                           isa: call,
                         },
-                        isa: lambda,
+                        isa: lambda_2,
                       },
                       bind: chamfer_pair,
                     },
                   ],
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
-              isa: unquote,
+              isa: unquote_2,
             },
             chamfer_strip: {
               normal: {
@@ -2521,11 +2529,11 @@
                     isa: call,
                   },
                 },
-                isa: unquote,
+                isa: unquote_2,
               },
               length: {
                 unquote: size,
-                isa: unquote,
+                isa: unquote_2,
               },
               curve: {
                 unquote: {
@@ -2573,9 +2581,9 @@
                       isa: call,
                     },
                   },
-                  isa: lambda,
+                  isa: lambda_2,
                 },
-                isa: unquote,
+                isa: unquote_2,
               },
               across: {
                 unquote: {
@@ -2626,7 +2634,7 @@
                     isa: call,
                   },
                 },
-                isa: unquote,
+                isa: unquote_2,
               },
               width: {
                 unquote: {
@@ -2644,7 +2652,7 @@
                   left: chamfer,
                   isa: call,
                 },
-                isa: unquote,
+                isa: unquote_2,
               },
             },
             face: {
@@ -2745,9 +2753,9 @@
                     isa: call,
                   },
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
-              isa: unquote,
+              isa: unquote_2,
             },
           },
           isa: call,
@@ -2814,7 +2822,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     chamfer_ring: {
       name: "four rotated copies",
@@ -2851,7 +2859,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     t: {
       name: "fraction",
@@ -2877,7 +2885,7 @@
         isa: call,
         z: y,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     half_face: {
       name: "half face",
@@ -2913,7 +2921,7 @@
         isa: call,
         z: z,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     intercept: {
       name: "intercept",
@@ -2939,7 +2947,7 @@
         isa: call,
         z: x,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     length: {
       name: "length",
@@ -2958,6 +2966,7 @@
           body: {
             function: quote,
             expression: {
+              isa: closure,
               lambda: {
                 params: [],
                 body: {
@@ -2969,22 +2978,22 @@
                   },
                   isa: call,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               environment: {
                 item: {
                   unquote: value,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
                 mapping: {
                   unquote: mapping,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
               },
             },
             isa: call,
           },
-          isa: lambda,
+          isa: lambda_2,
         },
         function: map_tree,
         isa: call,
@@ -2993,7 +3002,7 @@
           isa: call,
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     normal: {
       name: "normal",
@@ -3070,11 +3079,11 @@
               },
             ],
           },
-          isa: lambda,
+          isa: lambda_2,
         },
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     point_sum: {
       name: "point sum",
@@ -3138,7 +3147,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     preview_mode: {
       name: "preview mode",
@@ -3198,7 +3207,7 @@
         ],
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     direction: {
       name: "pull sign",
@@ -3224,7 +3233,7 @@
         isa: call,
         z: z,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     right_face: {
       name: "right face",
@@ -3247,7 +3256,7 @@
           isa: call,
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     rotated_groups: {
       name: "rotate path groups",
@@ -3263,6 +3272,7 @@
           body: {
             function: quote,
             expression: {
+              isa: closure,
               lambda: {
                 params: [],
                 body: {
@@ -3271,22 +3281,22 @@
                   orientation: orientation,
                   program: item,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               environment: {
                 item: {
                   unquote: value,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
                 orientation: {
                   unquote: orientation,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
               },
             },
             isa: call,
           },
-          isa: lambda,
+          isa: lambda_2,
         },
         function: map_tree,
         isa: call,
@@ -3295,7 +3305,7 @@
           isa: call,
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     rotate_paths: {
       name: "rotate paths",
@@ -3317,7 +3327,7 @@
         },
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     row_direction: {
       name: "row direction",
@@ -3494,7 +3504,7 @@
                   ],
                   isa: call,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               function: iterate,
               isa: call,
@@ -3603,7 +3613,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     scaled_point: {
       name: "scaled vector",
@@ -3653,7 +3663,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     segments: {
       name: "segments",
@@ -3726,7 +3736,7 @@
         },
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     square_tool: {
       name: "square tool",
@@ -3746,13 +3756,13 @@
                       left: square_diameter,
                       isa: call,
                     },
-                    isa: unquote,
+                    isa: unquote_2,
                   },
                 },
                 0xaa: {
                   axial: {
                     unquote: cutting_length,
-                    isa: unquote,
+                    isa: unquote_2,
                   },
                 },
               ],
@@ -3783,6 +3793,7 @@
         },
         isa: call,
       },
+      isa: value_wrapper,
     },
     square_diameter: {
       name: "square tool diameter",
@@ -3862,7 +3873,7 @@
         function: do,
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     strip: {
       name: "strip",
@@ -3891,7 +3902,7 @@
         isa: call,
         z: z,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     tilt: {
       name: "tilt (degrees)",
@@ -4006,7 +4017,7 @@
         function: do,
         isa: call,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     tool_diameter: {
       name: "tool diameter",
@@ -4026,6 +4037,7 @@
           body: {
             function: quote,
             expression: {
+              isa: closure,
               lambda: {
                 params: [],
                 body: {
@@ -4037,22 +4049,22 @@
                   isa: call,
                   tool: tool,
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               environment: {
                 item: {
                   unquote: value,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
                 tool: {
                   unquote: tool,
-                  isa: unquote,
+                  isa: unquote_2,
                 },
               },
             },
             isa: call,
           },
-          isa: lambda,
+          isa: lambda_2,
         },
         function: map_tree,
         isa: call,
@@ -4061,7 +4073,7 @@
           isa: call,
         },
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     top: {
       name: "top",
@@ -4077,7 +4089,7 @@
         isa: call,
         z: z,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     face: {
       name: "top face",
@@ -4105,9 +4117,9 @@
           },
           isa: call,
         },
-        isa: lambda,
+        isa: lambda_2,
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     u: {
       name: "u",
@@ -4166,7 +4178,7 @@
           },
         ],
       },
-      isa: lambda,
+      isa: lambda_2,
     },
     v: {
       name: "v",
@@ -4284,23 +4296,23 @@
                             expression: {
                               focus: {
                                 unquote: focus,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               position: {
                                 unquote: progress,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               profile_tolerance: {
                                 unquote: profile_tolerance,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               stock_max: {
                                 unquote: stock_max,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               stock_min: {
                                 unquote: stock_min,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                             },
                             isa: call,
@@ -4313,23 +4325,23 @@
                             expression: {
                               focus: {
                                 unquote: focus,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               position: {
                                 unquote: progress,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               profile_tolerance: {
                                 unquote: profile_tolerance,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               stock_max: {
                                 unquote: stock_max,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               stock_min: {
                                 unquote: stock_min,
-                                isa: unquote,
+                                isa: unquote_2,
                               },
                               stock: {
                                 color: {
@@ -4380,7 +4392,7 @@
                                   },
                                 ],
                               },
-                              isa: unquote,
+                              isa: unquote_2,
                             },
                             color: {
                               rgb: 0x5f96b4,
@@ -4476,7 +4488,7 @@
                     },
                   ],
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               function: with_controls,
               value: value,
@@ -4489,11 +4501,11 @@
                     expression: {
                       playback: {
                         unquote: parameters,
-                        isa: unquote,
+                        isa: unquote_2,
                       },
                       preview_mode: {
                         unquote: preview_mode,
-                        isa: unquote,
+                        isa: unquote_2,
                       },
                     },
                     isa: call,
@@ -4549,13 +4561,13 @@
                     },
                   ],
                 },
-                isa: lambda,
+                isa: lambda_2,
               },
               height: height,
               isa: call,
               width: width,
             },
-            isa: lambda,
+            isa: lambda_2,
           },
           value: program_tree,
         },
