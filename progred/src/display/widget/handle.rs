@@ -12,39 +12,47 @@ use std::rc::Rc;
 /// `child` after a bar as tall as it, in the border's color, or the accent's
 /// while the bar is hovered or the occurrence selected.
 pub fn handle<W: Host>(child: Layout<W>) -> Layout<W> {
-    marked(child, false)
+    crate::display::row(0.0, [bar(Bar::Always), child])
 }
 
-/// [`handle`], shown only while its bar is hovered or the selection is on
-/// the occurrence or inside it, for an occurrence as common as a
-/// parameter's name, where a bar on each would crowd what's drawn. Its
-/// place is kept, so nothing moves when it shows.
+/// A thinner [`handle`], shown only while it's hovered or the selection is
+/// on the occurrence or inside it, for an occurrence as common as a
+/// parameter's name, where a bar on each would crowd what's drawn. Its room
+/// is kept on both sides of `child`, so nothing moves when it shows and
+/// `child` sits evenly between its neighbours.
 pub fn quiet_handle<W: Host>(child: Layout<W>) -> Layout<W> {
-    marked(child, true)
+    crate::display::row(0.0, [bar(Bar::Quiet), child, room(Bar::Quiet)])
 }
 
-fn marked<W: Host>(child: Layout<W>, quiet: bool) -> Layout<W> {
-    crate::display::row(
-        0.0,
-        [
-            Layout::widget(fill_height(selectable_widget(bar(quiet)))),
-            child,
-        ],
-    )
+#[derive(Clone, Copy, PartialEq)]
+enum Bar {
+    Always,
+    Quiet,
 }
 
-fn bar<W: Host>(quiet: bool) -> Widget<W, W::Hover> {
-    Rc::new(move |context| {
+impl Bar {
+    /// The bar's width and the room it takes, in logical points.
+    fn size(self) -> (f64, f64) {
+        match self {
+            Bar::Always => (2.0, 6.0),
+            Bar::Quiet => (1.5, 3.0),
+        }
+    }
+}
+
+fn bar<W: Host>(kind: Bar) -> Layout<W> {
+    let widget: Widget<W, W::Hover> = Rc::new(move |context| {
         let styles = context.toolkit.styles();
         let scale = styles.scale;
-        let (width, gap, inset) = (2.0 * scale, 4.0 * scale, scale);
+        let (width, room) = kind.size();
+        let (width, room, inset) = (width * scale, room * scale, scale);
         let (rest, hot) = (styles.palette.border, styles.palette.accent);
         let selected = context.toolkit.selected();
-        let shown = !quiet || context.toolkit.selected_below(&[]);
+        let shown = kind == Bar::Always || context.toolkit.selected_below(&[]);
         let target = W::Hover::from(context.site().hover());
         leaf(
             Extent {
-                width: width + gap,
+                width: room,
                 ascent: 0.0,
                 descent: 0.0,
             },
@@ -67,5 +75,21 @@ fn bar<W: Host>(quiet: bool) -> Widget<W, W::Hover> {
                 });
             },
         )
-    })
+    });
+    Layout::widget(fill_height(selectable_widget(widget)))
+}
+
+/// Blank room as wide as `kind`'s bar takes.
+fn room<W: Host>(kind: Bar) -> Layout<W> {
+    Layout::widget(Rc::new(move |context| {
+        let width = kind.size().1 * context.toolkit.styles().scale;
+        leaf(
+            Extent {
+                width,
+                ascent: 0.0,
+                descent: 0.0,
+            },
+            |_, _| {},
+        )
+    }))
 }

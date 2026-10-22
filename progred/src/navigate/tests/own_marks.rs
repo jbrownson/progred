@@ -1,6 +1,6 @@
 //! Every stop draws something of its own, so selecting it looks different
-//! from selecting what's inside it: no stop's box is the box of the stop
-//! around it.
+//! from selecting what's inside it: selected, no stop's box is the box of
+//! the stop around it or of a stop just inside it.
 
 use crate::driver::Driver;
 use crate::occurrence::Step;
@@ -9,7 +9,7 @@ use crate::occurrence::Step;
 fn every_stop_in_the_sample_draws_something_of_its_own() {
     check(
         "sample",
-        &driver(include_str!("../../../../examples/sample.gid")),
+        &mut driver(include_str!("../../../../examples/sample.gid")),
     );
 }
 
@@ -21,11 +21,11 @@ fn every_stop_in_a_new_notebook_draws_something_of_its_own() {
     );
     driver.click::<Step>(&[]);
     driver.choose("notebook");
-    check("a new notebook", &driver);
+    check("a new notebook", &mut driver);
 }
 
 #[test]
-#[ignore = "draws the larger examples, a few seconds"]
+#[ignore = "selects every stop in the larger examples, about half a minute"]
 fn every_stop_in_the_examples_draws_something_of_its_own() {
     for (name, source) in [
         (
@@ -41,7 +41,7 @@ fn every_stop_in_the_examples_draws_something_of_its_own() {
             include_str!("../../../../examples/libraries.gid"),
         ),
     ] {
-        check(name, &driver(source));
+        check(name, &mut driver(source));
     }
 }
 
@@ -50,25 +50,47 @@ fn driver(source: &str) -> Driver {
     Driver::new(crate::test_editor(doc), Driver::VIEWPORT)
 }
 
-/// Each drawn stop against the nearest stop drawn around it.
-fn check(name: &str, driver: &Driver) {
-    let drawn = driver.drawn_under::<Step>(&[]);
-    let paths: Vec<_> = drawn.iter().map(|(path, _)| path.to_vec()).collect();
-    let same: Vec<_> = drawn
-        .iter()
-        .zip(&paths)
-        .filter_map(|((_, rect), path)| {
-            let (around, around_rect) = drawn
-                .iter()
-                .zip(&paths)
-                .filter(|(_, other)| other.len() < path.len() && path.starts_with(other))
-                .max_by_key(|(_, other)| other.len())
-                .map(|((_, rect), other)| (other, rect))?;
-            (rect == around_rect).then(|| format!("{path:?} in {around:?}"))
-        })
+/// Each drawn stop, selected, against the nearest stop drawn around it and
+/// the nearest drawn inside it.
+fn check(name: &str, driver: &mut Driver) {
+    let mut paths: Vec<_> = driver
+        .drawn_under::<Step>(&[])
+        .into_iter()
+        .map(|(path, _)| path.to_vec())
         .collect();
+    paths.dedup();
+    let mut same = Vec::new();
+    for path in paths {
+        driver.select(&path);
+        let drawn: Vec<_> = driver
+            .drawn_under::<Step>(&[])
+            .into_iter()
+            .map(|(path, rect)| (path.to_vec(), rect))
+            .collect();
+        let Some((_, rect)) = drawn.iter().find(|(other, _)| *other == path) else {
+            continue;
+        };
+        // The stop just around another: the longest of those its path starts
+        // with.
+        let around = |inner: &[Step]| {
+            drawn
+                .iter()
+                .filter(|(other, _)| other.len() < inner.len() && inner.starts_with(other))
+                .max_by_key(|(other, _)| other.len())
+        };
+        let outer = around(&path).into_iter();
+        let inner = drawn
+            .iter()
+            .filter(|(other, _)| around(other).is_some_and(|(around, _)| *around == path));
+        same.extend(
+            outer
+                .chain(inner)
+                .filter(|(_, other)| other == rect)
+                .map(|(other, _)| format!("{path:?} with {other:?}")),
+        );
+    }
     assert!(
         same.is_empty(),
-        "{name}: stops drawn as the stop around them: {same:#?}"
+        "{name}: selected stops drawn as a stop beside them: {same:#?}"
     );
 }
