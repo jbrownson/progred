@@ -1,7 +1,7 @@
 {
   "binders": {
     "name": 02e562654d6d0828d3a7559e6f75fffe,
-    "outline": e6c0b2058b8468428d64576d953e2d62,
+    "outline": efc8f00d14ad4fa8a768a234b8435311,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
@@ -77,6 +77,7 @@
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "evaluation": 549dd85073474d6296d773c8df9c0526,
     "program": bdf607810b274ad5b02bd409aef34b6a,
+    "sections": ceb00a1434284f7e88b7ef192583af09,
   },
   "cells": {
     parameters: {name: "Text and numbers"},
@@ -98,7 +99,8 @@
     deep_outer: deep_middle,
     deep_middle: deep_inner,
     deep_inner: {
-      outline: [checks, notes],
+      isa: outline,
+      sections: [checks, notes],
       checks: ["First inner item", "Second inner item"],
       notes: "Three cells enclose this multiline outline",
     },
@@ -197,9 +199,11 @@
     },
   },
   "root": {
-    outline: [workshop, forms, parameters, lists, empty, shared, results, deep, side_by_side, baseline_case, after_label, after_value, lists],
+    isa: outline,
+    sections: [workshop, forms, parameters, lists, empty, shared, results, deep, side_by_side, baseline_case, after_label, after_value, lists],
     workshop: {
-      outline: [dimensions, operations, inspection],
+      isa: outline,
+      sections: [dimensions, operations, inspection],
       dimensions: [
         width,
         length,
@@ -215,7 +219,8 @@
         finishing,
       ],
       inspection: {
-        outline: [checks, notes, checks],
+        isa: outline,
+        sections: [checks, notes, checks],
         checks: ["Measure width", width, {notes: ["Corners", ["Near", "Far"], bare]}],
         notes: ["Shared dimensions appear above and inside the operations", {}],
       },

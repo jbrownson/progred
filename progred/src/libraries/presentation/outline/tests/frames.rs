@@ -5,7 +5,7 @@ use crate::driver::Driver;
 use crate::frame::Hovered;
 use crate::frame::test_support::{editing_frame, settle};
 use crate::hover::Hover;
-use crate::libraries::presentation::vocabulary::OUTLINE;
+use crate::libraries::presentation::vocabulary::{SECTIONS, kind};
 use crate::libraries::{f64, name};
 use crate::location::Location;
 use crate::occurrence;
@@ -27,7 +27,8 @@ fn document() -> (Document, CellId, CellId, CellId) {
     (
         Document {
             root: Some(Value::record([
-                (OUTLINE, Value::list([b.into(), a.into()])),
+                (::grap::isa::ISA, kind::OUTLINE.into()),
+                (SECTIONS, Value::list([b.into(), a.into()])),
                 (a, Value::list([f64::value(1.0), f64::value(2.0)])),
                 (b, f64::value(3.0)),
                 (extra, f64::value(4.0)),
@@ -54,13 +55,13 @@ fn entry_paths(value: &Value, parent: &[occurrence::Step], key: CellId) -> Vec<o
     value
         .as_record()
         .unwrap()
-        .get(&OUTLINE)
+        .get(&SECTIONS)
         .unwrap()
         .as_list()
         .unwrap()
         .iter()
         .filter(|(_, v)| v.as_cell() == Some(key))
-        .map(|(p, _)| occurrence::below(parent, &[Step::Key(OUTLINE), Step::Element(p.clone())]))
+        .map(|(p, _)| occurrence::below(parent, &[Step::Key(SECTIONS), Step::Element(p.clone())]))
         .collect()
 }
 
@@ -129,11 +130,11 @@ fn cam_outline_draws_as_the_main_value_with_the_panes_out_of_sight() {
     assert!(
         crate::test_support::value_at(doc.root.as_ref().unwrap(), &main)
             .and_then(Value::as_record)
-            .is_some_and(|fields| fields.get(&OUTLINE).is_some() && fields.get(&PANES).is_none())
+            .is_some_and(|fields| fields.get(&SECTIONS).is_some() && fields.get(&PANES).is_none())
     );
     assert!(!crate::workspace::declarations(doc.root.as_ref()).is_empty());
     let mut world = crate::test_editor(doc);
-    let outline = [Step::Key(MAIN), Step::Key(OUTLINE)];
+    let outline = [Step::Key(MAIN), Step::Key(SECTIONS)];
     let entries = world
         .sources()
         .resolve_path(&outline)
@@ -228,7 +229,7 @@ fn outline_arrows_enter_sections_visit_visible_bodies_and_reach_extras_last() {
         // Up from the first heading returns to the outermost whole value.
         for (direction, path) in [
             (NamedKey::ArrowDown, vec![]),
-            (NamedKey::ArrowRight, vec![occurrence::Step::Key(OUTLINE)]),
+            (NamedKey::ArrowRight, vec![occurrence::Step::Key(SECTIONS)]),
             (NamedKey::ArrowLeft, vec![]),
             (NamedKey::ArrowDown, b_heading.clone()),
             (NamedKey::ArrowUp, vec![]),
@@ -274,7 +275,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
     fields.remove(&extra);
     let mut driver = Driver::new(crate::test_editor(doc.clone()), Driver::VIEWPORT);
     let root_rect = driver.rect::<Step>(&[]);
-    let list_rect = driver.rect(&[Step::Key(OUTLINE)]);
+    let list_rect = driver.rect(&[Step::Key(SECTIONS)]);
     assert_eq!(
         root_rect.x0, list_rect.x0,
         "the outline adds no outer indent"
@@ -285,14 +286,14 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
         "the record includes the field label outside the list"
     );
     let label_point = Point::new(root_rect.x0 + 4.0, root_rect.y0 + 4.0);
-    click_label(&mut driver, label_point, &[Step::Key(OUTLINE)]);
-    assert_eq!(driver.selection(), [Step::Key(OUTLINE)]);
-    assert!(driver.rect(&[Step::Key(OUTLINE)]).y0 > root_rect.y0);
+    click_label(&mut driver, label_point, &[Step::Key(SECTIONS)]);
+    assert_eq!(driver.selection(), [Step::Key(SECTIONS)]);
+    assert!(driver.rect(&[Step::Key(SECTIONS)]).y0 > root_rect.y0);
 
     // Override the ordinary definition: the label must follow that name,
     // without changing the geometry or identity of the section list.
     doc.cells.set_value(
-        OUTLINE,
+        SECTIONS,
         name::record("A much longer document organization handle", []),
     );
     let (_, after) = place(&doc, None, 500.0);
@@ -301,18 +302,18 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
         "the field label measures the updated name"
     );
     let mut renamed = Driver::new(crate::test_editor(doc), Driver::VIEWPORT);
-    assert_eq!(renamed.rect(&[Step::Key(OUTLINE)]), list_rect);
-    click_label(&mut renamed, label_point, &[Step::Key(OUTLINE)]);
+    assert_eq!(renamed.rect(&[Step::Key(SECTIONS)]), list_rect);
+    click_label(&mut renamed, label_point, &[Step::Key(SECTIONS)]);
     renamed.select::<Step>(&[]);
 
     // Removing the outline field exposes the remaining data structurally.
-    renamed.select(&[Step::Key(OUTLINE)]);
+    renamed.select(&[Step::Key(SECTIONS)]);
     renamed.press(NamedKey::Delete);
     assert!(
         renamed
             .editor()
             .sources()
-            .resolve_path(&[Step::Key(OUTLINE)])
+            .resolve_path(&[Step::Key(SECTIONS)])
             .is_none()
     );
     for field in [a, b] {
@@ -324,7 +325,8 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
 fn outline_library_tint_stops_at_the_heading() {
     let key = crate::libraries::editor::workspace::vocabulary::PANES;
     let mut world = crate::editor_of(Value::record([
-        (OUTLINE, Value::list([key.into()])),
+        (::grap::isa::ISA, kind::OUTLINE.into()),
+        (SECTIONS, Value::list([key.into()])),
         (key, Value::list([f64::value(1.0), f64::value(2.0)])),
     ]));
     let heading_path = entry(&world, &[], key);
@@ -385,7 +387,7 @@ fn outline_orders_list_occurrences_and_edits_their_source_fields() {
     assert_eq!(driver.value(&[Step::Key(b)]), f64::value(35.0));
     driver.runner.editor.model.workspace.document.shown = crate::workspace::Shown::RAW;
     let raw = editing_frame(&mut driver.runner.editor);
-    for field in [a, b, extra, OUTLINE] {
+    for field in [a, b, extra, SECTIONS] {
         stop(&raw, &[Step::Key(field)]);
     }
 }
@@ -396,7 +398,7 @@ fn repeated_sections_have_independent_folds_and_shared_edits() {
     let Value::Record(fields) = doc.root.as_mut().unwrap() else {
         unreachable!()
     };
-    fields.insert(OUTLINE, Value::list([a.into(), a.into(), b.into()]));
+    fields.insert(SECTIONS, Value::list([a.into(), a.into(), b.into()]));
     let entries = entry_paths(doc.root.as_ref().unwrap(), &[], a);
     let sections = entries.iter().map(|p| section(p, a)).collect::<Vec<_>>();
     let bodies = entries.iter().map(|p| body(p, a)).collect::<Vec<_>>();
@@ -505,8 +507,8 @@ fn outline_column_gaps_open_pending_before_between_and_after_items() {
             positions.get(index),
         )
         .unwrap();
-        let path = occurrence::of(&[Step::Key(OUTLINE), Step::Element(inserted.clone())]);
-        let list = driver.rect(&[Step::Key(OUTLINE)]);
+        let path = occurrence::of(&[Step::Key(SECTIONS), Step::Element(inserted.clone())]);
+        let list = driver.rect(&[Step::Key(SECTIONS)]);
         let top = index
             .checked_sub(1)
             .map_or(list.y0, |i| driver.rect(&entries[i]).y1);
@@ -525,7 +527,7 @@ fn outline_column_gaps_open_pending_before_between_and_after_items() {
         assert_eq!(driver.selection(), path);
         assert!(driver.picker_entries().is_some());
         assert!(driver.paste(&a.into()));
-        let list = driver.value(&[Step::Key(OUTLINE)]);
+        let list = driver.value(&[Step::Key(SECTIONS)]);
         let list = list.as_list().unwrap();
         assert_eq!(list.len(), 3);
         assert_eq!(list.get(&inserted), Some(&Value::Cell(a)));
@@ -600,7 +602,7 @@ fn outline_preserves_pending_insertions_in_both_lists() {
             f64::value(7.0)
         }));
     }
-    for list in [a, OUTLINE] {
+    for list in [a, SECTIONS] {
         assert_eq!(driver.positions(&[Step::Key(list)]).len(), 3);
     }
 }
@@ -632,7 +634,8 @@ fn nested_outline_composes_jumps_and_cell_follows() {
     let (parent, alias) = (new_cell_id(), new_cell_id());
     doc.cells.set_value(alias, doc.root.take().unwrap());
     doc.root = Some(Value::record([
-        (OUTLINE, Value::list([parent.into()])),
+        (::grap::isa::ISA, kind::OUTLINE.into()),
+        (SECTIONS, Value::list([parent.into()])),
         (parent, alias.into()),
         (b, f64::value(99.0)),
     ]));
@@ -657,7 +660,10 @@ fn nested_outline_composes_jumps_and_cell_follows() {
 #[test]
 fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     let a = new_cell_id();
-    let mut driver = Driver::of(Value::record([(OUTLINE, Value::list([a.into()]))]));
+    let mut driver = Driver::of(Value::record([
+        (::grap::isa::ISA, kind::OUTLINE.into()),
+        (SECTIONS, Value::list([a.into()])),
+    ]));
     let p = body(&entry(driver.editor(), &[], a), a);
     driver.select(&p);
     assert!(driver.picker_entries().is_some());
@@ -675,9 +681,9 @@ fn outline_missing_field_is_editable_and_empty_outline_is_reachable() {
     let Value::Record(fields) = Rc::make_mut(&mut world.model.doc).root.as_mut().unwrap() else {
         unreachable!()
     };
-    fields.insert(OUTLINE, Value::list([]));
+    fields.insert(SECTIONS, Value::list([]));
     world.model.selection = None;
     let f = editing_frame(&mut world);
-    let empty = stop(&f, &[Step::Key(OUTLINE)]);
+    let empty = stop(&f, &[Step::Key(SECTIONS)]);
     assert!(empty.rect.width() > 0.0 && empty.rect.height() > 0.0);
 }

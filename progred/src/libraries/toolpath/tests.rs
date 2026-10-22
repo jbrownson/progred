@@ -81,13 +81,8 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
     )
     .unwrap();
     assert!(!::grap::absent::is_absent(&controls), "{controls:?}");
-    let fields = controls
-        .as_record()
-        .unwrap()
-        .get(&ui::WITH_CONTROLS)
-        .unwrap()
-        .as_record()
-        .unwrap();
+    let fields = controls.as_record().unwrap();
+    assert_eq!(::grap::isa::of(fields), Some(ui::kind::VIEW_WITH_CONTROLS));
     let cursor = Value::record([
         (ui::POSITION, f64::value(0.7)),
         (ui::RANGE, Value::list([f64::value(0.0), f64::value(8.0)])),

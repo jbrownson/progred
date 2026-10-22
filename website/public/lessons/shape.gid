@@ -212,6 +212,7 @@
     "case": 7ebb4ced7047479caafcd90b14499697,
     "reason": c2a01958bce64151beb2b3992017de4c,
     "objects": 404c3832b3d24ec197d8f9bbec5b5df2,
+    "point_2": a780ca3f4fdd472d8b634c8fb96d83ab,
   },
   "cells": {
     model: {name: "Model"},
@@ -1534,6 +1535,7 @@
                     y: {f64: 0x000000000000e0bf},
                     x: {f64: 0x000000000000e0bf},
                     z: {f64: 0x000000000000e0bf},
+                    isa: point_2,
                   },
                   pattern: {isa: binder, bind: stock_min},
                 },
@@ -1543,6 +1545,7 @@
                     y: {f64: 0x000000000000e03f},
                     x: {f64: 0x000000000000e03f},
                     z: {f64: 0x000000000000e03f},
+                    isa: point_2,
                   },
                   pattern: {isa: binder, bind: stock_max},
                 },

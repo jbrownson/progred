@@ -76,6 +76,9 @@ pub mod vocabulary {
         /// `preview paths refined` makes one.
         pub const PATHS_REFINED_PREVIEW: CellId =
             CellId::from_u128(0xb2b559c9e1b74b3baa7c45c5621c6474);
+        /// A point or a direction: `{isa: point, x, y, z}`, as `point`
+        /// makes one.
+        pub const POINT: CellId = CellId::from_u128(0xa780ca3f4fdd472d8b634c8fb96d83ab);
     }
 }
 
@@ -87,7 +90,10 @@ const EMITTERS: &[CellId] = &[START_AT, LINE_TO, MAP_POINTS, MAP_AXES, WITH_TOOL
 
 #[cfg(any(test, feature = "cam-profile"))]
 fn point_value(point: Point3) -> Value {
-    Value::record([X, Y, Z].into_iter().zip(point.map(f64::value)))
+    ::grap::isa::record(
+        kind::POINT,
+        [X, Y, Z].into_iter().zip(point.map(f64::value)),
+    )
 }
 
 /// Playback that cuts a one-unit stock cube, centred on the origin, up to
@@ -114,7 +120,10 @@ fn cube_playback(progress: f64) -> playback::Settings {
 }
 
 fn runtime_point_value(point: Point3) -> RuntimeValue {
-    RuntimeValue::record([X, Y, Z].into_iter().zip(point.map(RuntimeValue::f64)))
+    ::grap::isa::runtime(
+        kind::POINT,
+        [X, Y, Z].into_iter().zip(point.map(RuntimeValue::f64)),
+    )
 }
 
 fn read_point(value: &Value) -> Option<Point3> {
@@ -122,6 +131,7 @@ fn read_point(value: &Value) -> Option<Point3> {
 }
 
 fn read_runtime_point(value: &RuntimeValue) -> Option<Point3> {
+    (value.kind()? == kind::POINT).then_some(())?;
     let point = [
         value.field(X)?.as_f64()?,
         value.field(Y)?.as_f64()?,
@@ -475,6 +485,7 @@ pub fn library<W: Host>() -> Library<W> {
             (Z, "z"),
             (PREVIEW, "preview paths"),
             (kind::PATHS_PREVIEW, "paths preview"),
+            (kind::POINT, "point"),
             (kind::PATHS_VOLUME_PREVIEW, "paths volume preview"),
             (kind::PATHS_MESH_PREVIEW, "paths mesh preview"),
             (kind::PATHS_REFINED_PREVIEW, "paths refined preview"),

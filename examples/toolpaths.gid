@@ -165,7 +165,7 @@
     "operand_2": b66457fa59524110bb363bc28754cea0,
     "operations_section": 983f8e752bd5d3b34f2c81ce317c03b4,
     "orientation": ddb447a86cf765e6a19f3c448882659e,
-    "outline": e6c0b2058b8468428d64576d953e2d62,
+    "outline": efc8f00d14ad4fa8a768a234b8435311,
     "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "parallel_strokes": 058f67b593d4c41d00e53c2e5409a5c7,
@@ -175,6 +175,7 @@
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
     "playback": 0955045e00d5d5f2139fb3ab19591c3e,
     "point": 61ca3de7d2601772ebedf8e2b2f5e0c5,
+    "point_2": a780ca3f4fdd472d8b634c8fb96d83ab,
     "point_sum": ef3f385a80bb047e57e6d08fd05b5461,
     "position": 199e09fd8b4d41632a90d103d278d6ea,
     "preview_mode": 49b9fdc633d846b9deb63e8ebecbb05c,
@@ -204,6 +205,7 @@
     "scaled_point": dfb16dc785610b93fa62389983e57594,
     "scene": 9b819b6ad5c547e8952d8759531b9cd3,
     "sections": 597f106baef34b199411828f4c870edc,
+    "sections_2": ceb00a1434284f7e88b7ef192583af09,
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
     "sequence_paths": 1ecd44ed838a86892635ca2785826f2a,
     "settings_section": 0e23e86816dc8eb7d788c4e24d637514,
@@ -4423,6 +4425,15 @@
         0xdb: rotated_groups,
         0xed: tooled_groups,
       ],
+      sections_2: [
+        0x24: settings_section,
+        0x49: geometry_section,
+        0x6d: tools_section,
+        0x92: operations_section,
+        0xb6: strategies_section,
+        0xdb: helpers_section,
+      ],
+      isa: outline,
       strategies_section: [
         0x11: diagonal_groups,
         0x22: diagonals,
@@ -4438,14 +4449,6 @@
         0xcc: chamfer_ring,
         0xdd: contour_chamfer,
         0xee: crosswise_chamfer,
-      ],
-      outline: [
-        0x24: settings_section,
-        0x49: geometry_section,
-        0x6d: tools_section,
-        0x92: operations_section,
-        0xb6: strategies_section,
-        0xdb: helpers_section,
       ],
     },
     panes: {
@@ -4657,6 +4660,7 @@
                         x: {
                           f64: 0x000000000000e0bf,
                         },
+                        isa: point_2,
                         z: {
                           f64: 0x000000000000e0bf,
                         },
@@ -4675,6 +4679,7 @@
                         x: {
                           f64: 0x000000000000e03f,
                         },
+                        isa: point_2,
                         z: {
                           f64: 0x000000000000e03f,
                         },

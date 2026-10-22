@@ -93,11 +93,9 @@ fn svg_bench_renders_toolpath_source_and_preview() {
     assert_eq!(value.as_cell(), Some(names["program_tree"]));
     let preview =
         presentation::tests::viewport_output(declaration, &sources, 700.0, 500.0).unwrap();
-    assert!(
-        preview
-            .as_record()
-            .unwrap()
-            .contains_key(&crate::libraries::controls::vocabulary::WITH_CONTROLS)
+    assert_eq!(
+        ::grap::isa::of(preview.as_record().unwrap()),
+        Some(crate::libraries::controls::vocabulary::kind::VIEW_WITH_CONTROLS)
     );
     let doc = Document {
         root: Some(preview),

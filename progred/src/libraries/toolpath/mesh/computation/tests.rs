@@ -95,11 +95,11 @@ fn playback_moves_immediately_and_only_the_surface_uses_pending_colors() {
             (PROFILE_TOLERANCE, f64::value(tolerance)),
             (
                 STOCK_MIN,
-                Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
+                ::grap::isa::record(kind::POINT, [X, Y, Z].map(|key| (key, f64::value(-0.5)))),
             ),
             (
                 STOCK_MAX,
-                Value::record([X, Y, Z].map(|key| (key, f64::value(0.5)))),
+                ::grap::isa::record(kind::POINT, [X, Y, Z].map(|key| (key, f64::value(0.5)))),
             ),
             (
                 STOCK,
@@ -264,11 +264,11 @@ fn path_appearance_changes_retain_the_stock_mesh() {
             (PROFILE_TOLERANCE, f64::value(tolerance)),
             (
                 STOCK_MIN,
-                Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
+                ::grap::isa::record(kind::POINT, [X, Y, Z].map(|key| (key, f64::value(-0.5)))),
             ),
             (
                 STOCK_MAX,
-                Value::record([X, Y, Z].map(|key| (key, f64::value(0.5)))),
+                ::grap::isa::record(kind::POINT, [X, Y, Z].map(|key| (key, f64::value(0.5)))),
             ),
             (
                 STOCK,
@@ -483,11 +483,11 @@ fn cam_dependencies_reuse_geometry_and_invalidate_program_and_settings() {
         (PROFILE_TOLERANCE, f64::value(0.001)),
         (
             STOCK_MIN,
-            Value::record([X, Y, Z].map(|key| (key, f64::value(-1.0)))),
+            ::grap::isa::record(kind::POINT, [X, Y, Z].map(|key| (key, f64::value(-1.0)))),
         ),
         (
             STOCK_MAX,
-            Value::record([X, Y, Z].map(|key| (key, f64::value(1.0)))),
+            ::grap::isa::record(kind::POINT, [X, Y, Z].map(|key| (key, f64::value(1.0)))),
         ),
         (
             STOCK,

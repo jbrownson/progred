@@ -42,11 +42,11 @@ fn settings_at(
         (PROFILE_TOLERANCE, f64::value(0.001)),
         (
             STOCK_MIN,
-            Value::record([X, Y, Z].map(|k| (k, f64::value(-0.5)))),
+            ::grap::isa::record(kind::POINT, [X, Y, Z].map(|k| (k, f64::value(-0.5)))),
         ),
         (
             STOCK_MAX,
-            Value::record([X, Y, Z].map(|k| (k, f64::value(0.5)))),
+            ::grap::isa::record(kind::POINT, [X, Y, Z].map(|k| (k, f64::value(0.5)))),
         ),
         (
             STOCK,
@@ -481,11 +481,11 @@ fn model_implicit_image_survives_tool_motion_and_path_style_changes() {
                 (PROFILE_TOLERANCE, f64::value(0.001)),
                 (
                     STOCK_MIN,
-                    Value::record([X, Y, Z].map(|k| (k, f64::value(-0.5)))),
+                    ::grap::isa::record(kind::POINT, [X, Y, Z].map(|k| (k, f64::value(-0.5)))),
                 ),
                 (
                     STOCK_MAX,
-                    Value::record([X, Y, Z].map(|k| (k, f64::value(0.5)))),
+                    ::grap::isa::record(kind::POINT, [X, Y, Z].map(|k| (k, f64::value(0.5)))),
                 ),
             ]))
             .unwrap(),

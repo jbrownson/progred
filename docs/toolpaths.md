@@ -80,8 +80,8 @@ Grap uses ordinary calls to scoped `start at`, `line to`, `with tool`,
 generators. Emitters outside an installed output scope return `toolpath output
 required`. `map points` takes a callable under `mapping` and an unevaluated
 `expression`. For each emitted point, it calls the mapping with `x`, `y`, `z`;
-the mapping returns an ordinary record with those fields (the `point` function
-constructs one). Nested mappings run inside-out and restore the surrounding
+the mapping returns a point, `{isa: point, x, y, z}`, as the `point` function
+makes one. Nested mappings run inside-out and restore the surrounding
 mapping on exit, including on failure. Mapping functions are intended to
 compute coordinates, not emit more paths.
 

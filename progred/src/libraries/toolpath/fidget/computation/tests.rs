@@ -80,11 +80,11 @@ fn playback(progress: f64) -> playback::Settings {
         (PROFILE_TOLERANCE, f64::value(0.001)),
         (
             STOCK_MIN,
-            Value::record([X, Y, Z].map(|key| (key, f64::value(-0.5)))),
+            ::grap::isa::record(kind::POINT, [X, Y, Z].map(|key| (key, f64::value(-0.5)))),
         ),
         (
             STOCK_MAX,
-            Value::record([X, Y, Z].map(|key| (key, f64::value(0.5)))),
+            ::grap::isa::record(kind::POINT, [X, Y, Z].map(|key| (key, f64::value(0.5)))),
         ),
         (
             STOCK,

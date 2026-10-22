@@ -1,15 +1,16 @@
 //! Outline entries own their UI state; their bodies jump to shared record fields.
 
-use super::vocabulary::OUTLINE;
+use super::vocabulary::{SECTIONS, kind};
 use crate::display::host::{Host, Layout, ProjectionInput};
 use crate::display::{self as d, col};
 use gid::{CellId, Step, Value};
 use std::rc::Rc;
 
 fn sections(value: &Value) -> Option<Vec<CellId>> {
-    value
-        .as_record()?
-        .get(&OUTLINE)?
+    let fields = value.as_record()?;
+    (::grap::isa::of(fields)? == kind::OUTLINE).then_some(())?;
+    fields
+        .get(&SECTIONS)?
         .as_list()?
         .values()
         .map(Value::as_cell)
@@ -21,12 +22,13 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
     let fields = input.value?.as_record()?.clone();
     let value = ::grap::RuntimeValue::from(input.value?.clone());
     let runtime_input = input.with_value(Some(&value));
-    let footer = d::structure::Fields::default()
-        .rest(&runtime_input, |key| key == OUTLINE || keys.contains(&key));
+    let footer = d::structure::Fields::default().rest(&runtime_input, |key| {
+        key == ::grap::isa::ISA || key == SECTIONS || keys.contains(&key)
+    });
     let label = d::structure::field_label(
         &runtime_input,
-        OUTLINE,
-        d::structure::field_name(input.env, OUTLINE),
+        SECTIONS,
+        d::structure::field_name(input.env, SECTIONS),
         true,
     );
     Some(Layout::program(Rc::new(move |context, build| {
@@ -53,7 +55,7 @@ pub(super) fn display<W: Host>(input: &ProjectionInput<'_, W>) -> Option<Layout<
                 8.0,
                 [
                     label.clone(),
-                    d::descend([Step::Key(OUTLINE)], Some(entries), None),
+                    d::descend([Step::Key(SECTIONS)], Some(entries), None),
                 ],
             )]
             .into_iter()

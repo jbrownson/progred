@@ -102,7 +102,7 @@ fn logical_example_offset_baselines_align_navigation_with_the_declared_rows() {
 #[test]
 fn logical_example_deep_multiline_cells_share_a_vertical_entrance() {
     let (mut world, binders) = example_section("deep");
-    let outline = crate::libraries::presentation::vocabulary::OUTLINE;
+    let outline = crate::libraries::presentation::vocabulary::SECTIONS;
     let first = positions(
         world
             .model
@@ -293,20 +293,21 @@ fn logical_reading_order_visits_container_stops_and_wraps_between_lines() {
 
 #[test]
 fn logical_navigation_retains_jump_editing_targets() {
-    use crate::libraries::presentation::vocabulary::OUTLINE;
+    use crate::libraries::presentation::vocabulary::{SECTIONS, kind};
     let field = gid::new_cell_id();
     let root = Value::record([
-        (OUTLINE, Value::list([field.into(), field.into()])),
+        (::grap::isa::ISA, kind::OUTLINE.into()),
+        (SECTIONS, Value::list([field.into(), field.into()])),
         (field, text::value("edit me")),
     ]);
-    let entries = positions(root.as_record().unwrap().get(&OUTLINE).unwrap());
+    let entries = positions(root.as_record().unwrap().get(&SECTIONS).unwrap());
     let mut cells = Cells::new();
     cells.set_value(field, name::record("Section", []));
     let mut world = crate::test_editor(Document {
         root: Some(root),
         cells,
     });
-    let heading = vec![Step::Key(OUTLINE), Step::Element(entries[0].clone())];
+    let heading = vec![Step::Key(SECTIONS), Step::Element(entries[0].clone())];
     // The body is drawn below its heading, jumped to the field it shows.
     let body = crate::occurrence::of(&heading)
         .into_iter()

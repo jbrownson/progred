@@ -85,7 +85,7 @@ impl OrbitProfile {
         editor.model.workspace.sync_declared(&declarations);
         editor.model.workspace.left_width = 0.5;
         if collapsed {
-            let outline = libraries::presentation::vocabulary::OUTLINE;
+            let outline = libraries::presentation::vocabulary::SECTIONS;
             let sections: Vec<_> = editor
                 .model
                 .doc

@@ -2,8 +2,9 @@
 
 The `controls` library supplies `with controls`, a viewport composition function.
 It takes `controls` (a callable receiving `control state` and `update`), `view` (a
-callable), `value`, `width`, and `height`, and returns an ordinary GID
-declaration. Its partial:
+callable), `value`, `width`, and `height`, and returns a view with controls,
+`{isa: view with controls, controls, view, value, width, height}`, a record of
+those arguments. Its kind's projection:
 
 1. During layout preparation, runs `controls` with evaluation-local control capabilities.
 2. Measures the emitted native widgets.

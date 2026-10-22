@@ -94,13 +94,8 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
             height,
         )
         .unwrap();
-        let controls = output
-            .as_record()
-            .unwrap()
-            .get(&c::WITH_CONTROLS)
-            .unwrap()
-            .as_record()
-            .unwrap();
+        let controls = output.as_record().unwrap();
+        assert_eq!(::grap::isa::of(controls), Some(c::kind::VIEW_WITH_CONTROLS));
         assert_eq!(controls.get(&l::WIDTH).and_then(f64::read), Some(width));
         assert_eq!(controls.get(&l::HEIGHT).and_then(f64::read), Some(height));
         let program = controls

@@ -166,15 +166,7 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
             600.0,
         )
         .unwrap();
-        let controls = declaration
-            .as_record()
-            .unwrap()
-            .get(&WITH_CONTROLS)
-            .unwrap()
-            .as_record()
-            .unwrap()
-            .get(&CONTROLS)
-            .unwrap();
+        let controls = declaration.as_record().unwrap().get(&CONTROLS).unwrap();
         // One view and its computations across widths, so the work is reused.
         with_view(sources, &Output::default(), |cx, text, project| {
             let cx = crate::projection::Cx {
@@ -708,16 +700,9 @@ fn controls_declaration_reuses_tracked_inputs_but_not_effectful_or_untracked_arg
                     None,
                 )
                 .into_value();
-            result
-                .as_record()
-                .unwrap()
-                .get(&WITH_CONTROLS)
-                .unwrap()
-                .as_record()
-                .unwrap()
-                .get(&VALUE)
-                .unwrap()
-                .clone()
+            let fields = result.as_record().unwrap();
+            assert_eq!(::grap::isa::of(fields), Some(kind::VIEW_WITH_CONTROLS));
+            fields.get(&VALUE).unwrap().clone()
         };
         assert_eq!(evaluate(&doc), f64::value(1.0));
         assert_eq!(evaluate(&doc), f64::value(1.0));

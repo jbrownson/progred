@@ -44,6 +44,15 @@ pub mod vocabulary {
     pub const NO_STATE: CellId = CellId::from_u128(0xa447ceb4dea2cb19e5feebaaace4a89b);
     pub const INVALID_INPUT: CellId = CellId::from_u128(0x696753238d1730b42d341ef86a2e2fd0);
     pub const OUTPUT_REQUIRED: CellId = CellId::from_u128(0xec88743fae51737b557a2c57aae7712b);
+
+    pub mod kind {
+        use gid::CellId;
+        /// A view drawn with its controls over it, as `with controls` makes
+        /// one: `{isa: view with controls, controls, view, value, width,
+        /// height}`.
+        pub const VIEW_WITH_CONTROLS: CellId =
+            CellId::from_u128(0x4a3ba158fa65468eb615ae30691eb65b);
+    }
 }
 use layout::vocabulary::{HEIGHT, WIDTH};
 use presentation::vocabulary::VALUE;
@@ -72,10 +81,7 @@ fn constructor(
         }
         fields.push((key, value));
     }
-    Ok(RuntimeValue::record([(
-        WITH_CONTROLS,
-        RuntimeValue::record(fields),
-    )]))
+    Ok(::grap::isa::runtime(kind::VIEW_WITH_CONTROLS, fields))
 }
 
 fn read_state(state: Option<&Value>, key: CellId) -> Option<&Value> {
@@ -339,7 +345,7 @@ fn radio_widget<W: Host>(
 }
 
 fn display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    let fields = input.value?.field(WITH_CONTROLS)?;
+    let fields = input.value?;
     let controls = fields.field(CONTROLS)?;
     let view = fields.field(VIEW)?;
     let source = fields.field(VALUE)?;
@@ -742,6 +748,7 @@ pub fn library<W: Host>() -> Library<W> {
         "controls",
         [
             (WITH_CONTROLS, "with controls"),
+            (kind::VIEW_WITH_CONTROLS, "view with controls"),
             (CONTROLS, "controls"),
             (VIEW, "view"),
             (PARAMETERS, "parameters"),
@@ -768,5 +775,5 @@ pub fn library<W: Host>() -> Library<W> {
         ],
         functions,
     )
-    .with_projection(display::runtime_partial(display))
+    .with_projections_for([(kind::VIEW_WITH_CONTROLS, display::runtime_partial(display))])
 }

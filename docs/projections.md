@@ -488,12 +488,13 @@ are explicit inputs. This memo retains only the computed Value, never widgets,
 handlers, or rendered output.
 
 The presentation library also offers an opt-in record outline:
-`{outline: [field-a, field-b], field-a: ..., field-b: ...}`. The list orders
-field references, not copies of their contents. The ordinary `outline:` field
-label selects the list and reads its displayed name from the current definition.
+`{isa: outline, sections: [field-a, field-b], field-a: ..., field-b: ...}`,
+drawn as its kind provides. The list orders field references, not copies of
+their contents. The ordinary `sections:` field label selects the list and reads
+its displayed name from the current definition.
 The list sits below the label without another indent, giving record and list
 selections distinct bounds even without extra fields. Select-all still reaches
-the root; deleting the outline field leaves the remaining record in its ordinary
+the root; deleting the `isa` field leaves the remaining record in its ordinary
 presentation. The list uses a vertical, unbracketed presentation with a local
 element partial for the field's name and
 disclosure heading. An item-composition callback adds the indented body outside
@@ -507,7 +508,7 @@ columns retain an ordinary empty-list handle.
 
 A heading selects the real list element, so navigation, insertion, deletion,
 and picking remain list operations. Removing an entry removes only the reference,
-not the source field. The body jumps at `outline / element / field` to where the
+not the source field. The body jumps at `sections / element / field` to where the
 source record's field is stored, whatever jumps led to the outline. Repeated entries
 therefore share document edits but have independent selection and fold state.
 Section lists use the same unbracketed column with spacing between items.
@@ -518,8 +519,8 @@ source.
 Visibility uses the existing undoable fold annotation at each body occurrence,
 without document edits or a separate state store. Clicking a heading folds its
 body and selects the heading, keeping selection out of hidden content. The
-outline has no outer braces. Only unlisted fields appear in an ordinary record
-footer, omitted when there are no extras or pending field insertion. Its braces
+outline has no outer braces. Only unlisted fields, other than `isa`, appear in
+an ordinary record footer, omitted when there are no extras or pending field insertion. Its braces
 select the whole record; it has no separate fold state or control. A missing
 referenced source field gets its ordinary empty picker. A malformed outline
 declines to the normal projection.
@@ -645,8 +646,9 @@ value.
 
 ## Controls and state
 
-The controls library's `with controls` projection runs a controls lambda with
-`control state` and `update` arguments. State is an arbitrary GID value held under
+The projection of a view with controls, which `with controls` returns, runs a
+controls lambda with `control state` and `update` arguments. State is an
+arbitrary GID value held under
 the occurrence's control-state annotation field; a missing field supplies the
 explicit `no control state` absent. Defaults belong to Grap code, not to this
 container. The controls lambda emits widgets and returns ordinary parameters,

@@ -24,10 +24,18 @@ pub mod vocabulary {
     pub const PREPARE: CellId = CellId::from_u128(0x8b782978097343efd90f6fb61f649419);
     /// The single argument of a projection function.
     pub const VALUE: CellId = CellId::from_u128(0x84d3ba81fd2a52ea37478f4a868106f4);
-    /// Ordered field references for an opt-in record outline.
-    pub const OUTLINE: CellId = CellId::from_u128(0xe6c0b2058b8468428d64576d953e2d62);
+    /// An outline's sections: references to its own fields, in order.
+    pub const SECTIONS: CellId = CellId::from_u128(0xceb00a1434284f7e88b7ef192583af09);
     /// Occurrence step for a computed result, not a field in the source record.
     pub const RESULT: CellId = CellId::from_u128(0x11098129f74918af8a0924f94c37df4f);
+
+    pub mod kind {
+        use gid::CellId;
+
+        /// A record drawn as an outline of some of its own fields:
+        /// `{isa: outline, sections, …fields}`.
+        pub const OUTLINE: CellId = CellId::from_u128(0xefc8f00d14ad4fa8a768a234b8435311);
+    }
 }
 
 pub fn viewport(value: &gid::Value) -> Option<(&gid::Value, &gid::Value)> {
@@ -167,15 +175,17 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::VIEWPORT, "viewport"),
             (vocabulary::PREPARE, "prepare"),
             (vocabulary::VALUE, "value"),
-            (vocabulary::OUTLINE, "outline"),
+            (vocabulary::kind::OUTLINE, "outline"),
+            (vocabulary::SECTIONS, "sections"),
             (vocabulary::RESULT, "result"),
         ],
         ::grap::ForeignFunctions::default(),
     )
-    .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(display),
+    .with_projection(crate::display::runtime_partial(display))
+    .with_projections_for([(
+        vocabulary::kind::OUTLINE,
         crate::display::partial(outline::display),
-    ]))
+    )])
 }
 
 #[cfg(test)]
