@@ -52,6 +52,10 @@ fn tagged(tag: CellId, content: Value) -> Value {
     Value::record([(tag, content)])
 }
 
+fn scene(objects: Value) -> Value {
+    ::grap::isa::record(vocabulary::kind::SCENE, [(vocabulary::OBJECTS, objects)])
+}
+
 fn colored(field: Value, rgb: [u8; 3]) -> Value {
     Value::record([
         (vocabulary::FIELD, field),
@@ -67,36 +71,34 @@ fn scene_colors_are_data_and_preview_preserves_metadata() {
     let field = f32::value(-1.0);
     let scene = name::record(
         "parts",
-        [(
-            vocabulary::SCENE,
-            Value::list([
-                name::record(
-                    "red part",
-                    colored(field.clone(), [255, 0, 0])
-                        .as_record()
-                        .unwrap()
-                        .iter()
-                        .map(|(key, value)| (*key, value.clone())),
-                ),
-                Value::record([(vocabulary::FIELD, field)]),
-            ]),
-        )],
+        [
+            (::grap::isa::ISA, vocabulary::kind::SCENE.into()),
+            (
+                vocabulary::OBJECTS,
+                Value::list([
+                    name::record(
+                        "red part",
+                        colored(field.clone(), [255, 0, 0])
+                            .as_record()
+                            .unwrap()
+                            .iter()
+                            .map(|(key, value)| (*key, value.clone())),
+                    ),
+                    Value::record([(vocabulary::FIELD, field)]),
+                ]),
+            ),
+        ],
     );
     let preview = evaluate(&call(
         vocabulary::PREVIEW_3D,
         [(presentation::vocabulary::VALUE, scene.clone())],
     ));
+    let preview = preview.as_record().unwrap();
     assert_eq!(
-        preview
-            .as_record()
-            .unwrap()
-            .get(&vocabulary::PREVIEW_3D)
-            .unwrap()
-            .as_record()
-            .unwrap()
-            .get(&vocabulary::FIELD),
-        Some(&scene)
+        ::grap::isa::of(preview),
+        Some(vocabulary::kind::VOLUME_PREVIEW)
     );
+    assert_eq!(preview.get(&vocabulary::FIELD), Some(&scene));
     let objects = scene_objects(&scene).unwrap();
     assert_eq!(objects[0].color, [255, 0, 0]);
     assert_eq!(objects[1].color, [255; 3]);
@@ -136,23 +138,17 @@ fn malformed_scenes_and_translucent_colors_fail_explicitly() {
     ] {
         let result = evaluate(&call(
             vocabulary::PREVIEW_3D,
-            [(
-                presentation::vocabulary::VALUE,
-                tagged(vocabulary::SCENE, objects),
-            )],
+            [(presentation::vocabulary::VALUE, scene(objects))],
         ));
         assert_eq!(result, ::grap::absent::value(reason));
     }
-    let opaque = tagged(
-        vocabulary::SCENE,
-        Value::list([Value::record([
-            (vocabulary::FIELD, f32::value(0.0)),
-            (
-                vocabulary::COLOR,
-                tagged(color::vocabulary::RGBA, vec![1, 2, 3, 255].into()),
-            ),
-        ])]),
-    );
+    let opaque = scene(Value::list([Value::record([
+        (vocabulary::FIELD, f32::value(0.0)),
+        (
+            vocabulary::COLOR,
+            tagged(color::vocabulary::RGBA, vec![1, 2, 3, 255].into()),
+        ),
+    ])]));
     assert_eq!(scene_objects(&opaque).unwrap()[0].color, [1, 2, 3]);
 }
 
@@ -220,10 +216,7 @@ fn cpu_scene_merges_depth_before_shading_colors() {
 fn empty_scene_is_transparent() {
     let value = evaluate(&call(
         vocabulary::PREVIEW_3D,
-        [(
-            presentation::vocabulary::VALUE,
-            tagged(vocabulary::SCENE, Value::list([])),
-        )],
+        [(presentation::vocabulary::VALUE, scene(Value::list([])))],
     ));
     let preview = volume_preview(&value).unwrap();
     let rgba = PreviewRenderer::default()
@@ -379,15 +372,11 @@ fn preview_is_an_ordinary_projected_value() {
         [(presentation::vocabulary::VALUE, sphere(40.0))],
     );
     let value = evaluate(&expression);
-    let renderer = RefCell::new(PreviewRenderer::default());
-    let layout = display(
-        &ProjectionInput {
-            scale_factor: 2.0,
-            writable: false,
-            ..projection_input(&NoEval, &value.into())
-        },
-        &renderer,
-    )
+    let layout = slice(&ProjectionInput {
+        scale_factor: 2.0,
+        writable: false,
+        ..projection_input(&NoEval, &value.into())
+    })
     .expect("preview projection");
 
     let (extent, drawing) = crate::libraries::test_widgets::paint(&layout);

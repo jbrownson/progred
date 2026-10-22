@@ -22,9 +22,9 @@ fn settings_at(
     scale: f64,
 ) -> implicit::computation::Settings {
     use fidget::vocabulary as f;
-    let model = fidget::volume_preview(&Value::record([(
-        f::PREVIEW_3D,
-        Value::record([
+    let model = fidget::volume_preview(&::grap::isa::record(
+        f::kind::VOLUME_PREVIEW,
+        [
             (f::FIELD, f32::value(1.0)),
             (layout::vocabulary::WIDTH, f64::value(width)),
             (layout::vocabulary::HEIGHT, f64::value(height)),
@@ -34,8 +34,8 @@ fn settings_at(
             (f::MAX_Y, f32::value(0.6)),
             (f::MIN_Z, f32::value(-0.6)),
             (f::MAX_Z, f32::value(0.6)),
-        ]),
-    )]))
+        ],
+    ))
     .unwrap();
     let playback = playback::Settings::read(&Value::record([
         (PROGRESS, f64::value(progress)),

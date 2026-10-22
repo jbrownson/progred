@@ -7,9 +7,9 @@ use std::{collections::VecDeque, sync::Mutex};
 
 fn settings(yaw: f32) -> Settings {
     use fidget::vocabulary as f;
-    let preview = fidget::volume_preview(&Value::record([(
-        f::PREVIEW_3D,
-        Value::record([
+    let preview = fidget::volume_preview(&::grap::isa::record(
+        f::kind::VOLUME_PREVIEW,
+        [
             (f::FIELD, f32::value(1.0)),
             (layout::vocabulary::WIDTH, f64::value(32.0)),
             (layout::vocabulary::HEIGHT, f64::value(24.0)),
@@ -19,8 +19,8 @@ fn settings(yaw: f32) -> Settings {
             (f::MAX_Y, f32::value(1.0)),
             (f::MIN_Z, f32::value(-1.0)),
             (f::MAX_Z, f32::value(1.0)),
-        ]),
-    )]))
+        ],
+    ))
     .unwrap();
     let camera = Value::record([(
         fidget::vocabulary::CAMERA,

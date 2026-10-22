@@ -55,9 +55,9 @@ fn program_size(shape: &VmShape) -> (usize, usize) {
 /// A preview of `objects` within ±0.85, `height` pixels tall and 4/9 as wide.
 fn volume(objects: Vec<SceneObject>, height: f64) -> implicit::VolumePreview {
     use implicit::vocabulary as f;
-    let mut preview = implicit::volume_preview(&Value::record([(
-        f::PREVIEW_3D,
-        Value::record([
+    let mut preview = implicit::volume_preview(&::grap::isa::record(
+        f::kind::VOLUME_PREVIEW,
+        [
             (f::FIELD, crate::libraries::f32::value(1.0)),
             (
                 crate::libraries::layout::vocabulary::WIDTH,
@@ -73,8 +73,8 @@ fn volume(objects: Vec<SceneObject>, height: f64) -> implicit::VolumePreview {
             (f::MAX_X, crate::libraries::f32::value(0.85)),
             (f::MAX_Y, crate::libraries::f32::value(0.85)),
             (f::MAX_Z, crate::libraries::f32::value(0.85)),
-        ]),
-    )]))
+        ],
+    ))
     .unwrap();
     preview.objects = objects;
     preview

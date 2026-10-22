@@ -27,22 +27,18 @@ pub(crate) fn preview(
     Ok(match depth(requested.as_ref()) {
         None => ::grap::absent::value(vocabulary::INVALID_MESH_DEPTH),
         Some(depth) => {
-            let value =
-                volume_preview_function(context, call, environment, vocabulary::PREVIEW_MESH)?;
-            if let Some(fields) = value
-                .as_record()
-                .and_then(|r| r.get(&vocabulary::PREVIEW_MESH))
-                .and_then(Value::as_record)
-            {
-                Value::record([(
-                    vocabulary::PREVIEW_MESH,
-                    Value::record(fields.iter().map(|(k, v)| (*k, v.clone())).chain([(
-                        vocabulary::MESH_DEPTH,
-                        crate::libraries::u64::value(u64::from(depth)),
-                    )])),
-                )])
-            } else {
-                value
+            let value = volume_preview_function(
+                context,
+                call,
+                environment,
+                vocabulary::kind::MESH_PREVIEW,
+            )?;
+            match of_kind(&value, vocabulary::kind::MESH_PREVIEW) {
+                Some(fields) => Value::Record(fields.update(
+                    vocabulary::MESH_DEPTH,
+                    crate::libraries::u64::value(u64::from(depth)),
+                )),
+                None => value,
             }
         }
     })
@@ -114,9 +110,7 @@ fn view(preview: &VolumePreview, camera: Camera, pixels: PixelRenderSize) -> Opt
 pub(super) fn display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
-    let value = input.value?;
-    value.field(vocabulary::PREVIEW_MESH)?;
-    let (preview, depth) = read(value.as_value())?;
+    let (preview, depth) = read(input.value?.as_value())?;
     let geometry = generate(&preview, depth)?;
     Some(interactive_volume(
         drawing(&geometry, &preview, input.state, input.scale_factor)?,
@@ -125,10 +119,7 @@ pub(super) fn display<W: Host>(
 }
 
 pub(crate) fn read(value: &Value) -> Option<(VolumePreview, u8)> {
-    let fields = value
-        .as_record()?
-        .get(&vocabulary::PREVIEW_MESH)?
-        .as_record()?;
+    let fields = of_kind(value, vocabulary::kind::MESH_PREVIEW)?;
     Some((
         volume_preview_fields(fields)?,
         depth(fields.get(&vocabulary::MESH_DEPTH))?,

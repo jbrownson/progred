@@ -596,8 +596,11 @@ resolution follows the display scale; rectangular 3D views preserve square
 pixels rather than stretching the geometry. Ordinary preview calls without size
 arguments retain the 256-point default.
 
-`preview 3d` accepts either one Fidget field (white) or a scene value:
-`{scene: [{field: sdf, color: rgb}, ...]}`. A scene groups separately colored
+Fidget's preview functions return data of a kind: `preview` a slice preview,
+`preview 3d` a volume preview and `preview mesh` a mesh preview, each the
+field with its size and bounds, which Fidget's projections draw. `preview 3d`
+accepts either one Fidget field (white) or a scene:
+`{isa: scene, objects: [{field: sdf, color: rgb}, ...]}`. A scene groups separately colored
 objects; it is not a CSG operator. Geometry is depth-merged before lighting,
 and equal depths keep the earlier object. Colors use the existing color
 library's RGB/RGBA values; omitted colors are white and alpha must be opaque.

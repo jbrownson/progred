@@ -60,13 +60,7 @@ fn mesh_function_returns_an_ordinary_declaration() {
         .result
     };
     let result = call(vec![(presentation::vocabulary::VALUE, f32::value(1.0))]);
-    let fields = result
-        .as_record()
-        .unwrap()
-        .get(&vocabulary::PREVIEW_MESH)
-        .unwrap()
-        .as_record()
-        .unwrap();
+    let fields = of_kind(&result, vocabulary::kind::MESH_PREVIEW).unwrap();
     assert_eq!(depth(fields.get(&vocabulary::MESH_DEPTH)), Some(6));
     assert_eq!(volume_preview_fields(fields).unwrap().objects.len(), 1);
     let invalid = call(vec![

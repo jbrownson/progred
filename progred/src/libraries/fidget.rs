@@ -68,7 +68,8 @@ pub mod vocabulary {
     pub const MESH_DEPTH: CellId = CellId::from_u128(0x47114a01984bb53e1538906f13333f84);
     pub const INVALID_MESH_DEPTH: CellId = CellId::from_u128(0xf1130a671f8af0a4444438a64450496c);
     pub const FIELD: CellId = CellId::from_u128(0x66bad5269b830181b840cf23a391b10e);
-    pub const SCENE: CellId = CellId::from_u128(0xd6757ca4cb992116fe31ede39530709d);
+    /// A scene's objects, each `{field, color}`.
+    pub const OBJECTS: CellId = CellId::from_u128(0x404c3832b3d24ec197d8f9bbec5b5df2);
     pub const COLOR: CellId = CellId::from_u128(0xd6b4c91765541de967c02878c42d15ea);
     pub const DELTA_X: CellId = CellId::from_u128(0x671936a24eb2d9d6e47ac5915a3e38c4);
     pub const DELTA_Y: CellId = CellId::from_u128(0x3dd683179b807ca200980eeffb90011f);
@@ -90,9 +91,22 @@ pub mod vocabulary {
     pub const INVALID_BOUNDS: CellId = CellId::from_u128(0x64f01f9b22d96b4adfaadf21c2d6a74e);
     pub const INVALID_SIZE: CellId = CellId::from_u128(0x220fe6002d6a973da9c2ea1ff7fec98e);
 
-    /// The kinds of Fidget's nodes, each a cell of its own.
+    /// The kinds of Fidget's nodes, previews and scenes, each a cell of its
+    /// own.
     pub mod kind {
         use gid::CellId;
+        /// A field drawn as a slice through it: `{isa: slice preview, field,
+        /// width, height, minimum x, …, slice z}`, as `preview` makes one.
+        pub const SLICE_PREVIEW: CellId = CellId::from_u128(0xace95ce2ff584f22b201e4b1302ef7a3);
+        /// A field or scene drawn as a volume: `{isa: volume preview, field,
+        /// width, height, minimum x, …, maximum z}`, as `preview 3d` makes
+        /// one.
+        pub const VOLUME_PREVIEW: CellId = CellId::from_u128(0x9b19e36924a4493ebd375f19ca310753);
+        /// A volume preview drawn as a mesh, with a `mesh depth`, as
+        /// `preview mesh` makes one.
+        pub const MESH_PREVIEW: CellId = CellId::from_u128(0x66df7f6afb0a41c3834d3b277053ff38);
+        /// Fields drawn together, each in its color: `{isa: scene, objects}`.
+        pub const SCENE: CellId = CellId::from_u128(0x9b819b6ad5c547e8952d8759531b9cd3);
         pub const AXIS: CellId = CellId::from_u128(0xf82b802a154f47ab973d4a522fd3d034);
         pub const SUM: CellId = CellId::from_u128(0x7300fd0088314a1b800a9cb15b015ba8);
         pub const SUBTRACT: CellId = CellId::from_u128(0x4535d940d2f04affa350291dd96f06bc);
@@ -197,7 +211,7 @@ fn preview_value(
     context: &mut ::grap::Context,
     call: &Expression,
     environment: &Environment,
-    marker: CellId,
+    kind: CellId,
     bounds: impl IntoIterator<Item = (CellId, f32)>,
     valid: impl Fn(&[(CellId, Value, f32)]) -> bool,
 ) -> Result<Value, Halt> {
@@ -205,7 +219,10 @@ fn preview_value(
     else {
         return Ok(context.missing_argument(call, presentation::vocabulary::VALUE));
     };
-    let validation = if matches!(marker, vocabulary::PREVIEW_3D | vocabulary::PREVIEW_MESH) {
+    let validation = if matches!(
+        kind,
+        vocabulary::kind::VOLUME_PREVIEW | vocabulary::kind::MESH_PREVIEW
+    ) {
         scene_objects(&field).map(|_| ())
     } else {
         tree(&field).map(|_| ()).ok_or(vocabulary::INVALID_FIELD)
@@ -217,15 +234,13 @@ fn preview_value(
             Some(size) => match bound_arguments(context, call, environment, bounds)?
                 .filter(|bounds| valid(bounds))
             {
-                Some(bounds) => Value::record([(
-                    marker,
-                    Value::record(
-                        [(vocabulary::FIELD, field)]
-                            .into_iter()
-                            .chain(size)
-                            .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
-                    ),
-                )]),
+                Some(bounds) => ::grap::isa::record(
+                    kind,
+                    [(vocabulary::FIELD, field)]
+                        .into_iter()
+                        .chain(size)
+                        .chain(bounds.into_iter().map(|(label, value, _)| (label, value))),
+                ),
                 None => ::grap::absent::value(vocabulary::INVALID_BOUNDS),
             },
         },
@@ -285,7 +300,7 @@ fn preview_function(
         context,
         call,
         environment,
-        vocabulary::PREVIEW,
+        vocabulary::kind::SLICE_PREVIEW,
         [
             (vocabulary::MIN_X, -100.0),
             (vocabulary::MAX_X, 100.0),
@@ -308,20 +323,20 @@ pub(crate) fn preview_3d_function(
     call: &Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
-    volume_preview_function(context, call, environment, vocabulary::PREVIEW_3D)
+    volume_preview_function(context, call, environment, vocabulary::kind::VOLUME_PREVIEW)
 }
 
 fn volume_preview_function(
     context: &mut ::grap::Context,
     call: &Expression,
     environment: &Environment,
-    marker: CellId,
+    kind: CellId,
 ) -> Result<Value, Halt> {
     preview_value(
         context,
         call,
         environment,
-        marker,
+        kind,
         [
             (vocabulary::MIN_X, -80.0),
             (vocabulary::MAX_X, 80.0),
@@ -443,7 +458,7 @@ struct SlicePreview {
 }
 
 fn slice_preview(value: &Value) -> Option<SlicePreview> {
-    let fields = value.as_record()?.get(&vocabulary::PREVIEW)?.as_record()?;
+    let fields = of_kind(value, vocabulary::kind::SLICE_PREVIEW)?;
     let preview = SlicePreview {
         tree: tree(fields.get(&vocabulary::FIELD)?)?,
         size: preview_size(fields)?,
@@ -619,17 +634,24 @@ fn pinch_zoom(state: Option<&Value>, delta: f32) -> Option<Value> {
 
 use volume::SceneObject;
 
-fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
-    let Some(scene) = value
+/// `value`'s fields when it says it's a `kind`.
+fn of_kind(value: &Value, kind: CellId) -> Option<&gid::Record> {
+    value
         .as_record()
-        .and_then(|fields| fields.get(&vocabulary::SCENE))
-    else {
+        .filter(|fields| ::grap::isa::of(fields) == Some(kind))
+}
+
+fn scene_objects(value: &Value) -> Result<Vec<SceneObject>, CellId> {
+    let Some(scene) = of_kind(value, vocabulary::kind::SCENE) else {
         return Ok(vec![SceneObject {
             tree: tree(value).ok_or(vocabulary::INVALID_FIELD)?,
             color: [255; 3],
         }]);
     };
-    let objects = scene.as_list().ok_or(vocabulary::INVALID_SCENE)?;
+    let objects = scene
+        .get(&vocabulary::OBJECTS)
+        .and_then(Value::as_list)
+        .ok_or(vocabulary::INVALID_SCENE)?;
     // Fidget's merged voxel stores the object index in a u16.
     if objects.len() > usize::from(u16::MAX) + 1 {
         return Err(vocabulary::INVALID_SCENE);
@@ -663,12 +685,7 @@ pub(crate) struct VolumePreview {
 }
 
 pub(crate) fn volume_preview(value: &Value) -> Option<VolumePreview> {
-    volume_preview_fields(
-        value
-            .as_record()?
-            .get(&vocabulary::PREVIEW_3D)?
-            .as_record()?,
-    )
+    volume_preview_fields(of_kind(value, vocabulary::kind::VOLUME_PREVIEW)?)
 }
 
 fn volume_preview_fields(fields: &gid::Record) -> Option<VolumePreview> {
@@ -939,23 +956,23 @@ fn volume_display<W: Host>(
     ))
 }
 
-fn display<W: Host>(
+/// A volume preview, drawn as `renderer` renders it, turned and zoomed by
+/// hand.
+fn volume<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
     renderer: &RefCell<PreviewRenderer>,
 ) -> Option<Layout<W>> {
-    let value = input.value?;
-    if value.contains_field(vocabulary::PREVIEW_3D) {
-        let drawing = volume_display(
-            &volume_preview(value.as_value())?,
-            input.state,
-            input.scale_factor,
-            &mut renderer.borrow_mut(),
-        )?;
-        Some(interactive_volume(drawing, input))
-    } else {
-        value.field(vocabulary::PREVIEW)?;
-        slice_display(slice_preview(value.as_value())?, input.scale_factor)
-    }
+    let drawing = volume_display(
+        &volume_preview(input.value?.as_value())?,
+        input.state,
+        input.scale_factor,
+        &mut renderer.borrow_mut(),
+    )?;
+    Some(interactive_volume(drawing, input))
+}
+
+fn slice<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
+    slice_display(slice_preview(input.value?.as_value())?, input.scale_factor)
 }
 
 pub(crate) fn interactive_volume<W: Host, V>(
@@ -1028,7 +1045,11 @@ pub fn library<W: Host>() -> Library<W> {
             (vocabulary::PREVIEW_MESH, "preview mesh"),
             (vocabulary::MESH_DEPTH, "mesh depth"),
             (vocabulary::FIELD, "field"),
-            (vocabulary::SCENE, "scene"),
+            (vocabulary::kind::SLICE_PREVIEW, "slice preview"),
+            (vocabulary::kind::VOLUME_PREVIEW, "volume preview"),
+            (vocabulary::kind::MESH_PREVIEW, "mesh preview"),
+            (vocabulary::kind::SCENE, "scene"),
+            (vocabulary::OBJECTS, "objects"),
             (vocabulary::COLOR, "color"),
             (vocabulary::DELTA_X, "x"),
             (vocabulary::DELTA_Y, "y"),
@@ -1099,10 +1120,19 @@ pub fn library<W: Host>() -> Library<W> {
             )
         }),
     )
-    .with_projections_for(nodes)
-    .with_projection(crate::display::compose_partials([
-        crate::display::runtime_partial(move |input| display(input, &renderer)),
-        crate::display::runtime_partial(mesh::display),
+    .with_projections_for(nodes.into_iter().chain([
+        (
+            vocabulary::kind::SLICE_PREVIEW,
+            crate::display::runtime_partial(slice),
+        ),
+        (
+            vocabulary::kind::VOLUME_PREVIEW,
+            crate::display::runtime_partial(move |input| volume(input, &renderer)),
+        ),
+        (
+            vocabulary::kind::MESH_PREVIEW,
+            crate::display::runtime_partial(mesh::display),
+        ),
     ]))
     .with_completions(completion::offers)
 }

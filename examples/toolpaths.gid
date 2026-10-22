@@ -153,6 +153,7 @@
     "nx": 351e707a08f74583029720db2c3a7da0,
     "ny": abd58966a5a7c9d07ba6276c4b23ab5b,
     "nz": 628ba05288f3cdb5b52b5b876a0a68f8,
+    "objects": 404c3832b3d24ec197d8f9bbec5b5df2,
     "offset": 879a809cb198076af71cc1164d761a00,
     "op1": b8cdf2aa2f55d823bcc0c67123fa2b56,
     "op1_chamfers": 68680a50ef0b37d3c27fcae16349db6b,
@@ -201,7 +202,7 @@
     "rows": 84e4b10aa9c3ac6e420e9141a6a6fb1b,
     "sample_pass": 0fe4804f079850dd4a826383c4999a10,
     "scaled_point": dfb16dc785610b93fa62389983e57594,
-    "scene": d6757ca4cb992116fe31ede39530709d,
+    "scene": 9b819b6ad5c547e8952d8759531b9cd3,
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
     "sequence_paths": 1ecd44ed838a86892635ca2785826f2a,
     "settings_section": 0e23e86816dc8eb7d788c4e24d637514,
@@ -4549,7 +4550,7 @@
                     value: {
                       function: quote,
                       expression: {
-                        scene: [
+                        objects: [
                           0x80: {
                             field: {
                               unquote: {
@@ -4582,6 +4583,7 @@
                             },
                           },
                         ],
+                        isa: scene,
                       },
                       isa: call,
                     },

@@ -140,7 +140,7 @@
     "row_direction": 6e582a6a57d4006a0820b079cb351685,
     "rows": 84e4b10aa9c3ac6e420e9141a6a6fb1b,
     "sample_pass": 0fe4804f079850dd4a826383c4999a10,
-    "scene": d6757ca4cb992116fe31ede39530709d,
+    "scene": 9b819b6ad5c547e8952d8759531b9cd3,
     "segments": 1b811a6a2c0697a4665e26001f94f1b8,
     "setup_up": 775e067bc167e68a3145d0a5f4bbc6e9,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
@@ -211,6 +211,7 @@
     "binding": 039cd524b99d47ca92d23b26de5a01aa,
     "case": 7ebb4ced7047479caafcd90b14499697,
     "reason": c2a01958bce64151beb2b3992017de4c,
+    "objects": 404c3832b3d24ec197d8f9bbec5b5df2,
   },
   "cells": {
     model: {name: "Model"},
@@ -1485,7 +1486,8 @@
                   isa: call,
                   function: quote,
                   expression: {
-                    scene: [
+                    isa: scene,
+                    objects: [
                       {
                         field: {
                           isa: unquote_2,
