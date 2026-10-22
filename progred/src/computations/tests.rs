@@ -203,16 +203,7 @@ fn occurrences_in_different_views_have_independent_root_lifetimes() {
     // declaration and a pane step.
     let document = Trail::root();
     let pane = Trail::from(crate::test_examples::pane_root(
-        &crate::workspace::declarations(Some(
-            &crate::workspace::append(
-                &Value::record([]),
-                crate::workspace::Side::Left,
-                Value::record([]),
-            )
-            .unwrap()
-            .0,
-        ))[0]
-            .path,
+        &crate::workspace::panes(Some(&crate::workspace::row([Value::record([])])))[0],
     ));
     let first = computations.at(&document, || computations.runtime.input(1));
     let second = computations.at(&pane, || computations.runtime.input(2));

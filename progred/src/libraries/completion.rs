@@ -33,33 +33,33 @@ pub fn generated(
     insertion(display, None, create, on_commit)
 }
 
-/// Starts an empty document: its main value's `key` names a new cell, the
-/// left pane shows what `pane` makes of it, and the cell's definition is
-/// picked next.
+/// Starts an empty document as a row: what `pane` makes of a new cell on the
+/// left, and on the right a record whose `key` names the cell, whose
+/// definition is picked next.
 pub fn starter(key: CellId, pane: impl Fn(CellId) -> Value + 'static) -> Completion {
+    use crate::libraries::editor::workspace::{row, vocabulary::PARTS};
+    // Where the row lists its second part.
+    let second = gid::position::spread(2).remove(1);
     generated(
         key,
         move || {
             let cell = gid::new_cell_id();
-            Value::record([
-                (
-                    crate::libraries::editor::workspace::vocabulary::MAIN,
-                    Value::record([(key, cell.into())]),
-                ),
-                (
-                    crate::libraries::editor::workspace::vocabulary::PANES,
-                    Value::record([(
-                        crate::libraries::editor::workspace::vocabulary::LEFT,
-                        Value::list([pane(cell)]),
-                    )]),
-                ),
-            ])
+            row([pane(cell), Value::record([(key, cell.into())])])
         },
-        Some(crate::selection::pending_at(&[
-            Step::Key(crate::libraries::editor::workspace::vocabulary::MAIN),
-            Step::Key(key),
-            Step::Follow(Resolution::Document),
-        ])),
+        Some(Rc::new(move |_, site, staged| {
+            let mut path =
+                crate::occurrence::below(site, &[Step::Key(PARTS), Step::Element(second.clone())]);
+            // At the document's root the row splits, its parts panes.
+            if site.is_empty() {
+                path.push(crate::occurrence::Step::Pane);
+            }
+            path.extend(crate::occurrence::of(&[
+                Step::Key(key),
+                Step::Follow(Resolution::Document),
+            ]));
+            staged.select(path, crate::selection::payload::empty_pending());
+            true
+        })),
     )
 }
 

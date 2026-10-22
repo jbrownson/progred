@@ -87,22 +87,6 @@ impl Annotations {
         self.node_at(path)?.value()
     }
 
-    /// The same annotations, each at its path under `prefix`.
-    pub fn under(&self, prefix: &[Step]) -> Self {
-        Self {
-            root: prefix.iter().rev().fold(self.root.clone(), |below, step| {
-                if below.is_empty() {
-                    below
-                } else {
-                    Rc::new(Node {
-                        value: None,
-                        children: HashMap::from([(step.clone(), below)]),
-                    })
-                }
-            }),
-        }
-    }
-
     /// Replace or clear the whole value at a path. Empty records prune.
     pub fn set(&mut self, path: &[Step], value: Option<Value>) {
         let value =

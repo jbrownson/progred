@@ -8,19 +8,13 @@ use crate::selection::Stage;
 use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 use ui_events::keyboard::NamedKey;
 
-/// A document whose left pane renders `render`, beside `program`.
+/// A document whose row renders `render` in its first part, beside `program`.
 fn rendered_in_a_pane(program: CellId, render: Value, cells: Cells) -> Driver {
     Driver::new(
         crate::test_editor(Document {
-            root: Some(Value::record([
-                (crate::libraries::grap::vocabulary::GRAP, program.into()),
-                (
-                    workspace::vocabulary::PANES,
-                    Value::record([(
-                        workspace::vocabulary::LEFT,
-                        Value::list([presentation::render(render)]),
-                    )]),
-                ),
+            root: Some(workspace::row([
+                presentation::render(render),
+                Value::record([(crate::libraries::grap::vocabulary::GRAP, program.into())]),
             ])),
             cells,
         }),
@@ -37,16 +31,24 @@ fn a_render_outside_a_pane_is_the_record_it_is() {
     )])));
 }
 
+/// Where the program's pane draws `rest` within its definition.
+fn in_program(rest: &[Step]) -> occurrence::Path {
+    occurrence::below(
+        &crate::test_examples::pane_root(&crate::test_examples::main_part()),
+        &[
+            &[
+                Step::Key(crate::libraries::grap::vocabulary::GRAP),
+                Step::Follow(gid::Resolution::Document),
+            ][..],
+            rest,
+        ]
+        .concat(),
+    )
+}
+
 /// The pane's result, and `rest` within it.
 fn pane_result(driver: &Driver, rest: &[occurrence::Step]) -> occurrence::Path {
-    let pane = driver.element(
-        &[
-            Step::Key(workspace::vocabulary::PANES),
-            Step::Key(workspace::vocabulary::LEFT),
-        ],
-        0,
-        &[],
-    );
+    let pane = driver.element(&[Step::Key(workspace::vocabulary::PARTS)], 0, &[]);
     [
         crate::test_examples::pane_root(&pane).as_slice(),
         &[
@@ -117,11 +119,7 @@ fn a_missing_argument_is_given_from_the_error() {
         )
     };
     let left = hole(&driver, numbers::vocabulary::LEFT);
-    let in_program = [
-        Step::Key(crate::libraries::grap::vocabulary::GRAP),
-        Step::Follow(gid::Resolution::Document),
-        Step::Key(numbers::vocabulary::LEFT),
-    ];
+    let in_program = in_program(&[Step::Key(numbers::vocabulary::LEFT)]);
     // The error's hole and the program's are one place, drawn twice.
     assert!(driver.shared(&left).is_some());
     assert_eq!(driver.shared(&left), driver.shared(&in_program));
@@ -182,11 +180,7 @@ fn an_errors_call_is_drawn_where_the_call_is() {
         assert!(driver.drawn(&in_error(key)));
         assert_eq!(
             driver.shared(&in_error(key)),
-            driver.shared(&[
-                Step::Key(crate::libraries::grap::vocabulary::GRAP),
-                Step::Follow(gid::Resolution::Document),
-                Step::Key(key),
-            ])
+            driver.shared(&in_program(&[Step::Key(key)]))
         );
     }
 }

@@ -31,14 +31,26 @@ pub fn cam_editor(mode: CellId) -> crate::Editor {
         &mode.to_string(),
     );
     let (doc, _) = crate::gid_text::parse(&source).unwrap();
-    let declarations = crate::workspace::declarations(doc.root.as_ref());
-    let mut editor = crate::test_editor(doc);
-    editor.model.workspace.sync_declared(&declarations);
-    editor
+    crate::test_editor(doc)
 }
 
-/// Where a pane declared at `path` starts drawing its entry: under the
-/// declaration, after a pane step.
+/// Where the `index`th of a row's `count` parts is, its list positions
+/// spread as a new list's.
+pub fn part(index: usize, count: usize) -> gid::Path {
+    vec![
+        Step::Key(crate::workspace::vocabulary::PARTS),
+        Step::Element(gid::position::spread(count).remove(index)),
+    ]
+}
+
+/// Where a starting point's or example's row keeps its main value: beside
+/// the preview, its second part.
+pub fn main_part() -> gid::Path {
+    part(1, 2)
+}
+
+/// Where the document's pane at `path` starts drawing its part: under the
+/// part, after a pane step.
 pub fn pane_root(path: &[Step]) -> crate::occurrence::Path {
     let mut root = crate::occurrence::of(path);
     root.push(crate::occurrence::Step::Pane);

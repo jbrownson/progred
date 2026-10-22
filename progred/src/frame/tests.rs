@@ -976,37 +976,32 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     let mut library_cells = Cells::new();
     library_cells.set_value(linked, declaration.clone());
     let mut model = Model::new(Document {
-        root: Some(Value::record([])),
+        root: Some(workspace::row([
+            declaration,
+            Value::from(alias),
+            Value::list([source.clone(), Value::from(linked)]),
+            Value::record([(presentation::vocabulary::VALUE, source.clone())]),
+        ])),
         cells,
     });
-    for value in [
-        declaration,
-        Value::from(alias),
-        Value::list([source.clone(), Value::from(linked)]),
-        Value::record([(presentation::vocabulary::VALUE, source.clone())]),
-    ] {
-        Rc::make_mut(&mut model.doc).root = Some(
-            workspace::append(
-                model.doc.root.as_ref().unwrap(),
-                workspace::Side::Left,
-                value,
-            )
-            .unwrap()
-            .0,
-        );
-    }
-    model
+    model.workspace.sync(model.doc.root.as_ref());
+    // An opened pane at the root shows the row's parts as data, where they're
+    // stored.
+    let everything = crate::location::Location::root(Vec::new());
+    let opened = model
         .workspace
-        .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
-    // The document view shows the declarations as data only without the
-    // editor library, which otherwise draws the workspace's main value.
-    model.workspace.document.shown = workspace::Shown::AllBut(vec![crate::libraries::editor::ID]);
-    crate::annotations::set_folded(
-        &mut model.workspace.document.annotations,
-        &[Occurs::Key(workspace::vocabulary::PANES)],
-        false,
-        false,
-    );
+        .open(workspace::Side::Left, crate::location::value(&everything));
+    let Target::Opened { id } = opened.target() else {
+        panic!("an opened pane")
+    };
+    let in_opened = |path: &[Step]| {
+        [
+            vec![Occurs::Opened(*id), Occurs::jump(everything.clone())],
+            crate::occurrence::of(path),
+        ]
+        .concat()
+    };
+    let panes = workspace::panes(model.doc.root.as_ref());
     let calls = Rc::new(Cell::new(0));
     let result = Rc::new(RefCell::new(source.clone()));
     let mut stack = stack::load();
@@ -1053,7 +1048,6 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             &Default::default(),
         )
     };
-    let document = model.workspace.document_root();
     let sources: Vec<_> = [
         (0, vec![]),
         (
@@ -1066,16 +1060,13 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
     ]
     .into_iter()
     .map(|(index, steps)| {
-        let pane = &model.workspace.left.panes[index];
-        let Target::Pane { path } = pane.view.root.target() else {
-            panic!("pane path")
-        };
-        // The document view draws the declaration where it's stored, and the
-        // pane draws it under the declaration, after a pane step.
+        let path = &panes[index];
+        // The opened pane draws the part where it's stored, and the part's
+        // own pane draws it under the part, after a pane step.
         let mut stored = path.clone();
         stored.extend(steps.iter().cloned());
         let drawn = crate::occurrence::below(&crate::test_examples::pane_root(path), &steps);
-        (pane.view.root.clone(), stored, drawn)
+        (Root::pane(path.clone()), stored, drawn)
     })
     .collect();
     let shown = place(&model);
@@ -1089,14 +1080,13 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             presentation::vocabulary::VALUE,
             presentation::vocabulary::PROJECTION,
         ] {
-            let stored =
-                crate::occurrence::below(&crate::occurrence::of(stored), &[Step::Key(field)]);
+            let stored = in_opened(&[&stored[..], &[Step::Key(field)]].concat());
             let drawn = crate::occurrence::below(drawn, &[Step::Key(field)]);
             assert!(
                 shown
                     .landmarks
                     .iter()
-                    .any(|target| target.root.as_ref() == Some(document) && target.path == stored)
+                    .any(|target| target.root.as_ref() == Some(&opened) && target.path == stored)
             );
             assert!(
                 !shown
@@ -1106,8 +1096,12 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             );
         }
     }
-    for pane in &mut model.workspace.left.panes {
-        pane.view.shown = workspace::Shown::RAW;
+    for path in &panes {
+        model
+            .workspace
+            .view_mut(&Root::pane(path.clone()))
+            .unwrap()
+            .shown = workspace::Shown::RAW;
     }
     let raw = place(&model);
     assert_eq!(calls.replace(0), 0);
@@ -1124,8 +1118,12 @@ fn pane_presentations_apply_only_at_entry_and_raw_keeps_the_declaration() {
             );
         }
     }
-    for pane in &mut model.workspace.left.panes {
-        pane.view.shown = workspace::Shown::ALL;
+    for path in &panes {
+        model
+            .workspace
+            .view_mut(&Root::pane(path.clone()))
+            .unwrap()
+            .shown = workspace::Shown::ALL;
     }
     *result.borrow_mut() = ::grap::absent::value(projector);
     let absent = place(&model);
@@ -1169,21 +1167,12 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         ),
     );
     let mut model = Model::new(Document {
-        root: Some(
-            workspace::append(
-                &Value::record([]),
-                workspace::Side::Left,
-                declaration.clone(),
-            )
-            .unwrap()
-            .0,
-        ),
+        root: Some(workspace::row([declaration.clone()])),
         cells: Cells::new(),
     });
-    model
-        .workspace
-        .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
-    model.workspace.left.panes[0].view.scroll = Vec2::new(75.0, 150.0);
+    model.workspace.sync(model.doc.root.as_ref());
+    let pane_root = Root::pane(crate::test_examples::part(0, 1));
+    model.workspace.view_mut(&pane_root).unwrap().scroll = Vec2::new(75.0, 150.0);
     let calls = Rc::new(RefCell::new(Vec::new()));
     let mut stack = stack::load();
     stack.libraries.insert(
@@ -1213,7 +1202,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
             ),
         ),
     );
-    let pane = &model.workspace.left.panes[0].view;
+    let pane = model.workspace.view(&pane_root).unwrap();
     let Target::Pane { path } = pane.root.target() else {
         panic!("pane")
     };
@@ -1259,7 +1248,7 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
         ));
         assert!(place(pane, Some(Point::new(29.5, 40.5))).claim.is_none());
         assert_eq!(
-            model.workspace.left.panes[0].view.scroll,
+            model.workspace.view(&pane_root).unwrap().scroll,
             Vec2::new(75.0, 150.0)
         );
 
@@ -1284,31 +1273,22 @@ fn viewport_panes_receive_their_size_without_margins_or_document_scrolling() {
 }
 
 #[test]
-fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
+fn rows_and_columns_are_editor_geometry_with_independent_view_regions() {
     let cell = CellId::from_u128(1);
     let mut cells = Cells::new();
     cells.set_value(cell, Value::from(b"pane".to_vec()));
     let mut model = Model::new(Document {
-        root: Some(Value::record([])),
+        root: Some(workspace::row([
+            workspace::column([Value::from(cell), Value::from(cell)]),
+            Value::record([]),
+        ])),
         cells,
     });
-    let document = model.workspace.document_root().clone();
-    for _ in 0..2 {
-        Rc::make_mut(&mut model.doc).root = Some(
-            workspace::append(
-                model.doc.root.as_ref().unwrap(),
-                workspace::Side::Left,
-                Value::from(cell),
-            )
-            .unwrap()
-            .0,
-        );
-    }
-    model
-        .workspace
-        .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
-    let upper = model.workspace.left.panes[0].view.root.clone();
-    let lower = model.workspace.left.panes[1].view.root.clone();
+    model.workspace.sync(model.doc.root.as_ref());
+    let column = crate::test_examples::part(0, 2);
+    let upper = Root::pane([column.clone(), crate::test_examples::part(0, 2)].concat());
+    let lower = Root::pane([column, crate::test_examples::part(1, 2)].concat());
+    let main = Root::pane(crate::test_examples::main_part());
     let stack = crate::stack::load();
     let styles = style::editor(style::Theme::Light.palette(), 1.0);
     let mut fonts = crate::display::test_support::Fonts::new();
@@ -1330,6 +1310,7 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
         &Default::default(),
     );
 
+    // The document's part splits, so its own view isn't drawn.
     assert_eq!(placed.view_regions.len(), 3);
     let upper_region = placed
         .view_regions
@@ -1341,15 +1322,13 @@ fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
         .iter()
         .find(|region| region.root == lower)
         .expect("lower pane");
-    let document_region = placed
+    let main_region = placed
         .view_regions
         .iter()
-        .find(|region| region.root == document)
-        .expect("document view");
-    assert_eq!(
-        (document_region.rect.y0, document_region.rect.y1),
-        (0.0, 600.0)
-    );
+        .find(|region| region.root == main)
+        .expect("main pane");
+    assert_eq!((main_region.rect.y0, main_region.rect.y1), (0.0, 600.0));
+    assert_eq!(main_region.rect.x0 - upper_region.rect.x1, 1.0);
     assert_eq!(upper_region.rect.x0, lower_region.rect.x0);
     assert_eq!(upper_region.rect.x1, lower_region.rect.x1);
     assert_eq!(lower_region.rect.y0 - upper_region.rect.y1, 1.0);
@@ -1420,7 +1399,7 @@ fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
 #[test]
 fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
     let editor = crate::test_editor(gid::Document::default());
-    let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
+    let target = Hovered::Divider(divider());
     for (x, pressed, expected) in [
         (5.0, false, Some(target.clone())),
         (11.0, false, None),
@@ -1453,7 +1432,7 @@ fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
 #[test]
 fn a_hovered_target_shows_the_cursor_it_asked_for() {
     let mut runner = EditorRunner::new(crate::test_editor(gid::Document::default()));
-    let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
+    let target = Hovered::Divider(divider());
     for (x, expected) in [
         (5.0, winit::window::CursorIcon::ColResize),
         (50.0, winit::window::CursorIcon::Default),
@@ -1482,6 +1461,15 @@ fn a_hovered_target_shows_the_cursor_it_asked_for() {
     }
 }
 
+/// A rule between the document's part and another, for hover targets.
+fn divider() -> workspace::Divider {
+    workspace::Divider {
+        direction: workspace::Direction::Across,
+        before: workspace::Slot::Document,
+        after: workspace::Slot::Part(Vec::new()),
+    }
+}
+
 /// A frame's description over `model` with no menu bar, for projecting its
 /// workspace.
 fn workspace_description<'a>(
@@ -1505,7 +1493,6 @@ fn workspace_description<'a>(
             redo: false,
             open_pane: false,
             close_pane: false,
-            show_panes: false,
             move_up: false,
             move_down: false,
             move_left: false,
@@ -1661,15 +1648,9 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
     use puri::draw::{DrawCmd, Shape};
     let program = gid::new_cell_id();
     let doc = Document {
-        root: Some(Value::record([
-            (GRAP, program.into()),
-            (
-                workspace::vocabulary::PANES,
-                Value::record([(
-                    workspace::vocabulary::LEFT,
-                    Value::list([presentation::render(program.into())]),
-                )]),
-            ),
+        root: Some(workspace::row([
+            presentation::render(program.into()),
+            Value::record([(GRAP, program.into())]),
         ])),
         cells: Cells::new(),
     };
@@ -1682,16 +1663,15 @@ fn a_selected_or_hovered_reference_marks_its_cell_in_every_view() {
             .find(|(path, _)| path.last() == Some(&Occurs::Key(key)))
             .expect("drawn")
     };
-    // The document's program field, and the pane's result naming it missing.
+    // The program field in one pane, and the other's result naming it
+    // missing.
     let (field, missing) = (
         drawn(&driver, GRAP),
         drawn(&driver, absent::vocabulary::CELL),
     );
-    assert!(
-        missing
-            .0
-            .starts_with(&[Occurs::Key(workspace::vocabulary::PANES)])
-    );
+    assert!(missing.0.starts_with(&crate::test_examples::pane_root(
+        &crate::test_examples::part(0, 2)
+    )));
     let marked = |driver: &crate::driver::Driver, alpha, other: Rect| {
         let brush = Brush::from(style::Theme::Light.palette().accent.with_alpha(alpha));
         let outline = style::highlight_outline(1.0, other);

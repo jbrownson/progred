@@ -43,6 +43,7 @@ pub(crate) fn test_editor_with_stack(doc: Document, stack: crate::stack::Stack) 
         None,
     );
     editor.model.workspace.document.root = test_root();
+    editor.model.workspace.sync(editor.model.doc.root.as_ref());
     editor.focused = true;
     editor
 }

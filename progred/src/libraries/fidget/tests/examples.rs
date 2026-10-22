@@ -69,8 +69,8 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
 
         let (standalone, _) = crate::gid_text::parse(fixture).unwrap();
         let standalone_sources = src(&standalone, &libraries);
-        let pane = crate::workspace::declarations(standalone.root.as_ref()).remove(0);
-        let declaration = standalone_sources.resolve_path(&pane.path).unwrap();
+        let pane = crate::workspace::panes(standalone.root.as_ref()).remove(0);
+        let declaration = standalone_sources.resolve_path(&pane).unwrap();
         let expected =
             presentation::tests::viewport_output(declaration, &standalone_sources, 256.0, 256.0)
                 .unwrap();
@@ -88,7 +88,7 @@ fn fidget_example_figures_evaluate_to_their_standalone_previews() {
 fn fidget_example_shows_each_preview_beside_its_code() {
     let (doc, names) = example();
     // The previews are the figures' own, not panes.
-    assert!(crate::workspace::declarations(doc.root.as_ref()).is_empty());
+    assert!(crate::workspace::panes(doc.root.as_ref()).is_empty());
     let figures = figures(&doc, &names);
     let mut world = crate::test_editor(doc);
     let frame = settle(editing_frame(&mut world), &world.sources());
@@ -156,9 +156,7 @@ fn complex_fidget_examples_render_visible_surfaces() {
             size: kurbo::Size::new(side as f64, side as f64),
             scale: 1.0,
             root: Some(crate::occurrence::of(
-                &crate::workspace::declarations(doc.root.as_ref())
-                    .remove(0)
-                    .path,
+                &crate::workspace::panes(doc.root.as_ref()).remove(0),
             )),
         };
         let (view, mut context) = view.prepare(&doc);

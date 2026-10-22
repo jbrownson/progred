@@ -9,16 +9,15 @@
     "gyroid": 6824d83b85a76ffceb8f676e18f922c2,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "left": 3cbf5357204947fdb4f26eadcbd777d6,
-    "main": f146d8a1d3174d9ab6136b4334768a2f,
     "max": 968e2f1f111a4849a8449dbeddbe8412,
     "multiply": 2b80236eda7245d6a63b0da98da25850,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "operand": b66457fa59524110bb363bc28754cea0,
-    "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
-    "panes": f30d400a4321a4d44d1628a8adc5a84d,
+    "parts": 4abd6fa4c21d4ba19bfc7c2893b52d69,
     "preview_3d": 9a8142ecc3124e873dd2ad955d28fb85,
     "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "right": 6ab1e9c9a6604d82b1aabddcfa03d0d8,
+    "row": f93143d539ec4ab2865709b80a7f395d,
     "sin": 3e471136af054326b47891d045361fbc,
     "sized_value": cc9c98621a79466f8c9f928d8ba09198,
     "sqrt": db6e742a39104ba89f2216ad9ab75e99,
@@ -193,19 +192,18 @@
     },
   },
   "root": {
-    main: {
-      fidget: [
-        0x80: gyroid,
-      ],
-    },
-    panes: {
-      pane_left: [
-        0x80: {
-          viewport: preview_3d,
-          projection_value: gyroid,
-          isa: sized_value,
-        },
-      ],
-    },
+    parts: [
+      0x55: {
+        viewport: preview_3d,
+        projection_value: gyroid,
+        isa: sized_value,
+      },
+      0xaa: {
+        fidget: [
+          0x80: gyroid,
+        ],
+      },
+    ],
+    isa: row,
   },
 }

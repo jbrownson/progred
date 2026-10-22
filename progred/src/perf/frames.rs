@@ -78,11 +78,10 @@ fn fixture(source: &str) -> Document {
 }
 
 fn first_viewport(doc: &Document) -> gid::Path {
-    crate::workspace::declarations(doc.root.as_ref())
+    crate::workspace::panes(doc.root.as_ref())
         .into_iter()
         .next()
         .expect("example declares a viewport")
-        .path
 }
 
 fn iop_tree() -> Document {

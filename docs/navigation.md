@@ -129,9 +129,9 @@ pointer and source selection and the explicit Select All command.
 
 Every occurrence the engine draws gets a landmark: the view's root, and each
 value a projection draws through `descend` or its peers (`at`, `jump`). What a
-projection draws itself, such as a number's digits, gets none. A view showing
-a workspace record starts at its main value, so the record isn't drawn and
-nothing selects it.
+projection draws itself, such as a number's digits, gets none. A document
+whose root is a row or column draws each part in its own pane, so the row
+isn't drawn and nothing selects it.
 
 Tab moves to the next tab stop, a place to fill in, and Shift+Tab to the one
 before, in reading order within the selection's view: line by line, where a

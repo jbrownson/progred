@@ -1,4 +1,4 @@
-//! The frame's own rules, for test harnesses: the editor's document view
+//! The frame's own rules, for test harnesses: the editor's selected view
 //! framed headlessly, a placed frame bound with its hover attributed, what
 //! the pointer lands on, and what a bench window's view shows.
 
@@ -9,7 +9,8 @@ use crate::sources::Sources;
 use gid::Document;
 use puri::draw::DrawList;
 
-/// `world`'s document view projected 500 points wide and placed, unbound.
+/// The view `world`'s selection is in, else its document view, projected
+/// 500 points wide and placed, unbound.
 pub(crate) fn editing_frame(world: &mut Editor) -> HoverOutput<Editor> {
     framed(world, None)
 }
@@ -28,12 +29,25 @@ pub(crate) fn framed(world: &mut Editor, pointer: Option<Point>) -> HoverOutput<
         scale: 1.0,
         cache: &mut world.text_cache,
     };
-    let view = &world.model.workspace.document;
+    let view = world.model.workspace.selected_or_document(
+        world
+            .model
+            .selection
+            .as_ref()
+            .map(crate::selection::Selection::root),
+    );
     let sources = Sources {
         doc: &world.model.doc,
         libraries: &world.stack.libraries,
     };
-    let shown = view_content(&world.stack, sources, view, Size::new(500.0, 500.0), 1.0);
+    let shown = view_content(
+        &world.stack,
+        sources,
+        &world.model.workspace,
+        view,
+        Size::new(500.0, 500.0),
+        1.0,
+    );
     let completions = crate::frame::completions(&world.stack, view);
     let selection = world.model.selection.as_ref();
     let measured = projection::project(
@@ -154,9 +168,11 @@ impl ProfileView {
             doc,
             libraries: &context.stack.libraries,
         };
+        let workspace = crate::workspace::Workspace::default();
         let shown = view_content(
             &context.stack,
             sources,
+            &workspace,
             &view,
             self.size * self.scale,
             self.scale,

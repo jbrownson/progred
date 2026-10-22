@@ -160,18 +160,8 @@ fn nested_result_evaluations_use_their_own_allowance() {
             (layout::vocabulary::FUEL, f64::value(3.0)),
         ],
     );
-    let mut driver = Driver::of(Value::record([(
-        workspace::vocabulary::PANES,
-        Value::record([(workspace::vocabulary::LEFT, Value::list([render]))]),
-    )]));
-    let pane = driver.element(
-        &[
-            gid::Step::Key(workspace::vocabulary::PANES),
-            gid::Step::Key(workspace::vocabulary::LEFT),
-        ],
-        0,
-        &[],
-    );
+    let mut driver = Driver::of(workspace::row([render]));
+    let pane = driver.element(&[gid::Step::Key(workspace::vocabulary::PARTS)], 0, &[]);
     let mut result = crate::test_examples::pane_root(&pane);
     result.extend([
         Step::Key(RESULT),

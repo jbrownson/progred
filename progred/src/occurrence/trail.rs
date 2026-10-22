@@ -44,7 +44,7 @@ impl Trail {
         let (marker, computed) = match step {
             Step::Jump(_) => (len, false),
             Step::Computed => (len, true),
-            Step::Pane => (len, computed),
+            Step::Pane | Step::Opened(_) => (len, computed),
             _ => (marker, computed),
         };
         Self(Some(Rc::new(Link {
@@ -107,7 +107,7 @@ impl Trail {
                     break;
                 }
                 Step::Computed => return None,
-                Step::Pane => {}
+                Step::Pane | Step::Opened(_) => {}
                 step => data.push(step.data().expect("a data step")),
             }
         }

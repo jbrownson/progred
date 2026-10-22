@@ -77,8 +77,7 @@ impl Model {
         };
         if let Some(restored) = restored {
             self.doc = restored.doc;
-            self.workspace
-                .sync_declared(&workspace::declarations(self.doc.root.as_ref()));
+            self.workspace.sync(self.doc.root.as_ref());
             self.workspace.restore_folds(restored.folds);
             self.selection = restored.selection.map(selection::Selection::edge);
             true

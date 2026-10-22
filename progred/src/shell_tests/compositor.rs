@@ -39,7 +39,12 @@ fn cam_hover_compositor_pixels() {
     );
     let (doc, names) = crate::gid_text::parse(&source).unwrap();
     let mut editor = crate::test_editor(doc);
-    editor.model.workspace.left_width = 0.70;
+    // The preview takes seven tenths of the width.
+    let preview = crate::workspace::panes(editor.model.doc.root.as_ref()).remove(0);
+    editor
+        .model
+        .workspace
+        .set_share(crate::workspace::Slot::Part(preview), 7.0 / 3.0);
     let jobs = Arc::new(Mutex::new(VecDeque::<incremental::background::Job>::new()));
     editor.computations = crate::computations::Computations::new(
         incremental::background::Executor::new({
@@ -229,7 +234,6 @@ fn editor_compositor_profile() {
         );
         let (doc, _) = crate::gid_text::parse(&source).unwrap();
         let mut editor = crate::test_editor(doc);
-        editor.model.workspace.left_width = 0.5;
         let jobs = Arc::new(Mutex::new(VecDeque::<incremental::background::Job>::new()));
         editor.computations = crate::computations::Computations::new(
             incremental::background::Executor::new({

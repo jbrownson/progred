@@ -16,16 +16,16 @@ use std::{
 fn readme_svg_captures() {
     let size = kurbo::Size::new(1200.0, 900.0);
     let (doc, _) = crate::gid_text::parse(crate::command::Example::IopTree.source()).unwrap();
-    let mut editor = crate::test_editor(doc);
-    editor.model.workspace.left_width = 0.5;
+    let editor = crate::test_editor(doc);
     render_editor(editor, size, "readme_iop.svg");
 
     let mut editor = cam_editor(t::PREVIEW_REFINED);
-    editor.model.workspace.left_width = 0.5;
-    let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
-        .path
-        .clone();
-    let view = &mut editor.model.workspace.left.panes[0].view;
+    let path = crate::workspace::panes(editor.model.doc.root.as_ref()).remove(0);
+    let view = editor
+        .model
+        .workspace
+        .view_mut(&crate::display::widget::view::Root::pane(path.clone()))
+        .unwrap();
     view.annotations
         .set_field(&result_path(&path), STATE, Some(cam_position(0.3)));
     view.annotations.set_field(
@@ -89,9 +89,7 @@ fn editor_toolpath_refined_svg_captures() {
             }
         },
     );
-    let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
-        .path
-        .clone();
+    let path = crate::workspace::panes(editor.model.doc.root.as_ref()).remove(0);
     let mut runner = crate::EditorRunner::new(editor);
     let size = kurbo::Size::new(1000.0, 750.0);
     let capture = |runner: &mut crate::EditorRunner, name: &str| {
@@ -151,8 +149,12 @@ fn editor_toolpath_refined_svg_captures() {
     finish_image(&mut runner, "cam_refined_image");
     assert!(queue.lock().unwrap().is_empty());
 
-    runner.editor.model.workspace.left.panes[0]
-        .view
+    runner
+        .editor
+        .model
+        .workspace
+        .view_mut(&crate::display::widget::view::Root::pane(path.clone()))
+        .unwrap()
         .annotations
         .set_field(
             &[result_path(&path), result_path(&[])].concat(),
@@ -166,8 +168,12 @@ fn editor_toolpath_refined_svg_captures() {
     assert_eq!(queue.lock().unwrap().len(), 1, "orbit requests no meshing");
     finish_image(&mut runner, "cam_refined_orbit_image");
 
-    runner.editor.model.workspace.left.panes[0]
-        .view
+    runner
+        .editor
+        .model
+        .workspace
+        .view_mut(&crate::display::widget::view::Root::pane(path.clone()))
+        .unwrap()
         .annotations
         .set_field(&result_path(&path), STATE, Some(cam_position(0.7)));
     capture(&mut runner, "cam_refined_playback_pending");

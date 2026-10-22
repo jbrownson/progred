@@ -72,9 +72,9 @@ fn example_model_stock_switch_preserves_playback_and_uses_refinement() {
         doc: &doc,
         libraries: &libraries,
     };
-    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let pane = crate::workspace::panes(doc.root.as_ref()).remove(0);
     let controls = presentation::tests::viewport_output(
-        sources.resolve_path(&pane.path).unwrap(),
+        sources.resolve_path(&pane).unwrap(),
         &sources,
         400.0,
         500.0,

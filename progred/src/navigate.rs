@@ -130,7 +130,7 @@ pub fn select_all<'a, World>(
 }
 
 /// What's drawn at the root of `root`'s view: its outermost value, such as a
-/// workspace's main value, or the place a pane shows.
+/// document pane's part, or the place a pane shows.
 fn root_target<'a, World>(
     landmarks: &'a [Landmark<World>],
     root: &Root,

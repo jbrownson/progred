@@ -124,7 +124,6 @@
     "line": 01cfce0acb730dfb2dcf3e57dc12889e,
     "line_radius": 4de64314b3008dcdf01ac387dc68e63f,
     "line_to": e88873219d230571430941334a51600f,
-    "main": f146d8a1d3174d9ab6136b4334768a2f,
     "map_axes": 5d5bf7f3beb0c1cba07226bab9683852,
     "map_points": 923fb213d0e56383539b43b1fc807458,
     "map_tree": 7dc1fd86e63e18ce835a5b1768f17abc,
@@ -166,11 +165,10 @@
     "operations_section": 983f8e752bd5d3b34f2c81ce317c03b4,
     "orientation": ddb447a86cf765e6a19f3c448882659e,
     "outline": efc8f00d14ad4fa8a768a234b8435311,
-    "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
-    "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "parallel_strokes": 058f67b593d4c41d00e53c2e5409a5c7,
     "parameters": 6f0875ea2329b14673435cc13e2836d0,
     "params": 195b378d0d31d90ab0d7366c15346b70,
+    "parts": 4abd6fa4c21d4ba19bfc7c2893b52d69,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
     "playback": 0955045e00d5d5f2139fb3ab19591c3e,
@@ -199,6 +197,7 @@
     "right_face": 5999e385d066a0034fda21e9e280f265,
     "rotate_paths": acbb966cac9d34d8a150c48c5b4094a1,
     "rotated_groups": dcbc9580925fd17ba6e1d9cd5b9e5744,
+    "row": f93143d539ec4ab2865709b80a7f395d,
     "row_direction": 6e582a6a57d4006a0820b079cb351685,
     "rows": 84e4b10aa9c3ac6e420e9141a6a6fb1b,
     "sample_pass": 0fe4804f079850dd4a826383c4999a10,
@@ -4378,410 +4377,409 @@
     },
   },
   "root": {
-    main: {
-      settings_section: [
-        0x2a: tilt,
-        0x55: tool_diameter,
-        0x80: square_diameter,
-        0xaa: cutting_length,
-        0xd5: chamfer_stepover,
-      ],
-      tools_section: [
-        0x33: ball_tool,
-        0x66: {
-          expression: ball_tool,
-          isa: evaluation,
-        },
-        0x99: square_tool,
-        0xcc: {
-          expression: square_tool,
-          isa: evaluation,
-        },
-      ],
-      geometry_section: [
-        0x80: cube,
-      ],
-      operations_section: [
-        0x1c: program_tree,
-        0x38: op1_groups,
-        0x55: op2_groups,
-        0x71: preview_operations,
-        0x8e: op1,
-        0xaa: op2,
-        0xc7: op1_chamfers,
-        0xe3: op2_chamfers,
-      ],
-      helpers_section: [
-        0x12: evenly_spaced,
-        0x24: parallel_strokes,
-        0x36: extend_stroke,
-        0x49: line,
-        0x5b: square_side_offset,
-        0x6d: rotate_paths,
-        0x80: translated_points,
-        0x92: point_sum,
-        0xa4: scaled_point,
-        0xb6: unit_vector,
-        0xc9: mapped_groups,
-        0xdb: rotated_groups,
-        0xed: tooled_groups,
-      ],
-      sections_2: [
-        0x24: settings_section,
-        0x49: geometry_section,
-        0x6d: tools_section,
-        0x92: operations_section,
-        0xb6: strategies_section,
-        0xdb: helpers_section,
-      ],
-      isa: outline,
-      strategies_section: [
-        0x11: diagonal_groups,
-        0x22: diagonals,
-        0x33: sample_pass,
-        0x44: crosshatch,
-        0x55: ball_center,
-        0x66: ball_path,
-        0x77: face_paths,
-        0x88: ball_tip,
-        0x99: chamfer_pass,
-        0xaa: contour_pass,
-        0xbb: cube_chamfers,
-        0xcc: chamfer_ring,
-        0xdd: contour_chamfer,
-        0xee: crosswise_chamfer,
-      ],
-    },
-    panes: {
-      pane_left: [
-        0x80: {
-          viewport: {
-            params: [
-              0x40: value,
-              0x80: width,
-              0xc0: height,
-            ],
-            body: {
-              view: {
-                params: [
-                  0x33: value,
-                  0x66: width,
-                  0x99: height,
-                  0xcc: parameters,
+    parts: [
+      0x55: {
+        viewport: {
+          params: [
+            0x40: value,
+            0x80: width,
+            0xc0: height,
+          ],
+          body: {
+            view: {
+              params: [
+                0x33: value,
+                0x66: width,
+                0x99: height,
+                0xcc: parameters,
+              ],
+              body: {
+                function: where,
+                expression: {
+                  playback: {
+                    subject: preview_mode,
+                    function: match,
+                    cases: [
+                      0x55: {
+                        pattern: model,
+                        expression: {
+                          function: quote,
+                          expression: {
+                            focus: {
+                              unquote: focus,
+                              isa: unquote_2,
+                            },
+                            position: {
+                              unquote: progress,
+                              isa: unquote_2,
+                            },
+                            profile_tolerance: {
+                              unquote: profile_tolerance,
+                              isa: unquote_2,
+                            },
+                            stock_max: {
+                              unquote: stock_max,
+                              isa: unquote_2,
+                            },
+                            stock_min: {
+                              unquote: stock_min,
+                              isa: unquote_2,
+                            },
+                          },
+                          isa: call,
+                        },
+                        isa: case,
+                      },
+                      0xaa: {
+                        pattern: stock,
+                        expression: {
+                          function: quote,
+                          expression: {
+                            focus: {
+                              unquote: focus,
+                              isa: unquote_2,
+                            },
+                            position: {
+                              unquote: progress,
+                              isa: unquote_2,
+                            },
+                            profile_tolerance: {
+                              unquote: profile_tolerance,
+                              isa: unquote_2,
+                            },
+                            stock_max: {
+                              unquote: stock_max,
+                              isa: unquote_2,
+                            },
+                            stock_min: {
+                              unquote: stock_min,
+                              isa: unquote_2,
+                            },
+                            stock: {
+                              color: {
+                                rgb: 0xb89b6d,
+                              },
+                            },
+                          },
+                          isa: call,
+                        },
+                        isa: case,
+                      },
+                    ],
+                    isa: call,
+                  },
+                  min_z: {
+                    f32: 0x9a9959bf,
+                  },
+                  fuel: {
+                    f64: 0x0000000060e34641,
+                  },
+                  line_radius: {
+                    f64: 0x7b14ae47e17a743f,
+                  },
+                  function: preview_paths_refined,
+                  value: {
+                    function: quote,
+                    expression: {
+                      objects: [
+                        0x80: {
+                          field: {
+                            unquote: {
+                              function: where,
+                              expression: {
+                                function: field,
+                                isa: call,
+                              },
+                              isa: call,
+                              bindings: [
+                                0x80: {
+                                  subject: {
+                                    function: cube,
+                                    isa: call,
+                                  },
+                                  pattern: {
+                                    field: {
+                                      bind: field,
+                                      isa: binder,
+                                    },
+                                  },
+                                  isa: binding,
+                                },
+                              ],
+                            },
+                            isa: unquote_2,
+                          },
+                          color: {
+                            rgb: 0x5f96b4,
+                          },
+                        },
+                      ],
+                      isa: scene,
+                    },
+                    isa: call,
+                  },
+                  max_x: {
+                    f32: 0x9a99593f,
+                  },
+                  max_y: {
+                    f32: 0x9a99593f,
+                  },
+                  height: height,
+                  color: {
+                    rgb: 0xf0ae50,
+                  },
+                  max_z: {
+                    f32: 0x9a99593f,
+                  },
+                  isa: call,
+                  min_y: {
+                    f32: 0x9a9959bf,
+                  },
+                  program: program_items,
+                  width: width,
+                  min_x: {
+                    f32: 0x9a9959bf,
+                  },
+                },
+                isa: call,
+                bindings: [
+                  0x33: {
+                    subject: parameters,
+                    pattern: {
+                      playback: {
+                        position: {
+                          bind: progress,
+                          isa: binder,
+                        },
+                        control_items: {
+                          bind: program_items,
+                          isa: binder,
+                        },
+                        control_range: {
+                          bind: focus,
+                          isa: binder,
+                        },
+                      },
+                      preview_mode: {
+                        bind: preview_mode,
+                        isa: binder,
+                      },
+                    },
+                    isa: binding,
+                  },
+                  0x66: {
+                    subject: {
+                      f64: 0xfca9f1d24d62303f,
+                    },
+                    pattern: {
+                      bind: profile_tolerance,
+                      isa: binder,
+                    },
+                    isa: binding,
+                  },
+                  0x99: {
+                    subject: {
+                      y: {
+                        f64: 0x000000000000e0bf,
+                      },
+                      x: {
+                        f64: 0x000000000000e0bf,
+                      },
+                      isa: point_2,
+                      z: {
+                        f64: 0x000000000000e0bf,
+                      },
+                    },
+                    pattern: {
+                      bind: stock_min,
+                      isa: binder,
+                    },
+                    isa: binding,
+                  },
+                  0xcc: {
+                    subject: {
+                      y: {
+                        f64: 0x000000000000e03f,
+                      },
+                      x: {
+                        f64: 0x000000000000e03f,
+                      },
+                      isa: point_2,
+                      z: {
+                        f64: 0x000000000000e03f,
+                      },
+                    },
+                    pattern: {
+                      bind: stock_max,
+                      isa: binder,
+                    },
+                    isa: binding,
+                  },
                 ],
-                body: {
-                  function: where,
+              },
+              isa: lambda_2,
+            },
+            function: with_controls,
+            value: value,
+            controls: {
+              params: [],
+              body: {
+                function: where,
+                expression: {
+                  function: quote,
                   expression: {
                     playback: {
-                      subject: preview_mode,
-                      function: match,
-                      cases: [
+                      unquote: parameters,
+                      isa: unquote_2,
+                    },
+                    preview_mode: {
+                      unquote: preview_mode,
+                      isa: unquote_2,
+                    },
+                  },
+                  isa: call,
+                },
+                isa: call,
+                bindings: [
+                  0x55: {
+                    subject: {
+                      control_initial: {
+                        function: quote,
+                        expression: model,
+                        isa: call,
+                      },
+                      control_key: {
+                        function: quote,
+                        expression: preview_mode,
+                        isa: call,
+                      },
+                      function: radio,
+                      control_options: [
                         0x55: {
-                          pattern: model,
-                          expression: {
-                            function: quote,
-                            expression: {
-                              focus: {
-                                unquote: focus,
-                                isa: unquote_2,
-                              },
-                              position: {
-                                unquote: progress,
-                                isa: unquote_2,
-                              },
-                              profile_tolerance: {
-                                unquote: profile_tolerance,
-                                isa: unquote_2,
-                              },
-                              stock_max: {
-                                unquote: stock_max,
-                                isa: unquote_2,
-                              },
-                              stock_min: {
-                                unquote: stock_min,
-                                isa: unquote_2,
-                              },
-                            },
-                            isa: call,
-                          },
-                          isa: case,
+                          name: "Model",
+                          value: model,
                         },
                         0xaa: {
-                          pattern: stock,
-                          expression: {
-                            function: quote,
-                            expression: {
-                              focus: {
-                                unquote: focus,
-                                isa: unquote_2,
-                              },
-                              position: {
-                                unquote: progress,
-                                isa: unquote_2,
-                              },
-                              profile_tolerance: {
-                                unquote: profile_tolerance,
-                                isa: unquote_2,
-                              },
-                              stock_max: {
-                                unquote: stock_max,
-                                isa: unquote_2,
-                              },
-                              stock_min: {
-                                unquote: stock_min,
-                                isa: unquote_2,
-                              },
-                              stock: {
-                                color: {
-                                  rgb: 0xb89b6d,
-                                },
-                              },
-                            },
-                            isa: call,
-                          },
-                          isa: case,
+                          name: "Stock",
+                          value: stock,
                         },
                       ],
                       isa: call,
                     },
-                    min_z: {
-                      f32: 0x9a9959bf,
+                    pattern: {
+                      bind: preview_mode,
+                      isa: binder,
                     },
-                    fuel: {
-                      f64: 0x0000000060e34641,
-                    },
-                    line_radius: {
-                      f64: 0x7b14ae47e17a743f,
-                    },
-                    function: preview_paths_refined,
-                    value: {
-                      function: quote,
-                      expression: {
-                        objects: [
-                          0x80: {
-                            field: {
-                              unquote: {
-                                function: where,
-                                expression: {
-                                  function: field,
-                                  isa: call,
-                                },
-                                isa: call,
-                                bindings: [
-                                  0x80: {
-                                    subject: {
-                                      function: cube,
-                                      isa: call,
-                                    },
-                                    pattern: {
-                                      field: {
-                                        bind: field,
-                                        isa: binder,
-                                      },
-                                    },
-                                    isa: binding,
-                                  },
-                                ],
-                              },
-                              isa: unquote_2,
-                            },
-                            color: {
-                              rgb: 0x5f96b4,
-                            },
-                          },
-                        ],
-                        isa: scene,
+                    isa: binding,
+                  },
+                  0xaa: {
+                    subject: {
+                      fuel: {
+                        f64: 0x00000000804f1241,
                       },
+                      control_key: {
+                        function: quote,
+                        expression: focus,
+                        isa: call,
+                      },
+                      function: tree_program_cursor,
                       isa: call,
+                      tree_program: value,
                     },
-                    max_x: {
-                      f32: 0x9a99593f,
+                    pattern: {
+                      bind: parameters,
+                      isa: binder,
                     },
-                    max_y: {
-                      f32: 0x9a99593f,
-                    },
-                    height: height,
-                    color: {
-                      rgb: 0xf0ae50,
-                    },
-                    max_z: {
-                      f32: 0x9a99593f,
-                    },
-                    isa: call,
-                    min_y: {
-                      f32: 0x9a9959bf,
-                    },
-                    program: program_items,
-                    width: width,
-                    min_x: {
-                      f32: 0x9a9959bf,
-                    },
+                    isa: binding,
                   },
-                  isa: call,
-                  bindings: [
-                    0x33: {
-                      subject: parameters,
-                      pattern: {
-                        playback: {
-                          position: {
-                            bind: progress,
-                            isa: binder,
-                          },
-                          control_items: {
-                            bind: program_items,
-                            isa: binder,
-                          },
-                          control_range: {
-                            bind: focus,
-                            isa: binder,
-                          },
-                        },
-                        preview_mode: {
-                          bind: preview_mode,
-                          isa: binder,
-                        },
-                      },
-                      isa: binding,
-                    },
-                    0x66: {
-                      subject: {
-                        f64: 0xfca9f1d24d62303f,
-                      },
-                      pattern: {
-                        bind: profile_tolerance,
-                        isa: binder,
-                      },
-                      isa: binding,
-                    },
-                    0x99: {
-                      subject: {
-                        y: {
-                          f64: 0x000000000000e0bf,
-                        },
-                        x: {
-                          f64: 0x000000000000e0bf,
-                        },
-                        isa: point_2,
-                        z: {
-                          f64: 0x000000000000e0bf,
-                        },
-                      },
-                      pattern: {
-                        bind: stock_min,
-                        isa: binder,
-                      },
-                      isa: binding,
-                    },
-                    0xcc: {
-                      subject: {
-                        y: {
-                          f64: 0x000000000000e03f,
-                        },
-                        x: {
-                          f64: 0x000000000000e03f,
-                        },
-                        isa: point_2,
-                        z: {
-                          f64: 0x000000000000e03f,
-                        },
-                      },
-                      pattern: {
-                        bind: stock_max,
-                        isa: binder,
-                      },
-                      isa: binding,
-                    },
-                  ],
-                },
-                isa: lambda_2,
+                ],
               },
-              function: with_controls,
-              value: value,
-              controls: {
-                params: [],
-                body: {
-                  function: where,
-                  expression: {
-                    function: quote,
-                    expression: {
-                      playback: {
-                        unquote: parameters,
-                        isa: unquote_2,
-                      },
-                      preview_mode: {
-                        unquote: preview_mode,
-                        isa: unquote_2,
-                      },
-                    },
-                    isa: call,
-                  },
-                  isa: call,
-                  bindings: [
-                    0x55: {
-                      subject: {
-                        control_initial: {
-                          function: quote,
-                          expression: model,
-                          isa: call,
-                        },
-                        control_key: {
-                          function: quote,
-                          expression: preview_mode,
-                          isa: call,
-                        },
-                        function: radio,
-                        control_options: [
-                          0x55: {
-                            name: "Model",
-                            value: model,
-                          },
-                          0xaa: {
-                            name: "Stock",
-                            value: stock,
-                          },
-                        ],
-                        isa: call,
-                      },
-                      pattern: {
-                        bind: preview_mode,
-                        isa: binder,
-                      },
-                      isa: binding,
-                    },
-                    0xaa: {
-                      subject: {
-                        fuel: {
-                          f64: 0x00000000804f1241,
-                        },
-                        control_key: {
-                          function: quote,
-                          expression: focus,
-                          isa: call,
-                        },
-                        function: tree_program_cursor,
-                        isa: call,
-                        tree_program: value,
-                      },
-                      pattern: {
-                        bind: parameters,
-                        isa: binder,
-                      },
-                      isa: binding,
-                    },
-                  ],
-                },
-                isa: lambda_2,
-              },
-              height: height,
-              isa: call,
-              width: width,
+              isa: lambda_2,
             },
-            isa: lambda_2,
+            height: height,
+            isa: call,
+            width: width,
           },
-          value: program_tree,
-          isa: sized_value,
+          isa: lambda_2,
         },
-      ],
-    },
+        value: program_tree,
+        isa: sized_value,
+      },
+      0xaa: {
+        settings_section: [
+          0x2a: tilt,
+          0x55: tool_diameter,
+          0x80: square_diameter,
+          0xaa: cutting_length,
+          0xd5: chamfer_stepover,
+        ],
+        tools_section: [
+          0x33: ball_tool,
+          0x66: {
+            expression: ball_tool,
+            isa: evaluation,
+          },
+          0x99: square_tool,
+          0xcc: {
+            expression: square_tool,
+            isa: evaluation,
+          },
+        ],
+        geometry_section: [
+          0x80: cube,
+        ],
+        operations_section: [
+          0x1c: program_tree,
+          0x38: op1_groups,
+          0x55: op2_groups,
+          0x71: preview_operations,
+          0x8e: op1,
+          0xaa: op2,
+          0xc7: op1_chamfers,
+          0xe3: op2_chamfers,
+        ],
+        helpers_section: [
+          0x12: evenly_spaced,
+          0x24: parallel_strokes,
+          0x36: extend_stroke,
+          0x49: line,
+          0x5b: square_side_offset,
+          0x6d: rotate_paths,
+          0x80: translated_points,
+          0x92: point_sum,
+          0xa4: scaled_point,
+          0xb6: unit_vector,
+          0xc9: mapped_groups,
+          0xdb: rotated_groups,
+          0xed: tooled_groups,
+        ],
+        sections_2: [
+          0x24: settings_section,
+          0x49: geometry_section,
+          0x6d: tools_section,
+          0x92: operations_section,
+          0xb6: strategies_section,
+          0xdb: helpers_section,
+        ],
+        isa: outline,
+        strategies_section: [
+          0x11: diagonal_groups,
+          0x22: diagonals,
+          0x33: sample_pass,
+          0x44: crosshatch,
+          0x55: ball_center,
+          0x66: ball_path,
+          0x77: face_paths,
+          0x88: ball_tip,
+          0x99: chamfer_pass,
+          0xaa: contour_pass,
+          0xbb: cube_chamfers,
+          0xcc: chamfer_ring,
+          0xdd: contour_chamfer,
+          0xee: crosswise_chamfer,
+        ],
+      },
+    ],
+    isa: row,
   },
 }

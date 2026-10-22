@@ -19,13 +19,14 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
     let cell = crate::test_support::value_at(
         doc.root.as_ref().unwrap(),
         &[
-            gid::Step::Key(crate::workspace::vocabulary::MAIN),
-            gid::Step::Key(crate::libraries::grap::vocabulary::GRAP),
-        ],
+            crate::test_examples::main_part(),
+            vec![gid::Step::Key(crate::libraries::grap::vocabulary::GRAP)],
+        ]
+        .concat(),
     )
     .and_then(gid::Value::as_cell)
     .unwrap();
-    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let pane = crate::workspace::panes(doc.root.as_ref()).remove(0);
     let displayed = Rc::new(std::cell::RefCell::new(Vec::new()));
     let observe = displayed.clone();
     context.stack.projection = Projection {
@@ -75,7 +76,7 @@ fn grap_template_preview_evaluates_the_shared_cells_current_call() {
         doc.cells.set_value(cell, expression.clone());
         displayed.borrow_mut().clear();
         context.frame(BenchFrame {
-            root: &crate::occurrence::of(&pane.path),
+            root: &crate::occurrence::of(&pane),
             ..BenchFrame::of(&doc, 600.0)
         });
         assert!(displayed.borrow().contains(&result));
@@ -100,11 +101,11 @@ fn iop_tree_at_size(size: kurbo::Size) {
         "/../examples/iop-tree.gid"
     )))
     .expect("the IoP tree demo parses");
-    let declaration = crate::workspace::declarations(doc.root.as_ref())
+    let pane = crate::workspace::panes(doc.root.as_ref())
         .into_iter()
         .next()
-        .expect("the picture is declared as a pane");
-    let source = crate::occurrence::of(&declaration.path);
+        .expect("the picture is a pane");
+    let source = crate::occurrence::of(&pane);
     let mut context = BenchContext::new();
     context.stack.projection =
         crate::projection::viewport::projection(&context.stack.projection, size);

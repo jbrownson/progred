@@ -61,7 +61,7 @@ fn website_forest_hover_finds_the_available_call() {
 fn website_growing_forest_controls_and_edits_change_the_drawing() {
     use crate::libraries::{color, controls, presentation};
     let (editor, names) = website_growing_forest_editor();
-    assert!(crate::workspace::declarations(editor.model.doc.root.as_ref()).is_empty());
+    assert!(crate::workspace::panes(editor.model.doc.root.as_ref()).is_empty());
     let mut driver = Driver::new(editor, kurbo::Size::new(720.0, 684.0));
     // The sun and the trees' leaves, whatever else is drawn.
     let painted = [(57, 155, 117), (220, 90, 40), (248, 201, 112)]
@@ -376,7 +376,7 @@ fn website_shape_edits_and_playback_change_the_rendered_mesh() {
             .collect()
     }
     let (editor, names) = website_shape_editor();
-    assert!(crate::workspace::declarations(editor.model.doc.root.as_ref()).is_empty());
+    assert!(crate::workspace::panes(editor.model.doc.root.as_ref()).is_empty());
     let mut driver = Driver::new(editor, kurbo::Size::new(720.0, 520.0));
     let render = |driver: &mut Driver| {
         driver.present();

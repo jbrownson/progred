@@ -521,31 +521,36 @@ program now). Grap's notebook opens on its first entry's expression, with
 nothing in error; see [Notebook and REPL](#notebook-and-repl) for what it
 lacks.
 
-## Workspace documents
+## Rows and columns
 
-A document whose root has a `panes` field is a workspace, and the editor
-swallows it: it shows the panes, and a view of the workspace record starts at
-its `main` value ([the model](model.md#panes)). Plain
-and Raw, or turning the editor library off, show the whole record. A document
-is wrapped only once something adds a workspace field, such as opening a pane.
-Starting points that open a pane and the examples use this shape. What's left,
-discussed in October 2026:
+A document whose root is a row or column splits its part of the window into its
+parts, and the editor's own row holds the document beside the panes it opened,
+which the document doesn't keep ([the model](model.md#panes)). This replaced
+October 2026's workspace record, `{main, panes: {left, right}}`, which only
+meant anything at the root and saved every pane, browsing included, into the
+document. Kept simple to start; what's left:
 
-- **Recursion.** A pane showing a workspace record already draws its main value;
-  drawing that workspace's own panes too suggests making the pane layout a
-  projection.
-- **Tabs or splits.** A main value holding several things, such as a Grap
-  program and a Fidget scene, could draw as tabs or splits. That's a projection
-  of a record of several things, wherever one appears, not part of the
-  workspace convention.
-- **Panes outside the document.** Every pane is an entry in the document, so
-  opening one edits it. That's right for a pane that belongs to the work, such
-  as a starting point's preview, and wrong for looking around: opening a
-  library marks an untitled document changed, and in an empty document it
-  leaves a workspace whose empty `main` no longer offers the starting points,
-  which only an empty root does, until it's undone. The owner thinks panes
-  only in the document may be a flaw, or at least shouldn't be the only kind;
-  session panes that aren't saved would serve browsing.
+- **Rows inside content.** Only the window splits: the root, and a part that's
+  itself a row or column. Elsewhere a row is data, so a notebook entry can't
+  yet show its code beside its preview. There a row has a width but no height
+  to divide, so it would be as tall as its tallest part, and a sized value
+  would need a height of its own.
+- **The editor's row as data.** It isn't a value yet, so it can't be opened or
+  edited as one, and it isn't remembered with the file. A command to keep an
+  opened pane by moving it into the document would turn looking around into
+  part of the work.
+- **Moving between rows.** Move Pane moves a part along its own row or column
+  only; nothing moves one into a neighbouring column, or an opened pane into
+  the document.
+- **A location at a row.** A pane showing a place that holds a row draws the row
+  as data rather than splitting.
+- **The document's own view.** While the root splits, the document's view
+  isn't drawn, so View commands reach it only with nothing selected, as when
+  switching it to Raw to see the row whole.
+- **Shares.** Parts start equal, so a starting point's preview takes half the
+  window where it took a third beside the workspace's main value.
+- **The root's libraries.** A document still declares its own libraries in a
+  root field, which also means something only at the root.
 
 ## Islands in the document
 

@@ -123,34 +123,35 @@ fn click_heading(driver: &mut Driver, path: &[occurrence::Step]) {
 }
 
 #[test]
-fn cam_outline_draws_as_the_main_value_with_the_panes_out_of_sight() {
-    use crate::libraries::editor::workspace::vocabulary::{MAIN, PANES};
+fn cam_outline_draws_in_its_part_beside_the_preview() {
     let (doc, _) = crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
-    let main = [Step::Key(MAIN)];
+    let main = crate::test_examples::main_part();
     assert!(
         crate::test_support::value_at(doc.root.as_ref().unwrap(), &main)
             .and_then(Value::as_record)
-            .is_some_and(|fields| fields.get(&SECTIONS).is_some() && fields.get(&PANES).is_none())
+            .is_some_and(|fields| fields.get(&SECTIONS).is_some())
     );
-    assert!(!crate::workspace::declarations(doc.root.as_ref()).is_empty());
+    assert!(crate::workspace::panes(doc.root.as_ref()).contains(&main));
     let mut world = crate::test_editor(doc);
-    let outline = [Step::Key(MAIN), Step::Key(SECTIONS)];
     let entries = world
         .sources()
-        .resolve_path(&outline)
+        .resolve_path(&[&main[..], &[Step::Key(SECTIONS)]].concat())
         .unwrap()
         .as_list()
         .unwrap()
         .clone();
-    let first_heading = [
-        &outline[..],
-        &[Step::Element(entries.keys().next().unwrap().clone())],
-    ]
-    .concat();
+    // The part draws in its own pane, after its pane step.
+    let pane = crate::test_examples::pane_root(&main);
+    let drawn = |steps: &[Step]| [pane.clone(), occurrence::of(steps)].concat();
+    let outline = drawn(&[Step::Key(SECTIONS)]);
+    let first_heading = drawn(&[
+        Step::Key(SECTIONS),
+        Step::Element(entries.keys().next().unwrap().clone()),
+    ]);
     for (position, value) in entries {
         world.session().set_folded(
             &section(
-                &occurrence::of(&[&outline[..], &[Step::Element(position)]].concat()),
+                &drawn(&[Step::Key(SECTIONS), Step::Element(position)]),
                 value.as_cell().unwrap(),
             ),
             false,
@@ -159,30 +160,16 @@ fn cam_outline_draws_as_the_main_value_with_the_panes_out_of_sight() {
     }
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     for (from, key, to) in [
-        (main.to_vec(), NamedKey::ArrowRight, outline.to_vec()),
-        (main.to_vec(), NamedKey::ArrowDown, first_heading.clone()),
-        (outline.to_vec(), NamedKey::ArrowDown, first_heading.clone()),
-        (first_heading, NamedKey::ArrowUp, main.to_vec()),
-        (outline.to_vec(), NamedKey::ArrowLeft, main.to_vec()),
+        (pane.clone(), NamedKey::ArrowRight, outline.clone()),
+        (pane.clone(), NamedKey::ArrowDown, first_heading.clone()),
+        (outline.clone(), NamedKey::ArrowDown, first_heading.clone()),
+        (first_heading, NamedKey::ArrowUp, pane.clone()),
+        (outline, NamedKey::ArrowLeft, pane),
     ] {
         driver.select(&from);
         driver.press(key);
         assert_eq!(driver.selection(), to);
     }
-    // The document view draws none of the workspace's own fields; the panes
-    // it declares draw their own views.
-    assert!(
-        !driver
-            .runner
-            .frame
-            .dispatch
-            .landmarks
-            .iter()
-            .any(|landmark| {
-                landmark.root.as_ref() == Some(&crate::test_root())
-                    && landmark.path.starts_with(&[occurrence::Step::Key(PANES)])
-            })
-    );
 }
 
 #[test]
@@ -323,7 +310,7 @@ fn outline_field_label_selects_the_list_and_reads_the_field_name() {
 
 #[test]
 fn outline_library_tint_stops_at_the_heading() {
-    let key = crate::libraries::editor::workspace::vocabulary::PANES;
+    let key = crate::libraries::editor::workspace::vocabulary::PARTS;
     let mut world = crate::editor_of(Value::record([
         (::grap::isa::ISA, kind::OUTLINE.into()),
         (SECTIONS, Value::list([key.into()])),

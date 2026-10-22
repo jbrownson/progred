@@ -1,28 +1,34 @@
-//! Editor-owned views over one document. The document stays in the
-//! center; panes form independently sized columns on either side.
-//! A root convention may declare the main value the document view shows,
-//! pane membership, side, order, and a presentation function; view mode,
-//! annotations, scroll, and live sizing remain process state.
+//! Editor-owned views over one document, laid out in rows and columns of
+//! parts. The editor's own row holds the document and the panes it opened
+//! beside it; a document whose root is a row or column splits its part the
+//! same way, each of the parts it splits into a pane. View mode,
+//! annotations, scroll, and each part's share remain process state.
 
 use crate::annotations::Annotations;
 use crate::display::widget::view::{Root, Target};
-use crate::location::Location;
 use crate::occurrence;
 use gid::{CellId, Path, Step, Value};
 use kurbo::{Rect, Size, Vec2};
+use std::collections::HashMap;
 
-/// The root's workspace declarations, which this module interprets: its
-/// panes, on the left or the right, and its own libraries. The workspace and
-/// presentation libraries name them.
+/// What this module interprets at the document's root: the row or column it
+/// splits into, and its own libraries. The editor and presentation
+/// libraries name them.
 pub mod vocabulary {
     use gid::CellId;
 
-    /// The value the document view shows in place of the whole root, so the
-    /// workspace's own fields stay out of sight.
-    pub const MAIN: CellId = CellId::from_u128(0xf146d8a1d3174d9ab6136b4334768a2f);
-    pub const PANES: CellId = CellId::from_u128(0xf30d400a4321a4d44d1628a8adc5a84d);
-    pub const LEFT: CellId = CellId::from_u128(0xdc3a1b9a7fb4bc348760160e3b365bca);
-    pub const RIGHT: CellId = CellId::from_u128(0xf13a5c1c4471c00178575a0e876768f8);
+    /// The kinds that split the space they're given among their parts.
+    pub mod kind {
+        use gid::CellId;
+
+        /// Parts side by side.
+        pub const ROW: CellId = CellId::from_u128(0xf93143d539ec4ab2865709b80a7f395d);
+        /// Parts one above another.
+        pub const COLUMN: CellId = CellId::from_u128(0xab69ac8c77c94425865d437f9d780643);
+    }
+
+    /// A row's or column's parts, in order.
+    pub const PARTS: CellId = CellId::from_u128(0x4abd6fa4c21d4ba19bfc7c2893b52d69);
     pub const LIBRARIES: CellId = CellId::from_u128(0xbc197ad66fea59a9bd97c4191c7845b2);
     /// The keys a document library owns: it draws records carrying them.
     pub const KEYS: CellId = CellId::from_u128(0xbb30d215605f5599e31f6274641ca89f);
@@ -30,8 +36,6 @@ pub mod vocabulary {
     /// with, and the one presentation and layout take.
     pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
 }
-
-const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
 
 /// The libraries an area shows: their projections, their offers and, for
 /// the name library, names. Those it leaves off keep their definitions
@@ -76,10 +80,154 @@ impl Default for Shown {
     }
 }
 
+/// Which end of the editor's row a pane opens at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Side {
     Left,
     Right,
+}
+
+/// Which way a row or column lays out its parts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    /// Side by side, as a row's.
+    Across,
+    /// One above another, as a column's.
+    Down,
+}
+
+/// A row: `parts` side by side.
+pub fn row(parts: impl IntoIterator<Item = Value>) -> Value {
+    ::grap::isa::record(
+        vocabulary::kind::ROW,
+        [(vocabulary::PARTS, Value::list(parts))],
+    )
+}
+
+/// A column: `parts` one above another.
+#[cfg(test)]
+pub fn column(parts: impl IntoIterator<Item = Value>) -> Value {
+    ::grap::isa::record(
+        vocabulary::kind::COLUMN,
+        [(vocabulary::PARTS, Value::list(parts))],
+    )
+}
+
+/// The parts `value` splits into and which way, where it's a row or column
+/// with any. One with none has nothing to split into, so it's data.
+pub fn split(value: &Value) -> Option<(Direction, &gid::List)> {
+    let fields = value.as_record()?;
+    let direction = match ::grap::isa::of(fields)? {
+        vocabulary::kind::ROW => Direction::Across,
+        vocabulary::kind::COLUMN => Direction::Down,
+        _ => return None,
+    };
+    let parts = fields.get(&vocabulary::PARTS)?.as_list()?;
+    (!parts.is_empty()).then_some((direction, parts))
+}
+
+/// Where the part at `position` of the row or column at `at` is.
+fn part_path(at: &[Step], position: &gid::Position) -> Path {
+    at.iter()
+        .cloned()
+        .chain([
+            Step::Key(vocabulary::PARTS),
+            Step::Element(position.clone()),
+        ])
+        .collect()
+}
+
+/// Every part `value` splits into below `at`, each followed by its own
+/// parts where it splits again, and whether it does.
+fn parts_of(value: &Value, at: &[Step]) -> Vec<(Path, bool)> {
+    split(value)
+        .into_iter()
+        .flat_map(|(_, parts)| parts.iter())
+        .flat_map(|(position, part)| {
+            let path = part_path(at, position);
+            let inner = parts_of(part, &path);
+            std::iter::once((path, !inner.is_empty())).chain(inner)
+        })
+        .collect()
+}
+
+/// Where the document's panes are: the parts its `root` splits into, where
+/// it's a row or column, in order, a part that splits again giving its own.
+/// Only the root splits, so a row deeper in the document stays data.
+pub fn panes(root: Option<&Value>) -> Vec<Path> {
+    root.into_iter()
+        .flat_map(|root| parts_of(root, &[]))
+        .filter_map(|(path, splits)| (!splits).then_some(path))
+        .collect()
+}
+
+/// The part at `path` below `value`, along keys and elements.
+fn part_at<'v>(value: &'v Value, path: &[Step]) -> Option<&'v Value> {
+    path.iter().try_fold(value, |value, step| match step {
+        Step::Key(key) => value.as_record()?.get(key),
+        Step::Element(position) => value.as_list()?.get(position),
+        Step::Follow(_) => None,
+    })
+}
+
+/// `root` with the part at `path` moved one place along its row or column,
+/// and where it went: left or right in a row, up or down in a column.
+pub fn move_part(root: &Value, path: &[Step], direction: Move) -> Option<(Value, Path)> {
+    let [
+        container @ ..,
+        Step::Key(vocabulary::PARTS),
+        Step::Element(position),
+    ] = path
+    else {
+        return None;
+    };
+    let (along, parts) = split(part_at(root, container)?)?;
+    let forward = match (along, direction) {
+        (Direction::Across, Move::Right) | (Direction::Down, Move::Down) => true,
+        (Direction::Across, Move::Left) | (Direction::Down, Move::Up) => false,
+        _ => return None,
+    };
+    let index = parts.keys().position(|key| key == position)?;
+    let destination = if forward {
+        (index + 1 < parts.len()).then_some(index + 1)?
+    } else {
+        index.checked_sub(1)?
+    };
+    let value = parts.get(position)?.clone();
+    let remaining = parts.without(position);
+    let keys: Vec<_> = remaining.keys().collect();
+    let position = gid::position::between(
+        destination
+            .checked_sub(1)
+            .and_then(|index| keys.get(index).copied()),
+        keys.get(destination).copied(),
+    )?;
+    let list = container
+        .iter()
+        .cloned()
+        .chain([Step::Key(vocabulary::PARTS)])
+        .collect::<Path>();
+    Some((
+        crate::spine::set(
+            Some(root),
+            &list,
+            Value::List(remaining.update(position.clone(), value)),
+        )?,
+        part_path(container, &position),
+    ))
+}
+
+/// The view `path` is drawn in: the opened pane its first step names, the
+/// document pane whose part its pane step follows ([`Workspace::root_path`]),
+/// else the document's.
+pub fn view_of(path: &[occurrence::Step]) -> Root {
+    if let Some(occurrence::Step::Opened(id)) = path.first() {
+        return Root::opened(*id);
+    }
+    path.iter()
+        .position(|step| matches!(step, occurrence::Step::Pane))
+        .and_then(|start| path[..start].iter().map(occurrence::Step::data).collect())
+        .map_or_else(Root::document, Root::pane)
 }
 
 pub struct View {
@@ -103,26 +251,39 @@ impl View {
     }
 }
 
-pub struct Pane {
+/// A pane the editor opened beside the document, which the document
+/// doesn't keep.
+pub struct Opened {
+    pub id: CellId,
     pub view: View,
-    /// Requested fraction of its column. Layout may temporarily
-    /// override it to satisfy minimums without rewriting the request.
-    pub height: f64,
+    /// What it shows, as a pane's entry: a location, or a copy of a
+    /// computed value, which has none.
+    pub entry: Value,
 }
 
-#[derive(Default)]
-pub struct Column {
-    pub panes: Vec<Pane>,
+/// A part of the editor's row.
+enum Part {
+    Document,
+    Opened(Opened),
 }
 
+/// What takes a share of a row or column: the document's part or an opened
+/// pane in the editor's row, or the part of the document's at a path.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Slot {
+    Document,
+    Opened(CellId),
+    Part(Path),
+}
+
+/// The rule between two neighbouring parts, which drags to move share from
+/// one to the other.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Divider {
-    Columns(Side),
-    Panes {
-        side: Side,
-        before: Root,
-        after: Root,
-    },
+pub struct Divider {
+    /// The way the row or column it divides goes.
+    pub direction: Direction,
+    pub before: Slot,
+    pub after: Slot,
 }
 
 #[derive(Clone)]
@@ -136,6 +297,8 @@ pub struct DividerPlacement {
     pub divider: Divider,
     /// The visible one-pixel rule. Its input target grows at placement.
     pub rect: Rect,
+    /// The share a pixel of dragging moves from one side to the other.
+    pub rate: f64,
 }
 
 #[derive(Default)]
@@ -145,14 +308,11 @@ pub struct Geometry<'a> {
 }
 
 impl<'a> Geometry<'a> {
-    fn with_view(mut self, view: &'a View, rect: Rect) -> Self {
-        self.views.push(ViewPlacement { view, rect });
-        self
-    }
-
-    fn with_divider(mut self, divider: Divider, rect: Rect) -> Self {
-        self.dividers.push(DividerPlacement { divider, rect });
-        self
+    fn view(view: &'a View, rect: Rect) -> Self {
+        Self {
+            views: vec![ViewPlacement { view, rect }],
+            dividers: Vec::new(),
+        }
     }
 
     fn extend(mut self, other: Self) -> Self {
@@ -162,274 +322,20 @@ impl<'a> Geometry<'a> {
     }
 }
 
-/// What a strip of the workspace shows: the document, or a side column.
-#[derive(Clone, Copy)]
-enum Area {
-    Document,
-    Column(Side),
-}
-
 pub struct Workspace {
     pub document: View,
-    pub left: Column,
-    pub right: Column,
-    /// Fractions of the full usable width; the document receives the
-    /// remainder. Empty columns retain their requested width.
-    pub left_width: f64,
-    pub right_width: f64,
+    /// The editor's row: the document's part among the panes opened beside
+    /// it, in order.
+    row: Vec<Part>,
+    /// The views of the parts the document's root splits into.
+    panes: Vec<View>,
+    /// Each part's share of its row or column, beside its neighbours': one
+    /// where unset.
+    shares: HashMap<Slot, f64>,
     dragging: Option<Drag>,
 }
 
 pub(crate) struct Folds(Vec<(Root, Annotations)>);
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Declaration {
-    pub side: Side,
-    pub path: Path,
-}
-
-/// The path to `root`'s main value: where it declares one, or would, holding
-/// only a workspace's own fields, as after the value it had was deleted.
-pub fn main_path(root: Option<&Value>) -> Option<Path> {
-    let fields = root?.as_record()?;
-    let workspace = |key: &CellId| [vocabulary::PANES, vocabulary::LIBRARIES].contains(key);
-    (fields.get(&vocabulary::MAIN).is_some()
-        || fields.get(&vocabulary::PANES).is_some() && fields.iter().all(|(key, _)| workspace(key)))
-    .then(|| vec![Step::Key(vocabulary::MAIN)])
-}
-
-/// Where a view showing `target` starts drawing. A pane draws under its
-/// declaration, after a pane step, so its occurrences stay apart from the
-/// document view's, even where that draws the declaration too. With `interpreted`, as while the editor library is on, a pane whose
-/// entry is a location shows that place, and a workspace record starts at
-/// its main value, so the workspace's own fields stay out of sight and out of
-/// reach. Otherwise a pane shows its entry.
-pub fn root_path(
-    sources: &crate::sources::Sources<'_>,
-    target: &Target,
-    interpreted: bool,
-) -> occurrence::Path {
-    let (mut path, shown) = match target {
-        Target::Document => (Vec::new(), Location::root(Vec::new())),
-        Target::Pane { path: declaration } => {
-            let mut path = occurrence::of(declaration);
-            path.push(occurrence::Step::Pane);
-            // A location entry shows its place: the pane jumps there.
-            let place = interpreted
-                .then(|| {
-                    sources
-                        .resolve_path(declaration)
-                        .and_then(crate::location::read)
-                })
-                .flatten();
-            if let Some(place) = &place {
-                path.push(occurrence::Step::jump(place.clone()));
-            }
-            (
-                path,
-                place.unwrap_or_else(|| Location::root(declaration.clone())),
-            )
-        }
-    };
-    if let Some(main) = main_path(sources.read(&shown)).filter(|_| interpreted) {
-        path.extend(occurrence::of(&main));
-    }
-    path
-}
-
-/// The view `path` is drawn in: the pane declared where its pane step
-/// starts one ([`root_path`]), else the document view.
-pub fn view_of(path: &[occurrence::Step]) -> Root {
-    path.iter()
-        .position(|step| matches!(step, occurrence::Step::Pane))
-        .and_then(|start| path[..start].iter().map(occurrence::Step::data).collect())
-        .map_or_else(Root::document, Root::pane)
-}
-
-/// Read pane declarations only from the document root. No recursive
-/// search means an identical record deeper in user data stays data.
-pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
-    let panes = root
-        .and_then(Value::as_record)
-        .and_then(|fields| fields.get(&vocabulary::PANES))
-        .and_then(Value::as_record);
-    [
-        (vocabulary::LEFT, Side::Left),
-        (vocabulary::RIGHT, Side::Right),
-    ]
-    .into_iter()
-    .flat_map(|(field, side)| {
-        panes
-            .and_then(|panes| panes.get(&field))
-            .and_then(Value::as_list)
-            .into_iter()
-            .flat_map(move |declarations| {
-                declarations.keys().map(move |position| Declaration {
-                    side,
-                    path: pane_path(side, position.clone()),
-                })
-            })
-    })
-    .collect()
-}
-
-/// The libraries the document declares at its root, in order. Each entry, or
-/// the cell it names, is a record of the `keys` the library owns and the
-/// `projection` that draws a record carrying them, a function of `value`.
-pub(crate) fn libraries(
-    sources: &crate::sources::Sources<'_>,
-) -> Vec<crate::display::DocumentLibrary> {
-    sources
-        .root()
-        .and_then(Value::as_record)
-        .and_then(|fields| fields.get(&vocabulary::LIBRARIES))
-        .and_then(Value::as_list)
-        .into_iter()
-        .flat_map(|declared| declared.values())
-        .filter_map(|entry| {
-            let entry = match entry.as_cell() {
-                Some(cell) => sources.resolve(cell)?.value,
-                None => entry,
-            };
-            let fields = entry.as_record()?;
-            Some(crate::display::DocumentLibrary {
-                keys: fields
-                    .get(&vocabulary::KEYS)?
-                    .as_list()?
-                    .values()
-                    .filter_map(Value::as_cell)
-                    .collect(),
-                projection: fields.get(&vocabulary::PROJECTION)?.clone().into(),
-            })
-        })
-        .collect()
-}
-
-fn column_key(side: Side) -> CellId {
-    match side {
-        Side::Left => vocabulary::LEFT,
-        Side::Right => vocabulary::RIGHT,
-    }
-}
-
-fn pane_path(side: Side, position: gid::Position) -> Path {
-    vec![
-        Step::Key(vocabulary::PANES),
-        Step::Key(column_key(side)),
-        Step::Element(position),
-    ]
-}
-
-/// `root` as a record to add the workspace's fields to: as it is if it
-/// already has them, and otherwise wrapped as a new workspace's main value,
-/// which moves every path into it under `main`. An empty document is a
-/// workspace with nothing in it yet, its main value still to write. Whether
-/// it was wrapped.
-pub fn workspace_root(root: Option<&Value>) -> (Value, bool) {
-    match root {
-        None => (Value::record([]), false),
-        Some(root) => match root.as_record() {
-            Some(fields)
-                if fields.get(&vocabulary::PANES).is_some()
-                    || fields.get(&vocabulary::MAIN).is_some() =>
-            {
-                (root.clone(), false)
-            }
-            _ => (Value::record([(vocabulary::MAIN, root.clone())]), true),
-        },
-    }
-}
-
-pub fn can_open(root: Option<&Value>) -> bool {
-    workspace_root(root).0.as_record().is_some_and(|fields| {
-        fields.get(&vocabulary::PANES).is_none_or(|panes| {
-            panes.as_record().is_some_and(|panes| {
-                [vocabulary::LEFT, vocabulary::RIGHT].iter().all(|side| {
-                    panes
-                        .get(side)
-                        .is_none_or(|value| value.as_list().is_some())
-                })
-            })
-        })
-    })
-}
-
-pub fn append(root: &Value, side: Side, value: Value) -> Option<(Value, Path)> {
-    let fields = root.as_record()?;
-    let panes = match fields.get(&vocabulary::PANES) {
-        Some(value) => value.as_record()?.clone(),
-        None => gid::Record::new(),
-    };
-    let column = match panes.get(&column_key(side)) {
-        Some(value) => value.as_list()?.clone(),
-        None => gid::List::new(),
-    };
-    let position = gid::position::between(column.keys().next_back(), None)?;
-    Some((
-        Value::Record(fields.update(
-            vocabulary::PANES,
-            Value::Record(panes.update(
-                column_key(side),
-                Value::List(column.update(position.clone(), value)),
-            )),
-        )),
-        pane_path(side, position),
-    ))
-}
-
-pub fn move_value(root: &Value, path: &[Step], direction: Move) -> Option<(Value, Path)> {
-    let (side, position) = match path {
-        [
-            Step::Key(vocabulary::PANES),
-            Step::Key(side),
-            Step::Element(position),
-        ] => match *side {
-            vocabulary::LEFT => Some((Side::Left, position)),
-            vocabulary::RIGHT => Some((Side::Right, position)),
-            _ => None,
-        },
-        _ => None,
-    }?;
-    let column = root
-        .as_record()?
-        .get(&vocabulary::PANES)?
-        .as_record()?
-        .get(&column_key(side))?
-        .as_list()?;
-    let value = column.get(position)?.clone();
-    match direction {
-        Move::Left if side == Side::Right => {
-            append(&crate::spine::without(root, path)?, Side::Left, value)
-        }
-        Move::Right if side == Side::Left => {
-            append(&crate::spine::without(root, path)?, Side::Right, value)
-        }
-        Move::Up | Move::Down => {
-            let index = column.keys().position(|key| key == position)?;
-            let destination = match direction {
-                Move::Up => index.checked_sub(1)?,
-                _ => (index + 1 < column.len()).then_some(index + 1)?,
-            };
-            let remaining = column.without(position);
-            let keys: Vec<_> = remaining.keys().collect();
-            let position = gid::position::between(
-                destination
-                    .checked_sub(1)
-                    .and_then(|index| keys.get(index).copied()),
-                keys.get(destination).copied(),
-            )?;
-            Some((
-                crate::spine::set(
-                    Some(root),
-                    &path[..2],
-                    Value::List(remaining.update(position.clone(), value)),
-                )?,
-                pane_path(side, position),
-            ))
-        }
-        _ => None,
-    }
-}
 
 #[derive(Clone)]
 struct Drag {
@@ -437,48 +343,45 @@ struct Drag {
     start: Vec2,
     before: f64,
     after: f64,
+    rate: f64,
 }
 
 impl Default for Workspace {
     fn default() -> Self {
-        let mut document = View::new(Root::document());
-        crate::annotations::set_folded(
-            &mut document.annotations,
-            &[crate::occurrence::Step::Key(vocabulary::PANES)],
-            false,
-            true,
-        );
         Self {
-            document,
-            left: Column::default(),
-            right: Column::default(),
-            left_width: DEFAULT_SIDE_WIDTH,
-            right_width: DEFAULT_SIDE_WIDTH,
+            document: View::new(Root::document()),
+            row: vec![Part::Document],
+            panes: Vec::new(),
+            shares: HashMap::new(),
             dragging: None,
         }
     }
 }
 
 impl Workspace {
-    /// The document's view, then each pane's, the left column's first.
+    /// The panes the editor opened, in the row's order.
+    pub fn opened(&self) -> impl Iterator<Item = &Opened> {
+        self.row.iter().filter_map(|part| match part {
+            Part::Opened(opened) => Some(opened),
+            Part::Document => None,
+        })
+    }
+
+    /// Every view: the document's, the opened panes' and the document's
+    /// panes'.
     fn views(&self) -> impl Iterator<Item = &View> {
-        std::iter::once(&self.document).chain(
-            self.left
-                .panes
-                .iter()
-                .chain(&self.right.panes)
-                .map(|pane| &pane.view),
-        )
+        std::iter::once(&self.document)
+            .chain(self.opened().map(|opened| &opened.view))
+            .chain(&self.panes)
     }
 
     fn views_mut(&mut self) -> impl Iterator<Item = &mut View> {
-        std::iter::once(&mut self.document).chain(
-            self.left
-                .panes
-                .iter_mut()
-                .chain(&mut self.right.panes)
-                .map(|pane| &mut pane.view),
-        )
+        std::iter::once(&mut self.document)
+            .chain(self.row.iter_mut().filter_map(|part| match part {
+                Part::Opened(opened) => Some(&mut opened.view),
+                Part::Document => None,
+            }))
+            .chain(&mut self.panes)
     }
 
     pub(crate) fn folds(&self) -> Folds {
@@ -542,138 +445,220 @@ impl Workspace {
         }
     }
 
-    /// Reconcile pane occurrences with their transient view state.
-    pub fn sync_declared(&mut self, declarations: &[Declaration]) {
-        let mut declared: Vec<_> = std::mem::take(&mut self.left.panes)
-            .into_iter()
-            .chain(std::mem::take(&mut self.right.panes))
-            .collect();
-        let mut left = Vec::new();
-        let mut right = Vec::new();
-        for declaration in declarations {
-            let existing = declared.iter().position(|pane| {
-                matches!(
-                    pane.view.root.target(),
-                    Target::Pane { path } if *path == declaration.path
-                )
-            });
-            let pane = existing.map_or_else(
-                || Pane {
-                    view: View::new(Root::pane(declaration.path.clone())),
-                    height: 1.0,
-                },
-                |index| declared.remove(index),
-            );
-            match declaration.side {
-                Side::Left => left.push(pane),
-                Side::Right => right.push(pane),
-            }
+    /// Whether the document's part splits as its root does: while the
+    /// document's view shows the editor library. Plain and Raw show the
+    /// root whole.
+    fn splits(&self) -> bool {
+        self.document.shown.shows(crate::libraries::editor::ID)
+    }
+
+    /// What the pane `root` shows, as its entry: a document pane's part, or
+    /// what an opened pane holds. None for the document.
+    pub fn entry<'a>(
+        &'a self,
+        sources: &crate::sources::Sources<'a>,
+        root: &Root,
+    ) -> Option<&'a Value> {
+        match root.target() {
+            Target::Document => None,
+            Target::Pane { path } => sources.resolve_path(path),
+            Target::Opened { id } => self
+                .opened()
+                .find(|opened| opened.id == *id)
+                .map(|opened| &opened.entry),
         }
-        normalize(&mut left);
-        normalize(&mut right);
-        self.left.panes = left;
-        self.right.panes = right;
+    }
+
+    /// Where the view `root` starts drawing. A document pane draws under its
+    /// part, after a pane step, so its occurrences stay apart from any other
+    /// drawing of the same data; an opened pane draws after a step naming
+    /// it. With `interpreted`, as while the editor library is on, a pane
+    /// whose entry is a location shows that place: it jumps there.
+    /// Otherwise a document pane shows its entry where it's stored, and an
+    /// opened pane its entry as a computed value, since nothing stores it.
+    pub fn root_path(
+        &self,
+        sources: &crate::sources::Sources<'_>,
+        root: &Root,
+        interpreted: bool,
+    ) -> occurrence::Path {
+        let place = interpreted
+            .then(|| self.entry(sources, root).and_then(crate::location::read))
+            .flatten();
+        let mut path = match root.target() {
+            Target::Document => return Vec::new(),
+            Target::Pane { path } => {
+                let mut path = occurrence::of(path);
+                path.push(occurrence::Step::Pane);
+                path
+            }
+            Target::Opened { id } => vec![occurrence::Step::Opened(*id)],
+        };
+        match place {
+            Some(place) => path.push(occurrence::Step::jump(place)),
+            None if matches!(root.target(), Target::Opened { .. }) => {
+                path.push(occurrence::Step::Computed);
+            }
+            None => {}
+        }
+        path
+    }
+
+    /// Reconcile the panes with the document's `root`: a view for each part
+    /// it splits into, a surviving part's keeping its state.
+    pub fn sync(&mut self, root: Option<&Value>) {
+        let parts = match root {
+            Some(root) if self.splits() => parts_of(root, &[]),
+            _ => Vec::new(),
+        };
+        let mut previous = std::mem::take(&mut self.panes);
+        self.panes = parts
+            .iter()
+            .filter(|(_, splits)| !splits)
+            .map(|(path, _)| {
+                let root = Root::pane(path.clone());
+                match previous.iter().position(|view| view.root == root) {
+                    Some(index) => previous.swap_remove(index),
+                    None => View::new(root),
+                }
+            })
+            .collect();
+        let opened: Vec<CellId> = self.opened().map(|opened| opened.id).collect();
+        let live = |slot: &Slot| match slot {
+            Slot::Document => true,
+            Slot::Opened(id) => opened.contains(id),
+            Slot::Part(path) => parts.iter().any(|(part, _)| part == path),
+        };
+        self.shares.retain(|slot, _| live(slot));
         if self
             .dragging
             .as_ref()
-            .is_some_and(|drag| !self.divider_is_live(&drag.divider))
+            .is_some_and(|drag| !live(&drag.divider.before) || !live(&drag.divider.after))
         {
             self.dragging = None;
         }
     }
 
-    /// The side column holding the pane `root`, and its index there.
-    fn pane(&self, root: &Root) -> Option<(Side, &Column, usize)> {
-        [Side::Left, Side::Right].into_iter().find_map(|side| {
-            let column = self.column(side);
-            column
-                .panes
-                .iter()
-                .position(|pane| pane.view.root == *root)
-                .map(|index| (side, column, index))
-        })
+    /// Opens `entry` as a new pane at `side`'s end of the editor's row, and
+    /// returns its view's root.
+    pub fn open(&mut self, side: Side, entry: Value) -> Root {
+        let id = gid::new_cell_id();
+        let root = Root::opened(id);
+        let part = Part::Opened(Opened {
+            id,
+            view: View::new(root.clone()),
+            entry,
+        });
+        match side {
+            Side::Left => self.row.insert(0, part),
+            Side::Right => self.row.push(part),
+        }
+        root
     }
 
-    pub fn can_move(&self, root: &Root, direction: Move) -> bool {
-        self.pane(root)
-            .is_some_and(|(side, column, index)| match direction {
-                Move::Up => index > 0,
-                Move::Down => index + 1 < column.panes.len(),
-                Move::Left => side == Side::Right,
-                Move::Right => side == Side::Left,
-            })
+    /// Closes the opened pane `root`, if it is one.
+    pub fn close(&mut self, root: &Root) -> bool {
+        let before = self.row.len();
+        self.row
+            .retain(|part| !matches!(part, Part::Opened(opened) if opened.view.root == *root));
+        self.row.len() < before
     }
 
-    pub fn start_resize(&mut self, divider: Divider, start: Vec2) -> bool {
-        let sizes = match &divider {
-            Divider::Columns(Side::Left) => Some((self.left_width, 0.0)),
-            Divider::Columns(Side::Right) => Some((self.right_width, 0.0)),
-            Divider::Panes {
-                side,
-                before,
-                after,
-            } => {
-                let height = |root: &Root| {
-                    self.column(*side)
-                        .panes
-                        .iter()
-                        .find(|pane| pane.view.root == *root)
-                        .map(|pane| pane.height)
-                };
-                height(before).zip(height(after))
-            }
-        };
-        if let Some((before, after)) = sizes {
-            self.dragging = Some(Drag {
-                divider,
-                start,
-                before,
-                after,
-            });
-            true
-        } else {
-            false
+    /// Moves the document pane `from`'s view and share to `to`, where its
+    /// part went. Its folds, kept by path, start over.
+    pub fn retarget(&mut self, from: &Root, to: Root) {
+        if let (Target::Pane { path: before }, Target::Pane { path: after }) =
+            (from.target(), to.target())
+            && let Some(share) = self.shares.remove(&Slot::Part(before.clone()))
+        {
+            self.shares.insert(Slot::Part(after.clone()), share);
+        }
+        if let Some(view) = self.view_mut(from) {
+            view.root = to;
+            view.annotations = Annotations::default();
         }
     }
 
-    pub fn resize(&mut self, divider: &Divider, point: Vec2, size: Size) -> bool {
-        match self
+    /// Where the opened pane `root` is in the editor's row.
+    fn place_in_row(&self, root: &Root) -> Option<usize> {
+        self.row
+            .iter()
+            .position(|part| matches!(part, Part::Opened(opened) if opened.view.root == *root))
+    }
+
+    /// Whether the pane `root` can move that way: an opened pane along the
+    /// editor's row, a document pane along its row or column in `document`.
+    pub fn can_move(&self, root: &Root, direction: Move, document: Option<&Value>) -> bool {
+        match root.target() {
+            Target::Document => false,
+            Target::Opened { .. } => self
+                .place_in_row(root)
+                .is_some_and(|index| match direction {
+                    Move::Left => index > 0,
+                    Move::Right => index + 1 < self.row.len(),
+                    Move::Up | Move::Down => false,
+                }),
+            Target::Pane { path } => {
+                document.is_some_and(|document| move_part(document, path, direction).is_some())
+            }
+        }
+    }
+
+    /// Moves the opened pane `root` one place along the editor's row.
+    pub fn move_opened(&mut self, root: &Root, direction: Move) -> bool {
+        let Some(index) = self.place_in_row(root) else {
+            return false;
+        };
+        let other = match direction {
+            Move::Left => index.checked_sub(1),
+            Move::Right => (index + 1 < self.row.len()).then_some(index + 1),
+            Move::Up | Move::Down => None,
+        };
+        other.is_some_and(|other| {
+            self.row.swap(index, other);
+            true
+        })
+    }
+
+    fn share(&self, slot: &Slot) -> f64 {
+        self.shares.get(slot).copied().unwrap_or(1.0)
+    }
+
+    #[cfg(test)]
+    pub fn set_share(&mut self, slot: Slot, share: f64) {
+        self.shares.insert(slot, share);
+    }
+
+    /// Starts dragging `divider` from `start`, moving `rate` share a pixel.
+    pub fn start_resize(&mut self, divider: Divider, start: Vec2, rate: f64) -> bool {
+        self.dragging = Some(Drag {
+            before: self.share(&divider.before),
+            after: self.share(&divider.after),
+            divider,
+            start,
+            rate,
+        });
+        true
+    }
+
+    pub fn resize(&mut self, divider: &Divider, point: Vec2) -> bool {
+        let Some(drag) = self
             .dragging
             .as_ref()
             .filter(|drag| drag.divider == *divider)
             .cloned()
-        {
-            None => false,
-            Some(drag) => match divider {
-                Divider::Columns(Side::Left) => {
-                    self.left_width =
-                        (drag.before + ratio(point.x - drag.start.x, size.width)).clamp(0.0, 1.0);
-                    true
-                }
-                Divider::Columns(Side::Right) => {
-                    self.right_width =
-                        (drag.before - ratio(point.x - drag.start.x, size.width)).clamp(0.0, 1.0);
-                    true
-                }
-                Divider::Panes {
-                    side,
-                    before,
-                    after,
-                } => {
-                    let panes = &mut self.column_mut(*side).panes;
-                    match divided(panes, before, after).and_then(|at| panes.get_mut(at..=at + 1)) {
-                        Some([first, second]) => {
-                            let pair = drag.before + drag.after;
-                            let delta = ratio(point.y - drag.start.y, size.height);
-                            first.height = (drag.before + delta).clamp(0.0, pair);
-                            second.height = pair - first.height;
-                            true
-                        }
-                        _ => false,
-                    }
-                }
-            },
-        }
+        else {
+            return false;
+        };
+        let travel = match divider.direction {
+            Direction::Across => point.x - drag.start.x,
+            Direction::Down => point.y - drag.start.y,
+        };
+        let pair = drag.before + drag.after;
+        let first = (drag.before + travel * drag.rate).clamp(0.0, pair);
+        self.shares.insert(divider.before.clone(), first);
+        self.shares.insert(divider.after.clone(), pair - first);
+        true
     }
 
     pub fn finish_resize(&mut self, divider: &Divider) -> bool {
@@ -693,93 +678,109 @@ impl Workspace {
         self.dragging.take().is_some()
     }
 
-    /// The columns side by side, a rule apart: the left, the document and
-    /// the right. A side column takes its requested fraction and the
-    /// document the rest, any of them raised to a minimum where all fit.
-    pub fn geometry(&self, size: Size, scale: f64) -> Geometry<'_> {
-        let rule = scale.max(1.0);
-        let column = |side: Side, width: f64| {
-            (!self.column(side).panes.is_empty()).then_some((Area::Column(side), width))
-        };
-        let (left, right) = (
-            column(Side::Left, self.left_width),
-            column(Side::Right, self.right_width),
-        );
-        let document_weight = left
-            .into_iter()
-            .chain(right)
-            .fold(1.0, |rest, (_, width)| rest - width)
-            .max(0.0);
-        let areas: Vec<_> = [left, Some((Area::Document, document_weight)), right]
-            .into_iter()
-            .flatten()
+    /// The editor's row filling `size`: its parts side by side, the
+    /// document's split as its `root` is, where it is.
+    pub fn geometry(&self, root: Option<&Value>, size: Size, scale: f64) -> Geometry<'_> {
+        let parts = self
+            .row
+            .iter()
+            .map(|part| match part {
+                Part::Document => (Slot::Document, part),
+                Part::Opened(opened) => (Slot::Opened(opened.id), part),
+            })
             .collect();
-        let usable_width = (size.width - rule * (areas.len() - 1) as f64).max(0.0);
-        let weights: Vec<f64> = areas.iter().map(|(_, weight)| *weight).collect();
-        let strip = |x: f64, width: f64| Rect::new(x, 0.0, x + width, size.height);
-        areas
+        self.lay_out(
+            Direction::Across,
+            parts,
+            Rect::from_origin_size(kurbo::Point::ZERO, size),
+            scale,
+            |part, rect| match part {
+                Part::Opened(opened) => Geometry::view(&opened.view, rect),
+                Part::Document => {
+                    match root.filter(|root| self.splits() && split(root).is_some()) {
+                        Some(root) => self.split_geometry(root, &[], rect, scale),
+                        None => Geometry::view(&self.document, rect),
+                    }
+                }
+            },
+        )
+    }
+
+    /// The row or column `value` at `at` in the document filling `rect`:
+    /// each part that splits again split in turn, and each other a pane.
+    fn split_geometry(&self, value: &Value, at: &[Step], rect: Rect, scale: f64) -> Geometry<'_> {
+        let Some((direction, parts)) = split(value) else {
+            return Geometry::default();
+        };
+        let parts = parts
+            .iter()
+            .map(|(position, part)| {
+                let path = part_path(at, position);
+                (Slot::Part(path.clone()), (path, part))
+            })
+            .collect();
+        self.lay_out(direction, parts, rect, scale, |(path, part), rect| {
+            if split(part).is_some() {
+                self.split_geometry(part, &path, rect, scale)
+            } else {
+                let root = Root::pane(path);
+                self.panes
+                    .iter()
+                    .find(|view| view.root == root)
+                    .map(|view| Geometry::view(view, rect))
+                    .unwrap_or_default()
+            }
+        })
+    }
+
+    /// `parts` one after another along `direction` in `rect`, a rule apart,
+    /// at their shares, any of them raised to a minimum where all fit, each
+    /// filling its own with `fill`.
+    fn lay_out<'a, T>(
+        &'a self,
+        direction: Direction,
+        parts: Vec<(Slot, T)>,
+        rect: Rect,
+        scale: f64,
+        fill: impl Fn(T, Rect) -> Geometry<'a>,
+    ) -> Geometry<'a> {
+        let rule = scale.max(1.0);
+        let (start, length, minimum) = match direction {
+            Direction::Across => (rect.x0, rect.width(), 180.0 * scale),
+            Direction::Down => (rect.y0, rect.height(), 96.0 * scale),
+        };
+        let usable = (length - rule * parts.len().saturating_sub(1) as f64).max(0.0);
+        let weights: Vec<f64> = parts.iter().map(|(slot, _)| self.share(slot)).collect();
+        let total: f64 = weights.iter().sum();
+        let rate = if usable > 0.0 { total / usable } else { 0.0 };
+        let band = |from: f64, to: f64| match direction {
+            Direction::Across => Rect::new(from, rect.y0, to, rect.y1),
+            Direction::Down => Rect::new(rect.x0, from, rect.x1, to),
+        };
+        let slots: Vec<Slot> = parts.iter().map(|(slot, _)| slot.clone()).collect();
+        let mut geometry = Geometry::default();
+        let mut at = start;
+        for (index, ((slot, part), length)) in parts
             .into_iter()
-            .zip(allocate(&weights, usable_width, 180.0 * scale))
-            .fold(
-                (0.0, Geometry::default()),
-                |(x, geometry), ((area, _), width)| match area {
-                    Area::Document => (
-                        x + width,
-                        geometry.with_view(&self.document, strip(x, width)),
-                    ),
-                    Area::Column(Side::Left) => (
-                        x + width + rule,
-                        geometry
-                            .extend(column_geometry(
-                                &self.left,
-                                Side::Left,
-                                strip(x, width),
-                                rule,
-                                scale,
-                            ))
-                            .with_divider(Divider::Columns(Side::Left), strip(x + width, rule)),
-                    ),
-                    Area::Column(Side::Right) => (
-                        x + rule + width,
-                        geometry
-                            .with_divider(Divider::Columns(Side::Right), strip(x, rule))
-                            .extend(column_geometry(
-                                &self.right,
-                                Side::Right,
-                                strip(x + rule, width),
-                                rule,
-                                scale,
-                            )),
-                    ),
-                },
-            )
-            .1
-    }
-
-    pub fn column(&self, side: Side) -> &Column {
-        match side {
-            Side::Left => &self.left,
-            Side::Right => &self.right,
+            .zip(allocate(&weights, usable, minimum))
+            .enumerate()
+        {
+            geometry = geometry.extend(fill(part, band(at, at + length)));
+            at += length;
+            if let Some(next) = slots.get(index + 1) {
+                geometry.dividers.push(DividerPlacement {
+                    divider: Divider {
+                        direction,
+                        before: slot,
+                        after: next.clone(),
+                    },
+                    rect: band(at, at + rule),
+                    rate,
+                });
+                at += rule;
+            }
         }
-    }
-
-    fn column_mut(&mut self, side: Side) -> &mut Column {
-        match side {
-            Side::Left => &mut self.left,
-            Side::Right => &mut self.right,
-        }
-    }
-
-    fn divider_is_live(&self, divider: &Divider) -> bool {
-        match divider {
-            Divider::Columns(Side::Left) => !self.left.panes.is_empty(),
-            Divider::Columns(Side::Right) => !self.right.panes.is_empty(),
-            Divider::Panes {
-                side,
-                before,
-                after,
-            } => divided(&self.column(*side).panes, before, after).is_some(),
-        }
+        geometry
     }
 }
 
@@ -791,31 +792,36 @@ pub enum Move {
     Right,
 }
 
-/// Where in `panes` a rule divides `before` from `after`, one right after
-/// the other: the index of `before`.
-fn divided(panes: &[Pane], before: &Root, after: &Root) -> Option<usize> {
-    panes.windows(2).position(|pair| {
-        matches!(pair, [first, second]
-            if first.view.root == *before && second.view.root == *after)
-    })
-}
-
-fn ratio(value: f64, total: f64) -> f64 {
-    if total > 0.0 { value / total } else { 0.0 }
-}
-
-fn normalize(panes: &mut [Pane]) {
-    let total: f64 = panes.iter().map(|pane| pane.height.max(0.0)).sum();
-    if total > 0.0 {
-        for pane in panes {
-            pane.height = pane.height.max(0.0) / total;
-        }
-    } else {
-        let equal = 1.0 / panes.len() as f64;
-        for pane in panes {
-            pane.height = equal;
-        }
-    }
+/// The libraries the document declares at its root, in order. Each entry, or
+/// the cell it names, is a record of the `keys` the library owns and the
+/// `projection` that draws a record carrying them, a function of `value`.
+pub(crate) fn libraries(
+    sources: &crate::sources::Sources<'_>,
+) -> Vec<crate::display::DocumentLibrary> {
+    sources
+        .root()
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&vocabulary::LIBRARIES))
+        .and_then(Value::as_list)
+        .into_iter()
+        .flat_map(|declared| declared.values())
+        .filter_map(|entry| {
+            let entry = match entry.as_cell() {
+                Some(cell) => sources.resolve(cell)?.value,
+                None => entry,
+            };
+            let fields = entry.as_record()?;
+            Some(crate::display::DocumentLibrary {
+                keys: fields
+                    .get(&vocabulary::KEYS)?
+                    .as_list()?
+                    .values()
+                    .filter_map(Value::as_cell)
+                    .collect(),
+                projection: fields.get(&vocabulary::PROJECTION)?.clone().into(),
+            })
+        })
+        .collect()
 }
 
 /// Allocate requested weights while temporarily enforcing a minimum.
@@ -864,41 +870,6 @@ fn allocate(weights: &[f64], total: f64, minimum: f64) -> Vec<f64> {
         }
     }
     result
-}
-
-/// The column's panes stacked in `rect`, a rule apart, at their requested
-/// shares of its height, any of them raised to a minimum where all fit.
-fn column_geometry(column: &Column, side: Side, rect: Rect, rule: f64, scale: f64) -> Geometry<'_> {
-    let usable = (rect.height() - rule * column.panes.len().saturating_sub(1) as f64).max(0.0);
-    let weights: Vec<f64> = column.panes.iter().map(|pane| pane.height).collect();
-    let band = |y: f64, height: f64| Rect::new(rect.x0, y, rect.x1, y + height);
-    let successors = column.panes.iter().skip(1).map(Some).chain([None]);
-    column
-        .panes
-        .iter()
-        .zip(allocate(&weights, usable, 96.0 * scale))
-        .zip(successors)
-        .fold(
-            (rect.y0, Geometry::default()),
-            |(y, geometry), ((pane, height), next)| {
-                let geometry = geometry.with_view(&pane.view, band(y, height));
-                match next {
-                    Some(next) => (
-                        y + height + rule,
-                        geometry.with_divider(
-                            Divider::Panes {
-                                side,
-                                before: pane.view.root.clone(),
-                                after: next.view.root.clone(),
-                            },
-                            band(y + height, rule),
-                        ),
-                    ),
-                    None => (y + height, geometry),
-                }
-            },
-        )
-        .1
 }
 
 #[cfg(test)]

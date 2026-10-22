@@ -70,7 +70,7 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
         crate::gid_text::parse(crate::command::Example::Toolpaths.source()).unwrap();
     let libraries = crate::stack::load().libraries;
     let computations = Computations::default();
-    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let pane = crate::workspace::panes(doc.root.as_ref()).remove(0);
     let program = computations.runtime.input(RuntimeValue::record([]));
     let paths = recording(
         &computations,
@@ -88,7 +88,7 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
             computations: &computations,
         };
         let output = presentation::tests::viewport_output(
-            sources.resolve_path(&pane.path).unwrap(),
+            sources.resolve_path(&pane).unwrap(),
             &env,
             width,
             height,
@@ -102,7 +102,7 @@ fn cam_resize_retains_prepared_program_and_recording_but_edits_invalidate() {
             .get(&presentation::vocabulary::VALUE)
             .unwrap()
             .clone();
-        crate::libraries::tree::prepared(&computations, &site(&pane.path), program.into(), 300_000)
+        crate::libraries::tree::prepared(&computations, &site(&pane), program.into(), 300_000)
             .as_ref()
             .as_ref()
             .unwrap()
@@ -156,8 +156,8 @@ fn profile_program_tree_construction() {
         doc: &doc,
         libraries: &libraries,
     };
-    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
-    let declaration = sources.resolve_path(&pane.path).unwrap();
+    let pane = crate::workspace::panes(doc.root.as_ref()).remove(0);
+    let declaration = sources.resolve_path(&pane).unwrap();
     let computations = crate::computations::Computations::from_sources(sources);
     let samples: Vec<_> = (0..5)
         .map(|trial| {
@@ -183,7 +183,7 @@ fn profile_program_tree_construction() {
             let start = Instant::now();
             let memoized = crate::libraries::tree::prepared(
                 &computations,
-                &site(&pane.path),
+                &site(&pane),
                 Value::from(names["program_tree"]).into(),
                 300_000,
             );

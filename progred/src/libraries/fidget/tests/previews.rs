@@ -20,13 +20,14 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
     let cell = crate::test_support::value_at(
         doc.root.as_ref().unwrap(),
         &[
-            gid::Step::Key(crate::workspace::vocabulary::MAIN),
-            gid::Step::Key(fidget::vocabulary::FIDGET),
-        ],
+            crate::test_examples::main_part(),
+            vec![gid::Step::Key(fidget::vocabulary::FIDGET)],
+        ]
+        .concat(),
     )
     .and_then(gid::Value::as_cell)
     .unwrap();
-    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let pane = crate::workspace::panes(doc.root.as_ref()).remove(0);
     context.stack.projection = crate::projection::viewport::projection(
         &context.stack.projection,
         kurbo::Size::new(96.0, 64.0),
@@ -36,7 +37,7 @@ fn fidget_template_preview_uses_the_shared_cells_current_definition() {
             doc.cells.set_value(cell, value);
         }
         let (bench, _) = context.frame(BenchFrame {
-            root: &crate::occurrence::of(&pane.path),
+            root: &crate::occurrence::of(&pane),
             ..BenchFrame::of(&doc, 1400.0)
         });
         bench.list.0.iter().find_map(|command| match command {
@@ -69,11 +70,11 @@ fn fidget_viewport_projects_an_image_at_the_assigned_size() {
         "/../examples/fidget.gid"
     )))
     .expect("the Fidget demo parses");
-    let declaration = crate::workspace::declarations(doc.root.as_ref())
+    let declaration = crate::workspace::panes(doc.root.as_ref())
         .into_iter()
         .next()
         .expect("the preview is declared as a pane");
-    let source = crate::occurrence::of(&declaration.path);
+    let source = crate::occurrence::of(&declaration);
     let mut context = BenchContext::new();
     context.stack.projection = crate::projection::viewport::projection(
         &context.stack.projection,

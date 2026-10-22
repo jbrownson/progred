@@ -317,6 +317,7 @@ impl Changes {
                     "view": match selected.root.target() {
                         Target::Document => serde_json::json!("document"),
                         Target::Pane { path: root } => serde_json::json!({"pane": path::value(root)}),
+                        Target::Opened { id } => serde_json::json!({"opened": id.to_string()}),
                     },
                     "path": crate::occurrence::value(&selected.path),
                     "source": selected.source.as_ref().map(source),

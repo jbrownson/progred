@@ -151,7 +151,6 @@ fn definition<'a>(
                 Entry::Command(C::Doc(D::OpenPane(Side::Left))),
                 Entry::Command(C::Doc(D::OpenPane(Side::Right))),
                 Entry::Command(C::Doc(D::ClosePane)),
-                Entry::Command(C::Doc(D::ShowPanes)),
                 Entry::Separator,
                 Entry::Command(C::Doc(D::MovePane(Move::Up))),
                 Entry::Command(C::Doc(D::MovePane(Move::Down))),

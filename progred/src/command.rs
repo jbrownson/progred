@@ -130,13 +130,11 @@ pub enum DocCommand {
     SaveAs,
     Undo,
     Redo,
-    /// Open the selected value in a pane on that side.
+    /// Open the selected value in a pane at that end of the editor's row.
     OpenPane(Side),
     /// Close the selected pane, leaving what it showed in place.
     ClosePane,
-    /// Show the panes declaration in a pane.
-    ShowPanes,
-    /// Move the selected pane.
+    /// Move the selected pane along its row or column.
     MovePane(Move),
     /// Show a preset's libraries in the selected area, or every library if
     /// it shows them already.
@@ -326,7 +324,6 @@ pub fn spec(command: Command) -> Spec {
             Some(Shortcut::shifted(ShortcutKey::P)),
         ),
         Command::Doc(DocCommand::ClosePane) => item("Close Pane", None),
-        Command::Doc(DocCommand::ShowPanes) => item("Show Panes", None),
         Command::Doc(DocCommand::MovePane(Move::Up)) => item("Move Pane Up", None),
         Command::Doc(DocCommand::MovePane(Move::Down)) => item("Move Pane Down", None),
         Command::Doc(DocCommand::MovePane(Move::Left)) => item("Move Pane Left", None),
@@ -364,7 +361,6 @@ pub struct Availability {
     pub redo: bool,
     pub open_pane: bool,
     pub close_pane: bool,
-    pub show_panes: bool,
     pub move_up: bool,
     pub move_down: bool,
     pub move_left: bool,
@@ -388,12 +384,11 @@ impl Availability {
             DocCommand::Redo => self.redo,
             DocCommand::OpenPane(_) => self.open_pane,
             DocCommand::ClosePane => self.close_pane,
-            DocCommand::ShowPanes | DocCommand::OpenLibrary(_) => self.show_panes,
             DocCommand::MovePane(Move::Up) => self.move_up,
             DocCommand::MovePane(Move::Down) => self.move_down,
             DocCommand::MovePane(Move::Left) => self.move_left,
             DocCommand::MovePane(Move::Right) => self.move_right,
-            DocCommand::Preset(_) | DocCommand::Projection(_) => true,
+            DocCommand::Preset(_) | DocCommand::Projection(_) | DocCommand::OpenLibrary(_) => true,
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             DocCommand::ActualSize => self.actual_size,
             #[cfg(any(target_os = "macos", target_os = "linux"))]

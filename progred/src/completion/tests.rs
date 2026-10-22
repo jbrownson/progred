@@ -117,16 +117,18 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
         let world = crate::libraries::test_widgets::activate_completion(offer);
         let document = &world.model.doc;
         let inserted = document.root.clone().unwrap();
-        let main = crate::workspace::vocabulary::MAIN;
-        let cell = crate::test_support::value_at(&inserted, &[Step::Key(main), Step::Key(field)])
-            .and_then(Value::as_cell)
-            .unwrap();
+        let main = crate::test_examples::main_part();
+        let cell = crate::test_support::value_at(
+            &inserted,
+            &[main.clone(), vec![Step::Key(field)]].concat(),
+        )
+        .and_then(Value::as_cell)
+        .unwrap();
         assert!(document.cells.value(cell).is_none());
-        let panes = crate::workspace::declarations(document.root.as_ref());
-        assert_eq!(panes.len(), 1);
-        assert_eq!(panes[0].side, crate::workspace::Side::Left);
+        let panes = crate::workspace::panes(document.root.as_ref());
+        assert_eq!(panes, [crate::test_examples::part(0, 2), main.clone()]);
         let pane =
-            crate::test_support::value_at(document.root.as_ref().unwrap(), &panes[0].path).unwrap();
+            crate::test_support::value_at(document.root.as_ref().unwrap(), &panes[0]).unwrap();
         assert_eq!(
             pane,
             &if field == fidget::vocabulary::FIDGET {
@@ -136,13 +138,14 @@ fn root_completions_share_a_bare_cell_with_a_left_pane_and_open_its_definition()
             }
         );
         let selected = world.model.selection.as_ref().unwrap();
+        // At the root the row splits, so the cell is picked in its own pane.
         assert_eq!(
             selected.path(),
             [
-                Step::Key(main),
-                Step::Key(field),
-                Step::Follow(Resolution::Document)
+                crate::test_examples::pane_root(&main),
+                crate::occurrence::of(&[Step::Key(field), Step::Follow(Resolution::Document)]),
             ]
+            .concat()
         );
         assert_eq!(
             selected.stage(&src(document, &stack.libraries)),
@@ -202,11 +205,14 @@ fn completion_continuations_use_the_insertion_site_and_decline_atomically() {
     assert_eq!(
         world.model.selection.as_ref().unwrap().path(),
         [
-            Step::Key(field),
-            Step::Key(crate::workspace::vocabulary::MAIN),
-            Step::Key(crate::libraries::grap::vocabulary::GRAP),
-            Step::Follow(Resolution::Document),
+            vec![Step::Key(field)],
+            crate::test_examples::main_part(),
+            vec![
+                Step::Key(crate::libraries::grap::vocabulary::GRAP),
+                Step::Follow(Resolution::Document),
+            ],
         ]
+        .concat()
     );
 
     let declined = grap::lambda(

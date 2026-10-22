@@ -157,7 +157,7 @@ fn recorded_hits_keep_the_executing_library_definition() {
 
 #[test]
 fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
-    use crate::libraries::{editor::workspace, layout::test_support as stored};
+    use crate::libraries::layout::test_support as stored;
     let program = grap::call(
         vocabulary::FILL.into(),
         [
@@ -175,30 +175,17 @@ fn a_nested_stored_drawing_links_its_fills_to_its_stored_program() {
             stored::program_drawing(40.0, 0.0, 40.0, 100, program.clone()),
         ],
     );
-    // A pane draws the picture; the document, read raw with its panes
-    // unfolded, draws the picture's source.
-    let mut editor = crate::editor_of(Value::record([(
-        workspace::vocabulary::PANES,
-        Value::record([(workspace::vocabulary::LEFT, Value::list([picture]))]),
-    )]));
+    // An opened pane draws the picture; the document, read raw, draws its
+    // source.
+    let mut editor = crate::editor_of(picture);
     editor.model.workspace.document.shown = crate::workspace::Shown::RAW;
-    crate::annotations::set_folded(
-        &mut editor.model.workspace.document.annotations,
-        &[crate::occurrence::Step::Key(workspace::vocabulary::PANES)],
-        false,
-        false,
+    editor.model.workspace.open(
+        crate::workspace::Side::Left,
+        crate::location::value(&crate::location::Location::root(Vec::new())),
     );
     let mut driver = crate::driver::Driver::new(editor, crate::driver::Driver::VIEWPORT);
-    let pane = driver.element(
-        &[
-            Step::Key(workspace::vocabulary::PANES),
-            Step::Key(workspace::vocabulary::LEFT),
-        ],
-        0,
-        &[],
-    );
     let stored_program = driver.element(
-        &[pane.as_slice(), &[Step::Key(vocabulary::CHILDREN)]].concat(),
+        &[Step::Key(vocabulary::CHILDREN)],
         1,
         &[Step::Key(vocabulary::PROGRAM)],
     );

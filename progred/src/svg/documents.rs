@@ -87,8 +87,8 @@ fn svg_bench_renders_toolpath_source_and_preview() {
     render(&doc, None, 760.0, "toolpaths_source.svg");
     let libraries = core_libraries();
     let sources = src(&doc, &libraries);
-    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
-    let declaration = sources.resolve_path(&pane.path).unwrap();
+    let pane = crate::workspace::panes(doc.root.as_ref()).remove(0);
+    let declaration = sources.resolve_path(&pane).unwrap();
     let (value, _) = presentation::viewport(declaration).unwrap();
     assert_eq!(value.as_cell(), Some(names["program_tree"]));
     let preview =

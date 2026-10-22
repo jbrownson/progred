@@ -3,7 +3,7 @@
 use super::HoverPass;
 use super::container;
 use super::frame::ViewRegion;
-use gid::Path;
+use gid::{CellId, Path};
 use kurbo::Vec2;
 use measured::Measured;
 use puri::handler::ScrollOutcome;
@@ -13,12 +13,19 @@ use ui_events::pointer::PointerScrollEvent;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Target {
     Document,
-    Pane { path: Path },
+    /// The part of the document's at `path`, which its root splits into.
+    Pane {
+        path: Path,
+    },
+    /// A pane the editor opened beside the document.
+    Opened {
+        id: CellId,
+    },
 }
 
-/// A view: the document's, or the pane declared at a path. A view is what
-/// it targets, and its occurrences' paths say which that is, so a path is
-/// enough to find its view.
+/// A view: the document's, one of its parts', or a pane the editor opened.
+/// A view is what it targets, and its occurrences' paths say which that is,
+/// so a path is enough to find its view.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Root(Rc<Target>);
 
@@ -29,6 +36,10 @@ impl Root {
 
     pub fn pane(path: Path) -> Self {
         Self(Rc::new(Target::Pane { path }))
+    }
+
+    pub fn opened(id: CellId) -> Self {
+        Self(Rc::new(Target::Opened { id }))
     }
 
     pub fn target(&self) -> &Target {

@@ -1,5 +1,6 @@
 use super::*;
 use crate::annotations;
+use crate::display::widget::view::Root;
 use crate::library::Libraries;
 use crate::sources::Sources;
 use gid::{Cells, Value};
@@ -25,10 +26,9 @@ fn edit(model: &mut Model, value: u8) {
 
 #[test]
 fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
-    let (root, pane_path) =
-        workspace::append(&Value::record([]), workspace::Side::Left, Value::record([])).unwrap();
+    let pane_path = crate::test_examples::part(0, 1);
     let mut model = Model::new(Document {
-        root: Some(root),
+        root: Some(workspace::row([Value::record([])])),
         cells: Cells::new(),
     });
     let old_cell = gid::new_cell_id();
@@ -42,7 +42,10 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
     assert!(model.step_history(true));
     assert!(model.dirty());
     assert!(model.history.can_undo() && model.history.can_redo());
-    let pane_root = model.workspace.left.panes[0].view.root.clone();
+    let pane_root = Root::pane(pane_path.clone());
+    let opened = model
+        .workspace
+        .open(workspace::Side::Left, Value::record([]));
     model.selection = Some(selection::pending_with_query(
         crate::occurrence::of(&pane_path),
         "old query",
@@ -59,15 +62,14 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
         ));
     model.workspace.document.scroll = Vec2::new(12.0, 300.0);
     model.workspace.document.shown = workspace::Shown::RAW;
-    model.workspace.left_width = 0.5;
-    model.workspace.right_width = 0.1;
-    for view in [
-        &mut model.workspace.document,
-        &mut model.workspace.left.panes[0].view,
-    ] {
-        view.annotations
-            .set(&[], Some(Value::record([(old_cell, Value::from(vec![1]))])));
-    }
+    let old = Some(Value::record([(old_cell, Value::from(vec![1]))]));
+    model.workspace.document.annotations.set(&[], old.clone());
+    model
+        .workspace
+        .view_mut(&pane_root)
+        .unwrap()
+        .annotations
+        .set(&[], old);
     let replacement = Document {
         root: Some(Value::record([])),
         cells: Cells::new(),
@@ -79,13 +81,11 @@ fn replacing_a_document_drops_its_history_selection_and_all_view_state() {
     assert!(!model.history.can_undo() && !model.history.can_redo());
     assert!(model.selection.is_none());
     assert!(model.workspace.view(&pane_root).is_none());
-    assert!(model.workspace.left.panes.is_empty() && model.workspace.right.panes.is_empty());
+    assert!(model.workspace.view(&opened).is_none());
+    assert_eq!(model.workspace.opened().count(), 0);
     assert_eq!(model.workspace.document.scroll, Vec2::ZERO);
     assert_eq!(model.workspace.document.shown, workspace::Shown::ALL);
     assert!(model.workspace.document.annotations.at(&[]).is_none());
-    let fresh = workspace::Workspace::default();
-    assert_eq!(model.workspace.left_width, fresh.left_width);
-    assert_eq!(model.workspace.right_width, fresh.right_width);
 }
 
 fn select(model: &mut Model, path: &[crate::occurrence::Step]) {
@@ -177,30 +177,22 @@ fn folds_undo_independently_of_document_edits_and_never_dirty_the_document() {
 
 #[test]
 fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
-    let first = workspace::append(
-        &Value::record([]),
-        workspace::Side::Left,
-        Value::list([Value::from(vec![1])]),
-    )
-    .unwrap();
-    let second = workspace::append(
-        &first.0,
-        workspace::Side::Left,
-        Value::list([Value::from(vec![1])]),
-    )
-    .unwrap();
+    let entry = || Value::list([Value::from(vec![1])]);
     let mut model = Model::new(Document {
-        root: Some(second.0),
+        root: Some(workspace::row([entry(), entry()])),
         cells: Cells::new(),
     });
-    model
-        .workspace
-        .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
-    let first_root = model.workspace.left.panes[0].view.root.clone();
-    let second_root = model.workspace.left.panes[1].view.root.clone();
-    // Each pane draws its entry under its declaration, after a pane step.
-    let first_path = crate::test_examples::pane_root(&first.1);
-    let second_path = crate::test_examples::pane_root(&second.1);
+    model.workspace.sync(model.doc.root.as_ref());
+    let (first, second) = (
+        crate::test_examples::part(0, 2),
+        crate::test_examples::part(1, 2),
+    );
+    let first_root = Root::pane(first.clone());
+    let second_root = Root::pane(second.clone());
+    assert!(model.workspace.view(&first_root).is_some());
+    // Each pane draws its part under it, after a pane step.
+    let first_path = crate::test_examples::pane_root(&first);
+    let second_path = crate::test_examples::pane_root(&second);
     select(&mut model, &first_path);
     assert!(model.set_folded(&first_path, false, None));
     assert!(!model.dirty());
@@ -208,12 +200,10 @@ fn folds_and_selection_restore_to_their_own_pane_even_after_pane_deletion() {
     assert!(crate::location::delete_edge(
         &mut model.doc,
         &Libraries::default(),
-        &crate::location::Location::root(&first.1)
+        &crate::location::Location::root(&first)
     ));
     model.history.record(before);
-    model
-        .workspace
-        .sync_declared(&workspace::declarations(model.doc.root.as_ref()));
+    model.workspace.sync(model.doc.root.as_ref());
     select(&mut model, &second_path);
     assert!(model.workspace.view(&first_root).is_none());
     assert!(model.step_history(true));

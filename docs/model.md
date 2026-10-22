@@ -76,12 +76,12 @@ root and the document's own definitions are writable, including a cell with no
 definition yet; a library's definitions are read-only. A route through a cell
 and a location starting at that cell are the same location.
 
-A selection's path also names the workspace view it's in: a pane's paths
-start with its declaration and a pane step ([panes](#panes)), and every other
-path is the document view's. So two panes showing the same stored data keep
-separate focus, scroll, and folds, and a view is what it targets, the
-document or a pane's declaration, which a workspace `Root` names; it is not a
-GID cell.
+A selection's path also names the workspace view it's in: a document pane's
+paths start with its part and a pane step, an opened pane's with a step naming
+it ([panes](#panes)), and every other path is the document view's. So two panes
+showing the same stored data keep separate focus, scroll, and folds, and a view
+is what it targets, the document, one of its parts, or a pane the editor
+opened, which a workspace `Root` names; it is not a GID cell.
 
 [`SourceTrace`](../progred/src/display/widget/source.rs) serves source-linked
 widgets, drawing, and highlighting. It is a location in the form it is stored
@@ -134,10 +134,11 @@ each occurrence holds its own step and a link to the trail of the occurrence
 it's drawn inside, so descending adds one link, siblings share what's above
 them, and what wants the whole path walks the parents. A selection, made
 rarely, holds its path whole. Its steps are the document's own, `Key`, `Element` and `Follow`,
-plus three of the editor's: a **jump** restarts the path at a location, as a
+plus four of the editor's: a **jump** restarts the path at a location, as a
 projection's `jump` does, a **computed** step stops it, as `at` does for a
-supplied value, and a **pane** step marks where a pane starts, which only the
-frame writes. Resolving a path starts from the document's root, or from its
+supplied value, a **pane** step marks where a document pane starts, and an
+**opened** step, first in its path, names the opened pane it's drawn in; only
+the frame writes the last two. Resolving a path starts from the document's root, or from its
 last jump's location, and follows the data steps after it; past a computed step
 there's no location until a jump. A cell followed inside a computed value has
 no stored route to it, so following it jumps to its definition, which starts a
@@ -480,11 +481,11 @@ leaving the location discards the picker without an edit. The seed color belongs
 only to the picker. An area with the color library switched off, Raw among
 them, offers none of the library's offers, this one included.
 
-Root `grap` and `fidget` offers create a fresh bare
-cell shared by their domain field and a left pane. Fidget's pane applies
-`preview 3d`; Grap's pane renders the evaluated result. The continuation opens
-the cell's pending document definition through the domain field, without
-inventing a placeholder value. Offers that mint identities construct their
+Root `grap` and `fidget` offers create a row of two parts sharing a fresh bare
+cell: a preview on the left, and a record whose domain field names the cell on
+the right. Fidget's preview applies `preview 3d`; Grap's renders the evaluated
+result. The continuation opens the cell's pending document definition through
+the domain field, in its pane, without inventing a placeholder value. Offers that mint identities construct their
 value on activation, so reusing an offer creates independent cells. Both are
 their libraries' starting points, which lead the hole of a document's root.
 
@@ -522,66 +523,65 @@ Enter must not then fall through to inserting the raw query.
 
 ## Panes
 
-[`workspace`](../progred/src/workspace.rs) recognizes a direct, coherent root
-record convention:
+The editor lays out its window as a row of parts: the document's, and the panes
+it opened beside it. A document whose root is a row or column splits its part
+the same way, so the parts it lists are panes of their own:
 
 ```text
-{main: value, panes: {left: [...values...], right: [...values...]}, ...}
+{isa: row, parts: [...values...]}      side by side
+{isa: column, parts: [...values...]}   one above another
 ```
 
-While a view shows the editor library, a view whose value is a workspace
-record starts drawing at its `main` value, so the workspace's own fields stay
-out of sight. The record itself is never drawn, so nothing selects it, and
-selection and navigation reach only what's inside. Plain and Raw leave the
-editor library off and show the whole record, as does turning the editor
-library off in the Projections menu. A root without `main` draws whole, as any
-other document does; one holding only the workspace's fields, as after its
-main value was deleted, draws an empty `main`. A pane showing a workspace
-record starts at its main value the same way. A document
-needs the wrapping only once something adds a workspace field: opening a pane
-on a root without them makes the root the `main` value of a new workspace
-record, moving the document view's folds with it, and starting points that open
-a pane begin that way.
+[`workspace`](../progred/src/workspace.rs) reads these at the root only, so a
+row deeper in the document is data, and a part that's itself a row or column
+splits again. A row or column with no parts has nothing to split into and is
+data too. The document's part splits while the document's view shows the
+editor library; Plain and Raw, or turning the editor library off in the
+Projections menu, show the root whole, rows and all. A starting point that
+opens a preview begins as a row of the preview and the record it shows.
 
-The pane lists determine side and order; entries are ordinary values. A pane
-draws under its declaration's path, after a **pane** step that says a pane
-starts there and changes nothing about where the data is. So its occurrences
-stay apart from the document view's even where that draws the declaration too,
-their paths name the pane they're in, and a pane showing its entry reads and
-writes the entry. An entry
-can name a [location](#data-and-resolution) as data: `{isa: location, steps:
-[...]}` from the document's root, or `{isa: location, in: cell, follow: source,
-steps: [...]}` inside a cell's definition, with the steps and source in the
-path convention's encoding. A pane tells what its entry is by its kind, so any
-other value, a record that happens to have a `steps` field included, shows as
-it is. While
-its pane shows the editor library, the pane jumps to that place after its pane
-step and draws and edits it there, so it stays in sync with the document; Plain and Raw show the entry itself. Open
-Value on Left and Right open the selection's place, starting at its nearest
-cell, so a cell is a location with no steps; a computed value has no place and
-opens as a copy. A place that's only empty, as after its value was deleted,
-draws as any empty place does, ready to write; one that can't be reached, as
-after its container was deleted, draws a read-only `place not found` absent
-carrying the location. Show Panes opens a location pane on the panes
-declaration, `{isa: location, steps: [panes]}`, or selects the one already open, so the panes
-can be edited as data while they show. The Libraries menu does the same for a
-loaded library, opening a location pane at its own cell, which is read-only
-like every library value; Open Value on a cell it lists opens that cell's
-definition beside it. Close Pane removes the selected pane's
-entry. Deleting a value
-pane's root does too, but a location pane's root is the place it shows, so
-deleting it deletes that content. Opening, closing and moving panes edit these
-lists, so they save and undo with the document. An empty document opening a
-pane becomes a workspace whose `main` is still to write. A malformed pane
-container or nonrecord root is not overwritten to make the operation possible.
+Parts take equal shares of their row or column at first, a rule apart, and
+dragging the rule moves share from one neighbour to the other. Shares are
+session state, as are each view's libraries shown, folds and scroll; a share
+too small for the minimum width or height draws at the minimum without being
+rewritten.
 
-Pane identity, the libraries shown, folds, scroll, and requested size are session
-state. The document view starts with the contents of `panes` folded; individual
-pane entries have no initial fold. Expanding the field is preserved when panes
-are added, removed, or moved. Surviving declarations retain their view state.
-Moving an entry assigns a new list position and explicitly retargets selection;
-its size, scroll, and the libraries it shows carry across, while path-keyed folds
-reset.
+A document pane draws its part under the part's path, after a **pane** step that
+says a pane starts there and changes nothing about where the data is. So its
+occurrences stay apart from any other drawing of the same data, their paths
+name the pane they're in, and a pane showing its part reads and writes it. A
+part can name a [location](#data-and-resolution) as data: `{isa: location,
+steps: [...]}` from the document's root, or `{isa: location, in: cell, follow:
+source, steps: [...]}` inside a cell's definition, with the steps and source in
+the path convention's encoding. A pane tells what its part is by its kind, so
+any other value, a record that happens to have a `steps` field included, shows
+as it is. While its pane shows the editor library, the pane jumps to that place
+after its pane step and draws and edits it there, so it stays in sync with the
+document; Plain and Raw show the location itself.
+
+Opened panes are the editor's and the document doesn't keep them, so opening,
+closing and moving one never edits the document, marks it changed, or enters
+its history. Open Value on Left and Right open the selection's place, starting
+at its nearest cell, so a cell is a location with no steps, at that end of the
+editor's row; a computed value has no place and opens as a copy, read-only. An
+opened pane draws after an **opened** step naming it, then a jump to its place,
+or a computed step for a copy or while the editor library is off. A place
+that's only empty, as after its value was deleted, draws as any empty place
+does, ready to write; one that can't be reached, as after its container was
+deleted, draws a read-only `place not found` absent carrying the location. The
+Libraries menu opens a loaded library the same way, as a location at its own
+cell, which is read-only like every library value, or selects the pane already
+showing it; Open Value on a cell it lists opens that cell's definition beside
+it. An empty document stays empty, so its root still offers the starting
+points.
+
+Close Pane closes an opened pane, or removes a document pane's part from its row
+or column, which is an edit of the document and undoes as one; a location
+pane's place stays as it is. Move Pane moves an opened pane along the editor's
+row, or a document pane's part along its row or column: left and right in a
+row, up and down in a column. Moving a part gives it a new list position and
+retargets the selection and the pane's share, while its path-keyed folds reset.
+A part that leaves keeps no view state; one that stays keeps its own.
 
 `{isa: projected value, value: source, projection: function}` is a
 presentation-library convention,
@@ -603,7 +603,7 @@ splitting determines that rectangle before the function runs, so there is no
 feedback from content measurement to pane sizing. View annotations and selection
 keep their existing per-view ownership. Raw returns to ordinary scrolling source
 display. The viewport convention applies only at pane entry, including through
-cell aliases; the main document and nested declarations remain editable data.
+cell aliases; the document view and nested declarations remain editable data.
 
 The Fidget example and template use this contract. Preview image dimensions are
 explicit arguments, separate from the Fidget field and camera volume. Raster
@@ -650,8 +650,8 @@ is New Window; Open creates a separate window.
 Replacement keeps the window, surface, geometry, fonts, text-shaping cache,
 clipboard, library stack, physical pointer/modifier input, and debug-display
 preference. It resets document/saved identity, history, selection and text/IME
-state, all pane identities and annotations (including camera and folds), scroll,
-shown libraries, divider state, binders, menus, gestures, queued input, retained
+state, every pane, opened ones included, and its annotations (camera and folds
+among them), scroll, shown libraries, shares, divider state, binders, menus, gestures, queued input, retained
 handlers/paint, and hover attribution. The successor frame is built immediately.
 On macOS the old file's frame-autosave name is detached without deleting its
 saved geometry; the represented file, title, and edited flag are refreshed.

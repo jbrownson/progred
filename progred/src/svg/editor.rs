@@ -182,10 +182,14 @@ fn capture_cam_async(mode: CellId) {
     capture(&mut runner, "cam_async_first.svg");
     complete(&mut runner);
     capture(&mut runner, "cam_async_ready.svg");
-    let path = crate::workspace::declarations(runner.editor.model.doc.root.as_ref())[0]
-        .path
-        .clone();
-    let annotations = &mut runner.editor.model.workspace.left.panes[0].view.annotations;
+    let path = crate::workspace::panes(runner.editor.model.doc.root.as_ref()).remove(0);
+    let annotations = &mut runner
+        .editor
+        .model
+        .workspace
+        .view_mut(&crate::display::widget::view::Root::pane(path.clone()))
+        .unwrap()
+        .annotations;
     annotations.set_field(&result_path(&path), STATE, Some(cam_position(0.7)));
     capture(&mut runner, "cam_async_updating.svg");
     assert_eq!(queue.lock().unwrap().len(), 1);

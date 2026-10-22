@@ -1,40 +1,43 @@
 use super::*;
+use crate::command::DocCommand;
+use crate::driver::Driver;
 use crate::sample::{PLANET_VIEW, planets};
+use crate::test_examples::{pane_root, part};
 use gid::Cells;
 use std::rc::Rc;
 
-impl Workspace {
-    fn side(&self, root: &Root) -> Option<Side> {
-        self.pane(root).map(|(side, ..)| side)
+/// Runs `command` as a menu would, and draws the next frame.
+fn run(driver: &mut Driver, command: DocCommand) {
+    driver
+        .runner
+        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
+            editor.run_doc_command(command, dispatch.geometry(1.0));
+            true
+        });
+    driver.present();
+}
+
+fn driver_of(root: Option<Value>, cells: Cells) -> Driver {
+    Driver::new(
+        crate::test_editor(gid::Document { root, cells }),
+        Driver::VIEWPORT,
+    )
+}
+
+/// The opened pane's id, where `root` is one.
+fn id(root: &Root) -> CellId {
+    match root.target() {
+        Target::Opened { id } => *id,
+        target => panic!("not an opened pane: {target:?}"),
     }
 }
 
-fn add_pane(workspace: &mut Workspace, side: Side) -> Root {
-    let column = workspace.column_mut(side);
-    let position = gid::position::between(
-        column
-            .panes
-            .last()
-            .and_then(|pane| match pane.view.root.target() {
-                Target::Pane { path } => match path.last() {
-                    Some(Step::Element(position)) => Some(position),
-                    _ => None,
-                },
-                _ => None,
-            }),
-        None,
-    )
-    .unwrap();
-    let root = Root::pane(pane_path(side, position));
-    column.panes.push(Pane {
-        view: View::new(root.clone()),
-        height: 1.0,
-    });
-    for pane in &mut column.panes {
-        pane.height = 1.0;
-    }
-    normalize(&mut column.panes);
-    root
+/// Where the opened pane `root` draws `place`.
+fn opened_at(root: &Root, place: crate::location::Location<'_>) -> occurrence::Path {
+    vec![
+        occurrence::Step::Opened(id(root)),
+        occurrence::Step::jump(place),
+    ]
 }
 
 #[test]
@@ -54,271 +57,207 @@ fn a_library_toggles_whichever_way_the_area_lists_its_libraries() {
 
 #[test]
 fn a_path_names_the_view_it_is_drawn_in() {
-    let (_, declaration) = append(&Value::record([]), Side::Left, Value::list([])).unwrap();
-    let pane = crate::test_examples::pane_root(&declaration);
-    // A pane's paths start with its declaration and a pane step.
-    assert_eq!(view_of(&pane), Root::pane(declaration.clone()));
+    let part = part(0, 1);
+    let pane = pane_root(&part);
+    // A document pane's paths start with its part and a pane step.
+    assert_eq!(view_of(&pane), Root::pane(part.clone()));
     assert_eq!(
-        view_of(&crate::occurrence::below(
-            &pane,
-            &[Step::Key(gid::new_cell_id())]
-        )),
-        Root::pane(declaration.clone())
+        view_of(&occurrence::below(&pane, &[Step::Key(gid::new_cell_id())])),
+        Root::pane(part.clone())
     );
-    // A jump at a pane entry, as a document projection might draw one, is
-    // still the document view's: only a pane step starts a pane.
-    let mut jumped = crate::occurrence::of(&declaration);
-    jumped.push(crate::occurrence::Step::jump(
-        crate::location::Location::root(declaration.clone()),
-    ));
+    // A jump at a part, as a document projection might draw one, is still
+    // the document view's: only a pane step starts a pane.
+    let mut jumped = occurrence::of(&part);
+    jumped.push(occurrence::Step::jump(crate::location::Location::root(
+        part.clone(),
+    )));
     assert_eq!(view_of(&jumped), Root::document());
-    // The declaration drawn as data is the document view's, as is the root.
-    assert_eq!(
-        view_of(&crate::occurrence::of(&declaration)),
-        Root::document()
-    );
+    // The part drawn as data is the document view's, as is the root.
+    assert_eq!(view_of(&occurrence::of(&part)), Root::document());
     assert_eq!(view_of(&[]), Root::document());
+    // An opened pane's paths start with the step naming it.
+    let opened = Root::opened(gid::new_cell_id());
+    let place = crate::location::Location::root(part);
+    assert_eq!(view_of(&opened_at(&opened, place)), opened);
 }
 
 #[test]
 fn duplicate_views_keep_independent_projection_state() {
     let mut workspace = Workspace::default();
-    let one = add_pane(&mut workspace, Side::Left);
-    let other = add_pane(&mut workspace, Side::Right);
-
+    let place = crate::location::value(&crate::location::Location::root(Vec::new()));
+    let one = workspace.open(Side::Left, place.clone());
+    let other = workspace.open(Side::Right, place);
     crate::annotations::set_folded(
         &mut workspace.view_mut(&one).unwrap().annotations,
         &[],
         false,
         true,
     );
-
-    assert!(crate::annotations::folded(
-        workspace.view(&one).unwrap().annotations.at(&[]),
-        false
-    ));
-    assert!(!crate::annotations::folded(
-        workspace.view(&other).unwrap().annotations.at(&[]),
-        false
-    ));
-    assert!(!crate::annotations::folded(
-        workspace.document.annotations.at(&[]),
-        false
-    ));
+    let folded = |root: &Root| {
+        crate::annotations::folded(workspace.view(root).unwrap().annotations.at(&[]), false)
+    };
+    assert!(folded(&one));
+    assert!(!folded(&other));
+    assert!(!folded(workspace.document_root()));
 }
 
 #[test]
-fn panes_are_values_and_their_edits_are_document_edits() {
-    let cell = CellId::from_u128(1);
-    let values = [
-        Value::from(cell),
-        Value::from(b"blob".to_vec()),
-        Value::list([]),
-        Value::record([]),
-    ];
-    let root = values.iter().fold(Value::record([]), |root, value| {
-        append(&root, Side::Left, value.clone()).unwrap().0
-    });
-    let locations = declarations(Some(&root));
-    assert_eq!(locations.len(), values.len());
-    for (location, value) in locations.iter().zip(&values) {
-        assert_eq!(
-            crate::test_support::value_at(&root, &location.path),
-            Some(value)
-        );
-        assert!(matches!(location.path.last(), Some(Step::Element(_))));
+fn a_root_row_or_column_splits_into_its_parts() {
+    let [a, b, c] = [1, 2, 3].map(|n| Value::from(vec![n]));
+    // A part that splits again gives its own parts, in order.
+    let root = row([column([a.clone(), b.clone()]), c.clone()]);
+    let panes = panes(Some(&root));
+    assert_eq!(
+        panes,
+        [
+            [part(0, 2), part(0, 2)].concat(),
+            [part(0, 2), part(1, 2)].concat(),
+            part(1, 2),
+        ]
+    );
+    for (pane, value) in panes.iter().zip([&a, &b, &c]) {
+        assert_eq!(crate::test_support::value_at(&root, pane), Some(value));
     }
-    let (moved, path) = move_value(&root, &locations[1].path, Move::Up).unwrap();
-    assert_eq!(declarations(Some(&moved))[0].path, path);
-    assert_eq!(
-        crate::test_support::value_at(&moved, &path),
-        Some(&values[1])
-    );
-    assert_eq!(
-        crate::test_support::value_at(&moved, &locations[0].path),
-        Some(&values[0])
-    );
-    let (moved, path) = move_value(&moved, &path, Move::Right).unwrap();
-    assert_eq!(declarations(Some(&moved)).last().unwrap().side, Side::Right);
-    let mut doc = gid::Document {
-        root: Some(moved),
-        cells: Cells::new(),
-    };
-    doc.cells
-        .set_value(cell, Value::from(b"definition".to_vec()));
-    let mut doc = Rc::new(doc);
-    let before = doc.clone();
-    assert!(crate::location::delete_edge(
-        &mut doc,
-        &Default::default(),
-        &crate::location::Location::root(&path)
-    ));
-    assert_eq!(declarations(doc.root.as_ref()).len(), 3);
-    assert_eq!(doc.cells.value(cell), before.cells.value(cell));
-    let mut history = crate::history::History::default();
-    history.record(before.clone());
-    let restored = history.undo(doc).unwrap();
-    assert_eq!(restored.root, before.root);
+    // A row with no parts, any other root and no root at all are data.
+    assert!(self::panes(Some(&row([]))).is_empty());
+    assert!(self::panes(Some(&a)).is_empty());
+    assert!(self::panes(None).is_empty());
+    // So is a row deeper in the document.
+    let nested = Value::record([(gid::new_cell_id(), root)]);
+    assert!(self::panes(Some(&nested)).is_empty());
 }
 
 #[test]
-fn opening_a_pane_wraps_a_bare_root_and_preserves_malformed_containers() {
-    let value = Value::from(b"data".to_vec());
-    let malformed = Value::record([(vocabulary::PANES, value.clone())]);
-    assert!(!can_open(Some(&malformed)));
-    assert!(append(&malformed, Side::Left, value.clone()).is_none());
-    // A root without the workspace's fields becomes a new workspace's main
-    // value, and stays one: the next pane opens beside the first.
-    for root in [
-        value.clone(),
-        Value::record([(CellId::from_u128(1), value.clone())]),
-    ] {
-        assert!(can_open(Some(&root)));
-        let (workspace, wrapped) = workspace_root(Some(&root));
-        assert!(wrapped);
-        let (opened, path) = append(&workspace, Side::Left, value.clone()).unwrap();
-        assert_eq!(
-            crate::test_support::value_at(&opened, &[Step::Key(vocabulary::MAIN)]),
-            Some(&root)
-        );
-        assert_eq!(crate::test_support::value_at(&opened, &path), Some(&value));
-        assert_eq!(workspace_root(Some(&opened)), (opened.clone(), false));
-    }
-    // An empty document starts a workspace whose main value is still to
-    // write, which the document view shows as it showed the empty root.
-    assert!(can_open(None));
-    let (workspace, wrapped) = workspace_root(None);
-    assert!(!wrapped);
-    let (opened, path) = append(&workspace, Side::Left, value.clone()).unwrap();
-    assert_eq!(crate::test_support::value_at(&opened, &path), Some(&value));
-    assert_eq!(
-        main_path(Some(&opened)),
-        Some(vec![Step::Key(vocabulary::MAIN)])
-    );
-    assert_eq!(
-        crate::test_support::value_at(&opened, &[Step::Key(vocabulary::MAIN)]),
-        None
-    );
+fn a_part_moves_along_its_row_or_column() {
+    let [a, b] = [1, 2].map(|n| Value::from(vec![n]));
+    let root = row([a.clone(), column([b.clone(), b.clone()])]);
+    let first = part(0, 2);
+    // Along a row, left and right.
+    assert!(move_part(&root, &first, Move::Left).is_none());
+    assert!(move_part(&root, &first, Move::Up).is_none());
+    let (moved, path) = move_part(&root, &first, Move::Right).unwrap();
+    assert_eq!(crate::test_support::value_at(&moved, &path), Some(&a));
+    assert_eq!(panes(Some(&moved)).last(), Some(&path));
+    // Along a column, up and down.
+    let upper = [part(1, 2), part(0, 2)].concat();
+    assert!(move_part(&root, &upper, Move::Right).is_none());
+    assert!(move_part(&root, &upper, Move::Up).is_none());
+    let (moved, path) = move_part(&root, &upper, Move::Down).unwrap();
+    assert_eq!(panes(Some(&moved))[2], path);
+    // The root itself has no row to move along.
+    assert!(move_part(&root, &[], Move::Right).is_none());
 }
 
 #[test]
-fn declared_panes_reconcile_without_losing_view_state() {
-    let one = Declaration {
-        side: Side::Left,
-        path: vec![Step::Key(CellId::from_u128(1))],
-    };
-    let two = Declaration {
-        side: Side::Left,
-        path: vec![Step::Key(CellId::from_u128(2))],
-    };
+fn document_panes_reconcile_without_losing_view_state() {
+    let entry = || Value::list([]);
     let mut workspace = Workspace::default();
-    let panes_path = [crate::occurrence::Step::Key(vocabulary::PANES)];
-    workspace.sync_declared(&[one.clone(), two.clone()]);
-    assert!(crate::annotations::folded(
-        workspace.document.annotations.at(&panes_path),
-        false
-    ));
-    for declaration in [&one, &two] {
-        assert!(
-            workspace
-                .document
-                .annotations
-                .at(&crate::occurrence::of(&declaration.path))
-                .is_none()
-        );
-    }
-    crate::annotations::set_folded(
-        &mut workspace.document.annotations,
-        &panes_path,
-        false,
-        false,
-    );
-    let root = workspace.left.panes[0].view.root.clone();
-    workspace.left.panes[0].view.scroll = Vec2::new(4.0, 9.0);
-    workspace.left.panes[0].view.shown = Shown::RAW;
-
-    workspace.sync_declared(&[two, one.clone()]);
-    let moved = &workspace.left.panes[1].view;
-    assert_eq!(moved.root, root);
-    assert_eq!(moved.scroll, Vec2::new(4.0, 9.0));
-    assert_eq!(moved.shown, Shown::RAW);
-    assert!(!crate::annotations::folded(
-        workspace.document.annotations.at(&panes_path),
-        false
-    ));
-    assert!(workspace.can_move(&root, Move::Up));
-
-    workspace.sync_declared(&[]);
-    assert!(workspace.left.panes.is_empty());
-    workspace.sync_declared(&[one]);
-    assert!(!crate::annotations::folded(
-        workspace.document.annotations.at(&panes_path),
-        false
-    ));
+    let root = row([entry(), entry()]);
+    workspace.sync(Some(&root));
+    let [first, second] = [0, 1].map(|index| Root::pane(part(index, 2)));
+    let view = workspace.view_mut(&first).unwrap();
+    view.scroll = Vec2::new(4.0, 9.0);
+    view.shown = Shown::RAW;
+    // A part that's still there keeps its view.
+    let fewer = crate::spine::without(&root, &part(1, 2)).unwrap();
+    workspace.sync(Some(&fewer));
+    assert!(workspace.view(&second).is_none());
+    let kept = workspace.view(&first).unwrap();
+    assert_eq!(kept.scroll, Vec2::new(4.0, 9.0));
+    assert_eq!(kept.shown, Shown::RAW);
+    // Plain and Raw show the document's root whole, with no panes.
+    workspace.document.shown = Shown::RAW;
+    workspace.sync(Some(&root));
+    assert!(workspace.view(&first).is_none());
+    let geometry = workspace.geometry(Some(&root), Size::new(900.0, 600.0), 1.0);
+    assert_eq!(geometry.views.len(), 1);
+    assert_eq!(geometry.views[0].view.root, *workspace.document_root());
 }
 
 #[test]
-fn minimums_override_without_rewriting_requested_percentages() {
+fn minimums_override_without_rewriting_requested_shares() {
     let sizes = allocate(&[0.05, 0.95], 1_000.0, 100.0);
     assert_eq!(sizes, [100.0, 900.0]);
     assert_eq!(allocate(&[0.1, 0.9], 100.0, 80.0), [50.0, 50.0]);
 }
 
 #[test]
-fn divider_drags_update_requests_without_baking_in_minimums() {
+fn divider_drags_move_share_between_neighbours() {
     let mut workspace = Workspace::default();
-    let upper = add_pane(&mut workspace, Side::Left);
-    let lower = add_pane(&mut workspace, Side::Left);
-
-    let columns = Divider::Columns(Side::Left);
-    workspace.left_width = 0.05;
-    workspace.start_resize(columns.clone(), Vec2::new(180.0, 0.0));
-    assert!(workspace.resize(&columns, Vec2::new(180.0, 0.0), Size::new(1_000.0, 600.0),));
-    assert_eq!(workspace.left_width, 0.05);
-    let geometry = workspace.geometry(Size::new(1_000.0, 600.0), 1.0);
-    let left_width = geometry
-        .views
-        .iter()
-        .find(|placed| placed.view.root == upper)
-        .unwrap()
-        .rect
-        .width();
-    assert_eq!(left_width, 180.0);
-    assert_eq!(workspace.left_width, 0.05);
-
-    workspace.finish_resize(&columns);
-    let panes = Divider::Panes {
-        side: Side::Left,
-        before: upper,
-        after: lower,
+    let opened = workspace.open(Side::Left, Value::record([]));
+    let size = Size::new(1_001.0, 600.0);
+    let width = |workspace: &Workspace, root: &Root| {
+        workspace
+            .geometry(None, size, 1.0)
+            .views
+            .iter()
+            .find(|placed| placed.view.root == *root)
+            .unwrap()
+            .rect
+            .width()
     };
-    workspace.start_resize(panes.clone(), Vec2::new(0.0, 300.0));
-    assert!(workspace.resize(&panes, Vec2::new(0.0, 450.0), Size::new(1_000.0, 600.0),));
-    assert_eq!(workspace.left.panes[0].height, 0.75);
-    assert_eq!(workspace.left.panes[1].height, 0.25);
+    assert_eq!(width(&workspace, &opened), 500.0);
+    let geometry = workspace.geometry(None, size, 1.0);
+    let [placed] = geometry.dividers.as_slice() else {
+        panic!("one rule, between the pane and the document")
+    };
+    let divider = placed.divider.clone();
+    assert_eq!(
+        divider,
+        Divider {
+            direction: Direction::Across,
+            before: Slot::Opened(id(&opened)),
+            after: Slot::Document,
+        }
+    );
+    // Dragging a quarter of the width right moves a quarter of the shares.
+    assert!(workspace.start_resize(divider.clone(), Vec2::new(500.0, 0.0), placed.rate));
+    assert!(workspace.resize(&divider, Vec2::new(750.0, 0.0)));
+    assert!(workspace.finish_resize(&divider));
+    assert_eq!(width(&workspace, &opened), 750.0);
+    // A share too small for the minimum is drawn at the minimum, and kept.
+    assert!(workspace.start_resize(divider.clone(), Vec2::new(750.0, 0.0), placed.rate));
+    assert!(workspace.resize(&divider, Vec2::new(0.0, 0.0)));
+    assert_eq!(workspace.share(&Slot::Opened(id(&opened))), 0.0);
+    assert_eq!(width(&workspace, &opened), 180.0);
+    assert_eq!(workspace.share(&Slot::Opened(id(&opened))), 0.0);
+    // A rule whose part has gone can't be dragged on.
+    assert!(workspace.close(&opened));
+    workspace.sync(None);
+    assert!(!workspace.resize(&divider, Vec2::new(10.0, 0.0)));
 }
 
 #[test]
-fn geometry_keeps_document_full_height_and_stacks_each_side() {
+fn opened_panes_sit_beside_the_documents_split_part() {
+    let [a, b, c] = [1, 2, 3].map(|n| Value::from(vec![n]));
+    let root = row([column([a, b]), c]);
     let mut workspace = Workspace::default();
-    let document = workspace.document.root.clone();
-    add_pane(&mut workspace, Side::Left);
-    add_pane(&mut workspace, Side::Left);
-    add_pane(&mut workspace, Side::Right);
-    let geometry = workspace.geometry(Size::new(900.0, 600.0), 1.0);
-    let document = geometry
-        .views
-        .iter()
-        .find(|placed| placed.view.root == document)
-        .unwrap();
-    assert_eq!((document.rect.y0, document.rect.y1), (0.0, 600.0));
-    let left: Vec<_> = geometry
-        .views
-        .iter()
-        .filter(|placed| workspace.side(&placed.view.root) == Some(Side::Left))
-        .collect();
-    assert_eq!(left.len(), 2);
-    assert_eq!(left[0].rect.height(), left[1].rect.height());
+    workspace.sync(Some(&root));
+    let opened = workspace.open(Side::Left, Value::record([]));
+    let geometry = workspace.geometry(Some(&root), Size::new(900.0, 600.0), 1.0);
+    let rect = |root: &Root| {
+        geometry
+            .views
+            .iter()
+            .find(|placed| placed.view.root == *root)
+            .map(|placed| placed.rect)
+    };
+    // The document's part splits as its root does, so its own view isn't
+    // drawn.
+    assert_eq!(geometry.views.len(), 4);
+    assert!(rect(workspace.document_root()).is_none());
+    let opened = rect(&opened).unwrap();
+    let upper = rect(&Root::pane([part(0, 2), part(0, 2)].concat())).unwrap();
+    let lower = rect(&Root::pane([part(0, 2), part(1, 2)].concat())).unwrap();
+    let beside = rect(&Root::pane(part(1, 2))).unwrap();
+    assert_eq!((opened.x0, opened.y0, opened.y1), (0.0, 0.0, 600.0));
+    assert_eq!(upper.x0 - opened.x1, 1.0);
+    assert_eq!((upper.x0, upper.x1), (lower.x0, lower.x1));
+    assert_eq!(lower.y0 - upper.y1, 1.0);
+    assert_eq!(upper.height(), lower.height());
+    assert_eq!(beside.x0 - upper.x1, 1.0);
+    assert_eq!((beside.y0, beside.y1, beside.x1), (0.0, 600.0, 900.0));
+    // A rule between the pane and the document, and one in each split.
     assert_eq!(geometry.dividers.len(), 3);
 }
 
@@ -340,46 +279,7 @@ fn only_the_root_declares_libraries() {
 }
 
 #[test]
-fn the_document_view_starts_at_a_workspace_roots_main_value() {
-    let panes = Value::record([(
-        vocabulary::PANES,
-        Value::record([(vocabulary::LEFT, Value::list([]))]),
-    )]);
-    let main = vec![Step::Key(vocabulary::MAIN)];
-    let with = |fields: &[(CellId, Value)]| {
-        Value::record(
-            panes
-                .as_record()
-                .unwrap()
-                .iter()
-                .map(|(key, value)| (*key, value.clone()))
-                .chain(fields.iter().cloned()),
-        )
-    };
-    let data = Value::record([]);
-    assert_eq!(
-        main_path(Some(&with(&[(vocabulary::MAIN, data.clone())]))),
-        Some(main.clone())
-    );
-    // Only the workspace's own fields: its main value was deleted.
-    assert_eq!(main_path(Some(&panes)), Some(main.clone()));
-    assert_eq!(
-        main_path(Some(&with(&[(vocabulary::LIBRARIES, Value::list([]))]))),
-        Some(main)
-    );
-    // Any other root draws whole.
-    assert_eq!(
-        main_path(Some(&with(&[(gid::new_cell_id(), data.clone())]))),
-        None
-    );
-    assert_eq!(main_path(Some(&data)), None);
-    assert_eq!(main_path(Some(&Value::list([]))), None);
-    assert_eq!(main_path(None), None);
-}
-
-#[test]
-fn opening_a_pane_on_a_bare_root_wraps_it_and_keeps_its_folds() {
-    use crate::driver::Driver;
+fn opening_a_pane_shows_the_selected_place_and_leaves_the_document_alone() {
     let [outer, inner] = [CellId::from_u128(1), CellId::from_u128(2)];
     let root = Value::record([(outer, Value::record([(inner, Value::list([]))]))]);
     let mut world = crate::test_editor(gid::Document {
@@ -388,59 +288,30 @@ fn opening_a_pane_on_a_bare_root_wraps_it_and_keeps_its_folds() {
     });
     crate::annotations::set_folded(
         &mut world.model.workspace.document.annotations,
-        &[crate::occurrence::Step::Key(outer)],
+        &[occurrence::Step::Key(outer)],
         false,
         true,
     );
     let mut driver = Driver::new(world, Driver::VIEWPORT);
     driver.select(&[Step::Key(outer)]);
-    driver
-        .runner
-        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
-            editor.run_doc_command(
-                crate::command::DocCommand::OpenPane(Side::Left),
-                dispatch.geometry(1.0),
-            );
-            true
-        });
-    driver.present();
-    let opened = driver.editor().model.doc.root.clone().unwrap();
-    assert_eq!(
-        crate::test_support::value_at(&opened, &[Step::Key(vocabulary::MAIN)]),
-        Some(&root)
-    );
-    let main = |steps: &[Step]| [&[Step::Key(vocabulary::MAIN)][..], steps].concat();
-    // The pane shows the selected place, which the wrapping moved under
-    // `main`, rather than a copy of it.
-    let panes = declarations(Some(&opened));
-    assert_eq!(panes.len(), 1);
-    assert_eq!(
-        crate::test_support::value_at(&opened, &panes[0].path),
-        Some(&crate::location::value(&crate::location::Location::root(
-            main(&[Step::Key(outer)])
-        )))
-    );
-    // The document view draws the same value, now at `main`, folded as it
-    // was, and none of the workspace's own fields.
-    let in_document = |path: &[Step]| {
-        driver
-            .runner
-            .frame
-            .dispatch
-            .landmarks
-            .iter()
-            .any(|landmark| {
-                landmark.root.as_ref() == Some(&crate::test_root()) && landmark.path == path
-            })
-    };
-    assert!(in_document(&main(&[Step::Key(outer)])));
-    assert!(!in_document(&main(&[Step::Key(outer), Step::Key(inner)])));
-    assert!(!driver.drawn(&[Step::Key(vocabulary::PANES)]));
+    run(&mut driver, DocCommand::OpenPane(Side::Left));
+    assert_eq!(driver.editor().model.doc.root.as_ref(), Some(&root));
+    assert!(!driver.editor().model.dirty());
+    assert!(!driver.editor().model.history.can_undo());
+    // The pane holds the selected place, not a copy of it, and selects it.
+    let opened = driver.editor().model.workspace.opened().next().unwrap();
+    let place = crate::location::Location::root(vec![Step::Key(outer)]);
+    assert_eq!(opened.entry, crate::location::value(&place));
+    let shown = opened_at(&opened.view.root, place);
+    assert!(driver.drawn(&shown));
+    assert_eq!(driver.selection(), shown);
+    // The document view draws the root as it did, folded as it was.
+    assert!(driver.drawn(&[Step::Key(outer)]));
+    assert!(!driver.drawn(&[Step::Key(outer), Step::Key(inner)]));
 }
 
 #[test]
 fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
-    use crate::driver::Driver;
     use crate::location::Start;
     let [label, cell] = [CellId::from_u128(1), CellId::from_u128(2)];
     let mut cells = Cells::new();
@@ -451,32 +322,17 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
             crate::libraries::f64::value(2.0),
         ]),
     );
-    let mut world = crate::test_editor(gid::Document {
-        root: Some(Value::record([(label, cell.into())])),
-        cells,
-    });
-    let first = cell_positions(&world, cell)[0].clone();
-    world.model.selection = Some(crate::selection::Selection::edge(crate::occurrence::of(&[
-        Step::Key(label),
-        Step::Follow(gid::Resolution::Document),
-        Step::Element(first.clone()),
-    ])));
-    let mut driver = Driver::new(world, Driver::VIEWPORT);
-    driver
-        .runner
-        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
-            editor.run_doc_command(
-                crate::command::DocCommand::OpenPane(Side::Left),
-                dispatch.geometry(1.0),
-            );
-            true
-        });
-    driver.present();
-    let opened = driver.editor().model.doc.root.clone().unwrap();
-    let declaration = declarations(Some(&opened)).remove(0).path;
-    let entry = crate::test_support::value_at(&opened, &declaration).unwrap();
+    let mut driver = driver_of(Some(Value::record([(label, cell.into())])), cells);
+    let first = driver.element(
+        &[Step::Key(label), Step::Follow(gid::Resolution::Document)],
+        0,
+        &[],
+    );
+    driver.select(&first);
+    run(&mut driver, DocCommand::OpenPane(Side::Left));
+    let opened = driver.editor().model.workspace.opened().next().unwrap();
     // Anchored at the nearest cell: the steps start inside its definition.
-    let place = crate::location::read(entry).unwrap();
+    let place = crate::location::read(&opened.entry).unwrap();
     assert_eq!(
         place.start,
         Start::Cell {
@@ -484,107 +340,86 @@ fn a_pane_opened_inside_a_cell_shows_that_place_through_the_cell() {
             resolution: gid::Resolution::Document
         }
     );
-    assert_eq!(place.path.as_ref(), [Step::Element(first.clone())]);
-    // The pane draws the place through a jump after its pane step, and an
-    // edit there lands in the cell, which the document view reads.
-    let mut shown = crate::test_examples::pane_root(&declaration);
-    shown.push(crate::occurrence::Step::jump(place));
+    assert_eq!(place.path.as_ref(), &first[2..]);
+    // The pane draws the place through a jump, and an edit there lands in
+    // the cell, which the document view reads.
+    let shown = opened_at(&opened.view.root, place);
     assert!(driver.drawn(&shown));
     let editor = &mut driver.runner.editor;
     assert!(crate::location::set_value(
         &mut editor.model.doc,
         &editor.stack.libraries,
-        &crate::occurrence::location(&shown).unwrap(),
+        &occurrence::location(&shown).unwrap(),
         crate::libraries::f64::value(5.0),
     ));
-    // Opening the pane wrapped the bare root under `main`.
     assert_eq!(
-        editor.sources().resolve_path(&[
-            Step::Key(vocabulary::MAIN),
-            Step::Key(label),
-            Step::Follow(gid::Resolution::Document),
-            Step::Element(first),
-        ]),
+        editor.sources().resolve_path(&first),
         Some(&crate::libraries::f64::value(5.0))
     );
 }
 
 #[test]
-fn closing_a_location_pane_removes_its_entry_and_leaves_its_place() {
-    use crate::command::DocCommand;
-    use crate::driver::Driver;
+fn closing_an_opened_pane_leaves_its_place() {
     let outer = CellId::from_u128(1);
     let root = Value::record([(outer, Value::list([]))]);
-    let mut driver = Driver::new(
-        crate::test_editor(gid::Document {
-            root: Some(root.clone()),
-            cells: Cells::new(),
-        }),
-        Driver::VIEWPORT,
-    );
-    let run = |driver: &mut Driver, command: DocCommand| {
-        driver
-            .runner
-            .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
-                editor.run_doc_command(command, dispatch.geometry(1.0));
-                true
-            });
-        driver.present();
-    };
+    let mut driver = driver_of(Some(root.clone()), Cells::new());
     driver.select(&[Step::Key(outer)]);
     assert!(!driver.editor().menu_availability().close_pane);
     // Opening selects the place in its new pane.
     run(&mut driver, DocCommand::OpenPane(Side::Left));
     assert!(driver.editor().menu_availability().close_pane);
     run(&mut driver, DocCommand::ClosePane);
+    assert_eq!(driver.editor().model.workspace.opened().count(), 0);
+    assert_eq!(driver.editor().model.doc.root.as_ref(), Some(&root));
+    assert!(driver.editor().model.selection.is_none());
+    assert!(!driver.editor().model.history.can_undo());
+}
+
+#[test]
+fn closing_a_document_pane_removes_its_part() {
+    let [a, b] = [1, 2].map(|n| Value::from(vec![n]));
+    let root = row([a, b.clone()]);
+    let mut driver = driver_of(Some(root.clone()), Cells::new());
+    driver.select(&pane_root(&part(0, 2)));
+    assert!(driver.editor().menu_availability().close_pane);
+    run(&mut driver, DocCommand::ClosePane);
     let closed = driver.editor().model.doc.root.clone().unwrap();
-    assert!(declarations(Some(&closed)).is_empty());
+    assert_eq!(panes(Some(&closed)), [part(1, 2)]);
     assert_eq!(
-        crate::test_support::value_at(&closed, &[Step::Key(vocabulary::MAIN)]),
-        Some(&root)
+        crate::test_support::value_at(&closed, &part(1, 2)),
+        Some(&b)
     );
     assert!(driver.editor().model.selection.is_none());
     run(&mut driver, DocCommand::Undo);
-    assert_eq!(
-        declarations(driver.editor().model.doc.root.as_ref()).len(),
-        1
-    );
+    assert_eq!(driver.editor().model.doc.root.as_ref(), Some(&root));
 }
 
 #[test]
 fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
-    use crate::driver::Driver;
     let outer = CellId::from_u128(1);
-    let mut driver = Driver::new(
-        crate::test_editor(gid::Document {
-            root: Some(Value::record([(
-                outer,
-                Value::list([crate::libraries::f64::value(1.0)]),
-            )])),
-            cells: Cells::new(),
-        }),
-        Driver::VIEWPORT,
+    let mut driver = driver_of(
+        Some(Value::record([(
+            outer,
+            Value::list([crate::libraries::f64::value(1.0)]),
+        )])),
+        Cells::new(),
     );
     let element = driver.element(&[Step::Key(outer)], 0, &[]);
     driver.select(&element);
-    driver
-        .runner
-        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
-            editor.run_doc_command(
-                crate::command::DocCommand::OpenPane(Side::Left),
-                dispatch.geometry(1.0),
-            );
-            true
-        });
-    driver.present();
-    let place = [&[Step::Key(vocabulary::MAIN)][..], &element].concat();
-    let declaration = declarations(driver.editor().model.doc.root.as_ref())
-        .remove(0)
-        .path;
-    let mut shown = crate::test_examples::pane_root(&declaration);
-    shown.push(crate::occurrence::Step::jump(
-        crate::location::Location::root(place.clone()),
-    ));
+    run(&mut driver, DocCommand::OpenPane(Side::Left));
+    let place = crate::location::Location::root(element.clone());
+    let mut shown = opened_at(
+        &driver
+            .editor()
+            .model
+            .workspace
+            .opened()
+            .next()
+            .unwrap()
+            .view
+            .root,
+        place.clone(),
+    );
     let remove = |driver: &mut Driver, path: &[Step]| {
         let editor = &mut driver.runner.editor;
         let root = crate::spine::without(editor.model.doc.root.as_ref().unwrap(), path).unwrap();
@@ -602,199 +437,130 @@ fn a_location_pane_whose_place_is_gone_shows_an_absent_naming_it() {
     };
     // With only the element deleted, its place in the list is still there to
     // write, as any empty place is.
-    remove(&mut driver, &place);
+    remove(&mut driver, &element);
     driver.select(&shown);
     assert!(writable(&driver));
     // With the list gone too, nothing can be written there, and the pane
     // says which place it can't find, a value computed in its place.
-    remove(
-        &mut driver,
-        &[Step::Key(vocabulary::MAIN), Step::Key(outer)],
-    );
-    shown.push(crate::occurrence::Step::Computed);
+    remove(&mut driver, &[Step::Key(outer)]);
+    shown.push(occurrence::Step::Computed);
     driver.select(&shown);
     assert!(!writable(&driver));
     driver.keystroke(
         ui_events::keyboard::Key::Character("c".into()),
         crate::test_support::command(),
     );
-    assert_eq!(
-        driver.copied(),
-        Some(crate::location::not_found(
-            &crate::location::Location::root(place)
-        ))
-    );
+    assert_eq!(driver.copied(), Some(crate::location::not_found(&place)));
 }
 
 #[test]
-fn show_panes_opens_the_panes_declaration_once() {
-    use crate::command::DocCommand;
-    use crate::driver::Driver;
-    let mut driver = Driver::new(
-        crate::test_editor(gid::Document {
-            root: Some(Value::record([(CellId::from_u128(1), Value::list([]))])),
-            cells: Cells::new(),
-        }),
-        Driver::VIEWPORT,
-    );
-    let show = |driver: &mut Driver| {
-        driver
-            .runner
-            .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
-                editor.run_doc_command(DocCommand::ShowPanes, dispatch.geometry(1.0));
-                true
-            });
-        driver.present();
-    };
-    let panes = [Step::Key(vocabulary::PANES)];
-    show(&mut driver);
-    let root = driver.editor().model.doc.root.clone().unwrap();
-    let declared = declarations(Some(&root));
-    assert_eq!(declared.len(), 1);
-    assert_eq!(declared[0].side, Side::Right);
+fn a_computed_value_opens_as_a_copy() {
+    let key = CellId::from_u128(1);
+    let mut world = crate::test_editor(gid::Document {
+        root: Some(Value::record([(key, Value::list([]))])),
+        cells: Cells::new(),
+    });
+    let copy = Value::from(b"computed".to_vec());
+    let root = world.model.workspace.open(Side::Right, copy.clone());
+    // Nothing stores it, so the pane draws it as computed.
+    let shown = vec![
+        occurrence::Step::Opened(id(&root)),
+        occurrence::Step::Computed,
+    ];
     assert_eq!(
-        crate::test_support::value_at(&root, &declared[0].path),
-        Some(&crate::location::value(&crate::location::Location::root(
-            panes.to_vec()
-        )))
+        world
+            .model
+            .workspace
+            .root_path(&world.sources(), &root, true),
+        shown
     );
-    // The pane draws the declaration, its own entry included, and selects it.
-    let mut shown = crate::test_examples::pane_root(&declared[0].path);
-    shown.push(crate::occurrence::Step::jump(
-        crate::location::Location::root(panes.to_vec()),
-    ));
+    world.model.selection = Some(crate::selection::Selection::edge(shown.clone()));
+    let driver = Driver::new(world, Driver::VIEWPORT);
     assert!(driver.drawn(&shown));
-    assert_eq!(driver.selection(), shown);
-    // Showing them again selects that pane rather than opening another.
-    driver.select(&[Step::Key(vocabulary::MAIN)]);
-    show(&mut driver);
-    assert_eq!(
-        declarations(driver.editor().model.doc.root.as_ref()).len(),
-        1
+    assert!(
+        !driver
+            .editor()
+            .model
+            .selection
+            .as_ref()
+            .unwrap()
+            .writable(&driver.editor().sources())
     );
-    assert_eq!(driver.selection(), shown);
 }
 
 #[test]
-fn moving_a_pane_keeps_its_selection_on_what_it_was_on() {
-    use crate::driver::Driver;
-    let (root, declaration) = append(
-        &Value::record([]),
-        Side::Left,
+fn moving_a_document_pane_keeps_its_selection_on_what_it_was_on() {
+    let root = row([
         Value::list([crate::libraries::f64::value(1.0)]),
-    )
-    .unwrap();
-    let mut driver = Driver::new(
-        crate::test_editor(gid::Document {
-            root: Some(root),
-            cells: Cells::new(),
-        }),
-        Driver::VIEWPORT,
-    );
-    let element = |driver: &Driver, declaration: &[Step]| {
-        crate::occurrence::below(
-            &crate::test_examples::pane_root(declaration),
-            &[driver.element(declaration, 0, &[])[declaration.len()].clone()],
+        Value::record([]),
+    ]);
+    let mut driver = driver_of(Some(root), Cells::new());
+    let element = |driver: &Driver, part: &[Step]| {
+        occurrence::below(
+            &pane_root(part),
+            &[driver.element(part, 0, &[])[part.len()].clone()],
         )
     };
-    driver.select(&element(&driver, &declaration));
-    driver
-        .runner
-        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
-            editor.run_doc_command(
-                crate::command::DocCommand::MovePane(Move::Right),
-                dispatch.geometry(1.0),
-            );
-            true
-        });
-    driver.present();
-    let moved = declarations(driver.editor().model.doc.root.as_ref())
-        .remove(0)
-        .path;
-    assert_ne!(moved, declaration);
-    // The selection moved with the pane, through its jump to the entry's new
-    // place.
+    let first = part(0, 2);
+    driver.select(&element(&driver, &first));
+    assert!(driver.editor().menu_availability().move_right);
+    assert!(!driver.editor().menu_availability().move_left);
+    assert!(!driver.editor().menu_availability().move_up);
+    run(&mut driver, DocCommand::MovePane(Move::Right));
+    let moved = panes(driver.editor().model.doc.root.as_ref()).remove(1);
+    assert_ne!(moved, first);
+    // The selection moved with the part.
     assert_eq!(driver.selection(), element(&driver, &moved));
     assert!(driver.drawn(&element(&driver, &moved)));
 }
 
-fn cell_positions(world: &crate::Editor, cell: CellId) -> Vec<gid::Position> {
-    world
-        .model
-        .doc
-        .cells
-        .value(cell)
-        .and_then(Value::as_list)
-        .unwrap()
-        .keys()
-        .cloned()
-        .collect()
-}
-
 #[test]
-fn a_root_of_only_the_workspace_fields_draws_an_empty_main() {
-    use crate::driver::Driver;
-    let (root, _) = append(&Value::record([]), Side::Left, Value::list([])).unwrap();
-    let driver = Driver::new(
-        crate::test_editor(gid::Document {
-            root: Some(root),
-            cells: Cells::new(),
-        }),
-        Driver::VIEWPORT,
-    );
-    assert!(driver.drawn(&[Step::Key(vocabulary::MAIN)]));
-    // The record around it is drawn as nothing of its own, so it can't be
-    // selected.
-    assert!(!driver.drawn::<Step>(&[]));
-    assert!(!driver.drawn(&[Step::Key(vocabulary::PANES)]));
+fn an_opened_pane_moves_along_the_editors_row() {
+    let mut workspace = Workspace::default();
+    let opened = workspace.open(Side::Left, Value::record([]));
+    let size = Size::new(900.0, 600.0);
+    let x = |workspace: &Workspace| {
+        workspace
+            .geometry(None, size, 1.0)
+            .views
+            .iter()
+            .find(|placed| placed.view.root == opened)
+            .unwrap()
+            .rect
+            .x0
+    };
+    assert_eq!(x(&workspace), 0.0);
+    assert!(!workspace.can_move(&opened, Move::Left, None));
+    assert!(!workspace.can_move(&opened, Move::Up, None));
+    assert!(workspace.can_move(&opened, Move::Right, None));
+    assert!(workspace.move_opened(&opened, Move::Right));
+    assert!(x(&workspace) > 0.0);
+    assert!(!workspace.can_move(&opened, Move::Right, None));
+    assert!(!workspace.can_move(workspace.document_root(), Move::Left, None));
 }
 
 #[test]
 fn open_library_shows_a_loaded_library_read_only_once() {
-    use crate::command::DocCommand;
-    use crate::driver::Driver;
     use crate::libraries::presentation;
-    let mut driver = Driver::new(
-        crate::test_editor(gid::Document {
-            root: Some(Value::record([(CellId::from_u128(1), Value::list([]))])),
-            cells: Cells::new(),
-        }),
-        Driver::VIEWPORT,
-    );
-    let open = |driver: &mut Driver| {
-        driver
-            .runner
-            .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
-                editor.run_doc_command(
-                    DocCommand::OpenLibrary(presentation::ID),
-                    dispatch.geometry(1.0),
-                );
-                true
-            });
-        driver.present();
-    };
+    let root = Value::record([(CellId::from_u128(1), Value::list([]))]);
+    let mut driver = driver_of(Some(root.clone()), Cells::new());
     let place = crate::location::Location::in_cell(
         presentation::ID,
         gid::Resolution::Library(presentation::ID),
         Vec::new(),
     );
-    open(&mut driver);
-    let root = driver.editor().model.doc.root.clone().unwrap();
-    let declared = declarations(Some(&root));
-    assert_eq!(declared.len(), 1);
-    assert_eq!(declared[0].side, Side::Right);
-    assert_eq!(
-        crate::test_support::value_at(&root, &declared[0].path),
-        Some(&crate::location::value(&place))
-    );
+    run(&mut driver, DocCommand::OpenLibrary(presentation::ID));
+    assert_eq!(driver.editor().model.doc.root.as_ref(), Some(&root));
+    let opened = driver.editor().model.workspace.opened().next().unwrap();
+    assert_eq!(opened.entry, crate::location::value(&place));
     // The pane draws the library, its cells among it, and selects it.
-    let mut shown = crate::test_examples::pane_root(&declared[0].path);
-    shown.push(crate::occurrence::Step::jump(place.clone()));
+    let shown = opened_at(&opened.view.root, place);
     assert_eq!(driver.selection(), shown);
-    let mut cells = shown.clone();
-    cells.push(crate::occurrence::Step::Key(
-        crate::library::vocabulary::CELLS,
-    ));
+    let cells = [
+        shown.clone(),
+        vec![occurrence::Step::Key(crate::library::vocabulary::CELLS)],
+    ]
+    .concat();
     assert!(driver.drawn(&cells));
     driver.select(&cells);
     assert!(
@@ -807,45 +573,39 @@ fn open_library_shows_a_loaded_library_read_only_once() {
             .writable(&driver.editor().sources())
     );
     // Opening it again selects that pane rather than opening another.
-    driver.select(&[Step::Key(vocabulary::MAIN)]);
-    open(&mut driver);
-    assert_eq!(
-        declarations(driver.editor().model.doc.root.as_ref()).len(),
-        1
-    );
+    driver.select(&[Step::Key(CellId::from_u128(1))]);
+    run(&mut driver, DocCommand::OpenLibrary(presentation::ID));
+    assert_eq!(driver.editor().model.workspace.opened().count(), 1);
     assert_eq!(driver.selection(), shown);
 }
 
 #[test]
-fn an_empty_document_opens_a_library() {
-    use crate::command::DocCommand;
-    use crate::driver::Driver;
+fn an_empty_document_opens_a_library_and_stays_empty() {
     use crate::libraries::presentation;
-    let mut driver = Driver::new(
-        crate::test_editor(gid::Document::default()),
-        Driver::VIEWPORT,
-    );
+    let mut driver = driver_of(None, Cells::new());
     let command = DocCommand::OpenLibrary(presentation::ID);
     assert!(driver.editor().menu_availability().doc_enabled(command));
-    driver
-        .runner
-        .update_frame(1.0, Driver::VIEWPORT, |editor, dispatch, _| {
-            editor.run_doc_command(command, dispatch.geometry(1.0));
-            true
-        });
-    driver.present();
-    let root = driver.editor().model.doc.root.clone().unwrap();
-    let declared = declarations(Some(&root));
-    assert_eq!(declared.len(), 1);
-    let mut shown = crate::test_examples::pane_root(&declared[0].path);
-    shown.push(crate::occurrence::Step::jump(
+    run(&mut driver, command);
+    let opened = &driver
+        .editor()
+        .model
+        .workspace
+        .opened()
+        .next()
+        .unwrap()
+        .view
+        .root;
+    let shown = opened_at(
+        opened,
         crate::location::Location::in_cell(
             presentation::ID,
             gid::Resolution::Library(presentation::ID),
             Vec::new(),
         ),
-    ));
+    );
     assert_eq!(driver.selection(), shown);
-    // The document view still shows a value to write: the workspace's main.
-    assert!(driver.drawn(&[Step::Key(vocabulary::MAIN)]));
+    // The document is still empty, so its root still offers starting points.
+    assert!(driver.editor().model.doc.root.is_none());
+    assert!(!driver.editor().model.dirty());
+    assert!(driver.drawn::<Step>(&[]));
 }

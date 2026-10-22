@@ -1,7 +1,8 @@
 //! The editor's own vocabulary: its selection, each site's state and folds,
-//! paths as data, and the workspace's panes and libraries. The editor defines
-//! these cells beside the code that interprets them, and supplies their
-//! effects while dispatching; this library names them.
+//! paths as data, and the rows and columns of parts and the libraries a
+//! document declares at its root. The editor defines these cells beside the
+//! code that interprets them, and supplies their effects while dispatching;
+//! this library names them.
 
 use crate::display::Host;
 use crate::display::host::{Layout, ProjectionInput};
@@ -53,10 +54,10 @@ pub fn library<W: Host>() -> Library<W> {
             (crate::occurrence::vocabulary::JUMP, "jump"),
             (crate::occurrence::vocabulary::COMPUTED, "computed"),
             (crate::occurrence::vocabulary::PANE, "pane"),
-            (workspace::vocabulary::MAIN, "main"),
-            (workspace::vocabulary::PANES, "panes"),
-            (workspace::vocabulary::LEFT, "left"),
-            (workspace::vocabulary::RIGHT, "right"),
+            (crate::occurrence::vocabulary::OPENED, "opened"),
+            (workspace::vocabulary::kind::ROW, "row"),
+            (workspace::vocabulary::kind::COLUMN, "column"),
+            (workspace::vocabulary::PARTS, "parts"),
             (workspace::vocabulary::LIBRARIES, "libraries"),
             (workspace::vocabulary::KEYS, "keys"),
             (crate::library::vocabulary::kind::LIBRARY, "loaded library"),

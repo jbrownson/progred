@@ -404,8 +404,7 @@ impl Editor {
     }
 
     fn sync_views(&mut self) {
-        let declarations = workspace::declarations(self.model.doc.root.as_ref());
-        self.model.workspace.sync_declared(&declarations);
+        self.model.workspace.sync(self.model.doc.root.as_ref());
         if self
             .model
             .selection
@@ -645,12 +644,13 @@ struct ViewContent<'a> {
     viewport: bool,
 }
 
-/// What `view` shows in an area of `size` at `scale`: a pane whose value is
-/// a viewport fills the pane with it, while it shows the presentation
-/// library.
+/// What `view` shows in an area of `size` at `scale`: a document pane whose
+/// value is a viewport fills the pane with it, while it shows the
+/// presentation library.
 fn view_content<'a>(
     stack: &'a stack::Stack,
     sources: sources::Sources<'a>,
+    workspace: &'a workspace::Workspace,
     view: &'a workspace::View,
     size: Size,
     scale: f64,
@@ -662,7 +662,8 @@ fn view_content<'a>(
         _ => None,
     };
     let interpreted = view.shown.shows(crate::libraries::editor::ID);
-    let root_path = workspace::root_path(&sources, view.root.target(), interpreted);
+    let root_path = workspace.root_path(&sources, &view.root, interpreted);
+    let pane = !matches!(view.root.target(), Target::Document);
     match (view.root.target(), viewport) {
         (Target::Pane { path }, Some(entry)) => ViewContent {
             // The cells the entry follows to its viewport, below the jump.
@@ -674,11 +675,16 @@ fn view_content<'a>(
             )),
             viewport: true,
         },
-        (target, _) => {
-            let root = crate::occurrence::read(&sources, &root_path);
+        _ => {
+            let entry = workspace.entry(&sources, &view.root);
+            // An opened pane's entry, which nothing stores, draws as computed.
+            let root = match root_path.last() {
+                Some(crate::occurrence::Step::Computed) => entry,
+                _ => crate::occurrence::read(&sources, &root_path),
+            };
             let not_found = root
                 .is_none()
-                .then(|| not_found(sources, target, interpreted, &root_path))
+                .then(|| not_found(sources, entry, interpreted, &root_path))
                 .flatten();
             let mut drawn = root_path;
             if not_found.is_some() {
@@ -687,28 +693,25 @@ fn view_content<'a>(
             ViewContent {
                 root: not_found.map(Cow::Owned).or(root.map(Cow::Borrowed)),
                 root_path: drawn,
-                projection: view_projection(stack, view, matches!(target, Target::Pane { .. })),
+                projection: view_projection(stack, view, pane),
                 viewport: false,
             }
         }
     }
 }
 
-/// What a pane showing a location draws when its place, where `root_path`
-/// jumps, can't be reached, as after its container was deleted: an absent
-/// naming it. A place that's only empty draws as any empty place does, ready
-/// to write.
+/// What a pane showing a location, its `entry`, draws when its place, where
+/// `root_path` jumps, can't be reached, as after its container was deleted:
+/// an absent naming it. A place that's only empty draws as any empty place
+/// does, ready to write.
 fn not_found(
     sources: sources::Sources<'_>,
-    target: &Target,
+    entry: Option<&gid::Value>,
     interpreted: bool,
     root_path: &[crate::occurrence::Step],
 ) -> Option<gid::Value> {
-    let Target::Pane { path } = target else {
-        return None;
-    };
     let location = interpreted
-        .then(|| crate::location::read(sources.resolve_path(path)?))
+        .then(|| crate::location::read(entry?))
         .flatten()?;
     let place = crate::occurrence::location(root_path)?;
     (!crate::location::reachable(&sources, &place)).then(|| crate::location::not_found(&location))
@@ -756,7 +759,7 @@ fn project_workspace_view(
         doc: &model.doc,
         libraries: &stack.libraries,
     };
-    let shown = view_content(stack, sources, view, size, scale);
+    let shown = view_content(stack, sources, &model.workspace, view, size, scale);
     let margin = content_margin(shown.viewport, scale);
     let completions = completions(stack, view);
     let projected = projection::project(
@@ -810,15 +813,16 @@ fn project_workspace_view(
     })
 }
 
-/// The rule between two columns or panes, which drags to resize them.
+/// The rule between two parts, which drags to move share from one to the
+/// other, `rate` a pixel.
 fn divider_rule(
     divider: workspace::Divider,
     rect: Rect,
+    rate: f64,
     border: peniko::Color,
     scale: f64,
-    size: Size,
 ) -> measured::Measured<HoverPass<Editor>> {
-    let vertical = matches!(divider, workspace::Divider::Columns(_));
+    let vertical = divider.direction == workspace::Direction::Across;
     let hover_divider = divider.clone();
     let cursor_divider = divider.clone();
     let down_divider = divider.clone();
@@ -859,6 +863,7 @@ fn divider_rule(
                             event.state.position.x - clip.x0,
                             event.state.position.y - clip.y0,
                         ),
+                        rate,
                     )
             });
             p.handler().on_pointer_move(move |app: &mut Editor, event| {
@@ -868,7 +873,6 @@ fn divider_rule(
                         event.current.position.x - clip.x0,
                         event.current.position.y - clip.y0,
                     ),
-                    size,
                 )
             });
             p.handler().on_pointer_up(move |app: &mut Editor, _| {
@@ -884,10 +888,11 @@ fn project_workspace(
     tcx: &mut TextCtx,
     size: Size,
 ) -> measured::Measured<HoverPass<Editor>> {
-    let geometry = description
-        .model
-        .workspace
-        .geometry(size, description.scale);
+    let geometry = description.model.workspace.geometry(
+        description.model.doc.root.as_ref(),
+        size,
+        description.scale,
+    );
     let views = geometry
         .views
         .into_iter()
@@ -908,9 +913,9 @@ fn project_workspace(
             let rule = divider_rule(
                 placed_divider.divider,
                 rect,
+                placed_divider.rate,
                 styles.palette.border,
                 description.scale,
-                size,
             );
             measured::overlay_into(body, rule, move |placement, _| {
                 let rect = rect + placement.rect.origin().to_vec2();

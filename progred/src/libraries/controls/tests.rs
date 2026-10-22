@@ -156,11 +156,11 @@ fn cam_collection_is_shared_with_the_view_and_reused_with_its_hover_links() {
         libraries: &libraries,
     };
     let computations = crate::computations::Computations::from_sources(sources);
-    let pane = crate::workspace::declarations(doc.root.as_ref()).remove(0);
+    let pane = crate::workspace::panes(doc.root.as_ref()).remove(0);
     let mut previous: Option<RuntimeValue> = None;
     for width in [400.0, 600.0, 401.0] {
         let declaration = presentation::tests::viewport_output(
-            sources.resolve_path(&pane.path).unwrap(),
+            sources.resolve_path(&pane).unwrap(),
             &sources,
             width,
             600.0,

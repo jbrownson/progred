@@ -99,10 +99,7 @@ fn generated_completions_run_only_on_activation_and_mint_fresh_shared_cells() {
         let cell = |root: &Value| {
             crate::test_support::value_at(
                 root,
-                &[
-                    Step::Key(crate::workspace::vocabulary::MAIN),
-                    Step::Key(field),
-                ],
+                &[crate::test_examples::main_part(), vec![Step::Key(field)]].concat(),
             )
             .cloned()
             .unwrap()

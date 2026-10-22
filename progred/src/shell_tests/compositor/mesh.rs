@@ -13,14 +13,14 @@ fn cam_mesh_roundtrip_profile() {
     let scale = 2.0;
     for progress in [0.02, 0.5] {
         let mut editor = cam_editor(t::PREVIEW_MESH);
-        editor.model.workspace.left_width = 0.5;
-        let path = crate::workspace::declarations(editor.model.doc.root.as_ref())[0]
-            .path
-            .clone();
+        let path = crate::workspace::panes(editor.model.doc.root.as_ref()).remove(0);
         let controls = result_path(&path);
         let camera = [controls.clone(), result_path(&[])].concat();
-        editor.model.workspace.left.panes[0]
-            .view
+        editor
+            .model
+            .workspace
+            .view_mut(&crate::display::widget::view::Root::pane(path.clone()))
+            .unwrap()
             .annotations
             .set_field(&controls, STATE, Some(cam_position(progress)));
         let jobs = Arc::new(Mutex::new(VecDeque::<incremental::background::Job>::new()));
@@ -48,8 +48,12 @@ fn cam_mesh_roundtrip_profile() {
         let mut timings = [Vec::new(), Vec::new()];
         let mut builds = Vec::new();
         for iteration in 0..24 {
-            runner.editor.model.workspace.left.panes[0]
-                .view
+            runner
+                .editor
+                .model
+                .workspace
+                .view_mut(&crate::display::widget::view::Root::pane(path.clone()))
+                .unwrap()
                 .annotations
                 .set_field(
                     &camera,

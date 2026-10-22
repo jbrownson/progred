@@ -96,7 +96,6 @@ fn all_enabled() -> crate::command::Availability {
         redo: true,
         open_pane: true,
         close_pane: true,
-        show_panes: true,
         move_up: true,
         move_down: true,
         move_left: true,
@@ -320,7 +319,7 @@ fn an_open_menu_captures_other_key_downs() {
 fn the_drawn_tree_lists_every_command_once() {
     let definition = definition([], []);
     let commands = commands(&definition).collect::<Vec<_>>();
-    assert_eq!(commands.len(), 24 + Example::ALL.len());
+    assert_eq!(commands.len(), 23 + Example::ALL.len());
     for (index, command) in commands.iter().enumerate() {
         assert!(commands[index + 1..].iter().all(|other| command != other));
     }

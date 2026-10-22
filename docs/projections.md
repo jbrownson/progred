@@ -59,8 +59,8 @@ ordinary reachable data; configuration is never discovered through a reserved
 cell address or other data outside ordinary root reachability.
 
 A document declares its own libraries under the root's `libraries` field, which
-the editor library names beside `panes`, and the editor reads it only at the
-root. Each entry, or the cell it names, is a record of the `keys` the library
+the editor library names beside `row` and `column`, and the editor reads it
+only at the root. Each entry, or the cell it names, is a record of the `keys` the library
 owns and the `projection` that draws a record carrying any of them: a function
 of `value`, the same convention a pane's projection uses. One built-in library,
 "document libraries", loaded after all the others, tries the declared libraries

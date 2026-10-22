@@ -32,7 +32,6 @@
     "lambda": e4a0653134ca48379cab2e008bed03e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_2": 3cbf5357204947fdb4f26eadcbd777d6,
-    "main": f146d8a1d3174d9ab6136b4334768a2f,
     "max": 968e2f1f111a4849a8449dbeddbe8412,
     "max_x": 9ffd33d780fb0665bcf2e4ec437079e8,
     "max_y": c9e7268eb34af7bea225df94841c1c27,
@@ -46,15 +45,15 @@
     "normal": 4b3db08982e1a337f2d43489f59b82a9,
     "objects": 404c3832b3d24ec197d8f9bbec5b5df2,
     "operand": b66457fa59524110bb363bc28754cea0,
-    "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
-    "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "params": 195b378d0d31d90ab0d7366c15346b70,
+    "parts": 4abd6fa4c21d4ba19bfc7c2893b52d69,
     "preview_mesh": 95eec28ff8cc6ba67153f9dfc4021139,
     "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "right_2": 6ab1e9c9a6604d82b1aabddcfa03d0d8,
+    "row": f93143d539ec4ab2865709b80a7f395d,
     "scene": 9b819b6ad5c547e8952d8759531b9cd3,
     "shoulder": 2dfbf5b2f1f415381c4eb7993598d7cb,
     "size": f8ddfd6772816a66d2bc9c4d11df6625,
@@ -455,74 +454,73 @@
     },
   },
   "root": {
-    main: {
-      fidget: [
-        0x80: cube,
-      ],
-    },
-    panes: {
-      pane_left: [
-        0x80: {
-          viewport: {
-            params: [
-              0x40: projection_value,
-              0x80: width,
-              0xc0: height,
-            ],
-            body: {
-              min_z: {
-                f32: 0x9a9919bf,
-              },
-              mesh_depth: {
-                u64: 0x0500000000000000,
-              },
-              function: preview_mesh,
-              projection_value: {
-                function: quote,
-                expression: {
-                  objects: [
-                    0x80: {
-                      field: {
-                        unquote: {
-                          function: projection_value,
-                          isa: call,
-                        },
-                        isa: unquote_2,
+    parts: [
+      0x55: {
+        viewport: {
+          params: [
+            0x40: projection_value,
+            0x80: width,
+            0xc0: height,
+          ],
+          body: {
+            min_z: {
+              f32: 0x9a9919bf,
+            },
+            mesh_depth: {
+              u64: 0x0500000000000000,
+            },
+            function: preview_mesh,
+            projection_value: {
+              function: quote,
+              expression: {
+                objects: [
+                  0x80: {
+                    field: {
+                      unquote: {
+                        function: projection_value,
+                        isa: call,
                       },
-                      color: {
-                        rgb: 0x60b6d0,
-                      },
+                      isa: unquote_2,
                     },
-                  ],
-                  isa: scene,
-                },
-                isa: call,
-              },
-              max_x: {
-                f32: 0x9a99193f,
-              },
-              max_y: {
-                f32: 0x9a99193f,
-              },
-              height: height,
-              max_z: {
-                f32: 0x9a99193f,
+                    color: {
+                      rgb: 0x60b6d0,
+                    },
+                  },
+                ],
+                isa: scene,
               },
               isa: call,
-              min_y: {
-                f32: 0x9a9919bf,
-              },
-              width: width,
-              min_x: {
-                f32: 0x9a9919bf,
-              },
             },
-            isa: lambda,
+            max_x: {
+              f32: 0x9a99193f,
+            },
+            max_y: {
+              f32: 0x9a99193f,
+            },
+            height: height,
+            max_z: {
+              f32: 0x9a99193f,
+            },
+            isa: call,
+            min_y: {
+              f32: 0x9a9919bf,
+            },
+            width: width,
+            min_x: {
+              f32: 0x9a9919bf,
+            },
           },
-          projection_value: cube,
-          isa: sized_value,
+          isa: lambda,
         },
-      ],
-    },
+        projection_value: cube,
+        isa: sized_value,
+      },
+      0xaa: {
+        fidget: [
+          0x80: cube,
+        ],
+      },
+    ],
+    isa: row,
   },
 }
