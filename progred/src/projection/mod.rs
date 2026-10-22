@@ -85,6 +85,17 @@ impl Projection {
         &self.partial
     }
 
+    /// `partial` tried before this projection's own partials, its entry and
+    /// the projections cells provide kept.
+    #[cfg(test)]
+    pub(crate) fn preceded_by(&self, partial: Partial) -> Self {
+        Self {
+            partial: crate::display::compose_partials([partial, self.partial.clone()]),
+            entry: self.entry.clone(),
+            provided: self.provided.clone(),
+        }
+    }
+
     /// Prepend a partial at entry, following cells to their definitions.
     /// Its children and computed results use the ordinary projection.
     pub fn with_entry(self, partial: Partial) -> Self {

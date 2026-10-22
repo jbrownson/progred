@@ -423,17 +423,16 @@ fn cam_controls_profile_loop() {
     // final 3D projection is replaced, avoiding the headless CPU raster fallback.
     let previews = Rc::new(std::cell::Cell::new(0));
     let rendered = previews.clone();
+    let omitted = crate::display::runtime_partial(move |input| {
+        use crate::libraries::toolpath::vocabulary::kind::PATHS_REFINED_PREVIEW;
+        (input.value?.kind()? == PATHS_REFINED_PREVIEW).then_some(())?;
+        rendered.set(rendered.get() + 1);
+        Some(crate::display::dim("preview omitted"))
+    });
     let mut context = BenchContext::new();
-    context.stack.projection = Projection::new([
-        crate::display::runtime_partial(move |input| {
-            input
-                .value?
-                .field(crate::libraries::toolpath::vocabulary::PREVIEW_REFINED)?;
-            rendered.set(rendered.get() + 1);
-            Some(crate::display::dim("preview omitted"))
-        }),
-        context.stack.projection.partial().clone(),
-    ]);
+    // The viewport is a pane, which draws with the pane's projection.
+    context.stack.projection = context.stack.projection.preceded_by(omitted.clone());
+    context.stack.pane_projection = context.stack.pane_projection.preceded_by(omitted);
     let (view, mut context) = view.prepare_with(&doc, context);
     profile(
         "CAM viewport/control pipeline, 400x600 @2, no 3D work",
