@@ -854,7 +854,7 @@ fn controls_overlay_the_full_height_view_and_supply_their_values() {
 
 #[test]
 fn radio_options_require_distinct_values_and_preserve_callable_data() {
-    let callable = Value::record([(::grap::vocabulary::FFI, SLIDER.into())]);
+    let callable = Value::from(SLIDER);
     let option = name::record("A callable", [(VALUE, callable.clone())]);
     let options = radio_options(&Value::list([option.clone()])).unwrap();
     assert_eq!(options[0].value, callable);
@@ -876,8 +876,8 @@ fn radio_dispatch_updates_value_without_touching_playback_camera_or_document() {
             (STATE, Value::record([(A, f64::value(0.35))])),
         ]),
     );
-    let first = Value::record([(::grap::vocabulary::FFI, SLIDER.into())]);
-    let second = Value::record([(::grap::vocabulary::FFI, RADIO.into())]);
+    let first = Value::from(SLIDER);
+    let second = Value::from(RADIO);
     let control = radio_widget(
         B,
         vec![

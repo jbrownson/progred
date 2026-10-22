@@ -5,7 +5,6 @@
     "axis_2": f82b802a154f47ab973d4a522fd3d034,
     "cos": fc89c17ecb5147158f928fe4e89da1e3,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
-    "ffi": 912adb7252d689659b6de9eeeb827658,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "gyroid": 6824d83b85a76ffceb8f676e18f922c2,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
@@ -201,9 +200,7 @@
     panes: {
       pane_left: [
         0x80: {
-          viewport: {
-            ffi: preview_3d,
-          },
+          viewport: preview_3d,
           projection_value: gyroid,
         },
       ],

@@ -8,7 +8,6 @@
     "difference": 10f86aecbad3474fa912858a56ebdf94,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
-    "ffi": 912adb7252d689659b6de9eeeb827658,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "field": 66bad5269b830181b840cf23a391b10e,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
@@ -168,9 +167,7 @@
     panes: {
       pane_left: [
         0x80: {
-          viewport: {
-            ffi: preview_3d,
-          },
+          viewport: preview_3d,
           projection_value: ring,
         },
       ],

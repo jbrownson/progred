@@ -271,7 +271,6 @@ enum RuntimeValueKind {
     Unboxed(Unboxed),
     Record(Rc<[(CellId, RuntimeValue)]>),
     List(Rc<[RuntimeValue]>),
-    Foreign(CellId),
     Closure(Closure),
 }
 
@@ -310,7 +309,6 @@ impl RuntimeValue {
         match (&self.0, &other.0) {
             (RuntimeValueKind::Data(a), RuntimeValueKind::Data(b)) => a == b,
             (RuntimeValueKind::Unboxed(a), RuntimeValueKind::Unboxed(b)) => a.same(b),
-            (RuntimeValueKind::Foreign(a), RuntimeValueKind::Foreign(b)) => a == b,
             (RuntimeValueKind::Record(a), RuntimeValueKind::Record(b)) => {
                 Rc::ptr_eq(a, b)
                     || (a.len() == b.len()
@@ -375,9 +373,7 @@ impl RuntimeValue {
             RuntimeValueKind::Record(fields) => runtime_field(fields, crate::f32::F32)?
                 .as_blob()
                 .and_then(crate::f32::decode),
-            RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_)
-            | RuntimeValueKind::Closure(_) => None,
+            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
         }
     }
 
@@ -392,9 +388,7 @@ impl RuntimeValue {
             RuntimeValueKind::Record(fields) => runtime_field(fields, crate::u64::U64)?
                 .as_blob()
                 .and_then(crate::u64::decode),
-            RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_)
-            | RuntimeValueKind::Closure(_) => None,
+            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
         }
     }
 
@@ -416,9 +410,7 @@ impl RuntimeValue {
             RuntimeValueKind::Record(fields) => runtime_field(fields, crate::f64::F64)?
                 .as_blob()
                 .and_then(crate::f64::decode),
-            RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_)
-            | RuntimeValueKind::Closure(_) => None,
+            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
         }
     }
 
@@ -434,9 +426,7 @@ impl RuntimeValue {
             RuntimeValueKind::Record(fields) => runtime_field(fields, crate::text::UTF8)?
                 .as_blob()
                 .and_then(crate::text::decode),
-            RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_)
-            | RuntimeValueKind::Closure(_) => None,
+            RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
         }
     }
 
@@ -447,9 +437,6 @@ impl RuntimeValue {
             }
             RuntimeValueKind::Record(fields) => runtime_field(fields, field).cloned(),
             RuntimeValueKind::Unboxed(unboxed) => unboxed.field(field).map(Self::from),
-            RuntimeValueKind::Foreign(foreign) => {
-                (field == vocabulary::FFI).then(|| Self::from(Value::from(*foreign)))
-            }
             RuntimeValueKind::Closure(_) if field == isa::ISA => {
                 Some(Self::from(Value::from(vocabulary::kind::CLOSURE)))
             }
@@ -468,7 +455,6 @@ impl RuntimeValue {
             RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
             | RuntimeValueKind::List(_)
-            | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
         }
     }
@@ -504,7 +490,6 @@ impl RuntimeValue {
             RuntimeValueKind::Data(value) => Some(value.as_record()?.len()),
             RuntimeValueKind::Record(fields) => Some(fields.len()),
             RuntimeValueKind::Unboxed(unboxed) => Some(unboxed.len()),
-            RuntimeValueKind::Foreign(_) => Some(1),
             RuntimeValueKind::Closure(closure) => Some(closure_keys(closure).len()),
             RuntimeValueKind::List(_) => None,
         }
@@ -538,7 +523,6 @@ impl RuntimeValue {
             RuntimeValueKind::List(elements) => Some(elements.len()),
             RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
-            | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
         }
     }
@@ -559,7 +543,6 @@ impl RuntimeValue {
                 .is_some_and(|fields| fields.contains_key(&field)),
             RuntimeValueKind::Record(fields) => runtime_field(fields, field).is_some(),
             RuntimeValueKind::Unboxed(unboxed) => unboxed.contains_field(field),
-            RuntimeValueKind::Foreign(_) => field == vocabulary::FFI,
             RuntimeValueKind::Closure(closure) => closure_keys(closure).contains(&field),
             RuntimeValueKind::List(_) => false,
         }
@@ -571,7 +554,6 @@ impl RuntimeValue {
             RuntimeValueKind::Data(value) => Some(value.as_record()?.keys().copied().collect()),
             RuntimeValueKind::Record(fields) => Some(fields.iter().map(|(key, _)| *key).collect()),
             RuntimeValueKind::Unboxed(unboxed) => Some(unboxed.keys()),
-            RuntimeValueKind::Foreign(_) => Some(vec![vocabulary::FFI]),
             RuntimeValueKind::Closure(closure) => Some(closure_keys(closure)),
             RuntimeValueKind::List(_) => None,
         }
@@ -595,7 +577,6 @@ impl RuntimeValue {
                 Shape::Record(fields.iter().map(|(key, _)| *key).collect())
             }
             RuntimeValueKind::Unboxed(unboxed) => Shape::Record(unboxed.keys()),
-            RuntimeValueKind::Foreign(_) => Shape::Record(vec![vocabulary::FFI]),
             RuntimeValueKind::Closure(closure) => Shape::Record(closure_keys(closure)),
         }
     }
@@ -620,7 +601,6 @@ impl RuntimeValue {
             RuntimeValueKind::List(elements) => elements.get(index).cloned(),
             RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_)
-            | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
         }
     }
@@ -1673,7 +1653,7 @@ impl<'a> Context<'a> {
                                 match environment.get_at(&context.indices, cell, index) {
                                     Some(value) => unbox(value.clone()),
                                     // Ordinary cells took the direct path above.
-                                    None => RuntimeValue::new(RuntimeValueKind::Foreign(cell)),
+                                    None => RuntimeValue::from(Value::from(cell)),
                                 }
                             }
                             None => context.eval(function.clone(), environment)?,
@@ -1818,19 +1798,12 @@ impl<'a> Context<'a> {
             RuntimeValueKind::Closure(closure) => {
                 Some(self.eval_grap_call(closure.clone(), call, environment, plan))
             }
-            RuntimeValueKind::Foreign(cell) => Some(match self.foreign_target_cell(*cell) {
-                Some(foreign) => {
-                    self.call_foreign_staged(&foreign, call, environment, Some(stages))
-                }
-                None => self.call_cell(*cell, call, environment, None),
-            }),
             RuntimeValueKind::Data(_)
             | RuntimeValueKind::Unboxed(_)
             | RuntimeValueKind::Record(_) => match self.runtime_closure(&callable) {
                 Some(closure) => Some(self.eval_grap_call(closure, call, environment, plan)),
                 None => callable
                     .as_cell()
-                    .or_else(|| callable.field(vocabulary::FFI)?.as_cell())
                     .map(|cell| match self.foreign_target_cell(cell) {
                         Some(foreign) => {
                             self.call_foreign_staged(&foreign, call, environment, Some(stages))
@@ -1892,6 +1865,12 @@ impl<'a> Context<'a> {
         match environment.get_at(&self.indices, cell, index) {
             Some(value) => Ok(unbox(value.clone())),
             None => match self.host.resolve(cell) {
+                // A foreign function's value is its cell: what's foreign is
+                // the definition there, which a call reaches.
+                Some((_, Definition::Foreign(_))) => Ok(RuntimeValue::from(Value::from(cell))),
+                None if self.foreign_target_cell(cell).is_some() => {
+                    Ok(RuntimeValue::from(Value::from(cell)))
+                }
                 None => Ok(missing_cell(cell)),
                 Some((resolution, definition)) => {
                     while self.cell_states.len() <= index.0 {
@@ -2063,25 +2042,7 @@ impl<'a> Context<'a> {
         expression: Expression,
         environment: &Environment,
     ) -> Result<PreparedCallable, Halt> {
-        let reference = match expression.0.form {
-            Form::Cell(cell) if environment.get_runtime(cell).is_none() => self
-                .foreign_target_cell(cell)
-                .map(|_| RuntimeValue::new(RuntimeValueKind::Foreign(cell)))
-                .or_else(|| match self.host.resolve(cell) {
-                    Some((_, Definition::Foreign(_))) => {
-                        Some(RuntimeValue::new(RuntimeValueKind::Foreign(cell)))
-                    }
-                    _ => None,
-                }),
-            _ => None,
-        };
-        let callable = match reference {
-            Some(reference) => {
-                self.burn()?;
-                reference
-            }
-            None => self.eval(expression, environment)?,
-        };
+        let callable = self.eval(expression, environment)?;
         Ok(self.prepare_runtime_callable(callable, environment))
     }
 
@@ -2120,23 +2081,11 @@ impl<'a> Context<'a> {
                 RuntimeValueKind::Closure(closure) => {
                     context.call_closure(closure.clone(), &callable.value, &arguments)
                 }
-                RuntimeValueKind::Foreign(cell) => {
-                    let call = runtime_call(RuntimeValue::from(ffi(*cell)), arguments);
-                    match context.foreign_target_cell(*cell) {
-                        Some(foreign) => {
-                            context.call_foreign(&foreign, &call, &callable.environment)
-                        }
-                        None => context.call_cell(*cell, &call, &callable.environment, None),
-                    }
-                }
                 RuntimeValueKind::Data(_)
                 | RuntimeValueKind::Unboxed(_)
                 | RuntimeValueKind::Record(_) => {
                     let value = &callable.value;
-                    match value
-                        .as_cell()
-                        .or_else(|| value.field(vocabulary::FFI)?.as_cell())
-                    {
+                    match value.as_cell() {
                         Some(cell) => {
                             let call = runtime_call(value.clone(), arguments);
                             match context.foreign_target_cell(cell) {
@@ -2269,31 +2218,23 @@ impl<'a> Context<'a> {
         match self.runtime_closure(&callable) {
             Some(closure) => Some(self.call_closure(closure, &callable, arguments)),
             None => match callable.0 {
-                RuntimeValueKind::Foreign(cell) => Some(match self.foreign_target_cell(cell) {
-                    Some(foreign) => self.apply_foreign(
-                        &foreign,
-                        callable,
-                        arguments.iter().cloned(),
-                        environment,
-                    ),
-                    None => {
-                        self.apply_cell(cell, ffi(cell).into(), arguments.to_vec(), environment)
-                    }
-                }),
                 RuntimeValueKind::Data(_)
                 | RuntimeValueKind::Unboxed(_)
-                | RuntimeValueKind::Record(_) => callable
-                    .as_cell()
-                    .or_else(|| callable.field(vocabulary::FFI)?.as_cell())
-                    .map(|cell| match self.foreign_target_cell(cell) {
-                        Some(foreign) => self.apply_foreign(
-                            &foreign,
-                            callable,
-                            arguments.iter().cloned(),
-                            environment,
-                        ),
-                        None => self.apply_cell(cell, callable, arguments.to_vec(), environment),
-                    }),
+                | RuntimeValueKind::Record(_) => {
+                    callable
+                        .as_cell()
+                        .map(|cell| match self.foreign_target_cell(cell) {
+                            Some(foreign) => self.apply_foreign(
+                                &foreign,
+                                callable,
+                                arguments.iter().cloned(),
+                                environment,
+                            ),
+                            None => {
+                                self.apply_cell(cell, callable, arguments.to_vec(), environment)
+                            }
+                        })
+                }
                 RuntimeValueKind::List(_) | RuntimeValueKind::Closure(_) => None,
             },
         }
@@ -2390,7 +2331,7 @@ impl<'a> Context<'a> {
                     fields: lambda.as_value().as_record()?.clone(),
                 })
             }
-            RuntimeValueKind::List(_) | RuntimeValueKind::Foreign(_) => None,
+            RuntimeValueKind::List(_) => None,
         }
     }
 }
@@ -2518,11 +2459,6 @@ pub fn lambda(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
             (vocabulary::BODY, body),
         ],
     )
-}
-
-/// A callable naming a foreign function — the FFI bridge as a value.
-pub fn ffi(cell: CellId) -> Value {
-    Value::record([(vocabulary::FFI, Value::from(cell))])
 }
 
 pub fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {

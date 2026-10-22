@@ -223,8 +223,7 @@ what the kind required when it was written. Open beside it:
   provides first (see [projections](projections.md#projection-composition)),
   and evaluation dispatches on Grap's kinds. Still told by their fields:
   `{evaluate: …}`, notebooks, and the other libraries' records;
-  `{ffi: cell}` and `{grap: cell}` are to go, a foreign function's value its
-  cell. Declining partials allocate while they probe, about 4,300 times a
+  `{grap: cell}` is to go. Declining partials allocate while they probe, about 4,300 times a
   frame in the IoP source form, so the remaining probing has a cost to find.
 - **A kind's own description.** A kind's cell could be described by a record
   that says it's a kind, `{isa: kind, name, …}`, as a field's could by

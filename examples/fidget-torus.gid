@@ -3,7 +3,6 @@
     "axis": fb2b3baa73025ae4b7b2aa97d65d1643,
     "axis_2": f82b802a154f47ab973d4a522fd3d034,
     "f32": 64810cfeb0631ca8875e282d1ad4af79,
-    "ffi": 912adb7252d689659b6de9eeeb827658,
     "fidget": 5653d5cc6cf43eb2291f9943c29eeab4,
     "isa": dbd7e1a38e30425fb1b408b2e446bb1b,
     "left": 3cbf5357204947fdb4f26eadcbd777d6,
@@ -85,9 +84,7 @@
     panes: {
       pane_left: [
         0x80: {
-          viewport: {
-            ffi: preview_3d,
-          },
+          viewport: preview_3d,
           projection_value: torus,
         },
       ],

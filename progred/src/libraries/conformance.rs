@@ -213,46 +213,40 @@ fn an_enriched_number_matches_record_patterns_like_its_data() {
 #[test]
 fn callable_record_patterns_are_transparent_to_lowering() {
     let binder = new_cell_id();
-    for (subject, field) in [
-        (grap::lambda([], blob("body")), grap::vocabulary::LAMBDA),
-        (
-            grap::ffi(crate::libraries::grap::numbers::f64::SUM),
-            grap::vocabulary::FFI,
-        ),
-    ] {
-        let evaluated = evaluate(&subject, 100).result;
-        // The subject is evaluated at a different location inside `match`,
-        // so its body origin differs; this open pattern compares the callable,
-        // the lambda as written or the foreign cell, not that annotation.
-        let contents = evaluated.as_record().unwrap().get(&field).unwrap().clone();
-        for pattern in [Value::record([]), Value::record([(field, contents)])] {
-            let cases = Value::list([
-                Value::record([
-                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
-                    (control::vocabulary::PATTERN, pattern),
-                    (grap::vocabulary::EXPRESSION, blob("record")),
-                ]),
-                Value::record([
-                    (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
-                    (
-                        control::vocabulary::PATTERN,
-                        Value::record([
-                            (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
-                            (control::vocabulary::BIND, Value::from(binder)),
-                        ]),
-                    ),
-                    (grap::vocabulary::EXPRESSION, blob("other")),
-                ]),
-            ]);
-            let expression = grap::call(
-                Value::from(control::vocabulary::MATCH),
-                [
-                    (control::vocabulary::VALUE, subject.clone()),
-                    (control::vocabulary::CASES, cases),
-                ],
-            );
-            assert_eq!(evaluate(&expression, 100).result, blob("record"));
-        }
+    let subject = grap::lambda([], blob("body"));
+    let field = grap::vocabulary::LAMBDA;
+    let evaluated = evaluate(&subject, 100).result;
+    // The subject is evaluated at a different location inside `match`,
+    // so its body origin differs; this open pattern compares the callable,
+    // the lambda as written, not that annotation.
+    let contents = evaluated.as_record().unwrap().get(&field).unwrap().clone();
+    for pattern in [Value::record([]), Value::record([(field, contents)])] {
+        let cases = Value::list([
+            Value::record([
+                (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
+                (control::vocabulary::PATTERN, pattern),
+                (grap::vocabulary::EXPRESSION, blob("record")),
+            ]),
+            Value::record([
+                (::grap::isa::ISA, control::vocabulary::kind::CASE.into()),
+                (
+                    control::vocabulary::PATTERN,
+                    Value::record([
+                        (::grap::isa::ISA, control::vocabulary::kind::BINDER.into()),
+                        (control::vocabulary::BIND, Value::from(binder)),
+                    ]),
+                ),
+                (grap::vocabulary::EXPRESSION, blob("other")),
+            ]),
+        ]);
+        let expression = grap::call(
+            Value::from(control::vocabulary::MATCH),
+            [
+                (control::vocabulary::VALUE, subject.clone()),
+                (control::vocabulary::CASES, cases),
+            ],
+        );
+        assert_eq!(evaluate(&expression, 100).result, blob("record"));
     }
 }
 

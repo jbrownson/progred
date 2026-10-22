@@ -251,7 +251,6 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
         unboxed(decorated_number),
         native_text("three"),
         unboxed(decorated_text),
-        RuntimeValue::new(RuntimeValueKind::Foreign(metadata)),
         closure,
         RuntimeValue::list([]),
         RuntimeValue::from(Value::from(metadata)),
@@ -275,7 +274,6 @@ fn runtime_record_keys_and_membership_match_all_gid_shapes() {
             metadata,
             crate::f64::F64,
             crate::text::UTF8,
-            vocabulary::FFI,
             vocabulary::LAMBDA,
             vocabulary::ENVIRONMENT,
         ] {
@@ -578,7 +576,7 @@ fn expression_application_preserves_raw_foreign_arguments_and_runtime_callbacks(
     );
     assert_eq!(result.result.as_f64(), Some(9.0));
     let result = apply(
-        &ffi(identity).into(),
+        &Value::from(identity).into(),
         [(argument, source_argument)],
         &receiver,
         None,
@@ -628,7 +626,7 @@ fn runtime_built_callable_records_match_their_gid_forms() {
             }),
         ),
     )]);
-    let foreign = RuntimeValue::record([(vocabulary::FFI, Value::from(identity).into())]);
+    let foreign = RuntimeValue::from(Value::from(identity));
     let closure = RuntimeValue::record([
         (isa::ISA, Value::from(vocabulary::kind::CLOSURE).into()),
         (
@@ -688,8 +686,6 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
         ),
     )]);
     let number = (crate::f64::F64, Value::from(3.0_f64.to_le_bytes().to_vec()));
-    let foreign =
-        gid::Record::from_iter([number.clone(), (vocabulary::FFI, Value::from(identity))]);
     let closure = gid::Record::from_iter([
         number,
         (isa::ISA, Value::from(vocabulary::kind::CLOSURE)),
@@ -707,7 +703,7 @@ fn unboxed_values_keep_the_callable_facets_of_their_records() {
     ]);
     let noop = |_, _: &mut Context<'_>, _: &Expression, _: &Environment| unreachable!();
     let overlay = ForeignOverlay::new(&[], &noop);
-    for record in [foreign, closure] {
+    for record in [closure] {
         let unboxed = unboxed(record.clone());
         assert_eq!(unboxed.as_f64(), Some(3.0));
         // The number answers each call as its record form does.
@@ -1074,7 +1070,7 @@ fn foreign_arguments_keep_runtime_closures_without_materializing_them() {
         panic!("expected a closure")
     };
     let result = apply(
-        &ffi(identity).into(),
+        &Value::from(identity).into(),
         [(argument, original.clone())],
         &receiver,
         None,
@@ -1267,7 +1263,7 @@ fn every_entry_point_binds_in_its_context_index_table() {
         evaluate(&call(probe.into(), []), &receiver, 100),
         evaluate_runtime_at(&lambda_call, None, &receiver, 100),
         evaluate_runtime_scoped(&lambda_call, &receiver, &overlay, 100),
-        apply(&ffi(probe).into(), [], &receiver, None, 100),
+        apply(&Value::from(probe).into(), [], &receiver, None, 100),
         apply_expression(&Value::from(probe).into(), [], &receiver, None, 100),
     ];
     for result in &results {

@@ -48,7 +48,6 @@ impl Reify {
                 .share(Some(Shared::List(Rc::as_ptr(elements))), |this| {
                     Value::list(elements.iter().map(|value| this.value(value)))
                 }),
-            RuntimeValueKind::Foreign(cell) => ffi(*cell),
             // The lambda as written, then what it closes over and where its
             // body came from, beside it.
             RuntimeValueKind::Closure(closure) => {

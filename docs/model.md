@@ -32,8 +32,9 @@ implicitly composed. Duplicate indicators and inspection UI are deferred.
 Each library has one definition per cell: either an ordinary value or a native
 definition (`grap::Definition::Foreign`) pairing a descriptive value with its
 Rust implementation. Reads and
-calls use the same lookup. Reading a native definition uses its description;
-calling it invokes its implementation. An absent or non-callable result does
+calls use the same lookup. A native definition's description is what its
+name and parameters are read from; evaluating a reference to it gives its cell,
+the function's value, and calling it invokes its implementation. An absent or non-callable result does
 not try another source. Library descriptions (currently name records) live in
 that same table under the library identities, not in a separate metadata store.
 Replacing a loaded library replaces all its contributions in place, including

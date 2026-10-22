@@ -17,7 +17,7 @@ use crate::display::{
     col, descend, dim, faced, indent, picker, ranked, row, selectable, selectable_bracket, shared,
 };
 use ::grap::source::vocabulary::BODY_ORIGIN;
-use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FFI, FUNCTION, LAMBDA, PARAMS, VALUE, kind};
+use ::grap::vocabulary::{BODY, ENVIRONMENT, EVALUATE, FUNCTION, LAMBDA, PARAMS, VALUE, kind};
 use ::grap::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use puri::text::Script;
 
@@ -639,14 +639,6 @@ fn value_display<W: Host>(
 }
 
 /// Foreignness is an evaluator implementation detail. In source, an
-/// FFI callable projects exactly like the cell it names.
-fn ffi_display<W: Host>(input: &ProjectionInput<'_, W, ::grap::RuntimeValue>) -> Option<Layout<W>> {
-    record_form(input, [FFI], |[ffi]| {
-        ffi?.as_cell()?;
-        Some(shallow_path(input, [Step::Key(FFI)]))
-    })
-}
-
 fn evaluate_display<W: Host>(
     input: &ProjectionInput<'_, W, ::grap::RuntimeValue>,
 ) -> Option<Layout<W>> {
@@ -722,7 +714,6 @@ pub fn library<W: Host>() -> Library<W> {
             (kind::CLOSURE, "closure"),
             (kind::VALUE_WRAPPER, "value wrapper"),
             (::grap::vocabulary::ENVIRONMENT, "environment"),
-            (::grap::vocabulary::FFI, "ffi"),
             (::grap::vocabulary::EVALUATE, "evaluate"),
             (::grap::vocabulary::EXPRESSION, "expression"),
             (::grap::source::vocabulary::BODY_ORIGIN, "body origin"),
@@ -787,7 +778,6 @@ pub fn library<W: Host>() -> Library<W> {
         crate::display::compose_partials([
             numbers,
             crate::display::runtime_partial(evaluate_display),
-            crate::display::runtime_partial(ffi_display),
             crate::display::runtime_partial(program_display),
             crate::display::runtime_partial(notebook::display),
         ]),
@@ -865,7 +855,6 @@ fn function_offers(
     bound: &dyn Fn(CellId) -> bool,
 ) -> Vec<Completion> {
     let as_function = match request.path.last() {
-        Some(Step::Key(field)) if *field == FFI => return Vec::new(),
         Some(Step::Key(field)) => *field == FUNCTION,
         _ => false,
     };

@@ -94,7 +94,7 @@ fn images_show_at_their_own_size_until_they_shrink_to_fit() {
 
 fn call(function: CellId, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     crate::test_support::test_evaluate(
-        &::grap::call(::grap::ffi(function), arguments),
+        &::grap::call(function.into(), arguments),
         |_| None,
         &functions(),
         100,

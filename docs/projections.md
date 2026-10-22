@@ -357,7 +357,7 @@ at their real field paths; they remain absent from the document until edited.
 An active missing argument stays in its declared position rather than gaining a
 second trailing row. This is a raw definition lookup, not evaluation of the
 callable: a native function named by its cell uses the `params` its description
-lists, and computed callables and `{ffi: cell}` references use the ordinary order.
+lists, and computed callables use the ordinary order.
 A number operation's name carries the same representation subscript used by
 literals: it is a formatted name, `["+", {subscript: <the f64 cell>}]`, so a
 call's function reference and the picker's offer both draw it from the
@@ -727,7 +727,6 @@ Grap recognizes these forms through its vocabulary cells:
 {isa: call, function: callable-expression, parameter-cell: argument-expression, ...}
 {isa: value wrapper, value: expression, ...}
 {isa: closure, lambda: {isa: lambda, params: [...], body: expression}, environment: {...}, body origin: ...}
-{ffi: function-cell}
 ```
 
 A record is a call, a lambda, a value wrapper or a closure only when its `isa`
@@ -774,17 +773,18 @@ ordinal into the loaded stack, so loading or reordering libraries cannot
 silently retarget editor state. With no definition,
 evaluation returns missing-cell absent. A cell is transparent: its definition is
 evaluated where it is referenced, using the bindings in scope there, so a cell
-defined for a function body can be referenced in several places within it. A native definition's descriptive value
-is evaluated without invoking its implementation. A named foreign function
-therefore evaluates to its ordinary name record. Scoped capabilities participate
-only in calls, never ordinary reads.
+defined for a function body can be referenced in several places within it. A
+foreign function's value is its cell: what's foreign is the definition there,
+so a reference to one, or to a function a scoped capability supplies,
+evaluates to the cell without invoking anything, and a call of that cell
+reaches the implementation. Its descriptive value is what names and parameters
+are read from.
 
 Direct calls retain the same `{function: cell, ...arguments}` syntax for Rust
-and Grap implementations. To pass a callable reference through an evaluated
-argument, use the existing inert `{ffi: cell}` representation; passing a bare
-cell evaluates its data. This reference still dispatches in the receiving host
-context. It contains neither a native function pointer nor an extra cell definition.
-The Fidget example uses such a reference for its viewport function.
+and Grap implementations. Passing a foreign function through an evaluated
+argument passes its cell, which still dispatches in the receiving host
+context; it holds no native function pointer. The Fidget examples name their
+viewport function this way.
 
 A direct call uses the same resolver. A native definition invokes its Rust
 implementation; an ordinary value is evaluated as the callable.

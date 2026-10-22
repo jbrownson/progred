@@ -142,9 +142,10 @@ fn replacing_a_foreign_registration_does_not_add_cell_values() {
             .collect::<Vec<_>>(),
         [LEFT_LIBRARY]
     );
+    // The description is the definition's; the function's value is its cell.
     assert_eq!(
         ::grap::evaluate_value(&SHARED_FUNCTION.into(), &libraries, 20).result,
-        name
+        Value::from(SHARED_FUNCTION)
     );
     assert_eq!(
         ::grap::evaluate_value(&::grap::call(SHARED_FUNCTION.into(), []), &libraries, 20).result,
@@ -300,8 +301,11 @@ fn unnamed_native_definitions_have_an_empty_description() {
         )),
     )]);
     assert_eq!(
-        ::grap::evaluate_value(&SHARED_FUNCTION.into(), &libraries, 20).result,
-        Value::record([])
+        libraries
+            .definitions(SHARED_FUNCTION)
+            .map(|(_, definition)| definition.value().clone())
+            .collect::<Vec<_>>(),
+        [Value::record([])]
     );
     assert_eq!(
         ::grap::apply_value(&SHARED_FUNCTION.into(), [], &libraries, None, 20).result,

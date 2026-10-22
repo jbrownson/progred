@@ -118,7 +118,7 @@ fn current_state(annotation: Option<&Value>) -> Value {
 }
 
 fn update_function() -> Value {
-    Value::record([(::grap::vocabulary::FFI, UPDATE.into())])
+    UPDATE.into()
 }
 
 fn apply_change(

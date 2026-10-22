@@ -1,7 +1,7 @@
 //! Custom forms obey the same placed navigation policy as structural containers.
 use super::*;
 use crate::libraries::{f64, fidget, grap::control};
-use ::grap::vocabulary::{BODY, EVALUATE, EXPRESSION, FFI, FUNCTION, PARAMS, VALUE};
+use ::grap::vocabulary::{BODY, EVALUATE, EXPRESSION, FUNCTION, PARAMS, VALUE};
 use gid::{Path, Step};
 use puri::handler::NavigationDirection;
 
@@ -144,11 +144,6 @@ fn inline_custom_forms_keep_vertical_siblings_and_a_leading_whole_stop() {
                 (control::vocabulary::UNQUOTE, number()),
             ]),
             vec![Step::Key(control::vocabulary::UNQUOTE)],
-        ),
-        (
-            "ffi",
-            Value::record([(FFI, crate::libraries::grap::numbers::f64::SIN.into())]),
-            vec![Step::Key(FFI)],
         ),
         (
             "do",
