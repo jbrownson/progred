@@ -636,15 +636,17 @@ fn match_evaluates_its_subject_once_across_all_cases() {
     assert_eq!(SUBJECT_EVALUATIONS.load(Ordering::SeqCst), 1);
 }
 
+/// The cases are read, never evaluated: the call, its function, the
+/// subject and the chosen arm burn.
 #[test]
-fn lowered_match_cases_still_consume_their_evaluation_fuel() {
+fn a_match_burns_its_subject_and_arm_but_not_its_cases() {
     let expression = match_call(blob("subject"), [case_arm(blob("subject"), blob("result"))]);
 
-    let completed = evaluate_with_fuel(&expression, 6);
+    let completed = evaluate_with_fuel(&expression, 5);
     assert_eq!(completed.result, blob("result"));
     assert_eq!(completed.remaining_fuel, 1);
 
-    let exhausted = evaluate_with_fuel(&expression, 5);
+    let exhausted = evaluate_with_fuel(&expression, 4);
     assert_eq!(
         exhausted.result,
         grap::absent::value(grap::absent::FUEL_EXHAUSTED),
@@ -721,8 +723,10 @@ fn let_and_where_evaluate_bindings_sequentially() {
     }
 }
 
+/// The bindings are read, never evaluated: the call, its function, each
+/// binding's value and the body burn.
 #[test]
-fn lowered_bindings_still_consume_their_evaluation_fuel() {
+fn a_let_burns_its_values_and_body_but_not_its_bindings() {
     let binder = new_cell_id();
     let expression = bindings_call(
         vocabulary::LET,
@@ -730,11 +734,11 @@ fn lowered_bindings_still_consume_their_evaluation_fuel() {
         Value::from(binder),
     );
 
-    let completed = evaluate_with_fuel(&expression, 6);
+    let completed = evaluate_with_fuel(&expression, 5);
     assert_eq!(completed.result, blob("bound"));
     assert_eq!(completed.remaining_fuel, 1);
 
-    let exhausted = evaluate_with_fuel(&expression, 5);
+    let exhausted = evaluate_with_fuel(&expression, 4);
     assert_eq!(
         exhausted.result,
         grap::absent::value(grap::absent::FUEL_EXHAUSTED),
@@ -768,11 +772,10 @@ fn let_destructures_each_value_and_returns_an_absent_on_mismatch() {
 }
 
 #[test]
-fn referenced_patterns_preserve_lowered_captures_and_fuel() {
+fn patterns_match_runtime_and_stored_subjects_alike() {
     let field = new_cell_id();
     let binder = new_cell_id();
     let subject_cell = new_cell_id();
-    let clauses_cell = new_cell_id();
     let subject = RuntimeValue::record([
         (
             field,
@@ -793,54 +796,39 @@ fn referenced_patterns_preserve_lowered_captures_and_fuel() {
             } else {
                 binding_clause(pattern.clone(), subject.clone())
             }]);
-            for referenced in [false, true] {
-                let clauses_input = if referenced {
-                    Value::from(clauses_cell)
+            let expression = grap::call(
+                Value::from(function),
+                if function == vocabulary::MATCH {
+                    [
+                        (vocabulary::VALUE, subject.clone()),
+                        (vocabulary::CASES, clauses),
+                    ]
                 } else {
-                    clauses.clone()
-                };
-                let expression = grap::call(
-                    Value::from(function),
-                    if function == vocabulary::MATCH {
-                        [
-                            (vocabulary::VALUE, subject.clone()),
-                            (vocabulary::CASES, clauses_input),
-                        ]
-                    } else {
-                        [
-                            (vocabulary::BINDINGS, clauses_input),
-                            (grap::vocabulary::EXPRESSION, Value::from(binder)),
-                        ]
-                    },
-                );
-                let run = |fuel| {
-                    crate::test_support::test_evaluate(
-                        &expression,
-                        |cell| (cell == clauses_cell).then(|| clauses.clone()),
-                        &functions,
-                        fuel,
-                    )
-                };
-                // Control call (2), subject call (2), clauses (1), body (1).
-                let fuel = 7 + usize::from(referenced);
-                let completed = run(fuel);
-                assert_eq!(completed.result, crate::libraries::f64::value(7.0));
-                assert_eq!(completed.remaining_fuel, 1);
-                let exhausted = run(fuel - 1);
-                assert_eq!(
-                    exhausted.result,
-                    grap::absent::value(grap::absent::FUEL_EXHAUSTED),
-                );
-                assert_eq!(exhausted.remaining_fuel, 0);
-            }
+                    [
+                        (vocabulary::BINDINGS, clauses),
+                        (grap::vocabulary::EXPRESSION, Value::from(binder)),
+                    ]
+                },
+            );
+            let run =
+                |fuel| crate::test_support::test_evaluate(&expression, |_| None, &functions, fuel);
+            // Control call (2), subject call (2), body (1).
+            let completed = run(6);
+            assert_eq!(completed.result, crate::libraries::f64::value(7.0));
+            assert_eq!(completed.remaining_fuel, 1);
+            let exhausted = run(5);
+            assert_eq!(
+                exhausted.result,
+                grap::absent::value(grap::absent::FUEL_EXHAUSTED),
+            );
+            assert_eq!(exhausted.remaining_fuel, 0);
         }
     }
 }
 
 #[test]
-fn referenced_patterns_preserve_mismatches_and_lazy_binder_errors() {
+fn patterns_report_mismatches_and_binder_errors_lazily() {
     let binder = new_cell_id();
-    let clauses_cell = new_cell_id();
     let invalid = Value::record([(vocabulary::BIND, blob("not a cell"))]);
     let subject = Value::list([blob("first"), blob("second")]);
     for (pattern, reason) in [
@@ -861,35 +849,24 @@ fn referenced_patterns_preserve_mismatches_and_lazy_binder_errors() {
             } else {
                 binding_clause(pattern.clone(), subject.clone())
             }]);
-            for referenced in [false, true] {
-                let clauses_input = if referenced {
-                    Value::from(clauses_cell)
+            let expression = grap::call(
+                Value::from(function),
+                if function == vocabulary::MATCH {
+                    [
+                        (vocabulary::VALUE, subject.clone()),
+                        (vocabulary::CASES, clauses),
+                    ]
                 } else {
-                    clauses.clone()
-                };
-                let expression = grap::call(
-                    Value::from(function),
-                    if function == vocabulary::MATCH {
-                        [
-                            (vocabulary::VALUE, subject.clone()),
-                            (vocabulary::CASES, clauses_input),
-                        ]
-                    } else {
-                        [
-                            (vocabulary::BINDINGS, clauses_input),
-                            (grap::vocabulary::EXPRESSION, blob("never")),
-                        ]
-                    },
-                );
-                let result = crate::test_support::test_evaluate(
-                    &expression,
-                    |cell| (cell == clauses_cell).then(|| clauses.clone()),
-                    &functions(),
-                    20,
-                );
-                assert_eq!(result.result, expected);
-                assert_eq!(result.remaining_fuel, 16 - usize::from(referenced));
-            }
+                    [
+                        (vocabulary::BINDINGS, clauses),
+                        (grap::vocabulary::EXPRESSION, blob("never")),
+                    ]
+                },
+            );
+            let result =
+                crate::test_support::test_evaluate(&expression, |_| None, &functions(), 20);
+            assert_eq!(result.result, expected);
+            assert_eq!(result.remaining_fuel, 17);
         }
     }
 }

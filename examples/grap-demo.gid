@@ -42,7 +42,7 @@
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "quote_generator": b4d0601d7c58b203646a3bf8e7d5681d,
-    "quoted_match_result": c1f6c6ab6c929a0a0dcf08cf6ce9aab6,
+    "quoted_cases": c1f6c6ab6c929a0a0dcf08cf6ce9aab6,
     "radius": c56b7e320d753ea059eb5d7eacb49f10,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "scale": ccba1404490345dcf33d8a19ddaa5bd1,
@@ -158,8 +158,8 @@
     quote_generator: {
       name: "quote generator",
     },
-    quoted_match_result: {
-      name: "quoted match result",
+    quoted_cases: {
+      name: "quoted cases",
     },
     radius: {
       name: "radius",
@@ -325,15 +325,10 @@
       },
     },
     0xb3: {
-      quoted_match_result: {
+      quoted_cases: {
         evaluate: {
-          value: "subject",
-          function: match,
-          cases: {
-            generated_value: a_value,
-            function: make_cases,
-            isa: call,
-          },
+          generated_value: a_value,
+          function: make_cases,
           isa: call,
         },
       },

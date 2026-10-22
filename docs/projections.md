@@ -937,13 +937,10 @@ catch-all. Only the selected expression runs,
 in the caller's environment extended by captures. Its absent result is final,
 not a request to try another case. There is no implicit match-subject binding.
 
-Case lists and `let`/`where` binding lists supplied by another expression are
-evaluated once and inspected as runtime containers. Selected expressions and
-binding right-hand sides use `Context::eval_runtime_code` in the appropriate
-environment; they are not serialized back to GID first. Embedded native closures
-therefore retain their original code origins and captures. Patterns still use
-the GID-oriented structural matcher, converting only the individual pattern.
-Literal clause lists keep their existing prepared-expression path.
+A `match`'s cases and a `let`/`where`'s bindings are the form's own syntax,
+read where they're written and never evaluated, like `do`'s expressions. A
+clause list that isn't written in place, such as a reference to a cell holding
+one, answers invalid cases or invalid bindings.
 
 `quote` walks the original raw structure, replacing `{isa: unquote, unquote: expression}`
 leaves by evaluating their expressions in the caller's environment. It never

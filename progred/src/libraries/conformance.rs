@@ -109,8 +109,9 @@ fn a_do_sequence_burns_only_its_elements() {
     assert_eq!(evaluation.remaining_fuel, 6);
 }
 
-/// A match with no matching case still pays for its subject and its
-/// cases list: call(1) + function(1) + subject(1) + cases(1) = 4.
+/// A match with no matching case still pays for its subject; like do's
+/// expressions, its cases are read, never evaluated: call(1) +
+/// function(1) + subject(1) = 3.
 #[test]
 fn an_unmatched_subject_burns_everything_but_an_arm() {
     let expression = grap::call(
@@ -138,7 +139,7 @@ fn an_unmatched_subject_burns_everything_but_an_arm() {
         ]),
     );
 
-    assert_eq!(evaluation.remaining_fuel, 6);
+    assert_eq!(evaluation.remaining_fuel, 7);
 }
 
 /// Quote walks its template without burning; only the unquote body
@@ -170,7 +171,7 @@ fn a_quote_burns_only_its_unquotes() {
 /// An enriched number — extra fields beside the f64 — answers record
 /// patterns exactly as its stored form would, however the
 /// implementation carries it: call(1) + function(1) + subject(1) +
-/// cases(1) + arm(1) = 5.
+/// arm(1) = 4.
 #[test]
 fn an_enriched_number_matches_record_patterns_like_its_data() {
     let note = new_cell_id();
@@ -203,12 +204,11 @@ fn an_enriched_number_matches_record_patterns_like_its_data() {
     );
     let evaluation = evaluate(&expression, 10);
     assert_eq!(evaluation.result, blob("annotated"));
-    assert_eq!(evaluation.remaining_fuel, 5);
+    assert_eq!(evaluation.remaining_fuel, 6);
 }
 
 #[test]
 fn callable_record_patterns_are_transparent_to_lowering() {
-    let cases_cell = new_cell_id();
     let binder = new_cell_id();
     for (subject, field) in [
         (grap::lambda([], blob("body")), grap::vocabulary::LAMBDA),
@@ -236,31 +236,23 @@ fn callable_record_patterns_are_transparent_to_lowering() {
                     (grap::vocabulary::EXPRESSION, blob("other")),
                 ]),
             ]);
-            for clauses in [cases.clone(), Value::from(cases_cell)] {
-                let expression = grap::call(
-                    Value::from(control::vocabulary::MATCH),
-                    [
-                        (control::vocabulary::VALUE, subject.clone()),
-                        (control::vocabulary::CASES, clauses),
-                    ],
-                );
-                let evaluation = evaluate_resolving(
-                    &expression,
-                    |cell| (cell == cases_cell).then(|| cases.clone()),
-                    100,
-                );
-                assert_eq!(evaluation.result, blob("record"));
-            }
+            let expression = grap::call(
+                Value::from(control::vocabulary::MATCH),
+                [
+                    (control::vocabulary::VALUE, subject.clone()),
+                    (control::vocabulary::CASES, cases),
+                ],
+            );
+            assert_eq!(evaluate(&expression, 100).result, blob("record"));
         }
     }
 }
 
-/// The prepared and deferred clause routes must agree: moving a
-/// literal clause list behind a cell changes only the fuel of reaching
-/// it — the cell evaluation plus the list evaluation, one burn more
-/// than the literal's stand-in burn — never the result.
+/// Clauses are their form's own syntax, read where they're written, so a
+/// clause list behind a cell isn't one, and nothing is evaluated for it:
+/// call(1) + function(1) = 2.
 #[test]
-fn clause_lists_behind_cells_agree_with_literal_clauses() {
+fn clause_lists_behind_cells_are_invalid() {
     let binder = new_cell_id();
     let cases = Value::list([
         Value::record([
@@ -297,20 +289,18 @@ fn clause_lists_behind_cells_agree_with_literal_clauses() {
             ],
         )
     };
-    let check = |program: &dyn Fn(Value) -> Value, clauses: Value| {
+    let check = |program: &dyn Fn(Value) -> Value, clauses: Value, invalid: CellId| {
         let reference = new_cell_id();
-        let literal = evaluate(&program(clauses.clone()), 20);
         let referenced = evaluate_resolving(
             &program(Value::from(reference)),
             |cell| (cell == reference).then(|| clauses.clone()),
             20,
         );
-        assert_eq!(literal.result, referenced.result);
-
-        assert_eq!(literal.remaining_fuel, referenced.remaining_fuel + 1);
+        assert_eq!(referenced.result, grap::absent::value(invalid));
+        assert_eq!(referenced.remaining_fuel, 18);
     };
-    check(&matches, cases);
-    check(&lets, bindings);
+    check(&matches, cases, control::vocabulary::INVALID_CASES);
+    check(&lets, bindings, control::vocabulary::INVALID_BINDINGS);
 }
 
 /// Arithmetic burns like any strict call: call(1) + function(1) +

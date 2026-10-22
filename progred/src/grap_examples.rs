@@ -47,6 +47,15 @@ fn the_sample_contains_a_projectable_grap_computation() {
     assert_eq!(evaluate(&doc, profile).result, f64::value(40.0));
 }
 
+/// The case list the demo's quote generator makes for `value`: data, not
+/// a match.
+fn generated_cases(binders: &Binders, value: ::core::primitive::f64) -> Value {
+    Value::list([Value::record([
+        (binders["pattern"], crate::libraries::text::value("subject")),
+        (binders["expression"], f64::value(value)),
+    ])])
+}
+
 /// The demo's circle of `radius`, as its `circle` function makes it.
 fn circle(binders: &Binders, radius: ::core::primitive::f64) -> Value {
     Value::record([(
@@ -82,7 +91,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         ("graph_function_result", f64::value(34.0)),
         ("circle_result", circle(&binders, 34.0)),
         ("match_result", f64::value(3.0)),
-        ("quoted_match_result", f64::value(3.0)),
+        ("quoted_cases", generated_cases(&binders, 3.0)),
         ("metadata_call", f64::value(7.0)),
     ] {
         assert_eq!(
@@ -158,9 +167,9 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
     assert_eq!(
         evaluate(
             &doc,
-            evaluated_expression(demo_entry(&doc, &binders, "quoted_match_result")),
+            evaluated_expression(demo_entry(&doc, &binders, "quoted_cases")),
         )
         .result,
-        f64::value(5.0)
+        generated_cases(&binders, 5.0)
     );
 }
