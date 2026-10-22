@@ -20,11 +20,12 @@ text, f64, Grap, presentation, layout, and other domains. The built-in
 function, its evaluation control and arithmetic, and Grap's projection; CAD
 concepts remain separate libraries. Nothing in this representation requires Rust FFIs, which leaves room
 for [editor-authored libraries](deferred.md#editor-authored-libraries). A
-`Library` carries definitions and one partial projection. A library with several
-forms composes them with
+`Library` carries definitions, one partial projection, and the projections its
+cells provide: a kind's for the records that say they're of it, a function's for
+calls of it. A library with several forms composes them with
 `compose_partials`: first success wins, and the empty composition declines. The
 editor composes these library projections in load order above its one total
-structural fallback. `Libraries` keeps an insertion-ordered unique map keyed by
+structural fallback, after the projections kinds provide. `Libraries` keeps an insertion-ordered unique map keyed by
 stable random library identities supplied externally; the identity is not a
 field inside the library. Loaded libraries are read-only. Repeating a library
 identity replaces its entire contribution in place before composition. Loading
@@ -114,10 +115,24 @@ The Projections menu leads with All, Plain and Raw, then a checkbox for each
 library an area can switch off, one bringing a projection or offers; a set
 matching no preset is a custom one. Choosing the preset an area already shows
 goes back to every library. Specific
-domain projections precede general ones. Libraries contribute these functions
-explicitly; composition does not depend on registering them under a shared cell
-identity. The current host partials are Rust callbacks,
-while presentation declarations can apply ordinary Grap callables.
+domain projections precede general ones.
+
+A record that says what kind of thing it is draws first as its kind provides,
+ahead of every library's partial: the stack's first partial reads the record's
+`isa` and applies the projection its libraries registered under that kind's cell,
+composed in load order, or declines where the kind provides none or the record
+says no kind, and the libraries' partials are tried in load order. Projection
+inputs carry the provided projections, so a projection can ask another cell for
+its own: Grap's call kind draws a call as its function provides, else as a
+call. Grap's calls, lambdas, closures and value wrappers provide theirs;
+control's `match`, `let`, `where`, `do`, `all` and `quote` and the infix
+operators of Grap's numbers and of Fidget provide theirs for calls of them, and
+the unquote kind for unquotes. An area that switches a library off leaves its
+cells' projections off, so with Grap off an operator call is a record again.
+Measured on 22 October 2026, this took the IoP source form's projection scope
+from 2.44 ms to 2.23 ms a frame and its allocations from about 35,000 to 30,700;
+the frame canaries moved within their noise. The current host partials are Rust
+callbacks, while presentation declarations can apply ordinary Grap callables.
 
 Recognition checks the fields a partial uses, not the absence of unrelated
 fields. A compact form shows the fields it doesn't draw after it, as a trailing

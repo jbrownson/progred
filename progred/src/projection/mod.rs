@@ -73,6 +73,12 @@ impl Projection {
         Self { provided, ..self }
     }
 
+    /// The projections cells provide for what this draws.
+    #[cfg(test)]
+    pub(crate) fn provided(&self) -> &Provided {
+        &self.provided
+    }
+
     /// The composed partials, without the entry.
     #[cfg(any(test, target_arch = "wasm32"))]
     pub(crate) fn partial(&self) -> &Partial {

@@ -218,11 +218,21 @@ what the kind required when it was written. Open beside it:
 
 - **Kinds everywhere, and dispatch on them.** The owner's direction: use the
   isa generally, not by a clever rule about where it's needed, with values
-  encoded under one tag (numbers, text, booleans) the exception. Then the
-  projection stack, and evaluation, could dispatch on a record's kind instead
-  of trying each projection in turn. Still told by their fields: absents,
-  `{ffi: cell}`, `{evaluate: …}`, programs, notebooks, `match` cases and
-  patterns, `let` bindings, and the other libraries' records.
+  encoded under one primitive tag (numbers, text, booleans, colors, path
+  steps) the exception. The projection stack draws a record as its kind
+  provides first (see [projections](projections.md#projection-composition)),
+  and evaluation dispatches on Grap's kinds. Still told by their fields:
+  absents (to become `{isa: absent, reason: …}`), `{evaluate: …}`, notebooks,
+  `match` cases, `let` bindings, binders, and the other libraries' records;
+  `{ffi: cell}` and `{grap: cell}` are to go, a foreign function's value its
+  cell. Declining partials allocate while they probe, about 4,300 times a
+  frame in the IoP source form, so the remaining probing has a cost to find.
+- **A kind's own description.** A kind's cell could be described by a record
+  that says it's a kind, `{isa: kind, name, …}`, as a field's could by
+  `{isa: field, name, …}`, and `kind` by itself. A document's kinds would keep
+  their projections there; built-in kinds register theirs in Rust under the
+  cell. A function might provide one the same way, and binary functions could
+  share one, which needs definitions that turn into functions.
 - **Declared kinds.** A kind's cell could hold its definition, the fields it
   has and which it requires, so forms and offers read it instead of each
   projection listing its own; that's the structural type system the owner has

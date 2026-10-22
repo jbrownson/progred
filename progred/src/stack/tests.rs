@@ -72,3 +72,82 @@ fn a_library_switched_off_offers_nothing() {
     assert!(offered(&stack.completions_without(&[])));
     assert!(!offered(&stack.completions_without(&[color::ID])));
 }
+
+type Drew = std::rc::Rc<std::cell::Cell<Option<&'static str>>>;
+
+/// A projection drawing every value, noting `name` as what drew it.
+fn drawing(drew: &Drew, name: &'static str) -> Partial {
+    let drew = drew.clone();
+    crate::display::runtime_partial(move |_| {
+        drew.set(Some(name));
+        Some(crate::display::dim(name))
+    })
+}
+
+/// What drew `value` through `projection`: the name a drawing noted, else
+/// "something else", or nothing where it declined.
+fn drawn_by(projection: &Projection, drew: &Drew, value: &gid::Value) -> Option<&'static str> {
+    drew.set(None);
+    let value = grap::RuntimeValue::from(value);
+    (projection.partial())(&crate::display::ProjectionInput {
+        provided: projection.provided().clone(),
+        ..crate::libraries::test_widgets::projection_input(
+            &crate::display::test_support::NoEval,
+            &value,
+        )
+    })
+    .map(|_| drew.get().unwrap_or("something else"))
+}
+
+#[test]
+fn a_record_draws_as_its_kind_provides_before_any_library_tries_it() {
+    let drew = Drew::default();
+    let (first, second, kind) = (gid::new_cell_id(), gid::new_cell_id(), gid::new_cell_id());
+    let stack = compose([
+        (
+            first,
+            Library::default().with_projection(drawing(&drew, "first library")),
+        ),
+        (
+            second,
+            Library::default().with_projections_for([(kind, drawing(&drew, "kind"))]),
+        ),
+    ]);
+    let of_kind = grap::isa::record(kind, []);
+    assert_eq!(drawn_by(&stack.projection, &drew, &of_kind), Some("kind"));
+    // A kind providing nothing, or no kind said, is the libraries' to draw.
+    for value in [
+        grap::isa::record(gid::new_cell_id(), []),
+        gid::Value::record([]),
+    ] {
+        assert_eq!(
+            drawn_by(&stack.projection, &drew, &value),
+            Some("first library")
+        );
+    }
+    // Switched off, a library's cells provide nothing.
+    let (without, _) = stack.without(&[second]);
+    assert_eq!(drawn_by(&without, &drew, &of_kind), Some("first library"));
+}
+
+#[test]
+fn a_call_draws_as_its_function_provides_else_as_a_call() {
+    let drew = Drew::default();
+    let (library, function) = (gid::new_cell_id(), gid::new_cell_id());
+    let stack = compose([
+        (grap_library::ID, grap_library::library()),
+        (
+            library,
+            Library::default().with_projections_for([(function, drawing(&drew, "function"))]),
+        ),
+    ]);
+    let call = |function: gid::CellId| grap::call(function.into(), []);
+    assert_eq!(
+        drawn_by(&stack.projection, &drew, &call(function)),
+        Some("function")
+    );
+    assert_eq!(
+        drawn_by(&stack.projection, &drew, &call(gid::new_cell_id())),
+        Some("something else")
+    );
+}
